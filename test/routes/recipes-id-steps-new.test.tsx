@@ -9,6 +9,8 @@ import { createUser } from "~/lib/auth.server";
 import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { faker } from "@faker-js/faker";
+import * as ingredientParseModule from "~/lib/ingredient-parse.server";
+import { IngredientParseError } from "~/lib/ingredient-parse.server";
 
 // Helper to extract data from React Router's data() response
 function extractResponseData(response: any): { data: any; status: number } {
@@ -406,6 +408,188 @@ describe("Recipes $id Steps New Route", () => {
       expect(data.errors.description).toBe("Description must be 5,000 characters or less");
     });
 
+    it("should parse ingredients when parseIngredients intent is submitted", async () => {
+      const parseSpy = vi
+        .spyOn(ingredientParseModule, "parseIngredients")
+        .mockResolvedValue([{ quantity: 2, unit: "cups", ingredientName: "flour" }]);
+
+      const request = await createFormRequest(
+        { intent: "parseIngredients", ingredientText: "2 cups flour" },
+        testUserId
+      );
+
+      try {
+        const response = await action({
+          request,
+          context: { cloudflare: { env: { OPENAI_API_KEY: "cf-test-key" } } },
+          params: { id: recipeId },
+        } as any);
+
+        const { data, status } = extractResponseData(response);
+        expect(status).toBe(200);
+        expect(data.parsedIngredients).toEqual([
+          { quantity: 2, unit: "cups", ingredientName: "flour" },
+        ]);
+        expect(parseSpy).toHaveBeenCalledWith("2 cups flour", "cf-test-key");
+      } finally {
+        parseSpy.mockRestore();
+      }
+    });
+
+    it("should return parse validation errors from ingredient parser", async () => {
+      const parseSpy = vi
+        .spyOn(ingredientParseModule, "parseIngredients")
+        .mockRejectedValue(new IngredientParseError("Ingredient text is required"));
+
+      const request = await createFormRequest(
+        { intent: "parseIngredients", ingredientText: "" },
+        testUserId
+      );
+
+      try {
+        const response = await action({
+          request,
+          context: { cloudflare: { env: null } },
+          params: { id: recipeId },
+        } as any);
+
+        const { data, status } = extractResponseData(response);
+        expect(status).toBe(400);
+        expect(data.errors.parse).toBe("Ingredient text is required");
+      } finally {
+        parseSpy.mockRestore();
+      }
+    });
+
+    it("should return generic parse errors for unexpected parser failures", async () => {
+      const parseSpy = vi
+        .spyOn(ingredientParseModule, "parseIngredients")
+        .mockRejectedValue(new Error("OpenAI unavailable"));
+
+      const request = await createFormRequest(
+        { intent: "parseIngredients", ingredientText: "2 cups flour" },
+        testUserId
+      );
+
+      try {
+        const response = await action({
+          request,
+          context: { cloudflare: { env: null } },
+          params: { id: recipeId },
+        } as any);
+
+        const { data, status } = extractResponseData(response);
+        expect(status).toBe(500);
+        expect(data.errors.parse).toBe("An unexpected error occurred while parsing ingredients");
+      } finally {
+        parseSpy.mockRestore();
+      }
+    });
+
+    it("should ignore malformed ingredientsJson and create an empty step", async () => {
+      const request = await createFormRequest(
+        { description: "Step with malformed ingredient payload", ingredientsJson: "not-json" },
+        testUserId
+      );
+
+      const response = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any);
+
+      expect(response).toBeInstanceOf(Response);
+      expect(response.status).toBe(302);
+
+      const createdStep = await db.recipeStep.findFirst({
+        where: { recipeId, description: "Step with malformed ingredient payload" },
+        include: { ingredients: true },
+      });
+      expect(createdStep?.ingredients).toHaveLength(0);
+    });
+
+    it("should ignore non-array ingredientsJson and create an empty step", async () => {
+      const request = await createFormRequest(
+        { description: "Step with object ingredient payload", ingredientsJson: JSON.stringify({ quantity: 1 }) },
+        testUserId
+      );
+
+      const response = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any);
+
+      expect(response).toBeInstanceOf(Response);
+      expect(response.status).toBe(302);
+
+      const createdStep = await db.recipeStep.findFirst({
+        where: { recipeId, description: "Step with object ingredient payload" },
+        include: { ingredients: true },
+      });
+      expect(createdStep?.ingredients).toHaveLength(0);
+    });
+
+    it("should return validation error when ingredient quantity is invalid", async () => {
+      const request = await createFormRequest(
+        {
+          description: "Invalid quantity",
+          ingredientsJson: JSON.stringify([{ quantity: 0, unit: "cup", ingredientName: "flour" }]),
+        },
+        testUserId
+      );
+
+      const response = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any);
+
+      const { data, status } = extractResponseData(response);
+      expect(status).toBe(400);
+      expect(data.errors.quantity).toBe("Quantity must be between 0.001 and 99,999");
+    });
+
+    it("should return validation error when ingredient unit is blank", async () => {
+      const request = await createFormRequest(
+        {
+          description: "Invalid unit",
+          ingredientsJson: JSON.stringify([{ quantity: 1, unit: "   ", ingredientName: "flour" }]),
+        },
+        testUserId
+      );
+
+      const response = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any);
+
+      const { data, status } = extractResponseData(response);
+      expect(status).toBe(400);
+      expect(data.errors.unitName).toBe("Unit name is required");
+    });
+
+    it("should return validation error when ingredient name is blank", async () => {
+      const request = await createFormRequest(
+        {
+          description: "Invalid ingredient name",
+          ingredientsJson: JSON.stringify([{ quantity: 1, unit: "cup", ingredientName: "   " }]),
+        },
+        testUserId
+      );
+
+      const response = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any);
+
+      const { data, status } = extractResponseData(response);
+      expect(status).toBe(400);
+      expect(data.errors.ingredientName).toBe("Ingredient name is required");
+    });
+
     it("should accept stepTitle at exactly 200 characters", async () => {
       const exactTitle = "a".repeat(200);
       const request = await createFormRequest(
@@ -475,6 +659,82 @@ describe("Recipes $id Steps New Route", () => {
       expect(steps[0].stepTitle).toBe("Prep Work");
       expect(steps[0].description).toBe("Prepare all ingredients");
       expect(steps[0].stepNum).toBe(1);
+    });
+
+    it("should reuse existing unit and ingredient refs when adding ingredients", async () => {
+      const unit = await db.unit.create({ data: { name: "cup" } });
+      const ingredientRef = await db.ingredientRef.create({ data: { name: "sugar" } });
+
+      const request = await createFormRequest(
+        {
+          stepTitle: "Mix",
+          description: "Mix existing pantry records",
+          ingredientsJson: JSON.stringify([{ quantity: 3, unit: "CUP", ingredientName: "SUGAR" }]),
+        },
+        testUserId
+      );
+
+      const response = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any);
+
+      expect(response).toBeInstanceOf(Response);
+      expect(response.status).toBe(302);
+
+      const ingredient = await db.ingredient.findFirst({
+        where: { recipeId, ingredientRefId: ingredientRef.id },
+      });
+      expect(ingredient).toMatchObject({
+        quantity: 3,
+        unitId: unit.id,
+        ingredientRefId: ingredientRef.id,
+      });
+      expect(await db.unit.count({ where: { name: "cup" } })).toBe(1);
+      expect(await db.ingredientRef.count({ where: { name: "sugar" } })).toBe(1);
+    });
+
+    it("should return duplicate ingredient error after creating the step", async () => {
+      const existingStep = await db.recipeStep.create({
+        data: {
+          recipeId,
+          stepNum: 1,
+          description: "Existing step",
+        },
+      });
+      const unit = await db.unit.create({ data: { name: "cup" } });
+      const ingredientRef = await db.ingredientRef.create({ data: { name: "flour" } });
+      await db.ingredient.create({
+        data: {
+          recipeId,
+          stepNum: existingStep.stepNum,
+          quantity: 1,
+          unitId: unit.id,
+          ingredientRefId: ingredientRef.id,
+        },
+      });
+
+      const request = await createFormRequest(
+        {
+          description: "Duplicate ingredient step",
+          ingredientsJson: JSON.stringify([{ quantity: 2, unit: "cup", ingredientName: "flour" }]),
+        },
+        testUserId
+      );
+
+      const response = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any);
+
+      const { data, status } = extractResponseData(response);
+      expect(status).toBe(400);
+      expect(data.errors.ingredientName).toBe("This ingredient is already in the recipe");
+      expect(await db.recipeStep.findUnique({
+        where: { recipeId_stepNum: { recipeId, stepNum: 2 } },
+      })).toBeTruthy();
     });
 
     it("should create step without optional title", async () => {
@@ -1030,6 +1290,83 @@ describe("Recipes $id Steps New Route", () => {
       const descriptionInput = await screen.findByLabelText(/Description/i);
       expect(descriptionInput).toBeInTheDocument();
       expect(descriptionInput).toHaveAttribute("required");
+    });
+
+    it("should render field-level action errors after submit", async () => {
+      const mockData = {
+        recipe: {
+          id: "recipe-1",
+          title: "Test Recipe",
+        },
+        nextStepNum: 1,
+        availableSteps: [],
+      };
+
+      const Stub = createTestRoutesStub([
+        {
+          path: "/recipes/:id/steps/new",
+          Component: NewStep,
+          loader: () => mockData,
+          action: () => ({
+            errors: {
+              stepTitle: "Step title must be 200 characters or less",
+              description: "Step description is required",
+              quantity: "Quantity must be between 0.001 and 99,999",
+              unitName: "Unit name is required",
+              ingredientName: "Ingredient name is required",
+            },
+          }),
+        },
+      ]);
+
+      render(<Stub initialEntries={["/recipes/recipe-1/steps/new"]} />);
+
+      await screen.findByRole("heading", { name: /Add Step/i });
+
+      await act(async () => {
+        fireEvent.change(screen.getByLabelText(/Description/i), {
+          target: { value: "Trigger action errors" },
+        });
+      });
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: /Create/i }));
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText("Step title must be 200 characters or less")).toBeInTheDocument();
+        expect(screen.getByText("Step description is required")).toBeInTheDocument();
+        expect(screen.getByText("Quantity must be between 0.001 and 99,999")).toBeInTheDocument();
+        expect(screen.getByText("Unit name is required")).toBeInTheDocument();
+        expect(screen.getByText("Ingredient name is required")).toBeInTheDocument();
+      });
+    });
+
+    it("should omit uses output section when later step has no available previous steps", async () => {
+      const mockData = {
+        recipe: {
+          id: "recipe-1",
+          title: "Test Recipe",
+        },
+        nextStepNum: 2,
+        availableSteps: [],
+      };
+
+      const Stub = createTestRoutesStub([
+        {
+          path: "/recipes/:id/steps/new",
+          Component: NewStep,
+          loader: () => mockData,
+        },
+      ]);
+
+      render(<Stub initialEntries={["/recipes/recipe-1/steps/new"]} />);
+
+      await screen.findByRole("heading", { name: /Add Step/i });
+
+      expect(screen.queryByText("Uses Output From")).not.toBeInTheDocument();
+      expect(screen.queryByText("Uses Output From (optional)")).not.toBeInTheDocument();
+      expect(screen.queryByText("No previous steps available")).not.toBeInTheDocument();
     });
 
     it("should have correct form attributes", async () => {
