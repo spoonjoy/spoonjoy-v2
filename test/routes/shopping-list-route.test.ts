@@ -1491,5 +1491,42 @@ describe("Shopping List Route", () => {
         isAmbiguous: true,
       });
     });
+
+    it("should parse mixed fractions, simple fractions, and whole-count items", () => {
+      expect(parseShoppingItemFallback("1 1/2 cups oats")).toMatchObject({
+        quantity: "1.5",
+        unitName: "cups",
+        ingredientName: "oats",
+        isAmbiguous: false,
+      });
+      expect(parseShoppingItemFallback("1/2 tsp salt")).toMatchObject({
+        quantity: "0.5",
+        unitName: "tsp",
+        ingredientName: "salt",
+        isAmbiguous: false,
+      });
+      expect(parseShoppingItemFallback("2 apples")).toMatchObject({
+        quantity: "2",
+        unitName: "whole",
+        ingredientName: "apples",
+        isAmbiguous: false,
+      });
+    });
+
+    it("should flag empty and invalid quantity text as ambiguous", () => {
+      expect(parseShoppingItemFallback("   ")).toMatchObject({
+        quantity: "",
+        unitName: "",
+        ingredientName: "",
+        isAmbiguous: true,
+        originalText: "   ",
+      });
+      expect(parseShoppingItemFallback("1/0 cup flour")).toMatchObject({
+        quantity: "",
+        unitName: "",
+        ingredientName: "1/0 cup flour",
+        isAmbiguous: true,
+      });
+    });
   });
 });
