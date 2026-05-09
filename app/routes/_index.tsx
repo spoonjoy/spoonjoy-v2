@@ -14,6 +14,7 @@ import { getDisplayRecipeImageUrl } from "~/lib/recipe-image";
 const DEFAULT_CHEF_AVATAR = "/images/chef-rj.png";
 
 type KitchenTab = "recipes" | "cookbooks";
+type KitchenUserWhere = { id: string } | { username: string };
 
 function normalizeTab(value: string | null): KitchenTab {
   return value === "cookbooks" ? "cookbooks" : "recipes";
@@ -68,14 +69,14 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       })
     : null;
 
+  const kitchenUserWhere: KitchenUserWhere = requestedChefId
+    ? { id: requestedChefId }
+    : requestedChefUsername
+      ? { username: requestedChefUsername }
+      : { id: currentUserId as string };
+
   const kitchenUser = await database.user.findUnique({
-    where: requestedChefId
-      ? { id: requestedChefId }
-      : requestedChefUsername
-        ? { username: requestedChefUsername }
-        : currentUserId
-          ? { id: currentUserId }
-          : { id: "" },
+    where: kitchenUserWhere,
     select: {
       id: true,
       username: true,

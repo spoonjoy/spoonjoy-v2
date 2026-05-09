@@ -151,6 +151,9 @@ describe("shopping list UX updates", () => {
     expect(screen.getByRole("button", { name: "Delete chicken thigh" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Check item" })).toBeInTheDocument();
 
+    swipeRow(row!, -30);
+    await waitFor(() => expect(row).toHaveAttribute("data-motion-x", "-104"));
+
     fireEvent.click(screen.getByRole("button", { name: "Check item" }));
     await waitFor(() => expect(row).toHaveAttribute("data-motion-x", "0"));
     expect(screen.getByRole("button", { name: "Check item" })).toBeInTheDocument();

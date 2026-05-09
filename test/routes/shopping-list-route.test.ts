@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { db } from "~/lib/db.server";
-import { loader, action, parseShoppingItemFallback } from "~/routes/shopping-list";
+import { loader, action, parseShoppingItemFallback, __internal__ } from "~/routes/shopping-list";
 import { createUser } from "~/lib/auth.server";
 import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
@@ -1527,6 +1527,13 @@ describe("Shopping List Route", () => {
         ingredientName: "1/0 cup flour",
         isAmbiguous: true,
       });
+      expect(parseShoppingItemFallback("1 1/0 cup flour")).toMatchObject({
+        quantity: "",
+        unitName: "",
+        ingredientName: "1 1/0 cup flour",
+        isAmbiguous: true,
+      });
+      expect(__internal__.parseFractionToken("not-a-number")).toBeNull();
     });
   });
 });

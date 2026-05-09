@@ -256,4 +256,49 @@ describe("shopping list OpenAI and add-from-recipe coverage", () => {
     expect(updatedItem?.quantity).toBe(2);
     expect(updatedItem?.categoryKey).not.toBeNull();
   });
+
+  it("keeps an existing quantity when a recipe ingredient has zero quantity", async () => {
+    const shoppingList = await db.shoppingList.create({ data: { authorId: testUserId } });
+    const recipe = await db.recipe.create({
+      data: { title: "Existing Quantity Zero Recipe", chefId: testUserId },
+    });
+    await db.recipeStep.create({
+      data: { recipeId: recipe.id, stepNum: 1, description: "Gather" },
+    });
+    const unit = await db.unit.create({ data: { name: `dash_${faker.string.alphanumeric(6)}` } });
+    const ingredientRef = await db.ingredientRef.create({
+      data: { name: `vanilla_${faker.string.alphanumeric(6)}` },
+    });
+    await db.shoppingListItem.create({
+      data: {
+        shoppingListId: shoppingList.id,
+        quantity: 5,
+        unitId: unit.id,
+        ingredientRefId: ingredientRef.id,
+        categoryKey: "baking",
+      },
+    });
+    await db.ingredient.create({
+      data: {
+        recipeId: recipe.id,
+        stepNum: 1,
+        quantity: 0,
+        unitId: unit.id,
+        ingredientRefId: ingredientRef.id,
+      },
+    });
+
+    const request = await createFormRequest(
+      { intent: "addFromRecipe", recipeId: recipe.id, scaleFactor: "3" },
+      testUserId
+    );
+
+    await action({ request, context: { cloudflare: { env: null } }, params: {} } as any);
+
+    const updatedItem = await db.shoppingListItem.findFirst({
+      where: { shoppingListId: shoppingList.id, ingredientRefId: ingredientRef.id },
+    });
+    expect(updatedItem?.quantity).toBe(5);
+    expect(updatedItem?.categoryKey).toBe("baking");
+  });
 });
