@@ -214,6 +214,33 @@ describe('DockContext', () => {
 
       expect(screen.getByTestId('action-count')).toHaveTextContent('2')
     })
+
+    it('accepts null actions to keep the dock in default mode', () => {
+      function TestPage() {
+        useDockActions(null)
+        return <div>Default Dock Page</div>
+      }
+
+      function TestApp() {
+        const context = useDockContext()
+        return (
+          <>
+            <div data-testid="action-count">{context.actions?.length ?? 0}</div>
+            <div data-testid="is-contextual">{context.isContextual ? 'yes' : 'no'}</div>
+            <TestPage />
+          </>
+        )
+      }
+
+      render(
+        <DockContextProvider>
+          <TestApp />
+        </DockContextProvider>
+      )
+
+      expect(screen.getByTestId('action-count')).toHaveTextContent('0')
+      expect(screen.getByTestId('is-contextual')).toHaveTextContent('no')
+    })
   })
 
   describe('DockAction type', () => {

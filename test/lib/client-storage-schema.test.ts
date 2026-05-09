@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   APP_STORAGE_SCHEMA_VERSION,
   __internal__,
@@ -6,6 +6,10 @@ import {
 } from '~/lib/client-storage-schema'
 
 describe('client storage schema migration', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
   beforeEach(() => {
     window.localStorage.clear()
     window.sessionStorage.clear()
@@ -44,5 +48,40 @@ describe('client storage schema migration', () => {
 
     expect(window.localStorage.getItem('spoonjoy-theme')).toBe('light')
     expect(window.localStorage.getItem('spoonjoy-nav-state')).toBe('keep')
+  })
+
+  it('returns safely when window is unavailable', () => {
+    vi.stubGlobal('window', undefined)
+
+    expect(() => applyStorageSchemaMigration()).not.toThrow()
+  })
+
+  it('skips null keys and invalid preserved theme values during cleanup', () => {
+    const removedKeys: string[] = []
+    const localStorage = {
+      length: 3,
+      getItem: vi.fn((key: string) => (key === 'spoonjoy-theme' ? 'sepia' : null)),
+      key: vi.fn((index: number) => [null, 'spoonjoy-stale', 'spoonjoy-theme'][index] ?? null),
+      removeItem: vi.fn((key: string) => removedKeys.push(key)),
+      setItem: vi.fn(),
+    } as unknown as Storage
+    const sessionStorage = {
+      length: 0,
+      getItem: vi.fn(),
+      key: vi.fn(),
+      removeItem: vi.fn(),
+      setItem: vi.fn(),
+    } as unknown as Storage
+
+    vi.stubGlobal('window', { localStorage, sessionStorage })
+
+    applyStorageSchemaMigration()
+
+    expect(removedKeys).toEqual(['spoonjoy-stale'])
+    expect(localStorage.setItem).toHaveBeenCalledOnce()
+    expect(localStorage.setItem).toHaveBeenCalledWith(
+      __internal__.STORAGE_SCHEMA_VERSION_KEY,
+      APP_STORAGE_SCHEMA_VERSION
+    )
   })
 })

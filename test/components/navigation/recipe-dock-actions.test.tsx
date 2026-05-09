@@ -77,6 +77,18 @@ describe('Recipe Dock Actions', () => {
       expect(onAddToList).toHaveBeenCalledOnce()
     })
 
+    it('renders the added-to-list icon badge component', () => {
+      render(<MemoryRouter><DockContextProvider><ContextDisplay /><RecipeDetailPage recipeId="123" chefId="chef-1" isOwner={true} isInShoppingList={true} /></DockContextProvider></MemoryRouter>)
+      const AddedIcon = capturedActions?.find(a => a.id === 'add-to-list')?.icon
+
+      expect(AddedIcon).toBeDefined()
+      const { container } = render(AddedIcon ? <AddedIcon className="test-icon" /> : null)
+
+      expect(container.querySelector('span.relative')).toBeInTheDocument()
+      expect(container.querySelectorAll('svg')).toHaveLength(2)
+      expect(container.querySelector('svg.test-icon')).toBeInTheDocument()
+    })
+
     it('owner edit action uses direct route and shared handlers execute', async () => {
       const onSave = vi.fn(); const onAddToList = vi.fn(); const onShare = vi.fn()
       render(<MemoryRouter><DockContextProvider><ContextDisplay /><RecipeDetailPage recipeId="123" chefId="chef-1" isOwner={true} onSave={onSave} onAddToList={onAddToList} onShare={onShare} /></DockContextProvider></MemoryRouter>)
@@ -111,6 +123,12 @@ describe('Recipe Dock Actions', () => {
       render(<MemoryRouter><DockContextProvider><ContextDisplay /><RecipeEditPage recipeId="456" /></DockContextProvider></MemoryRouter>)
       expect(screen.getByTestId('action-ids')).toHaveTextContent('cancel,save')
       expect(capturedActions?.find(a => a.id === 'cancel')?.onAction).toBe('/recipes/456')
+    })
+
+    it('uses a no-op save fallback when no edit save handler is provided', () => {
+      render(<MemoryRouter><DockContextProvider><ContextDisplay /><RecipeEditPage recipeId="456" /></DockContextProvider></MemoryRouter>)
+
+      expect(() => capturedActions?.find(a => a.id === 'save')?.onAction?.()).not.toThrow()
     })
   })
 })
