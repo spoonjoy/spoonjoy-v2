@@ -690,6 +690,59 @@ describe("Recipes $id Edit Route", () => {
       expect(data.errors.stepDeletion).toContain("Cannot delete");
     });
 
+    it("should return step deletion error when stepId is missing", async () => {
+      const request = await createFormRequest(
+        {
+          intent: "deleteStep",
+        },
+        testUserId
+      );
+
+      const response = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any);
+
+      const { data, status } = extractResponseData(response);
+      expect(status).toBe(400);
+      expect(data.errors.stepDeletion).toBe("Step not found");
+    });
+
+    it("should return step deletion error when step belongs to a different recipe", async () => {
+      const otherRecipe = await db.recipe.create({
+        data: {
+          title: "Other Delete Recipe " + faker.string.alphanumeric(6),
+          chefId: testUserId,
+        },
+      });
+      const otherStep = await db.recipeStep.create({
+        data: {
+          recipeId: otherRecipe.id,
+          stepNum: 1,
+          description: "Other step",
+        },
+      });
+
+      const request = await createFormRequest(
+        {
+          intent: "deleteStep",
+          stepId: otherStep.id,
+        },
+        testUserId
+      );
+
+      const response = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any);
+
+      const { data, status } = extractResponseData(response);
+      expect(status).toBe(404);
+      expect(data.errors.stepDeletion).toBe("Step not found");
+    });
+
     it("should throw 404 for soft-deleted recipe in action", async () => {
       // Soft delete the recipe
       await db.recipe.update({
@@ -1399,6 +1452,168 @@ describe("Recipes $id Edit Route", () => {
       expect(firstStepElements.length).toBeGreaterThan(0);
       expect(screen.getByRole("link", { name: "Edit" })).toHaveAttribute("href", "/recipes/recipe-1/steps/step-abc/edit");
       expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
+    });
+
+    it("should cancel and confirm step deletion from the dialog", async () => {
+      const user = userEvent.setup();
+      const submittedStepIds: string[] = [];
+      const mockData = {
+        recipe: {
+          id: "recipe-1",
+          title: "Test Recipe",
+          description: null,
+          servings: null,
+          imageUrl: "",
+          steps: [
+            {
+              id: "step-delete",
+              stepNum: 1,
+              stepTitle: "Step to delete",
+              description: "Delete me",
+              ingredients: [],
+            },
+          ],
+        },
+        formattedSteps: [
+          {
+            id: "step-delete",
+            stepNum: 1,
+            stepTitle: "Step to delete",
+            description: "Delete me",
+            ingredients: [],
+          },
+        ],
+      };
+
+      const Stub = createTestRoutesStub([
+        {
+          path: "/recipes/:id/edit",
+          Component: EditRecipe,
+          loader: () => mockData,
+          action: async ({ request }: { request: Request }) => {
+            const formData = await request.formData();
+            submittedStepIds.push(formData.get("stepId")?.toString() ?? "");
+            return { success: true };
+          },
+        },
+      ]);
+
+      render(<Stub initialEntries={["/recipes/recipe-1/edit"]} />);
+      await screen.findByText("Step to delete");
+
+      await user.click(screen.getByRole("button", { name: "Delete" }));
+      expect(await screen.findByRole("alertdialog", { name: "Delete Step" })).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(submittedStepIds).toEqual([]);
+
+      await user.click(screen.getAllByRole("button", { name: "Delete" })[0]);
+      await user.click(await screen.findByRole("button", { name: "Confirm" }));
+
+      await waitFor(() => {
+        expect(submittedStepIds).toEqual(["step-delete"]);
+      });
+    });
+
+    it("should close the step deletion dialog when dismissed by escape", async () => {
+      const user = userEvent.setup();
+      const mockData = {
+        recipe: {
+          id: "recipe-1",
+          title: "Test Recipe",
+          description: null,
+          servings: null,
+          imageUrl: "",
+          steps: [
+            {
+              id: "step-escape",
+              stepNum: 1,
+              stepTitle: "Escape Step",
+              description: "Dismiss me",
+              ingredients: [],
+            },
+          ],
+        },
+        formattedSteps: [
+          {
+            id: "step-escape",
+            stepNum: 1,
+            stepTitle: "Escape Step",
+            description: "Dismiss me",
+            ingredients: [],
+          },
+        ],
+      };
+
+      const Stub = createTestRoutesStub([
+        {
+          path: "/recipes/:id/edit",
+          Component: EditRecipe,
+          loader: () => mockData,
+        },
+      ]);
+
+      render(<Stub initialEntries={["/recipes/recipe-1/edit"]} />);
+      await screen.findByText("Escape Step");
+
+      await user.click(screen.getByRole("button", { name: "Delete" }));
+      expect(await screen.findByRole("alertdialog", { name: "Delete Step" })).toBeInTheDocument();
+
+      await user.keyboard("{Escape}");
+
+      await waitFor(() => {
+        expect(screen.queryByRole("alertdialog", { name: "Delete Step" })).not.toBeInTheDocument();
+      });
+    });
+
+    it("should display step deletion errors returned after confirming deletion", async () => {
+      const user = userEvent.setup();
+      const mockData = {
+        recipe: {
+          id: "recipe-1",
+          title: "Test Recipe",
+          description: null,
+          servings: null,
+          imageUrl: "",
+          steps: [
+            {
+              id: "step-blocked",
+              stepNum: 1,
+              stepTitle: "Blocked Step",
+              description: "Cannot delete",
+              ingredients: [],
+            },
+          ],
+        },
+        formattedSteps: [
+          {
+            id: "step-blocked",
+            stepNum: 1,
+            stepTitle: "Blocked Step",
+            description: "Cannot delete",
+            ingredients: [],
+          },
+        ],
+      };
+
+      const Stub = createTestRoutesStub([
+        {
+          path: "/recipes/:id/edit",
+          Component: EditRecipe,
+          loader: () => mockData,
+          action: () => ({
+            errors: { stepDeletion: "Cannot delete this step because another step uses it." },
+          }),
+        },
+      ]);
+
+      render(<Stub initialEntries={["/recipes/recipe-1/edit"]} />);
+      await screen.findByText("Blocked Step");
+
+      await user.click(screen.getByRole("button", { name: "Delete" }));
+      await user.click(await screen.findByRole("button", { name: "Confirm" }));
+
+      expect(await screen.findByText("Cannot delete this step because another step uses it.")).toBeInTheDocument();
     });
 
     it("should populate hidden form and submit when Save Recipe is clicked", async () => {

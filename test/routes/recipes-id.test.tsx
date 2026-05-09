@@ -15,7 +15,7 @@ vi.mock("~/components/navigation", async () => {
   };
 });
 
-import { useRecipeDetailActions } from "~/components/navigation";
+import { shareContent, useRecipeDetailActions } from "~/components/navigation";
 import { loader, action, applyCreatedCookbookState } from "~/routes/recipes.$id";
 import RecipeDetail from "~/routes/recipes.$id";
 import { createUser } from "~/lib/auth.server";
@@ -606,6 +606,59 @@ describe("Recipes $id Route", () => {
 
       expect(result.hasIngredientsInShoppingList).toBe(false);
     });
+
+    it("should not match shopping list ingredients when only the list item has a null unit", async () => {
+      const step = await db.recipeStep.create({
+        data: {
+          recipeId,
+          stepNum: 1,
+          description: "Mix",
+        },
+      });
+      const ingredientRef = await db.ingredientRef.create({
+        data: { name: "vanilla_null_unit_" + faker.string.alphanumeric(6) },
+      });
+      const unit = await db.unit.create({
+        data: { name: "tsp_null_list_" + faker.string.alphanumeric(6) },
+      });
+      await db.ingredient.create({
+        data: {
+          recipeId,
+          stepNum: step.stepNum,
+          quantity: 1,
+          unitId: unit.id,
+          ingredientRefId: ingredientRef.id,
+        },
+      });
+
+      const shoppingList = await db.shoppingList.create({
+        data: { authorId: testUserId },
+      });
+      await db.shoppingListItem.create({
+        data: {
+          shoppingListId: shoppingList.id,
+          ingredientRefId: ingredientRef.id,
+          unitId: null,
+          quantity: 1,
+        },
+      });
+
+      const session = await sessionStorage.getSession();
+      session.set("userId", testUserId);
+      const setCookieHeader = await sessionStorage.commitSession(session);
+      const cookieValue = setCookieHeader.split(";")[0];
+      const headers = new Headers();
+      headers.set("Cookie", cookieValue);
+
+      const request = new UndiciRequest(`http://localhost:3000/recipes/${recipeId}`, { headers });
+      const result = await loader({
+        request,
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any);
+
+      expect(result.hasIngredientsInShoppingList).toBe(false);
+    });
   });
 
   describe("action", () => {
@@ -767,6 +820,25 @@ describe("Recipes $id Route", () => {
       });
       expect(recipeInCookbook).not.toBeNull();
     });
+
+    it("throws 400 when creating a cookbook with a blank title", async () => {
+      const request = await createFormRequest(
+        { intent: "createCookbookAndSave", title: "   " },
+        testUserId
+      );
+
+      await expect(
+        action({
+          request,
+          context: { cloudflare: { env: null } },
+          params: { id: recipeId },
+        } as any)
+      ).rejects.toSatisfy((error: any) => {
+        expect(error).toBeInstanceOf(Response);
+        expect(error.status).toBe(400);
+        return true;
+      });
+    });
   });
 
   describe("create cookbook reflection state", () => {
@@ -779,6 +851,19 @@ describe("Recipes $id Route", () => {
 
       expect(state.cookbooks.map((cookbook) => cookbook.id)).toEqual(["cb-new", "cb-existing"]);
       expect(state.savedCookbookIds.has("cb-new")).toBe(true);
+    });
+
+    it("does not duplicate an existing cookbook when reflecting created state", () => {
+      const existingCookbooks = [{ id: "cb-existing", title: "Existing" }];
+
+      const state = applyCreatedCookbookState(
+        existingCookbooks,
+        new Set<string>(),
+        { id: "cb-existing", title: "Existing" }
+      );
+
+      expect(state.cookbooks).toBe(existingCookbooks);
+      expect(state.savedCookbookIds.has("cb-existing")).toBe(true);
     });
   });
 
@@ -890,8 +975,147 @@ describe("Recipes $id Route", () => {
       await waitFor(() => {
         expect(screen.getByRole("dialog", { name: "Save to Cookbook" })).toBeInTheDocument();
       });
-      expect(screen.getByTestId("cookbook-item-cb-2")).toBeInTheDocument();
-      expect(screen.getByTestId("cookbook-item-cb-2")).toHaveTextContent("✓");
+      const createdCookbook = await screen.findByTestId("cookbook-item-cb-2");
+      expect(createdCookbook).toBeInTheDocument();
+      expect(createdCookbook).toHaveTextContent("✓");
+    });
+
+    it("optimistically toggles cookbook saves from the save modal", async () => {
+      const user = userEvent.setup();
+      const submittedIntents: Array<{ intent: string | null; cookbookId: string | null }> = [];
+      const mockData = {
+        recipe: {
+          id: "recipe-1",
+          title: "Toggle Cookbook Recipe",
+          description: null,
+          servings: null,
+          imageUrl: null,
+          chef: { id: "user-1", username: "testchef" },
+          steps: [],
+        },
+        isOwner: true,
+        cookbooks: [
+          { id: "cb-unsaved", title: "Weeknights" },
+          { id: "cb-saved", title: "Favorites" },
+        ],
+        savedInCookbookIds: ["cb-saved"],
+      };
+
+      const Stub = createTestRoutesStub([
+        {
+          path: "/recipes/:id",
+          Component: RecipeDetail,
+          loader: () => mockData,
+          action: async ({ request }) => {
+            const formData = await request.formData();
+            submittedIntents.push({
+              intent: formData.get("intent")?.toString() ?? null,
+              cookbookId: formData.get("cookbookId")?.toString() ?? null,
+            });
+            return { success: true };
+          },
+        },
+      ]);
+
+      render(<Stub initialEntries={["/recipes/recipe-1"]} />);
+      await screen.findByRole("heading", { name: "Toggle Cookbook Recipe" });
+
+      openSaveModalFromDock();
+      await screen.findByRole("dialog", { name: "Save to Cookbook" });
+
+      await user.click(screen.getByTestId("cookbook-item-cb-unsaved"));
+      expect(screen.getByTestId("cookbook-item-cb-unsaved")).toHaveTextContent("✓");
+
+      await user.click(screen.getByTestId("cookbook-item-cb-saved"));
+      expect(screen.getByTestId("cookbook-item-cb-saved")).not.toHaveTextContent("✓");
+
+      await waitFor(() => {
+        expect(submittedIntents).toEqual([
+          { intent: "addToCookbook", cookbookId: "cb-unsaved" },
+          { intent: "removeFromCookbook", cookbookId: "cb-saved" },
+        ]);
+      });
+    });
+
+    it("prevents blank cookbook creation submissions in the save modal", async () => {
+      const submittedIntents: string[] = [];
+      const mockData = {
+        recipe: {
+          id: "recipe-1",
+          title: "Blank Cookbook Recipe",
+          description: null,
+          servings: null,
+          imageUrl: null,
+          chef: { id: "user-1", username: "testchef" },
+          steps: [],
+        },
+        isOwner: true,
+        cookbooks: [],
+        savedInCookbookIds: [],
+      };
+
+      const Stub = createTestRoutesStub([
+        {
+          path: "/recipes/:id",
+          Component: RecipeDetail,
+          loader: () => mockData,
+          action: async ({ request }) => {
+            const formData = await request.formData();
+            submittedIntents.push(formData.get("intent")?.toString() ?? "");
+            return { success: true };
+          },
+        },
+      ]);
+
+      render(<Stub initialEntries={["/recipes/recipe-1"]} />);
+      await screen.findByRole("heading", { name: "Blank Cookbook Recipe" });
+
+      openSaveModalFromDock();
+      await screen.findByRole("dialog", { name: "Save to Cookbook" });
+
+      const form = screen.getByTestId("create-cookbook-button").closest("form");
+      expect(form).not.toBeNull();
+      fireEvent.submit(form!);
+
+      expect(submittedIntents).toEqual([]);
+    });
+
+    it("shares from the registered dock action", async () => {
+      const mockData = {
+        recipe: {
+          id: "recipe-1",
+          title: "Shareable Recipe",
+          description: "Worth sharing",
+          servings: null,
+          imageUrl: null,
+          chef: { id: "user-1", username: "testchef" },
+          steps: [],
+        },
+        isOwner: true,
+        cookbooks: [],
+        savedInCookbookIds: [],
+      };
+
+      const Stub = createTestRoutesStub([
+        {
+          path: "/recipes/:id",
+          Component: RecipeDetail,
+          loader: () => mockData,
+        },
+      ]);
+
+      render(<Stub initialEntries={["/recipes/recipe-1"]} />);
+      await screen.findByRole("heading", { name: "Shareable Recipe" });
+
+      const dockActionRegistration = vi.mocked(useRecipeDetailActions).mock.calls.at(-1)?.[0];
+      await dockActionRegistration?.onShare?.();
+
+      expect(vi.mocked(shareContent)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "Shareable Recipe",
+          text: "Worth sharing",
+        })
+      );
     });
 
     it("shows add-to-list toast from dock action", async () => {
@@ -1600,6 +1824,86 @@ describe("Recipes $id Route", () => {
 
       expect(await screen.findByRole("alertdialog", { name: "Delete Recipe" })).toBeInTheDocument();
       expect(screen.getByText("Delete this recipe? This cannot be undone.")).toBeInTheDocument();
+    });
+
+    it("should cancel recipe deletion from the dialog without submitting", async () => {
+      const user = userEvent.setup();
+      const submittedIntents: string[] = [];
+      const mockData = {
+        recipe: {
+          id: "recipe-1",
+          title: "Recipe Delete Actions",
+          description: null,
+          servings: null,
+          imageUrl: null,
+          chef: { id: "user-1", username: "testchef" },
+          steps: [],
+        },
+        isOwner: true,
+        cookbooks: [],
+        savedInCookbookIds: [],
+      };
+
+      const Stub = createTestRoutesStub([
+        {
+          path: "/recipes/:id",
+          Component: RecipeDetail,
+          loader: () => mockData,
+          action: async ({ request }) => {
+            const formData = await request.formData();
+            submittedIntents.push(formData.get("intent")?.toString() ?? "");
+            return { success: true };
+          },
+        },
+      ]);
+
+      render(<Stub initialEntries={["/recipes/recipe-1"]} />);
+      await screen.findByRole("heading", { name: "Recipe Delete Actions" });
+
+      await user.click(screen.getByRole("button", { name: "Delete Recipe" }));
+      await user.click(await screen.findByRole("button", { name: "Cancel" }));
+      expect(submittedIntents).toEqual([]);
+    });
+
+    it("should confirm recipe deletion from the dialog", async () => {
+      const user = userEvent.setup();
+      const submittedIntents: string[] = [];
+      const mockData = {
+        recipe: {
+          id: "recipe-1",
+          title: "Recipe Delete Confirm",
+          description: null,
+          servings: null,
+          imageUrl: null,
+          chef: { id: "user-1", username: "testchef" },
+          steps: [],
+        },
+        isOwner: true,
+        cookbooks: [],
+        savedInCookbookIds: [],
+      };
+
+      const Stub = createTestRoutesStub([
+        {
+          path: "/recipes/:id",
+          Component: RecipeDetail,
+          loader: () => mockData,
+          action: async ({ request }) => {
+            const formData = await request.formData();
+            submittedIntents.push(formData.get("intent")?.toString() ?? "");
+            return { success: true };
+          },
+        },
+      ]);
+
+      render(<Stub initialEntries={["/recipes/recipe-1"]} />);
+      await screen.findByRole("heading", { name: "Recipe Delete Confirm" });
+      await user.click(screen.getByRole("button", { name: "Delete Recipe" }));
+      await user.click(await screen.findByRole("button", { name: "Delete Recipe" }));
+
+      await waitFor(() => {
+        expect(submittedIntents).toEqual(["delete"]);
+      });
     });
 
     it("should not render Share button in header (moved to SpoonDock)", async () => {

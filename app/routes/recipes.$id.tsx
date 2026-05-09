@@ -99,7 +99,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
 
   const recipeIngredientKeys = new Set(
     recipe.steps.flatMap((step) =>
-      step.ingredients.map((ingredient) => `${ingredient.ingredientRefId}:${ingredient.unitId ?? "null"}`)
+      step.ingredients.map((ingredient) => `${ingredient.ingredientRefId}:${ingredient.unitId}`)
     )
   );
   const recipeIngredientRefIds = Array.from(
