@@ -594,20 +594,8 @@ export default function ShoppingList() {
   const removeFetcher = useFetcher();
 
   useEffect(() => {
-    const activeIds = new Set(shoppingList.items.map((item) => item.id));
-
-    setOptimisticCheckedById((current) => {
-      return Object.fromEntries(
-        Object.entries(current).filter(([itemId]) => activeIds.has(itemId))
-      );
-    });
-
-    setOptimisticRemovedById((current) => {
-      return Object.fromEntries(
-        Object.entries(current).filter(([itemId]) => activeIds.has(itemId))
-      );
-    });
-
+    setOptimisticCheckedById({});
+    setOptimisticRemovedById({});
     setRevealedItemId(null);
   }, [shoppingList.items]);
 
