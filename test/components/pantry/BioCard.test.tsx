@@ -51,6 +51,21 @@ describe('BioCard', () => {
     expect(screen.getByText('3 cookbooks')).toBeInTheDocument()
   })
 
+  it('renders location and joined metadata when provided', () => {
+    renderWithRouter(
+      <BioCard
+        name="Chef Rowan"
+        bio="Bio"
+        recipeCount={12}
+        cookbookCount={3}
+        location="Portland, OR"
+        joinedLabel="Joined May 2026"
+      />
+    )
+
+    expect(screen.getByText('Portland, OR • Joined May 2026')).toBeInTheDocument()
+  })
+
   it('invokes edit profile callback when edit button is clicked', async () => {
     const onEditProfile = vi.fn()
     renderWithRouter(

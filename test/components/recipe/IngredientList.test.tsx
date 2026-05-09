@@ -126,6 +126,19 @@ describe('IngredientList', () => {
     expect(orderedNames[2]).toContain('flour')
   })
 
+  it('keeps unchecked ingredients before a later checked ingredient', () => {
+    const { container } = render(
+      <IngredientList ingredients={sampleIngredients} checkedIds={new Set(['2'])} onToggle={vi.fn()} />
+    )
+    const orderedNames = Array.from(container.querySelectorAll('[data-testid^="ingredient-item-"]')).map(
+      (item) => item.textContent ?? ''
+    )
+
+    expect(orderedNames[0]).toContain('flour')
+    expect(orderedNames[1]).toContain('butter')
+    expect(orderedNames[2]).toContain('sugar')
+  })
+
   it('renders a step output uses section when references are present', () => {
     render(
       <IngredientList
@@ -169,6 +182,23 @@ describe('IngredientList', () => {
     )
 
     await userEvent.click(screen.getByRole('checkbox', { name: /step 1.*make the dough/i }))
+    expect(onStepOutputToggle).toHaveBeenCalledWith('step-1')
+  })
+
+  it('toggles a step output when its text button is clicked', async () => {
+    const onStepOutputToggle = vi.fn()
+    render(
+      <IngredientList
+        ingredients={sampleIngredients}
+        stepOutputUses={sampleStepOutputUses}
+        checkedIds={new Set()}
+        checkedStepOutputIds={new Set()}
+        onToggle={vi.fn()}
+        onStepOutputToggle={onStepOutputToggle}
+      />
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: /step 1.*make the dough/i }))
     expect(onStepOutputToggle).toHaveBeenCalledWith('step-1')
   })
 
@@ -234,5 +264,30 @@ describe('IngredientList', () => {
 
     expect(screen.queryByRole('checkbox')).toBeNull()
     expect(screen.getByText(/step 1/i)).toBeInTheDocument()
+  })
+
+  it('shows checked styling without checkbox controls when checked ids are provided', () => {
+    render(
+      <IngredientList
+        ingredients={[{ id: '1', quantity: 1, unit: 'cup', name: 'flour' }]}
+        checkedIds={new Set(['1'])}
+        showCheckboxes={false}
+      />
+    )
+
+    expect(screen.getByText('flour')).toHaveClass('line-through')
+    expect(screen.getByTestId('ingredient-quantity-1')).toHaveClass('line-through')
+  })
+
+  it('renders a non-empty placeholder when quantity and unit are missing', () => {
+    render(
+      <IngredientList
+        ingredients={[{ id: '1', quantity: null, unit: '', name: 'pepper' }]}
+        checkedIds={new Set()}
+        onToggle={vi.fn()}
+      />
+    )
+
+    expect(screen.getByTestId('ingredient-quantity-1').textContent).toBe('\u00A0')
   })
 })

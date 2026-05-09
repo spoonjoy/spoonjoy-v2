@@ -14,6 +14,18 @@ const sampleCookbooks: Cookbook[] = [
 
 describe('SaveToCookbookDropdown', () => {
   describe('rendering', () => {
+    it('treats a null cookbook collection defensively as empty', async () => {
+      render(
+        <SaveToCookbookDropdown
+          cookbooks={null as unknown as Cookbook[]}
+          onSave={vi.fn()}
+        />
+      )
+
+      await userEvent.click(screen.getByRole('button', { name: /save/i }))
+      expect(screen.getByText(/no cookbooks yet/i)).toBeInTheDocument()
+    })
+
     it('renders save button', () => {
       render(
         <SaveToCookbookDropdown

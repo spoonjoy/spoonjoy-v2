@@ -53,6 +53,21 @@ function ToastControls() {
   );
 }
 
+function DefaultToastContextControls() {
+  const { showToast, dismissToast } = useToast();
+
+  return (
+    <>
+      <button type="button" onClick={() => showToast({ message: "No provider" })}>
+        Default show
+      </button>
+      <button type="button" onClick={dismissToast}>
+        Default dismiss
+      </button>
+    </>
+  );
+}
+
 describe("Toast", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -152,5 +167,30 @@ describe("Toast", () => {
 
     await user.click(screen.getByRole("button", { name: "Dismiss toast" }));
     expect(screen.queryByText("First toast")).not.toBeInTheDocument();
+  });
+
+  it("dismisses safely when no toast timer is active", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ToastProvider>
+        <ToastControls />
+      </ToastProvider>
+    );
+
+    await user.click(screen.getByRole("button", { name: "Dismiss toast" }));
+
+    expect(screen.queryByTestId("toast-snackbar")).not.toBeInTheDocument();
+  });
+
+  it("default context functions are safe no-ops outside a provider", async () => {
+    const user = userEvent.setup();
+
+    render(<DefaultToastContextControls />);
+
+    await user.click(screen.getByRole("button", { name: "Default show" }));
+    await user.click(screen.getByRole("button", { name: "Default dismiss" }));
+
+    expect(screen.queryByTestId("toast-snackbar")).not.toBeInTheDocument();
   });
 });
