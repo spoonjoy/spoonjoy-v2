@@ -20,6 +20,7 @@ export default [
   ]),
   route("shopping-list", "routes/shopping-list.tsx"),
   route("account/settings", "routes/account.settings.tsx"),
+  route("photos/*", "routes/photos.$.tsx"),
   route(".well-known/appspecific/com.chrome.devtools.json", "routes/devtools-well-known.tsx"),
   route("*", "routes/$.tsx"),
 ] satisfies RouteConfig;

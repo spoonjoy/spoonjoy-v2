@@ -1,4 +1,5 @@
 import type { Route } from "./+types/photos.$";
+import { getCloudflareEnv } from "~/lib/route-platform.server";
 
 /**
  * Resource route to serve photos from Cloudflare R2 storage.
@@ -11,7 +12,7 @@ export async function loader({ params, context }: Route.LoaderArgs) {
     throw new Response("Not Found", { status: 404 });
   }
 
-  const r2Bucket = context?.cloudflare?.env?.PHOTOS as R2Bucket | undefined;
+  const r2Bucket = getCloudflareEnv(context)?.PHOTOS;
 
   if (!r2Bucket) {
     // In local dev without R2, return 404

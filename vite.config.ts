@@ -1,7 +1,10 @@
 import { cloudflare } from "@cloudflare/vite-plugin";
 import { reactRouter } from "@react-router/dev/vite";
 import { defineConfig } from "vite";
-import path from "path";
+
+const appDirectory = new URL("./app", import.meta.url).pathname;
+const componentsDirectory = new URL("./app/components", import.meta.url).pathname;
+const prismaWasmClient = new URL("./node_modules/.prisma/client/wasm.js", import.meta.url).pathname;
 
 export default defineConfig({
   plugins: [
@@ -10,13 +13,10 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./app/components"),
-      "~": path.resolve(__dirname, "./app"),
+      "@": componentsDirectory,
+      "~": appDirectory,
       // Prisma edge runtime alias for Cloudflare Workers
-      ".prisma/client/default": path.resolve(
-        __dirname,
-        "node_modules/.prisma/client/wasm.js"
-      ),
+      ".prisma/client/default": prismaWasmClient,
     },
   },
 });

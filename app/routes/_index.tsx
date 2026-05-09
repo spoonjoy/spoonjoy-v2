@@ -1,7 +1,7 @@
 import type { Route } from "./+types/_index";
 import { Form, useLoaderData, useLocation } from "react-router";
 import { Settings, ChefHat } from "lucide-react";
-import { getDb, db } from "~/lib/db.server";
+import { getRequestDb } from "~/lib/route-platform.server";
 import { getUserId } from "~/lib/session.server";
 import { Button } from "~/components/ui/button";
 import { Link } from "~/components/ui/link";
@@ -52,10 +52,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     };
   }
 
-  /* istanbul ignore next -- @preserve Cloudflare D1 production-only path */
-  const database = context?.cloudflare?.env?.DB
-    ? await getDb(context.cloudflare.env as { DB: D1Database })
-    : db;
+  const database = await getRequestDb(context);
 
   const viewer = currentUserId
     ? await database.user.findUnique({

@@ -1,6 +1,6 @@
 import type { Route } from "./+types/cookbooks.new";
 import { Form, redirect, data, useActionData } from "react-router";
-import { getDb, db } from "~/lib/db.server";
+import { getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -38,10 +38,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     return data({ errors }, { status: 400 });
   }
 
-  /* istanbul ignore next -- @preserve Cloudflare D1 production-only path */
-  const database = context?.cloudflare?.env?.DB
-    ? await getDb(context.cloudflare.env as { DB: D1Database })
-    : db;
+  const database = await getRequestDb(context);
 
   try {
     const cookbook = await database.cookbook.create({

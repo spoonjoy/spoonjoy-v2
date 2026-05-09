@@ -1,6 +1,6 @@
 import type { Route } from "./+types/recipes.$id.steps.$stepId.edit";
 import { Form, redirect, data, useActionData, useLoaderData, useSearchParams, useSubmit } from "react-router";
-import { getDb, db } from "~/lib/db.server";
+import { getCloudflareEnv, getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
 import { useEffect, useState } from "react";
 import { ConfirmationDialog } from "~/components/confirmation-dialog";
@@ -61,14 +61,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const userId = await requireUserId(request);
   const { id, stepId } = params;
 
-  /* istanbul ignore next -- @preserve
-   * Cloudflare D1 production-only path: The context?.cloudflare?.env?.DB check
-   * is only truthy in Cloudflare Workers production runtime. Local tests use
-   * the SQLite db directly. Cannot be tested without Cloudflare Workers runtime.
-   */
-  const database = context?.cloudflare?.env?.DB
-    ? await getDb(context.cloudflare.env as { DB: D1Database })
-    : db;
+  const database = await getRequestDb(context);
 
   const recipe = await database.recipe.findUnique({
     where: { id },
@@ -134,14 +127,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   const formData = await request.formData();
   const intent = formData.get("intent")?.toString();
 
-  /* istanbul ignore next -- @preserve
-   * Cloudflare D1 production-only path: The context?.cloudflare?.env?.DB check
-   * is only truthy in Cloudflare Workers production runtime. Local tests use
-   * the SQLite db directly. Cannot be tested without Cloudflare Workers runtime.
-   */
-  const database = context?.cloudflare?.env?.DB
-    ? await getDb(context.cloudflare.env as { DB: D1Database })
-    : db;
+  const database = await getRequestDb(context);
 
   // Verify ownership
   const recipe = await database.recipe.findUnique({
@@ -172,7 +158,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 
     // Get API key from Cloudflare env or process.env
     const apiKey =
-      context?.cloudflare?.env?.OPENAI_API_KEY ||
+      getCloudflareEnv(context)?.OPENAI_API_KEY ||
       process.env.OPENAI_API_KEY ||
       "";
 

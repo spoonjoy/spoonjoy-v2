@@ -65,6 +65,31 @@ export function generateOAuthState(): string {
   return arcticGenerateState();
 }
 
+function encodeApplePrivateKey(privateKey: string): Uint8Array {
+  const base64 = privateKey
+    .replace(/-----BEGIN PRIVATE KEY-----/g, "")
+    .replace(/-----END PRIVATE KEY-----/g, "")
+    .replace(/\s/g, "");
+
+  try {
+    const binary = atob(base64);
+    return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  } catch {
+    // Keep fake/test keys usable for URL generation; Apple token exchange will still fail for invalid real keys.
+    return new TextEncoder().encode(privateKey);
+  }
+}
+
+function createAppleClient(config: AppleOAuthConfig, redirectUri: string): Apple {
+  return new Apple(
+    config.clientId,
+    config.teamId,
+    config.keyId,
+    encodeApplePrivateKey(config.privateKey),
+    redirectUri
+  );
+}
+
 /**
  * Creates an Apple authorization URL for initiating Sign in with Apple.
  *
@@ -81,13 +106,7 @@ export function createAppleAuthorizationURL(
   redirectUri: string,
   state: string
 ): URL {
-  // Create Arctic Apple client
-  const apple = new Apple(
-    config.clientId,
-    config.teamId,
-    config.keyId,
-    config.privateKey
-  );
+  const apple = createAppleClient(config, redirectUri);
 
   // Arctic's createAuthorizationURL handles the core OAuth URL construction
   const scopes = ["email", "name"];
@@ -96,8 +115,6 @@ export function createAppleAuthorizationURL(
   // Apple requires response_mode=form_post when requesting scopes
   // This must be added manually as Arctic doesn't set it by default
   url.searchParams.set("response_mode", "form_post");
-
-  // Set the redirect_uri (Arctic doesn't include this in the URL)
   url.searchParams.set("redirect_uri", redirectUri);
 
   return url;
@@ -170,19 +187,10 @@ export async function verifyAppleCallback(
   }
 
   try {
-    // Create Arctic Apple client
-    const apple = new Apple(
-      config.clientId,
-      config.teamId,
-      config.keyId,
-      config.privateKey
-    );
+    const apple = createAppleClient(config, redirectUri);
 
     // Exchange authorization code for tokens
-    const tokens = await apple.validateAuthorizationCode(
-      callbackData.code,
-      redirectUri
-    );
+    const tokens = await apple.validateAuthorizationCode(callbackData.code);
 
     // Decode the ID token to get user claims
     const idToken = tokens.idToken();

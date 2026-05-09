@@ -1,5 +1,7 @@
 import { defineConfig } from "vitest/config";
-import { resolve } from "path";
+
+const appDirectory = new URL("./app", import.meta.url).pathname;
+const componentsDirectory = new URL("./app/components", import.meta.url).pathname;
 
 export default defineConfig({
   test: {
@@ -18,7 +20,6 @@ export default defineConfig({
     coverage: {
       provider: "istanbul",
       reporter: ["text", "json", "html"],
-      all: true,
       include: ["app/lib/**/*.ts", "app/routes/**/*.tsx", "app/components/**/*.tsx", "app/hooks/**/*.ts"],
       exclude: ["node_modules/**", "test/**", "**/*.config.ts", "**/*.d.ts", "**/types/**"],
       thresholds: {
@@ -31,8 +32,8 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      "~": resolve(__dirname, "./app"),
-      "@": resolve(__dirname, "./app/components"),
+      "~": appDirectory,
+      "@": componentsDirectory,
     }
   }
 });

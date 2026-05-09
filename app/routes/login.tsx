@@ -1,6 +1,6 @@
 import type { Route } from "./+types/login";
 import { Form, redirect, data, useActionData, useLoaderData } from "react-router";
-import { getDb, db } from "~/lib/db.server";
+import { getRequestDb } from "~/lib/route-platform.server";
 import { authenticateUser } from "~/lib/auth.server";
 import { createUserSession, getUserId } from "~/lib/session.server";
 import { OAuthButtonGroup, OAuthDivider, OAuthError } from "~/components/ui/oauth";
@@ -67,10 +67,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   // Get the appropriate database instance
-  /* istanbul ignore next -- @preserve Cloudflare D1 production-only path */
-  const database = context?.cloudflare?.env?.DB
-    ? await getDb(context.cloudflare.env as { DB: D1Database })
-    : db;
+  const database = await getRequestDb(context);
 
   // Authenticate user
   const user = await authenticateUser(database, email, password);

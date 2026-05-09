@@ -171,6 +171,20 @@ oUQDQgAEtest1234567890test1234567890test1234567890test1234
       expect(url.searchParams.get("redirect_uri")).toBe(mockRedirectUri);
     });
 
+    it("should accept decodable PEM private keys", () => {
+      const state = "test-state-123";
+      const configWithDecodableKey: AppleOAuthConfig = {
+        ...mockConfig,
+        privateKey: `-----BEGIN PRIVATE KEY-----
+dGVzdA==
+-----END PRIVATE KEY-----`,
+      };
+
+      const url = createAppleAuthorizationURL(configWithDecodableKey, mockRedirectUri, state);
+
+      expect(url.searchParams.get("client_id")).toBe(mockConfig.clientId);
+    });
+
     it("should include state parameter for CSRF protection", () => {
       const state = "test-state-123";
       const url = createAppleAuthorizationURL(mockConfig, mockRedirectUri, state);

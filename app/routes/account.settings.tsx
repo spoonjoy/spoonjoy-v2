@@ -1,7 +1,7 @@
 import type { Route } from "./+types/account.settings";
 import { useLoaderData, useActionData, Form, redirect } from "react-router";
 import { useState, useRef, useEffect } from "react";
-import { getDb, db } from "~/lib/db.server";
+import { getCloudflareEnv, getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
 import { unlinkOAuthAccount } from "~/lib/oauth-user.server";
 import { hashPassword, verifyPassword } from "~/lib/auth.server";
@@ -32,10 +32,7 @@ interface LoaderData {
 export async function loader({ request, context }: Route.LoaderArgs) {
   const userId = await requireUserId(request);
 
-  /* istanbul ignore next -- @preserve Cloudflare D1 production-only path */
-  const database = context?.cloudflare?.env?.DB
-    ? await getDb(context.cloudflare.env as { DB: D1Database })
-    : db;
+  const database = await getRequestDb(context);
 
   const user = await database.user.findUnique({
     where: { id: userId },
@@ -117,10 +114,7 @@ function isValidEmail(email: string): boolean {
 export async function action({ request, context }: Route.ActionArgs): Promise<ActionResult> {
   const userId = await requireUserId(request);
 
-  /* istanbul ignore next -- @preserve Cloudflare D1 production-only path */
-  const database = context?.cloudflare?.env?.DB
-    ? await getDb(context.cloudflare.env as { DB: D1Database })
-    : db;
+  const database = await getRequestDb(context);
 
   const formData = await request.formData();
   const intent = formData.get("intent");
@@ -243,7 +237,7 @@ export async function action({ request, context }: Route.ActionArgs): Promise<Ac
     }
 
     // Upload to Cloudflare R2 if available, otherwise fall back to base64
-    const r2Bucket = context?.cloudflare?.env?.PHOTOS as R2Bucket | undefined;
+    const r2Bucket = getCloudflareEnv(context)?.PHOTOS;
     let photoUrl: string;
 
     if (r2Bucket) {
@@ -290,7 +284,7 @@ export async function action({ request, context }: Route.ActionArgs): Promise<Ac
 
     // Delete from R2 if it's an R2 path
     if (user?.photoUrl?.startsWith('/photos/')) {
-      const r2Bucket = context?.cloudflare?.env?.PHOTOS as R2Bucket | undefined;
+      const r2Bucket = getCloudflareEnv(context)?.PHOTOS;
       if (r2Bucket) {
         const key = user.photoUrl.replace('/photos/', '');
         await r2Bucket.delete(key);

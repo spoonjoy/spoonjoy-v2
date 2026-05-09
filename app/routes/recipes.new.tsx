@@ -1,6 +1,6 @@
 import type { Route } from "./+types/recipes.new";
 import { redirect, data, useActionData, useNavigate, useNavigation, Form } from "react-router";
-import { getDb, db } from "~/lib/db.server";
+import { getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
 import { Heading } from "~/components/ui/heading";
 import { Link } from "~/components/ui/link";
@@ -69,10 +69,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     return data({ errors }, { status: 400 });
   }
 
-  /* istanbul ignore next -- @preserve Cloudflare D1 production-only path */
-  const database = context?.cloudflare?.env?.DB
-    ? await getDb(context.cloudflare.env as { DB: D1Database })
-    : db;
+  const database = await getRequestDb(context);
 
   try {
     // Parse steps data

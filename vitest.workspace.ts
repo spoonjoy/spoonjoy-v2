@@ -1,8 +1,7 @@
-import { defineWorkspace } from 'vitest/config';
 import { storybookTest } from '@storybook/addon-vitest/vitest-plugin';
-import path from 'path';
+import { playwright } from '@vitest/browser-playwright';
 
-export default defineWorkspace([
+export default [
   // Main project tests (unit/integration)
   'vitest.config.ts',
   // Storybook component tests
@@ -10,7 +9,7 @@ export default defineWorkspace([
     extends: '.storybook/vite.config.ts',
     plugins: [
       storybookTest({
-        configDir: path.join(__dirname, '.storybook'),
+        configDir: new URL('.storybook', import.meta.url).pathname,
       }),
     ],
     test: {
@@ -18,10 +17,10 @@ export default defineWorkspace([
       browser: {
         enabled: true,
         headless: true,
-        provider: 'playwright',
+        provider: playwright(),
         instances: [{ browser: 'chromium' }],
       },
       setupFiles: ['.storybook/vitest.setup.ts'],
     },
   },
-]);
+];

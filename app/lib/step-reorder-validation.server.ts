@@ -192,9 +192,13 @@ export function combineValidationResults(
     return outgoingResult;
   }
 
-  // Both failed - combine error messages
-  const combinedError = `${incomingResult.error}. Additionally, ${outgoingResult.error.charAt(0).toLowerCase()}${outgoingResult.error.slice(1)}`;
-  return { valid: false, error: combinedError };
+  const incomingError = incomingResult as { valid: false; error: string };
+  const outgoingError = outgoingResult as { valid: false; error: string };
+  const formattedOutgoingError = `${outgoingError.error.charAt(0).toLowerCase()}${outgoingError.error.slice(1)}`;
+  return {
+    valid: false,
+    error: `${incomingError.error}. Additionally, ${formattedOutgoingError}`,
+  };
 }
 
 /**

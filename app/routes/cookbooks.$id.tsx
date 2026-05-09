@@ -1,6 +1,6 @@
 import type { Route } from "./+types/cookbooks.$id";
 import { redirect, useLoaderData, Form, data, useSubmit } from "react-router";
-import { getDb, db } from "~/lib/db.server";
+import { getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
 import { useState, useRef } from "react";
 import { ConfirmationDialog } from "~/components/confirmation-dialog";
@@ -15,10 +15,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const userId = await requireUserId(request);
   const { id } = params;
 
-  /* istanbul ignore next -- @preserve Cloudflare D1 production-only path */
-  const database = context?.cloudflare?.env?.DB
-    ? await getDb(context.cloudflare.env as { DB: D1Database })
-    : db;
+  const database = await getRequestDb(context);
 
   const cookbook = await database.cookbook.findUnique({
     where: { id },
@@ -93,10 +90,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   const formData = await request.formData();
   const intent = formData.get("intent");
 
-  /* istanbul ignore next -- @preserve Cloudflare D1 production-only path */
-  const database = context?.cloudflare?.env?.DB
-    ? await getDb(context.cloudflare.env as { DB: D1Database })
-    : db;
+  const database = await getRequestDb(context);
 
   // Verify ownership
   const cookbook = await database.cookbook.findUnique({

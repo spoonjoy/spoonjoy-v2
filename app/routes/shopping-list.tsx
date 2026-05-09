@@ -1,8 +1,9 @@
 import type { Route } from "./+types/shopping-list";
+import type { PrismaClient } from "@prisma/client";
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useLoaderData, Form, data, useSubmit, useFetcher, useActionData } from "react-router";
-import { getDb, db } from "~/lib/db.server";
+import { getCloudflareEnv, getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
 import { Heading, Subheading } from "~/components/ui/heading";
 import { Text } from "~/components/ui/text";
@@ -27,6 +28,14 @@ type ParsedItemDraft = {
   ingredientName: string;
   isAmbiguous: boolean;
   originalText: string;
+};
+
+type ShoppingListActionData = {
+  success?: boolean;
+  errors?: {
+    parse?: string;
+  };
+  parseDraft?: ParsedItemDraft;
 };
 
 function parseFractionToken(token: string): number | null {
@@ -120,7 +129,7 @@ export function parseShoppingItemFallback(text: string): ParsedItemDraft {
   };
 }
 
-async function nextSortIndex(database: NonNullable<typeof db>, shoppingListId: string) {
+async function nextSortIndex(database: PrismaClient, shoppingListId: string) {
   const maxItem = await database.shoppingListItem.findFirst({
     where: { shoppingListId, deletedAt: null },
     orderBy: { sortIndex: "desc" },
@@ -131,7 +140,7 @@ async function nextSortIndex(database: NonNullable<typeof db>, shoppingListId: s
 }
 
 async function normalizeShoppingListOrdering(
-  database: NonNullable<typeof db>,
+  database: PrismaClient,
   shoppingListId: string
 ) {
   const activeItems: ShoppingListItemState[] = await database.shoppingListItem.findMany({
@@ -157,10 +166,7 @@ async function normalizeShoppingListOrdering(
 export async function loader({ request, context }: Route.LoaderArgs) {
   const userId = await requireUserId(request);
 
-  /* istanbul ignore next -- @preserve Cloudflare D1 production-only path */
-  const database = context?.cloudflare?.env?.DB
-    ? await getDb(context.cloudflare.env as { DB: D1Database })
-    : db;
+  const database = await getRequestDb(context);
 
   // Get or create shopping list
   let shoppingList = await database.shoppingList.findUnique({
@@ -224,10 +230,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   const formData = await request.formData();
   const intent = formData.get("intent")?.toString();
 
-  /* istanbul ignore next -- @preserve Cloudflare D1 production-only path */
-  const database = context?.cloudflare?.env?.DB
-    ? await getDb(context.cloudflare.env as { DB: D1Database })
-    : db;
+  const database = await getRequestDb(context);
 
   // Get or create shopping list
   let shoppingList = await database.shoppingList.findUnique({
@@ -258,7 +261,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 
     if (!parsedDraft.ingredientName.trim() && ingredientText.trim()) {
       const apiKey =
-        context?.cloudflare?.env?.OPENAI_API_KEY ||
+        getCloudflareEnv(context)?.OPENAI_API_KEY ||
         process.env.OPENAI_API_KEY ||
         "";
 
@@ -350,13 +353,11 @@ export async function action({ request, context }: Route.ActionArgs) {
       }
 
       // Check if item already exists
-      const existingItem = await database.shoppingListItem.findUnique({
+      const existingItem = await database.shoppingListItem.findFirst({
         where: {
-          shoppingListId_unitId_ingredientRefId: {
-            shoppingListId: shoppingList.id,
-            unitId,
-            ingredientRefId: ingredientRef.id,
-          },
+          shoppingListId: shoppingList.id,
+          unitId,
+          ingredientRefId: ingredientRef.id,
         },
       });
 
@@ -583,7 +584,7 @@ export function shouldDeleteOnSwipe(offsetX: number, isRevealed = false) {
 }
 
 export default function ShoppingList() {
-  const actionData = useActionData<typeof action>();
+  const actionData = useActionData<ShoppingListActionData>();
   const { shoppingList, recipes } = useLoaderData<typeof loader>();
   const [showClearDialog, setShowClearDialog] = useState(false);
   const [optimisticCheckedById, setOptimisticCheckedById] = useState<Record<string, boolean>>({});

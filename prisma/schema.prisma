@@ -96,6 +96,7 @@ model RecipeStep {
   stepNum     Int
   stepTitle   String?
   description String          
+  duration    Int?
   ingredients Ingredient[]
   usingSteps  StepOutputUse[] @relation("input")
   usedBySteps StepOutputUse[] @relation("output")

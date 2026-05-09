@@ -1,10 +1,10 @@
 {
   "compilerOptions": {
-    "lib": ["ES2022"],
+    "lib": ["DOM", "DOM.Iterable", "ES2022"],
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "types": ["@cloudflare/workers-types/2023-07-01"],
+    "types": ["vite/client"],
     "jsx": "react-jsx",
     "strict": true,
     "esModuleInterop": true,
@@ -13,11 +13,12 @@
     "isolatedModules": true,
     "resolveJsonModule": true,
     "noEmit": true,
+    "rootDirs": [".", "./.react-router/types"],
     "paths": {
       "~/*": ["./app/*"],
       "@/*": ["./app/components/*"]
     }
   },
-  "include": ["**/*.ts", "**/*.tsx", ".react-router/types/**/*"],
-  "exclude": ["node_modules"]
+  "include": ["app/**/*", "workers/**/*", ".react-router/types/**/*", "react-router.config.ts", "vite.config.ts", "vitest.config.ts", "vitest.workspace.ts"],
+  "exclude": ["node_modules", "app/**/__tests__/**", "**/*.test.ts", "**/*.test.tsx", "test/**", "stories/**"]
 }
