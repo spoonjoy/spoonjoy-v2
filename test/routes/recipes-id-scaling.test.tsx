@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
 import RecipeDetail from "~/routes/recipes.$id";
@@ -59,7 +58,7 @@ describe("Recipe View Scaling Integration", () => {
 
       // Scale selector should be present
       expect(screen.getByTestId("scale-display")).toBeInTheDocument();
-      expect(screen.getByTestId("scale-display")).toHaveTextContent("1×");
+      expect(screen.getByTestId("scale-display")).toHaveTextContent("Serves 4");
 
       // Scale buttons should be present
       expect(screen.getByTestId("scale-plus")).toBeInTheDocument();
@@ -67,8 +66,6 @@ describe("Recipe View Scaling Integration", () => {
     });
 
     it("should update servings text when scale changes", async () => {
-      const user = userEvent.setup();
-
       const mockData = {
         recipe: {
           id: "recipe-1",
@@ -100,21 +97,19 @@ describe("Recipe View Scaling Integration", () => {
 
       // Click plus button 4 times to get to 2× scale
       const plusButton = screen.getByTestId("scale-plus");
-      await user.click(plusButton);
-      await user.click(plusButton);
-      await user.click(plusButton);
-      await user.click(plusButton);
+      fireEvent.click(plusButton);
+      fireEvent.click(plusButton);
+      fireEvent.click(plusButton);
+      fireEvent.click(plusButton);
 
       // Verify scale display shows 2×
-      expect(screen.getByTestId("scale-display")).toHaveTextContent("2×");
+      expect(screen.getByTestId("scale-display")).toHaveTextContent("Serves 8");
 
       // Servings should now show "Serves 8"
       expect(screen.getByText(/serves 8/i)).toBeInTheDocument();
     });
 
     it("should scale ingredient quantities across all steps", async () => {
-      const user = userEvent.setup();
-
       const mockData = {
         recipe: {
           id: "recipe-1",
@@ -173,24 +168,24 @@ describe("Recipe View Scaling Integration", () => {
       await screen.findByRole("heading", { name: "Multi-Step Recipe" });
 
       // Initial quantities
-      expect(screen.getByText(/1 cup flour/i)).toBeInTheDocument();
-      expect(screen.getByText(/½ cup sugar/i)).toBeInTheDocument();
+      expect(screen.getByText("flour")).toBeInTheDocument();
+      expect(screen.getByTestId("ingredient-quantity-ing-1")).toHaveTextContent("1 cup");
+      expect(screen.getByText("sugar")).toBeInTheDocument();
+      expect(screen.getByTestId("ingredient-quantity-ing-2")).toHaveTextContent("½ cup");
 
       // Scale to 2×
       const plusButton = screen.getByTestId("scale-plus");
-      await user.click(plusButton);
-      await user.click(plusButton);
-      await user.click(plusButton);
-      await user.click(plusButton);
+      fireEvent.click(plusButton);
+      fireEvent.click(plusButton);
+      fireEvent.click(plusButton);
+      fireEvent.click(plusButton);
 
       // Quantities should be doubled
-      expect(screen.getByText(/2 cups? flour/i)).toBeInTheDocument();
-      expect(screen.getByText(/1 cup sugar/i)).toBeInTheDocument();
+      expect(screen.getByTestId("ingredient-quantity-ing-1")).toHaveTextContent("2 cup");
+      expect(screen.getByTestId("ingredient-quantity-ing-2")).toHaveTextContent("1 cup");
     });
 
     it("should preserve ingredient check state when scaling", async () => {
-      const user = userEvent.setup();
-
       const mockData = {
         recipe: {
           id: "recipe-1",
@@ -240,29 +235,28 @@ describe("Recipe View Scaling Integration", () => {
       await screen.findByRole("heading", { name: "Recipe with Checkboxes" });
 
       // Find and check the first ingredient
-      const checkboxes = screen.getAllByRole("checkbox");
-      expect(checkboxes).toHaveLength(2);
-      expect(checkboxes[0]).not.toBeChecked();
+      const flourCheckbox = screen.getByRole("checkbox", { name: "Mark flour as used" });
+      const sugarCheckbox = screen.getByRole("checkbox", { name: "Mark sugar as used" });
+      expect(flourCheckbox).not.toBeChecked();
 
-      await user.click(checkboxes[0]);
-      expect(checkboxes[0]).toBeChecked();
+      fireEvent.click(flourCheckbox);
+      expect(flourCheckbox).toBeChecked();
 
       // Click again to uncheck (tests the delete branch)
-      await user.click(checkboxes[0]);
-      expect(checkboxes[0]).not.toBeChecked();
+      fireEvent.click(flourCheckbox);
+      expect(flourCheckbox).not.toBeChecked();
 
       // Check again and then scale
-      await user.click(checkboxes[0]);
-      expect(checkboxes[0]).toBeChecked();
+      fireEvent.click(flourCheckbox);
+      expect(flourCheckbox).toBeChecked();
 
       // Now scale the recipe
       const plusButton = screen.getByTestId("scale-plus");
-      await user.click(plusButton);
+      fireEvent.click(plusButton);
 
       // The checkbox should still be checked
-      const checkboxesAfterScale = screen.getAllByRole("checkbox");
-      expect(checkboxesAfterScale[0]).toBeChecked();
-      expect(checkboxesAfterScale[1]).not.toBeChecked();
+      expect(screen.getByRole("checkbox", { name: "Mark flour as used" })).toBeChecked();
+      expect(sugarCheckbox).not.toBeChecked();
     });
 
     it("should render recipe image when provided", async () => {
@@ -478,9 +472,9 @@ describe("Recipe View Scaling Integration", () => {
 
       await screen.findByRole("heading", { name: "My Recipe" });
 
-      // Edit and delete buttons are no longer in RecipeHeader (moved to dock/edit page)
+      // Edit is handled by contextual dock actions; delete remains page-level for owners.
       expect(screen.queryByRole("link", { name: /edit/i })).not.toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: /delete/i })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Delete Recipe" })).toBeInTheDocument();
     });
 
     it("should not show owner controls when isOwner is false", async () => {
@@ -515,8 +509,6 @@ describe("Recipe View Scaling Integration", () => {
     });
 
     it("should handle scale range servings text correctly", async () => {
-      const user = userEvent.setup();
-
       const mockData = {
         recipe: {
           id: "recipe-1",
@@ -547,10 +539,10 @@ describe("Recipe View Scaling Integration", () => {
 
       // Scale to 2×
       const plusButton = screen.getByTestId("scale-plus");
-      await user.click(plusButton);
-      await user.click(plusButton);
-      await user.click(plusButton);
-      await user.click(plusButton);
+      fireEvent.click(plusButton);
+      fireEvent.click(plusButton);
+      fireEvent.click(plusButton);
+      fireEvent.click(plusButton);
 
       // Range should be doubled: 2-4 becomes 4-8
       expect(screen.getByText(/feeds 4-8 people/i)).toBeInTheDocument();

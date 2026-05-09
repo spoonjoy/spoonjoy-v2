@@ -117,11 +117,9 @@ describe('Root layout responsive behavior', () => {
         </MemoryRouter>
       )
 
-      // Authenticated users should see Recipes, Cookbooks, List, Profile
-      expect(screen.getByText('Recipes')).toBeInTheDocument()
-      expect(screen.getByText('Cookbooks')).toBeInTheDocument()
+      // Authenticated users should see the v3 3-slot dock actions
+      expect(screen.getByText('New')).toBeInTheDocument()
       expect(screen.getByText('List')).toBeInTheDocument()
-      expect(screen.getByText('Profile')).toBeInTheDocument()
     })
 
     it('shows unauthenticated nav items in SpoonDock for unauthenticated users', () => {

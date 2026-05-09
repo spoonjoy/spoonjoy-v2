@@ -373,7 +373,7 @@ export default function NewStep() {
         <Form method="post" className="space-y-6">
           <Fieldset className="space-y-6">
             <Field>
-              <Label>Title (optional)</Label>
+              <Label>Step Title (optional)</Label>
               <Input
                 type="text"
                 name="stepTitle"

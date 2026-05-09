@@ -3614,7 +3614,7 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
 
         // Wait for parsed ingredients to appear
         await waitFor(() => {
-          expect(screen.getByText(/Ingredients/)).toBeInTheDocument();
+          expect(screen.getByRole("heading", { name: /Ingredients \(\d+\)/ })).toBeInTheDocument();
         }, { timeout: 3000 });
 
         // Find and click the Edit button for flour
@@ -3755,7 +3755,7 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
 
         // Wait for parsed ingredients to appear
         await waitFor(() => {
-          expect(screen.getByText(/Ingredients/)).toBeInTheDocument();
+          expect(screen.getByRole("heading", { name: /Ingredients \(\d+\)/ })).toBeInTheDocument();
         }, { timeout: 3000 });
 
         // Find all remove buttons and click the first one

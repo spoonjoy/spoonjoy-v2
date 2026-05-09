@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   build-storybook:
-    name: 📚 Build Storybook
+    name: build-storybook
     runs-on: ubuntu-latest
     
     steps:
@@ -47,7 +47,7 @@ jobs:
           retention-days: 1
 
   deploy-storybook:
-    name: 🚀 Deploy to Cloudflare Pages
+    name: deploy-storybook
     if: github.ref == 'refs/heads/main'
     needs: build-storybook
     runs-on: ubuntu-latest

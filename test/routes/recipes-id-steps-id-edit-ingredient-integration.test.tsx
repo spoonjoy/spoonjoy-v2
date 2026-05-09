@@ -366,7 +366,7 @@ describe('Step Edit Ingredient Integration', () => {
       // Wait for parsed results to appear
       await waitFor(
         () => {
-          expect(screen.getByText(/parsed ingredients/i)).toBeInTheDocument()
+          expect(screen.getByRole('heading', { name: /Ingredients \(\d+\)/i })).toBeInTheDocument()
         },
         { timeout: 3000 }
       )
@@ -525,7 +525,7 @@ describe('Step Edit Ingredient Integration', () => {
         () => {
           // Either we see loading indicator or parsed results
           const hasLoading = screen.queryByTestId('loading-indicator')
-          const hasParsed = screen.queryByText(/parsed ingredients/i)
+          const hasParsed = screen.queryByRole('heading', { name: /Ingredients \(\d+\)/i })
           expect(hasLoading || hasParsed).toBeTruthy()
         },
         { timeout: 3000 }
@@ -590,7 +590,7 @@ describe('Step Edit Ingredient Integration', () => {
       // Parsed ingredients should appear
       await waitFor(
         () => {
-          expect(screen.getByText(/parsed ingredients/i)).toBeInTheDocument()
+          expect(screen.getByRole('heading', { name: /Ingredients \(\d+\)/i })).toBeInTheDocument()
         },
         { timeout: 3000 }
       )
@@ -713,7 +713,7 @@ describe('Step Edit Ingredient Integration', () => {
       // Wait for parsing
       await waitFor(
         () => {
-          expect(screen.getByText(/parsed ingredients/i)).toBeInTheDocument()
+          expect(screen.getByRole('heading', { name: /Ingredients \(\d+\)/i })).toBeInTheDocument()
         },
         { timeout: 3000 }
       )
@@ -741,7 +741,7 @@ describe('Step Edit Ingredient Integration', () => {
       // Wait for parsed ingredients header to appear
       await waitFor(
         () => {
-          expect(screen.getByText(/parsed ingredients/i)).toBeInTheDocument()
+          expect(screen.getByRole('heading', { name: /Ingredients \(\d+\)/i })).toBeInTheDocument()
         },
         { timeout: 3000 }
       )
@@ -796,7 +796,7 @@ describe('Step Edit Ingredient Integration', () => {
       // Wait for parsed ingredients header with count to appear (indicates parsing is complete)
       await waitFor(
         () => {
-          expect(screen.getByText(/parsed ingredients/i)).toBeInTheDocument()
+          expect(screen.getByRole('heading', { name: /Ingredients \(\d+\)/i })).toBeInTheDocument()
         },
         { timeout: 3000 }
       )
@@ -832,7 +832,7 @@ describe('Step Edit Ingredient Integration', () => {
 
       await waitFor(
         () => {
-          expect(screen.getByText(/parsed ingredients/i)).toBeInTheDocument()
+          expect(screen.getByRole('heading', { name: /Ingredients \(\d+\)/i })).toBeInTheDocument()
         },
         { timeout: 3000 }
       )
@@ -843,7 +843,7 @@ describe('Step Edit Ingredient Integration', () => {
       // Parsed ingredients should be cleared or show empty state
       await waitFor(
         () => {
-          expect(screen.queryByText(/parsed ingredients/i)).not.toBeInTheDocument()
+          expect(screen.queryByRole('heading', { name: /Ingredients \(\d+\)/i })).not.toBeInTheDocument()
         },
         { timeout: 3000 }
       )

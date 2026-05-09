@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { db } from "~/lib/db.server";
-import { loader, action, parseShoppingItemFallback } from "~/routes/shopping-list";
+import { loader, action, parseShoppingItemFallback, __internal__ } from "~/routes/shopping-list";
 import { createUser } from "~/lib/auth.server";
 import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
@@ -1490,6 +1490,50 @@ describe("Shopping List Route", () => {
         ingredientName: "olive oil",
         isAmbiguous: true,
       });
+    });
+
+    it("should parse mixed fractions, simple fractions, and whole-count items", () => {
+      expect(parseShoppingItemFallback("1 1/2 cups oats")).toMatchObject({
+        quantity: "1.5",
+        unitName: "cups",
+        ingredientName: "oats",
+        isAmbiguous: false,
+      });
+      expect(parseShoppingItemFallback("1/2 tsp salt")).toMatchObject({
+        quantity: "0.5",
+        unitName: "tsp",
+        ingredientName: "salt",
+        isAmbiguous: false,
+      });
+      expect(parseShoppingItemFallback("2 apples")).toMatchObject({
+        quantity: "2",
+        unitName: "whole",
+        ingredientName: "apples",
+        isAmbiguous: false,
+      });
+    });
+
+    it("should flag empty and invalid quantity text as ambiguous", () => {
+      expect(parseShoppingItemFallback("   ")).toMatchObject({
+        quantity: "",
+        unitName: "",
+        ingredientName: "",
+        isAmbiguous: true,
+        originalText: "   ",
+      });
+      expect(parseShoppingItemFallback("1/0 cup flour")).toMatchObject({
+        quantity: "",
+        unitName: "",
+        ingredientName: "1/0 cup flour",
+        isAmbiguous: true,
+      });
+      expect(parseShoppingItemFallback("1 1/0 cup flour")).toMatchObject({
+        quantity: "",
+        unitName: "",
+        ingredientName: "1 1/0 cup flour",
+        isAmbiguous: true,
+      });
+      expect(__internal__.parseFractionToken("not-a-number")).toBeNull();
     });
   });
 });

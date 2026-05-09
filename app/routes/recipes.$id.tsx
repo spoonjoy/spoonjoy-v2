@@ -99,7 +99,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
 
   const recipeIngredientKeys = new Set(
     recipe.steps.flatMap((step) =>
-      step.ingredients.map((ingredient) => `${ingredient.ingredientRefId}:${ingredient.unitId ?? "null"}`)
+      step.ingredients.map((ingredient) => `${ingredient.ingredientRefId}:${ingredient.unitId}`)
     )
   );
   const recipeIngredientRefIds = Array.from(
@@ -234,6 +234,8 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 }
 
 type CookbookListItem = { id: string; title: string };
+const EMPTY_COOKBOOKS: CookbookListItem[] = [];
+const EMPTY_SAVED_COOKBOOK_IDS: string[] = [];
 
 export function applyCreatedCookbookState(
   currentCookbooks: CookbookListItem[],
@@ -255,13 +257,10 @@ export function applyCreatedCookbookState(
 }
 
 export default function RecipeDetail() {
-  const {
-    recipe,
-    isOwner,
-    cookbooks = [],
-    savedInCookbookIds = [],
-    hasIngredientsInShoppingList = false,
-  } = useLoaderData<typeof loader>();
+  const loaderData = useLoaderData<typeof loader>();
+  const { recipe, isOwner, hasIngredientsInShoppingList = false } = loaderData;
+  const cookbooks = loaderData.cookbooks ?? EMPTY_COOKBOOKS;
+  const savedInCookbookIds = loaderData.savedInCookbookIds ?? EMPTY_SAVED_COOKBOOK_IDS;
   const submit = useSubmit();
   const addToListFetcher = useFetcher();
   const createCookbookFetcher = useFetcher<typeof action>();

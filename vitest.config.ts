@@ -7,8 +7,10 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./test/setup.ts"],
     pool: "forks",
-    maxWorkers: 2,
-    fileParallelism: true,
+    // DB-backed route/model tests share test.db and destructive cleanup helpers.
+    // Keep files serial until the suite has per-worker database isolation.
+    maxWorkers: 1,
+    fileParallelism: false,
     sequence: {
       shuffle: false,
     },

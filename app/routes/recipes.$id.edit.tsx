@@ -303,6 +303,7 @@ export default function EditRecipe() {
   };
 
   const handleDeleteStep = () => {
+    /* istanbul ignore if -- @preserve defensive guard for stale dialog callbacks */
     if (!stepToDelete) return;
 
     const formData = new FormData();

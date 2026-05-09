@@ -50,7 +50,7 @@ describe("Focused Step Editor Flow (E2E)", () => {
     expect(screen.getByText("Step 1")).toBeInTheDocument();
     expect(screen.getByText("Prep")).toBeInTheDocument();
     expect(screen.getByText("2 ingredients")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Edit" })).toHaveAttribute("href", "/recipes/recipe-1/steps/step-1/edit");
+    expect(screen.getAllByRole("link", { name: "Edit" })[0]).toHaveAttribute("href", "/recipes/recipe-1/steps/step-1/edit");
 
     expect(screen.getAllByRole("button", { name: "Move Up" })).toHaveLength(2);
     expect(screen.getAllByRole("button", { name: "Move Down" })).toHaveLength(2);
@@ -115,7 +115,7 @@ describe("Focused Step Editor Flow (E2E)", () => {
 
     expect(await screen.findByRole("heading", { name: "Add Step" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create" })).toBeInTheDocument();
-    expect(screen.getByText("Ingredients")).toBeInTheDocument();
+    expect(screen.getAllByText("Ingredients", { selector: "label" }).length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: /Create Step & Add Ingredients/i })).not.toBeInTheDocument();
   });
 

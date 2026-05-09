@@ -50,8 +50,7 @@ export async function shareContent(options: ShareOptions): Promise<ShareResult> 
       })
       return { success: true, method: 'native' }
     } catch (error) {
-      // User cancelled or share failed - fall through to clipboard
-      console.log('Native share failed, falling back to clipboard:', error)
+      // User cancellation/share failure is expected; silently fall back to clipboard.
     }
   }
 
@@ -62,8 +61,7 @@ export async function shareContent(options: ShareOptions): Promise<ShareResult> 
       return { success: true, method: 'clipboard' }
     }
     return { success: false, method: 'clipboard' }
-  } catch (error) {
-    console.error('Clipboard write failed:', error)
+  } catch {
     return { success: false, method: 'clipboard' }
   }
 }

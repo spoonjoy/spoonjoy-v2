@@ -50,6 +50,8 @@ function parseFractionToken(token: string): number | null {
   return Number.isFinite(numeric) ? numeric : null;
 }
 
+export const __internal__ = { parseFractionToken };
+
 export function parseShoppingItemFallback(text: string): ParsedItemDraft {
   const normalized = text.trim().replace(/\s+/g, " ");
 
@@ -592,23 +594,9 @@ export default function ShoppingList() {
   const removeFetcher = useFetcher();
 
   useEffect(() => {
-    const activeIds = new Set(shoppingList.items.map((item) => item.id));
-
-    setOptimisticCheckedById((current) => {
-      const next = Object.fromEntries(
-        Object.entries(current).filter(([itemId]) => activeIds.has(itemId))
-      );
-      return Object.keys(next).length === Object.keys(current).length ? current : next;
-    });
-
-    setOptimisticRemovedById((current) => {
-      const next = Object.fromEntries(
-        Object.entries(current).filter(([itemId]) => activeIds.has(itemId))
-      );
-      return Object.keys(next).length === Object.keys(current).length ? current : next;
-    });
-
-    setRevealedItemId((current) => (current && activeIds.has(current) ? current : null));
+    setOptimisticCheckedById({});
+    setOptimisticRemovedById({});
+    setRevealedItemId(null);
   }, [shoppingList.items]);
 
   const displayItems = useMemo(() => {
@@ -665,7 +653,7 @@ export default function ShoppingList() {
   };
 
   const removeItem = (itemId: string) => {
-    setRevealedItemId((current) => (current === itemId ? null : current));
+    setRevealedItemId(null);
     setOptimisticRemovedById((current) => ({ ...current, [itemId]: true }));
 
     removeFetcher.submit(

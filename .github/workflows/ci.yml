@@ -7,8 +7,8 @@ on:
     branches: [main]
 
 jobs:
-  quality:
-    name: 🍴 Quality Check
+  coverage:
+    name: coverage
     runs-on: ubuntu-latest
     timeout-minutes: 90
 
@@ -65,7 +65,7 @@ jobs:
         run: pnpm build
 
   e2e:
-    name: 🎭 Playwright E2E Tests
+    name: e2e
     runs-on: ubuntu-latest
     timeout-minutes: 10
 

@@ -22,4 +22,27 @@ describe("ingredient affordance mapping", () => {
     expect(affordance.categoryKey).toBe("protein");
     expect(affordance.iconKey).toBe("drumstick");
   });
+
+  it("keeps a submitted specific icon over inferred defaults", () => {
+    const affordance = resolveIngredientAffordance("mystery ingredient", "pantry", "citrus");
+
+    expect(affordance.categoryKey).toBe("pantry");
+    expect(affordance.iconKey).toBe("citrus");
+    expect(affordance.iconLabel).toBe("Citrus");
+  });
+
+  it("falls back to inferred icon when submitted icon is generic", () => {
+    const affordance = resolveIngredientAffordance("fresh basil", "produce", "package");
+
+    expect(affordance.categoryKey).toBe("produce");
+    expect(affordance.iconKey).toBe("leaf");
+  });
+
+  it("falls back to inferred category when submitted category is invalid", () => {
+    const affordance = resolveIngredientAffordance("fresh basil", "not-a-category", "leaf");
+
+    expect(affordance.categoryKey).toBe("produce");
+    expect(affordance.categoryLabel).toBe("Produce");
+    expect(affordance.iconKey).toBe("leaf");
+  });
 });

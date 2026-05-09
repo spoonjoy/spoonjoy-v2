@@ -200,6 +200,32 @@ describe("Kitchen Index Route", () => {
         return true;
       });
     });
+
+    it("returns empty kitchen payload when session user no longer exists", async () => {
+      const session = await sessionStorage.getSession();
+      session.set("userId", "missing-user-id");
+      const cookieValue = (await sessionStorage.commitSession(session)).split(";")[0];
+
+      const headers = new Headers();
+      headers.set("Cookie", cookieValue);
+
+      const request = new UndiciRequest("http://localhost:3000/?tab=cookbooks", { headers });
+
+      const result = await loader({
+        request,
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+
+      expect(result).toEqual({
+        tab: "cookbooks",
+        isOwner: false,
+        viewer: null,
+        kitchenUser: null,
+        recipes: [],
+        cookbooks: [],
+      });
+    });
   });
 
   describe("meta", () => {
@@ -275,6 +301,60 @@ describe("Kitchen Index Route", () => {
       expect(styles.length).toBe(0);
     });
 
+    it("renders owner empty states and recipe image fallback branches", async () => {
+      const Stub = createTestRoutesStub([
+        {
+          path: "/",
+          Component: Index,
+          loader: () => ({
+            tab: "recipes",
+            isOwner: true,
+            viewer: { id: "viewer-1", username: "chef", email: "chef@example.com", photoUrl: null },
+            kitchenUser: { id: "viewer-1", username: "chef", photoUrl: null },
+            recipes: [],
+            cookbooks: [],
+          }),
+        },
+      ]);
+
+      render(<Stub initialEntries={["/"]} />);
+
+      expect(await screen.findByText("0 recipes and 0 cookbooks")).toBeInTheDocument();
+      expect(screen.getByText("No recipes yet. Add your first recipe to start your kitchen.")).toBeInTheDocument();
+      expect(screen.getByText("No cookbooks yet. Create one to organize your recipes.")).toBeInTheDocument();
+    });
+
+    it("renders recipe images when recipes have displayable image URLs", async () => {
+      const Stub = createTestRoutesStub([
+        {
+          path: "/",
+          Component: Index,
+          loader: () => ({
+            tab: "recipes",
+            isOwner: false,
+            viewer: null,
+            kitchenUser: { id: "chef-1", username: "chef", photoUrl: "https://example.com/avatar.jpg" },
+            recipes: [
+              {
+                id: "recipe-with-image",
+                title: "Image Dish",
+                description: null,
+                servings: null,
+                imageUrl: "https://example.com/dish.jpg",
+              },
+            ],
+            cookbooks: [],
+          }),
+        },
+      ]);
+
+      render(<Stub initialEntries={["/?chef=chef"]} />);
+
+      const image = await screen.findByRole("img", { name: "Image Dish" });
+      expect(image).toHaveAttribute("src", "https://example.com/dish.jpg");
+      expect(screen.queryByText(/Serves/)).not.toBeInTheDocument();
+    });
+
     it("renders visitor kitchen with read-only controls hidden", async () => {
       const Stub = createTestRoutesStub([
         {
@@ -315,8 +395,15 @@ describe("Kitchen Index Route", () => {
               {
                 id: "cookbook-1",
                 title: "Swiss Weeknight",
-                _count: { recipes: 0 },
-                recipes: [],
+                _count: { recipes: 1 },
+                recipes: [
+                  {
+                    recipe: {
+                      imageUrl: "https://example.com/cookbook-recipe.jpg",
+                      title: "Rosti",
+                    },
+                  },
+                ],
               },
             ],
           }),
