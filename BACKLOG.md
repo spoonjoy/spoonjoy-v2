@@ -230,13 +230,13 @@ Completion notes:
 
 Priority: `P1`
 Lane: `architecture`, `maintainability`, `testing`
-Status: `proposed`
+Status: `in-progress`
 
 Problem: Several route modules mix loader/action logic, domain operations, helper functions, and large UI components. The tests are also large, making future changes expensive under the 100% coverage rule.
 
 Evidence:
 
-- `app/routes/account.settings.tsx` is about 981 lines.
+- `app/routes/account.settings.tsx` was about 970 lines before the first `SJ-007` extraction slice.
 - `app/routes/shopping-list.tsx` is about 930 lines.
 - `app/routes/recipes.$id.tsx` is about 762 lines.
 - Matching test files exceed thousands of lines, with `test/routes/account-settings.test.tsx` at 4257 lines.
@@ -248,6 +248,11 @@ Acceptance criteria:
 - Extract recipe detail cookbook/shopping-list helpers from the UI route.
 - Keep route modules thin without changing behavior.
 - Preserve or improve coverage while reducing route test fixture duplication.
+
+Progress notes:
+
+- First slice extracted account settings loader/action, profile photo, OAuth-linking, and password mutation behavior into `app/lib/account-settings.server.ts`, leaving `app/routes/account.settings.tsx` as a much thinner route/UI wrapper.
+- Remaining slices: extract shopping-list parsing/persistence/action handlers and recipe-detail cookbook/shopping-list helpers.
 
 ### SJ-008 - Mobile RecipeBuilder And SpoonDock UX Audit
 
