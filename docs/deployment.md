@@ -11,14 +11,15 @@ Spoonjoy v2 deploys to Cloudflare Workers with D1 for data and R2 for uploaded p
 | `DB` | D1 database | Prisma-backed application data |
 | `PHOTOS` | R2 bucket | Profile and recipe image uploads served through `/photos/*` |
 
-Create first-time production resources with:
+Create first-time production resources with the commands below. R2 must first be enabled in Cloudflare Dashboard > R2 Object Storage; if it is not enabled, Wrangler returns `10042: Please enable R2 through the Cloudflare Dashboard`.
 
 ```bash
 wrangler d1 create spoonjoy
 wrangler r2 bucket create spoonjoy-photos
+wrangler r2 bucket list
 ```
 
-After creating D1, copy the returned `database_id` into `wrangler.json` under the `DB` binding.
+After creating D1, copy the returned `database_id` into `wrangler.json` under the `DB` binding. Verify both D1 and R2 resources live in the same Cloudflare account used by `CLOUDFLARE_ACCOUNT_ID`/Wrangler deploy credentials.
 
 ## Required Secrets
 
@@ -101,7 +102,7 @@ pnpm deploy
 | Symptom | Likely Cause | Fix |
 | --- | --- | --- |
 | OAuth buttons redirect back with `oauthError` | Missing or mismatched OAuth secret/callback config | Re-check provider callback URLs and `wrangler secret put` values |
-| Uploaded images work locally but not in production | Missing `PHOTOS` R2 bucket/binding | Create `spoonjoy-photos` and verify `wrangler.json` binding |
+| Uploaded images work locally but not in production | Missing `PHOTOS` R2 bucket/binding or R2 is not enabled for the deploy account | Enable R2 in the Dashboard, create `spoonjoy-photos`, and verify `wrangler.json` binding |
 | Ingredient parsing returns fallback/manual review | Missing or invalid `OPENAI_API_KEY` | Set the secret or keep deterministic fallback behavior |
 | Production schema is stale | D1 migrations not applied remotely | Run `wrangler d1 migrations apply DB --remote` before deploy |
 | Sessions reset across deploys | Missing/rotating `SESSION_SECRET` | Set a stable high-entropy production secret |

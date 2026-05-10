@@ -13,7 +13,7 @@
     "dev": "react-router dev",
     "build": "react-router build",
     "preview": "wrangler pages dev",
-    "deploy": "pnpm build && npx -p wrangler@4.55.0 wrangler deploy",
+    "deploy": "pnpm build && npx -p wrangler@4.90.0 wrangler deploy",
     "deploy:preflight": "tsx scripts/deployment-preflight.ts",
     "typecheck": "react-router typegen && tsc",
     "test": "vitest",
@@ -70,7 +70,7 @@
   },
   "devDependencies": {
     "@chromatic-com/storybook": "^5.0.0",
-    "@cloudflare/workers-types": "^4.20260124.0",
+    "@cloudflare/workers-types": "^4.20260507.1",
     "@faker-js/faker": "^10.2.0",
     "@playwright/test": "^1.58.1",
     "@storybook/addon-a11y": "^10.2.1",
@@ -106,7 +106,7 @@
     "undici": "^7.20.0",
     "vite": "^7.3.1",
     "vitest": "^4.0.18",
-    "wrangler": "^4.65.0"
+    "wrangler": "^4.90.0"
   },
   "pnpm": {
     "overrides": {
