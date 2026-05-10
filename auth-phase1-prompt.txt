@@ -24,4 +24,4 @@ Technical requirements:
 - Use TypeScript properly
 
 When completely finished, run:
-clawdbot gateway wake --text "✅ Phase 1: Auth system complete" --mode now
+ouro msg --to slugger "✅ Phase 1: Auth system complete"
