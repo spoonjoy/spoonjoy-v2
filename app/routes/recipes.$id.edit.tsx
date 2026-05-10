@@ -318,6 +318,7 @@ export default function EditRecipe() {
   const formRef = useRef<HTMLFormElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [stepToDelete, setStepToDelete] = useState<{ id: string; stepNum: number } | null>(null);
+  const [dockSaveRequest, setDockSaveRequest] = useState(0);
   const isLoading = navigation.state === 'submitting';
 
   const handleCancel = () => {
@@ -368,6 +369,7 @@ export default function EditRecipe() {
 
   useRecipeEditActions({
     recipeId: recipe.id,
+    onSave: () => setDockSaveRequest((request) => request + 1),
   });
 
   return (
@@ -415,6 +417,7 @@ export default function EditRecipe() {
           onCancel={handleCancel}
           errors={actionData?.errors}
           loading={isLoading}
+          saveRequestSignal={dockSaveRequest}
           showSteps={false}
         />
 

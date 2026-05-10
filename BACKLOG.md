@@ -3,7 +3,7 @@
 Status: proposed canonical backlog
 Audit date: 2026-05-10
 Baseline: `main` at `3533955` (`Upgrade GitHub Actions to Node 24 runtime (#3)`)
-Verification anchor: `pnpm test:coverage` passed with 137 test files, 3493 tests, 0 skipped tests, and 100% statements/branches/functions/lines.
+Verification anchor: `pnpm test:coverage` passed with 137 test files, 3497 tests, 0 skipped tests, and 100% statements/branches/functions/lines.
 
 ## How To Use This Backlog
 
@@ -43,7 +43,7 @@ Status meanings:
 6. `SJ-006`: Remove or replace skipped tests so 100% coverage also means no hidden skipped assertions.
 7. `SJ-008`: Run the mobile RecipeBuilder/SpoonDock UX pass once core create/edit data paths are trustworthy.
 
-Completed in sequence: `SJ-001`, `SJ-002`, `SJ-003`, `SJ-004`, `SJ-005`, `SJ-006`.
+Completed in sequence: `SJ-001`, `SJ-002`, `SJ-003`, `SJ-004`, `SJ-005`, `SJ-006`, `SJ-008`.
 
 ## Backlog Items
 
@@ -249,7 +249,7 @@ Acceptance criteria:
 
 Priority: `P1`
 Lane: `mobile`, `ux`, `accessibility`
-Status: `proposed`
+Status: `done`
 
 Problem: Mobile-first recipe input was previously flagged as unresolved/reverted. Recipe creation is a core mobile flow, so this still needs a real device-size pass rather than component-only confidence.
 
@@ -266,6 +266,16 @@ Acceptance criteria:
 - Verify touch-target behavior in a browser at mobile breakpoints.
 - Ensure drag/reorder alternatives are accessible on mobile.
 - Capture before/after screenshots or an explicit QA checklist in the PR.
+
+Completion notes:
+
+- Added a mobile Playwright audit spec for create, edit, detail, and shopping-list flows at a 390x844 touch viewport.
+- Fixed edit-page SpoonDock Save so it submits current RecipeBuilder state instead of registering a no-op action.
+- Added contextual SpoonDock layout support so recipe-detail Edit/List/Save/Share actions fit inside the dock without side-slot overflow.
+- Added mobile clearance to the Save to Cookbook sheet so its footer stays above the fixed SpoonDock.
+- Added 44px minimum touch-target enforcement for shopping-list item rows and check buttons.
+- Captured the ongoing manual QA checklist in `docs/qa/sj-008-mobile-recipebuilder-spoondock-audit.md`.
+- Verified focused Vitest coverage, full `pnpm test:coverage`, and the targeted mobile Playwright audit.
 
 ### SJ-009 - Add Canonical User Profile Routes And Fix Chef Links
 
@@ -533,7 +543,7 @@ Problem: The codebase has a solid accessibility testing baseline, but several hi
 
 Evidence:
 
-- Skipped tests mention touch-target and dialog-error coverage.
+- `SJ-006` and `SJ-008` added touch-target, dialog-error, and mobile dock coverage, but broader integrated keyboard/screen-reader review remains valuable.
 - Recipe detail uses bottom-sheet-style `Dialog` for cookbook saving.
 - Shopping list uses swipe affordances and optimistic state.
 - SpoonDock changes navigation behavior on mobile.

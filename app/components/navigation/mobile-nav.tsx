@@ -99,9 +99,9 @@ export function MobileNav({ isAuthenticated = true }: MobileNavProps) {
     : defaultNavItems.filter((item) => item.position === 'right')
 
   return (
-    <SpoonDock>
+    <SpoonDock layout={isContextual ? 'contextual' : 'default'}>
       {/* Left slot — fixed width via grid */}
-      <div className="flex items-center justify-center">
+      <div className={`flex items-center justify-center ${isContextual ? 'gap-1' : ''}`}>
         {leftItems.map((item) => {
           if (isContextual) {
             const action = item as DockAction
@@ -124,7 +124,7 @@ export function MobileNav({ isAuthenticated = true }: MobileNavProps) {
       <DockCenter href="/" />
 
       {/* Right slot — fixed width via grid */}
-      <div className="flex items-center justify-center">
+      <div className={`flex items-center justify-center ${isContextual ? 'gap-1' : ''}`}>
         {rightItems.map((item) => {
           if (isContextual) {
             const action = item as DockAction

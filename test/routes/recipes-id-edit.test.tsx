@@ -6,6 +6,7 @@ import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
 import { loader, action } from "~/routes/recipes.$id.edit";
 import EditRecipe from "~/routes/recipes.$id.edit";
+import { DockContextProvider, MobileNav } from "~/components/navigation";
 import { createUser } from "~/lib/auth.server";
 import { sessionStorage } from "~/lib/session.server";
 import { ACTIVE_RECIPE_TITLE_CONFLICT_ERROR } from "~/lib/recipe-title-uniqueness.server";
@@ -1911,6 +1912,72 @@ describe("Recipes $id Edit Route", () => {
       expect(submittedData.title).toBe("Updated Title");
       expect(submittedData.description).toBe("Updated description");
       expect(submittedData.servings).toBe("8");
+      expect(submittedData.steps).toBeDefined();
+    });
+
+    it("should populate hidden form and submit when dock Save is clicked", async () => {
+      const user = userEvent.setup();
+      let submittedData: any = null;
+
+      const loaderData = {
+        recipe: {
+          id: "recipe-1",
+          title: "Original Title",
+          description: "Original description",
+          servings: "4",
+          imageUrl: "",
+          steps: [],
+        },
+        formattedSteps: [],
+      };
+
+      const Stub = createTestRoutesStub([
+        {
+          path: "/recipes/:id/edit",
+          Component: () => (
+            <DockContextProvider>
+              <EditRecipe />
+              <MobileNav />
+            </DockContextProvider>
+          ),
+          loader: () => loaderData,
+          action: async ({ request }: { request: Request }) => {
+            const formData = await request.formData();
+            submittedData = {
+              title: formData.get("title"),
+              description: formData.get("description"),
+              servings: formData.get("servings"),
+              steps: formData.get("steps"),
+            };
+            return { success: true };
+          },
+        },
+      ]);
+
+      render(<Stub initialEntries={["/recipes/recipe-1/edit"]} />);
+
+      await screen.findByRole("button", { name: "Save Recipe" });
+
+      const titleInput = screen.getByLabelText(/^Title$/i);
+      const descriptionInput = screen.getByLabelText(/Description/);
+      const servingsInput = screen.getByLabelText(/Servings/);
+
+      await user.clear(titleInput);
+      await user.type(titleInput, "Dock Updated Title");
+      await user.clear(descriptionInput);
+      await user.type(descriptionInput, "Dock updated description");
+      await user.clear(servingsInput);
+      await user.type(servingsInput, "6");
+
+      await user.click(await screen.findByRole("button", { name: "Save" }));
+
+      await waitFor(() => {
+        expect(submittedData).not.toBeNull();
+      });
+
+      expect(submittedData.title).toBe("Dock Updated Title");
+      expect(submittedData.description).toBe("Dock updated description");
+      expect(submittedData.servings).toBe("6");
       expect(submittedData.steps).toBeDefined();
     });
 

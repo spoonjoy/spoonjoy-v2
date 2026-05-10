@@ -21,6 +21,7 @@ import clsx from 'clsx'
 export interface SpoonDockProps {
   children?: React.ReactNode
   className?: string
+  layout?: 'default' | 'contextual'
   /** Accessible label for the navigation landmark */
   'aria-label'?: string
 }
@@ -28,6 +29,7 @@ export interface SpoonDockProps {
 export function SpoonDock({ 
   children, 
   className,
+  layout = 'default',
   'aria-label': ariaLabel = 'Main navigation',
   ...props 
 }: SpoonDockProps) {
@@ -39,8 +41,11 @@ export function SpoonDock({
         // Positioning - fixed at bottom, centered horizontally
         'fixed bottom-0 left-[max(1rem,env(safe-area-inset-left))] right-[max(1rem,env(safe-area-inset-right))]',
         
-        // 3-column fixed grid: side slots 72px, center auto
-        'grid grid-cols-[72px_1fr_72px] items-center',
+        // 3-column grid. Contextual routes can expose two actions per side.
+        'grid items-center',
+        layout === 'contextual'
+          ? 'grid-cols-[minmax(96px,1fr)_52px_minmax(96px,1fr)]'
+          : 'grid-cols-[72px_1fr_72px]',
         
         // Sizing
         'max-w-md mx-auto',

@@ -877,7 +877,7 @@ export default function ShoppingList() {
                       exit={{ opacity: 0, y: 8 }}
                       transition={{ type: "spring", stiffness: 520, damping: 42, mass: 0.5 }}
                       className={`
-                        relative z-10 px-3 py-2
+                        relative z-10 min-h-11 px-3 py-2
                         flex items-center bg-white dark:bg-zinc-800
                         ${item.checked ? "opacity-60" : ""}
                       `}
@@ -891,7 +891,7 @@ export default function ShoppingList() {
                           }
                           toggleItem(item);
                         }}
-                        className="flex min-w-0 items-center gap-2 text-left"
+                        className="flex min-h-11 min-w-0 flex-1 items-center gap-2 text-left"
                         aria-label={item.checked ? "Uncheck item" : "Check item"}
                       >
                         <span

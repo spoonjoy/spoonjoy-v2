@@ -20,6 +20,7 @@ import { render, screen, within, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { createRoutesStub } from "react-router";
+import { useState } from "react";
 import { RecipeBuilder } from "~/components/recipe/RecipeBuilder";
 import type { StepData } from "~/components/recipe/StepEditorCard";
 
@@ -341,6 +342,57 @@ describe("RecipeBuilder", () => {
 
       // onSave should NOT have been called
       expect(onSave).not.toHaveBeenCalled();
+    });
+
+    it("does not call onSave for the initial save request signal", async () => {
+      const onSave = vi.fn();
+      const Wrapper = createTestWrapper({ onSave, saveRequestSignal: 1 });
+      render(<Wrapper initialEntries={["/recipes/new"]} />);
+
+      await userEvent.type(screen.getByLabelText(/title/i), "Initial Signal Recipe");
+
+      expect(onSave).not.toHaveBeenCalled();
+    });
+
+    it("calls onSave when saveRequestSignal changes", async () => {
+      const user = userEvent.setup();
+      const onSave = vi.fn();
+
+      function SaveSignalHost() {
+        const [saveRequestSignal, setSaveRequestSignal] = useState(0);
+
+        return (
+          <>
+            <button
+              type="button"
+              onClick={() => setSaveRequestSignal((signal) => signal + 1)}
+            >
+              Dock Save
+            </button>
+            <RecipeBuilder
+              onSave={onSave}
+              saveRequestSignal={saveRequestSignal}
+            />
+          </>
+        );
+      }
+
+      const Wrapper = createRoutesStub([
+        {
+          path: "/recipes/new",
+          Component: SaveSignalHost,
+          action: async () => ({ parsedIngredients: [] }),
+        },
+      ]);
+
+      render(<Wrapper initialEntries={["/recipes/new"]} />);
+
+      await user.type(screen.getByLabelText(/title/i), "Dock Saved Recipe");
+      await user.click(screen.getByRole("button", { name: "Dock Save" }));
+
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({ title: "Dock Saved Recipe" }),
+      );
     });
 
     it("converts empty description to null on save", async () => {

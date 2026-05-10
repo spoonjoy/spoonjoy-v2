@@ -922,7 +922,9 @@ describe("Recipes $id Route", () => {
         "data-enter:data-closed:translate-y-4",
         "data-closed:opacity-0"
       );
-      expect(panel?.className).toContain("max-h-[calc(100dvh-1.5rem)]");
+      expect(panel?.className).toContain("mb-24");
+      expect(panel?.className).toContain("max-h-[calc(100dvh-7.5rem)]");
+      expect(panel?.className).toContain("sm:mb-auto");
       expect(panel).toHaveClass("!rounded-sm", "!shadow-none");
 
       const modalBody = screen.getByTestId("save-modal-body");

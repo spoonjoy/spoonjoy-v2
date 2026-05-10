@@ -16,7 +16,7 @@
  * - Character limits on inputs
  */
 
-import { useState, useEffect, useId } from 'react'
+import { useState, useEffect, useId, useRef } from 'react'
 import { Button } from '~/components/ui/button'
 import { Fieldset, Field, Label, ErrorMessage } from '~/components/ui/fieldset'
 import { Input } from '~/components/ui/input'
@@ -48,6 +48,7 @@ export interface RecipeBuilderProps {
   onCancel?: () => void
   disabled?: boolean
   loading?: boolean
+  saveRequestSignal?: number
   errors?: {
     title?: string
     description?: string
@@ -65,6 +66,7 @@ export function RecipeBuilder({
   onCancel,
   disabled = false,
   loading = false,
+  saveRequestSignal = 0,
   errors,
   showSteps = true,
 }: RecipeBuilderProps) {
@@ -88,6 +90,7 @@ export function RecipeBuilder({
 
   // Steps state
   const [steps, setSteps] = useState<StepData[]>(recipe?.steps ?? [])
+  const lastSaveRequestSignal = useRef(saveRequestSignal)
 
   // Cleanup preview URL on unmount
   useEffect(() => {
@@ -120,6 +123,12 @@ export function RecipeBuilder({
     }
     onSave(data)
   }
+
+  useEffect(() => {
+    if (saveRequestSignal === lastSaveRequestSignal.current) return
+    lastSaveRequestSignal.current = saveRequestSignal
+    handleSave()
+  }, [saveRequestSignal])
 
   const handleCancel = () => {
     onCancel?.()

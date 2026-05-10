@@ -234,6 +234,7 @@ describe('MobileNav', () => {
       expect(screen.getByText('Edit')).toBeInTheDocument()
       expect(screen.queryByText('New')).not.toBeInTheDocument()
       expect(screen.queryByText('List')).not.toBeInTheDocument()
+      expect(screen.getByRole('navigation')).toHaveClass('grid-cols-[minmax(96px,1fr)_52px_minmax(96px,1fr)]')
     })
 
     it('renders left-position actions on left side of dock', () => {
@@ -392,6 +393,7 @@ describe('MobileNav', () => {
       expect(screen.queryByText('Back')).not.toBeInTheDocument()
       expect(screen.getByText('New')).toBeInTheDocument()
       expect(screen.getByText('List')).toBeInTheDocument()
+      expect(screen.getByRole('navigation')).toHaveClass('grid-cols-[72px_1fr_72px]')
     })
 
     it('renders left item with function onAction as button', async () => {

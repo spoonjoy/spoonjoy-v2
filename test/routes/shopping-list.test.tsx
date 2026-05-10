@@ -1008,6 +1008,7 @@ describe("Shopping List Routes", () => {
       // Button-style toggles with aria-label are acceptable
       const toggleButton = screen.getByRole("button", { name: "Check item" });
       expect(toggleButton).toBeInTheDocument();
+      expect(toggleButton).toHaveClass("min-h-11");
     });
   });
 

@@ -62,6 +62,14 @@ describe('SpoonDock', () => {
       expect(nav).toHaveClass('grid-cols-[72px_1fr_72px]')
     })
 
+    it('uses wider balanced side columns for contextual action clusters', () => {
+      render(<SpoonDock layout="contextual" />)
+      const nav = screen.getByRole('navigation')
+      expect(nav).toHaveClass('grid')
+      expect(nav).toHaveClass('grid-cols-[minmax(96px,1fr)_52px_minmax(96px,1fr)]')
+      expect(nav).not.toHaveClass('grid-cols-[72px_1fr_72px]')
+    })
+
     it('centers items vertically', () => {
       render(<SpoonDock />)
       const nav = screen.getByRole('navigation')
