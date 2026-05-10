@@ -3,7 +3,7 @@
 Status: proposed canonical backlog
 Audit date: 2026-05-10
 Baseline: `main` at `3533955` (`Upgrade GitHub Actions to Node 24 runtime (#3)`)
-Verification anchor: `pnpm test:coverage` passed with 138 test files, 3517 tests, 0 skipped tests, and 100% statements/branches/functions/lines.
+Verification anchor: `pnpm test:coverage` passed with 139 test files, 3520 tests, 0 skipped tests, and 100% statements/branches/functions/lines.
 
 ## How To Use This Backlog
 
@@ -44,8 +44,10 @@ Status meanings:
 7. `SJ-008`: Run the mobile RecipeBuilder/SpoonDock UX pass once core create/edit data paths are trustworthy.
 8. `SJ-009`: Add canonical user profile routes so chef links resolve to shareable profile URLs.
 9. `SJ-013`: Harden shopping-list item actions for idempotency, restore behavior, and cross-user isolation.
+10. `SJ-015`: Add Cloudflare deployment preflight checks and production deployment docs.
+11. `SJ-023`: Remove production build sourcemap warnings so the zero-warning contract covers deploy builds.
 
-Completed in sequence: `SJ-001`, `SJ-002`, `SJ-003`, `SJ-004`, `SJ-005`, `SJ-006`, `SJ-008`, `SJ-009`, `SJ-013`.
+Completed in sequence: `SJ-001`, `SJ-002`, `SJ-003`, `SJ-004`, `SJ-005`, `SJ-006`, `SJ-008`, `SJ-009`, `SJ-013`, `SJ-015`.
 
 ## Backlog Items
 
@@ -432,7 +434,7 @@ Acceptance criteria:
 
 Priority: `P1`
 Lane: `cloudflare`, `ops`, `docs`
-Status: `proposed`
+Status: `done`
 
 Problem: Runtime code expects Cloudflare bindings/secrets that now span D1, R2 photos, OAuth, sessions, and OpenAI. Wrangler has the core bindings, but the deployment posture still needs a preflight-style hardening pass so agents and humans can verify production readiness without rediscovering requirements.
 
@@ -450,6 +452,13 @@ Acceptance criteria:
 - Align env helper types with actual route needs.
 - Add a deployment preflight or doc checklist for D1 migrations, seed behavior, R2, OAuth, and OpenAI.
 - CI/deploy docs match current workflow commands.
+
+Completion notes:
+
+- Added `pnpm deploy:preflight` with a tested validator for Wrangler bindings, required package scripts, Cloudflare env typing, documented secrets, migration presence, and deploy-command documentation.
+- Added `docs/deployment.md` with D1, R2, secret, local `.dev.vars`, preflight, migration, deploy, and failure-mode guidance.
+- Added `SESSION_SECRET` to the Cloudflare `Env` type and refreshed README/GUIDE deploy references.
+- Verified `pnpm deploy:preflight`, focused deployment-preflight tests, `pnpm typecheck`, full `pnpm test:coverage`, `pnpm build`, and `pnpm test:e2e`.
 
 ### SJ-016 - Password Reset And WebAuthn Parity Decision
 
@@ -593,6 +602,27 @@ Acceptance criteria:
 - Support owner scoping through `SPOONJOY_MCP_USER_EMAIL` while allowing explicit `ownerEmail` overrides.
 - Document the exact `mcpServers.spoonjoy` bundle config and vault env pattern.
 - Cover MCP protocol handling and tool behavior with tests while preserving 100% coverage.
+
+### SJ-023 - Remove Production Build Sourcemap Warnings
+
+Priority: `P0`
+Lane: `agent-trust`, `build`, `quality`
+Status: `proposed`
+
+Problem: `pnpm build` exits successfully, but Vite/Rollup emits repeated sourcemap-location diagnostics for several local UI/navigation modules. The repo contract treats warnings as failures, so production build output needs to be quiet before deployment checks can be treated as fully warning-clean.
+
+Evidence:
+
+- `pnpm build` emitted `Error when using sourcemap for reporting an error: Can't resolve original location of error.`
+- The messages referenced local modules such as `app/components/ui/navbar.tsx`, `app/components/ui/listbox.tsx`, `app/components/ui/theme-provider.tsx`, `app/components/navigation/dock-context.tsx`, and `app/components/navigation/mobile-nav.tsx`.
+- The referenced files begin with module-level `'use client'` directives, which React Router does not require and Rollup commonly reports as ignored directives during bundling.
+
+Acceptance criteria:
+
+- Production build output no longer includes sourcemap-location diagnostics for local app modules.
+- Any stale module-level directives are removed or otherwise handled without changing runtime behavior.
+- Add coverage or a documented verification command sufficient to keep the warning from regressing.
+- Preserve existing typecheck, full coverage, build, and e2e checks.
 
 ## Parking Lot
 

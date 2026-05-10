@@ -14,6 +14,7 @@
     "build": "react-router build",
     "preview": "wrangler pages dev",
     "deploy": "pnpm build && npx -p wrangler@4.55.0 wrangler deploy",
+    "deploy:preflight": "tsx scripts/deployment-preflight.ts",
     "typecheck": "react-router typegen && tsc",
     "test": "vitest",
     "test:ui": "vitest --ui",

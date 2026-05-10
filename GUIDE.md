@@ -311,6 +311,8 @@ export default function Recipes() {
 
 5. **Build for production** — `pnpm build` creates an optimized bundle
 
+6. **Check deploy readiness** — `pnpm deploy:preflight` verifies the Cloudflare bindings, documented secrets, scripts, and migrations used by production deploys. See `docs/deployment.md` for the full checklist.
+
 ### Future Features (In Progress)
 
 - Recipe import from URLs
@@ -332,6 +334,7 @@ export default function Recipes() {
 | `pnpm prisma:generate` | Regenerate Prisma client |
 | `pnpm build` | Production build |
 | `pnpm typecheck` | TypeScript validation |
+| `pnpm deploy:preflight` | Verify Cloudflare deploy readiness |
 
 ---
 
@@ -362,12 +365,14 @@ The dev server will automatically try the next available port (5173 → 5174 →
 OAuth requires API credentials. For local development, put them in `.dev.vars`; for production, set them with `wrangler secret put`:
 
 ```bash
+SESSION_SECRET=local-dev-secret-change-me
 GOOGLE_CLIENT_ID=your-google-client-id
 GOOGLE_CLIENT_SECRET=your-google-client-secret
 APPLE_CLIENT_ID=your-apple-client-id
 APPLE_TEAM_ID=your-apple-team-id
 APPLE_KEY_ID=your-apple-key-id
 APPLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----..."
+OPENAI_API_KEY=sk-...
 ```
 
 For local development, email/password login works without any additional setup.
