@@ -98,8 +98,10 @@ expect.extend({
 import { mockAnimationsApi } from "jsdom-testing-mocks";
 import { getLocalDb } from "~/lib/db.server";
 
-// Mock animations API for HeadlessUI components
-mockAnimationsApi();
+// Mock animations API for HeadlessUI components when a DOM is available.
+if (typeof window !== "undefined") {
+  mockAnimationsApi();
+}
 
 // Mock ResizeObserver for HeadlessUI virtual components
 class MockResizeObserver {

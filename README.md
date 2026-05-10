@@ -183,7 +183,7 @@ migrations/
 
 ## Features
 
-- **Authentication**: Email/password today; Google/Apple OAuth helpers are implemented and route completion is tracked in `SJ-002`
+- **Authentication**: Email/password plus Google/Apple OAuth initiation, callback, login, signup, and account-linking routes
 - **Recipes**: Full CRUD with steps, ingredients, and step dependencies
 - **Step Dependencies**: Steps can reference outputs from previous steps
 - **Cookbooks**: Organize recipes into collections

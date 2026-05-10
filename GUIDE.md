@@ -104,7 +104,7 @@ Open **http://localhost:5173** — welcome to Spoonjoy!
 3. Click **Sign Up**
 4. You're redirected to `/recipes` — you're in!
 
-> **Tip:** Passwords are securely hashed with bcrypt. OAuth (Google/Apple) requires API credentials and the `/auth/*` routes tracked in `BACKLOG.md` item `SJ-002`.
+> **Tip:** Passwords are securely hashed with bcrypt. OAuth (Google/Apple) requires API credentials; `/auth/google`, `/auth/google/callback`, `/auth/apple`, and `/auth/apple/callback` are wired for login and account linking.
 
 ---
 
