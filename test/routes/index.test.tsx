@@ -233,14 +233,14 @@ describe("Kitchen Index Route", () => {
       const result = meta({} as any);
 
       expect(result).toEqual([
-        { title: "Spoonjoy - Kitchen" },
-        { name: "description", content: "Open your personal kitchen and cookbook collection" },
+        { title: "Spoonjoy - Recipe Kitchens & Cookbooks" },
+        { name: "description", content: "Collect family recipes, shape them into cookbooks, and share a personal kitchen." },
       ]);
     });
   });
 
   describe("component", () => {
-    it("renders guest welcome card", async () => {
+    it("renders guest landing page with product framing and auth actions", async () => {
       const Stub = createTestRoutesStub([
         {
           path: "/",
@@ -258,8 +258,14 @@ describe("Kitchen Index Route", () => {
 
       render(<Stub initialEntries={["/"]} />);
 
-      expect(await screen.findByText("Spoonjoy Kitchen")).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: "Sign Up" })).toHaveAttribute("href", "/signup");
+      expect(await screen.findByRole("heading", { name: /recipes, cookbooks, and kitchen memory/i })).toBeInTheDocument();
+      expect(screen.getByText("Family recipe OS")).toBeInTheDocument();
+      expect(screen.getByText(/share a kitchen that feels personal/i)).toBeInTheDocument();
+      expect(screen.getByText("Sunday Tomato Sauce")).toBeInTheDocument();
+      expect(screen.getByText("Personal kitchens")).toBeInTheDocument();
+      expect(screen.getByText("Cookbooks")).toBeInTheDocument();
+      expect(screen.getByText("Family-ready")).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Start Your Kitchen" })).toHaveAttribute("href", "/signup");
       expect(screen.getByRole("link", { name: "Log In" })).toHaveAttribute("href", "/login");
       expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
     });
