@@ -808,80 +808,69 @@ describe('StepEditorCard', () => {
     })
   })
 
-  // Note: These tests are skipped because JSDOM's getBoundingClientRect() always returns 0.
-  // Touch target sizes should be verified in browser-based E2E tests instead.
   describe('mobile optimization', () => {
-    it.skip('ingredient toggle buttons have minimum 44px touch targets (requires browser)', () => {
+    function expectCoarsePointerTouchTarget(element: HTMLElement) {
+      const touchTarget = element.querySelector('[data-slot="touch-target"][aria-hidden="true"]')
+      expect(touchTarget).toBeInTheDocument()
+      expect(touchTarget?.className).toContain('size-[max(100%,2.75rem)]')
+      expect(touchTarget?.className).toContain('pointer-fine:hidden')
+    }
+
+    it('ingredient toggle renders a coarse-pointer touch target', () => {
       const Wrapper = createTestWrapper(async () => ({ parsedIngredients: [] }))
       render(<Wrapper initialEntries={['/recipes/recipe-1/steps/edit']} />)
 
-      // The toggle switch (IngredientInputToggle) should have adequate touch target
-      const toggle = screen.getByRole('switch')
-      const toggleRect = toggle.getBoundingClientRect()
-
-      // WCAG 2.5.5 Level AAA recommends 44x44px minimum touch targets
-      expect(toggleRect.width).toBeGreaterThanOrEqual(44)
-      expect(toggleRect.height).toBeGreaterThanOrEqual(44)
+      expectCoarsePointerTouchTarget(screen.getByRole('switch'))
     })
 
-    it.skip('save button has minimum 44px touch target height (requires browser)', () => {
+    it('save button renders a coarse-pointer touch target', () => {
       const Wrapper = createTestWrapper(async () => ({ parsedIngredients: [] }))
       render(<Wrapper initialEntries={['/recipes/recipe-1/steps/edit']} />)
 
       const saveButton = screen.getByRole('button', { name: /save/i })
-      const buttonRect = saveButton.getBoundingClientRect()
-
-      expect(buttonRect.height).toBeGreaterThanOrEqual(44)
+      expectCoarsePointerTouchTarget(saveButton)
     })
 
-    it.skip('remove button has minimum 44px touch target height (requires browser)', () => {
+    it('remove button renders a coarse-pointer touch target', () => {
       const Wrapper = createTestWrapper(async () => ({ parsedIngredients: [] }))
       render(<Wrapper initialEntries={['/recipes/recipe-1/steps/edit']} />)
 
       const removeButton = screen.getByRole('button', { name: /remove/i })
-      const buttonRect = removeButton.getBoundingClientRect()
-
-      expect(buttonRect.height).toBeGreaterThanOrEqual(44)
+      expectCoarsePointerTouchTarget(removeButton)
     })
 
-    it.skip('move up button has minimum 44px touch target height (requires browser)', () => {
+    it('move up button renders a coarse-pointer touch target', () => {
       const Wrapper = createTestWrapper(async () => ({ parsedIngredients: [] }), {
         onMoveUp: vi.fn(),
       })
       render(<Wrapper initialEntries={['/recipes/recipe-1/steps/edit']} />)
 
       const moveUpButton = screen.getByRole('button', { name: /move up/i })
-      const buttonRect = moveUpButton.getBoundingClientRect()
-
-      expect(buttonRect.height).toBeGreaterThanOrEqual(44)
+      expectCoarsePointerTouchTarget(moveUpButton)
     })
 
-    it.skip('move down button has minimum 44px touch target height (requires browser)', () => {
+    it('move down button renders a coarse-pointer touch target', () => {
       const Wrapper = createTestWrapper(async () => ({ parsedIngredients: [] }), {
         onMoveDown: vi.fn(),
       })
       render(<Wrapper initialEntries={['/recipes/recipe-1/steps/edit']} />)
 
       const moveDownButton = screen.getByRole('button', { name: /move down/i })
-      const buttonRect = moveDownButton.getBoundingClientRect()
-
-      expect(buttonRect.height).toBeGreaterThanOrEqual(44)
+      expectCoarsePointerTouchTarget(moveDownButton)
     })
 
-    it.skip('all action buttons pass WCAG touch target guidelines (44x44px) (requires browser)', () => {
+    it('all action buttons render coarse-pointer touch targets', () => {
       const Wrapper = createTestWrapper(async () => ({ parsedIngredients: [] }), {
         onMoveUp: vi.fn(),
         onMoveDown: vi.fn(),
       })
       render(<Wrapper initialEntries={['/recipes/recipe-1/steps/edit']} />)
 
-      // Get all buttons in the action buttons area
       const buttons = screen.getAllByRole('button')
+      expect(buttons).toHaveLength(4)
 
       buttons.forEach((button) => {
-        const rect = button.getBoundingClientRect()
-        // Each button should have at least 44px height for touch-friendly interaction
-        expect(rect.height).toBeGreaterThanOrEqual(44)
+        expectCoarsePointerTouchTarget(button)
       })
     })
   })

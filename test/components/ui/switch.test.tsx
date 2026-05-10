@@ -128,6 +128,13 @@ describe('Switch', () => {
       expect(thumb?.className).toContain('rounded-full')
     })
 
+    it('renders a coarse-pointer touch target', () => {
+      const { container } = render(<Switch aria-label="Test switch" />)
+      const touchTarget = container.querySelector('span[data-slot="touch-target"][aria-hidden="true"]')
+      expect(touchTarget).toBeInTheDocument()
+      expect(touchTarget?.className).toContain('size-[max(100%,2.75rem)]')
+    })
+
     it('has accessible name from aria-label', () => {
       render(<Switch aria-label="Accessible switch" />)
       expect(screen.getByRole('switch', { name: 'Accessible switch' })).toBeInTheDocument()

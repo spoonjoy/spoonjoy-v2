@@ -15,6 +15,7 @@
 import clsx from 'clsx'
 import { ArrowDown, ArrowUp, Save, Trash2 } from 'lucide-react'
 import { useEffect, useId, useRef, useState } from 'react'
+import { TouchTarget } from '~/components/ui/button'
 import { Input } from '~/components/ui/input'
 import { Textarea } from '~/components/ui/textarea'
 import { IngredientInputToggle, type IngredientInputMode } from './IngredientInputToggle'
@@ -295,8 +296,10 @@ export function StepEditorCard({
           disabled={disabled}
           className={clsx(buttonBaseStyles, buttonSolidStyles, buttonGreenStyles, 'cursor-default')}
         >
-          <Save className="size-4" aria-hidden="true" />
-          Save
+          <TouchTarget>
+            <Save className="size-4" aria-hidden="true" />
+            Save
+          </TouchTarget>
         </button>
 
         <button
@@ -305,8 +308,10 @@ export function StepEditorCard({
           disabled={disabled}
           className={clsx(buttonBaseStyles, buttonSolidStyles, buttonRedStyles, 'cursor-default')}
         >
-          <Trash2 className="size-4" aria-hidden="true" />
-          Remove
+          <TouchTarget>
+            <Trash2 className="size-4" aria-hidden="true" />
+            Remove
+          </TouchTarget>
         </button>
 
         {onMoveUp && (
@@ -316,8 +321,10 @@ export function StepEditorCard({
             disabled={disabled || !canMoveUp}
             className={clsx(buttonBaseStyles, buttonOutlineStyles, 'cursor-default')}
           >
-            <ArrowUp className="size-4" aria-hidden="true" />
-            Move Up
+            <TouchTarget>
+              <ArrowUp className="size-4" aria-hidden="true" />
+              Move Up
+            </TouchTarget>
           </button>
         )}
 
@@ -328,8 +335,10 @@ export function StepEditorCard({
             disabled={disabled || !canMoveDown}
             className={clsx(buttonBaseStyles, buttonOutlineStyles, 'cursor-default')}
           >
-            <ArrowDown className="size-4" aria-hidden="true" />
-            Move Down
+            <TouchTarget>
+              <ArrowDown className="size-4" aria-hidden="true" />
+              Move Down
+            </TouchTarget>
           </button>
         )}
       </div>

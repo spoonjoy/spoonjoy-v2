@@ -190,6 +190,11 @@ export function Switch({
           'group-data-checked:group-data-disabled:bg-white group-data-checked:group-data-disabled:shadow-sm group-data-checked:group-data-disabled:ring-black/5'
         )}
       />
+      <span
+        data-slot="touch-target"
+        className="absolute top-1/2 left-1/2 size-[max(100%,2.75rem)] -translate-x-1/2 -translate-y-1/2 pointer-fine:hidden"
+        aria-hidden="true"
+      />
     </Headless.Switch>
   )
 }

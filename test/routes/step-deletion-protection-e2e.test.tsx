@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
-import { render, screen, waitFor, fireEvent, act } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
 import { action as newRecipeAction } from "~/routes/recipes.new";
@@ -265,9 +265,7 @@ describe("E2E: Step Deletion Protection", () => {
   });
 
   describe("Error message displays correctly in UI", () => {
-    // TODO: This test needs updating to work with ConfirmationDialog - form submission via ref.current?.submit()
-    // doesn't properly trigger the stubbed action in the test environment
-    it.skip("should render error message in step deletion error alert", async () => {
+    it("should render error message in step deletion error alert", async () => {
       // Create recipe with dependency
       const recipeId = await createRecipe("UI Error Test " + faker.string.alphanumeric(6));
       const step1Id = await addStep(recipeId, "First step", "Step 1");
@@ -275,53 +273,43 @@ describe("E2E: Step Deletion Protection", () => {
 
       // Load step edit data
       const loaderData = await loadStepEdit(recipeId, step1Id);
+      const actionResult = {
+        errors: {
+          stepDeletion: "Cannot delete Step 1 because it is used by Step 2",
+        },
+      };
 
       // Render component with deletion error in action data
       const Stub = createTestRoutesStub([
         {
+          id: "step-edit",
           path: "/recipes/:id/steps/:stepId/edit",
           Component: EditStep,
           loader: () => loaderData,
-          action: () => ({
-            errors: {
-              stepDeletion: "Cannot delete Step 1 because it is used by Step 2",
-            },
-          }),
+          action: () => actionResult,
         },
       ]);
 
-      render(<Stub initialEntries={[`/recipes/${recipeId}/steps/${step1Id}/edit`]} />);
+      render(
+        <Stub
+          initialEntries={[`/recipes/${recipeId}/steps/${step1Id}/edit`]}
+          hydrationData={{
+            loaderData: { "step-edit": loaderData },
+            actionData: { "step-edit": actionResult },
+          }}
+        />
+      );
 
       // Wait for the page to render
-      await screen.findByRole("heading", { name: /Edit Step 1/i });
+      await screen.findByRole("heading", { name: /Edit Step/i });
 
-      // Click delete to open confirmation dialog
-      const deleteButton = screen.getByRole("button", { name: "Delete Step" });
-      await act(async () => {
-        fireEvent.click(deleteButton);
-      });
-
-      // Wait for the confirmation dialog to appear and click "Delete it"
-      await waitFor(() => {
-        expect(screen.getByRole("dialog")).toBeInTheDocument();
-      });
-      const confirmButton = screen.getByRole("button", { name: "Delete it" });
-      await act(async () => {
-        fireEvent.click(confirmButton);
-      });
-
-      // Wait for error message to appear with role="alert"
-      await waitFor(() => {
-        const errorElement = screen.getByRole("alert");
-        expect(errorElement).toHaveTextContent(
-          "Cannot delete Step 1 because it is used by Step 2"
-        );
-      });
+      const errorElement = await screen.findByRole("alert");
+      expect(errorElement).toHaveTextContent(
+        "Cannot delete Step 1 because it is used by Step 2"
+      );
     });
 
-    // TODO: This test needs updating to work with ConfirmationDialog - form submission via ref.current?.submit()
-    // doesn't properly trigger the stubbed action in the test environment
-    it.skip("should display error with proper styling", async () => {
+    it("should display error with proper styling", async () => {
       // Create recipe with dependency
       const recipeId = await createRecipe("UI Style Test " + faker.string.alphanumeric(6));
       const step1Id = await addStep(recipeId, "First step", "Step 1");
@@ -329,47 +317,38 @@ describe("E2E: Step Deletion Protection", () => {
 
       // Load step edit data
       const loaderData = await loadStepEdit(recipeId, step1Id);
+      const actionResult = {
+        errors: {
+          stepDeletion: "Cannot delete Step 1 because it is used by Steps 2 and 3",
+        },
+      };
 
       // Render component with deletion error
       const Stub = createTestRoutesStub([
         {
+          id: "step-edit",
           path: "/recipes/:id/steps/:stepId/edit",
           Component: EditStep,
           loader: () => loaderData,
-          action: () => ({
-            errors: {
-              stepDeletion: "Cannot delete Step 1 because it is used by Steps 2 and 3",
-            },
-          }),
+          action: () => actionResult,
         },
       ]);
 
-      render(<Stub initialEntries={[`/recipes/${recipeId}/steps/${step1Id}/edit`]} />);
+      render(
+        <Stub
+          initialEntries={[`/recipes/${recipeId}/steps/${step1Id}/edit`]}
+          hydrationData={{
+            loaderData: { "step-edit": loaderData },
+            actionData: { "step-edit": actionResult },
+          }}
+        />
+      );
 
       // Wait for the page to render
-      await screen.findByRole("heading", { name: /Edit Step 1/i });
+      await screen.findByRole("heading", { name: /Edit Step/i });
 
-      // Click delete to open confirmation dialog
-      const deleteButton = screen.getByRole("button", { name: "Delete Step" });
-      await act(async () => {
-        fireEvent.click(deleteButton);
-      });
-
-      // Wait for the confirmation dialog to appear and click "Delete it"
-      await waitFor(() => {
-        expect(screen.getByRole("dialog")).toBeInTheDocument();
-      });
-      const confirmButton = screen.getByRole("button", { name: "Delete it" });
-      await act(async () => {
-        fireEvent.click(confirmButton);
-      });
-
-      // Wait for error message and verify styling
-      await waitFor(() => {
-        const errorElement = screen.getByRole("alert");
-        // Should have the same styling as other error alerts (red background)
-        expect(errorElement).toHaveClass("bg-red-50");
-      });
+      const errorElement = await screen.findByRole("alert");
+      expect(errorElement).toHaveClass("bg-red-50");
     });
 
     it("should not show deletion error when no error exists", async () => {

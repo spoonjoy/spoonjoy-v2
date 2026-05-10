@@ -17,7 +17,7 @@ describe('Button', () => {
 
     it('renders touch target span with aria-hidden', () => {
       const { container } = render(<TouchTarget>Click me</TouchTarget>)
-      const touchTarget = container.querySelector('span[aria-hidden="true"]')
+      const touchTarget = container.querySelector('span[data-slot="touch-target"][aria-hidden="true"]')
       expect(touchTarget).toBeInTheDocument()
     })
   })

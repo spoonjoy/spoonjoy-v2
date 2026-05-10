@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
-import { render, screen, waitFor, fireEvent, act } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
 import { action as newRecipeAction } from "~/routes/recipes.new";
@@ -514,45 +514,46 @@ describe("E2E: Step Reorder Protection", () => {
     });
   });
 
-  // Note: These UI tests are skipped because the edit page now uses RecipeBuilder
-  // which handles step reordering client-side, not via server actions. The server
-  // reorder validation is still tested in the action tests above.
-  describe.skip("Error message displays correctly in UI (requires legacy server-side reorder UI)", () => {
+  describe("Error message displays correctly in UI", () => {
     it("should render error message in reorder error alert", async () => {
       // Create recipe with dependency
       const recipeId = await createRecipe("UI Reorder Error Test " + faker.string.alphanumeric(6));
-      const step1Id = await addStep(recipeId, "First step", "Step 1");
+      await addStep(recipeId, "First step", "Step 1");
       await addStep(recipeId, "Second step uses first", "Step 2", [1]);
 
       // Load recipe edit data
       const loaderData = await loadRecipeEdit(recipeId);
+      const actionResult = {
+        errors: {
+          reorder: "Cannot move Step 1 to position 2 because Step 2 uses its output",
+        },
+      };
 
       // Render component with reorder error in action data
       const Stub = createTestRoutesStub([
         {
+          id: "recipe-edit",
           path: "/recipes/:id/edit",
           Component: EditRecipe,
           loader: () => loaderData,
-          action: () => ({
-            errors: {
-              reorder: "Cannot move Step 1 to position 2 because Step 2 uses its output",
-            },
-          }),
+          action: () => actionResult,
         },
       ]);
 
-      render(<Stub initialEntries={[`/recipes/${recipeId}/edit`]} />);
+      render(
+        <Stub
+          initialEntries={[`/recipes/${recipeId}/edit`]}
+          hydrationData={{
+            loaderData: { "recipe-edit": loaderData },
+            actionData: { "recipe-edit": actionResult },
+          }}
+        />
+      );
 
       // Wait for the page to render (multiple Edit Recipe headings exist, get first)
       await waitFor(() => {
         const headings = screen.getAllByRole("heading", { name: /Edit Recipe/i });
         expect(headings.length).toBeGreaterThan(0);
-      });
-
-      // Click move down on step 1 to trigger action
-      const moveDownButton = screen.getByTitle("Move down");
-      await act(async () => {
-        fireEvent.click(moveDownButton);
       });
 
       // Wait for error message to appear with role="alert"
@@ -572,33 +573,37 @@ describe("E2E: Step Reorder Protection", () => {
 
       // Load recipe edit data
       const loaderData = await loadRecipeEdit(recipeId);
+      const actionResult = {
+        errors: {
+          reorder: "Cannot move Step 2 to position 1 because it uses output from Step 1",
+        },
+      };
 
       // Render component with outgoing error in action data
       const Stub = createTestRoutesStub([
         {
+          id: "recipe-edit",
           path: "/recipes/:id/edit",
           Component: EditRecipe,
           loader: () => loaderData,
-          action: () => ({
-            errors: {
-              reorder: "Cannot move Step 2 to position 1 because it uses output from Step 1",
-            },
-          }),
+          action: () => actionResult,
         },
       ]);
 
-      render(<Stub initialEntries={[`/recipes/${recipeId}/edit`]} />);
+      render(
+        <Stub
+          initialEntries={[`/recipes/${recipeId}/edit`]}
+          hydrationData={{
+            loaderData: { "recipe-edit": loaderData },
+            actionData: { "recipe-edit": actionResult },
+          }}
+        />
+      );
 
       // Wait for the page to render (multiple Edit Recipe headings exist, get first)
       await waitFor(() => {
         const headings = screen.getAllByRole("heading", { name: /Edit Recipe/i });
         expect(headings.length).toBeGreaterThan(0);
-      });
-
-      // Click move up on step 2 to trigger action
-      const moveUpButton = screen.getByTitle("Move up");
-      await act(async () => {
-        fireEvent.click(moveUpButton);
       });
 
       // Wait for error message to appear
@@ -637,8 +642,8 @@ describe("E2E: Step Reorder Protection", () => {
       });
 
       // Verify reorder buttons are present
-      expect(screen.getByTitle("Move down")).toBeInTheDocument();
-      expect(screen.getByTitle("Move up")).toBeInTheDocument();
+      expect(screen.getAllByRole("button", { name: "Move Down" }).length).toBeGreaterThan(0);
+      expect(screen.getAllByRole("button", { name: "Move Up" }).length).toBeGreaterThan(0);
 
       // No reorder error should be visible
       const alerts = screen.queryAllByRole("alert");

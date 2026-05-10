@@ -3,7 +3,7 @@
 Status: proposed canonical backlog
 Audit date: 2026-05-10
 Baseline: `main` at `3533955` (`Upgrade GitHub Actions to Node 24 runtime (#3)`)
-Verification anchor: `pnpm test:coverage` passed with 137 test files, 3481 tests, 15 skipped tests, and 100% statements/branches/functions/lines.
+Verification anchor: `pnpm test:coverage` passed with 137 test files, 3493 tests, 0 skipped tests, and 100% statements/branches/functions/lines.
 
 ## How To Use This Backlog
 
@@ -43,7 +43,7 @@ Status meanings:
 6. `SJ-006`: Remove or replace skipped tests so 100% coverage also means no hidden skipped assertions.
 7. `SJ-008`: Run the mobile RecipeBuilder/SpoonDock UX pass once core create/edit data paths are trustworthy.
 
-Completed in sequence: `SJ-001`, `SJ-002`, `SJ-003`, `SJ-004`, `SJ-005`.
+Completed in sequence: `SJ-001`, `SJ-002`, `SJ-003`, `SJ-004`, `SJ-005`, `SJ-006`.
 
 ## Backlog Items
 
@@ -173,12 +173,12 @@ Priority: `P1`
 Lane: `data-integrity`, `recipes`, `database`
 Status: `done`
 
-Problem: The schema intends to prevent duplicate active recipe titles per chef while allowing title reuse after soft delete, but the current nullable `deletedAt` compound unique constraint does not enforce that rule in SQLite/D1. The corresponding model test is skipped.
+Problem: The schema intends to prevent duplicate active recipe titles per chef while allowing title reuse after soft delete, but the current nullable `deletedAt` compound unique constraint does not enforce that rule in SQLite/D1. The corresponding model test was skipped before `SJ-005`.
 
 Evidence:
 
 - `prisma/schema.prisma` has `@@unique([chefId, title, deletedAt])` with a TODO noting it is broken.
-- `test/models/recipe.test.ts` skips the duplicate-title integrity test because `NULL` values are not equal in SQLite.
+- `test/models/recipe.test.ts` previously skipped the duplicate-title integrity test because `NULL` values are not equal in SQLite.
 
 Acceptance criteria:
 
@@ -199,13 +199,13 @@ Completion notes:
 
 Priority: `P1`
 Lane: `quality`, `testing`, `agent-trust`
-Status: `proposed`
+Status: `done`
 
-Problem: The repo currently satisfies 100% coverage, but 15 tests are skipped. Several skipped tests cover user-visible edge paths: step deletion dialog errors, reorder error UI, mobile touch targets, and editor parsing behavior.
+Problem: The repo satisfied 100% coverage, but 15 tests were skipped. Several skipped tests covered user-visible edge paths: step deletion dialog errors, reorder error UI, mobile touch targets, and editor parsing behavior.
 
 Evidence:
 
-- `pnpm test:coverage` reports 15 skipped tests.
+- Prior `pnpm test:coverage` baseline reported 15 skipped tests.
 - Skips include `test/components/recipe/StepEditorCard.test.tsx`, `test/routes/step-reorder-protection-e2e.test.tsx`, `test/routes/step-deletion-protection-e2e.test.tsx`, and `test/routes/recipes-id-steps-id-edit.test.tsx`.
 
 Acceptance criteria:
@@ -213,6 +213,14 @@ Acceptance criteria:
 - Remove all stale `it.skip`/`describe.skip` cases by fixing tests, moving browser-only assertions into Playwright, or replacing them with viable equivalents.
 - If a skip is intentionally retained, document the platform limitation and add a tracked backlog ID next to it.
 - Coverage remains 100% and all test runs remain warning-free.
+
+Completion notes:
+
+- Removed every explicit `it.skip`/`describe.skip` from `app/` and `test/`; `rg "\b(it|test|describe)\.skip\b|skip\(" test app` now returns no matches.
+- Replaced JSDOM layout-dependent touch-target assertions with structural checks against explicit coarse-pointer touch target affordances.
+- Added reusable `data-slot="touch-target"` markers to `TouchTarget`, added equivalent switch touch targets, and wrapped `StepEditorCard` action buttons with the shared touch target pattern.
+- Replaced stale reorder/deletion UI skips with current action-data rendering tests or removed assertions for route-era UI that no longer exists.
+- Verified `pnpm test:coverage` with 137 test files, 3493 tests, 0 skipped tests, and 100% statements/branches/functions/lines.
 
 ### SJ-007 - Split Large Route Modules Into Testable Domains
 
@@ -243,19 +251,19 @@ Priority: `P1`
 Lane: `mobile`, `ux`, `accessibility`
 Status: `proposed`
 
-Problem: Mobile-first recipe input was previously flagged as unresolved/reverted, and several touch-target tests are skipped because they require a browser. Recipe creation is a core mobile flow, so this needs a real device-size pass rather than component-only confidence.
+Problem: Mobile-first recipe input was previously flagged as unresolved/reverted. Recipe creation is a core mobile flow, so this still needs a real device-size pass rather than component-only confidence.
 
 Evidence:
 
 - `REVIEW-PACKET.md` calls out Recipe Input v2, SpoonDock, mobile optimization, and visual polish for review.
-- `test/components/recipe/StepEditorCard.test.tsx` skips 44px touch-target tests.
+- `SJ-006` added structural touch-target checks, but mobile viewport behavior still needs browser validation.
 - `app/root.tsx` uses a mobile-only main area with bottom padding plus `MobileNav`, making obstruction/regression checks important.
 
 Acceptance criteria:
 
 - Audit create/edit/detail/shopping-list flows at small mobile breakpoints in a browser.
 - Ensure SpoonDock does not obscure primary actions, forms, modals, or validation messages.
-- Convert touch-target checks into Playwright or otherwise enforce them reliably.
+- Verify touch-target behavior in a browser at mobile breakpoints.
 - Ensure drag/reorder alternatives are accessible on mobile.
 - Capture before/after screenshots or an explicit QA checklist in the PR.
 
