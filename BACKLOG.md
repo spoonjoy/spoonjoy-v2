@@ -3,7 +3,7 @@
 Status: proposed canonical backlog
 Audit date: 2026-05-10
 Baseline: `main` at `3533955` (`Upgrade GitHub Actions to Node 24 runtime (#3)`)
-Verification anchor: `pnpm test:coverage` passed with 136 test files, 3471 tests, 16 skipped tests, and 100% statements/branches/functions/lines.
+Verification anchor: `pnpm test:coverage` passed with 137 test files, 3481 tests, 15 skipped tests, and 100% statements/branches/functions/lines.
 
 ## How To Use This Backlog
 
@@ -43,7 +43,7 @@ Status meanings:
 6. `SJ-006`: Remove or replace skipped tests so 100% coverage also means no hidden skipped assertions.
 7. `SJ-008`: Run the mobile RecipeBuilder/SpoonDock UX pass once core create/edit data paths are trustworthy.
 
-Completed in sequence: `SJ-001`, `SJ-002`, `SJ-003`, `SJ-004`.
+Completed in sequence: `SJ-001`, `SJ-002`, `SJ-003`, `SJ-004`, `SJ-005`.
 
 ## Backlog Items
 
@@ -171,7 +171,7 @@ Completion notes:
 
 Priority: `P1`
 Lane: `data-integrity`, `recipes`, `database`
-Status: `proposed`
+Status: `done`
 
 Problem: The schema intends to prevent duplicate active recipe titles per chef while allowing title reuse after soft delete, but the current nullable `deletedAt` compound unique constraint does not enforce that rule in SQLite/D1. The corresponding model test is skipped.
 
@@ -188,18 +188,25 @@ Acceptance criteria:
 - Race behavior is tested as far as the platform supports.
 - The skipped model test is restored or replaced by equivalent active-route/model coverage.
 
+Completion notes:
+
+- Added shared active-title uniqueness validation for SQLite/D1 app-level enforcement.
+- Create and edit actions now reject duplicate active titles for the same chef while allowing same-title recipes for other chefs and title reuse after soft delete.
+- The Ouroboros MCP `create_recipe` tool uses the same active-title guard, so harness writes follow the app contract.
+- Removed the stale skipped model assertion that expected SQLite/D1 to enforce nullable compound uniqueness directly.
+
 ### SJ-006 - Eliminate Hidden Test Debt From Skipped Tests
 
 Priority: `P1`
 Lane: `quality`, `testing`, `agent-trust`
 Status: `proposed`
 
-Problem: The repo currently satisfies 100% coverage, but 16 tests are skipped. Several skipped tests cover user-visible edge paths: step deletion dialog errors, reorder error UI, mobile touch targets, and active recipe title uniqueness.
+Problem: The repo currently satisfies 100% coverage, but 15 tests are skipped. Several skipped tests cover user-visible edge paths: step deletion dialog errors, reorder error UI, mobile touch targets, and editor parsing behavior.
 
 Evidence:
 
-- `pnpm test:coverage` reports 16 skipped tests.
-- Skips include `test/models/recipe.test.ts`, `test/components/recipe/StepEditorCard.test.tsx`, `test/routes/step-reorder-protection-e2e.test.tsx`, `test/routes/step-deletion-protection-e2e.test.tsx`, and `test/routes/recipes-id-steps-id-edit.test.tsx`.
+- `pnpm test:coverage` reports 15 skipped tests.
+- Skips include `test/components/recipe/StepEditorCard.test.tsx`, `test/routes/step-reorder-protection-e2e.test.tsx`, `test/routes/step-deletion-protection-e2e.test.tsx`, and `test/routes/recipes-id-steps-id-edit.test.tsx`.
 
 Acceptance criteria:
 

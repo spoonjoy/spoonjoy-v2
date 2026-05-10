@@ -82,8 +82,8 @@ model Recipe {
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
 
-  // Allow users to create a second recipe with the same title *if* the other one is deleted
-  // TODO this is currently broken, see here: https://github.com/spoonjoy/spoonjoy-requests-issues/issues/1
+  // App actions enforce active title uniqueness because SQLite/D1 treat NULL values as distinct here.
+  // This index still protects exact duplicates once deletedAt is non-null.
   @@unique([chefId, title, deletedAt])
   @@index([chefId])
   @@index([sourceRecipeId])

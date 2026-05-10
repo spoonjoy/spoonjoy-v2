@@ -21,6 +21,7 @@ import {
   storeImage,
   validateImageFile,
 } from "~/lib/image-storage.server";
+import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
 import { Button } from "~/components/ui/button";
 import { Dialog, DialogActions, DialogDescription, DialogTitle } from "~/components/ui/dialog";
 import { useRef, useState } from "react";
@@ -236,6 +237,15 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 
   if (Object.keys(errors).length > 0) {
     return data({ errors }, { status: 400 });
+  }
+
+  const titleUniquenessResult = await validateActiveRecipeTitleUnique(database, {
+    chefId: userId,
+    title,
+    excludeRecipeId: id,
+  });
+  if (!titleUniquenessResult.valid) {
+    return data({ errors: { title: titleUniquenessResult.error } }, { status: 400 });
   }
 
   const photosBucket = getCloudflareEnv(context)?.PHOTOS;

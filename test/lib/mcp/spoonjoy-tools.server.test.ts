@@ -2,6 +2,7 @@ import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import { faker } from "@faker-js/faker";
 import { getLocalDb } from "~/lib/db.server";
 import { callSpoonjoyMcpTool, listSpoonjoyMcpTools, type SpoonjoyMcpContext } from "~/lib/mcp/spoonjoy-tools.server";
+import { ACTIVE_RECIPE_TITLE_CONFLICT_ERROR } from "~/lib/recipe-title-uniqueness.server";
 import { cleanupDatabase } from "../../helpers/cleanup";
 
 function parseJson(text: string) {
@@ -205,6 +206,8 @@ describe("spoonjoy MCP tools", () => {
   });
 
   it("validates write tool inputs", async () => {
+    await callSpoonjoyMcpTool("create_recipe", { title: "Duplicate MCP Recipe" }, context);
+    await expect(callSpoonjoyMcpTool("create_recipe", { title: "Duplicate MCP Recipe" }, context)).rejects.toThrow(ACTIVE_RECIPE_TITLE_CONFLICT_ERROR);
     await expect(callSpoonjoyMcpTool("create_recipe", { title: "No owner" }, { db: context.db })).rejects.toThrow("ownerEmail is required");
     await expect(callSpoonjoyMcpTool("create_recipe", { title: "Bad steps", steps: {} }, context)).rejects.toThrow("steps must be an array");
     await expect(callSpoonjoyMcpTool("create_recipe", { title: "Bad step", steps: [null] }, context)).rejects.toThrow("steps[0] must be an object");

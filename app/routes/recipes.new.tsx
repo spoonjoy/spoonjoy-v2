@@ -18,6 +18,7 @@ import {
   storeImage,
   validateImageFile,
 } from "~/lib/image-storage.server";
+import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
 import { useRef } from "react";
 
 interface ActionData {
@@ -91,6 +92,14 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   const database = await getRequestDb(context);
+  const titleUniquenessResult = await validateActiveRecipeTitleUnique(database, {
+    chefId: userId,
+    title,
+  });
+  if (!titleUniquenessResult.valid) {
+    return data({ errors: { title: titleUniquenessResult.error } }, { status: 400 });
+  }
+
   const photosBucket = getCloudflareEnv(context)?.PHOTOS;
   const recipeId = crypto.randomUUID();
   let imageUrl = "";

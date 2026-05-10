@@ -10,6 +10,7 @@ import { action as shoppingListAction } from "~/routes/shopping-list";
 import NewRecipe from "~/routes/recipes.new";
 import { createUser } from "~/lib/auth.server";
 import { sessionStorage } from "~/lib/session.server";
+import { ACTIVE_RECIPE_TITLE_CONFLICT_ERROR } from "~/lib/recipe-title-uniqueness.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { faker } from "@faker-js/faker";
 
@@ -208,6 +209,74 @@ describe("Recipes New Route", () => {
       expect(recipes[0].description).toBeNull();
       expect(recipes[0].servings).toBeNull();
       expect(recipes[0].imageUrl).toBe("");
+    });
+
+    it("should reject duplicate active recipe titles for the same chef", async () => {
+      await db.recipe.create({
+        data: {
+          title: "Duplicate Dinner",
+          chefId: testUserId,
+        },
+      });
+      const request = await createFormRequest({ title: "  Duplicate Dinner  " }, testUserId);
+
+      const response = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+
+      const { data, status } = extractResponseData(response);
+      expect(status).toBe(400);
+      expect(data.errors.title).toBe(ACTIVE_RECIPE_TITLE_CONFLICT_ERROR);
+      await expect(db.recipe.count({ where: { chefId: testUserId } })).resolves.toBe(1);
+    });
+
+    it("should allow duplicate active recipe titles for different chefs", async () => {
+      const otherUser = await createUser(
+        db,
+        faker.internet.email(),
+        `${faker.internet.username()}_${faker.string.alphanumeric(8)}`,
+        "testPassword123"
+      );
+      await db.recipe.create({
+        data: {
+          title: "Shared Dinner",
+          chefId: otherUser.id,
+        },
+      });
+      const request = await createFormRequest({ title: "Shared Dinner" }, testUserId);
+
+      const response = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+
+      expect(response).toBeInstanceOf(Response);
+      expect(response.status).toBe(302);
+      await expect(db.recipe.count({ where: { title: "Shared Dinner" } })).resolves.toBe(2);
+    });
+
+    it("should allow title reuse after the prior recipe is soft-deleted", async () => {
+      await db.recipe.create({
+        data: {
+          title: "Restored Dinner",
+          chefId: testUserId,
+          deletedAt: new Date(),
+        },
+      });
+      const request = await createFormRequest({ title: "Restored Dinner" }, testUserId);
+
+      const response = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+
+      expect(response).toBeInstanceOf(Response);
+      expect(response.status).toBe(302);
+      await expect(db.recipe.count({ where: { chefId: testUserId, title: "Restored Dinner" } })).resolves.toBe(2);
     });
 
     it("should return validation error for whitespace-only title", async () => {

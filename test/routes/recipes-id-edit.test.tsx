@@ -8,6 +8,7 @@ import { loader, action } from "~/routes/recipes.$id.edit";
 import EditRecipe from "~/routes/recipes.$id.edit";
 import { createUser } from "~/lib/auth.server";
 import { sessionStorage } from "~/lib/session.server";
+import { ACTIVE_RECIPE_TITLE_CONFLICT_ERROR } from "~/lib/recipe-title-uniqueness.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { faker } from "@faker-js/faker";
 
@@ -385,6 +386,71 @@ describe("Recipes $id Edit Route", () => {
       expect(recipe?.title).toBe("Updated Title");
       expect(recipe?.description).toBe("Updated Description");
       expect(recipe?.servings).toBe("6");
+    });
+
+    it("should allow saving a recipe without changing its own active title", async () => {
+      const currentRecipe = await db.recipe.findUniqueOrThrow({ where: { id: recipeId } });
+      const request = await createFormRequest(
+        {
+          title: currentRecipe.title,
+          description: "Still mine",
+        },
+        testUserId
+      );
+
+      const response = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any);
+
+      expect(response).toBeInstanceOf(Response);
+      expect(response.status).toBe(302);
+    });
+
+    it("should reject updates to another active recipe title for the same chef", async () => {
+      await db.recipe.create({
+        data: {
+          title: "Already Taken",
+          chefId: testUserId,
+        },
+      });
+      const originalRecipe = await db.recipe.findUniqueOrThrow({ where: { id: recipeId } });
+      const request = await createFormRequest({ title: "  Already Taken  " }, testUserId);
+
+      const response = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any);
+
+      const { data, status } = extractResponseData(response);
+      expect(status).toBe(400);
+      expect(data.errors.title).toBe(ACTIVE_RECIPE_TITLE_CONFLICT_ERROR);
+      const unchangedRecipe = await db.recipe.findUniqueOrThrow({ where: { id: recipeId } });
+      expect(unchangedRecipe.title).toBe(originalRecipe.title);
+    });
+
+    it("should allow updates to a soft-deleted recipe title", async () => {
+      await db.recipe.create({
+        data: {
+          title: "Archived Title",
+          chefId: testUserId,
+          deletedAt: new Date(),
+        },
+      });
+      const request = await createFormRequest({ title: "Archived Title" }, testUserId);
+
+      const response = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any);
+
+      expect(response).toBeInstanceOf(Response);
+      expect(response.status).toBe(302);
+      const recipe = await db.recipe.findUniqueOrThrow({ where: { id: recipeId } });
+      expect(recipe.title).toBe("Archived Title");
     });
 
     it("should handle reorderStep intent - move step up", async () => {

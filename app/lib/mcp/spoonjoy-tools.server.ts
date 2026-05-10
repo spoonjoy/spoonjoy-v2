@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient as PrismaClientType } from "@prisma/client";
+import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
 
 export interface SpoonjoyMcpContext {
   db: PrismaClientType;
@@ -385,6 +386,12 @@ const createRecipeTool: SpoonjoyMcpTool = {
 
     const recipe = await context.db.$transaction(async (tx) => {
       const owner = await getOrCreateOwner(tx, email);
+      const titleUniqueness = await validateActiveRecipeTitleUnique(tx, {
+        chefId: owner.id,
+        title,
+      });
+      if (!titleUniqueness.valid) throw new Error(titleUniqueness.error);
+
       const created = await tx.recipe.create({
         data: {
           title,
