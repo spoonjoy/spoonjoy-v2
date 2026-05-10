@@ -22,6 +22,7 @@
     "prisma:push": "prisma db push",
     "prisma:studio": "prisma studio",
     "db:seed": "pnpm exec tsx prisma/seed.ts",
+    "mcp:serve": "tsx scripts/spoonjoy-mcp-server.ts",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
     "chromatic": "chromatic --exit-zero-on-changes",
