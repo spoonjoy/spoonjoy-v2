@@ -2,111 +2,34 @@ import { Meta } from '@storybook/addon-docs/blocks';
 
 <Meta title="Introduction" />
 
-# Welcome to Spoonjoy's Component Kitchen
+# Spoonjoy Storybook
 
-You found it. The secret sauce. The mise en place of our UI. Welcome to Storybook, where components come to be poked, prodded, and occasionally yelled at until they work correctly.
+This Storybook is intentionally curated. It documents current Spoonjoy product surfaces and the small shared foundation those surfaces actually use.
 
-Think of this as the test kitchen for Spoonjoy's interface—a place where buttons get clicked thousands of times, inputs receive the strangest possible values, and someone inevitably asks "but what if the user types 47 emojis?"
+If a story does not represent something visible in today's app, support a current app flow, or explain a reusable foundation pattern in context, it does not belong here. Exhaustive primitive inventories, old design-token catalogs, internal dock dissections, and test-only interaction fixtures live better in code, tests, or not at all.
 
-## Getting This Thing Running
+## What Stays Here
+
+- **App/Foundation** — A compact snapshot of current UI primitives as Spoonjoy uses them.
+- **Brand/SpoonjoyLogo** — The active brand mark and real app placements.
+- **Navigation/MobileNav** — Current mobile information architecture: New, Home, List, and logged-out Home/Login.
+- **Components/ConfirmationDialog** — The confirmation pattern used for destructive app actions.
+- **Pantry** — The current pantry/home recipe surfaces.
+- **Recipe/Input/RecipeBuilder** and **Recipe/View/RecipeView** — Current high-level recipe creation and reading experiences.
+
+## What Does Not Belong Here
+
+- Stories for unused or internal-only implementation pieces.
+- Exhaustive prop permutations that duplicate component APIs without product context.
+- Test-only stories whose job is covered by Vitest or route/component tests.
+- Stale examples for old navigation, old button props, or retired design tokens.
+
+## Commands
 
 ```bash
-npm run storybook
+pnpm storybook
+pnpm build-storybook
+pnpm test -- --run test/storybook-sync.test.ts
 ```
 
-That's it. No arcane incantations required. It'll spin up on `localhost:6006` and you can click around to your heart's content.
-
-If you're feeling fancy and want to build a static version (for deployment, showing off, or just proving you can):
-
-```bash
-npm run build-storybook
-```
-
-## What's in Here
-
-We've got components. Lots of components. Organized with the care of someone who has opinions about folder structure.
-
-### Form Inputs
-The workhorses of data collection. Type things, click things, select things.
-
-- **[Button](/docs/ui-button--docs)** — 21 color variants. Because we couldn't pick just one.
-- **[Input](/docs/ui-input--docs)** — For when you need users to type things.
-- **[Textarea](/docs/ui-textarea--docs)** — Like Input, but for people who have a lot to say.
-- **[Checkbox](/docs/ui-checkbox--docs)** — Binary decisions made visual.
-- **[Radio](/docs/ui-radio--docs)** — When checkbox said "pick one."
-- **[Switch](/docs/ui-switch--docs)** — Toggle things on. Toggle things off. Revolutionary.
-- **[Select](/docs/ui-select--docs)** — Native dropdowns for the purists.
-- **[Listbox](/docs/ui-listbox--docs)** — Custom dropdowns for the fancy folks.
-- **[Combobox](/docs/ui-combobox--docs)** — Type-to-filter because scrolling is for suckers.
-
-### Typography & Display
-Making words look good since... well, since we built this.
-
-- **[Heading](/docs/ui-heading--docs)** — h1 through h6, semantically correct and everything.
-- **[Text](/docs/ui-text--docs)** — Paragraphs, but make them configurable.
-- **[Badge](/docs/ui-badge--docs)** — Little colored pills of information.
-- **[Avatar](/docs/ui-avatar--docs)** — Circles with faces (or initials, we don't judge).
-- **[Link](/docs/ui-link--docs)** — Underlined text that takes you places.
-- **[Divider](/docs/ui-divider--docs)** — A horizontal line. Surprisingly useful.
-
-### Feedback & Overlays
-When you need the user's attention RIGHT NOW.
-
-- **[Alert](/docs/ui-alert--docs)** — Modal dialogs that demand acknowledgment.
-- **[Dialog](/docs/ui-dialog--docs)** — Modals for when you need more than buttons.
-- **[Dropdown](/docs/ui-dropdown--docs)** — Menus that appear when summoned.
-- **[ValidationError](/docs/ui-validationerror--docs)** — Red text that tells you what you did wrong.
-
-### Data Display
-Showing users their stuff in organized ways.
-
-- **[Table](/docs/ui-table--docs)** — Rows and columns of data, as nature intended.
-- **[DescriptionList](/docs/ui-descriptionlist--docs)** — Key-value pairs, but pretty.
-- **[Pagination](/docs/ui-pagination--docs)** — Navigate through pages of content.
-
-### Layout
-The bones that hold everything together.
-
-- **[Fieldset](/docs/ui-fieldset--docs)** — Group form fields with labels.
-- **[StackedLayout](/docs/ui-stackedlayout--docs)** — Stacked page layout structure.
-- **[SidebarLayout](/docs/ui-sidebarlayout--docs)** — When you need a sidebar. Shocking.
-- **[Navbar](/docs/ui-navbar--docs)** — Navigation at the top.
-- **[Sidebar](/docs/ui-sidebar--docs)** — Navigation on the side.
-
-### Auth & App-Specific
-The Spoonjoy specials.
-
-- **[AuthLayout](/docs/auth-authlayout--docs)** — Wrapper for login/signup pages.
-- **[OAuth](/docs/auth-oauth--docs)** — Social login buttons that actually work.
-- **[StepOutputUseDisplay](/docs/recipe-stepoutputusedisplay--docs)** — Recipe step magic.
-
-## How to Actually Use This
-
-1. **Browse the sidebar** — Components are organized by category. Click around.
-2. **Check the Docs tab** — Each component has documentation explaining what it does and why.
-3. **Play with Controls** — The controls panel lets you tweak props in real-time. It's like a DJ mixer but for UI.
-4. **Run the interactions** — Some stories have automated tests. Watch robots click buttons for you.
-5. **Test accessibility** — The a11y tab shows accessibility violations. Fix them. Please.
-
-## The Philosophy
-
-Every component in here follows a few guiding principles:
-
-- **HeadlessUI for behavior** — We don't reinvent focus traps or keyboard navigation.
-- **Tailwind for styling** — Utility classes all the way down.
-- **Dark mode support** — Because some of us code at 2am.
-- **Accessibility first** — Screen readers are users too.
-- **Snarky documentation** — If we have to write docs, we're at least going to have fun.
-
-## Pro Tips
-
-- **Use the search** — Press `/` or click the search icon. Finding things is faster than scrolling.
-- **Keyboard shortcuts** — Press `?` to see all the shortcuts. You're welcome.
-- **Zoom with your browser** — Components are shown at actual size. Zoom if you need to squint.
-- **Dark mode toggle** — There's a sun/moon icon in the toolbar. Use it.
-
-## Questions?
-
-Read the code. The code is the documentation. The documentation is the code. Welcome to software engineering.
-
-Now go click some buttons.
+Treat this as Spoonjoy's visual field guide: enough to understand the app quickly, not so much that the signal gets buried under pantry clutter.

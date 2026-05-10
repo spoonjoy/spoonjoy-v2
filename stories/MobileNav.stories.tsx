@@ -1,31 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
-import { fn, expect, within } from 'storybook/test'
-import { MemoryRouter, Routes, Route, useLocation } from 'react-router'
+import { ArrowLeft, Edit, Share2, Trash2 } from 'lucide-react'
 import { MobileNav } from '../app/components/navigation/mobile-nav'
 import { DockContextProvider, useDockActions, type DockAction } from '../app/components/navigation/dock-context'
-import { ArrowLeft, Edit, ShoppingCart, Share, Heart, Bookmark } from 'lucide-react'
 
-/**
- * # MobileNav
- * 
- * The complete mobile navigation dock, assembling SpoonDock, DockItems, and DockCenter.
- * Uses React Router's location to determine the active navigation item.
- * 
- * ## Key Features
- * 
- * - **Route-aware** - Automatically highlights the active navigation item
- * - **Contextual mode** - Pages can register custom actions via DockContext
- * - **Authentication states** - Different nav items for logged in vs logged out
- * - **Responsive** - Hidden on desktop (lg breakpoint and above)
- * 
- * ## Navigation Items
- * 
- * **Authenticated:**
- * - Recipes (left) | Cookbooks (left) | [Logo] | List (right) | Profile (right)
- * 
- * **Unauthenticated:**
- * - Home (left) | [Logo] | Login (right)
- */
 const meta: Meta<typeof MobileNav> = {
   title: 'Navigation/MobileNav',
   component: MobileNav,
@@ -34,21 +11,10 @@ const meta: Meta<typeof MobileNav> = {
     viewport: {
       defaultViewport: 'mobile1',
     },
-    backgrounds: {
-      default: 'dark',
-      values: [
-        { name: 'dark', value: '#18181b' },
-        { name: 'light', value: '#ffffff' },
-      ],
-    },
     docs: {
       description: {
-        component: `
-MobileNav is the assembled mobile navigation dock that combines SpoonDock, DockItems, 
-and DockCenter. It uses React Router for route awareness and DockContext for contextual actions.
-
-Supports both authenticated and unauthenticated states with different navigation items.
-        `,
+        component:
+          'The current mobile dock: authenticated users get New, centered home logo, and List; logged-out users get Home, centered logo, and Login. Page-level contextual actions may replace the side slots.',
       },
     },
   },
@@ -56,7 +22,7 @@ Supports both authenticated and unauthenticated states with different navigation
   argTypes: {
     isAuthenticated: {
       control: 'boolean',
-      description: 'Whether user is authenticated (changes nav items)',
+      description: 'Switches between the authenticated and logged-out dock IA.',
     },
   },
 }
@@ -64,411 +30,103 @@ Supports both authenticated and unauthenticated states with different navigation
 export default meta
 type Story = StoryObj<typeof meta>
 
-// =============================================================================
-// WRAPPER COMPONENTS
-// =============================================================================
-
-/**
- * Wrapper that provides MemoryRouter and DockContextProvider
- */
-function StoryWrapper({
-  initialPath = '/recipes',
-  children,
-}: {
-  initialPath?: string
-  children: React.ReactNode
-}) {
+function Frame({ children, caption }: { children: React.ReactNode; caption: string }) {
   return (
-    <MemoryRouter initialEntries={[initialPath]}>
-      <DockContextProvider>
-        <div className="h-screen w-full bg-zinc-900 relative">
-          <div className="p-4 text-white space-y-4 pb-32">
-            <CurrentPathDisplay />
-            <p className="text-zinc-400">
-              The dock appears fixed at the bottom of the screen.
-            </p>
-          </div>
-          {children}
+    <DockContextProvider>
+      <div className="relative min-h-screen bg-[radial-gradient(circle_at_top,_#3f3f46,_#18181b_45%,_#09090b)] p-6 pb-32 text-white">
+        <div className="max-w-sm space-y-3">
+          <p className="text-xs uppercase tracking-[0.3em] text-amber-200/80">Mobile dock</p>
+          <h1 className="text-2xl font-semibold">{caption}</h1>
+          <p className="text-sm text-zinc-300">Resize to a mobile viewport or use Storybook's viewport toolbar to inspect the fixed bottom dock.</p>
         </div>
-      </DockContextProvider>
-    </MemoryRouter>
+        {children}
+      </div>
+    </DockContextProvider>
   )
 }
 
-/**
- * Displays the current path for debugging
- */
-function CurrentPathDisplay() {
-  const location = useLocation()
-  return (
-    <div className="text-zinc-400 text-sm">
-      Current path: <code className="text-white">{location.pathname}</code>
-    </div>
-  )
+function ContextualRecipeActions() {
+  const actions: DockAction[] = [
+    { id: 'back', icon: ArrowLeft, label: 'Back', onAction: '/recipes', position: 'left' },
+    { id: 'share', icon: Share2, label: 'Share', onAction: () => undefined, position: 'right' },
+    { id: 'edit', icon: Edit, label: 'Edit', onAction: '/recipes/r-1/edit', position: 'right' },
+  ]
+  useDockActions(actions)
+  return <MobileNav isAuthenticated />
 }
 
-// =============================================================================
-// BASIC STORIES
-// =============================================================================
-
-/**
- * Default authenticated navigation with Recipes active.
- */
-export const Default: Story = {
-  args: {
-    isAuthenticated: true,
-  },
-  render: (args) => (
-    <StoryWrapper initialPath="/recipes">
-      <MobileNav {...args} />
-    </StoryWrapper>
-  ),
-}
-
-/**
- * Unauthenticated user sees Home and Login options.
- */
-export const Unauthenticated: Story = {
-  args: {
-    isAuthenticated: false,
-  },
-  render: (args) => (
-    <StoryWrapper initialPath="/">
-      <MobileNav {...args} />
-    </StoryWrapper>
-  ),
-  parameters: {
-    docs: {
-      description: {
-        story: 'When not authenticated, shows simplified nav: Home | Logo | Login',
-      },
+function ContextualEditActions() {
+  const actions: DockAction[] = [
+    { id: 'back', icon: ArrowLeft, label: 'Back', onAction: '/recipes/r-1', position: 'left' },
+    {
+      id: 'delete',
+      icon: Trash2,
+      label: 'Delete',
+      ariaLabel: 'Delete recipe',
+      iconClassName: 'text-red-400',
+      labelClassName: 'text-red-300',
+      onAction: () => undefined,
+      position: 'right',
     },
-  },
+  ]
+  useDockActions(actions)
+  return <MobileNav isAuthenticated />
 }
 
-// =============================================================================
-// ACTIVE STATE STORIES
-// =============================================================================
-
-/**
- * Recipes tab active
- */
-export const RecipesActive: Story = {
+export const AuthenticatedHome: Story = {
   args: { isAuthenticated: true },
+  parameters: { router: { initialEntries: ['/'] } },
   render: (args) => (
-    <StoryWrapper initialPath="/recipes">
+    <Frame caption="Kitchen home">
       <MobileNav {...args} />
-    </StoryWrapper>
+    </Frame>
   ),
 }
 
-/**
- * Cookbooks tab active
- */
-export const CookbooksActive: Story = {
+export const NewRecipeActive: Story = {
   args: { isAuthenticated: true },
+  parameters: { router: { initialEntries: ['/recipes/new'] } },
   render: (args) => (
-    <StoryWrapper initialPath="/cookbooks">
+    <Frame caption="New recipe active">
       <MobileNav {...args} />
-    </StoryWrapper>
+    </Frame>
   ),
 }
 
-/**
- * Shopping List tab active
- */
 export const ShoppingListActive: Story = {
   args: { isAuthenticated: true },
+  parameters: { router: { initialEntries: ['/shopping-list'] } },
   render: (args) => (
-    <StoryWrapper initialPath="/shopping-list">
+    <Frame caption="Shopping list active">
       <MobileNav {...args} />
-    </StoryWrapper>
+    </Frame>
   ),
 }
 
-/**
- * Profile tab active
- */
-export const ProfileActive: Story = {
-  args: { isAuthenticated: true },
-  render: (args) => (
-    <StoryWrapper initialPath="/account/settings">
-      <MobileNav {...args} />
-    </StoryWrapper>
-  ),
-}
-
-/**
- * Nested route still activates parent tab (e.g., /recipes/123)
- */
-export const NestedRoute: Story = {
-  args: { isAuthenticated: true },
-  render: (args) => (
-    <StoryWrapper initialPath="/recipes/123">
-      <MobileNav {...args} />
-    </StoryWrapper>
-  ),
-  parameters: {
-    docs: {
-      description: {
-        story: 'Nested routes like /recipes/123 still highlight the parent tab (Recipes).',
-      },
-    },
-  },
-}
-
-// =============================================================================
-// CONTEXTUAL MODE STORIES
-// =============================================================================
-
-/**
- * Component that registers contextual actions
- */
-function ContextualPage({ actions }: { actions: DockAction[] }) {
-  useDockActions(actions)
-  return (
-    <div className="p-4 text-white">
-      <h2 className="text-lg font-semibold">Contextual Mode Active</h2>
-      <p className="text-zinc-400 text-sm mt-2">
-        This page has registered custom dock actions.
-      </p>
-    </div>
-  )
-}
-
-/**
- * Recipe detail page with contextual actions.
- */
-export const ContextualRecipeDetail: Story = {
-  render: () => {
-    const actions: DockAction[] = [
-      { id: 'back', icon: ArrowLeft, label: 'Back', onAction: '/recipes', position: 'left' },
-      { id: 'edit', icon: Edit, label: 'Edit', onAction: fn(), position: 'left' },
-      { id: 'add-to-list', icon: ShoppingCart, label: 'Add', onAction: fn(), position: 'right' },
-      { id: 'share', icon: Share, label: 'Share', onAction: fn(), position: 'right' },
-    ]
-
-    return (
-      <MemoryRouter initialEntries={['/recipes/123']}>
-        <DockContextProvider>
-          <div className="h-screen w-full bg-zinc-900 relative">
-            <ContextualPage actions={actions} />
-            <MobileNav isAuthenticated={true} />
-          </div>
-        </DockContextProvider>
-      </MemoryRouter>
-    )
-  },
-  parameters: {
-    docs: {
-      description: {
-        story: `
-On recipe detail pages, the dock shows contextual actions:
-- Back | Edit | [Logo] | Add to List | Share
-
-These replace the default navigation items.
-        `,
-      },
-    },
-  },
-}
-
-/**
- * Custom contextual actions (e.g., a favorites page)
- */
-export const ContextualFavorites: Story = {
-  render: () => {
-    const actions: DockAction[] = [
-      { id: 'back', icon: ArrowLeft, label: 'Back', onAction: '/recipes', position: 'left' },
-      { id: 'heart', icon: Heart, label: 'Favorite', onAction: fn(), position: 'right' },
-      { id: 'save', icon: Bookmark, label: 'Save', onAction: fn(), position: 'right' },
-    ]
-
-    return (
-      <MemoryRouter initialEntries={['/favorites']}>
-        <DockContextProvider>
-          <div className="h-screen w-full bg-zinc-900 relative">
-            <ContextualPage actions={actions} />
-            <MobileNav isAuthenticated={true} />
-          </div>
-        </DockContextProvider>
-      </MemoryRouter>
-    )
-  },
-  parameters: {
-    docs: {
-      description: {
-        story: 'Pages can register any set of contextual actions they need.',
-      },
-    },
-  },
-}
-
-// =============================================================================
-// RESPONSIVE STORIES
-// =============================================================================
-
-/**
- * Small mobile (iPhone SE)
- */
-export const SmallMobile: Story = {
-  ...Default,
-  parameters: {
-    viewport: { defaultViewport: 'mobile1' },
-    docs: {
-      description: { story: 'Navigation on small mobile devices (320px).' },
-    },
-  },
-}
-
-/**
- * Large mobile (iPhone 12/13 Pro)
- */
-export const LargeMobile: Story = {
-  ...Default,
-  parameters: {
-    viewport: { defaultViewport: 'mobile2' },
-    docs: {
-      description: { story: 'Navigation on larger mobile devices (414px).' },
-    },
-  },
-}
-
-/**
- * Tablet - still shows the dock
- */
-export const Tablet: Story = {
-  ...Default,
-  parameters: {
-    viewport: { defaultViewport: 'tablet' },
-    docs: {
-      description: { story: 'Navigation on tablet (768px). Still visible below lg breakpoint.' },
-    },
-  },
-}
-
-/**
- * Desktop - dock is hidden (lg:hidden)
- */
-export const HiddenOnDesktop: Story = {
-  ...Default,
-  parameters: {
-    viewport: { defaultViewport: 'desktop' },
-    docs: {
-      description: { story: 'On desktop (lg+), the mobile dock is hidden. Users see the navbar.' },
-    },
-  },
-}
-
-// =============================================================================
-// INTERACTION TESTS
-// =============================================================================
-
-/**
- * Verify all navigation items are rendered
- */
-export const RendersAllItems: Story = {
-  args: { isAuthenticated: true },
-  render: (args) => (
-    <StoryWrapper initialPath="/recipes">
-      <MobileNav {...args} />
-    </StoryWrapper>
-  ),
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement)
-    
-    // Check that all nav items are present
-    await expect(canvas.getByText('Recipes')).toBeInTheDocument()
-    await expect(canvas.getByText('Cookbooks')).toBeInTheDocument()
-    await expect(canvas.getByText('List')).toBeInTheDocument()
-    await expect(canvas.getByText('Profile')).toBeInTheDocument()
-  },
-}
-
-/**
- * Verify unauthenticated nav items
- */
-export const RendersUnauthenticatedItems: Story = {
+export const LoggedOutHome: Story = {
   args: { isAuthenticated: false },
+  parameters: { router: { initialEntries: ['/'] } },
   render: (args) => (
-    <StoryWrapper initialPath="/">
+    <Frame caption="Logged-out home">
       <MobileNav {...args} />
-    </StoryWrapper>
+    </Frame>
   ),
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement)
-    
-    // Check unauthenticated items
-    await expect(canvas.getByText('Home')).toBeInTheDocument()
-    await expect(canvas.getByText('Login')).toBeInTheDocument()
-    
-    // Authenticated items should not be present
-    expect(canvas.queryByText('Recipes')).not.toBeInTheDocument()
-    expect(canvas.queryByText('Cookbooks')).not.toBeInTheDocument()
-  },
 }
 
-// =============================================================================
-// BACKGROUND VARIATIONS
-// =============================================================================
-
-/**
- * Navigation over light content
- */
-export const OverLightBackground: Story = {
-  args: { isAuthenticated: true },
-  render: (args) => (
-    <MemoryRouter initialEntries={['/recipes']}>
-      <DockContextProvider>
-        <div className="h-screen w-full bg-white relative">
-          <div className="p-4 text-zinc-900 space-y-4">
-            <h1 className="text-xl font-bold">Light Background</h1>
-            <p className="text-zinc-600">
-              The dock maintains its dark glass styling over light content.
-            </p>
-          </div>
-          <MobileNav {...args} />
-        </div>
-      </DockContextProvider>
-    </MemoryRouter>
+export const RecipeDetailContext: Story = {
+  parameters: { router: { initialEntries: ['/recipes/r-1'] } },
+  render: () => (
+    <Frame caption="Recipe detail actions">
+      <ContextualRecipeActions />
+    </Frame>
   ),
-  parameters: {
-    backgrounds: { default: 'light' },
-  },
 }
 
-/**
- * Navigation over an image
- */
-export const OverImage: Story = {
-  args: { isAuthenticated: true },
-  render: (args) => (
-    <MemoryRouter initialEntries={['/recipes']}>
-      <DockContextProvider>
-        <div
-          className="h-screen w-full bg-cover bg-center relative"
-          style={{
-            backgroundImage:
-              'url(https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=800)',
-          }}
-        >
-          <div className="absolute inset-0 bg-black/30" />
-          <div className="relative p-4 text-white">
-            <h1 className="text-xl font-bold">Over Image</h1>
-            <p className="text-white/80">
-              The backdrop blur creates a frosted glass effect.
-            </p>
-          </div>
-          <MobileNav {...args} />
-        </div>
-      </DockContextProvider>
-    </MemoryRouter>
+export const RecipeEditContext: Story = {
+  parameters: { router: { initialEntries: ['/recipes/r-1/edit'] } },
+  render: () => (
+    <Frame caption="Recipe edit actions">
+      <ContextualEditActions />
+    </Frame>
   ),
-  parameters: {
-    docs: {
-      description: {
-        story: 'The glass morphism effect looks beautiful over image backgrounds.',
-      },
-    },
-  },
 }

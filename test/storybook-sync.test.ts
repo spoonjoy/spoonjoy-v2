@@ -1,235 +1,164 @@
-/**
- * Storybook Sync Tests
- *
- * Verifies that Storybook stories match actual component usage in the app.
- * Stories should reflect reality for USED components - aspirational content
- * is OK for unused components.
- *
- * These tests ensure:
- * 1. All custom components have stories
- * 2. Stories exist for frequently used components
- * 3. Story files are properly structured
- */
+import { describe, it, expect } from 'vitest'
+import * as fs from 'node:fs'
+import * as path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-import { describe, it, expect } from "vitest";
-import * as fs from "node:fs";
-import * as path from "node:path";
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const STORIES_DIR = path.join(__dirname, '../stories')
 
-const STORIES_DIR = path.join(__dirname, "../stories");
-const COMPONENTS_DIR = path.join(__dirname, "../app/components");
+const curatedRootStories = new Set([
+  'AppFoundation.stories.tsx',
+  'ConfirmationDialog.stories.tsx',
+  'MobileNav.stories.tsx',
+  'SpoonjoyLogo.stories.tsx',
+])
 
-/**
- * Helper to check if a story file exists for a component
- */
-function storyExists(componentName: string): boolean {
-  const possibleNames = [
-    `${componentName}.stories.tsx`,
-    `${componentName}.stories.ts`,
-    // Handle kebab-case to PascalCase conversion
-    componentName
-      .split("-")
-      .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
-      .join("") + ".stories.tsx",
-  ];
+const requiredStoryFiles = [
+  'Introduction.mdx',
+  'AppFoundation.stories.tsx',
+  'ConfirmationDialog.stories.tsx',
+  'MobileNav.stories.tsx',
+  'SpoonjoyLogo.stories.tsx',
+  'Pantry/BioCard.stories.tsx',
+  'Pantry/PantryPage.stories.tsx',
+  'Pantry/RecipeGrid.stories.tsx',
+  'Recipe/Input/RecipeBuilder.stories.tsx',
+  'Recipe/View/RecipeView.stories.tsx',
+]
 
-  return possibleNames.some((name) =>
-    fs.existsSync(path.join(STORIES_DIR, name))
-  );
+const removedStaleFiles = [
+  'Alert.stories.tsx',
+  'AuthLayout.stories.tsx',
+  'Avatar.stories.tsx',
+  'Badge.stories.tsx',
+  'Button.stories.tsx',
+  'Checkbox.stories.tsx',
+  'Combobox.stories.tsx',
+  'ComponentInventory.mdx',
+  'DescriptionList.stories.tsx',
+  'DesignTokens.mdx',
+  'Dialog.stories.tsx',
+  'Divider.stories.tsx',
+  'DockCenter.stories.tsx',
+  'DockContext.stories.tsx',
+  'DockIndicator.stories.tsx',
+  'DockItem.stories.tsx',
+  'Dropdown.stories.tsx',
+  'Fieldset.stories.tsx',
+  'Heading.stories.tsx',
+  'Input.stories.tsx',
+  'Link.stories.tsx',
+  'Listbox.stories.tsx',
+  'Navbar.stories.tsx',
+  'OAuth.stories.tsx',
+  'Pagination.stories.tsx',
+  'QuickActions.stories.tsx',
+  'Radio.stories.tsx',
+  'REORG-PLAN.md',
+  'Select.stories.tsx',
+  'Sidebar.stories.tsx',
+  'SidebarLayout.stories.tsx',
+  'SpoonDock.stories.tsx',
+  'StackedLayout.stories.tsx',
+  'Switch.stories.tsx',
+  'Table.stories.tsx',
+  'TailwindTest.stories.tsx',
+  'Text.stories.tsx',
+  'Textarea.stories.tsx',
+  'ThemeToggle.stories.tsx',
+  'UseRecipeDockActions.stories.tsx',
+  'ValidationError.stories.tsx',
+]
+
+function getAllFiles(dir: string): string[] {
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const fullPath = path.join(dir, entry.name)
+    if (entry.isDirectory()) return getAllFiles(fullPath)
+    return [fullPath]
+  })
 }
 
-/**
- * Get all story files in the stories directory
- */
-function getAllStoryFiles(): string[] {
-  return fs
-    .readdirSync(STORIES_DIR)
-    .filter((file) => file.endsWith(".stories.tsx") || file.endsWith(".stories.ts"));
+function storyPath(relativePath: string): string {
+  return path.join(STORIES_DIR, relativePath)
 }
 
-describe("Storybook Sync", () => {
-  describe("custom components have stories", () => {
-    it("SpoonjoyLogo should have a story", () => {
-      // SpoonjoyLogo is a custom component used in navigation
-      // It should have a dedicated story showing its variants
-      expect(storyExists("SpoonjoyLogo")).toBe(true);
-    });
+function storyFiles(): string[] {
+  return getAllFiles(STORIES_DIR)
+    .filter((file) => /\.stories\.(t|j)sx?$/.test(file))
+    .map((file) => path.relative(STORIES_DIR, file))
+    .sort()
+}
 
-    it("ConfirmationDialog should have a story", () => {
-      // ConfirmationDialog is a custom component created for UI polish
-      // It wraps Catalyst Dialog with a standard confirmation pattern
-      expect(storyExists("ConfirmationDialog")).toBe(true);
-    });
-  });
+function readStory(relativePath: string): string {
+  return fs.readFileSync(storyPath(relativePath), 'utf8')
+}
 
-  describe("story files exist for used components", () => {
-    // Components confirmed as used per audit-components.md
-    const usedComponents = [
-      "Button",
-      "Input",
-      "Heading",
-      "Text",
-      "Fieldset",
-      "Textarea",
-      "AuthLayout",
-      "Listbox",
-      "OAuth",
-      "Avatar",
-      "ThemeToggle",
-      "Link",
-      "Alert",
-      "Dialog",
-      "Checkbox",
-      "Switch",
-      "ValidationError",
-    ];
+describe('Storybook curation', () => {
+  it('keeps the current curated product surfaces', () => {
+    for (const file of requiredStoryFiles) {
+      expect(fs.existsSync(storyPath(file)), `${file} should exist`).toBe(true)
+    }
+  })
 
-    usedComponents.forEach((component) => {
-      it(`${component} should have a story file`, () => {
-        expect(storyExists(component)).toBe(true);
-      });
-    });
-  });
+  it('does not keep stale generic catalogs or internal dock dissections', () => {
+    for (const file of removedStaleFiles) {
+      expect(fs.existsSync(storyPath(file)), `${file} should not be in the curated Storybook`).toBe(false)
+    }
+  })
 
-  describe("story files are properly structured", () => {
-    it("all story files should export a default meta object", () => {
-      const storyFiles = getAllStoryFiles();
+  it('keeps root-level stories limited to app-specific surfaces', () => {
+    const unexpectedRootStories = storyFiles().filter((file) => !file.includes('/') && !curatedRootStories.has(file))
 
-      for (const file of storyFiles) {
-        const content = fs.readFileSync(path.join(STORIES_DIR, file), "utf-8");
+    expect(unexpectedRootStories).toEqual([])
+  })
 
-        // Check for default export (meta)
-        expect(
-          content.includes("export default"),
-          `${file} should have a default export`
-        ).toBe(true);
+  it('keeps markdown docs limited to the curated introduction', () => {
+    const markdownFiles = getAllFiles(STORIES_DIR)
+      .filter((file) => /\.mdx?$/.test(file))
+      .map((file) => path.relative(STORIES_DIR, file))
+      .sort()
 
-        // Check for Meta import
-        expect(
-          content.includes("Meta"),
-          `${file} should import Meta from storybook`
-        ).toBe(true);
-      }
-    });
+    expect(markdownFiles).toEqual(['Introduction.mdx'])
+  })
 
-    it("all story files should have at least one exported story", () => {
-      const storyFiles = getAllStoryFiles();
+  it('keeps every story file renderable by Storybook', () => {
+    for (const file of storyFiles()) {
+      const content = readStory(file)
 
-      for (const file of storyFiles) {
-        const content = fs.readFileSync(path.join(STORIES_DIR, file), "utf-8");
+      expect(content, `${file} should export a default meta object`).toMatch(/export default /)
+      expect(content, `${file} should include a named story export`).toMatch(/^export const \w+/m)
+    }
+  })
 
-        // Check for at least one named export (a story)
-        // Stories are typically: export const SomeName: Story = ...
-        const hasNamedExport =
-          content.includes("export const") ||
-          content.includes("export {");
+  it('does not keep test-only story exports', () => {
+    for (const file of storyFiles()) {
+      const content = readStory(file)
 
-        expect(
-          hasNamedExport,
-          `${file} should have at least one named export (story)`
-        ).toBe(true);
-      }
-    });
+      expect(content, `${file} should not contain Test_ exports or stories ending in Test`).not.toMatch(
+        /^export const (?:Test_\w+|\w+Test):/m
+      )
+    }
+  })
 
-    it("story files should not have TypeScript errors in imports", () => {
-      const storyFiles = getAllStoryFiles();
+  it('does not preserve stale Button API examples', () => {
+    for (const file of storyFiles()) {
+      const content = readStory(file)
 
-      for (const file of storyFiles) {
-        const content = fs.readFileSync(path.join(STORIES_DIR, file), "utf-8");
+      expect(content, `${file} should not pass removed color props to Button`).not.toMatch(/<Button\b[^>]*\bcolor=/)
+      expect(content, `${file} should not use the removed Button outline prop`).not.toMatch(/<Button\b[^>]*\boutline\b/)
+      expect(content, `${file} should not refer to old buttonColor demo plumbing`).not.toContain('buttonColor')
+      expect(content, `${file} should not advertise the retired exhaustive color catalog`).not.toContain('21 color')
+    }
+  })
 
-        // Check that imports reference existing paths
-        // Look for imports from ../app/components
-        const importMatches = content.matchAll(
-          /from ['"]\.\.\/app\/components\/([^'"]+)['"]/g
-        );
+  it('documents the current mobile IA instead of the retired five-item dock', () => {
+    const content = readStory('MobileNav.stories.tsx')
 
-        for (const match of importMatches) {
-          const importPath = match[1];
-          const fullPath = path.join(
-            COMPONENTS_DIR,
-            importPath.endsWith(".tsx") ? importPath : `${importPath}.tsx`
-          );
-          const indexPath = path.join(COMPONENTS_DIR, importPath, "index.tsx");
-
-          const fileExists =
-            fs.existsSync(fullPath) || fs.existsSync(indexPath);
-
-          expect(
-            fileExists,
-            `${file} imports from ${importPath} which should exist`
-          ).toBe(true);
-        }
-      }
-    });
-  });
-
-  describe("navigation components have stories", () => {
-    // Navigation components that should have stories
-    const navComponents = [
-      "Navbar",
-      "Sidebar",
-      "StackedLayout",
-      "SidebarLayout",
-    ];
-
-    navComponents.forEach((component) => {
-      it(`${component} should have a story file`, () => {
-        expect(storyExists(component)).toBe(true);
-      });
-    });
-  });
-
-  describe("SpoonDock navigation components have stories", () => {
-    // SpoonDock is the mobile navigation component
-    const dockComponents = [
-      "SpoonDock",
-      "DockItem",
-      "DockCenter",
-      "DockContext",
-      "DockIndicator",
-    ];
-
-    dockComponents.forEach((component) => {
-      it(`${component} should have a story file`, () => {
-        expect(storyExists(component)).toBe(true);
-      });
-    });
-  });
-
-  describe("story content quality", () => {
-    it("SpoonjoyLogo story should show all size and variant options", () => {
-      // This will fail until SpoonjoyLogo.stories.tsx is created
-      const storyPath = path.join(STORIES_DIR, "SpoonjoyLogo.stories.tsx");
-
-      expect(fs.existsSync(storyPath)).toBe(true);
-
-      if (fs.existsSync(storyPath)) {
-        const content = fs.readFileSync(storyPath, "utf-8");
-
-        // Should document size prop
-        expect(content.includes("size")).toBe(true);
-
-        // Should document variant prop
-        expect(content.includes("variant")).toBe(true);
-      }
-    });
-
-    it("ConfirmationDialog story should show destructive and non-destructive variants", () => {
-      // This will fail until ConfirmationDialog.stories.tsx is created
-      const storyPath = path.join(STORIES_DIR, "ConfirmationDialog.stories.tsx");
-
-      expect(fs.existsSync(storyPath)).toBe(true);
-
-      if (fs.existsSync(storyPath)) {
-        const content = fs.readFileSync(storyPath, "utf-8");
-
-        // Should show destructive variant
-        expect(content.includes("destructive")).toBe(true);
-
-        // Should show the playful copy examples from the app
-        expect(
-          content.includes("shadow realm") || content.includes("Banish")
-        ).toBe(true);
-      }
-    });
-  });
-});
+    expect(content).toContain('New')
+    expect(content).toContain('List')
+    expect(content).toContain('LoggedOutHome')
+    expect(content).not.toContain('CookbooksActive')
+    expect(content).not.toContain('ProfileActive')
+    expect(content).not.toContain('RecipesActive')
+  })
+})
