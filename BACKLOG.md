@@ -46,8 +46,9 @@ Status meanings:
 9. `SJ-013`: Harden shopping-list item actions for idempotency, restore behavior, and cross-user isolation.
 10. `SJ-015`: Add Cloudflare deployment preflight checks and production deployment docs.
 11. `SJ-023`: Remove production build sourcemap warnings so the zero-warning contract covers deploy builds.
+12. `SJ-007`: Split large route modules into testable server/domain modules.
 
-Completed in sequence: `SJ-001`, `SJ-002`, `SJ-003`, `SJ-004`, `SJ-005`, `SJ-006`, `SJ-008`, `SJ-009`, `SJ-013`, `SJ-015`, `SJ-023`.
+Completed in sequence: `SJ-001`, `SJ-002`, `SJ-003`, `SJ-004`, `SJ-005`, `SJ-006`, `SJ-008`, `SJ-009`, `SJ-013`, `SJ-015`, `SJ-023`, `SJ-007`.
 
 ## Backlog Items
 
@@ -230,7 +231,7 @@ Completion notes:
 
 Priority: `P1`
 Lane: `architecture`, `maintainability`, `testing`
-Status: `in-progress`
+Status: `done`
 
 Problem: Several route modules mix loader/action logic, domain operations, helper functions, and large UI components. The tests are also large, making future changes expensive under the 100% coverage rule.
 
@@ -253,7 +254,8 @@ Progress notes:
 
 - First slice extracted account settings loader/action, profile photo, OAuth-linking, and password mutation behavior into `app/lib/account-settings.server.ts`, leaving `app/routes/account.settings.tsx` as a much thinner route/UI wrapper.
 - Second slice extracted shopping-list parsing, ordering, loader, and action behavior into `app/lib/shopping-list.server.ts` plus client-safe parser helpers in `app/lib/shopping-list-parser.ts`, leaving `app/routes/shopping-list.tsx` focused on route exports, swipe helpers, and UI.
-- Remaining slice: extract recipe-detail cookbook/shopping-list helpers from the UI route.
+- Third slice extracted recipe-detail loader/action, cookbook save membership, shopping-list ingredient presence, and delete behavior into `app/lib/recipe-detail.server.ts`, leaving `app/routes/recipes.$id.tsx` focused on route exports, UI state, and rendering.
+- Scoped route-domain extraction is complete; any further recipe-detail UI component splitting should be tracked as a separate observed backlog item if it blocks future work.
 
 ### SJ-008 - Mobile RecipeBuilder And SpoonDock UX Audit
 

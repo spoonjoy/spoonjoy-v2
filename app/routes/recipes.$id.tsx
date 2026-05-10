@@ -1,10 +1,12 @@
 import type { Route } from "./+types/recipes.$id";
-import { redirect, useFetcher, useLoaderData, useSubmit } from "react-router";
+import { useFetcher, useLoaderData, useSubmit } from "react-router";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { usePostHog } from "@posthog/react";
 import { ArrowLeft } from "lucide-react";
-import { getRequestDb } from "~/lib/route-platform.server";
-import { requireUserId } from "~/lib/session.server";
+import {
+  handleRecipeDetailAction,
+  loadRecipeDetail,
+} from "~/lib/recipe-detail.server";
 import { Button } from "~/components/ui/button";
 import { useToast } from "~/components/ui/toast";
 import { Dialog, DialogActions, DialogBody, DialogDescription, DialogTitle } from "~/components/ui/dialog";
@@ -20,211 +22,11 @@ import { shareContent, useRecipeDetailActions } from "~/components/navigation";
 import { resolveIngredientAffordance } from "~/lib/ingredient-affordances";
 
 export async function loader({ request, params, context }: Route.LoaderArgs) {
-  const userId = await requireUserId(request);
-  const { id } = params;
-
-  const database = await getRequestDb(context);
-
-  const recipe = await database.recipe.findUnique({
-    where: { id },
-    include: {
-      chef: {
-        select: {
-          id: true,
-          username: true,
-          photoUrl: true,
-        },
-      },
-      steps: {
-        orderBy: {
-          stepNum: "asc",
-        },
-        include: {
-          ingredients: {
-            include: {
-              unit: true,
-              ingredientRef: true,
-            },
-          },
-          usingSteps: {
-            include: {
-              outputOfStep: {
-                select: {
-                  stepNum: true,
-                  stepTitle: true,
-                },
-              },
-            },
-            orderBy: {
-              outputStepNum: "asc",
-            },
-          },
-        },
-      },
-    },
-  });
-
-  if (!recipe || recipe.deletedAt) {
-    throw new Response("Recipe not found", { status: 404 });
-  }
-
-  // Check if user owns this recipe
-  const isOwner = recipe.chefId === userId;
-
-  // Fetch user's cookbooks for save functionality
-  const userCookbooks = await database.cookbook.findMany({
-    where: { authorId: userId },
-    select: {
-      id: true,
-      title: true,
-      recipes: {
-        where: { recipeId: id },
-        select: { id: true },
-      },
-    },
-    orderBy: { title: "asc" },
-  });
-
-  // Transform cookbooks and track which already contain this recipe
-  const cookbooks = userCookbooks.map((cb) => ({
-    id: cb.id,
-    title: cb.title,
-  }));
-  const savedInCookbookIds = userCookbooks
-    .filter((cb) => cb.recipes.length > 0)
-    .map((cb) => cb.id);
-
-  const recipeIngredientKeys = new Set(
-    recipe.steps.flatMap((step) =>
-      step.ingredients.map((ingredient) => `${ingredient.ingredientRefId}:${ingredient.unitId}`)
-    )
-  );
-  const recipeIngredientRefIds = Array.from(
-    new Set(recipe.steps.flatMap((step) => step.ingredients.map((ingredient) => ingredient.ingredientRefId)))
-  );
-
-  let hasIngredientsInShoppingList = false;
-  if (recipeIngredientKeys.size > 0 && recipeIngredientRefIds.length > 0) {
-    const shoppingList = await database.shoppingList.findUnique({
-      where: { authorId: userId },
-      select: {
-        items: {
-          where: {
-            deletedAt: null,
-            ingredientRefId: { in: recipeIngredientRefIds },
-          },
-          select: {
-            ingredientRefId: true,
-            unitId: true,
-          },
-        },
-      },
-    });
-
-    const shoppingListIngredientKeys = new Set(
-      (shoppingList?.items ?? []).map(
-        (item) => `${item.ingredientRefId}:${item.unitId ?? "null"}`
-      )
-    );
-    hasIngredientsInShoppingList = Array.from(recipeIngredientKeys).every((key) =>
-      shoppingListIngredientKeys.has(key)
-    );
-  }
-
-  return { recipe, isOwner, cookbooks, savedInCookbookIds, hasIngredientsInShoppingList };
+  return loadRecipeDetail({ request, params, context });
 }
 
 export async function action({ request, params, context }: Route.ActionArgs) {
-  const userId = await requireUserId(request);
-  const { id } = params;
-  const formData = await request.formData();
-  const intent = formData.get("intent");
-
-  const database = await getRequestDb(context);
-
-  // Create cookbook and save recipe to it
-  if (intent === "createCookbookAndSave") {
-    const title = formData.get("title")?.toString()?.trim();
-    if (!title) {
-      throw new Response("Title is required", { status: 400 });
-    }
-    const newCookbook = await database.cookbook.create({
-      data: {
-        title,
-        authorId: userId,
-      },
-    });
-    await database.recipeInCookbook.create({
-      data: {
-        cookbookId: newCookbook.id,
-        recipeId: id,
-        addedById: userId,
-      },
-    });
-    return { success: true, newCookbook: { id: newCookbook.id, title: newCookbook.title } };
-  }
-
-  // Add/remove cookbook membership doesn't require recipe ownership
-  if (intent === "addToCookbook" || intent === "removeFromCookbook") {
-    const cookbookId = formData.get("cookbookId")?.toString();
-    if (cookbookId) {
-      // Verify user owns the cookbook
-      const cookbook = await database.cookbook.findUnique({
-        where: { id: cookbookId },
-        select: { authorId: true },
-      });
-      if (!cookbook || cookbook.authorId !== userId) {
-        throw new Response("Unauthorized", { status: 403 });
-      }
-
-      if (intent === "removeFromCookbook") {
-        await database.recipeInCookbook.deleteMany({
-          where: { cookbookId, recipeId: id },
-        });
-        return { success: true };
-      }
-
-      try {
-        await database.recipeInCookbook.create({
-          data: {
-            cookbookId,
-            recipeId: id,
-            addedById: userId,
-          },
-        });
-        return { success: true };
-      } catch (error: unknown) {
-        // Already in cookbook - ignore
-        return { success: true };
-      }
-    }
-  }
-
-  // Verify ownership for other actions
-  const recipe = await database.recipe.findUnique({
-    where: { id },
-    select: { chefId: true, deletedAt: true },
-  });
-
-  if (!recipe || recipe.deletedAt) {
-    throw new Response("Recipe not found", { status: 404 });
-  }
-
-  if (recipe.chefId !== userId) {
-    throw new Response("Unauthorized", { status: 403 });
-  }
-
-  if (intent === "delete") {
-    // Soft delete
-    await database.recipe.update({
-      where: { id },
-      data: { deletedAt: new Date() },
-    });
-
-    return redirect("/recipes");
-  }
-
-  return null;
+  return handleRecipeDetailAction({ request, params, context });
 }
 
 type CookbookListItem = { id: string; title: string };
