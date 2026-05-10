@@ -143,10 +143,31 @@ describe('RecipeGrid', () => {
   })
 
   // Quick actions tests (#17)
-  it('renders Share and Save buttons on each recipe card', () => {
-    renderWithRouter(<RecipeGrid recipes={[recipes[0]]} />)
+  it('renders Share and Save buttons when handlers are provided', () => {
+    renderWithRouter(<RecipeGrid recipes={[recipes[0]]} onShare={vi.fn()} onSave={vi.fn()} />)
 
     expect(screen.getByLabelText('Share Lemon Pasta')).toBeInTheDocument()
+    expect(screen.getByLabelText('Save Lemon Pasta')).toBeInTheDocument()
+  })
+
+  it('hides quick action buttons when handlers are not provided', () => {
+    renderWithRouter(<RecipeGrid recipes={[recipes[0]]} />)
+
+    expect(screen.queryByLabelText('Share Lemon Pasta')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Save Lemon Pasta')).not.toBeInTheDocument()
+  })
+
+  it('renders only Share when only onShare is provided', () => {
+    renderWithRouter(<RecipeGrid recipes={[recipes[0]]} onShare={vi.fn()} />)
+
+    expect(screen.getByLabelText('Share Lemon Pasta')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Save Lemon Pasta')).not.toBeInTheDocument()
+  })
+
+  it('renders only Save when only onSave is provided', () => {
+    renderWithRouter(<RecipeGrid recipes={[recipes[0]]} onSave={vi.fn()} />)
+
+    expect(screen.queryByLabelText('Share Lemon Pasta')).not.toBeInTheDocument()
     expect(screen.getByLabelText('Save Lemon Pasta')).toBeInTheDocument()
   })
 
@@ -166,16 +187,10 @@ describe('RecipeGrid', () => {
     expect(onSave).toHaveBeenCalledWith('r-1')
   })
 
-  it('does not throw when Share clicked without onShare handler', () => {
-    renderWithRouter(<RecipeGrid recipes={[recipes[0]]} />)
+  it('keeps the action rail out of the DOM when no handlers are provided', () => {
+    const { container } = renderWithRouter(<RecipeGrid recipes={[recipes[0]]} />)
 
-    expect(() => fireEvent.click(screen.getByLabelText('Share Lemon Pasta'))).not.toThrow()
-  })
-
-  it('does not throw when Save clicked without onSave handler', () => {
-    renderWithRouter(<RecipeGrid recipes={[recipes[0]]} />)
-
-    expect(() => fireEvent.click(screen.getByLabelText('Save Lemon Pasta'))).not.toThrow()
+    expect(container.querySelector('.absolute.right-2.top-2')).toBeNull()
   })
 
   it('uses sharp corners (rounded-sm) not rounded-2xl', () => {

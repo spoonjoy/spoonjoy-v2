@@ -61,6 +61,7 @@ export function RecipeGrid({
         {recipes.map((recipe) => {
           const href = recipe.href ?? `/recipes/${recipe.id}`
           const displayImageUrl = getDisplayRecipeImageUrl(recipe.imageUrl)
+          const hasQuickActions = Boolean(onShare || onSave)
 
           return (
             <article
@@ -82,25 +83,30 @@ export function RecipeGrid({
                   </div>
                 )}
 
-                {/* Quick actions — subtle top-right icons */}
-                <div className="absolute right-2 top-2 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                  <button
-                    type="button"
-                    aria-label={`Share ${recipe.title}`}
-                    onClick={() => onShare?.(recipe.id)}
-                    className="rounded-sm bg-white/80 p-1.5 text-zinc-600 backdrop-blur-sm transition-colors hover:bg-white hover:text-zinc-900 dark:bg-zinc-900/80 dark:text-zinc-300 dark:hover:bg-zinc-900 dark:hover:text-white"
-                  >
-                    <Share2 className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={`Save ${recipe.title}`}
-                    onClick={() => onSave?.(recipe.id)}
-                    className="rounded-sm bg-white/80 p-1.5 text-zinc-600 backdrop-blur-sm transition-colors hover:bg-white hover:text-zinc-900 dark:bg-zinc-900/80 dark:text-zinc-300 dark:hover:bg-zinc-900 dark:hover:text-white"
-                  >
-                    <Bookmark className="h-3.5 w-3.5" />
-                  </button>
-                </div>
+                {hasQuickActions ? (
+                  <div className="absolute right-2 top-2 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                    {onShare ? (
+                      <button
+                        type="button"
+                        aria-label={`Share ${recipe.title}`}
+                        onClick={() => onShare(recipe.id)}
+                        className="rounded-sm bg-white/80 p-1.5 text-zinc-600 backdrop-blur-sm transition-colors hover:bg-white hover:text-zinc-900 dark:bg-zinc-900/80 dark:text-zinc-300 dark:hover:bg-zinc-900 dark:hover:text-white"
+                      >
+                        <Share2 className="h-3.5 w-3.5" />
+                      </button>
+                    ) : null}
+                    {onSave ? (
+                      <button
+                        type="button"
+                        aria-label={`Save ${recipe.title}`}
+                        onClick={() => onSave(recipe.id)}
+                        className="rounded-sm bg-white/80 p-1.5 text-zinc-600 backdrop-blur-sm transition-colors hover:bg-white hover:text-zinc-900 dark:bg-zinc-900/80 dark:text-zinc-300 dark:hover:bg-zinc-900 dark:hover:text-white"
+                      >
+                        <Bookmark className="h-3.5 w-3.5" />
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
 
               {/* Editorial text below — clean, minimal */}
