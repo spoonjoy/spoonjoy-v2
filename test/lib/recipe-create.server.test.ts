@@ -187,6 +187,7 @@ describe("recipe create helpers", () => {
       await db.ingredientRef.create({ data: { name: "flour" } });
 
       const recipe = await createRecipeDraft(db, {
+        id: "recipe-transaction-pancakes",
         title: "Transaction Pancakes",
         description: "Breakfast for agents",
         servings: "4",
@@ -227,6 +228,7 @@ describe("recipe create helpers", () => {
       });
 
       expect(persisted).toMatchObject({
+        id: "recipe-transaction-pancakes",
         title: "Transaction Pancakes",
         description: "Breakfast for agents",
         servings: "4",

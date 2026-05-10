@@ -107,6 +107,25 @@ describe("Recipes New Route", () => {
       });
     }
 
+    async function createMultipartRequest(
+      formData: UndiciFormData,
+      userId: string,
+      url = "http://localhost:3000/recipes/new"
+    ): Promise<UndiciRequest> {
+      const session = await sessionStorage.getSession();
+      session.set("userId", userId);
+      const setCookieHeader = await sessionStorage.commitSession(session);
+      const cookieValue = setCookieHeader.split(";")[0];
+      const headers = new Headers();
+      headers.set("Cookie", cookieValue);
+
+      return new UndiciRequest(url, {
+        method: "POST",
+        body: formData,
+        headers,
+      });
+    }
+
     it("should return validation error when title is missing", async () => {
       const request = await createFormRequest(
         { title: "", description: "Some description" },
@@ -391,6 +410,90 @@ describe("Recipes New Route", () => {
       });
       expect(recipe).not.toBeNull();
       expect(recipe!.title).toBe("Valid Title");
+      expect(recipe!.imageUrl).toMatch(/^data:image\/jpeg;base64,/);
+    });
+
+    it("should upload valid recipe image to R2 when a bucket is available", async () => {
+      const mockR2Bucket = {
+        put: vi.fn().mockResolvedValue(undefined),
+      };
+      const formData = new UndiciFormData();
+      formData.append("title", "R2 Image Recipe");
+      formData.append("image", new File(["image"], "recipe.jpg", { type: "image/jpeg" }));
+
+      const request = await createMultipartRequest(formData, testUserId);
+
+      const response = await action({
+        request,
+        context: { cloudflare: { env: { PHOTOS: mockR2Bucket } } },
+        params: {},
+      } as any);
+
+      expect(response).toBeInstanceOf(Response);
+      expect(response.status).toBe(302);
+
+      const recipe = await db.recipe.findFirstOrThrow({
+        where: { chefId: testUserId, title: "R2 Image Recipe" },
+      });
+      expect(recipe.imageUrl).toMatch(new RegExp(`^/photos/recipes/${testUserId}/${recipe.id}/\\d+\\.jpg$`));
+      expect(mockR2Bucket.put).toHaveBeenCalledWith(
+        recipe.imageUrl.replace("/photos/", ""),
+        expect.any(File),
+        { httpMetadata: { contentType: "image/jpeg" } }
+      );
+    });
+
+    it("should return image error when recipe image upload fails", async () => {
+      const mockR2Bucket = {
+        put: vi.fn().mockRejectedValue(new Error("R2 unavailable")),
+      };
+      const formData = new UndiciFormData();
+      formData.append("title", "Upload Failure Recipe");
+      formData.append("image", new File(["image"], "recipe.jpg", { type: "image/jpeg" }));
+
+      const request = await createMultipartRequest(formData, testUserId);
+
+      const response = await action({
+        request,
+        context: { cloudflare: { env: { PHOTOS: mockR2Bucket } } },
+        params: {},
+      } as any);
+
+      const { data, status } = extractResponseData(response);
+      expect(status).toBe(500);
+      expect(data.errors.image).toBe("Failed to upload image. Please try again.");
+      await expect(db.recipe.count({ where: { chefId: testUserId } })).resolves.toBe(0);
+    });
+
+    it("should delete uploaded recipe image when database creation fails", async () => {
+      const mockR2Bucket = {
+        put: vi.fn().mockResolvedValue(undefined),
+        delete: vi.fn().mockResolvedValue(undefined),
+      };
+      const originalTransaction = db.$transaction;
+      db.$transaction = vi.fn().mockRejectedValue(new Error("Database connection failed"));
+
+      try {
+        const formData = new UndiciFormData();
+        formData.append("title", "Creation Failure Recipe");
+        formData.append("image", new File(["image"], "recipe.webp", { type: "image/webp" }));
+
+        const request = await createMultipartRequest(formData, testUserId);
+
+        const response = await action({
+          request,
+          context: { cloudflare: { env: { PHOTOS: mockR2Bucket } } },
+          params: {},
+        } as any);
+
+        const { data, status } = extractResponseData(response);
+        expect(status).toBe(500);
+        expect(data.errors.general).toBe("Failed to create recipe. Please try again.");
+        const uploadedKey = mockR2Bucket.put.mock.calls[0][0];
+        expect(mockR2Bucket.delete).toHaveBeenCalledWith(uploadedKey);
+      } finally {
+        db.$transaction = originalTransaction;
+      }
     });
 
     it("should create recipe with valid steps JSON and redirect", async () => {

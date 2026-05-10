@@ -3,7 +3,7 @@
 Status: proposed canonical backlog
 Audit date: 2026-05-10
 Baseline: `main` at `3533955` (`Upgrade GitHub Actions to Node 24 runtime (#3)`)
-Verification anchor: `pnpm test:coverage` passed with 135 test files, 3452 tests, 16 skipped tests, and 100% statements/branches/functions/lines.
+Verification anchor: `pnpm test:coverage` passed with 136 test files, 3471 tests, 16 skipped tests, and 100% statements/branches/functions/lines.
 
 ## How To Use This Backlog
 
@@ -43,7 +43,7 @@ Status meanings:
 6. `SJ-006`: Remove or replace skipped tests so 100% coverage also means no hidden skipped assertions.
 7. `SJ-008`: Run the mobile RecipeBuilder/SpoonDock UX pass once core create/edit data paths are trustworthy.
 
-Completed in sequence: `SJ-001`, `SJ-002`, `SJ-003`.
+Completed in sequence: `SJ-001`, `SJ-002`, `SJ-003`, `SJ-004`.
 
 ## Backlog Items
 
@@ -138,7 +138,7 @@ Completion notes:
 
 Priority: `P0`
 Lane: `recipes`, `cloudflare`, `storage`
-Status: `proposed`
+Status: `done`
 
 Problem: Recipe image inputs validate files and show previews, but create/edit actions do not upload selected recipe images. Create always stores an empty image URL, and edit only handles clear-image.
 
@@ -158,6 +158,14 @@ Acceptance criteria:
 - Edit can replace and clear images, deleting old R2 objects when appropriate.
 - File type, size, missing bucket, upload failure, and deletion failure paths are tested.
 - Recipe cards and detail pages display the uploaded image after create/edit.
+
+Completion notes:
+
+- Added shared image storage helpers for R2 uploads, local data-URL fallback, validation, and stored-object deletion.
+- Moved profile photo upload/removal onto the shared helper so profile and recipe images use the same storage contract.
+- Recipe create now uploads selected images under `recipes/{userId}/{recipeId}/...` and stores the resulting served URL.
+- Recipe edit now uploads replacements, clears stored images, and handles upload/delete failure paths.
+- Added the `PHOTOS` R2 bucket binding to Wrangler and documented production R2 plus local no-bucket fallback behavior.
 
 ### SJ-005 - Fix Active Recipe Title Uniqueness
 

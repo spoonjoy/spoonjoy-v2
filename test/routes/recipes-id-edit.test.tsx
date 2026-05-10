@@ -278,6 +278,25 @@ describe("Recipes $id Edit Route", () => {
       });
     }
 
+    async function createMultipartRequest(
+      formData: UndiciFormData,
+      userId: string
+    ): Promise<UndiciRequest> {
+      const session = await sessionStorage.getSession();
+      session.set("userId", userId);
+      const setCookieHeader = await sessionStorage.commitSession(session);
+      const cookieValue = setCookieHeader.split(";")[0];
+
+      const headers = new Headers();
+      headers.set("Cookie", cookieValue);
+
+      return new UndiciRequest(`http://localhost:3000/recipes/${recipeId}/edit`, {
+        method: "POST",
+        body: formData,
+        headers,
+      });
+    }
+
     it("should redirect when not logged in", async () => {
       const request = await createFormRequest({ title: "New Title" });
 
@@ -917,6 +936,9 @@ describe("Recipes $id Edit Route", () => {
       // Valid image should result in successful redirect, not validation error
       expect(response).toBeInstanceOf(Response);
       expect(response.status).toBe(302);
+
+      const recipe = await db.recipe.findUniqueOrThrow({ where: { id: recipeId } });
+      expect(recipe.imageUrl).toMatch(/^data:image\/jpeg;base64,/);
     });
 
     it("should return validation error for image exceeding 5MB", async () => {
@@ -950,6 +972,154 @@ describe("Recipes $id Edit Route", () => {
       const { data, status } = extractResponseData(response);
       expect(status).toBe(400);
       expect(data.errors.image).toBe("Image must be less than 5MB");
+    });
+
+    it("should upload replacement image to R2 and delete old R2 image", async () => {
+      await db.recipe.update({
+        where: { id: recipeId },
+        data: { imageUrl: "/photos/recipes/user-old/recipe-old/111.jpg" },
+      });
+      const mockR2Bucket = {
+        put: vi.fn().mockResolvedValue(undefined),
+        delete: vi.fn().mockResolvedValue(undefined),
+      };
+      const formData = new UndiciFormData();
+      formData.append("title", "Valid Title");
+      formData.append("image", new File(["new-image"], "new-image.png", { type: "image/png" }));
+
+      const request = await createMultipartRequest(formData, testUserId);
+
+      const response = await action({
+        request,
+        context: { cloudflare: { env: { PHOTOS: mockR2Bucket } } },
+        params: { id: recipeId },
+      } as any);
+
+      expect(response).toBeInstanceOf(Response);
+      expect(response.status).toBe(302);
+
+      const recipe = await db.recipe.findUniqueOrThrow({ where: { id: recipeId } });
+      expect(recipe.imageUrl).toMatch(new RegExp(`^/photos/recipes/${testUserId}/${recipeId}/\\d+\\.png$`));
+      expect(mockR2Bucket.put).toHaveBeenCalledWith(
+        recipe.imageUrl.replace("/photos/", ""),
+        expect.any(File),
+        { httpMetadata: { contentType: "image/png" } }
+      );
+      expect(mockR2Bucket.delete).toHaveBeenCalledWith("recipes/user-old/recipe-old/111.jpg");
+    });
+
+    it("should keep replacement image when old R2 cleanup fails after update", async () => {
+      await db.recipe.update({
+        where: { id: recipeId },
+        data: { imageUrl: "/photos/recipes/user-old/recipe-old/111.jpg" },
+      });
+      const mockR2Bucket = {
+        put: vi.fn().mockResolvedValue(undefined),
+        delete: vi.fn().mockRejectedValue(new Error("delete failed")),
+      };
+      const formData = new UndiciFormData();
+      formData.append("title", "Valid Title");
+      formData.append("image", new File(["new-image"], "new-image.webp", { type: "image/webp" }));
+
+      const request = await createMultipartRequest(formData, testUserId);
+
+      const response = await action({
+        request,
+        context: { cloudflare: { env: { PHOTOS: mockR2Bucket } } },
+        params: { id: recipeId },
+      } as any);
+
+      expect(response).toBeInstanceOf(Response);
+      expect(response.status).toBe(302);
+
+      const recipe = await db.recipe.findUniqueOrThrow({ where: { id: recipeId } });
+      expect(recipe.imageUrl).toMatch(new RegExp(`^/photos/recipes/${testUserId}/${recipeId}/\\d+\\.webp$`));
+      expect(mockR2Bucket.delete).toHaveBeenCalledWith("recipes/user-old/recipe-old/111.jpg");
+    });
+
+    it("should return image error when replacement upload fails", async () => {
+      const mockR2Bucket = {
+        put: vi.fn().mockRejectedValue(new Error("R2 unavailable")),
+      };
+      const formData = new UndiciFormData();
+      formData.append("title", "Valid Title");
+      formData.append("image", new File(["new-image"], "new-image.jpg", { type: "image/jpeg" }));
+
+      const request = await createMultipartRequest(formData, testUserId);
+
+      const response = await action({
+        request,
+        context: { cloudflare: { env: { PHOTOS: mockR2Bucket } } },
+        params: { id: recipeId },
+      } as any);
+
+      const { data, status } = extractResponseData(response);
+      expect(status).toBe(500);
+      expect(data.errors.image).toBe("Failed to upload image. Please try again.");
+
+      const recipe = await db.recipe.findUniqueOrThrow({ where: { id: recipeId } });
+      expect(recipe.imageUrl).toMatch(/clbe7wr180009tkhggghtl1qd\.png$/);
+    });
+
+    it("should return image error when clearing an R2 image fails", async () => {
+      await db.recipe.update({
+        where: { id: recipeId },
+        data: { imageUrl: "/photos/recipes/user-old/recipe-old/111.jpg" },
+      });
+      const mockR2Bucket = {
+        delete: vi.fn().mockRejectedValue(new Error("delete failed")),
+      };
+      const request = await createFormRequest(
+        {
+          title: "Valid Title",
+          clearImage: "true",
+        },
+        testUserId
+      );
+
+      const response = await action({
+        request,
+        context: { cloudflare: { env: { PHOTOS: mockR2Bucket } } },
+        params: { id: recipeId },
+      } as any);
+
+      const { data, status } = extractResponseData(response);
+      expect(status).toBe(500);
+      expect(data.errors.image).toBe("Failed to delete image. Please try again.");
+
+      const recipe = await db.recipe.findUniqueOrThrow({ where: { id: recipeId } });
+      expect(recipe.imageUrl).toBe("/photos/recipes/user-old/recipe-old/111.jpg");
+    });
+
+    it("should delete uploaded replacement image when database update fails", async () => {
+      const mockR2Bucket = {
+        put: vi.fn().mockResolvedValue(undefined),
+        delete: vi.fn().mockResolvedValue(undefined),
+      };
+      const originalUpdate = db.recipe.update;
+      db.recipe.update = vi.fn().mockRejectedValue(new Error("Database connection failed"));
+
+      try {
+        const formData = new UndiciFormData();
+        formData.append("title", "Valid Title");
+        formData.append("image", new File(["new-image"], "new-image.gif", { type: "image/gif" }));
+
+        const request = await createMultipartRequest(formData, testUserId);
+
+        const response = await action({
+          request,
+          context: { cloudflare: { env: { PHOTOS: mockR2Bucket } } },
+          params: { id: recipeId },
+        } as any);
+
+        const { data, status } = extractResponseData(response);
+        expect(status).toBe(500);
+        expect(data.errors.general).toBe("Failed to update recipe. Please try again.");
+        const uploadedKey = mockR2Bucket.put.mock.calls[0][0];
+        expect(mockR2Bucket.delete).toHaveBeenCalledWith(uploadedKey);
+      } finally {
+        db.recipe.update = originalUpdate;
+      }
     });
 
     describe("field validation", () => {

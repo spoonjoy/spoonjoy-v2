@@ -27,6 +27,7 @@ type ValueValidationResult<T> =
   | { valid: false; error: string };
 
 export interface CreateRecipeDraftInput {
+  id: string;
   title: string;
   description: string | null;
   servings: string | null;
@@ -232,6 +233,7 @@ export async function createRecipeDraft(
   return db.$transaction(async (tx) => {
     const recipe = await tx.recipe.create({
       data: {
+        id: input.id,
         title: input.title,
         description: input.description,
         servings: input.servings,

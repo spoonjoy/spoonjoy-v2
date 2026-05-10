@@ -47,9 +47,11 @@ All configuration lives in `wrangler.json`:
 | Setting | Purpose |
 |---------|---------|
 | `d1_databases` | D1 database bindings |
+| `r2_buckets` | R2 image storage binding for profile and recipe photos |
 | `vars` | Environment variables (NODE_ENV, OAuth credentials, etc.) |
 
 **Local development uses sensible defaults** — no configuration required to get started.
+When the `PHOTOS` R2 binding is unavailable locally, uploaded images are stored as data URLs so recipe/profile image flows still work.
 
 For OAuth (Google/Apple login), provide credentials through Cloudflare secrets in production or `.dev.vars` locally:
 
@@ -141,12 +143,18 @@ pnpm exec prisma migrate diff --from-empty --to-schema-datamodel=./prisma/schema
    # Update wrangler.json with the returned database_id
    ```
 
-3. Apply migrations to production D1:
+3. Create the R2 bucket for uploaded photos (first time only):
+   ```bash
+   wrangler r2 bucket create spoonjoy-photos
+   # wrangler.json binds this bucket as PHOTOS
+   ```
+
+4. Apply migrations to production D1:
    ```bash
    wrangler d1 migrations apply DB --remote
    ```
 
-4. Set secrets:
+5. Set secrets:
    ```bash
    wrangler secret put SESSION_SECRET
    wrangler secret put GOOGLE_CLIENT_ID
@@ -158,7 +166,7 @@ pnpm exec prisma migrate diff --from-empty --to-schema-datamodel=./prisma/schema
    wrangler secret put OPENAI_API_KEY
    ```
 
-5. Deploy:
+6. Deploy:
    ```bash
    pnpm deploy
    ```

@@ -1,6 +1,6 @@
 import type { Route } from "./+types/recipes.new";
 import { redirect, data, useActionData, useNavigate, useNavigation, Form } from "react-router";
-import { getRequestDb } from "~/lib/route-platform.server";
+import { getCloudflareEnv, getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
 import { Heading } from "~/components/ui/heading";
 import { Link } from "~/components/ui/link";
@@ -11,6 +11,13 @@ import {
   validateServings,
 } from "~/lib/validation";
 import { createRecipeDraft, parseRecipeStepsJson } from "~/lib/recipe-create.server";
+import {
+  deleteStoredImage,
+  hasUploadedImageFile,
+  RECIPE_IMAGE_TYPES,
+  storeImage,
+  validateImageFile,
+} from "~/lib/image-storage.server";
 import { useRef } from "react";
 
 interface ActionData {
@@ -36,7 +43,8 @@ export async function action({ request, context }: Route.ActionArgs) {
   const title = formData.get("title")?.toString() || "";
   const description = formData.get("description")?.toString() || "";
   const servings = formData.get("servings")?.toString() || "";
-  const imageFile = formData.get("image") as File | null;
+  const imageEntry = formData.get("image");
+  const imageFile = hasUploadedImageFile(imageEntry) ? imageEntry : null;
   const stepsJson = formData.get("steps")?.toString() || "[]";
 
   const errors: ActionData["errors"] = {};
@@ -58,12 +66,17 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   // Validate image file if provided
-  if (imageFile && imageFile.size > 0) {
-    const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-    if (!validTypes.includes(imageFile.type)) {
-      errors.image = "Invalid image format";
-    } else if (imageFile.size > 5 * 1024 * 1024) {
-      errors.image = "Image must be less than 5MB";
+  if (imageFile) {
+    const imageError = validateImageFile(imageFile, {
+      allowedTypes: RECIPE_IMAGE_TYPES,
+      messages: {
+        invalidType: "Invalid image format",
+        fileTooLarge: "Image must be less than 5MB",
+      },
+    });
+
+    if (imageError) {
+      errors.image = imageError;
     }
   }
 
@@ -78,21 +91,42 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   const database = await getRequestDb(context);
+  const photosBucket = getCloudflareEnv(context)?.PHOTOS;
+  const recipeId = crypto.randomUUID();
+  let imageUrl = "";
+
+  if (imageFile) {
+    try {
+      imageUrl = await storeImage({
+        bucket: photosBucket,
+        file: imageFile,
+        namespace: `recipes/${userId}/${recipeId}`,
+      });
+    } catch {
+      return data(
+        { errors: { image: "Failed to upload image. Please try again." } },
+        { status: 500 }
+      );
+    }
+  }
 
   try {
-    // TODO: In production, upload imageFile to R2/storage and get URL
     const recipe = await createRecipeDraft(database, {
+      id: recipeId,
       title: title.trim(),
       description: description.trim() || null,
       servings: servings.trim() || null,
-      // Avoid schema default stock image when no image upload is provided.
-      imageUrl: "",
+      imageUrl,
       chefId: userId,
       steps: recipeSteps,
     });
 
     return redirect(`/recipes/${recipe.id}`);
   } catch (error) {
+    if (imageUrl) {
+      await deleteStoredImage({ bucket: photosBucket, imageUrl });
+    }
+
     return data(
       { errors: { general: "Failed to create recipe. Please try again." } },
       { status: 500 }

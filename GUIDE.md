@@ -120,9 +120,10 @@ Let's make something delicious — how about a classic grilled cheese?
    - **Title**: `Ultimate Grilled Cheese`
    - **Description**: `The only grilled cheese recipe you'll ever need`
    - **Servings**: `1`
+   - **Recipe Image**: upload a favorite sandwich photo if you have one
 4. Click **Create Recipe**
 
-> **Current backlog note:** Inline recipe creation is being hardened in `SJ-003` and `SJ-004` so steps, ingredients, and images persist from the single-page RecipeBuilder flow. If you hit a mismatch, use the per-step add/edit routes and check `BACKLOG.md`.
+> **Local image note:** Production stores profile and recipe images in the `PHOTOS` R2 bucket. Local development falls back to data URLs when that bucket binding is unavailable, so uploads still work without extra setup.
 
 ### Step 2: Add Steps
 

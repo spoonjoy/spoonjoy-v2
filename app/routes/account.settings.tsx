@@ -5,6 +5,12 @@ import { getCloudflareEnv, getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
 import { unlinkOAuthAccount } from "~/lib/oauth-user.server";
 import { hashPassword, verifyPassword } from "~/lib/auth.server";
+import {
+  deleteStoredImage,
+  hasUploadedImageFile,
+  storeImage,
+  validateImageFile,
+} from "~/lib/image-storage.server";
 import { Heading, Subheading } from "~/components/ui/heading";
 import { Text } from "~/components/ui/text";
 import { Button } from "~/components/ui/button";
@@ -214,7 +220,7 @@ export async function action({ request, context }: Route.ActionArgs): Promise<Ac
     const photo = formData.get("photo");
 
     // Check if file was provided
-    if (!photo || !(photo instanceof File) || photo.size === 0) {
+    if (!hasUploadedImageFile(photo)) {
       return {
         success: false,
         error: "no_file",
@@ -223,54 +229,34 @@ export async function action({ request, context }: Route.ActionArgs): Promise<Ac
     }
 
     // Check file type
-    if (!photo.type.startsWith("image/")) {
+    const imageError = validateImageFile(photo, {
+      messages: {
+        invalidType: "Please upload an image file",
+        fileTooLarge: "Photo must be less than 5MB",
+      },
+    });
+
+    if (imageError === "Please upload an image file") {
       return {
         success: false,
         error: "invalid_file_type",
-        message: "Please upload an image file",
+        message: imageError,
       };
     }
 
-    // Check file size (max 5MB)
-    const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
-    if (photo.size > MAX_FILE_SIZE) {
+    if (imageError === "Photo must be less than 5MB") {
       return {
         success: false,
         error: "file_too_large",
-        message: "Photo must be less than 5MB",
+        message: imageError,
       };
     }
 
-    // Upload to Cloudflare R2 if available, otherwise fall back to base64
-    const r2Bucket = getCloudflareEnv(context)?.PHOTOS;
-    let photoUrl: string;
-
-    if (r2Bucket) {
-      // Generate unique key for the photo
-      const ext = photo.name.split('.').pop() || 'jpg';
-      const key = `profiles/${userId}/${Date.now()}.${ext}`;
-
-      // Upload to R2
-      await r2Bucket.put(key, photo, {
-        httpMetadata: {
-          contentType: photo.type,
-        },
-      });
-
-      // Store the R2 key as the photo URL (will be served via public bucket or Worker)
-      // In production, configure R2 public access or a Worker to serve images
-      photoUrl = `/photos/${key}`;
-    } else {
-      // Fallback to base64 for local development without R2
-      const arrayBuffer = await photo.arrayBuffer();
-      const bytes = new Uint8Array(arrayBuffer);
-      let binary = '';
-      for (let i = 0; i < bytes.length; i++) {
-        binary += String.fromCharCode(bytes[i]);
-      }
-      const base64 = btoa(binary);
-      photoUrl = `data:${photo.type};base64,${base64}`;
-    }
+    const photoUrl = await storeImage({
+      bucket: getCloudflareEnv(context)?.PHOTOS,
+      file: photo,
+      namespace: `profiles/${userId}`,
+    });
 
     await database.user.update({
       where: { id: userId },
@@ -287,14 +273,10 @@ export async function action({ request, context }: Route.ActionArgs): Promise<Ac
       select: { photoUrl: true },
     });
 
-    // Delete from R2 if it's an R2 path
-    if (user?.photoUrl?.startsWith('/photos/')) {
-      const r2Bucket = getCloudflareEnv(context)?.PHOTOS;
-      if (r2Bucket) {
-        const key = user.photoUrl.replace('/photos/', '');
-        await r2Bucket.delete(key);
-      }
-    }
+    await deleteStoredImage({
+      bucket: getCloudflareEnv(context)?.PHOTOS,
+      imageUrl: user?.photoUrl,
+    });
 
     await database.user.update({
       where: { id: userId },

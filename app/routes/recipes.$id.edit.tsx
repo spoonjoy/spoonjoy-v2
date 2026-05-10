@@ -1,7 +1,7 @@
 import type { Route } from "./+types/recipes.$id.edit";
 import { Form, redirect, data, useActionData, useLoaderData, useNavigate, useNavigation, useSubmit } from "react-router";
 import { useRecipeEditActions } from "~/components/navigation";
-import { getRequestDb } from "~/lib/route-platform.server";
+import { getCloudflareEnv, getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
 import { Heading } from "~/components/ui/heading";
 import { Link } from "~/components/ui/link";
@@ -14,6 +14,13 @@ import {
 } from "~/lib/validation";
 import { validateStepReorderComplete } from "~/lib/step-reorder-validation.server";
 import { validateStepDeletion } from "~/lib/step-deletion-validation.server";
+import {
+  deleteStoredImage,
+  hasUploadedImageFile,
+  RECIPE_IMAGE_TYPES,
+  storeImage,
+  validateImageFile,
+} from "~/lib/image-storage.server";
 import { Button } from "~/components/ui/button";
 import { Dialog, DialogActions, DialogDescription, DialogTitle } from "~/components/ui/dialog";
 import { useRef, useState } from "react";
@@ -92,7 +99,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   // Verify ownership
   const recipe = await database.recipe.findUnique({
     where: { id },
-    select: { chefId: true, deletedAt: true },
+    select: { chefId: true, deletedAt: true, imageUrl: true },
   });
 
   if (!recipe || recipe.deletedAt) {
@@ -190,7 +197,8 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   const title = formData.get("title")?.toString() || "";
   const description = formData.get("description")?.toString() || "";
   const servings = formData.get("servings")?.toString() || "";
-  const imageFile = formData.get("image") as File | null;
+  const imageEntry = formData.get("image");
+  const imageFile = hasUploadedImageFile(imageEntry) ? imageEntry : null;
   const clearImage = formData.get("clearImage")?.toString() === "true";
 
   const errors: ActionData["errors"] = {};
@@ -212,12 +220,17 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   }
 
   // Validate image file if provided
-  if (imageFile && imageFile.size > 0) {
-    const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-    if (!validTypes.includes(imageFile.type)) {
-      errors.image = "Invalid image format";
-    } else if (imageFile.size > 5 * 1024 * 1024) {
-      errors.image = "Image must be less than 5MB";
+  if (imageFile) {
+    const imageError = validateImageFile(imageFile, {
+      allowedTypes: RECIPE_IMAGE_TYPES,
+      messages: {
+        invalidType: "Invalid image format",
+        fileTooLarge: "Image must be less than 5MB",
+      },
+    });
+
+    if (imageError) {
+      errors.image = imageError;
     }
   }
 
@@ -225,24 +238,60 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     return data({ errors }, { status: 400 });
   }
 
-  try {
-    const updateData: { title: string; description: string | null; servings: string | null; imageUrl?: string } = {
-      title: title.trim(),
-      description: description.trim() || null,
-      servings: servings.trim() || null,
-    };
+  const photosBucket = getCloudflareEnv(context)?.PHOTOS;
+  const updateData: { title: string; description: string | null; servings: string | null; imageUrl?: string } = {
+    title: title.trim(),
+    description: description.trim() || null,
+    servings: servings.trim() || null,
+  };
+  let uploadedImageUrl: string | null = null;
 
-    if (clearImage) {
-      updateData.imageUrl = "";
+  if (imageFile) {
+    try {
+      uploadedImageUrl = await storeImage({
+        bucket: photosBucket,
+        file: imageFile,
+        namespace: `recipes/${userId}/${id}`,
+      });
+      updateData.imageUrl = uploadedImageUrl;
+    } catch {
+      return data(
+        { errors: { image: "Failed to upload image. Please try again." } },
+        { status: 500 }
+      );
     }
+  } else if (clearImage) {
+    try {
+      await deleteStoredImage({ bucket: photosBucket, imageUrl: recipe.imageUrl });
+      updateData.imageUrl = "";
+    } catch {
+      return data(
+        { errors: { image: "Failed to delete image. Please try again." } },
+        { status: 500 }
+      );
+    }
+  }
 
+  try {
     await database.recipe.update({
       where: { id },
       data: updateData,
     });
 
+    if (uploadedImageUrl) {
+      try {
+        await deleteStoredImage({ bucket: photosBucket, imageUrl: recipe.imageUrl });
+      } catch {
+        // Keep the successful replacement visible even if old-object cleanup fails.
+      }
+    }
+
     return redirect(`/recipes/${id}`);
   } catch (error) {
+    if (uploadedImageUrl) {
+      await deleteStoredImage({ bucket: photosBucket, imageUrl: uploadedImageUrl });
+    }
+
     return data(
       { errors: { general: "Failed to update recipe. Please try again." } },
       { status: 500 }

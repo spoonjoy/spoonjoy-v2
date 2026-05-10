@@ -15,6 +15,13 @@
       "database_id": "32cb0e04-c45b-4cd2-a798-556556ae288d"
     }
   ],
+
+  "r2_buckets": [
+    {
+      "binding": "PHOTOS",
+      "bucket_name": "spoonjoy-photos"
+    }
+  ],
   
   "vars": {
     "NODE_ENV": "production"
