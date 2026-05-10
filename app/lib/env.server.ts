@@ -23,7 +23,7 @@ export interface AppleOAuthConfig {
   privateKey: string;
 }
 
-interface Env {
+export interface OAuthEnv {
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
   APPLE_CLIENT_ID?: string;
@@ -36,7 +36,7 @@ interface Env {
  * Validates and returns Google OAuth configuration.
  * Throws an error if any required environment variable is missing or empty.
  */
-export function getGoogleOAuthConfig(env: Env): GoogleOAuthConfig {
+export function getGoogleOAuthConfig(env: OAuthEnv): GoogleOAuthConfig {
   if (!env.GOOGLE_CLIENT_ID) {
     throw new Error("Missing required environment variable: GOOGLE_CLIENT_ID");
   }
@@ -56,7 +56,7 @@ export function getGoogleOAuthConfig(env: Env): GoogleOAuthConfig {
  * Validates and returns Apple OAuth configuration.
  * Throws an error if any required environment variable is missing or empty.
  */
-export function getAppleOAuthConfig(env: Env): AppleOAuthConfig {
+export function getAppleOAuthConfig(env: OAuthEnv): AppleOAuthConfig {
   if (!env.APPLE_CLIENT_ID) {
     throw new Error("Missing required environment variable: APPLE_CLIENT_ID");
   }
@@ -92,9 +92,9 @@ const ALL_OAUTH_ENV_VARS = [
  * Throws a single error listing ALL missing variables (better DX than one-at-a-time).
  * Returns true if all variables are present and non-empty.
  */
-export function validateOAuthEnv(env: Env): true {
+export function validateOAuthEnv(env: OAuthEnv): true {
   const missing = ALL_OAUTH_ENV_VARS.filter(
-    (key) => !env[key as keyof Env]
+    (key) => !env[key as keyof OAuthEnv]
   );
 
   if (missing.length > 0) {

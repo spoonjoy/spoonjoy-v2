@@ -5,6 +5,10 @@ export default [
   route("login", "routes/login.tsx"),
   route("signup", "routes/signup.tsx"),
   route("logout", "routes/logout.tsx"),
+  route("auth/google", "routes/auth.google.tsx"),
+  route("auth/google/callback", "routes/auth.google.callback.tsx"),
+  route("auth/apple", "routes/auth.apple.tsx"),
+  route("auth/apple/callback", "routes/auth.apple.callback.tsx"),
   route("recipes", "routes/recipes.tsx", [
     index("routes/recipes._index.tsx"),
     route("new", "routes/recipes.new.tsx"),

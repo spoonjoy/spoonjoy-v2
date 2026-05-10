@@ -43,6 +43,8 @@ Status meanings:
 6. `SJ-006`: Remove or replace skipped tests so 100% coverage also means no hidden skipped assertions.
 7. `SJ-008`: Run the mobile RecipeBuilder/SpoonDock UX pass once core create/edit data paths are trustworthy.
 
+Completed in sequence: `SJ-001`, `SJ-002`.
+
 ## Backlog Items
 
 ### SJ-001 - Establish Agent-Trust Backlog And Docs Source Of Truth
@@ -72,7 +74,7 @@ Acceptance criteria:
 
 Priority: `P0`
 Lane: `auth`, `product-seams`, `agent-trust`
-Status: `proposed`
+Status: `done`
 
 Problem: OAuth appears user-facing but route endpoints are missing. Login/signup render provider buttons that submit to `/auth/google` and `/auth/apple`; account settings redirects to `/auth/{provider}?linking=true`; `app/routes.ts` registers no `/auth/*` routes. The helpers and callback orchestration modules exist, so this is a seam-completion issue rather than a greenfield auth project.
 
@@ -93,6 +95,13 @@ Acceptance criteria:
 - Error paths redirect to login/signup/account settings with actionable `oauthError` values.
 - Tests cover missing env vars, invalid state, invalid provider, callback provider errors, existing-account linking, and OAuth-only user session creation.
 - Docs list current required Google and Apple secrets.
+
+Completion notes:
+
+- Registered Google and Apple initiation/callback routes in `app/routes.ts`.
+- Added shared OAuth route/session helpers for state, redirect preservation, linking intent, callback URL construction, and error redirects.
+- Added account settings OAuth error display for linking failures.
+- Verified with focused OAuth/auth/account route tests and full coverage before merge.
 
 ### SJ-003 - Persist RecipeBuilder Steps And Ingredients On Recipe Create
 

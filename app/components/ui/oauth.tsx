@@ -67,10 +67,20 @@ interface OAuthErrorProps {
 export function OAuthError({ error, className }: OAuthErrorProps) {
   if (!error) return null
 
-  const message =
-    error === 'account_exists'
-      ? 'An account with this email already exists. Please log in to link your account.'
-      : 'Something went wrong. Please try again.'
+  const messages: Record<string, string> = {
+    account_exists: 'An account with this email already exists. Please log in to link your account.',
+    email_required: 'An email address is required to create an account. Please allow email access and try again.',
+    invalid_state: 'Your OAuth session expired or could not be verified. Please try again.',
+    invalid_code: 'The OAuth provider did not return a usable authorization code. Please try again.',
+    invalid_code_verifier: 'Your OAuth security verifier was missing. Please try again.',
+    invalid_request: 'That OAuth callback method is not supported. Please start sign-in again.',
+    login_required: 'Please log in before linking a new OAuth provider.',
+    oauth_unconfigured: 'OAuth is not configured for this environment yet. Email/password login still works.',
+    provider_account_taken: 'That OAuth account is already linked to another Spoonjoy account.',
+    provider_already_linked: 'That OAuth provider is already linked to your account.',
+  }
+
+  const message = messages[error] ?? 'Something went wrong. Please try again.'
 
   return (
     <div

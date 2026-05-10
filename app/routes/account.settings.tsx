@@ -11,6 +11,7 @@ import { Button } from "~/components/ui/button";
 import { Field, Label, ErrorMessage } from "~/components/ui/fieldset";
 import { Input } from "~/components/ui/input";
 import { Avatar } from "~/components/ui/avatar";
+import { OAuthError } from "~/components/ui/oauth";
 
 const DEFAULT_AVATAR_URL =
   "https://res.cloudinary.com/dpjmyc4uz/image/upload/v1674541350/chef-rj.png";
@@ -27,10 +28,13 @@ interface LoaderData {
       providerUsername: string;
     }>;
   };
+  oauthError?: string;
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const userId = await requireUserId(request);
+  const url = new URL(request.url);
+  const oauthError = url.searchParams.get("oauthError") ?? undefined;
 
   const database = await getRequestDb(context);
 
@@ -65,6 +69,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       photoUrl: user.photoUrl,
       oauthAccounts: user.OAuth,
     },
+    oauthError,
   } satisfies LoaderData;
 }
 
@@ -643,7 +648,7 @@ function ProfilePhotoUpload({ photoUrl }: { photoUrl: string | null }) {
 }
 
 export default function AccountSettings() {
-  const { user } = useLoaderData<LoaderData>();
+  const { user, oauthError } = useLoaderData<LoaderData>();
   const actionData = useActionData<ActionResult>();
   const [isEditing, setIsEditing] = useState(false);
   const [unlinkingProvider, setUnlinkingProvider] = useState<string | null>(null);
@@ -671,6 +676,8 @@ export default function AccountSettings() {
   return (
     <div className="mx-auto max-w-2xl px-4 py-8">
       <Heading>Account Settings</Heading>
+
+      <OAuthError error={oauthError} className="mt-4" />
 
       {/* Success/Error Messages (only show global banner when there are no field-level errors) */}
       {actionData?.message && !actionData?.fieldErrors && (
