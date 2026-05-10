@@ -369,7 +369,7 @@ describe("Cookbooks $id Route", () => {
       });
     });
 
-    it("should return error when adding duplicate recipe to cookbook", async () => {
+    it("should return success when adding duplicate recipe to cookbook", async () => {
       // Create a recipe and add it to cookbook
       const recipe = await db.recipe.create({
         data: {
@@ -399,8 +399,9 @@ describe("Cookbooks $id Route", () => {
       } as any);
 
       const { data, status } = extractResponseData(response);
-      expect(status).toBe(400);
-      expect(data.error).toBe("Recipe already in cookbook");
+      expect(status).toBe(200);
+      expect(data.success).toBe(true);
+      await expect(db.recipeInCookbook.count({ where: { cookbookId, recipeId: recipe.id } })).resolves.toBe(1);
     });
 
     it("should do nothing when addRecipe without recipeId", async () => {
@@ -431,6 +432,120 @@ describe("Cookbooks $id Route", () => {
       } as any);
 
       expect(response).toBeNull();
+    });
+
+    it("should treat repeated removeRecipe submissions as idempotent", async () => {
+      const recipe = await db.recipe.create({
+        data: {
+          title: "Repeat Remove Recipe " + faker.string.alphanumeric(6),
+          chefId: testUserId,
+        },
+      });
+      const recipeInCookbook = await db.recipeInCookbook.create({
+        data: {
+          cookbookId,
+          recipeId: recipe.id,
+          addedById: testUserId,
+        },
+      });
+
+      const firstRequest = await createFormRequest(
+        { intent: "removeRecipe", recipeInCookbookId: recipeInCookbook.id },
+        testUserId
+      );
+      const secondRequest = await createFormRequest(
+        { intent: "removeRecipe", recipeInCookbookId: recipeInCookbook.id },
+        testUserId
+      );
+
+      const firstResponse = await action({
+        request: firstRequest,
+        context: { cloudflare: { env: null } },
+        params: { id: cookbookId },
+      } as any);
+      const secondResponse = await action({
+        request: secondRequest,
+        context: { cloudflare: { env: null } },
+        params: { id: cookbookId },
+      } as any);
+
+      expect(extractResponseData(firstResponse).data.success).toBe(true);
+      expect(extractResponseData(secondResponse).data.success).toBe(true);
+      await expect(db.recipeInCookbook.findUnique({ where: { id: recipeInCookbook.id } })).resolves.toBeNull();
+    });
+
+    it("should not remove a relation that belongs to another user's cookbook", async () => {
+      const otherCookbook = await db.cookbook.create({
+        data: {
+          title: "Other User Cookbook " + faker.string.alphanumeric(6),
+          authorId: otherUserId,
+        },
+      });
+      const otherRecipe = await db.recipe.create({
+        data: {
+          title: "Other User Recipe " + faker.string.alphanumeric(6),
+          chefId: otherUserId,
+        },
+      });
+      const otherRelation = await db.recipeInCookbook.create({
+        data: {
+          cookbookId: otherCookbook.id,
+          recipeId: otherRecipe.id,
+          addedById: otherUserId,
+        },
+      });
+
+      const request = await createFormRequest(
+        { intent: "removeRecipe", recipeInCookbookId: otherRelation.id },
+        testUserId
+      );
+
+      const response = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: { id: cookbookId },
+      } as any);
+
+      const { data } = extractResponseData(response);
+      expect(data.success).toBe(true);
+      await expect(db.recipeInCookbook.findUnique({ where: { id: otherRelation.id } })).resolves.not.toBeNull();
+    });
+
+    it("should not remove a relation from a different cookbook owned by the same user", async () => {
+      const secondCookbook = await db.cookbook.create({
+        data: {
+          title: "Second Cookbook " + faker.string.alphanumeric(6),
+          authorId: testUserId,
+        },
+      });
+      const recipe = await db.recipe.create({
+        data: {
+          title: "Second Cookbook Recipe " + faker.string.alphanumeric(6),
+          chefId: testUserId,
+        },
+      });
+      const otherRelation = await db.recipeInCookbook.create({
+        data: {
+          cookbookId: secondCookbook.id,
+          recipeId: recipe.id,
+          addedById: testUserId,
+        },
+      });
+
+      const request = await createFormRequest(
+        { intent: "removeRecipe", recipeInCookbookId: otherRelation.id },
+        testUserId
+      );
+
+      const response = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: { id: cookbookId },
+      } as any);
+
+      const { data } = extractResponseData(response);
+      expect(data.success).toBe(true);
+      await expect(db.recipeInCookbook.findUnique({ where: { id: otherRelation.id } })).resolves.not.toBeNull();
     });
 
     it("should return null for unknown intent", async () => {
