@@ -1,5 +1,7 @@
 # Active Tasks
 
+> Superseded: this file is a historical snapshot and is no longer the planning source of truth. Use `BACKLOG.md` for the proposed canonical backlog and `AUDIT-REPORT.md` for the May 2026 audit evidence.
+
 Current work in progress. One task actively worked at a time.
 
 ---
