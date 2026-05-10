@@ -448,6 +448,7 @@ export default function RecipeDetail() {
   useRecipeDetailActions({
     recipeId: recipe.id,
     chefId: recipe.chef.id,
+    chefProfileHref: `/users/${recipe.chef.username}`,
     isOwner,
     isInShoppingList: isAlreadyInList,
     onSave: handleOpenSaveModal,
@@ -605,6 +606,7 @@ export default function RecipeDetail() {
         description={recipe.description ?? undefined}
         chefName={recipe.chef.username}
         chefId={recipe.chef.id}
+        chefProfileHref={`/users/${recipe.chef.username}`}
         chefPhotoUrl={recipe.chef.photoUrl ?? undefined}
         imageUrl={recipe.imageUrl ?? undefined}
         servings={recipe.servings ?? undefined}

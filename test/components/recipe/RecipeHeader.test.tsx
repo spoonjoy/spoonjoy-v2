@@ -42,6 +42,15 @@ describe('RecipeHeader', () => {
       expect(link).toHaveAttribute('href', '/users/chef-456')
     })
 
+    it('prefers canonical chef profile href over chefId fallback', () => {
+      renderWithRouter(<RecipeHeader {...defaultProps} chefId="chef-456" chefProfileHref="/users/test-chef" />)
+
+      const chefName = screen.getByText((content, element) => {
+        return element?.tagName === 'STRONG' && element?.textContent === 'Test Chef'
+      })
+      expect(chefName.closest('a')).toHaveAttribute('href', '/users/test-chef')
+    })
+
     it('renders chef avatar with initials', () => {
       renderWithRouter(<RecipeHeader {...defaultProps} />)
       expect(screen.getByTestId('chef-avatar')).toBeInTheDocument()

@@ -128,6 +128,13 @@ describe('RecipeGrid', () => {
     expect(screen.getByText('Add some recipes')).toBeInTheDocument()
   })
 
+  it('hides the empty state CTA when explicitly disabled', () => {
+    renderWithRouter(<RecipeGrid recipes={[]} emptyCtaHref={null} />)
+
+    expect(screen.getByText('No recipes yet')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Create Recipe' })).toBeNull()
+  })
+
   it('defaults href to /recipes/:id when no href provided', () => {
     const recipe: PantryRecipeCard = { id: 'abc', title: 'Soup' }
     renderWithRouter(<RecipeGrid recipes={[recipe]} />)

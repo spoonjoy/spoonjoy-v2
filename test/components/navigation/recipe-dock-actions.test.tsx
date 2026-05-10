@@ -30,16 +30,17 @@ describe('Recipe Dock Actions', () => {
   })
 
   describe('useRecipeDetailActions', () => {
-    function RecipeDetailPage({ recipeId, chefId, isOwner, isInShoppingList, onSave, onAddToList, onShare }: {
+    function RecipeDetailPage({ recipeId, chefId, chefProfileHref, isOwner, isInShoppingList, onSave, onAddToList, onShare }: {
       recipeId: string
       chefId: string
+      chefProfileHref?: string
       isOwner: boolean
       isInShoppingList?: boolean
       onSave?: () => void
       onAddToList?: () => void
       onShare?: () => void
     }) {
-      useRecipeDetailActions({ recipeId, chefId, isOwner, isInShoppingList, onSave, onAddToList, onShare })
+      useRecipeDetailActions({ recipeId, chefId, chefProfileHref, isOwner, isInShoppingList, onSave, onAddToList, onShare })
       return <div data-testid="recipe-detail">Recipe Detail</div>
     }
 
@@ -62,6 +63,11 @@ describe('Recipe Dock Actions', () => {
       expect(screen.getByTestId('action-labels')).toHaveTextContent('View Chef Profile,List,Save,Share')
       expect(capturedActions?.find(a => a.id === 'edit')).toBeUndefined()
       expect(capturedActions?.find(a => a.id === 'view-chef-profile')?.onAction).toBe('/users/chef-1')
+    })
+
+    it('uses canonical chef profile href when provided', () => {
+      render(<MemoryRouter><DockContextProvider><ContextDisplay /><RecipeDetailPage recipeId="123" chefId="chef-1" chefProfileHref="/users/chef-rowan" isOwner={false} /></DockContextProvider></MemoryRouter>)
+      expect(capturedActions?.find(a => a.id === 'view-chef-profile')?.onAction).toBe('/users/chef-rowan')
     })
 
     it('uses added state icon styling while keeping action tappable', () => {

@@ -16,6 +16,8 @@ export interface RecipeHeaderProps {
   chefName: string
   /** Chef's user ID for profile link */
   chefId?: string
+  /** Canonical chef profile URL. Falls back to /users/:chefId when omitted. */
+  chefProfileHref?: string
   /** Chef's photo URL (optional) */
   chefPhotoUrl?: string
   /** URL to recipe image (optional) */
@@ -44,6 +46,7 @@ export function RecipeHeader({
   description,
   chefName,
   chefId,
+  chefProfileHref,
   chefPhotoUrl,
   imageUrl,
   servings,
@@ -54,6 +57,7 @@ export function RecipeHeader({
   // Scale the servings text based on the scale factor
   const scaledServings = servings ? scaleServingsText(servings, scaleFactor) : undefined
   const displayImageUrl = getDisplayRecipeImageUrl(imageUrl)
+  const resolvedChefHref = chefProfileHref ?? (chefId ? `/users/${chefId}` : undefined)
 
   return (
     <header className="w-full">
@@ -101,8 +105,8 @@ export function RecipeHeader({
             </span>
             <Text>
               By{' '}
-              {chefId ? (
-                <Link href={`/users/${chefId}`} className="hover:underline">
+              {resolvedChefHref ? (
+                <Link href={resolvedChefHref} className="hover:underline">
                   <strong>{chefName}</strong>
                 </Link>
               ) : (

@@ -7,6 +7,7 @@ import { useDockActions, type DockAction } from './dock-context'
 export interface UseRecipeDetailActionsOptions {
   recipeId: string
   chefId: string
+  chefProfileHref?: string
   isOwner: boolean
   isInShoppingList?: boolean
   onSave?: () => void
@@ -26,6 +27,7 @@ function AddedListIcon({ className }: { className?: string }) {
 export function useRecipeDetailActions({
   recipeId,
   chefId,
+  chefProfileHref,
   isOwner,
   isInShoppingList = false,
   onSave,
@@ -59,7 +61,7 @@ export function useRecipeDetailActions({
             id: 'view-chef-profile',
             icon: User,
             label: 'View Chef Profile',
-            onAction: `/users/${chefId}`,
+            onAction: chefProfileHref ?? `/users/${chefId}`,
             position: 'left',
           },
           listAction,
@@ -82,7 +84,7 @@ export function useRecipeDetailActions({
         position: 'right',
       },
     ]
-  }, [recipeId, chefId, isOwner, isInShoppingList, onSave, onAddToList, onShare])
+  }, [recipeId, chefId, chefProfileHref, isOwner, isInShoppingList, onSave, onAddToList, onShare])
 
   useDockActions(actions)
 }

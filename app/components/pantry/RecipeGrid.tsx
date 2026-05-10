@@ -21,7 +21,7 @@ export interface RecipeGridProps {
   recipes: PantryRecipeCard[]
   emptyTitle?: string
   emptyMessage?: string
-  emptyCtaHref?: string
+  emptyCtaHref?: string | null
   onShare?: (recipeId: string) => void
   onSave?: (recipeId: string) => void
 }
@@ -39,11 +39,13 @@ export function RecipeGrid({
       <section className="border border-dashed border-zinc-300 rounded-sm bg-zinc-50 p-5 dark:border-zinc-700 dark:bg-zinc-900/50">
         <Subheading level={2}>{emptyTitle}</Subheading>
         <Text className="mt-2">{emptyMessage}</Text>
-        <div className="mt-4">
-          <Button href={emptyCtaHref}>
-            Create Recipe
-          </Button>
-        </div>
+        {emptyCtaHref ? (
+          <div className="mt-4">
+            <Button href={emptyCtaHref}>
+              Create Recipe
+            </Button>
+          </div>
+        ) : null}
       </section>
     )
   }

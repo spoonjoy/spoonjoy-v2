@@ -3,7 +3,7 @@
 Status: proposed canonical backlog
 Audit date: 2026-05-10
 Baseline: `main` at `3533955` (`Upgrade GitHub Actions to Node 24 runtime (#3)`)
-Verification anchor: `pnpm test:coverage` passed with 137 test files, 3497 tests, 0 skipped tests, and 100% statements/branches/functions/lines.
+Verification anchor: `pnpm test:coverage` passed with 138 test files, 3511 tests, 0 skipped tests, and 100% statements/branches/functions/lines.
 
 ## How To Use This Backlog
 
@@ -42,8 +42,9 @@ Status meanings:
 5. `SJ-005`: Fix active recipe title uniqueness and unskip the integrity test.
 6. `SJ-006`: Remove or replace skipped tests so 100% coverage also means no hidden skipped assertions.
 7. `SJ-008`: Run the mobile RecipeBuilder/SpoonDock UX pass once core create/edit data paths are trustworthy.
+8. `SJ-009`: Add canonical user profile routes so chef links resolve to shareable profile URLs.
 
-Completed in sequence: `SJ-001`, `SJ-002`, `SJ-003`, `SJ-004`, `SJ-005`, `SJ-006`, `SJ-008`.
+Completed in sequence: `SJ-001`, `SJ-002`, `SJ-003`, `SJ-004`, `SJ-005`, `SJ-006`, `SJ-008`, `SJ-009`.
 
 ## Backlog Items
 
@@ -281,7 +282,7 @@ Completion notes:
 
 Priority: `P1`
 Lane: `profiles`, `navigation`, `product-parity`
-Status: `proposed`
+Status: `done`
 
 Problem: v2 has a kitchen view that can load another chef via query params, and recipe dock actions link to `/users/{chefId}`, but no `/users/*` route exists. Non-owner recipe detail actions can therefore point users to a missing route.
 
@@ -298,6 +299,15 @@ Acceptance criteria:
 - Update dock/profile links to valid routes.
 - Decide and document whether `chefId` query URLs remain supported as compatibility aliases.
 - Tests cover owner, non-owner, unknown chef, unauthenticated visitor, and profile photo fallback states.
+
+Completion notes:
+
+- Added `/users/:identifier` with username-first lookup and id-to-username redirects for compatibility with older `/users/{chefId}` links.
+- Kept existing index kitchen `chef` and `chefId` query support intact while making `/users/{username}` the canonical share/profile URL.
+- Updated recipe detail header and non-owner SpoonDock chef-profile actions to use canonical username URLs.
+- Hid empty-profile recipe creation CTAs for visitor views while preserving owner CTAs.
+- Added loader, meta, component, dock-action, header, and RecipeGrid branch coverage for owner, visitor, unknown, unauthenticated, profile-photo, nullable recipe metadata, and empty-state paths.
+- Verified `pnpm typecheck`, focused route/component tests, and full `pnpm test:coverage`.
 
 ### SJ-010 - Search, Discovery, And Fellow Chefs
 
@@ -414,13 +424,14 @@ Priority: `P1`
 Lane: `cloudflare`, `ops`, `docs`
 Status: `proposed`
 
-Problem: Runtime code expects Cloudflare bindings/secrets that are incompletely reflected in Wrangler config and docs. This is especially important before image uploads, OAuth routes, and AI parsing become expected production features.
+Problem: Runtime code expects Cloudflare bindings/secrets that now span D1, R2 photos, OAuth, sessions, and OpenAI. Wrangler has the core bindings, but the deployment posture still needs a preflight-style hardening pass so agents and humans can verify production readiness without rediscovering requirements.
 
 Evidence:
 
-- `wrangler.json` configures D1 but no `PHOTOS` R2 binding.
+- `wrangler.json` configures D1 and the `PHOTOS` R2 binding, while secrets remain managed out-of-band via Cloudflare.
 - `app/cloudflare-env.d.ts` includes `PHOTOS`, `OPENAI_API_KEY`, Google OAuth, and Apple OAuth variables.
-- README/GUIDE document Google callback config that is not represented in `app/lib/env.server.ts`, and omit several required Apple/OpenAI/R2 pieces.
+- `app/lib/env.server.ts` validates OAuth configuration only; there is no single deployment preflight covering sessions, D1, R2, OAuth, and OpenAI.
+- README/GUIDE document the main deployment commands, but do not provide a machine-checkable checklist or failure-mode guidance for missing optional services.
 
 Acceptance criteria:
 
