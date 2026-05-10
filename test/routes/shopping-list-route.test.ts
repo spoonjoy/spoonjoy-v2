@@ -553,6 +553,42 @@ describe("Shopping List Route", () => {
       expect(items).toHaveLength(1);
       expect(items[0].checked).toBe(false);
     });
+
+    it("should clear legacy checked rows even when checkedAt is missing", async () => {
+      const shoppingList = await db.shoppingList.create({
+        data: { authorId: testUserId },
+      });
+
+      const ingredientRef = await db.ingredientRef.create({
+        data: { name: "legacy_checked_" + faker.string.alphanumeric(6) },
+      });
+
+      const legacyItem = await db.shoppingListItem.create({
+        data: {
+          shoppingListId: shoppingList.id,
+          ingredientRefId: ingredientRef.id,
+          checked: true,
+          checkedAt: null,
+        },
+      });
+
+      const request = await createFormRequest(
+        { intent: "clearCompleted" },
+        testUserId
+      );
+
+      await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+
+      const clearedItem = await db.shoppingListItem.findUnique({
+        where: { id: legacyItem.id },
+      });
+
+      expect(clearedItem?.deletedAt).not.toBeNull();
+    });
   });
 
   describe("action - removeItem", () => {
@@ -617,6 +653,51 @@ describe("Shopping List Route", () => {
       });
 
       expect(deletedItem?.deletedAt).not.toBeNull();
+    });
+
+    it("should not remove another user's shopping-list item", async () => {
+      await db.shoppingList.create({
+        data: { authorId: testUserId },
+      });
+      const otherUser = await createUser(
+        db,
+        faker.internet.email(),
+        faker.internet.username() + "_" + faker.string.alphanumeric(8),
+        "testPassword123"
+      );
+      const otherShoppingList = await db.shoppingList.create({
+        data: { authorId: otherUser.id },
+      });
+      const ingredientRef = await db.ingredientRef.create({
+        data: { name: "other_remove_" + faker.string.alphanumeric(6) },
+      });
+      const otherItem = await db.shoppingListItem.create({
+        data: {
+          shoppingListId: otherShoppingList.id,
+          ingredientRefId: ingredientRef.id,
+          deletedAt: null,
+        },
+      });
+
+      const request = await createFormRequest(
+        {
+          intent: "removeItem",
+          itemId: otherItem.id,
+        },
+        testUserId
+      );
+
+      const result = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+
+      const unchangedItem = await db.shoppingListItem.findUnique({
+        where: { id: otherItem.id },
+      });
+      expect(result).toEqual({ data: { success: true }, init: null, type: "DataWithResponseInit" });
+      expect(unchangedItem?.deletedAt).toBeNull();
     });
 
     it("should do nothing when itemId is not provided", async () => {
@@ -1029,6 +1110,89 @@ describe("Shopping List Route", () => {
       expect(updatedList?.items[0].checkedAt).toBeNull();
     });
 
+    it("should restore a soft-deleted recipe ingredient as unchecked at the end", async () => {
+      const shoppingList = await db.shoppingList.create({
+        data: { authorId: testUserId },
+      });
+
+      const activeRef = await db.ingredientRef.create({
+        data: { name: "recipe_restore_anchor_" + faker.string.alphanumeric(6) },
+      });
+      await db.shoppingListItem.create({
+        data: {
+          shoppingListId: shoppingList.id,
+          ingredientRefId: activeRef.id,
+          sortIndex: 0,
+        },
+      });
+
+      const unit = await db.unit.create({
+        data: { name: "cup_recipe_restore_" + faker.string.alphanumeric(6) },
+      });
+      const ingredientRef = await db.ingredientRef.create({
+        data: { name: "beans_recipe_restore_" + faker.string.alphanumeric(6) },
+      });
+      const deletedItem = await db.shoppingListItem.create({
+        data: {
+          shoppingListId: shoppingList.id,
+          quantity: 1,
+          unitId: unit.id,
+          ingredientRefId: ingredientRef.id,
+          checked: true,
+          checkedAt: new Date(),
+          deletedAt: new Date(),
+          sortIndex: 0,
+        },
+      });
+
+      const recipe = await db.recipe.create({
+        data: {
+          title: "Recipe restoring deleted shopping item",
+          chefId: testUserId,
+        },
+      });
+      await db.recipeStep.create({
+        data: {
+          recipeId: recipe.id,
+          stepNum: 1,
+          description: "Restore",
+        },
+      });
+      await db.ingredient.create({
+        data: {
+          recipeId: recipe.id,
+          stepNum: 1,
+          quantity: 2,
+          unitId: unit.id,
+          ingredientRefId: ingredientRef.id,
+        },
+      });
+
+      const request = await createFormRequest(
+        {
+          intent: "addFromRecipe",
+          recipeId: recipe.id,
+        },
+        testUserId
+      );
+
+      await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+
+      const restored = await db.shoppingListItem.findUnique({
+        where: { id: deletedItem.id },
+      });
+
+      expect(restored?.quantity).toBe(3);
+      expect(restored?.checked).toBe(false);
+      expect(restored?.checkedAt).toBeNull();
+      expect(restored?.deletedAt).toBeNull();
+      expect(restored?.sortIndex).toBe(1);
+    });
+
     it("should do nothing when recipeId is not provided", async () => {
       await db.shoppingList.create({
         data: { authorId: testUserId },
@@ -1244,6 +1408,116 @@ describe("Shopping List Route", () => {
       expect(updatedList?.items).toHaveLength(1);
       expect(updatedList?.items[0].quantity).toBe(5);
     });
+
+    it("should reactivate a checked manual item as unchecked when adding it again", async () => {
+      const shoppingList = await db.shoppingList.create({
+        data: { authorId: testUserId },
+      });
+
+      const ingredientName = ("checked_restore_" + faker.string.alphanumeric(6)).toLowerCase();
+      const unitName = ("bunch_" + faker.string.alphanumeric(6)).toLowerCase();
+      const ingredientRef = await db.ingredientRef.create({ data: { name: ingredientName } });
+      const unit = await db.unit.create({ data: { name: unitName } });
+
+      const existingItem = await db.shoppingListItem.create({
+        data: {
+          shoppingListId: shoppingList.id,
+          ingredientRefId: ingredientRef.id,
+          unitId: unit.id,
+          quantity: 1,
+          checked: true,
+          checkedAt: new Date(),
+          sortIndex: 0,
+        },
+      });
+
+      const request = await createFormRequest(
+        {
+          intent: "addItem",
+          ingredientName,
+          unitName,
+          quantity: "2",
+        },
+        testUserId
+      );
+
+      await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+
+      const restored = await db.shoppingListItem.findUnique({
+        where: { id: existingItem.id },
+      });
+
+      expect(restored?.quantity).toBe(3);
+      expect(restored?.checked).toBe(false);
+      expect(restored?.checkedAt).toBeNull();
+      expect(restored?.deletedAt).toBeNull();
+      expect(restored?.sortIndex).toBe(1);
+    });
+
+    it("should restore a soft-deleted manual item at the end of the active list", async () => {
+      const shoppingList = await db.shoppingList.create({
+        data: { authorId: testUserId },
+      });
+
+      const activeRef = await db.ingredientRef.create({
+        data: { name: "active_restore_anchor_" + faker.string.alphanumeric(6) },
+      });
+      await db.shoppingListItem.create({
+        data: {
+          shoppingListId: shoppingList.id,
+          ingredientRefId: activeRef.id,
+          sortIndex: 0,
+        },
+      });
+
+      const ingredientName = ("deleted_restore_" + faker.string.alphanumeric(6)).toLowerCase();
+      const unitName = ("bag_" + faker.string.alphanumeric(6)).toLowerCase();
+      const ingredientRef = await db.ingredientRef.create({ data: { name: ingredientName } });
+      const unit = await db.unit.create({ data: { name: unitName } });
+
+      const deletedItem = await db.shoppingListItem.create({
+        data: {
+          shoppingListId: shoppingList.id,
+          ingredientRefId: ingredientRef.id,
+          unitId: unit.id,
+          quantity: 4,
+          checked: true,
+          checkedAt: new Date(),
+          deletedAt: new Date(),
+          sortIndex: 0,
+        },
+      });
+
+      const request = await createFormRequest(
+        {
+          intent: "addItem",
+          ingredientName,
+          unitName,
+          quantity: "1",
+        },
+        testUserId
+      );
+
+      await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+
+      const restored = await db.shoppingListItem.findUnique({
+        where: { id: deletedItem.id },
+      });
+
+      expect(restored?.quantity).toBe(5);
+      expect(restored?.checked).toBe(false);
+      expect(restored?.checkedAt).toBeNull();
+      expect(restored?.deletedAt).toBeNull();
+      expect(restored?.sortIndex).toBe(1);
+    });
   });
 
   describe("action - toggleCheck edge cases", () => {
@@ -1314,6 +1588,54 @@ describe("Shopping List Route", () => {
 
       // Returns success even when no action taken (item not found)
       expect(result).toEqual({ data: { success: true }, init: null, type: "DataWithResponseInit" });
+    });
+
+    it("should not toggle another user's shopping-list item", async () => {
+      await db.shoppingList.create({
+        data: { authorId: testUserId },
+      });
+      const otherUser = await createUser(
+        db,
+        faker.internet.email(),
+        faker.internet.username() + "_" + faker.string.alphanumeric(8),
+        "testPassword123"
+      );
+      const otherShoppingList = await db.shoppingList.create({
+        data: { authorId: otherUser.id },
+      });
+      const ingredientRef = await db.ingredientRef.create({
+        data: { name: "other_toggle_" + faker.string.alphanumeric(6) },
+      });
+      const otherItem = await db.shoppingListItem.create({
+        data: {
+          shoppingListId: otherShoppingList.id,
+          ingredientRefId: ingredientRef.id,
+          checked: false,
+          checkedAt: null,
+        },
+      });
+
+      const request = await createFormRequest(
+        {
+          intent: "toggleCheck",
+          itemId: otherItem.id,
+          nextChecked: "true",
+        },
+        testUserId
+      );
+
+      const result = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+
+      const unchangedItem = await db.shoppingListItem.findUnique({
+        where: { id: otherItem.id },
+      });
+      expect(result).toEqual({ data: { success: true }, init: null, type: "DataWithResponseInit" });
+      expect(unchangedItem?.checked).toBe(false);
+      expect(unchangedItem?.checkedAt).toBeNull();
     });
 
     it("should toggle checked item back to unchecked", async () => {
