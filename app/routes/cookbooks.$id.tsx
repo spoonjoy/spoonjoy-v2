@@ -146,7 +146,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         return data({ success: true });
       } catch (error: any) {
         if (error.code === "P2002") {
-          return data({ error: "Recipe already in cookbook" }, { status: 400 });
+          return data({ success: true });
         }
         throw error;
       }
@@ -156,8 +156,11 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   if (intent === "removeRecipe") {
     const recipeInCookbookId = formData.get("recipeInCookbookId")?.toString();
     if (recipeInCookbookId) {
-      await database.recipeInCookbook.delete({
-        where: { id: recipeInCookbookId },
+      await database.recipeInCookbook.deleteMany({
+        where: {
+          id: recipeInCookbookId,
+          cookbookId: id,
+        },
       });
       return data({ success: true });
     }

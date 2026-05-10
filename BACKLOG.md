@@ -48,8 +48,9 @@ Status meanings:
 11. `SJ-023`: Remove production build sourcemap warnings so the zero-warning contract covers deploy builds.
 12. `SJ-007`: Split large route modules into testable server/domain modules.
 13. `SJ-024`: Add direct MCP shopping-list item controls for Ouroboros agents.
+14. `SJ-017`: Harden cookbook membership authorization and idempotency.
 
-Completed in sequence: `SJ-001`, `SJ-002`, `SJ-003`, `SJ-004`, `SJ-005`, `SJ-006`, `SJ-008`, `SJ-009`, `SJ-013`, `SJ-015`, `SJ-023`, `SJ-007`, `SJ-024`.
+Completed in sequence: `SJ-001`, `SJ-002`, `SJ-003`, `SJ-004`, `SJ-005`, `SJ-006`, `SJ-008`, `SJ-009`, `SJ-013`, `SJ-015`, `SJ-023`, `SJ-007`, `SJ-024`, `SJ-017`.
 
 ## Backlog Items
 
@@ -494,14 +495,15 @@ Acceptance criteria:
 
 Priority: `P2`
 Lane: `cookbooks`, `product`
-Status: `proposed`
+Status: `done`
 
-Problem: Cookbook creation/detail exist, and recipes can be saved/removed from cookbooks, but deferred tasks still mention editing cookbook titles. Full cookbook lifecycle is not complete.
+Problem: Cookbook creation/detail, title editing, deletion, and recipe membership controls exist, but revalidation found cookbook membership actions were not fully idempotent or relation-scoped.
 
 Evidence:
 
-- `.tasks/ACTIVE.md` deferred backlog lists edit cookbook title.
-- `app/routes.ts` registers `cookbooks/new` and `cookbooks/:id`, but no edit route.
+- `.tasks/ACTIVE.md` deferred backlog listed edit cookbook title, but `app/routes/cookbooks.$id.tsx` now includes inline owner-only title editing and deletion.
+- `app/routes/cookbooks.$id.tsx` previously deleted a posted `recipeInCookbookId` without constraining it to the current cookbook id.
+- Duplicate add submissions previously returned a 400 even though recipe membership is naturally idempotent.
 
 Acceptance criteria:
 
@@ -509,6 +511,14 @@ Acceptance criteria:
 - Decide whether cookbook delete/archive belongs in this unit.
 - Ensure recipe membership actions remain authorized and idempotent.
 - Tests cover owner/non-owner, duplicate title, empty title, and detail page refresh behavior.
+
+Completion notes:
+
+- Revalidated that owner-only title editing, duplicate-title validation, delete confirmation, and owner/non-owner UI coverage already exist on `cookbooks/:id`.
+- Made duplicate `addRecipe` submissions return success without creating a duplicate row.
+- Scoped `removeRecipe` to both `recipeInCookbookId` and the current cookbook id, preventing wrong-cookbook relation deletion.
+- Made repeated `removeRecipe` submissions idempotent through `deleteMany`.
+- Added route regression tests for duplicate add success, repeated remove, cross-owner relation isolation, and same-owner different-cookbook isolation.
 
 ### SJ-018 - Recipe Validation Parity Across Bulk And Per-Step Paths
 
