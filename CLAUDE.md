@@ -121,15 +121,15 @@ test: add coverage for cookbook CRUD operations
 
 ## When You're Done
 
-Always notify completion so Slugger (the orchestrating agent) knows you're finished:
+Always notify completion so Slugger (the Ouroboros agent) knows you're finished:
 
 ```bash
-clawdbot gateway wake --text "Done: [brief summary of what was accomplished]" --mode now
+ouro msg --to slugger "Done: [brief summary of what was accomplished]"
 ```
 
 Include this at the end of your task. Example:
 ```bash
-clawdbot gateway wake --text "Done: Fixed all 21 ingredientRef test calls, all tests passing" --mode now
+ouro msg --to slugger "Done: Fixed all 21 ingredientRef test calls, all tests passing"
 ```
 
 ## Communication Style

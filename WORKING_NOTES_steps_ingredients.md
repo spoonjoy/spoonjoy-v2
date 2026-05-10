@@ -6,8 +6,8 @@ This document tracks research, decisions, and implementation notes for the stepO
 
 ## Task Context
 
-- **Active Task**: `~/clawd/tasks/active-coding-steps_ingredients.md`
-- **Planning Doc**: `~/clawd/tasks/planning-coding-steps_ingredients.md`
+- **Active Task**: Slugger/Ouroboros task board entry for `steps_ingredients`
+- **Planning Doc**: Slugger/Ouroboros task history (`ouro task board --agent slugger`)
 
 ### Key Decisions from Planning
 
