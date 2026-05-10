@@ -40,6 +40,7 @@ Notes:
 - `SESSION_SECRET` protects auth sessions and must be high entropy in production.
 - Google and Apple OAuth secrets are required for OAuth login/account linking.
 - `OPENAI_API_KEY` enables ingredient parsing. Missing local keys fall back to deterministic parsing paths where supported, but production should set the secret before enabling AI-assisted flows.
+- Optional ingredient parsing runtime knobs are `INGREDIENT_PARSE_PROVIDER`, `INGREDIENT_PARSE_MODEL`, `INGREDIENT_PARSE_TIMEOUT_MS`, and `INGREDIENT_PARSE_MAX_RETRIES`. The safe default is OpenAI with `gpt-4o-mini`, an 8000ms timeout, and 1 retry.
 
 ## Local `.dev.vars`
 
@@ -54,6 +55,10 @@ APPLE_TEAM_ID=your-apple-team-id
 APPLE_KEY_ID=your-apple-key-id
 APPLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----..."
 OPENAI_API_KEY=sk-...
+INGREDIENT_PARSE_PROVIDER=openai
+INGREDIENT_PARSE_MODEL=gpt-4o-mini
+INGREDIENT_PARSE_TIMEOUT_MS=8000
+INGREDIENT_PARSE_MAX_RETRIES=1
 ```
 
 Basic local app development does not require these values. The app uses safe local fallbacks for sessions and stores uploaded images as data URLs when the `PHOTOS` binding is unavailable.

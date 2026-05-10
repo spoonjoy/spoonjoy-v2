@@ -86,7 +86,10 @@ describe("shopping list OpenAI and add-from-recipe coverage", () => {
       params: {},
     } as any);
 
-    expect(parseIngredientsMock).toHaveBeenCalledWith("one and a half cups oats", "test-key");
+    expect(parseIngredientsMock).toHaveBeenCalledWith(
+      "one and a half cups oats",
+      expect.objectContaining({ OPENAI_API_KEY: "test-key" })
+    );
 
     const shoppingList = await db.shoppingList.findUnique({
       where: { authorId: testUserId },

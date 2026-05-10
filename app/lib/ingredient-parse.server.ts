@@ -1,5 +1,5 @@
 /**
- * Ingredient parsing with OpenAI gpt-4o-mini structured outputs.
+ * Ingredient parsing with OpenAI structured outputs.
  *
  * This module provides LLM-powered parsing of natural language ingredient text
  * (e.g., "2 cups flour") into structured data (quantity, unit, ingredient name).
@@ -7,6 +7,31 @@
 
 import OpenAI from 'openai'
 import { z } from 'zod'
+
+export const DEFAULT_INGREDIENT_PARSE_PROVIDER = 'openai'
+export const DEFAULT_INGREDIENT_PARSE_MODEL = 'gpt-4o-mini'
+export const DEFAULT_INGREDIENT_PARSE_TIMEOUT_MS = 8_000
+export const DEFAULT_INGREDIENT_PARSE_MAX_RETRIES = 1
+
+export type IngredientParseProvider = typeof DEFAULT_INGREDIENT_PARSE_PROVIDER
+
+export interface IngredientParserEnv {
+  OPENAI_API_KEY?: string
+  INGREDIENT_PARSE_PROVIDER?: string
+  INGREDIENT_PARSE_MODEL?: string
+  INGREDIENT_PARSE_TIMEOUT_MS?: string
+  INGREDIENT_PARSE_MAX_RETRIES?: string
+}
+
+export interface IngredientParserConfig {
+  provider: IngredientParseProvider
+  apiKey: string
+  model: string
+  timeoutMs: number
+  maxRetries: number
+}
+
+export type IngredientParserConfigInput = string | IngredientParserEnv | undefined
 
 /**
  * Schema for a single parsed ingredient.
@@ -102,35 +127,143 @@ Rules:
 
 Parse each line or comma-separated ingredient independently.`
 
+function getConfigSource(input: IngredientParserConfigInput): IngredientParserEnv {
+  if (typeof input === 'string') {
+    return { OPENAI_API_KEY: input }
+  }
+
+  return input ?? {}
+}
+
+function resolveProvider(provider: string | undefined): IngredientParseProvider {
+  const normalized = (provider || DEFAULT_INGREDIENT_PARSE_PROVIDER).trim().toLowerCase()
+
+  if (normalized === DEFAULT_INGREDIENT_PARSE_PROVIDER) {
+    return DEFAULT_INGREDIENT_PARSE_PROVIDER
+  }
+
+  throw new IngredientParseError(`Unsupported ingredient parser provider: ${provider}`)
+}
+
+function resolveNonEmpty(value: string | undefined, fallback: string): string {
+  const trimmed = value?.trim()
+  return trimmed ? trimmed : fallback
+}
+
+function resolveInteger(value: string | undefined, fallback: number, minimum: number): number {
+  const trimmed = value?.trim()
+  if (!trimmed) {
+    return fallback
+  }
+
+  const parsed = Number(trimmed)
+  if (!Number.isInteger(parsed) || parsed < minimum) {
+    return fallback
+  }
+
+  return parsed
+}
+
+export function resolveIngredientParserConfig(input?: IngredientParserConfigInput): IngredientParserConfig {
+  const source = getConfigSource(input)
+
+  return {
+    provider: resolveProvider(source.INGREDIENT_PARSE_PROVIDER),
+    apiKey: resolveNonEmpty(source.OPENAI_API_KEY, ''),
+    model: resolveNonEmpty(source.INGREDIENT_PARSE_MODEL, DEFAULT_INGREDIENT_PARSE_MODEL),
+    timeoutMs: resolveInteger(
+      source.INGREDIENT_PARSE_TIMEOUT_MS,
+      DEFAULT_INGREDIENT_PARSE_TIMEOUT_MS,
+      1
+    ),
+    maxRetries: resolveInteger(
+      source.INGREDIENT_PARSE_MAX_RETRIES,
+      DEFAULT_INGREDIENT_PARSE_MAX_RETRIES,
+      0
+    ),
+  }
+}
+
+function getErrorStatus(error: unknown): number | undefined {
+  if (typeof error !== 'object' || error === null || !('status' in error)) {
+    return undefined
+  }
+
+  const status = (error as { status?: unknown }).status
+  return typeof status === 'number' ? status : undefined
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message
+  }
+
+  return String(error)
+}
+
+function mapOpenAIError(error: unknown): IngredientParseError {
+  const status = getErrorStatus(error)
+
+  if (status === 401 || status === 403) {
+    return new IngredientParseError('OpenAI authentication failed', error)
+  }
+
+  if (status === 429) {
+    return new IngredientParseError('OpenAI rate limit exceeded', error)
+  }
+
+  if (status === 408 || (status !== undefined && status >= 500)) {
+    return new IngredientParseError('OpenAI request timeout or temporary service failure', error)
+  }
+
+  const message = getErrorMessage(error).toLowerCase()
+  if (message.includes('timeout') || message.includes('timed out')) {
+    return new IngredientParseError('OpenAI request timeout', error)
+  }
+
+  if (message.includes('network') || message.includes('connection')) {
+    return new IngredientParseError('OpenAI connection failed', error)
+  }
+
+  return new IngredientParseError('Failed to parse ingredients', error)
+}
+
 /**
- * Parse natural language ingredient text into structured data using OpenAI gpt-4o-mini.
+ * Parse natural language ingredient text into structured data using the configured provider.
  *
  * @param text - The ingredient text to parse (e.g., "2 cups flour" or multiple lines)
- * @param apiKey - The OpenAI API key
+ * @param configInput - The OpenAI API key string or ingredient parser env/config values
  * @returns Array of parsed ingredients
  * @throws IngredientParseError if parsing fails
  *
  * @example
  * ```typescript
- * const ingredients = await parseIngredients("2 cups flour\n1/2 tsp salt", apiKey)
+ * const ingredients = await parseIngredients("2 cups flour\n1/2 tsp salt", env)
  * // Returns: [
  * //   { quantity: 2, unit: "cup", ingredientName: "flour" },
  * //   { quantity: 0.5, unit: "tsp", ingredientName: "salt" }
  * // ]
  * ```
  */
-export async function parseIngredients(text: string, apiKey: string): Promise<ParsedIngredient[]> {
-  // Validate API key
-  if (!apiKey) {
+export async function parseIngredients(
+  text: string,
+  configInput?: IngredientParserConfigInput
+): Promise<ParsedIngredient[]> {
+  const config = resolveIngredientParserConfig(configInput)
+
+  if (!config.apiKey) {
     throw new IngredientParseError('OpenAI API key is required')
   }
 
-  // Create OpenAI client
-  const openai = new OpenAI({ apiKey })
+  const openai = new OpenAI({
+    apiKey: config.apiKey,
+    timeout: config.timeoutMs,
+    maxRetries: config.maxRetries,
+  })
 
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: config.model,
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: text },
@@ -141,10 +274,14 @@ export async function parseIngredients(text: string, apiKey: string): Promise<Pa
       },
     })
 
-    // Validate response structure
     const choice = response.choices[0]
     if (!choice) {
       throw new IngredientParseError('No response from OpenAI API')
+    }
+
+    const refusal = choice.message.refusal
+    if (refusal) {
+      throw new IngredientParseError('OpenAI refused to parse this ingredient text')
     }
 
     const content = choice.message.content
@@ -152,7 +289,6 @@ export async function parseIngredients(text: string, apiKey: string): Promise<Pa
       throw new IngredientParseError('Empty response content from OpenAI API')
     }
 
-    // Parse JSON response
     let parsed: unknown
     try {
       parsed = JSON.parse(content)
@@ -160,7 +296,6 @@ export async function parseIngredients(text: string, apiKey: string): Promise<Pa
       throw new IngredientParseError('Invalid JSON in OpenAI response', jsonError)
     }
 
-    // Validate against Zod schema
     const result = ParsedIngredientsResponseSchema.safeParse(parsed)
     if (!result.success) {
       throw new IngredientParseError(
@@ -171,12 +306,10 @@ export async function parseIngredients(text: string, apiKey: string): Promise<Pa
 
     return result.data.ingredients
   } catch (error) {
-    // Re-throw if already an IngredientParseError
     if (error instanceof IngredientParseError) {
       throw error
     }
 
-    // Wrap other errors
-    throw new IngredientParseError('Failed to parse ingredients', error)
+    throw mapOpenAIError(error)
   }
 }

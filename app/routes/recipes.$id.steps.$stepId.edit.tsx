@@ -1,6 +1,6 @@
 import type { Route } from "./+types/recipes.$id.steps.$stepId.edit";
 import { Form, redirect, data, useActionData, useLoaderData, useSearchParams, useSubmit } from "react-router";
-import { getCloudflareEnv, getRequestDb } from "~/lib/route-platform.server";
+import { getIngredientParserEnv, getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
 import { useEffect, useState } from "react";
 import { ConfirmationDialog } from "~/components/confirmation-dialog";
@@ -156,14 +156,11 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   if (intent === "parseIngredients") {
     const ingredientText = formData.get("ingredientText")?.toString() || "";
 
-    // Get API key from Cloudflare env or process.env
-    const apiKey =
-      getCloudflareEnv(context)?.OPENAI_API_KEY ||
-      process.env.OPENAI_API_KEY ||
-      "";
-
     try {
-      const parsedIngredients = await parseIngredients(ingredientText, apiKey);
+      const parsedIngredients = await parseIngredients(
+        ingredientText,
+        getIngredientParserEnv(context)
+      );
       return data({ parsedIngredients });
     } catch (error) {
       if (error instanceof IngredientParseError) {

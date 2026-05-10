@@ -423,7 +423,7 @@ Completion notes:
 
 Priority: `P2`
 Lane: `ai`, `ingredients`, `cloudflare`
-Status: `proposed`
+Status: `done`
 
 Problem: Ingredient parsing is implemented against OpenAI structured outputs, but provider research/docs are time-sensitive and should be refreshed before productizing or expanding the AI path. The current parser hardcodes a model ID and route callers directly choose API-key fallback behavior.
 
@@ -440,6 +440,15 @@ Acceptance criteria:
 - Centralize timeout, retry, error mapping, and structured-output validation.
 - Keep deterministic fallback behavior for missing API keys.
 - Tests cover configured model/provider, missing key, provider failure, malformed JSON, and multi-line ingredient parsing.
+
+Completion notes:
+
+- Refreshed `docs/ingredient-parsing-provider-research.md` against current official OpenAI, Anthropic, and Gemini docs.
+- Kept OpenAI `gpt-4o-mini` as the safe default for focused structured extraction while documenting newer-model/provider evaluation paths.
+- Added centralized parser env resolution and runtime controls for `INGREDIENT_PARSE_PROVIDER`, `INGREDIENT_PARSE_MODEL`, `INGREDIENT_PARSE_TIMEOUT_MS`, and `INGREDIENT_PARSE_MAX_RETRIES`.
+- Centralized OpenAI timeout/retry construction, unsupported-provider failure, provider error mapping, refusal handling, JSON parsing, and Zod response validation.
+- Preserved shopping-list deterministic/manual fallback behavior when no API key is configured.
+- Verified focused parser/route tests, `pnpm typecheck`, `pnpm build`, full `pnpm test:coverage`, and `pnpm test:e2e`.
 
 ### SJ-015 - Cloudflare Deployment And Environment Hardening
 

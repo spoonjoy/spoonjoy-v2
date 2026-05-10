@@ -1,7 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import type { AppLoadContext } from "react-router";
 import { data } from "react-router";
-import { getCloudflareEnv, getRequestDb } from "~/lib/route-platform.server";
+import { getIngredientParserEnv, getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
 import { IngredientParseError, parseIngredients } from "~/lib/ingredient-parse.server";
 import { resolveIngredientAffordance } from "~/lib/ingredient-affordances";
@@ -152,14 +152,11 @@ export async function handleShoppingListAction({ request, context }: ShoppingLis
     };
 
     if (!parsedDraft.ingredientName.trim() && ingredientText.trim()) {
-      const apiKey =
-        getCloudflareEnv(context)?.OPENAI_API_KEY ||
-        process.env.OPENAI_API_KEY ||
-        "";
+      const parserEnv = getIngredientParserEnv(context);
 
-      if (apiKey) {
+      if (parserEnv.OPENAI_API_KEY) {
         try {
-          const parsedIngredients = await parseIngredients(ingredientText, apiKey);
+          const parsedIngredients = await parseIngredients(ingredientText, parserEnv);
           const firstParsed = parsedIngredients[0];
 
           if (parsedIngredients.length === 1 && firstParsed) {

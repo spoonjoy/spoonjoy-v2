@@ -1,9 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import {
+  DEFAULT_INGREDIENT_PARSE_MAX_RETRIES,
+  DEFAULT_INGREDIENT_PARSE_MODEL,
+  DEFAULT_INGREDIENT_PARSE_PROVIDER,
+  DEFAULT_INGREDIENT_PARSE_TIMEOUT_MS,
   parseIngredients,
   ParsedIngredientSchema,
   ParsedIngredientsResponseSchema,
   IngredientParseError,
+  resolveIngredientParserConfig,
   type ParsedIngredient,
 } from '~/lib/ingredient-parse.server'
 
@@ -19,9 +24,14 @@ import {
 
 // Mock the OpenAI SDK
 const mockCreate = vi.fn()
+const mockConstructorOptions = vi.fn()
 vi.mock('openai', () => {
   return {
     default: class MockOpenAI {
+      constructor(options: unknown) {
+        mockConstructorOptions(options)
+      }
+
       chat = {
         completions: {
           create: mockCreate,
@@ -189,6 +199,78 @@ describe('Ingredient Parsing', () => {
       const error = new IngredientParseError('Parsing failed', cause)
       expect(error.message).toBe('Parsing failed')
       expect(error.cause).toBe(cause)
+    })
+  })
+
+  describe('resolveIngredientParserConfig', () => {
+    it('uses safe defaults when env values are missing', () => {
+      expect(resolveIngredientParserConfig()).toEqual({
+        provider: DEFAULT_INGREDIENT_PARSE_PROVIDER,
+        apiKey: '',
+        model: DEFAULT_INGREDIENT_PARSE_MODEL,
+        timeoutMs: DEFAULT_INGREDIENT_PARSE_TIMEOUT_MS,
+        maxRetries: DEFAULT_INGREDIENT_PARSE_MAX_RETRIES,
+      })
+    })
+
+    it('treats a string config as the OpenAI API key', () => {
+      expect(resolveIngredientParserConfig(TEST_API_KEY)).toMatchObject({
+        provider: DEFAULT_INGREDIENT_PARSE_PROVIDER,
+        apiKey: TEST_API_KEY,
+        model: DEFAULT_INGREDIENT_PARSE_MODEL,
+      })
+    })
+
+    it('uses configured provider, model, timeout, and retry env values', () => {
+      expect(
+        resolveIngredientParserConfig({
+          OPENAI_API_KEY: 'env-key',
+          INGREDIENT_PARSE_PROVIDER: ' OpenAI ',
+          INGREDIENT_PARSE_MODEL: ' gpt-5.5 ',
+          INGREDIENT_PARSE_TIMEOUT_MS: '12000',
+          INGREDIENT_PARSE_MAX_RETRIES: '3',
+        })
+      ).toEqual({
+        provider: DEFAULT_INGREDIENT_PARSE_PROVIDER,
+        apiKey: 'env-key',
+        model: 'gpt-5.5',
+        timeoutMs: 12000,
+        maxRetries: 3,
+      })
+    })
+
+    it('falls back to numeric defaults for blank, non-integer, and out-of-range controls', () => {
+      expect(
+        resolveIngredientParserConfig({
+          OPENAI_API_KEY: '   ',
+          INGREDIENT_PARSE_MODEL: '   ',
+          INGREDIENT_PARSE_TIMEOUT_MS: '0',
+          INGREDIENT_PARSE_MAX_RETRIES: '-1',
+        })
+      ).toMatchObject({
+        apiKey: '',
+        model: DEFAULT_INGREDIENT_PARSE_MODEL,
+        timeoutMs: DEFAULT_INGREDIENT_PARSE_TIMEOUT_MS,
+        maxRetries: DEFAULT_INGREDIENT_PARSE_MAX_RETRIES,
+      })
+
+      expect(
+        resolveIngredientParserConfig({
+          INGREDIENT_PARSE_TIMEOUT_MS: '1.5',
+          INGREDIENT_PARSE_MAX_RETRIES: 'nope',
+        })
+      ).toMatchObject({
+        timeoutMs: DEFAULT_INGREDIENT_PARSE_TIMEOUT_MS,
+        maxRetries: DEFAULT_INGREDIENT_PARSE_MAX_RETRIES,
+      })
+    })
+
+    it('rejects unsupported providers instead of silently switching vendors', () => {
+      expect(() =>
+        resolveIngredientParserConfig({
+          INGREDIENT_PARSE_PROVIDER: 'anthropic',
+        })
+      ).toThrow(IngredientParseError)
     })
   })
 
@@ -919,6 +1001,17 @@ describe('Ingredient Parsing', () => {
         )
       })
 
+      it('throws IngredientParseError before provider calls when provider is unsupported', async () => {
+        await expect(
+          parseIngredients('2 cups flour', {
+            OPENAI_API_KEY: TEST_API_KEY,
+            INGREDIENT_PARSE_PROVIDER: 'gemini',
+          })
+        ).rejects.toThrow(IngredientParseError)
+
+        expect(mockCreate).not.toHaveBeenCalled()
+      })
+
       it('throws IngredientParseError for rate limit errors', async () => {
         const rateLimitError = new Error('Rate limit exceeded')
         ;(rateLimitError as any).status = 429
@@ -933,6 +1026,78 @@ describe('Ingredient Parsing', () => {
         const authError = new Error('Invalid API key')
         ;(authError as any).status = 401
         mockCreate.mockRejectedValueOnce(authError)
+
+        await expect(parseIngredients('2 cups flour', TEST_API_KEY)).rejects.toThrow(
+          IngredientParseError
+        )
+      })
+
+      it('throws IngredientParseError for forbidden authentication errors', async () => {
+        const authError = new Error('Forbidden API key')
+        ;(authError as any).status = 403
+        mockCreate.mockRejectedValueOnce(authError)
+
+        await expect(parseIngredients('2 cups flour', TEST_API_KEY)).rejects.toThrow(
+          IngredientParseError
+        )
+      })
+
+      it('throws IngredientParseError for timeout statuses', async () => {
+        const timeoutError = new Error('Request timeout')
+        ;(timeoutError as any).status = 408
+        mockCreate.mockRejectedValueOnce(timeoutError)
+
+        await expect(parseIngredients('2 cups flour', TEST_API_KEY)).rejects.toThrow(
+          IngredientParseError
+        )
+      })
+
+      it('throws IngredientParseError for provider service failures', async () => {
+        const serviceError = new Error('Server unavailable')
+        ;(serviceError as any).status = 503
+        mockCreate.mockRejectedValueOnce(serviceError)
+
+        await expect(parseIngredients('2 cups flour', TEST_API_KEY)).rejects.toThrow(
+          IngredientParseError
+        )
+      })
+
+      it('maps timeout and connection messages to retryable parser errors', async () => {
+        mockCreate.mockRejectedValueOnce(new Error('timed out while waiting'))
+
+        await expect(parseIngredients('2 cups flour', TEST_API_KEY)).rejects.toThrow(
+          IngredientParseError
+        )
+
+        mockCreate.mockRejectedValueOnce(new Error('connection refused'))
+
+        await expect(parseIngredients('2 cups flour', TEST_API_KEY)).rejects.toThrow(
+          IngredientParseError
+        )
+      })
+
+      it('maps non-Error provider failures with non-numeric statuses', async () => {
+        mockCreate.mockRejectedValueOnce({
+          status: 'unknown',
+          toString: () => 'plain provider failure',
+        })
+
+        await expect(parseIngredients('2 cups flour', TEST_API_KEY)).rejects.toThrow(
+          IngredientParseError
+        )
+      })
+
+      it('throws IngredientParseError when OpenAI returns a refusal', async () => {
+        mockCreate.mockResolvedValueOnce({
+          choices: [
+            {
+              message: {
+                refusal: 'Cannot parse this request',
+                content: null,
+              },
+            },
+          ],
+        })
 
         await expect(parseIngredients('2 cups flour', TEST_API_KEY)).rejects.toThrow(
           IngredientParseError
@@ -958,7 +1123,39 @@ describe('Ingredient Parsing', () => {
 
         expect(mockCreate).toHaveBeenCalledWith(
           expect.objectContaining({
-            model: 'gpt-4o-mini',
+            model: DEFAULT_INGREDIENT_PARSE_MODEL,
+          })
+        )
+      })
+
+      it('calls OpenAI API with configured model and runtime controls', async () => {
+        mockCreate.mockResolvedValueOnce({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  ingredients: [{ quantity: 2, unit: 'cup', ingredientName: 'flour' }],
+                }),
+              },
+            },
+          ],
+        })
+
+        await parseIngredients('2 cups flour', {
+          OPENAI_API_KEY: TEST_API_KEY,
+          INGREDIENT_PARSE_MODEL: 'gpt-5.5',
+          INGREDIENT_PARSE_TIMEOUT_MS: '12000',
+          INGREDIENT_PARSE_MAX_RETRIES: '0',
+        })
+
+        expect(mockConstructorOptions).toHaveBeenCalledWith({
+          apiKey: TEST_API_KEY,
+          timeout: 12000,
+          maxRetries: 0,
+        })
+        expect(mockCreate).toHaveBeenCalledWith(
+          expect.objectContaining({
+            model: 'gpt-5.5',
           })
         )
       })

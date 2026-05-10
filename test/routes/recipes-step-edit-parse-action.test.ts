@@ -501,10 +501,10 @@ describe('recipes.$id.steps.$stepId.edit - parseIngredients action', () => {
         context: mockContext,
       } as any)
 
-      // Verify parseIngredients was called with an API key
+      // Verify parseIngredients was called with centralized parser env
       expect(parseIngredients).toHaveBeenCalledWith(
         '2 cups flour',
-        expect.any(String)
+        expect.any(Object)
       )
     })
 
@@ -540,7 +540,9 @@ describe('recipes.$id.steps.$stepId.edit - parseIngredients action', () => {
 
       expect(parseIngredients).toHaveBeenCalledWith(
         '2 cups flour',
-        'cf-test-api-key'
+        expect.objectContaining({
+          OPENAI_API_KEY: 'cf-test-api-key',
+        })
       )
     })
   })

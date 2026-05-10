@@ -44,6 +44,10 @@ declare global {
     PHOTOS?: R2Bucket;
     SESSION_SECRET?: string;
     OPENAI_API_KEY?: string;
+    INGREDIENT_PARSE_PROVIDER?: string;
+    INGREDIENT_PARSE_MODEL?: string;
+    INGREDIENT_PARSE_TIMEOUT_MS?: string;
+    INGREDIENT_PARSE_MAX_RETRIES?: string;
     GOOGLE_CLIENT_ID?: string;
     GOOGLE_CLIENT_SECRET?: string;
     APPLE_CLIENT_ID?: string;

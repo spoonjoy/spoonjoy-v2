@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   getDb: vi.fn(),
@@ -7,11 +7,23 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("~/lib/db.server", () => mocks);
 
-import { getCloudflareEnv, getRequestDb } from "~/lib/route-platform.server";
+import {
+  getCloudflareEnv,
+  getIngredientParserEnv,
+  getRequestDb,
+} from "~/lib/route-platform.server";
 
 describe("route-platform.server", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.INGREDIENT_PARSE_PROVIDER;
+    delete process.env.INGREDIENT_PARSE_MODEL;
+    delete process.env.INGREDIENT_PARSE_TIMEOUT_MS;
+    delete process.env.INGREDIENT_PARSE_MAX_RETRIES;
   });
 
   it("returns the Cloudflare env from route context", () => {
@@ -23,6 +35,47 @@ describe("route-platform.server", () => {
   it("returns undefined when the route context has no env", () => {
     expect(getCloudflareEnv({ cloudflare: { env: null } })).toBeUndefined();
     expect(getCloudflareEnv({})).toBeUndefined();
+  });
+
+  it("returns ingredient parser env from Cloudflare bindings before process env", () => {
+    process.env.OPENAI_API_KEY = "process-key";
+    process.env.INGREDIENT_PARSE_MODEL = "process-model";
+
+    expect(
+      getIngredientParserEnv({
+        cloudflare: {
+          env: {
+            OPENAI_API_KEY: "cf-key",
+            INGREDIENT_PARSE_PROVIDER: "openai",
+            INGREDIENT_PARSE_MODEL: "cf-model",
+            INGREDIENT_PARSE_TIMEOUT_MS: "9000",
+            INGREDIENT_PARSE_MAX_RETRIES: "2",
+          },
+        },
+      })
+    ).toEqual({
+      OPENAI_API_KEY: "cf-key",
+      INGREDIENT_PARSE_PROVIDER: "openai",
+      INGREDIENT_PARSE_MODEL: "cf-model",
+      INGREDIENT_PARSE_TIMEOUT_MS: "9000",
+      INGREDIENT_PARSE_MAX_RETRIES: "2",
+    });
+  });
+
+  it("falls back to process env for ingredient parser values outside Cloudflare", () => {
+    process.env.OPENAI_API_KEY = "process-key";
+    process.env.INGREDIENT_PARSE_PROVIDER = "openai";
+    process.env.INGREDIENT_PARSE_MODEL = "process-model";
+    process.env.INGREDIENT_PARSE_TIMEOUT_MS = "7000";
+    process.env.INGREDIENT_PARSE_MAX_RETRIES = "0";
+
+    expect(getIngredientParserEnv({ cloudflare: { env: null } })).toEqual({
+      OPENAI_API_KEY: "process-key",
+      INGREDIENT_PARSE_PROVIDER: "openai",
+      INGREDIENT_PARSE_MODEL: "process-model",
+      INGREDIENT_PARSE_TIMEOUT_MS: "7000",
+      INGREDIENT_PARSE_MAX_RETRIES: "0",
+    });
   });
 
   it("uses the Cloudflare D1 binding when present", async () => {

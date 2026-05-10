@@ -430,7 +430,10 @@ describe("Recipes $id Steps New Route", () => {
         expect(data.parsedIngredients).toEqual([
           { quantity: 2, unit: "cups", ingredientName: "flour" },
         ]);
-        expect(parseSpy).toHaveBeenCalledWith("2 cups flour", "cf-test-key");
+        expect(parseSpy).toHaveBeenCalledWith(
+          "2 cups flour",
+          expect.objectContaining({ OPENAI_API_KEY: "cf-test-key" })
+        );
       } finally {
         parseSpy.mockRestore();
       }
