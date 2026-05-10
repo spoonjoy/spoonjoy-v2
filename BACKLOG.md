@@ -3,7 +3,7 @@
 Status: proposed canonical backlog
 Audit date: 2026-05-10
 Baseline: `main` at `3533955` (`Upgrade GitHub Actions to Node 24 runtime (#3)`)
-Verification anchor: `pnpm test:coverage` passed with 139 test files, 3520 tests, 0 skipped tests, and 100% statements/branches/functions/lines.
+Verification anchor: `pnpm test:coverage` passed with 140 test files, 3521 tests, 0 skipped tests, and 100% statements/branches/functions/lines.
 
 ## How To Use This Backlog
 
@@ -47,7 +47,7 @@ Status meanings:
 10. `SJ-015`: Add Cloudflare deployment preflight checks and production deployment docs.
 11. `SJ-023`: Remove production build sourcemap warnings so the zero-warning contract covers deploy builds.
 
-Completed in sequence: `SJ-001`, `SJ-002`, `SJ-003`, `SJ-004`, `SJ-005`, `SJ-006`, `SJ-008`, `SJ-009`, `SJ-013`, `SJ-015`.
+Completed in sequence: `SJ-001`, `SJ-002`, `SJ-003`, `SJ-004`, `SJ-005`, `SJ-006`, `SJ-008`, `SJ-009`, `SJ-013`, `SJ-015`, `SJ-023`.
 
 ## Backlog Items
 
@@ -607,7 +607,7 @@ Acceptance criteria:
 
 Priority: `P0`
 Lane: `agent-trust`, `build`, `quality`
-Status: `proposed`
+Status: `done`
 
 Problem: `pnpm build` exits successfully, but Vite/Rollup emits repeated sourcemap-location diagnostics for several local UI/navigation modules. The repo contract treats warnings as failures, so production build output needs to be quiet before deployment checks can be treated as fully warning-clean.
 
@@ -623,6 +623,13 @@ Acceptance criteria:
 - Any stale module-level directives are removed or otherwise handled without changing runtime behavior.
 - Add coverage or a documented verification command sufficient to keep the warning from regressing.
 - Preserve existing typecheck, full coverage, build, and e2e checks.
+
+Completion notes:
+
+- Removed stale module-level `'use client'` directives from local React Router component files.
+- Added `test/build-output-hygiene.test.ts` so top-level client directives cannot return unnoticed.
+- Verified `pnpm build` output no longer contains sourcemap/directive diagnostics.
+- Verified focused build-hygiene test, `pnpm typecheck`, full `pnpm test:coverage`, and `pnpm test:e2e`.
 
 ## Parking Lot
 

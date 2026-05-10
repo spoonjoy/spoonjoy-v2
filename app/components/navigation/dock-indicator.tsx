@@ -1,5 +1,3 @@
-'use client'
-
 import clsx from 'clsx'
 import { motion, useReducedMotion } from 'framer-motion'
 
