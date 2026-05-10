@@ -516,12 +516,28 @@ Acceptance criteria:
 - Mobile touch targets meet the chosen accessibility threshold.
 - Add Storybook/a11y or Playwright assertions where component tests cannot observe layout.
 
+
+### SJ-022 - Make Spoonjoy The Ouroboros Recipe MCP App
+
+Priority: `P0`
+Lane: `mcp`, `ouroboros`, `agent-trust`, `recipes`
+Status: `done`
+
+Problem: Ouroboros agents need a first-class recipe substrate rather than browser/shell indirection for recipe memory and shopping-list operations. Spoonjoy should be the official recipe app for the harness through a stdio MCP server that can be registered in `agent.json.mcpServers`.
+
+Acceptance criteria:
+
+- Provide a stdio JSON-RPC MCP server compatible with the Ouroboros harness MCP client.
+- Expose health, recipe search, recipe fetch, recipe creation, shopping-list add, and shopping-list fetch tools.
+- Support owner scoping through `SPOONJOY_MCP_USER_EMAIL` while allowing explicit `ownerEmail` overrides.
+- Document the exact `mcpServers.spoonjoy` bundle config and vault env pattern.
+- Cover MCP protocol handling and tool behavior with tests while preserving 100% coverage.
+
 ## Parking Lot
 
 These are intentionally lower-certainty until product direction is clarified:
 
 - Native mobile app packaging.
-- MCP integration for agent-facing recipe operations.
 - Public/private recipe visibility model beyond basic profile/kitchen routes.
 - Dedicated admin/moderation tools.
 - Data migration from Spoonjoy v1 production into v2.

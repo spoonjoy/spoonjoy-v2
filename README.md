@@ -64,6 +64,8 @@ APPLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----..."
 
 For production, use `wrangler secret put` for sensitive values.
 
+For Ouroboros agent integration, see [`docs/ouroboros-mcp.md`](docs/ouroboros-mcp.md).
+
 ## Development Commands
 
 | Command | Purpose |
@@ -188,6 +190,7 @@ migrations/
 - **Step Dependencies**: Steps can reference outputs from previous steps
 - **Cookbooks**: Organize recipes into collections
 - **Shopping List**: Personal shopping list with check-off
+- **Ouroboros MCP**: Stdio MCP server for agent recipe/search/create/shopping-list tools
 
 ## Database Schema
 
