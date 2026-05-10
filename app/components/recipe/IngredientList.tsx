@@ -85,7 +85,7 @@ export function IngredientList({
       className="space-y-2"
     >
       {hasStepOutputUses && (
-        <li data-testid="step-output-uses-section" className="border-l border-zinc-300 pl-4 dark:border-zinc-600">
+        <li data-testid="step-output-uses-section" className="border-l border-[var(--sj-brass)] pl-4">
           <ul className="space-y-2 py-1">
             {stepOutputUses.map((ref) => {
               const isChecked = checkedStepOutputIds.has(ref.id)
@@ -100,8 +100,8 @@ export function IngredientList({
                         onClick={() => onStepOutputToggle(ref.id)}
                         className={`min-h-11 min-w-0 text-left text-sm transition-colors ${
                           isChecked
-                            ? 'line-through text-zinc-500 dark:text-zinc-500'
-                            : 'text-zinc-600 dark:text-zinc-300'
+                            ? 'line-through text-[var(--sj-ink-soft)] opacity-60'
+                            : 'text-[var(--sj-ink-soft)]'
                         }`}
                       >
                         <StepReferenceText reference={ref} />
@@ -118,7 +118,7 @@ export function IngredientList({
 
               return (
                 <li key={ref.id}>
-                  <span className="text-sm text-zinc-600 dark:text-zinc-300">
+                  <span className="text-sm text-[var(--sj-ink-soft)]">
                     <StepReferenceText reference={ref} />
                   </span>
                 </li>
@@ -137,7 +137,7 @@ export function IngredientList({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 6 }}
             transition={{ type: 'spring', stiffness: 520, damping: 42, mass: 0.5 }}
-            className="border-b border-zinc-200 py-2 dark:border-zinc-700"
+            className="border-b border-[var(--sj-border)] py-2 last:border-b-0"
             data-testid={`ingredient-item-${ingredient.id}`}
           >
             <IngredientRow
@@ -183,8 +183,8 @@ function IngredientRow({
           <span
             className={`truncate text-base ${
               isChecked
-                ? 'line-through text-zinc-500 dark:text-zinc-500'
-                : 'text-zinc-900 dark:text-zinc-100'
+                ? 'line-through text-[var(--sj-ink-soft)] opacity-60'
+                : 'text-[var(--sj-ink)]'
             }`}
           >
             {ingredient.name}
@@ -196,8 +196,8 @@ function IngredientRow({
           <span
             className={`truncate text-base ${
               isChecked
-                ? 'line-through text-zinc-500 dark:text-zinc-500'
-                : 'text-zinc-900 dark:text-zinc-100'
+                ? 'line-through text-[var(--sj-ink-soft)] opacity-60'
+                : 'text-[var(--sj-ink)]'
             }`}
           >
             {ingredient.name}
@@ -208,8 +208,8 @@ function IngredientRow({
         data-testid={`ingredient-quantity-${ingredient.id}`}
         className={`whitespace-nowrap text-right text-sm tabular-nums ${
           isChecked
-            ? 'line-through text-zinc-400 dark:text-zinc-600'
-            : 'text-zinc-600 dark:text-zinc-300'
+            ? 'line-through text-[var(--sj-ink-soft)] opacity-60'
+            : 'text-[var(--sj-ink-soft)]'
         }`}
       >
         {quantityText || '\u00A0'}
@@ -227,12 +227,12 @@ function IngredientRow({
 
 function IngredientIcon({ Icon }: { Icon: React.ComponentType<{ className?: string; 'aria-hidden'?: boolean }> | null }) {
   if (Icon) {
-    return <Icon className="h-4 w-4 shrink-0 text-zinc-500 dark:text-zinc-400" aria-hidden />
+    return <Icon className="h-4 w-4 shrink-0 text-[var(--sj-brass)]" aria-hidden />
   }
 
   return (
     <span
-      className="flex h-4 w-4 shrink-0 items-center justify-center text-zinc-400 dark:text-zinc-500"
+      className="flex h-4 w-4 shrink-0 items-center justify-center text-[var(--sj-ink-soft)]"
       aria-hidden="true"
     >
       •

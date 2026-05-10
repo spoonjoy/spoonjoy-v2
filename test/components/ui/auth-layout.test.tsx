@@ -75,7 +75,7 @@ describe('AuthLayout', () => {
       expect(main).toHaveClass('flex')
       expect(main).toHaveClass('min-h-dvh')
       expect(main).toHaveClass('flex-col')
-      expect(main).toHaveClass('p-2')
+      expect(main).toHaveClass('p-3')
     })
 
     it('applies centered content wrapper styles', () => {
@@ -89,33 +89,32 @@ describe('AuthLayout', () => {
       expect(wrapper).toHaveClass('grow')
       expect(wrapper).toHaveClass('items-center')
       expect(wrapper).toHaveClass('justify-center')
-      expect(wrapper).toHaveClass('p-6')
+      expect(wrapper).toHaveClass('p-4')
     })
 
-    it('applies responsive lg breakpoint styles to wrapper', () => {
+    it('applies branded panel styles to the auth card', () => {
       const { container } = render(
         <AuthLayout>
           <p>Content</p>
         </AuthLayout>
       )
-      const wrapper = container.querySelector('main > div')
-      expect(wrapper).toHaveClass('lg:rounded-lg')
-      expect(wrapper).toHaveClass('lg:bg-white')
-      expect(wrapper).toHaveClass('lg:p-10')
-      expect(wrapper).toHaveClass('lg:shadow-xs')
-      expect(wrapper).toHaveClass('lg:ring-1')
-      expect(wrapper).toHaveClass('lg:ring-zinc-950/5')
+      const authCard = container.querySelector('main > div > section')
+      expect(authCard).toHaveClass('sj-panel')
+      expect(authCard).toHaveClass('rounded-[2rem]')
+      expect(authCard).toHaveClass('p-6')
+      expect(authCard).toHaveClass('sm:p-8')
+      expect(authCard).toHaveClass('overflow-hidden')
     })
 
-    it('applies dark mode styles to wrapper', () => {
+    it('keeps the card constrained for focused auth flows', () => {
       const { container } = render(
         <AuthLayout>
           <p>Content</p>
         </AuthLayout>
       )
-      const wrapper = container.querySelector('main > div')
-      expect(wrapper).toHaveClass('dark:lg:bg-zinc-900')
-      expect(wrapper).toHaveClass('dark:lg:ring-white/10')
+      const authCard = container.querySelector('main > div > section')
+      expect(authCard).toHaveClass('w-full')
+      expect(authCard).toHaveClass('max-w-md')
     })
   })
 })

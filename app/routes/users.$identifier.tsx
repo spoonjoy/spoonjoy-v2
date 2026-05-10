@@ -121,24 +121,25 @@ export default function UserProfile() {
   const profileHref = `/users/${profile.username}`;
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
-      <section className="rounded-sm border border-zinc-300 bg-stone-50/70 p-5 shadow-sm dark:border-zinc-700 dark:bg-zinc-900/70 sm:p-6">
-        <header className="flex flex-col gap-4 border-b border-zinc-300 pb-5 dark:border-zinc-700 sm:flex-row sm:items-start sm:justify-between">
+    <div className="sj-page px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
+      <section className="sj-panel mx-auto max-w-6xl rounded-[2rem] p-5 sm:p-7">
+        <header className="flex flex-col gap-4 border-b border-[var(--sj-border)] pb-5 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-center gap-4">
             <Avatar
               src={profile.photoUrl ?? DEFAULT_CHEF_AVATAR}
               alt={profile.username}
               initials={profile.username.charAt(0).toUpperCase()}
-              className="size-16 border border-zinc-300 bg-zinc-100 text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
+              className="size-18 border border-[var(--sj-border)] bg-[var(--sj-flour)] text-[var(--sj-ink)] shadow-[var(--sj-shadow-soft)]"
             />
             <div>
-              <Heading level={1} className="font-serif text-3xl/9 tracking-tight">
+              <p className="sj-eyebrow">Chef profile</p>
+              <Heading level={1} className="mt-2 text-4xl/11 tracking-[-0.04em]">
                 {profile.username}
               </Heading>
-              <Text className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">
+              <Text className="mt-1 text-sm">
                 {profile.joinedLabel} • {recipes.length} {recipes.length === 1 ? "recipe" : "recipes"} • {cookbooks.length} {cookbooks.length === 1 ? "cookbook" : "cookbooks"}
               </Text>
-              <Link href={`/?chef=${profile.username}`} className="mt-2 inline-block text-sm text-blue-600 no-underline hover:underline">
+              <Link href={`/?chef=${profile.username}`} className="sj-link mt-2 inline-block text-sm">
                 Open kitchen view
               </Link>
             </div>
@@ -176,12 +177,12 @@ export default function UserProfile() {
 
           <aside>
             <div className="mb-4 flex items-center justify-between gap-3">
-              <Subheading level={2}>Cookbooks</Subheading>
-              <Text className="text-xs">{cookbooks.length} total</Text>
+              <Subheading level={2} className="text-2xl/8">Cookbooks</Subheading>
+              <Text className="font-sj-ui text-xs uppercase tracking-[0.14em]">{cookbooks.length} total</Text>
             </div>
 
             {cookbooks.length === 0 ? (
-              <div className="rounded-sm border border-dashed border-zinc-300 bg-white p-5 dark:border-zinc-700 dark:bg-zinc-900">
+              <div className="rounded-[2rem] border border-dashed border-[var(--sj-border-strong)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_70%,transparent)] p-5">
                 <Text>
                   {isOwner ? "No cookbooks yet." : `${profile.username} has not shared any cookbooks yet.`}
                 </Text>
@@ -205,8 +206,8 @@ export default function UserProfile() {
           </aside>
         </div>
 
-        <div className="mt-8 border-t border-zinc-300 pt-4 text-sm dark:border-zinc-700">
-          <Link href={profileHref} className="text-zinc-500 no-underline hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">
+        <div className="mt-8 border-t border-[var(--sj-border)] pt-4 text-sm">
+          <Link href={profileHref} className="sj-link text-[var(--sj-ink-soft)]">
             Canonical profile: {profileHref}
           </Link>
         </div>

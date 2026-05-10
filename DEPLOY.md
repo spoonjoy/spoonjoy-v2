@@ -36,14 +36,15 @@ wrangler d1 create spoonjoy
 
 **Copy the `database_id`** — you'll need it for wrangler.json.
 
-### R2 Bucket (optional, for recipe images)
+### R2 Bucket (required for recipe images)
 
-> **Note**: R2 bucket is optional. Image upload functionality is not yet implemented. Skip this step unless you're adding image support.
+Recipe and profile image uploads are backed by Cloudflare R2 through the `PHOTOS` binding. Before the first bucket can be created, R2 must be enabled for the Cloudflare account in the Dashboard. Wrangler/API calls return `10042: Please enable R2 through the Cloudflare Dashboard` until that account-level R2 step is complete.
 
 ```bash
-# First, enable R2 in Cloudflare Dashboard
-# Then create the bucket:
+# First, enable R2 in Cloudflare Dashboard > R2 Object Storage.
+# Then create and verify the bucket:
 wrangler r2 bucket create spoonjoy-photos
+wrangler r2 bucket list
 ```
 
 ## Step 3: Update wrangler.json
@@ -135,7 +136,7 @@ wrangler secret put APPLE_PRIVATE_KEY
 
 | Secret | Description | Required For |
 |--------|-------------|--------------|
-| `OPENAI_API_KEY` | OpenAI API key | AI-powered step suggestions |
+| `OPENAI_API_KEY` | OpenAI API key | AI-powered ingredient parsing |
 
 ```bash
 wrangler secret put OPENAI_API_KEY
@@ -157,10 +158,10 @@ wrangler d1 execute spoonjoy --remote --file=./migrations/0002_seed.sql
 
 ```bash
 # Build the application
-npm run build
+pnpm build
 
-# Deploy to Cloudflare Workers
-npx wrangler deploy
+# Deploy to Cloudflare Workers with the repo-pinned Wrangler version
+pnpm deploy
 ```
 
 The deploy output will show your Worker URL: `https://spoonjoy-v2.<account>.workers.dev`
@@ -168,9 +169,10 @@ The deploy output will show your Worker URL: `https://spoonjoy-v2.<account>.work
 ## Step 7: Verify Deployment
 
 1. **Check the deployment URL** in Wrangler output
-2. **Test the app**: Visit `https://spoonjoy-v2.pages.dev` (or your custom domain)
-3. **Check logs**: `wrangler pages deployment tail`
+2. **Test the app**: Visit `https://spoonjoy-v2.<account>.workers.dev` (or your custom domain)
+3. **Check logs**: `wrangler tail spoonjoy-v2`
 4. **Test authentication**: Try logging in with email/password and OAuth
+5. **Test images**: Upload a recipe image and verify the returned URL is served through `/photos/...`
 
 ## Environment Variables Summary
 
@@ -201,15 +203,19 @@ The deploy output will show your Worker URL: `https://spoonjoy-v2.<account>.work
 
 ### Database errors
 - Verify migrations ran: `wrangler d1 migrations list spoonjoy --remote`
-- Check database exists: `wrangler d1 list`
+- Check database exists in the same Cloudflare account as `CLOUDFLARE_ACCOUNT_ID`: `wrangler d1 list`
 
 ### OAuth redirect errors
 - Verify redirect URIs match your deployed domain in Google/Apple console
 - Ensure secrets are set correctly (no extra whitespace)
 
+### R2 errors
+- `10042: Please enable R2 through the Cloudflare Dashboard` means the Cloudflare account has not enabled R2 yet. Enable R2 in the Dashboard, then rerun `wrangler r2 bucket create spoonjoy-photos`.
+- Verify the bucket exists in the same account used for deploy: `wrangler r2 bucket list`.
+
 ### Build failures
-- Run locally first: `npm run build`
-- Check Node.js version matches (20+)
+- Run locally first: `pnpm build`
+- Check Node.js version matches (22.x)
 
 ## Custom Domain (Optional)
 
@@ -228,7 +234,7 @@ git commit -m "your changes"
 git push
 
 # Deploy
-npm run deploy
+pnpm deploy
 ```
 
 Or set up automatic deployments via GitHub integration in Cloudflare Pages dashboard.

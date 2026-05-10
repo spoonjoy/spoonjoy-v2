@@ -17,12 +17,13 @@ export function loader() {
 
 export default function CatchAll() {
   return (
-    <div className="mx-auto max-w-2xl px-4 py-12 sm:py-20">
-      <section className="rounded-sm border border-zinc-300 bg-stone-50 p-8 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
-        <Heading level={1} className="font-serif tracking-tight">
+    <div className="sj-page px-4 py-12 sm:py-20">
+      <section className="sj-panel mx-auto max-w-2xl rounded-[2rem] p-8">
+        <p className="sj-eyebrow">404</p>
+        <Heading level={1} className="mt-4 text-4xl/11 tracking-[-0.04em]">
           Page not found
         </Heading>
-        <Text className="mt-3 text-zinc-600 dark:text-zinc-300">
+        <Text className="mt-3 text-base/7">
           The page you are looking for does not exist or may have moved.
         </Text>
         <div className="mt-6">

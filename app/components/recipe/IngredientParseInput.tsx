@@ -7,16 +7,16 @@ import type { ParsedIngredient } from '~/lib/ingredient-parse.server'
 
 // Button styles extracted for native button compatibility
 const buttonBaseStyles = [
-  'relative isolate inline-flex items-center justify-center gap-x-2 rounded-lg border text-sm/6 font-semibold',
+  'font-sj-ui relative isolate inline-flex items-center justify-center gap-x-2 rounded-full border text-sm/6 font-semibold',
   'px-3 py-1.5',
-  'focus:outline-2 focus:outline-offset-2 focus:outline-blue-500',
+  'focus:outline-2 focus:outline-offset-2 focus:outline-[var(--sj-brass)]',
   'disabled:opacity-50 disabled:cursor-not-allowed',
 ]
 
 const buttonOutlineStyles = [
-  'border-zinc-950/10 dark:border-white/15',
-  'text-zinc-950 dark:text-white',
-  'hover:bg-zinc-950/5 dark:hover:bg-white/5',
+  'border-[var(--sj-border)]',
+  'text-[var(--sj-ink)]',
+  'hover:bg-[var(--sj-flour)]',
 ]
 
 export interface IngredientParseInputProps {
@@ -150,7 +150,7 @@ export function IngredientParseInput({
 
   return (
     <div aria-busy={parser.isLoading}>
-      <label id={labelId} htmlFor={id} className="block mb-2 text-sm font-bold">
+      <label id={labelId} htmlFor={id} className="font-sj-ui mb-2 block text-sm font-bold">
         Ingredients
       </label>
       <Textarea
@@ -165,14 +165,14 @@ export function IngredientParseInput({
         invalid={hasError}
         resizable
       />
-      <p id={descriptionId} className="mt-2 text-sm text-zinc-500">
+      <p id={descriptionId} className="mt-2 text-sm text-[var(--sj-ink-soft)]">
         AI will parse your ingredients automatically after you stop typing.
       </p>
       {parser.isLoading && (
         <div
           data-testid="loading-indicator"
           aria-live="polite"
-          className="mt-2 flex items-center gap-2 text-sm text-zinc-500"
+          className="mt-2 flex items-center gap-2 text-sm text-[var(--sj-ink-soft)]"
         >
           <svg
             className="h-4 w-4 animate-spin"
@@ -202,9 +202,9 @@ export function IngredientParseInput({
         <div
           id={errorId}
           role="alert"
-          className="mt-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg"
+          className="mt-3 rounded-[1.25rem] border border-[var(--sj-tomato)] bg-[color-mix(in_srgb,var(--sj-tomato)_10%,var(--sj-panel-solid))] p-3"
         >
-          <p className="text-sm text-red-700 dark:text-red-300 mb-2">
+          <p className="mb-2 text-sm text-[var(--sj-tomato)]">
             {errorInfo.message}
           </p>
           <div className="flex gap-2">

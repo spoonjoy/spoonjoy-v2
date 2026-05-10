@@ -175,7 +175,7 @@ export function RecipeBuilder({
       {errors?.general && (
         <div
           role="alert"
-          className="rounded-lg bg-red-50 p-4 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-400"
+          className="rounded-2xl border border-[var(--sj-tomato)] bg-[color-mix(in_srgb,var(--sj-tomato)_10%,var(--sj-panel-solid))] p-4 text-sm text-[var(--sj-tomato)]"
         >
           {errors.general}
         </div>
@@ -184,9 +184,18 @@ export function RecipeBuilder({
       {/* Recipe details section */}
       <fieldset
         aria-label="Recipe details"
-        className="space-y-6"
+        className="sj-form-section space-y-6"
         disabled={isDisabled}
       >
+        <div>
+          <p className="sj-eyebrow">Recipe card</p>
+          <h2 className="font-sj-display mt-3 text-3xl/9 font-semibold tracking-[-0.03em] text-[var(--sj-ink)]">
+            Give the dish a home.
+          </h2>
+          <p className="mt-2 max-w-2xl text-sm/6 text-[var(--sj-ink-soft)]">
+            Capture the name, story, serving cue, and photo someone will need when they cook this later.
+          </p>
+        </div>
         <Fieldset>
           <Field>
             <Label>Title</Label>
@@ -252,12 +261,17 @@ export function RecipeBuilder({
       </fieldset>
 
       {showSteps && (
-        <section aria-label="Recipe Steps" className="space-y-4">
-          <h2 className="text-xl font-semibold">Recipe Steps</h2>
+        <section aria-label="Recipe Steps" className="sj-form-section space-y-4">
+          <div>
+            <p className="sj-eyebrow">Method</p>
+            <h2 className="font-sj-display mt-3 text-3xl/9 font-semibold tracking-[-0.03em] text-[var(--sj-ink)]">
+              Build the cooking path.
+            </h2>
+          </div>
           {errors?.steps && (
             <div
               role="alert"
-              className="rounded-lg bg-red-50 p-4 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-400"
+              className="rounded-2xl border border-[var(--sj-tomato)] bg-[color-mix(in_srgb,var(--sj-tomato)_10%,var(--sj-panel-solid))] p-4 text-sm text-[var(--sj-tomato)]"
             >
               {errors.steps}
             </div>
@@ -273,12 +287,13 @@ export function RecipeBuilder({
       )}
 
       {/* Action buttons */}
-      <div className="flex gap-4 justify-end pt-4 border-t border-zinc-200 dark:border-zinc-700">
+      <div className="flex flex-col-reverse gap-3 border-t border-[var(--sj-border)] pt-5 sm:flex-row sm:justify-end">
         <Button
           type="button"
 
           onClick={handleCancel}
           disabled={isDisabled}
+          plain
         >
           Cancel
         </Button>

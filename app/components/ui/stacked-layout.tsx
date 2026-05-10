@@ -23,13 +23,13 @@ function MobileSidebar({ open, close, children }: React.PropsWithChildren<{ open
     <Headless.Dialog open={open} onClose={close} className="lg:hidden">
       <Headless.DialogBackdrop
         transition
-        className="fixed inset-0 bg-black/30 transition data-closed:opacity-0 data-enter:duration-300 data-enter:ease-out data-leave:duration-200 data-leave:ease-in"
+        className="fixed inset-0 bg-black/35 backdrop-blur-sm transition data-closed:opacity-0 data-enter:duration-300 data-enter:ease-out data-leave:duration-200 data-leave:ease-in"
       />
       <Headless.DialogPanel
         transition
         className="fixed inset-y-0 w-full max-w-80 p-2 transition duration-300 ease-in-out data-closed:-translate-x-full"
       >
-        <div className="flex h-full flex-col rounded-lg bg-white shadow-xs ring-1 ring-zinc-950/5 dark:bg-zinc-900 dark:ring-white/10">
+        <div className="sj-panel flex h-full flex-col rounded-[1.75rem]">
           <div className="-mb-3 px-4 pt-3">
             <Headless.CloseButton as={NavbarItem} aria-label="Close navigation">
               <CloseMenuIcon />
@@ -50,14 +50,14 @@ export function StackedLayout({
   let [showSidebar, setShowSidebar] = useState(false)
 
   return (
-    <div className="relative isolate flex min-h-svh w-full flex-col bg-white lg:bg-zinc-100 dark:bg-zinc-900 dark:lg:bg-zinc-950">
+    <div className="sj-app-shell relative isolate flex min-h-svh w-full flex-col">
       {/* Sidebar on mobile */}
       <MobileSidebar open={showSidebar} close={() => setShowSidebar(false)}>
         {sidebar}
       </MobileSidebar>
 
       {/* Navbar */}
-      <header className="flex items-center px-4">
+      <header className="sticky top-0 z-30 flex items-center border-b border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_76%,transparent)] px-4 backdrop-blur-xl">
         <div className="py-2.5 lg:hidden">
           <NavbarItem onClick={() => setShowSidebar(true)} aria-label="Open navigation">
             <OpenMenuIcon />
@@ -67,8 +67,8 @@ export function StackedLayout({
       </header>
 
       {/* Content */}
-      <main className="flex flex-1 flex-col pb-2 lg:px-2">
-        <div className="grow p-6 lg:rounded-lg lg:bg-white lg:p-10 lg:shadow-xs lg:ring-1 lg:ring-zinc-950/5 dark:lg:bg-zinc-900 dark:lg:ring-white/10">
+      <main className="flex flex-1 flex-col pb-3 lg:px-3">
+        <div className="sj-desktop-surface grow rounded-[1.75rem] border border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-panel)_82%,transparent)] p-6 shadow-[var(--sj-shadow-soft)] backdrop-blur-xl lg:p-10">
           <div className="mx-auto max-w-6xl">{children}</div>
         </div>
       </main>

@@ -916,7 +916,7 @@ describe("Recipes New Route", () => {
 
       render(<Stub initialEntries={["/recipes/new"]} />);
 
-      expect(await screen.findByRole("heading", { name: "Create New Recipe" })).toBeInTheDocument();
+      expect(await screen.findByRole("heading", { name: "Write the version future-you can actually cook." })).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "← Back to recipes" })).toHaveAttribute("href", "/recipes");
       expect(screen.getByLabelText(/Title/)).toBeInTheDocument();
       expect(screen.getByLabelText(/Description/)).toBeInTheDocument();

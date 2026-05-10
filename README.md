@@ -215,7 +215,8 @@ migrations/
 - **Cookbooks**: Organize recipes into collections
 - **Shopping List**: Personal shopping list with check-off
 - **Full Search**: Self-hosted SQLite/D1 FTS5 search across recipes, cookbooks, chefs, and private shopping-list items
-- **Ouroboros MCP**: Stdio MCP server for agent recipe/search/create/shopping-list tools
+- **Ouroboros MCP**: Stdio MCP server for agent recipe/search/create/shopping-list/cookbook tools with API-token auth
+- **HTTP API**: REST-style JSON API for non-agent clients, sharing the same operation layer as MCP
 
 ## Database Schema
 
@@ -228,6 +229,7 @@ Key models:
 - `Ingredient` - Ingredients linked to specific steps
 - `Cookbook` - Recipe collections
 - `ShoppingList` - Personal shopping lists
+- `ApiCredential` - Hashed owner-scoped API tokens for REST and MCP clients
 
 ## Feedback
 

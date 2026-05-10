@@ -15,6 +15,11 @@ async function createLocalSqliteDb(): Promise<PrismaClientType> {
   return new PrismaClient();
 }
 
+async function loadWranglerPlatformProxy(): Promise<Pick<typeof import("wrangler"), "getPlatformProxy">> {
+  const moduleName = "wrangler";
+  return import(/* @vite-ignore */ moduleName);
+}
+
 let localDbPromise: Promise<PrismaClientType> | null = null;
 export let db: PrismaClientType | null = null;
 
@@ -27,7 +32,7 @@ export async function getLocalDb(): Promise<PrismaClientType> {
       }
 
       try {
-        const { getPlatformProxy } = await import("wrangler");
+        const { getPlatformProxy } = await loadWranglerPlatformProxy();
         const platform = await getPlatformProxy<{ DB: D1Database }>();
         if (platform.env?.DB) {
           return getDb({ DB: platform.env.DB });

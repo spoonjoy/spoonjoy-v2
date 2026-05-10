@@ -43,6 +43,12 @@ import "./styles/tailwind.css";
 
 export function links() {
   return [
+    { rel: "preconnect", href: "https://fonts.googleapis.com" },
+    { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
+    {
+      rel: "stylesheet",
+      href: "https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,500..900,50..100,0..1&family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400..800&display=swap",
+    },
     { rel: "icon", href: "/logos/sj_black.svg", type: "image/svg+xml" },
     { rel: "apple-touch-icon", href: "/logos/sj_black.svg" },
   ];
@@ -267,7 +273,7 @@ export default function App() {
           }}
         />
       </head>
-      <body className="m-0 p-0">
+      <body className="m-0 bg-[var(--sj-page)] p-0 text-[var(--sj-ink)] antialiased">
         <ThemeProvider>
           <DockContextProvider>
             <ToastProvider>
@@ -283,7 +289,7 @@ export default function App() {
 
               {/* Mobile: Content only */}
               <div className="lg:hidden">
-                <main className="pb-[calc(5rem+env(safe-area-inset-bottom))]">
+                <main className="sj-mobile-surface pb-[calc(5rem+env(safe-area-inset-bottom))]">
                   <Outlet />
                 </main>
               </div>

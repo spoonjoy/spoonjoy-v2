@@ -3155,7 +3155,7 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
           const errorElement = screen.getByText("Can only reference previous steps");
           expect(errorElement).toBeInTheDocument();
           // Error should have the correct error styling (red text)
-          expect(errorElement).toHaveClass("text-red-600");
+          expect(errorElement).toHaveClass("text-[var(--sj-tomato)]");
         });
       });
     });

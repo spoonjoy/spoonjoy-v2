@@ -263,7 +263,7 @@ describe("shopping list UX updates", () => {
     await waitFor(() => expect(submittedIntents).toContain("clearAll"));
   });
 
-  it("uses straight seam classes and closes all reveals when check-off reorders rows", async () => {
+  it("uses rounded receipt row shells and closes all reveals when check-off reorders rows", async () => {
     const Stub = createTestRoutesStub([
       {
         path: "/shopping-list",
@@ -301,10 +301,10 @@ describe("shopping list UX updates", () => {
     const { container } = render(<Stub initialEntries={["/shopping-list"]} />);
 
     expect(await screen.findByText("apples")).toBeInTheDocument();
-    const seamContainer = container.querySelector(".relative.overflow-hidden.rounded-lg.border");
+    const seamContainer = container.querySelector(".relative.overflow-hidden.rounded-\\[1\\.35rem\\].border");
     const rowShell = container.querySelector(".relative.z-10.px-3.py-2");
     expect(seamContainer).toBeInTheDocument();
-    expect(rowShell?.className).not.toContain("rounded");
+    expect(rowShell?.className).toContain("bg-[var(--sj-panel-solid)]");
 
     const bananasLabel = await screen.findByText("bananas");
     const bananasRow = bananasLabel.closest("[data-motion-x]");

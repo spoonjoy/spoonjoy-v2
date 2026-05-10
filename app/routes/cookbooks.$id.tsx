@@ -178,21 +178,21 @@ export default function CookbookDetail() {
   const deleteFormRef = useRef<HTMLFormElement>(null);
 
   return (
-    <div className="font-sans leading-relaxed p-8">
-      <div className="max-w-[1200px] mx-auto">
+    <div className="sj-page px-4 py-8 sm:px-6 sm:py-12">
+      <div className="mx-auto max-w-6xl">
         <div className="mb-8">
           <Link
             href="/cookbooks"
-            className="text-blue-600 no-underline"
+            className="sj-link"
           >
             ← Back to cookbooks
           </Link>
         </div>
 
-        <div className="flex justify-between items-start mb-8">
+        <div className="sj-panel mb-8 flex flex-col gap-5 rounded-[2rem] p-6 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex-1">
             {isEditingTitle && isOwner ? (
-              <Form method="post" className="flex gap-2 items-center mb-2">
+              <Form method="post" className="mb-2 flex flex-col gap-3 sm:flex-row sm:items-center">
                 <input type="hidden" name="intent" value="updateTitle" />
                 <Input
                   type="text"
@@ -200,26 +200,29 @@ export default function CookbookDetail() {
                   defaultValue={cookbook.title}
                   required
                   autoFocus
-                  className="text-2xl font-bold"
+                  className="[&_input]:text-2xl [&_input]:font-bold"
                 />
                 <Button type="submit">
                   Save
                 </Button>
                 <Button
                   type="button"
-
+                  plain
                   onClick={() => setIsEditingTitle(false)}
                 >
                   Cancel
                 </Button>
               </Form>
             ) : (
-              <div className="flex items-center gap-4 mb-2">
-                <Heading level={1} className="m-0">{cookbook.title}</Heading>
+              <div className="mb-2 flex flex-col gap-3 sm:flex-row sm:items-center">
+                <div>
+                  <p className="sj-eyebrow">Cookbook</p>
+                  <Heading level={1} className="m-0 mt-3 text-4xl/11 tracking-[-0.04em] sm:text-6xl/15">{cookbook.title}</Heading>
+                </div>
                 {isOwner && (
                   <Button
                     onClick={() => setIsEditingTitle(true)}
-
+                    plain
                     className="text-sm"
                   >
                     Edit Title
@@ -264,9 +267,9 @@ export default function CookbookDetail() {
         </div>
 
         {isOwner && availableRecipes.length > 0 && (
-          <div className="bg-zinc-100 dark:bg-zinc-800/50 p-6 rounded-lg mb-8">
-            <Subheading level={3} className="m-0 mb-4">Add Recipe to Cookbook</Subheading>
-            <Form method="post" className="flex gap-4">
+          <div className="sj-card mb-8 rounded-[2rem] p-6">
+            <Subheading level={3} className="m-0 mb-4 text-2xl/8">Add Recipe to Cookbook</Subheading>
+            <Form method="post" className="flex flex-col gap-4 sm:flex-row">
               <input type="hidden" name="intent" value="addRecipe" />
               <Select
                 name="recipeId"
@@ -288,8 +291,8 @@ export default function CookbookDetail() {
         )}
 
         {cookbook.recipes.length === 0 ? (
-          <div className="bg-zinc-100 dark:bg-zinc-800/50 p-12 rounded-lg text-center">
-            <Subheading level={2} className="text-zinc-500 dark:text-zinc-400">No recipes yet</Subheading>
+          <div className="sj-card rounded-[2rem] p-12 text-center">
+            <Subheading level={2} className="text-2xl/8">No recipes yet</Subheading>
             <Text className="mb-6">
               {isOwner ? "Add recipes to your cookbook using the form above" : "This cookbook is empty"}
             </Text>
@@ -299,20 +302,20 @@ export default function CookbookDetail() {
             {cookbook.recipes.map((item) => (
               <div
                 key={item.id}
-                className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg overflow-hidden"
+                className="sj-card sj-hover-lift overflow-hidden rounded-[1.6rem]"
               >
                 <Link
                   href={`/recipes/${item.recipe.id}`}
-                  className="block no-underline text-inherit"
+                  className="block text-inherit no-underline"
                 >
                   <div
-                    className="w-full h-[200px] bg-zinc-100 dark:bg-zinc-700 bg-cover bg-center"
+                    className="h-[220px] w-full bg-[var(--sj-flour)] bg-cover bg-center"
                     style={{
                       backgroundImage: item.recipe.imageUrl ? `url(${item.recipe.imageUrl})` : undefined,
                     }}
                   />
                   <div className="p-4">
-                    <Subheading level={3} className="m-0 mb-2">{item.recipe.title}</Subheading>
+                    <Subheading level={3} className="m-0 mb-2 text-xl/7">{item.recipe.title}</Subheading>
                     {item.recipe.description && (
                       <Text className="text-sm m-0 mb-2 line-clamp-2">
                         {item.recipe.description}

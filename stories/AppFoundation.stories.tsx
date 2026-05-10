@@ -28,7 +28,7 @@ type Story = StoryObj<typeof meta>
 
 export const KitchenActions: Story = {
   render: () => (
-    <section className="max-w-3xl rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+    <section className="sj-panel max-w-3xl rounded-[2rem] p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <Heading>Tonight's Kitchen</Heading>
@@ -61,7 +61,7 @@ export const KitchenActions: Story = {
 
 export const RecipeFormBasics: Story = {
   render: () => (
-    <section className="max-w-2xl rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+    <section className="sj-panel max-w-2xl rounded-[2rem] p-6">
       <Fieldset>
         <Legend>Recipe basics</Legend>
         <Text>Fields are shown the way recipe creation uses them: clear labels, helpful copy, and visible errors.</Text>
@@ -90,8 +90,8 @@ export const RecipeFormBasics: Story = {
 
 export const PantryCardLanguage: Story = {
   render: () => (
-    <article className="max-w-sm overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-      <div className="flex aspect-[4/3] items-center justify-center bg-zinc-100 text-zinc-400 dark:bg-zinc-900 dark:text-zinc-500">
+    <article className="sj-card max-w-sm overflow-hidden rounded-[1.6rem]">
+      <div className="flex aspect-[4/3] items-center justify-center bg-[var(--sj-flour)] text-[var(--sj-ink-soft)]">
         <UtensilsCrossed className="h-8 w-8" aria-hidden="true" />
       </div>
       <div className="space-y-3 p-5">

@@ -269,7 +269,7 @@ describe('Fieldset', () => {
       )
       const desc = screen.getByText('Styled Description')
       expect(desc.className).toContain('text-base/6')
-      expect(desc.className).toContain('text-zinc-500')
+      expect(desc.className).toContain('text-[var(--sj-ink-soft)]')
     })
 
     it('has data-slot="description" attribute', () => {
@@ -310,7 +310,7 @@ describe('Fieldset', () => {
         </Field>
       )
       const error = screen.getByText('Error Text')
-      expect(error.className).toContain('text-red-600')
+      expect(error.className).toContain('text-[var(--sj-tomato)]')
     })
 
     it('has data-slot="error" attribute', () => {

@@ -58,13 +58,13 @@ export function StepCard({
 
   return (
     <article
-      className="py-10 sm:py-12"
+      className="px-5 py-8 sm:px-8 sm:py-10"
       aria-labelledby={`step-${stepNumber}-heading`}
     >
       <div className="space-y-3">
         <p
           data-testid="step-number"
-          className="m-0 font-serif text-xs uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-400"
+          className="font-sj-ui m-0 text-xs font-semibold uppercase tracking-[0.22em] text-[var(--sj-ink-soft)]"
           aria-label={`Step ${stepNumber}`}
         >
           Step {stepNumber}
@@ -72,7 +72,7 @@ export function StepCard({
         {title && (
           <h3
             id={`step-${stepNumber}-heading`}
-            className="m-0 font-serif text-2xl font-medium tracking-tight text-zinc-900 sm:text-3xl dark:text-zinc-100"
+            className="font-sj-display m-0 text-2xl font-semibold tracking-[-0.03em] text-[var(--sj-ink)] sm:text-3xl"
           >
             {title}
           </h3>
@@ -83,7 +83,7 @@ export function StepCard({
       <div className="mt-8 space-y-8">
         {(ingredients.length > 0 || stepOutputUses.length > 0) && (
           <div>
-            <div className="mb-4 text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
+            <div className="font-sj-ui mb-4 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)]">
               Ingredients
             </div>
             <IngredientList
@@ -99,7 +99,7 @@ export function StepCard({
           </div>
         )}
 
-        <Text className="m-0 whitespace-pre-wrap text-base leading-loose sm:text-lg">
+        <Text className="m-0 whitespace-pre-wrap text-base leading-loose text-[var(--sj-ink)] sm:text-lg">
           {description}
         </Text>
       </div>

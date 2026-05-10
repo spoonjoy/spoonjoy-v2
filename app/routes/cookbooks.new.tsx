@@ -7,6 +7,7 @@ import { Input } from "~/components/ui/input";
 import { Fieldset, Field, Label, ErrorMessage } from "~/components/ui/fieldset";
 import { Heading } from "~/components/ui/heading";
 import { Link } from "~/components/ui/link";
+import { Text } from "~/components/ui/text";
 import { ValidationError } from "~/components/ui/validation-error";
 
 interface ActionData {
@@ -68,13 +69,19 @@ export default function NewCookbook() {
   const actionData = useActionData<ActionData>();
 
   return (
-    <div className="font-sans leading-relaxed p-8">
-      <div className="max-w-[600px] mx-auto">
+    <div className="sj-page px-4 py-8 sm:px-6 sm:py-12">
+      <div className="mx-auto max-w-3xl">
         <div className="mb-8">
-          <Heading level={1}>Create New Cookbook</Heading>
+          <p className="sj-eyebrow">New cookbook</p>
+          <Heading level={1} className="mt-4 text-4xl/11 tracking-[-0.04em] sm:text-6xl/15">
+            Make a collection worth coming back to.
+          </Heading>
+          <Text className="mt-4 max-w-2xl text-base/7">
+            Start with a clear title. Add recipes next and let the cover become a living collage.
+          </Text>
           <Link
             href="/cookbooks"
-            className="text-blue-600 no-underline"
+            className="sj-link mt-4 inline-flex"
           >
             ← Back to cookbooks
           </Link>
@@ -84,7 +91,7 @@ export default function NewCookbook() {
           <ValidationError error={actionData.errors.general} className="mb-4" />
         )}
 
-        <Form method="post">
+        <Form method="post" className="sj-panel rounded-[2rem] p-6">
           <Fieldset className="space-y-6">
             <Field>
               <Label>Cookbook Title *</Label>
@@ -102,8 +109,8 @@ export default function NewCookbook() {
               )}
             </Field>
 
-            <div className="flex gap-4 justify-end pt-4">
-              <Button href="/cookbooks">
+            <div className="flex flex-col-reverse gap-3 border-t border-[var(--sj-border)] pt-4 sm:flex-row sm:justify-end">
+              <Button href="/cookbooks" plain>
                 Cancel
               </Button>
               <Button type="submit">

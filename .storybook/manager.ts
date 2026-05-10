@@ -4,7 +4,7 @@ import { create } from 'storybook/theming';
 const lightTheme = create({
   base: 'light',
   brandTitle: 'Spoonjoy',
-  brandUrl: 'https://spoonjoy.com',
+  brandUrl: 'https://spoonjoy.app',
   brandImage: '/logos/sj_black.svg',
   brandTarget: '_self',
 });
@@ -12,7 +12,7 @@ const lightTheme = create({
 const darkTheme = create({
   base: 'dark',
   brandTitle: 'Spoonjoy',
-  brandUrl: 'https://spoonjoy.com',
+  brandUrl: 'https://spoonjoy.app',
   brandImage: '/logos/sj_white.svg',
   brandTarget: '_self',
 });

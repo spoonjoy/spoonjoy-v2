@@ -44,10 +44,10 @@ function ProfilePhotoUpload({ photoUrl }: { photoUrl: string | null }) {
   const buttonText = photoUrl ? "Change Photo" : "Upload Photo";
 
   return (
-    <div className="mt-4 flex items-start gap-6">
-      <Avatar src={currentPhotoUrl} alt="Profile photo" className="size-24" />
+    <div className="mt-4 flex flex-col gap-6 sm:flex-row sm:items-start">
+      <Avatar src={currentPhotoUrl} alt="Profile photo" className="size-28 border border-[var(--sj-border)] shadow-[var(--sj-shadow-soft)]" />
       <div className="flex-1 space-y-4">
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3">
           <Form method="post" encType="multipart/form-data">
             <input type="hidden" name="intent" value="uploadPhoto" />
             <input
@@ -77,11 +77,11 @@ function ProfilePhotoUpload({ photoUrl }: { photoUrl: string | null }) {
           )}
         </div>
         {actionData?.error && (
-          <Text className="text-sm text-red-600 dark:text-red-400">
+        <Text className="text-sm text-[var(--sj-tomato)]">
             {actionData.message}
           </Text>
         )}
-        <Text className="text-sm text-zinc-500">
+        <Text className="text-sm">
           JPG, PNG, or GIF. Max 5MB.
         </Text>
       </div>
@@ -116,8 +116,15 @@ export default function AccountSettings() {
   const canRemovePassword = user.oauthAccounts.length > 0;
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-8">
-      <Heading>Account Settings</Heading>
+    <div className="sj-page px-4 py-8 sm:px-6 sm:py-12">
+      <div className="mx-auto max-w-4xl">
+      <div className="mb-8">
+        <p className="sj-eyebrow">Kitchen identity</p>
+        <Heading className="mt-4 text-4xl/11 tracking-[-0.04em] sm:text-6xl/15">Account Settings</Heading>
+        <Text className="mt-4 max-w-2xl text-base/7">
+          Keep your chef profile, sign-in methods, and photo ready for family, guests, and agents.
+        </Text>
+      </div>
 
       <OAuthError error={oauthError} className="mt-4" />
 
@@ -126,8 +133,8 @@ export default function AccountSettings() {
         <div
           className={`mt-4 rounded-lg p-4 ${
             actionData.success
-              ? "bg-green-50 text-green-800 dark:bg-green-900/20 dark:text-green-200"
-              : "bg-red-50 text-red-800 dark:bg-red-900/20 dark:text-red-200"
+              ? "border border-[var(--sj-herb)] bg-[color-mix(in_srgb,var(--sj-herb)_12%,var(--sj-panel-solid))] text-[var(--sj-herb)]"
+              : "border border-[var(--sj-tomato)] bg-[color-mix(in_srgb,var(--sj-tomato)_10%,var(--sj-panel-solid))] text-[var(--sj-tomato)]"
           }`}
         >
           {actionData.message}
@@ -135,9 +142,12 @@ export default function AccountSettings() {
       )}
 
       {/* User Info Section */}
-      <section data-testid="user-info-section" className="mt-8">
-        <div className="flex items-center justify-between">
-          <Subheading>User Information</Subheading>
+      <section data-testid="user-info-section" className="sj-panel mt-8 rounded-[2rem] p-6">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <Subheading className="text-2xl/8">User Information</Subheading>
+            <Text className="mt-1">The email and username attached to your kitchen.</Text>
+          </div>
           {!isEditing && (
             <Button plain onClick={() => setIsEditing(true)}>
               Edit
@@ -171,7 +181,7 @@ export default function AccountSettings() {
                 <ErrorMessage>{actionData.fieldErrors.username}</ErrorMessage>
               )}
             </Field>
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
               <Button type="submit">
                 Save
               </Button>
@@ -181,13 +191,13 @@ export default function AccountSettings() {
             </div>
           </Form>
         ) : (
-          <div className="mt-4 space-y-2">
-            <Text>
-              <span className="font-medium text-zinc-950 dark:text-white">Email:</span>{" "}
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <Text className="rounded-[1.25rem] border border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_68%,transparent)] p-4">
+              <span className="font-sj-ui block text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">Email</span>
               {user.email}
             </Text>
-            <Text>
-              <span className="font-medium text-zinc-950 dark:text-white">Username:</span>{" "}
+            <Text className="rounded-[1.25rem] border border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_68%,transparent)] p-4">
+              <span className="font-sj-ui block text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">Username</span>
               {user.username}
             </Text>
           </div>
@@ -195,18 +205,20 @@ export default function AccountSettings() {
       </section>
 
       {/* Profile Photo Section */}
-      <section data-testid="profile-photo-section" className="mt-8">
-        <Subheading>Profile Photo</Subheading>
+      <section data-testid="profile-photo-section" className="sj-panel mt-8 rounded-[2rem] p-6">
+        <Subheading className="text-2xl/8">Profile Photo</Subheading>
+        <Text className="mt-1">Make your kitchen feel human before anyone reads a recipe.</Text>
         <ProfilePhotoUpload photoUrl={user.photoUrl} />
       </section>
 
       {/* OAuth Providers Section */}
-      <section data-testid="oauth-providers-section" className="mt-8">
-        <Subheading>Connected Accounts</Subheading>
+      <section data-testid="oauth-providers-section" className="sj-panel mt-8 rounded-[2rem] p-6">
+        <Subheading className="text-2xl/8">Connected Accounts</Subheading>
+        <Text className="mt-1">Use OAuth when it helps, but never make it the only way in unless you choose to.</Text>
 
         {/* Warning when can't unlink */}
         {!canUnlinkOAuth && user.oauthAccounts.length > 0 && (
-          <Text className="mt-2 text-sm text-amber-600 dark:text-amber-400">
+          <Text className="mt-3 rounded-[1.25rem] border border-[var(--sj-brass)] bg-[color-mix(in_srgb,var(--sj-brass)_12%,var(--sj-panel-solid))] p-3 text-sm text-[var(--sj-brass)]">
             You cannot unlink your OAuth provider because it is your only authentication method. Please set a password first.
           </Text>
         )}
@@ -220,7 +232,7 @@ export default function AccountSettings() {
             return (
               <div
                 key={provider}
-                className="flex items-center justify-between rounded-lg border border-zinc-200 p-4 dark:border-zinc-700"
+                className="flex flex-col gap-3 rounded-[1.5rem] border border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_68%,transparent)] p-4 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div>
                   {isLinked ? (
@@ -228,21 +240,21 @@ export default function AccountSettings() {
                       {/* Only show provider name label if username doesn't contain it */}
                       {/* This avoids duplicate regex matches in tests */}
                       {!account!.providerUsername.toLowerCase().includes(provider) && (
-                        <Text className="font-medium text-zinc-950 dark:text-white">
+                        <Text className="font-medium text-[var(--sj-ink)]">
                           {capitalizeProvider(provider)}
                         </Text>
                       )}
                       <Text className="text-sm">{account!.providerUsername}</Text>
                     </>
                   ) : (
-                    <Text className="font-medium text-zinc-950 dark:text-white">
+                    <Text className="font-medium text-[var(--sj-ink)]">
                       {capitalizeProvider(provider)}
                     </Text>
                   )}
                 </div>
                 {isLinked ? (
                   isShowingUnlinkConfirm ? (
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <Text className="text-sm">Are you sure?</Text>
                       <Form method="post" className="inline">
                         <input type="hidden" name="intent" value="unlinkOAuth" />
@@ -294,8 +306,9 @@ export default function AccountSettings() {
       </section>
 
       {/* Password Section */}
-      <section data-testid="password-section" className="mt-8">
-        <Subheading>Password</Subheading>
+      <section data-testid="password-section" className="sj-panel mt-8 rounded-[2rem] p-6">
+        <Subheading className="text-2xl/8">Password</Subheading>
+        <Text className="mt-1">A first-class fallback for any client, browser, or future importer.</Text>
         <div className="mt-4">
           {user.hasPassword ? (
             passwordFormState === "change" ? (
@@ -320,7 +333,7 @@ export default function AccountSettings() {
                   {actionData?.fieldErrors?.newPassword && (
                     <ErrorMessage>{actionData.fieldErrors.newPassword}</ErrorMessage>
                   )}
-                  <Text className="mt-1 text-xs text-zinc-500">
+                  <Text className="mt-1 text-xs">
                     Must be at least 8 characters
                   </Text>
                 </Field>
@@ -332,7 +345,7 @@ export default function AccountSettings() {
                     autoComplete="new-password"
                   />
                 </Field>
-                <div className="flex gap-3">
+                <div className="flex flex-wrap gap-3">
                   <Button type="submit">
                     Change Password
                   </Button>
@@ -354,7 +367,7 @@ export default function AccountSettings() {
                       autoComplete="current-password"
                     />
                   </Field>
-                  <div className="flex gap-3">
+                  <div className="flex flex-wrap gap-3">
                     <Button type="submit" variant="destructive">
                       Confirm
                     </Button>
@@ -365,7 +378,7 @@ export default function AccountSettings() {
                 </Form>
               </div>
             ) : (
-              <div className="flex gap-3">
+              <div className="flex flex-wrap gap-3">
                 <Button type="button" plain onClick={() => setPasswordFormState("change")}>
                   Change Password
                 </Button>
@@ -391,7 +404,7 @@ export default function AccountSettings() {
                   {actionData?.fieldErrors?.newPassword && (
                     <ErrorMessage>{actionData.fieldErrors.newPassword}</ErrorMessage>
                   )}
-                  <Text className="mt-1 text-xs text-zinc-500">
+                  <Text className="mt-1 text-xs">
                     Must be at least 8 characters
                   </Text>
                 </Field>
@@ -403,7 +416,7 @@ export default function AccountSettings() {
                     autoComplete="new-password"
                   />
                 </Field>
-                <div className="flex gap-3">
+                <div className="flex flex-wrap gap-3">
                   <Button type="submit">
                     Set Password
                   </Button>
@@ -425,6 +438,7 @@ export default function AccountSettings() {
           )}
         </div>
       </section>
+      </div>
     </div>
   );
 }

@@ -148,10 +148,10 @@ export function RecipeImageUpload({
       <div
         data-drop-zone
         className={clsx(
-          'relative w-full aspect-video rounded-lg border-2 border-dashed transition-colors',
+          'relative w-full aspect-video overflow-hidden rounded-[1.5rem] border-2 border-dashed transition-colors',
           isDragging
-            ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/25 drag-active'
-            : 'border-zinc-300 dark:border-zinc-700',
+            ? 'drag-active border-[var(--sj-brass)] bg-[color-mix(in_srgb,var(--sj-brass)_14%,var(--sj-panel-solid))]'
+            : 'border-[var(--sj-border-strong)] bg-[color-mix(in_srgb,var(--sj-flour)_46%,transparent)]',
           isDisabled && 'opacity-50 cursor-not-allowed'
         )}
         onDragEnter={handleDragEnter}
@@ -163,12 +163,14 @@ export function RecipeImageUpload({
           <img
             src={displayUrl!}
             alt={alt || 'Recipe image preview'}
-            className="w-full h-full object-cover rounded-lg"
+            className="h-full w-full object-cover"
           />
         ) : (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-zinc-500 dark:text-zinc-400">
-            <ImageIcon className="size-12" />
-            <p className="text-sm">Drag and drop or upload an image</p>
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center text-[var(--sj-ink-soft)]">
+            <div className="rounded-full border border-[var(--sj-border)] bg-[var(--sj-panel-solid)] p-4 shadow-[var(--sj-shadow-soft)]">
+              <ImageIcon className="size-10" />
+            </div>
+            <p className="font-sj-ui text-sm font-semibold uppercase tracking-[0.12em]">Drag, drop, or upload a recipe photo</p>
           </div>
         )}
 
@@ -176,9 +178,9 @@ export function RecipeImageUpload({
           <div
             role="status"
             aria-busy="true"
-            className="absolute inset-0 flex items-center justify-center bg-white/75 dark:bg-zinc-900/75 rounded-lg"
+            className="absolute inset-0 flex items-center justify-center rounded-[1.5rem] bg-[color-mix(in_srgb,var(--sj-panel-solid)_78%,transparent)]"
           >
-            <Loader2 className="size-8 animate-spin text-zinc-600 dark:text-zinc-400" />
+            <Loader2 className="size-8 animate-spin text-[var(--sj-brass)]" />
           </div>
         )}
       </div>
@@ -201,9 +203,8 @@ export function RecipeImageUpload({
               onClick={handleUploadClick}
               disabled={isDisabled}
               className={clsx(
-                'inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors',
-                'border-zinc-950/10 text-zinc-950 hover:bg-zinc-950/5',
-                'dark:border-white/15 dark:text-white dark:hover:bg-white/5',
+                'font-sj-ui inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm font-semibold transition-colors',
+                'border-[var(--sj-border-strong)] text-[var(--sj-ink)] hover:bg-[var(--sj-flour)]',
                 'disabled:opacity-50 disabled:cursor-not-allowed'
               )}
             >
@@ -215,9 +216,8 @@ export function RecipeImageUpload({
               onClick={handleClear}
               disabled={isDisabled}
               className={clsx(
-                'inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors',
-                'border-red-300 text-red-700 hover:bg-red-50',
-                'dark:border-red-700 dark:text-red-400 dark:hover:bg-red-950/25',
+                'font-sj-ui inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm font-semibold transition-colors',
+                'border-[var(--sj-tomato)] text-[var(--sj-tomato)] hover:bg-[color-mix(in_srgb,var(--sj-tomato)_10%,transparent)]',
                 'disabled:opacity-50 disabled:cursor-not-allowed'
               )}
             >
@@ -231,9 +231,8 @@ export function RecipeImageUpload({
             onClick={handleUploadClick}
             disabled={isDisabled}
             className={clsx(
-              'inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors',
-              'border-zinc-950/10 text-zinc-950 hover:bg-zinc-950/5',
-              'dark:border-white/15 dark:text-white dark:hover:bg-white/5',
+              'font-sj-ui inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm font-semibold transition-colors',
+              'border-[var(--sj-border-strong)] text-[var(--sj-ink)] hover:bg-[var(--sj-flour)]',
               'disabled:opacity-50 disabled:cursor-not-allowed'
             )}
           >
@@ -243,12 +242,12 @@ export function RecipeImageUpload({
         )}
       </div>
 
-      <p className="text-sm text-zinc-500 dark:text-zinc-400">
+      <p className="text-sm text-[var(--sj-ink-soft)]">
         JPG, PNG, GIF, or WebP. Max 5MB.
       </p>
 
       {error && (
-        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+        <p role="alert" className="text-sm text-[var(--sj-tomato)]">
           {error}
         </p>
       )}

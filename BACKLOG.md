@@ -749,6 +749,39 @@ Completion notes:
 - Cookbook create/add/remove are idempotent so agents can retry safely.
 - Updated Ouroboros MCP docs and expanded MCP tests for metadata, owner scoping, active recipe filtering, duplicate handling, idempotent mutations, and validation errors.
 
+### SJ-026 - Add Shared REST/MCP API Auth
+
+Priority: `P0`
+Lane: `api`, `mcp`, `auth`, `ouroboros`, `agent-trust`
+Status: `done`
+
+Problem: Spoonjoy is becoming both a human recipe app and an agent substrate. MCP clients need portable auth, Ouro needs first-class vault-friendly config, and non-agent clients need a normal HTTP API without duplicating MCP business logic.
+
+Evidence:
+
+- MCP owner identity previously depended on `SPOONJOY_MCP_USER_EMAIL` or per-call `ownerEmail`, which is useful locally but not a portable auth boundary.
+- No REST API existed for external non-agent clients.
+- Duplicating API logic between MCP and HTTP would make recipe/search/cookbook/shopping-list behavior drift.
+
+Acceptance criteria:
+
+- Add hashed, owner-scoped API credentials with local Prisma and D1 migrations.
+- Support bearer API tokens for REST and MCP clients.
+- Preserve trusted `SPOONJOY_MCP_USER_EMAIL` fallback for Ouro/local stdio bootstrapping without requiring Ouro.
+- Reject authenticated attempts to act for a different `ownerEmail`.
+- Expose REST endpoints for search, recipes, cookbooks, shopping list, and token lifecycle.
+- Keep MCP and REST DRY by routing both through the same shared operation layer.
+- Preserve 100% coverage and zero-warning test output.
+
+Completion notes:
+
+- Added `ApiCredential` schema/migrations and token helpers that generate `sj_` tokens, store SHA-256 hashes, track prefixes, update last-used timestamps, and support revocation.
+- Refactored MCP tools into `app/lib/spoonjoy-api.server.ts`; `app/lib/mcp/spoonjoy-tools.server.ts` is now a JSON-string adapter over the shared operations.
+- Added `GET/POST/PATCH/DELETE /api/*` endpoints that authenticate sessions/bearer tokens and dispatch to the same operation handlers.
+- Updated the MCP stdio server to accept `SPOONJOY_MCP_API_TOKEN` and continue supporting `SPOONJOY_MCP_USER_EMAIL` for trusted local/Ouro vault config.
+- Documented the HTTP API and updated Ouroboros MCP docs with authz/authn guidance.
+- Verified targeted REST/MCP/auth tests, `pnpm typecheck`, and full `pnpm run test:coverage`.
+
 ## Parking Lot
 
 These are intentionally lower-certainty until product direction is clarified:

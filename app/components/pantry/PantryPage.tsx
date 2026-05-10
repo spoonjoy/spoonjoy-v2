@@ -16,13 +16,15 @@ export function PantryPage({
   createRecipeHref = '/recipes/new',
 }: PantryPageProps) {
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+    <div className="sj-page px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
+      <div className="mx-auto max-w-6xl">
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <Heading level={1} className="text-3xl/8 font-bold tracking-tight">
+          <p className="sj-eyebrow">Pantry</p>
+          <Heading level={1} className="mt-4 text-4xl/11 font-bold tracking-[-0.04em] sm:text-6xl/15">
             Pantry
           </Heading>
-          <Text className="mt-2 max-w-2xl">
+          <Text className="mt-3 max-w-2xl text-base/7">
             Your personal kitchen profile with recipes and pantry-ready favorites.
           </Text>
         </div>
@@ -38,11 +40,12 @@ export function PantryPage({
         </aside>
 
         <section className="lg:col-span-8">
-          <Subheading level={2} className="mb-4 text-sm">
+          <Subheading level={2} className="mb-4 text-2xl/8">
             Pantry Recipes
           </Subheading>
           <RecipeGrid recipes={recipes} />
         </section>
+      </div>
       </div>
     </div>
   )

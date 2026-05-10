@@ -1,4 +1,5 @@
 import { createInterface } from "node:readline";
+import { authenticateApiToken, principalFromUserEmail, type ApiPrincipal } from "../app/lib/api-auth.server";
 import { getLocalDb } from "../app/lib/db.server";
 import { handleJsonRpcLine, type JsonRpcToolRouter } from "../app/lib/mcp/json-rpc.server";
 import { callSpoonjoyMcpTool, listSpoonjoyMcpTools } from "../app/lib/mcp/spoonjoy-tools.server";
@@ -15,13 +16,20 @@ async function getProtocolSafeDb() {
 
 const db = await getProtocolSafeDb();
 const defaultOwnerEmail = process.env.SPOONJOY_MCP_USER_EMAIL;
+let principal: ApiPrincipal | null = null;
+
+if (process.env.SPOONJOY_MCP_API_TOKEN) {
+  principal = await authenticateApiToken(db, process.env.SPOONJOY_MCP_API_TOKEN);
+} else if (defaultOwnerEmail) {
+  principal = await principalFromUserEmail(db, defaultOwnerEmail, "environment");
+}
 
 const router: JsonRpcToolRouter = {
   listTools() {
     return { tools: listSpoonjoyMcpTools() };
   },
   async callTool(name, args) {
-    const text = await callSpoonjoyMcpTool(name, args, { db, defaultOwnerEmail });
+    const text = await callSpoonjoyMcpTool(name, args, { db, principal, defaultOwnerEmail });
     return { content: [{ type: "text", text }] };
   },
 };

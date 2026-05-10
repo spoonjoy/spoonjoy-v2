@@ -74,7 +74,7 @@ test.describe('Mobile RecipeBuilder and SpoonDock audit', () => {
   test('create flow keeps RecipeBuilder controls reachable above the dock', async ({ page }) => {
     await page.goto('/recipes/new');
 
-    await expect(page.getByRole('heading', { name: 'Create New Recipe' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Write the version future-you can actually cook.' })).toBeVisible();
     const dock = await getDock(page);
 
     await expectTouchTarget(dock.getByRole('link', { name: 'New' }), 'New dock link');
@@ -95,7 +95,7 @@ test.describe('Mobile RecipeBuilder and SpoonDock audit', () => {
     const recipeHref = await getFirstRecipeHref(page);
     await page.goto(`${recipeHref}/edit`);
 
-    await expect(page.getByRole('heading', { name: 'Edit Recipe' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Tune the recipe until it feels cookable.' })).toBeVisible();
     const dock = await getDock(page);
     const cancelAction = dock.getByRole('link', { name: 'Cancel' });
     const saveAction = dock.getByRole('button', { name: 'Save' });

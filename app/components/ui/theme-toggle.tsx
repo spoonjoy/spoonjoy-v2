@@ -20,10 +20,10 @@ export function ThemeToggle() {
     <Headless.Button
       onClick={cycleTheme}
       className={clsx(
-        'relative flex items-center justify-center rounded-lg p-2',
-        'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200',
-        'hover:bg-zinc-100 dark:hover:bg-zinc-800',
-        'focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500',
+        'relative flex items-center justify-center rounded-full p-2',
+        'text-[var(--sj-ink-soft)] hover:text-[var(--sj-tomato)]',
+        'hover:bg-[var(--sj-flour)]',
+        'focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--sj-brass)]',
         'transition-colors duration-200'
       )}
       aria-label={`Current theme: ${theme}. Click to cycle themes.`}
@@ -54,10 +54,10 @@ export function ThemeDropdown() {
     <Headless.Menu as="div" className="relative">
       <Headless.MenuButton
         className={clsx(
-          'flex items-center justify-center rounded-lg p-2',
-          'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200',
-          'hover:bg-zinc-100 dark:hover:bg-zinc-800',
-          'focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500',
+          'flex items-center justify-center rounded-full p-2',
+          'text-[var(--sj-ink-soft)] hover:text-[var(--sj-tomato)]',
+          'hover:bg-[var(--sj-flour)]',
+          'focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--sj-brass)]',
           'transition-colors duration-200'
         )}
         aria-label="Toggle theme"
@@ -72,8 +72,8 @@ export function ThemeDropdown() {
       <Headless.MenuItems
         className={clsx(
           'absolute right-0 z-50 mt-2 w-36 origin-top-right',
-          'rounded-lg bg-white dark:bg-zinc-800',
-          'shadow-lg ring-1 ring-black/5 dark:ring-white/10',
+          'rounded-[1rem] border border-[var(--sj-border)] bg-[var(--sj-panel-solid)]',
+          'shadow-[var(--sj-shadow-soft)]',
           'focus:outline-none'
         )}
       >
@@ -84,17 +84,17 @@ export function ThemeDropdown() {
                 <button
                   onClick={() => setTheme(value)}
                   className={clsx(
-                    'flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm',
-                    focus && 'bg-zinc-100 dark:bg-zinc-700',
+                    'flex w-full items-center gap-2 rounded-full px-3 py-2 text-sm',
+                    focus && 'bg-[var(--sj-flour)]',
                     theme === value
-                      ? 'text-blue-600 dark:text-blue-400'
-                      : 'text-zinc-700 dark:text-zinc-300'
+                      ? 'text-[var(--sj-tomato)]'
+                      : 'text-[var(--sj-ink-soft)]'
                   )}
                 >
                   <Icon className="h-4 w-4" />
                   {label}
                   {value === 'system' && resolvedTheme && (
-                    <span className="ml-auto text-zinc-400" aria-hidden="true">
+                    <span className="ml-auto text-[var(--sj-ink-soft)]" aria-hidden="true">
                       {resolvedTheme === 'dark' ? (
                         <Moon className="h-3 w-3" />
                       ) : (

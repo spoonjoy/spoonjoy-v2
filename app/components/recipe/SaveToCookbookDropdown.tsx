@@ -107,8 +107,8 @@ export function SaveToCookbookDropdown({
           <Bookmark className="w-4 h-4" aria-hidden="true" />
           Save
         </Button>
-        <div className="absolute right-0 top-full mt-1 z-50 w-64 rounded-lg bg-white dark:bg-zinc-900 shadow-lg ring-1 ring-zinc-950/10 dark:ring-white/10 p-3">
-          <label htmlFor="new-cookbook-input" className="block text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-1">
+        <div className="sj-panel absolute right-0 top-full z-50 mt-1 w-64 rounded-[1.5rem] p-3">
+          <label htmlFor="new-cookbook-input" className="font-sj-ui mb-1 block text-sm font-medium text-[var(--sj-ink-soft)]">
             New cookbook name
           </label>
           <input
@@ -120,7 +120,7 @@ export function SaveToCookbookDropdown({
             onKeyDown={handleKeyDown}
             placeholder="Cookbook name"
             aria-label="New cookbook name"
-            className="w-full px-2 py-1 text-sm border border-zinc-300 dark:border-zinc-600 rounded bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="font-sj-ui w-full rounded-full border border-[var(--sj-border-strong)] bg-[var(--sj-field)] px-3 py-1.5 text-sm text-[var(--sj-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--sj-brass)]"
           />
           <div className="flex gap-2 mt-2">
             <Button
@@ -157,7 +157,7 @@ export function SaveToCookbookDropdown({
       <DropdownMenu anchor="bottom end">
         {hasCookbooks ? (
           <>
-            <DropdownHeader className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
+            <DropdownHeader className="text-sm font-medium text-[var(--sj-ink-soft)]">
               Save to cookbook
             </DropdownHeader>
             {cookbooksList.map(cookbook => {
@@ -168,7 +168,7 @@ export function SaveToCookbookDropdown({
                   onClick={() => !isSaved && onSave(cookbook.id)}
                   disabled={isSaved}
                 >
-                  <span className={isSaved ? 'text-zinc-400' : ''}>
+                  <span className={isSaved ? 'text-[var(--sj-ink-soft)] opacity-60' : ''}>
                     {cookbook.title}
                     {isSaved && ' ✓'}
                   </span>
@@ -187,7 +187,7 @@ export function SaveToCookbookDropdown({
           </>
         ) : (
           <>
-            <DropdownHeader className="text-sm text-zinc-500 dark:text-zinc-400">
+            <DropdownHeader className="text-sm text-[var(--sj-ink-soft)]">
               No cookbooks yet
             </DropdownHeader>
             {(onCreateNew || onCreateAndSave) && (

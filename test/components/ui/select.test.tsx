@@ -393,7 +393,7 @@ describe('Select', () => {
       )
       const wrapper = container.querySelector('[data-slot="control"]')
       expect(wrapper?.className).toContain('has-data-focus:after:ring-2')
-      expect(wrapper?.className).toContain('has-data-focus:after:ring-blue-500')
+      expect(wrapper?.className).toContain('has-data-focus:after:ring-[var(--sj-brass)]')
     })
 
     it('applies invalid state styling classes', () => {
@@ -403,7 +403,7 @@ describe('Select', () => {
         </Select>
       )
       const select = container.querySelector('select')
-      expect(select?.className).toContain('data-invalid:border-red-500')
+      expect(select?.className).toContain('data-invalid:border-[var(--sj-tomato)]')
     })
   })
 

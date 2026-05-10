@@ -442,14 +442,15 @@ export default function EditStep() {
   };
 
   return (
-    <div className="font-sans leading-relaxed p-8">
-      <div className="max-w-[800px] mx-auto">
+    <div className="sj-page px-4 py-8 sm:px-6 sm:py-12">
+      <div className="mx-auto max-w-4xl">
         <div className="mb-8">
-          <Heading level={1}>Edit Step</Heading>
+          <p className="sj-eyebrow">Step {step.stepNum}</p>
+          <Heading level={1} className="mt-4 text-4xl/11 tracking-[-0.04em] sm:text-6xl/15">Edit Step</Heading>
           <Text>Step {step.stepNum}</Text>
           <Link
             href={`/recipes/${recipe.id}/edit`}
-            className="text-blue-600 no-underline"
+            className="sj-link mt-4 inline-flex"
           >
             ← Back to recipe
           </Link>
@@ -459,7 +460,7 @@ export default function EditStep() {
           <ValidationError error={actionData.errors.general} className="mb-4" />
         )}
 
-        <Form method="post" className="flex flex-col gap-6">
+        <Form method="post" className="sj-panel flex flex-col gap-6 rounded-[2rem] p-6">
           <Field>
             <Label>
               Step Title (optional)
@@ -481,7 +482,7 @@ export default function EditStep() {
           {step.stepNum === 1 ? (
             <Field>
               <Label>Uses Output From</Label>
-              <Text className="text-zinc-500 italic">No previous steps available</Text>
+              <Text className="italic">No previous steps available</Text>
             </Field>
           ) : availableSteps.length > 0 && (
             <Field>
@@ -535,8 +536,8 @@ export default function EditStep() {
             )}
           </Field>
 
-          <div className="flex gap-4 justify-end">
-            <Button href={`/recipes/${recipe.id}/edit`}>
+          <div className="flex flex-col-reverse gap-3 border-t border-[var(--sj-border)] pt-4 sm:flex-row sm:justify-end">
+            <Button href={`/recipes/${recipe.id}/edit`} plain>
               Cancel
             </Button>
             <Button type="submit">
@@ -547,9 +548,9 @@ export default function EditStep() {
 
         <div className="mt-4">{stepDeletionErrorElement}</div>
 
-        <div className="mt-12 pt-8 border-t border-zinc-200">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="m-0">Ingredients</h2>
+        <div className="sj-panel mt-12 rounded-[2rem] p-6">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <h2 className="font-sj-display m-0 text-3xl/9 font-semibold text-[var(--sj-ink)]">Ingredients</h2>
             <Button
               onClick={() => setShowIngredientForm(!showIngredientForm)}
 
@@ -559,7 +560,7 @@ export default function EditStep() {
           </div>
 
           {showIngredientForm && (
-            <div className="bg-zinc-100 p-6 rounded-lg mb-4 flex flex-col gap-4">
+            <div className="mb-4 flex flex-col gap-4 rounded-[1.5rem] border border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-flour)_55%,transparent)] p-6">
               {/* Toggle between AI and Manual modes */}
               <IngredientInputToggle onChange={handleModeChange} />
 
@@ -588,15 +589,15 @@ export default function EditStep() {
           )}
 
           {step.ingredients.length === 0 ? (
-            <div className="bg-zinc-100 p-8 rounded-lg text-center">
-              <p className="text-zinc-500">No ingredients added yet</p>
+            <div className="rounded-[1.5rem] border border-dashed border-[var(--sj-border-strong)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_70%,transparent)] p-8 text-center">
+              <p className="text-[var(--sj-ink-soft)]">No ingredients added yet</p>
             </div>
           ) : (
             <div className="flex flex-col gap-2">
               {step.ingredients.map((ingredient) => (
                 <div
                   key={ingredient.id}
-                  className="bg-white border border-zinc-200 rounded p-3 px-4 flex justify-between items-center"
+                  className="flex items-center justify-between rounded-[1.25rem] border border-[var(--sj-border)] bg-[var(--sj-panel-solid)] p-3 px-4"
                 >
                   <span>
                     <strong>{ingredient.quantity}</strong> {ingredient.unit.name} {ingredient.ingredientRef.name}

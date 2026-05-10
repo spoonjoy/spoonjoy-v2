@@ -550,9 +550,9 @@ describe("E2E: Step Reorder Protection", () => {
         />
       );
 
-      // Wait for the page to render (multiple Edit Recipe headings exist, get first)
+      // Wait for the page to render.
       await waitFor(() => {
-        const headings = screen.getAllByRole("heading", { name: /Edit Recipe/i });
+        const headings = screen.getAllByRole("heading", { name: /Tune the recipe/i });
         expect(headings.length).toBeGreaterThan(0);
       });
 
@@ -600,9 +600,9 @@ describe("E2E: Step Reorder Protection", () => {
         />
       );
 
-      // Wait for the page to render (multiple Edit Recipe headings exist, get first)
+      // Wait for the page to render.
       await waitFor(() => {
-        const headings = screen.getAllByRole("heading", { name: /Edit Recipe/i });
+        const headings = screen.getAllByRole("heading", { name: /Tune the recipe/i });
         expect(headings.length).toBeGreaterThan(0);
       });
 
@@ -635,9 +635,9 @@ describe("E2E: Step Reorder Protection", () => {
 
       render(<Stub initialEntries={[`/recipes/${recipeId}/edit`]} />);
 
-      // Wait for the page to render (multiple Edit Recipe headings exist, get first)
+      // Wait for the page to render.
       await waitFor(() => {
-        const headings = screen.getAllByRole("heading", { name: /Edit Recipe/i });
+        const headings = screen.getAllByRole("heading", { name: /Tune the recipe/i });
         expect(headings.length).toBeGreaterThan(0);
       });
 

@@ -8,7 +8,10 @@ When registered under the server name `spoonjoy`, the harness exposes these firs
 
 | Tool | Purpose |
 | --- | --- |
-| `health` | Check server readiness and whether write tools have a default owner email. |
+| `health` | Check server readiness, auth source, and whether owner-scoped writes are available. |
+| `create_api_token` | Create an owner-scoped Spoonjoy API token; the secret is returned once and stored hashed. |
+| `list_api_tokens` | List API token metadata for the owner; token secrets are never returned. |
+| `revoke_api_token` | Revoke one owner-scoped API token. |
 | `search_spoonjoy` | Full-text search recipes, cookbooks, chefs, and the configured owner's private shopping list. |
 | `search_recipes` | Full-text search recipes by title, description, source URL, steps, ingredients, and optional chef email. |
 | `search_shopping_list` | Full-text search the configured owner's private shopping list by ingredient, unit, category, icon, and checked state. |
@@ -25,9 +28,20 @@ When registered under the server name `spoonjoy`, the harness exposes these firs
 | `remove_shopping_list_item` | Soft-remove one shopping-list item by id. |
 | `get_shopping_list` | Fetch the owner shopping list. |
 
-Search is backed by the same self-hosted SQLite/D1 FTS5 index as the UI and ranked with BM25. Shopping-list results are private: `search_spoonjoy` includes them only when `SPOONJOY_MCP_USER_EMAIL` or `ownerEmail` identifies the owner, and `search_shopping_list` always requires that owner identity.
+Search is backed by the same self-hosted SQLite/D1 FTS5 index as the UI and ranked with BM25. Shopping-list results are private: `search_spoonjoy` includes them only when an authenticated token, `SPOONJOY_MCP_USER_EMAIL`, or `ownerEmail` identifies the owner, and `search_shopping_list` always requires that owner identity.
 
 Cookbook tools are deliberately owner-scoped: agents can only list, fetch, create, and mutate cookbooks owned by `SPOONJOY_MCP_USER_EMAIL` or an explicit `ownerEmail`. Recipe membership adds require an active `recipeId`; deleted recipes are excluded from cookbook payloads and cannot be newly added.
+
+## Authentication And Authorization
+
+Spoonjoy supports two MCP auth modes:
+
+- Preferred portable mode: set `SPOONJOY_MCP_API_TOKEN` to a Spoonjoy API token. This works for any MCP client that can pass environment variables to the stdio server. Tokens are owner-scoped, stored hashed, and can be revoked.
+- Trusted local/Ouro bootstrap mode: set `SPOONJOY_MCP_USER_EMAIL`. This is useful for the Ouroboros harness and local development, especially when the value comes from Ouro vault. It is not a remote auth boundary by itself; it is a trusted local stdio identity assertion.
+
+When a token is present, Spoonjoy derives ownership from the authenticated principal. Tool calls that try to override `ownerEmail` to another user are rejected with `403`. Without a token, owner-scoped tools require either `SPOONJOY_MCP_USER_EMAIL` or an explicit `ownerEmail`.
+
+API token lifecycle is available through MCP itself (`create_api_token`, `list_api_tokens`, `revoke_api_token`) and through the HTTP API at `/api/tokens`. The raw token is returned once; save it in the MCP client's secret store or in Ouro vault.
 
 ## Harness Config
 
@@ -41,6 +55,7 @@ Add this to an agent bundle's `agent.json`:
       "args": ["--silent", "mcp:serve"],
       "cwd": "/Users/arimendelow/Projects/spoonjoy-v2",
       "env": {
+        "SPOONJOY_MCP_API_TOKEN": "vault:runtime/config/spoonjoyApiToken",
         "SPOONJOY_MCP_USER_EMAIL": "vault:runtime/config/spoonjoyUserEmail"
       }
     }
@@ -48,7 +63,7 @@ Add this to an agent bundle's `agent.json`:
 }
 ```
 
-For local development without vault injection, replace the env value with a local test email. If `SPOONJOY_MCP_USER_EMAIL` is missing, read tools still work and write tools return a configuration error unless `ownerEmail` is provided in the tool call.
+For local development without vault injection, use a literal `SPOONJOY_MCP_API_TOKEN` or a local test `SPOONJOY_MCP_USER_EMAIL`. If both are missing, public read tools still work and owner-scoped tools return an authentication/configuration error unless `ownerEmail` is provided in the tool call.
 
 ## Local Smoke
 
