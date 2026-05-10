@@ -9,7 +9,9 @@ When registered under the server name `spoonjoy`, the harness exposes these firs
 | Tool | Purpose |
 | --- | --- |
 | `health` | Check server readiness and whether write tools have a default owner email. |
-| `search_recipes` | Search recipes by text and optional chef email. |
+| `search_spoonjoy` | Full-text search recipes, cookbooks, chefs, and the configured owner's private shopping list. |
+| `search_recipes` | Full-text search recipes by title, description, source URL, steps, ingredients, and optional chef email. |
+| `search_shopping_list` | Full-text search the configured owner's private shopping list by ingredient, unit, category, icon, and checked state. |
 | `get_recipe` | Fetch a recipe by id or title with ordered steps and ingredients. |
 | `create_recipe` | Create a recipe for the configured owner, including steps and ingredients. |
 | `add_recipe_to_shopping_list` | Add all recipe ingredients to the owner shopping list, merging duplicates. |
@@ -22,6 +24,8 @@ When registered under the server name `spoonjoy`, the harness exposes these firs
 | `set_shopping_list_item_checked` | Check or uncheck one active shopping-list item by id. |
 | `remove_shopping_list_item` | Soft-remove one shopping-list item by id. |
 | `get_shopping_list` | Fetch the owner shopping list. |
+
+Search is backed by the same self-hosted SQLite/D1 FTS5 index as the UI and ranked with BM25. Shopping-list results are private: `search_spoonjoy` includes them only when `SPOONJOY_MCP_USER_EMAIL` or `ownerEmail` identifies the owner, and `search_shopping_list` always requires that owner identity.
 
 Cookbook tools are deliberately owner-scoped: agents can only list, fetch, create, and mutate cookbooks owned by `SPOONJOY_MCP_USER_EMAIL` or an explicit `ownerEmail`. Recipe membership adds require an active `recipeId`; deleted recipes are excluded from cookbook payloads and cannot be newly added.
 

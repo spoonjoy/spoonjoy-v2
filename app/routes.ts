@@ -9,6 +9,7 @@ export default [
   route("auth/google/callback", "routes/auth.google.callback.tsx"),
   route("auth/apple", "routes/auth.apple.tsx"),
   route("auth/apple/callback", "routes/auth.apple.callback.tsx"),
+  route("search", "routes/search.tsx"),
   route("recipes", "routes/recipes.tsx", [
     index("routes/recipes._index.tsx"),
     route("new", "routes/recipes.new.tsx"),

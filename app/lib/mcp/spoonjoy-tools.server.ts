@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient as PrismaClientType } from "@prisma/client";
 import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
+import { normalizeSearchScope, searchSpoonjoy } from "~/lib/search.server";
 
 export interface SpoonjoyMcpContext {
   db: PrismaClientType;
@@ -390,7 +391,7 @@ const healthTool: SpoonjoyMcpTool = {
 
 const searchRecipesTool: SpoonjoyMcpTool = {
   name: "search_recipes",
-  description: "Search Spoonjoy recipes by title, description, source URL, and optional chef email.",
+  description: "Full-text search Spoonjoy recipes by title, description, source URL, steps, ingredients, and optional chef email.",
   inputSchema: {
     type: "object",
     properties: {
@@ -404,30 +405,106 @@ const searchRecipesTool: SpoonjoyMcpTool = {
     const query = optionalString(args.query);
     const chefEmail = optionalString(args.chefEmail)?.toLowerCase();
     const limit = normalizeLimit(args.limit);
+    const chef = chefEmail
+      ? await context.db.user.findUnique({ where: { email: chefEmail }, select: { id: true } })
+      : null;
 
-    const recipes = await context.db.recipe.findMany({
-      where: {
-        deletedAt: null,
-        ...(chefEmail ? { chef: { email: chefEmail } } : {}),
-        ...(query
-          ? {
-              OR: [
-                { title: { contains: query } },
-                { description: { contains: query } },
-                { sourceUrl: { contains: query } },
-              ],
-            }
-          : {}),
-      },
-      orderBy: { updatedAt: "desc" },
-      take: limit,
-      include: {
-        chef: { select: { id: true, email: true, username: true } },
-        steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
-      },
+    if (chefEmail && !chef) {
+      return json({ recipes: [] });
+    }
+
+    const results = await searchSpoonjoy(context.db, {
+      query,
+      scope: "recipes",
+      ownerId: chef?.id,
+      limit,
     });
+    const resultOrder = new Map(results.map((result, index) => [result.id, index]));
+
+    const recipes = results.length
+      ? await context.db.recipe.findMany({
+          where: {
+            id: { in: results.map((result) => result.id) },
+            deletedAt: null,
+          },
+          include: {
+            chef: { select: { id: true, email: true, username: true } },
+            steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
+          },
+        })
+      : [];
+
+    recipes.sort((a, b) => (resultOrder.get(a.id) as number) - (resultOrder.get(b.id) as number));
 
     return json({ recipes: recipes.map(formatRecipeSummary) });
+  },
+};
+
+const searchSpoonjoyTool: SpoonjoyMcpTool = {
+  name: "search_spoonjoy",
+  description: "Full-text search Spoonjoy recipes, cookbooks, chefs, and the configured owner's private shopping list.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      query: { type: "string" },
+      scope: {
+        type: "string",
+        enum: ["all", "recipes", "cookbooks", "chefs", "shopping-list", "shopping"],
+      },
+      ownerEmail: { type: "string" },
+      limit: { type: "number", minimum: 1, maximum: MAX_LIMIT },
+    },
+    additionalProperties: false,
+  },
+  async handle(args, context) {
+    const query = optionalString(args.query);
+    const scope = normalizeSearchScope(optionalString(args.scope));
+    const email = ownerEmail(args, context)?.toLowerCase();
+    const owner = email ? await getOrCreateOwner(context.db, email) : null;
+
+    const results = await searchSpoonjoy(context.db, {
+      query,
+      scope,
+      viewerId: owner?.id,
+      limit: normalizeLimit(args.limit),
+    });
+
+    return json({
+      query: query ?? "",
+      scope,
+      results,
+    });
+  },
+};
+
+const searchShoppingListTool: SpoonjoyMcpTool = {
+  name: "search_shopping_list",
+  description: "Full-text search the configured owner's private shopping list by ingredient, unit, category, icon, and checked state.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      ownerEmail: { type: "string" },
+      query: { type: "string" },
+      limit: { type: "number", minimum: 1, maximum: MAX_LIMIT },
+    },
+    additionalProperties: false,
+  },
+  async handle(args, context) {
+    const email = requireOwnerEmail(args, context);
+    const owner = await getOrCreateOwner(context.db, email);
+    const query = optionalString(args.query);
+    const items = await searchSpoonjoy(context.db, {
+      query,
+      scope: "shopping-list",
+      viewerId: owner.id,
+      ownerId: owner.id,
+      limit: normalizeLimit(args.limit),
+    });
+
+    return json({
+      query: query ?? "",
+      items,
+    });
   },
 };
 
@@ -1013,7 +1090,9 @@ const getShoppingListTool: SpoonjoyMcpTool = {
 
 const tools: SpoonjoyMcpTool[] = [
   healthTool,
+  searchSpoonjoyTool,
   searchRecipesTool,
+  searchShoppingListTool,
   getRecipeTool,
   createRecipeTool,
   addRecipeToShoppingListTool,

@@ -214,6 +214,7 @@ migrations/
 - **Step Dependencies**: Steps can reference outputs from previous steps
 - **Cookbooks**: Organize recipes into collections
 - **Shopping List**: Personal shopping list with check-off
+- **Full Search**: Self-hosted SQLite/D1 FTS5 search across recipes, cookbooks, chefs, and private shopping-list items
 - **Ouroboros MCP**: Stdio MCP server for agent recipe/search/create/shopping-list tools
 
 ## Database Schema

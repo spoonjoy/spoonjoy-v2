@@ -38,7 +38,7 @@ import {
 } from "~/components/ui/sidebar";
 import { Button } from "~/components/ui/button";
 import { SpoonjoyLogo } from "~/components/ui/spoonjoy-logo";
-import { BookOpen, Book, ShoppingCart, User, Home, Settings, LogOut } from "lucide-react";
+import { BookOpen, Book, ShoppingCart, User, Home, Settings, LogOut, Search } from "lucide-react";
 import "./styles/tailwind.css";
 
 export function links() {
@@ -58,6 +58,7 @@ export async function loader({ request }: Route.LoaderArgs) {
  */
 function getActiveNav(pathname: string): string | null {
   if (pathname === "/" || pathname === "") return "home";
+  if (pathname.startsWith("/search")) return "search";
   if (pathname.startsWith("/recipes")) return "recipes";
   if (pathname.startsWith("/cookbooks")) return "cookbooks";
   if (pathname.startsWith("/shopping-list")) return "shopping";
@@ -84,6 +85,10 @@ function AppNavbar({ userId }: { userId: string | null }) {
       {userId ? (
         <>
           <NavbarSection>
+            <NavbarItem href="/search" current={currentNav === "search"}>
+              <Search data-slot="icon" />
+              <NavbarLabel>Search</NavbarLabel>
+            </NavbarItem>
             <NavbarItem href="/recipes" current={currentNav === "recipes"}>
               <BookOpen data-slot="icon" />
               <NavbarLabel>Recipes</NavbarLabel>
@@ -115,6 +120,10 @@ function AppNavbar({ userId }: { userId: string | null }) {
         <>
           <NavbarSpacer />
           <NavbarSection>
+            <NavbarItem href="/search" current={currentNav === "search"}>
+              <Search data-slot="icon" />
+              <NavbarLabel>Search</NavbarLabel>
+            </NavbarItem>
             <ThemeToggle />
             <NavbarItem href="/login">
               <NavbarLabel>Login</NavbarLabel>
@@ -151,6 +160,10 @@ function AppSidebar({ userId }: { userId: string | null }) {
               <Home data-slot="icon" />
               <SidebarLabel>Home</SidebarLabel>
             </SidebarItem>
+            <SidebarItem href="/search" current={currentNav === "search"}>
+              <Search data-slot="icon" />
+              <SidebarLabel>Search</SidebarLabel>
+            </SidebarItem>
             <SidebarItem href="/recipes" current={currentNav === "recipes"}>
               <BookOpen data-slot="icon" />
               <SidebarLabel>Recipes</SidebarLabel>
@@ -169,6 +182,10 @@ function AppSidebar({ userId }: { userId: string | null }) {
             <SidebarItem href="/" current={currentNav === "home"}>
               <Home data-slot="icon" />
               <SidebarLabel>Home</SidebarLabel>
+            </SidebarItem>
+            <SidebarItem href="/search" current={currentNav === "search"}>
+              <Search data-slot="icon" />
+              <SidebarLabel>Search</SidebarLabel>
             </SidebarItem>
             <SidebarItem href="/login">
               <User data-slot="icon" />

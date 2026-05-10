@@ -28,7 +28,9 @@ describe("spoonjoy MCP tools", () => {
   it("lists stable MCP tool metadata", () => {
     expect(listSpoonjoyMcpTools().map((tool) => tool.name)).toEqual([
       "health",
+      "search_spoonjoy",
       "search_recipes",
+      "search_shopping_list",
       "get_recipe",
       "create_recipe",
       "add_recipe_to_shopping_list",
@@ -100,6 +102,15 @@ describe("spoonjoy MCP tools", () => {
     const search = parseJson(await callSpoonjoyMcpTool("search_recipes", { query: "Pancakes", chefEmail: context.defaultOwnerEmail, limit: 25 }, context));
     expect(search.recipes).toHaveLength(1);
     expect(search.recipes[0]).toMatchObject({ title: "Agent Pancakes", stepCount: 2, ingredientNames: ["butter", "flour", "milk"] });
+
+    const ingredientSearch = parseJson(await callSpoonjoyMcpTool("search_recipes", { query: "Butter" }, context));
+    expect(ingredientSearch.recipes[0]).toMatchObject({ id: first.recipe.id, title: "Agent Pancakes" });
+
+    const missingChefSearch = parseJson(await callSpoonjoyMcpTool("search_recipes", {
+      query: "Pancakes",
+      chefEmail: uniqueEmail("missing-chef"),
+    }, context));
+    expect(missingChefSearch.recipes).toEqual([]);
   });
 
   it("creates minimal recipes and finds null for missing recipes", async () => {
@@ -455,6 +466,77 @@ describe("spoonjoy MCP tools", () => {
     expect(restored.shoppingList.items[0]).toMatchObject({ id: itemId, quantity: 4, checked: false });
   });
 
+  it("exposes unified full-text search and private shopping-list search to Ouroboros agents", async () => {
+    const recipe = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+      title: "Harness Tomato Toast",
+      description: "Agent-searchable brunch",
+      steps: [{ description: "Toast and top", ingredients: [{ name: "Tomato", quantity: 1, unit: "Each" }] }],
+    }, context));
+    const cookbook = parseJson(await callSpoonjoyMcpTool("create_cookbook", {
+      title: "Harness Brunch Plans",
+    }, context));
+    await callSpoonjoyMcpTool("add_recipe_to_cookbook", {
+      cookbookId: cookbook.cookbook.id,
+      recipeId: recipe.recipe.id,
+    }, context);
+    const shopping = parseJson(await callSpoonjoyMcpTool("add_shopping_list_item", {
+      name: "Harness Tomatoes",
+      quantity: 2,
+      unit: "Each",
+      categoryKey: "produce",
+      iconKey: "tomato",
+    }, context));
+
+    const unified = parseJson(await callSpoonjoyMcpTool("search_spoonjoy", {
+      query: "Harness",
+      scope: "all",
+    }, context));
+    expect(unified.scope).toBe("all");
+    expect(unified.results.map((result: { id: string }) => result.id)).toEqual(
+      expect.arrayContaining([recipe.recipe.id, cookbook.cookbook.id, shopping.shoppingList.items[0].id])
+    );
+    expect(unified.results.find((result: { id: string }) => result.id === shopping.shoppingList.items[0].id)).toMatchObject({
+      type: "shopping-list-item",
+      title: "harness tomatoes",
+      metadata: { quantity: 2, unit: "each", checked: false },
+    });
+
+    const shoppingSearch = parseJson(await callSpoonjoyMcpTool("search_shopping_list", {
+      query: "produce",
+      limit: 1,
+    }, context));
+    expect(shoppingSearch).toMatchObject({
+      query: "produce",
+      items: [
+        {
+          id: shopping.shoppingList.items[0].id,
+          type: "shopping-list-item",
+          href: "/shopping-list",
+        },
+      ],
+    });
+
+    const aliasScope = parseJson(await callSpoonjoyMcpTool("search_spoonjoy", {
+      query: "tomatoes",
+      scope: "shopping",
+    }, context));
+    expect(aliasScope.scope).toBe("shopping-list");
+    expect(aliasScope.results).toHaveLength(1);
+
+    const noOwnerSearch = parseJson(await callSpoonjoyMcpTool("search_spoonjoy", {
+      query: "Harness",
+    }, { db: context.db }));
+    expect(noOwnerSearch.results.some((result: { type: string }) => result.type === "shopping-list-item")).toBe(false);
+
+    const recents = parseJson(await callSpoonjoyMcpTool("search_spoonjoy", {}, context));
+    expect(recents).toMatchObject({ query: "", scope: "all" });
+    expect(recents.results.length).toBeGreaterThan(0);
+
+    const allShopping = parseJson(await callSpoonjoyMcpTool("search_shopping_list", {}, context));
+    expect(allShopping.query).toBe("");
+    expect(allShopping.items.length).toBeGreaterThan(0);
+  });
+
   it("supports unitless direct shopping-list items", async () => {
     const result = parseJson(await callSpoonjoyMcpTool("add_shopping_list_item", {
       name: "Bananas",
@@ -514,6 +596,7 @@ describe("spoonjoy MCP tools", () => {
     expect(parseJson(await callSpoonjoyMcpTool("search_recipes", { limit: 2.7 }, context)).recipes).toHaveLength(2);
     expect(parseJson(await callSpoonjoyMcpTool("search_recipes", { limit: 999 }, context)).recipes.length).toBeGreaterThanOrEqual(3);
     expect(parseJson(await callSpoonjoyMcpTool("search_recipes", { limit: "bad" }, context)).recipes).toHaveLength(3);
+    expect(parseJson(await callSpoonjoyMcpTool("search_recipes", { query: "absent-match" }, context)).recipes).toEqual([]);
   });
 
   it("validates write tool inputs", async () => {
@@ -540,6 +623,7 @@ describe("spoonjoy MCP tools", () => {
     await expect(callSpoonjoyMcpTool("remove_recipe_from_cookbook", { recipeId: "recipe" }, context)).rejects.toThrow("cookbookId or title is required");
     await expect(callSpoonjoyMcpTool("remove_recipe_from_cookbook", { cookbookId: "book", recipeId: "recipe" }, context)).rejects.toThrow("Cookbook not found");
     await expect(callSpoonjoyMcpTool("add_shopping_list_item", { name: "No owner" }, { db: context.db })).rejects.toThrow("ownerEmail is required");
+    await expect(callSpoonjoyMcpTool("search_shopping_list", { query: "No owner" }, { db: context.db })).rejects.toThrow("ownerEmail is required");
     await expect(callSpoonjoyMcpTool("add_shopping_list_item", { name: "Bad quantity", quantity: 0 }, context)).rejects.toThrow("quantity must be a positive number");
     await expect(callSpoonjoyMcpTool("add_shopping_list_item", { quantity: 1 }, context)).rejects.toThrow("name is required");
     await expect(callSpoonjoyMcpTool("set_shopping_list_item_checked", { itemId: "item", checked: "yes" }, context)).rejects.toThrow("checked must be a boolean");
