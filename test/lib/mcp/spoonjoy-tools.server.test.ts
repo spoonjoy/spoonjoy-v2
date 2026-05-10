@@ -32,6 +32,11 @@ describe("spoonjoy MCP tools", () => {
       "get_recipe",
       "create_recipe",
       "add_recipe_to_shopping_list",
+      "list_cookbooks",
+      "get_cookbook",
+      "create_cookbook",
+      "add_recipe_to_cookbook",
+      "remove_recipe_from_cookbook",
       "add_shopping_list_item",
       "set_shopping_list_item_checked",
       "remove_shopping_list_item",
@@ -159,6 +164,193 @@ describe("spoonjoy MCP tools", () => {
     const second = parseJson(await callSpoonjoyMcpTool("add_recipe_to_shopping_list", { recipeId: recipe.recipe.id }, context));
     expect(second).toMatchObject({ created: 0, updated: 1 });
     expect(second.shoppingList.items[0]).toMatchObject({ name: "sugar", quantity: 2, checked: false });
+  });
+
+  it("creates, lists, and fetches cookbooks idempotently for the configured owner", async () => {
+    const first = parseJson(await callSpoonjoyMcpTool("create_cookbook", {
+      title: "Agent Dinner Plans",
+    }, context));
+    expect(first).toMatchObject({
+      created: true,
+      cookbook: {
+        title: "Agent Dinner Plans",
+        recipeCount: 0,
+        recipes: [],
+      },
+    });
+
+    const duplicate = parseJson(await callSpoonjoyMcpTool("create_cookbook", {
+      title: "Agent Dinner Plans",
+    }, context));
+    expect(duplicate).toMatchObject({
+      created: false,
+      cookbook: { id: first.cookbook.id, title: "Agent Dinner Plans" },
+    });
+
+    const explicitOwner = parseJson(await callSpoonjoyMcpTool("create_cookbook", {
+      ownerEmail: uniqueEmail("cookbook-owner"),
+      title: "Agent Dinner Plans",
+    }, context));
+    expect(explicitOwner).toMatchObject({
+      created: true,
+      cookbook: { title: "Agent Dinner Plans" },
+    });
+    expect(explicitOwner.cookbook.id).not.toBe(first.cookbook.id);
+
+    const list = parseJson(await callSpoonjoyMcpTool("list_cookbooks", {
+      query: "Dinner",
+      limit: 3,
+    }, context));
+    expect(list.cookbooks).toHaveLength(1);
+    expect(list.cookbooks[0]).toMatchObject({
+      id: first.cookbook.id,
+      title: "Agent Dinner Plans",
+      recipeCount: 0,
+      recipes: [],
+    });
+
+    const byId = parseJson(await callSpoonjoyMcpTool("get_cookbook", {
+      cookbookId: first.cookbook.id,
+    }, context));
+    expect(byId.cookbook).toMatchObject({
+      id: first.cookbook.id,
+      title: "Agent Dinner Plans",
+      recipeCount: 0,
+      recipes: [],
+    });
+
+    const byTitle = parseJson(await callSpoonjoyMcpTool("get_cookbook", {
+      cookbookTitle: "Agent Dinner Plans",
+    }, context));
+    expect(byTitle.cookbook.id).toBe(first.cookbook.id);
+  });
+
+  it("adds and removes recipes from owner-scoped cookbooks idempotently", async () => {
+    const cookbook = parseJson(await callSpoonjoyMcpTool("create_cookbook", {
+      title: "Harness Menus",
+    }, context));
+    const recipe = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+      title: "Organized Soup",
+      description: "Soup for MCP memory",
+      steps: [{ description: "Simmer", ingredients: [{ name: "Carrot", quantity: 2, unit: "Each" }] }],
+    }, context));
+
+    const added = parseJson(await callSpoonjoyMcpTool("add_recipe_to_cookbook", {
+      cookbookId: cookbook.cookbook.id,
+      recipeId: recipe.recipe.id,
+    }, context));
+    expect(added.added).toBe(true);
+    expect(added.cookbook).toMatchObject({
+      id: cookbook.cookbook.id,
+      recipeCount: 1,
+      recipes: [
+        {
+          addedById: recipe.recipe.chef.id,
+          recipe: {
+            id: recipe.recipe.id,
+            title: "Organized Soup",
+            ingredientNames: ["carrot"],
+          },
+        },
+      ],
+    });
+    expect(typeof added.cookbook.recipes[0].relationId).toBe("string");
+    expect(typeof added.cookbook.recipes[0].addedAt).toBe("string");
+
+    const duplicate = parseJson(await callSpoonjoyMcpTool("add_recipe_to_cookbook", {
+      title: "Harness Menus",
+      recipeId: recipe.recipe.id,
+    }, context));
+    expect(duplicate.added).toBe(false);
+    expect(duplicate.cookbook.recipeCount).toBe(1);
+
+    const listed = parseJson(await callSpoonjoyMcpTool("list_cookbooks", {}, context));
+    expect(listed.cookbooks[0]).toMatchObject({
+      id: cookbook.cookbook.id,
+      recipeCount: 1,
+      recipes: [{ id: recipe.recipe.id, title: "Organized Soup" }],
+    });
+
+    const removed = parseJson(await callSpoonjoyMcpTool("remove_recipe_from_cookbook", {
+      cookbookTitle: "Harness Menus",
+      recipeId: recipe.recipe.id,
+    }, context));
+    expect(removed).toMatchObject({
+      removed: true,
+      cookbook: { recipeCount: 0, recipes: [] },
+    });
+
+    const removedAgain = parseJson(await callSpoonjoyMcpTool("remove_recipe_from_cookbook", {
+      cookbookId: cookbook.cookbook.id,
+      recipeId: recipe.recipe.id,
+    }, context));
+    expect(removedAgain).toMatchObject({
+      removed: false,
+      cookbook: { recipeCount: 0, recipes: [] },
+    });
+  });
+
+  it("keeps cookbook MCP reads and writes scoped to the owning agent", async () => {
+    const cookbook = parseJson(await callSpoonjoyMcpTool("create_cookbook", {
+      title: "Private Agent Book",
+    }, context));
+    const recipe = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+      title: "Private Agent Recipe",
+    }, context));
+    const otherEmail = uniqueEmail("other-cookbook-agent");
+
+    expect(parseJson(await callSpoonjoyMcpTool("get_cookbook", {
+      ownerEmail: otherEmail,
+      cookbookId: cookbook.cookbook.id,
+    }, context))).toEqual({ cookbook: null });
+
+    await expect(callSpoonjoyMcpTool("add_recipe_to_cookbook", {
+      ownerEmail: otherEmail,
+      cookbookId: cookbook.cookbook.id,
+      recipeId: recipe.recipe.id,
+    }, context)).rejects.toThrow("Cookbook not found");
+
+    await expect(callSpoonjoyMcpTool("remove_recipe_from_cookbook", {
+      ownerEmail: otherEmail,
+      cookbookId: cookbook.cookbook.id,
+      recipeId: recipe.recipe.id,
+    }, context)).rejects.toThrow("Cookbook not found");
+
+    const stillEmpty = parseJson(await callSpoonjoyMcpTool("get_cookbook", {
+      cookbookId: cookbook.cookbook.id,
+    }, context));
+    expect(stillEmpty.cookbook).toMatchObject({ recipeCount: 0, recipes: [] });
+  });
+
+  it("excludes deleted recipes from cookbook MCP payloads", async () => {
+    const cookbook = parseJson(await callSpoonjoyMcpTool("create_cookbook", {
+      title: "Active Only",
+    }, context));
+    const recipe = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+      title: "Soon Deleted Recipe",
+    }, context));
+    await callSpoonjoyMcpTool("add_recipe_to_cookbook", {
+      cookbookId: cookbook.cookbook.id,
+      recipeId: recipe.recipe.id,
+    }, context);
+
+    await context.db.recipe.update({
+      where: { id: recipe.recipe.id },
+      data: { deletedAt: new Date() },
+    });
+
+    const fetched = parseJson(await callSpoonjoyMcpTool("get_cookbook", {
+      cookbookId: cookbook.cookbook.id,
+    }, context));
+    expect(fetched.cookbook).toMatchObject({ recipeCount: 0, recipes: [] });
+
+    const listed = parseJson(await callSpoonjoyMcpTool("list_cookbooks", {}, context));
+    expect(listed.cookbooks[0]).toMatchObject({ recipeCount: 0, recipes: [] });
+
+    await expect(callSpoonjoyMcpTool("add_recipe_to_cookbook", {
+      cookbookId: cookbook.cookbook.id,
+      recipeId: recipe.recipe.id,
+    }, context)).rejects.toThrow("Recipe not found");
   });
 
   it("treats an existing null shopping-list quantity as zero when merging", async () => {
@@ -335,6 +527,18 @@ describe("spoonjoy MCP tools", () => {
     await expect(callSpoonjoyMcpTool("create_recipe", { title: "Bad unit", steps: [{ description: "x", ingredients: [{ name: "x", quantity: 1, unit: "" }] }] }, context)).rejects.toThrow("unit is required");
     await expect(callSpoonjoyMcpTool("missing", {}, context)).rejects.toThrow("Unknown Spoonjoy MCP tool");
     await expect(callSpoonjoyMcpTool("add_recipe_to_shopping_list", {}, context)).rejects.toThrow("recipeId is required");
+    await expect(callSpoonjoyMcpTool("create_cookbook", { title: "No owner" }, { db: context.db })).rejects.toThrow("ownerEmail is required");
+    await expect(callSpoonjoyMcpTool("create_cookbook", { title: "" }, context)).rejects.toThrow("title is required");
+    await expect(callSpoonjoyMcpTool("get_cookbook", {}, context)).rejects.toThrow("cookbookId or title is required");
+    await expect(callSpoonjoyMcpTool("list_cookbooks", { limit: 0 }, context)).resolves.toContain('"cookbooks"');
+    await expect(callSpoonjoyMcpTool("add_recipe_to_cookbook", { cookbookId: "book" }, context)).rejects.toThrow("recipeId is required");
+    await expect(callSpoonjoyMcpTool("add_recipe_to_cookbook", { recipeId: "recipe" }, context)).rejects.toThrow("cookbookId or title is required");
+    await expect(callSpoonjoyMcpTool("add_recipe_to_cookbook", { cookbookId: "book", recipeId: "recipe" }, context)).rejects.toThrow("Cookbook not found");
+    const cookbook = parseJson(await callSpoonjoyMcpTool("create_cookbook", { title: "Validation Cookbook" }, context));
+    await expect(callSpoonjoyMcpTool("add_recipe_to_cookbook", { cookbookId: cookbook.cookbook.id, recipeId: "missing-recipe" }, context)).rejects.toThrow("Recipe not found");
+    await expect(callSpoonjoyMcpTool("remove_recipe_from_cookbook", { cookbookId: "book" }, context)).rejects.toThrow("recipeId is required");
+    await expect(callSpoonjoyMcpTool("remove_recipe_from_cookbook", { recipeId: "recipe" }, context)).rejects.toThrow("cookbookId or title is required");
+    await expect(callSpoonjoyMcpTool("remove_recipe_from_cookbook", { cookbookId: "book", recipeId: "recipe" }, context)).rejects.toThrow("Cookbook not found");
     await expect(callSpoonjoyMcpTool("add_shopping_list_item", { name: "No owner" }, { db: context.db })).rejects.toThrow("ownerEmail is required");
     await expect(callSpoonjoyMcpTool("add_shopping_list_item", { name: "Bad quantity", quantity: 0 }, context)).rejects.toThrow("quantity must be a positive number");
     await expect(callSpoonjoyMcpTool("add_shopping_list_item", { quantity: 1 }, context)).rejects.toThrow("name is required");

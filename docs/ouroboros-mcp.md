@@ -13,10 +13,17 @@ When registered under the server name `spoonjoy`, the harness exposes these firs
 | `get_recipe` | Fetch a recipe by id or title with ordered steps and ingredients. |
 | `create_recipe` | Create a recipe for the configured owner, including steps and ingredients. |
 | `add_recipe_to_shopping_list` | Add all recipe ingredients to the owner shopping list, merging duplicates. |
+| `list_cookbooks` | List cookbooks owned by the configured owner, with active recipe counts and cover recipes. |
+| `get_cookbook` | Fetch one owner-scoped cookbook by `cookbookId`, `title`, or `cookbookTitle`. |
+| `create_cookbook` | Create or return an existing owner-scoped cookbook by exact title. |
+| `add_recipe_to_cookbook` | Idempotently add an active recipe to an owner-scoped cookbook. |
+| `remove_recipe_from_cookbook` | Idempotently remove a recipe from an owner-scoped cookbook. |
 | `add_shopping_list_item` | Add or restore one manual shopping-list item, merging matching owner/unit/ingredient rows. |
 | `set_shopping_list_item_checked` | Check or uncheck one active shopping-list item by id. |
 | `remove_shopping_list_item` | Soft-remove one shopping-list item by id. |
 | `get_shopping_list` | Fetch the owner shopping list. |
+
+Cookbook tools are deliberately owner-scoped: agents can only list, fetch, create, and mutate cookbooks owned by `SPOONJOY_MCP_USER_EMAIL` or an explicit `ownerEmail`. Recipe membership adds require an active `recipeId`; deleted recipes are excluded from cookbook payloads and cannot be newly added.
 
 ## Harness Config
 

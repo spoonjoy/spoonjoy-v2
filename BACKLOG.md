@@ -701,6 +701,35 @@ Completion notes:
 - Checked/remove operations are scoped to the configured owner and reject cross-owner item ids.
 - Updated Ouroboros MCP docs and added tool coverage for metadata, direct add/merge/restore, check/uncheck, remove/idempotent remove, unitless quantity merges, invalid inputs, missing owner config, and cross-owner isolation.
 
+### SJ-025 - Add MCP Cookbook Organization Tools
+
+Priority: `P0`
+Lane: `mcp`, `ouroboros`, `cookbooks`, `agent-trust`
+Status: `done`
+
+Problem: Spoonjoy is becoming the official recipe app for the Ouroboros harness, but agents could only create/search/fetch recipes and manage shopping lists. They could not organize recipe memory into cookbooks, even though cookbooks are a core Spoonjoy concept.
+
+Evidence:
+
+- `app/lib/mcp/spoonjoy-tools.server.ts` exposed no cookbook tools.
+- `docs/ouroboros-mcp.md` documented recipe and shopping-list tools only.
+- The app already supports cookbook creation and recipe membership through routes and schema.
+
+Acceptance criteria:
+
+- Add owner-scoped MCP tools for cookbook list, fetch, create, add recipe, and remove recipe.
+- Cookbook creation and recipe membership mutations are idempotent for agent retry safety.
+- Cookbook payloads exclude deleted recipes and reject newly adding deleted/missing recipes.
+- Cross-owner cookbook reads and mutations cannot leak or alter another owner's cookbooks.
+- Tests cover tool metadata, create/list/get, duplicate create, add/remove/idempotency, deleted recipe filtering, validation, and cross-owner isolation.
+
+Completion notes:
+
+- Added `list_cookbooks`, `get_cookbook`, `create_cookbook`, `add_recipe_to_cookbook`, and `remove_recipe_from_cookbook` MCP tools.
+- Tools reuse `SPOONJOY_MCP_USER_EMAIL` / `ownerEmail` owner scoping and return active recipe summaries suitable for agent memory organization.
+- Cookbook create/add/remove are idempotent so agents can retry safely.
+- Updated Ouroboros MCP docs and expanded MCP tests for metadata, owner scoping, active recipe filtering, duplicate handling, idempotent mutations, and validation errors.
+
 ## Parking Lot
 
 These are intentionally lower-certainty until product direction is clarified:

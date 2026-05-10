@@ -35,10 +35,45 @@ type ShoppingListWithItems = Prisma.ShoppingListGetPayload<{
   };
 }>;
 
+type CookbookWithRecipes = Prisma.CookbookGetPayload<{
+  include: {
+    author: { select: { id: true; email: true; username: true } };
+    recipes: {
+      include: {
+        recipe: {
+          include: {
+            chef: { select: { id: true; email: true; username: true } };
+            steps: {
+              include: {
+                ingredients: { include: { unit: true; ingredientRef: true } };
+              };
+            };
+          };
+        };
+      };
+    };
+  };
+}>;
+
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 25;
 const DEFAULT_RECIPE_IMAGE_URL =
   "https://res.cloudinary.com/dpjmyc4uz/image/upload/v1674541350/clbe7wr180009tkhggghtl1qd.png";
+
+const cookbookRecipeInclude = {
+  author: { select: { id: true, email: true, username: true } },
+  recipes: {
+    orderBy: { createdAt: "desc" },
+    include: {
+      recipe: {
+        include: {
+          chef: { select: { id: true, email: true, username: true } },
+          steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
+        },
+      },
+    },
+  },
+} satisfies Prisma.CookbookInclude;
 
 function json(value: unknown): string {
   return JSON.stringify(value, null, 2);
@@ -212,6 +247,39 @@ function formatShoppingList(list: ShoppingListWithItems) {
   };
 }
 
+function activeCookbookRecipes(cookbook: CookbookWithRecipes) {
+  return cookbook.recipes.filter((item) => !item.recipe.deletedAt);
+}
+
+function formatCookbookSummary(cookbook: CookbookWithRecipes) {
+  const recipes = activeCookbookRecipes(cookbook);
+
+  return {
+    id: cookbook.id,
+    title: cookbook.title,
+    ownerId: cookbook.authorId,
+    author: cookbook.author,
+    recipeCount: recipes.length,
+    recipes: recipes.map((item) => ({
+      id: item.recipe.id,
+      title: item.recipe.title,
+      imageUrl: item.recipe.imageUrl,
+    })),
+  };
+}
+
+function formatCookbook(cookbook: CookbookWithRecipes) {
+  return {
+    ...formatCookbookSummary(cookbook),
+    recipes: activeCookbookRecipes(cookbook).map((item) => ({
+      relationId: item.id,
+      addedById: item.addedById,
+      addedAt: item.createdAt.toISOString(),
+      recipe: formatRecipeSummary(item.recipe),
+    })),
+  };
+}
+
 function parseIngredient(value: unknown, index: number) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`steps.ingredients[${index}] must be an object`);
@@ -259,6 +327,28 @@ async function findRecipeByIdOrTitle(db: PrismaClientType, args: Record<string, 
       chef: { select: { id: true, email: true, username: true } },
       steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
     },
+  });
+}
+
+async function findOwnerCookbook(db: Database, ownerId: string, args: Record<string, unknown>) {
+  const cookbookId = optionalString(args.cookbookId);
+  const title = optionalString(args.title) ?? optionalString(args.cookbookTitle);
+
+  if (!cookbookId && !title) throw new Error("cookbookId or title is required");
+
+  return db.cookbook.findFirst({
+    where: {
+      authorId: ownerId,
+      ...(cookbookId ? { id: cookbookId } : { title }),
+    },
+    include: cookbookRecipeInclude,
+  });
+}
+
+async function reloadOwnerCookbook(db: Database, ownerId: string, cookbookId: string) {
+  return db.cookbook.findFirstOrThrow({
+    where: { id: cookbookId, authorId: ownerId },
+    include: cookbookRecipeInclude,
   });
 }
 
@@ -544,6 +634,205 @@ const addRecipeToShoppingListTool: SpoonjoyMcpTool = {
   },
 };
 
+const listCookbooksTool: SpoonjoyMcpTool = {
+  name: "list_cookbooks",
+  description: "List cookbooks owned by the configured owner, with active recipe counts and covers.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      ownerEmail: { type: "string" },
+      query: { type: "string" },
+      limit: { type: "number", minimum: 1, maximum: MAX_LIMIT },
+    },
+    additionalProperties: false,
+  },
+  async handle(args, context) {
+    const email = requireOwnerEmail(args, context);
+    const owner = await getOrCreateOwner(context.db, email);
+    const query = optionalString(args.query);
+
+    const cookbooks = await context.db.cookbook.findMany({
+      where: {
+        authorId: owner.id,
+        ...(query ? { title: { contains: query } } : {}),
+      },
+      orderBy: { updatedAt: "desc" },
+      take: normalizeLimit(args.limit),
+      include: cookbookRecipeInclude,
+    });
+
+    return json({ cookbooks: cookbooks.map(formatCookbookSummary) });
+  },
+};
+
+const getCookbookTool: SpoonjoyMcpTool = {
+  name: "get_cookbook",
+  description: "Fetch one cookbook owned by the configured owner by cookbookId or exact title.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      ownerEmail: { type: "string" },
+      cookbookId: { type: "string" },
+      title: { type: "string" },
+      cookbookTitle: { type: "string" },
+    },
+    additionalProperties: false,
+  },
+  async handle(args, context) {
+    const email = requireOwnerEmail(args, context);
+    const owner = await getOrCreateOwner(context.db, email);
+    const cookbook = await findOwnerCookbook(context.db, owner.id, args);
+
+    return json({ cookbook: cookbook ? formatCookbook(cookbook) : null });
+  },
+};
+
+const createCookbookTool: SpoonjoyMcpTool = {
+  name: "create_cookbook",
+  description: "Create or return an existing cookbook for the configured owner by exact title.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      ownerEmail: { type: "string" },
+      title: { type: "string" },
+    },
+    required: ["title"],
+    additionalProperties: false,
+  },
+  async handle(args, context) {
+    const email = requireOwnerEmail(args, context);
+    const title = requiredString(args, "title");
+
+    const result = await context.db.$transaction(async (tx) => {
+      const owner = await getOrCreateOwner(tx, email);
+      const existing = await tx.cookbook.findFirst({
+        where: { authorId: owner.id, title },
+        include: cookbookRecipeInclude,
+      });
+
+      if (existing) {
+        return { created: false, cookbook: existing };
+      }
+
+      const created = await tx.cookbook.create({
+        data: { authorId: owner.id, title },
+      });
+
+      return {
+        created: true,
+        cookbook: await reloadOwnerCookbook(tx, owner.id, created.id),
+      };
+    });
+
+    return json({ created: result.created, cookbook: formatCookbook(result.cookbook) });
+  },
+};
+
+const addRecipeToCookbookTool: SpoonjoyMcpTool = {
+  name: "add_recipe_to_cookbook",
+  description: "Idempotently add an active recipe to a cookbook owned by the configured owner.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      ownerEmail: { type: "string" },
+      cookbookId: { type: "string" },
+      title: { type: "string" },
+      cookbookTitle: { type: "string" },
+      recipeId: { type: "string" },
+    },
+    required: ["recipeId"],
+    additionalProperties: false,
+  },
+  async handle(args, context) {
+    const email = requireOwnerEmail(args, context);
+    const recipeId = requiredString(args, "recipeId");
+
+    const result = await context.db.$transaction(async (tx) => {
+      const owner = await getOrCreateOwner(tx, email);
+      const cookbook = await findOwnerCookbook(tx, owner.id, args);
+      if (!cookbook) throw new Error("Cookbook not found");
+
+      const recipe = await tx.recipe.findFirst({
+        where: { id: recipeId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!recipe) throw new Error("Recipe not found");
+
+      const existing = await tx.recipeInCookbook.findUnique({
+        where: {
+          cookbookId_recipeId: {
+            cookbookId: cookbook.id,
+            recipeId,
+          },
+        },
+      });
+
+      if (existing) {
+        return {
+          added: false,
+          cookbook: await reloadOwnerCookbook(tx, owner.id, cookbook.id),
+        };
+      }
+
+      await tx.recipeInCookbook.create({
+        data: {
+          cookbookId: cookbook.id,
+          recipeId,
+          addedById: owner.id,
+        },
+      });
+
+      return {
+        added: true,
+        cookbook: await reloadOwnerCookbook(tx, owner.id, cookbook.id),
+      };
+    });
+
+    return json({ added: result.added, cookbook: formatCookbook(result.cookbook) });
+  },
+};
+
+const removeRecipeFromCookbookTool: SpoonjoyMcpTool = {
+  name: "remove_recipe_from_cookbook",
+  description: "Idempotently remove a recipe from a cookbook owned by the configured owner.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      ownerEmail: { type: "string" },
+      cookbookId: { type: "string" },
+      title: { type: "string" },
+      cookbookTitle: { type: "string" },
+      recipeId: { type: "string" },
+    },
+    required: ["recipeId"],
+    additionalProperties: false,
+  },
+  async handle(args, context) {
+    const email = requireOwnerEmail(args, context);
+    const recipeId = requiredString(args, "recipeId");
+
+    const result = await context.db.$transaction(async (tx) => {
+      const owner = await getOrCreateOwner(tx, email);
+      const cookbook = await findOwnerCookbook(tx, owner.id, args);
+      if (!cookbook) throw new Error("Cookbook not found");
+
+      const deleted = await tx.recipeInCookbook.deleteMany({
+        where: {
+          cookbookId: cookbook.id,
+          recipeId,
+        },
+      });
+
+      return {
+        removed: deleted.count > 0,
+        cookbook: await reloadOwnerCookbook(tx, owner.id, cookbook.id),
+      };
+    });
+
+    return json({ removed: result.removed, cookbook: formatCookbook(result.cookbook) });
+  },
+};
+
 const addShoppingListItemTool: SpoonjoyMcpTool = {
   name: "add_shopping_list_item",
   description: "Add or restore one manual item on the configured owner shopping list, merging matching items.",
@@ -728,6 +1017,11 @@ const tools: SpoonjoyMcpTool[] = [
   getRecipeTool,
   createRecipeTool,
   addRecipeToShoppingListTool,
+  listCookbooksTool,
+  getCookbookTool,
+  createCookbookTool,
+  addRecipeToCookbookTool,
+  removeRecipeFromCookbookTool,
   addShoppingListItemTool,
   setShoppingListItemCheckedTool,
   removeShoppingListItemTool,
