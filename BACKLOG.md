@@ -3,7 +3,7 @@
 Status: proposed canonical backlog
 Audit date: 2026-05-10
 Baseline: `main` at `3533955` (`Upgrade GitHub Actions to Node 24 runtime (#3)`)
-Verification anchor: `pnpm test:coverage` passed with 138 test files, 3511 tests, 0 skipped tests, and 100% statements/branches/functions/lines.
+Verification anchor: `pnpm test:coverage` passed with 138 test files, 3517 tests, 0 skipped tests, and 100% statements/branches/functions/lines.
 
 ## How To Use This Backlog
 
@@ -43,8 +43,9 @@ Status meanings:
 6. `SJ-006`: Remove or replace skipped tests so 100% coverage also means no hidden skipped assertions.
 7. `SJ-008`: Run the mobile RecipeBuilder/SpoonDock UX pass once core create/edit data paths are trustworthy.
 8. `SJ-009`: Add canonical user profile routes so chef links resolve to shareable profile URLs.
+9. `SJ-013`: Harden shopping-list item actions for idempotency, restore behavior, and cross-user isolation.
 
-Completed in sequence: `SJ-001`, `SJ-002`, `SJ-003`, `SJ-004`, `SJ-005`, `SJ-006`, `SJ-008`, `SJ-009`.
+Completed in sequence: `SJ-001`, `SJ-002`, `SJ-003`, `SJ-004`, `SJ-005`, `SJ-006`, `SJ-008`, `SJ-009`, `SJ-013`.
 
 ## Backlog Items
 
@@ -379,7 +380,7 @@ Acceptance criteria:
 
 Priority: `P1`
 Lane: `shopping-list`, `sync`, `data-integrity`
-Status: `proposed`
+Status: `done`
 
 Problem: Shopping-list Option 2 is largely implemented, but the stale active tracker still identifies conflict behavior and integration hardening as next work. The current server-backed list should be made robust under repeated submissions and multi-session use.
 
@@ -395,6 +396,15 @@ Acceptance criteria:
 - Multi-session behavior is covered at the route or e2e level.
 - Ordering remains deterministic after concurrent-ish toggles and clears.
 - UI reconciles optimistic updates with server state cleanly.
+
+Completion notes:
+
+- Scoped item-level toggle and remove actions to the current user's shopping list so posted item ids cannot mutate another user's list.
+- Made manual re-adds and recipe-based re-adds reactivate existing checked/deleted rows as active unchecked rows.
+- Restored soft-deleted rows to the end of the active list to avoid duplicate or stale ordering.
+- Hardened `clearCompleted` to clear legacy rows where `checked` is true but `checkedAt` is missing.
+- Added route regression tests for cross-user toggle/remove isolation, checked-row reactivation, soft-deleted manual and recipe restore, legacy clear-completed rows, and deterministic restored ordering.
+- Verified focused shopping-list route/UI tests, `pnpm typecheck`, and full `pnpm test:coverage`.
 
 ### SJ-014 - Ingredient Parsing Provider Refresh And Runtime Controls
 

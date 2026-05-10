@@ -366,14 +366,18 @@ export async function action({ request, context }: Route.ActionArgs) {
         const newQuantity = quantity
           ? (existingItem.quantity || 0) + parseFloat(quantity)
           : existingItem.quantity;
+        const shouldMoveToEnd = Boolean(existingItem.deletedAt || existingItem.checkedAt || existingItem.checked);
 
         await database.shoppingListItem.update({
           where: { id: existingItem.id },
           data: {
             quantity: newQuantity,
+            checked: false,
+            checkedAt: null,
             categoryKey: affordance.categoryKey,
             iconKey: affordance.iconKey,
             deletedAt: null,
+            sortIndex: shouldMoveToEnd ? await nextSortIndex(database, shoppingList.id) : existingItem.sortIndex,
           },
         });
       } else {
@@ -458,6 +462,7 @@ export async function action({ request, context }: Route.ActionArgs) {
               const newQuantity = scaledQuantity
                 ? (existingItem.quantity || 0) + scaledQuantity
                 : existingItem.quantity;
+              const shouldMoveToEnd = Boolean(existingItem.deletedAt || existingItem.checkedAt || existingItem.checked);
 
               await database.shoppingListItem.update({
                 where: { id: existingItem.id },
@@ -466,6 +471,7 @@ export async function action({ request, context }: Route.ActionArgs) {
                   checked: false,
                   checkedAt: null,
                   deletedAt: null,
+                  sortIndex: shouldMoveToEnd ? await nextSortIndex(database, shoppingList.id) : existingItem.sortIndex,
                   categoryKey: existingItem.categoryKey ?? affordance.categoryKey,
                   iconKey: affordance.iconKey,
                 },
@@ -497,8 +503,11 @@ export async function action({ request, context }: Route.ActionArgs) {
     const nextCheckedRaw = formData.get("nextChecked")?.toString();
 
     if (itemId) {
-      const item = await database.shoppingListItem.findUnique({
-        where: { id: itemId },
+      const item = await database.shoppingListItem.findFirst({
+        where: {
+          id: itemId,
+          shoppingListId: shoppingList.id,
+        },
       });
 
       /* istanbul ignore else -- @preserve item should exist if toggling */
@@ -523,8 +532,12 @@ export async function action({ request, context }: Route.ActionArgs) {
     const itemId = formData.get("itemId")?.toString();
 
     if (itemId) {
-      await database.shoppingListItem.update({
-        where: { id: itemId },
+      await database.shoppingListItem.updateMany({
+        where: {
+          id: itemId,
+          shoppingListId: shoppingList.id,
+          deletedAt: null,
+        },
         data: { deletedAt: new Date() },
       });
       await normalizeShoppingListOrdering(database, shoppingList.id);
@@ -536,8 +549,11 @@ export async function action({ request, context }: Route.ActionArgs) {
     await database.shoppingListItem.updateMany({
       where: {
         shoppingListId: shoppingList.id,
-        checkedAt: { not: null },
         deletedAt: null,
+        OR: [
+          { checkedAt: { not: null } },
+          { checked: true },
+        ],
       },
       data: { deletedAt: new Date() },
     });
