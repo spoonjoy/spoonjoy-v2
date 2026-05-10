@@ -358,35 +358,35 @@ describe('StackedLayout', () => {
         </StackedLayout>
       )
       const main = screen.getByRole('main')
-      expect(main.className).toContain('pb-2')
-      expect(main.className).toContain('lg:px-2')
+      expect(main.className).toContain('pb-3')
+      expect(main.className).toContain('lg:px-3')
     })
   })
 
-  describe('dark mode classes', () => {
-    it('root container has dark mode background classes', () => {
+  describe('branded surface classes', () => {
+    it('root container uses the Spoonjoy app shell', () => {
       const { container } = render(
         <StackedLayout navbar={<div>Navbar</div>} sidebar={<nav>Sidebar</nav>}>
           <div>Content</div>
         </StackedLayout>
       )
       const root = container.firstChild as HTMLElement
-      expect(root.className).toContain('dark:bg-zinc-900')
-      expect(root.className).toContain('dark:lg:bg-zinc-950')
+      expect(root.className).toContain('sj-app-shell')
+      expect(root.className).toContain('relative')
     })
 
-    it('content area has dark mode styling classes', () => {
+    it('content area uses the branded desktop surface', () => {
       const { container } = render(
         <StackedLayout navbar={<div>Navbar</div>} sidebar={<nav>Sidebar</nav>}>
           <div>Content</div>
         </StackedLayout>
       )
       const contentWrapper = container.querySelector('.grow')
-      expect(contentWrapper?.className).toContain('dark:lg:bg-zinc-900')
-      expect(contentWrapper?.className).toContain('dark:lg:ring-white/10')
+      expect(contentWrapper?.className).toContain('sj-desktop-surface')
+      expect(contentWrapper?.className).toContain('backdrop-blur-xl')
     })
 
-    it('mobile sidebar panel has dark mode classes', async () => {
+    it('mobile sidebar panel uses the branded panel shell', async () => {
       const user = userEvent.setup()
       const { container } = render(
         <StackedLayout navbar={<div>Navbar</div>} sidebar={<nav>Sidebar</nav>}>
@@ -398,10 +398,10 @@ describe('StackedLayout', () => {
 
       await waitFor(() => {
         const dialog = screen.getByRole('dialog')
-        const panelContent = dialog.querySelector('.rounded-lg.bg-white')
+        const panelContent = dialog.querySelector('.sj-panel')
         expect(panelContent).toBeInTheDocument()
-        expect(panelContent?.className).toContain('dark:bg-zinc-900')
-        expect(panelContent?.className).toContain('dark:ring-white/10')
+        expect(panelContent?.className).toContain('flex')
+        expect(panelContent?.className).toContain('rounded-[1.75rem]')
       })
     })
   })
@@ -602,11 +602,11 @@ describe('StackedLayout', () => {
         </StackedLayout>
       )
       const contentWrapper = container.querySelector('.grow')
-      expect(contentWrapper?.className).toContain('lg:rounded-lg')
-      expect(contentWrapper?.className).toContain('lg:bg-white')
-      expect(contentWrapper?.className).toContain('lg:shadow-xs')
-      expect(contentWrapper?.className).toContain('lg:ring-1')
-      expect(contentWrapper?.className).toContain('lg:ring-zinc-950/5')
+      expect(contentWrapper?.className).toContain('rounded-[1.75rem]')
+      expect(contentWrapper?.className).toContain('bg-[color-mix(in_srgb,var(--sj-panel)_82%,transparent)]')
+      expect(contentWrapper?.className).toContain('shadow-[var(--sj-shadow-soft)]')
+      expect(contentWrapper?.className).toContain('border')
+      expect(contentWrapper?.className).toContain('border-[var(--sj-border)]')
     })
 
     it('content wrapper has proper padding', () => {
@@ -632,7 +632,7 @@ describe('StackedLayout', () => {
   })
 
   describe('mobile sidebar panel styling', () => {
-    it('mobile sidebar panel has rounded corners and shadow', async () => {
+    it('mobile sidebar panel has rounded branded corners', async () => {
       const user = userEvent.setup()
       render(
         <StackedLayout navbar={<div>Navbar</div>} sidebar={<nav>Sidebar</nav>}>
@@ -644,13 +644,13 @@ describe('StackedLayout', () => {
 
       await waitFor(() => {
         const dialog = screen.getByRole('dialog')
-        const panelInner = dialog.querySelector('.rounded-lg.bg-white')
+        const panelInner = dialog.querySelector('.sj-panel')
         expect(panelInner).toBeInTheDocument()
-        expect(panelInner?.className).toContain('shadow-xs')
+        expect(panelInner?.className).toContain('rounded-[1.75rem]')
       })
     })
 
-    it('mobile sidebar panel has ring styling', async () => {
+    it('mobile sidebar panel uses the branded panel primitive', async () => {
       const user = userEvent.setup()
       render(
         <StackedLayout navbar={<div>Navbar</div>} sidebar={<nav>Sidebar</nav>}>
@@ -662,10 +662,9 @@ describe('StackedLayout', () => {
 
       await waitFor(() => {
         const dialog = screen.getByRole('dialog')
-        const panelInner = dialog.querySelector('.rounded-lg.bg-white')
+        const panelInner = dialog.querySelector('.sj-panel')
         expect(panelInner).toBeInTheDocument()
-        expect(panelInner?.className).toContain('ring-1')
-        expect(panelInner?.className).toContain('ring-zinc-950/5')
+        expect(panelInner?.className).toContain('sj-panel')
       })
     })
 

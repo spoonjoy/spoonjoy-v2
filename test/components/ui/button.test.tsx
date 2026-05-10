@@ -41,20 +41,20 @@ describe('Button', () => {
       const { container } = render(<Button>Default</Button>)
       const button = container.querySelector('button')
       expect(button).toHaveClass('cursor-default')
-      expect(button).toHaveClass('rounded-sm')
-      expect(button).toHaveClass('border-zinc-300')
+      expect(button).toHaveClass('rounded-full')
+      expect(button).toHaveClass('border-[var(--sj-ink)]')
     })
 
     it('applies destructive styles when destructive variant is used', () => {
       const { container } = render(<Button variant="destructive">Delete</Button>)
       const button = container.querySelector('button')
-      expect(button).toHaveClass('text-red-700')
+      expect(button).toHaveClass('text-[var(--sj-tomato)]')
     })
 
     it('applies plain styles when plain prop is true', () => {
       const { container } = render(<Button plain>Plain</Button>)
       const button = container.querySelector('button')
-      expect(button).toHaveClass('border-transparent')
+      expect(button).toHaveClass('border-[var(--sj-border)]')
     })
 
     it('applies custom className', () => {

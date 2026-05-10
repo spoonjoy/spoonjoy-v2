@@ -4,6 +4,7 @@ import { getCloudflareEnv, getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
 import { Heading } from "~/components/ui/heading";
 import { Link } from "~/components/ui/link";
+import { Text } from "~/components/ui/text";
 import { RecipeBuilder, type RecipeBuilderData } from "~/components/recipe/RecipeBuilder";
 import {
   validateTitle,
@@ -183,13 +184,21 @@ export default function NewRecipe() {
   };
 
   return (
-    <div className="font-sans leading-relaxed p-8">
-      <div className="max-w-[800px] mx-auto">
-        <div className="mb-8">
-          <Heading level={1}>Create New Recipe</Heading>
+    <div className="sj-page px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
+      <div className="mx-auto max-w-5xl">
+        <div className="mb-8 grid gap-5 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-end">
+          <div>
+            <p className="sj-eyebrow">New recipe</p>
+            <Heading level={1} className="mt-4 text-4xl/11 tracking-[-0.04em] sm:text-6xl/15">
+              Write the version future-you can actually cook.
+            </Heading>
+            <Text className="mt-4 max-w-2xl text-base/7">
+              Start with the story and the photo, then shape the method into steps when the dish is ready.
+            </Text>
+          </div>
           <Link
             href="/recipes"
-            className="text-blue-600 no-underline"
+            className="sj-link justify-self-start lg:justify-self-end"
           >
             ← Back to recipes
           </Link>

@@ -225,7 +225,7 @@ describe('Textarea', () => {
     it('textarea has placeholder color styling', () => {
       const { container } = render(<Textarea />)
       const textarea = container.querySelector('textarea')
-      expect(textarea?.className).toContain('placeholder:text-zinc-500')
+      expect(textarea?.className).toContain('placeholder:text-[var(--sj-ink-soft)]')
     })
 
     it('textarea has focus outline hidden', () => {
@@ -237,19 +237,19 @@ describe('Textarea', () => {
     it('textarea has invalid state styling', () => {
       const { container } = render(<Textarea />)
       const textarea = container.querySelector('textarea')
-      expect(textarea?.className).toContain('data-invalid:border-red-500')
+      expect(textarea?.className).toContain('data-invalid:border-[var(--sj-tomato)]')
     })
 
     it('textarea has disabled border styling', () => {
       const { container } = render(<Textarea />)
       const textarea = container.querySelector('textarea')
-      expect(textarea?.className).toContain('disabled:border-zinc-950/20')
+      expect(textarea?.className).toContain('disabled:border-[var(--sj-border)]')
     })
 
     it('textarea has hover border styling', () => {
       const { container } = render(<Textarea />)
       const textarea = container.querySelector('textarea')
-      expect(textarea?.className).toContain('data-hover:border-zinc-950/20')
+      expect(textarea?.className).toContain('data-hover:border-[var(--sj-brass)]')
     })
 
     it('textarea has appearance-none', () => {

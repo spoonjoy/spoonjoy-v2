@@ -281,7 +281,7 @@ describe('Sidebar components', () => {
       expect(h3?.className).toContain('mb-1')
       expect(h3?.className).toContain('px-2')
       expect(h3?.className).toContain('text-xs/6')
-      expect(h3?.className).toContain('font-medium')
+      expect(h3?.className).toContain('font-semibold')
     })
 
     it('passes additional props', () => {
@@ -426,14 +426,14 @@ describe('Sidebar components', () => {
         expect(button?.className).toContain('flex')
         expect(button?.className).toContain('w-full')
         expect(button?.className).toContain('items-center')
-        expect(button?.className).toContain('rounded-lg')
+        expect(button?.className).toContain('rounded-full')
       })
 
       it('applies gap and padding classes', () => {
         const { container } = render(<SidebarItem>Styled Item</SidebarItem>)
         const button = container.querySelector('button')
         expect(button?.className).toContain('gap-3')
-        expect(button?.className).toContain('px-2')
+        expect(button?.className).toContain('px-3')
         expect(button?.className).toContain('py-2.5')
       })
 
@@ -442,7 +442,7 @@ describe('Sidebar components', () => {
         const button = container.querySelector('button')
         expect(button?.className).toContain('text-left')
         expect(button?.className).toContain('text-base/6')
-        expect(button?.className).toContain('font-medium')
+        expect(button?.className).toContain('font-semibold')
       })
     })
 

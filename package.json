@@ -107,11 +107,5 @@
     "vite": "^7.3.1",
     "vitest": "^4.0.18",
     "wrangler": "^4.90.0"
-  },
-  "pnpm": {
-    "overrides": {
-      "blake3-wasm": "3.0.0",
-      "@c4312/blake3-internal": "3.0.0"
-    }
   }
 }

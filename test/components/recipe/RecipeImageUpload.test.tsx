@@ -390,7 +390,7 @@ describe('RecipeImageUpload', () => {
       )
 
       const errorMessage = screen.getByText(/upload failed/i)
-      expect(errorMessage).toHaveClass('text-red-600')
+      expect(errorMessage).toHaveClass('text-[var(--sj-tomato)]')
     })
 
     it('clears error when new file is selected', async () => {

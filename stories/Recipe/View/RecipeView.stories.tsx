@@ -131,8 +131,8 @@ function RecipeViewMock({ recipe, initialScale = 1, isOwner = false }: { recipe:
   }
 
   return (
-    <div className="min-h-screen bg-zinc-50 pb-24 dark:bg-zinc-950">
-      <div className="mx-auto max-w-4xl px-4 pt-4 sm:px-6 lg:px-8">
+    <div className="sj-page pb-24">
+      <div className="mx-auto max-w-6xl px-4 pt-5 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between gap-4">
           <Button href="/recipes" plain>
             <ArrowLeft data-slot="icon" aria-hidden="true" />
@@ -157,19 +157,22 @@ function RecipeViewMock({ recipe, initialScale = 1, isOwner = false }: { recipe:
       />
 
       <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
-        <Heading level={2} className="mb-6 font-serif text-2xl font-medium tracking-tight sm:text-3xl">
-          Steps
-        </Heading>
+        <div className="mb-6">
+          <p className="sj-eyebrow">Cook mode</p>
+          <Heading level={2} className="mt-3 text-3xl/9 font-semibold tracking-[-0.03em] sm:text-4xl/11">
+            Steps
+          </Heading>
+        </div>
 
         {recipe.steps.length === 0 ? (
-          <div className="rounded-xl bg-zinc-100 p-8 text-center dark:bg-zinc-800">
+          <div className="sj-card rounded-[2rem] p-8 text-center">
             <Text className="mb-4">No steps added yet</Text>
             {isOwner ? <Button href={`/recipes/${recipe.id}/edit`}>Add Steps</Button> : null}
           </div>
         ) : (
-          <div className="border-y border-zinc-200 dark:border-zinc-700">
+          <div className="overflow-hidden rounded-[2rem] border border-[var(--sj-border)] bg-[var(--sj-panel)] shadow-[var(--sj-shadow-soft)] backdrop-blur-xl">
             {recipe.steps.map((step) => (
-              <div key={step.id} id={`step-${step.stepNum}`} className="border-b border-zinc-200 last:border-b-0 dark:border-zinc-700">
+              <div key={step.id} id={`step-${step.stepNum}`} className="border-b border-[var(--sj-border)] last:border-b-0">
                 <StepCard
                   stepNumber={step.stepNum}
                   title={step.title}

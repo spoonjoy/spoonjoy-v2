@@ -380,12 +380,12 @@ export default function RecipeDetail() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 pb-24">
-      <div className="px-4 sm:px-6 lg:px-8 pt-4 max-w-4xl mx-auto">
+    <div className="sj-page pb-24">
+      <div className="mx-auto max-w-6xl px-4 pt-5 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between gap-4">
           <Button href="/recipes" plain>
             <ArrowLeft data-slot="icon" />
-            Back to recipes
+            ← Back to recipes
           </Button>
           {/* istanbul ignore next -- @preserve owner-only UI rendering */}
           {isOwner && (
@@ -422,7 +422,7 @@ export default function RecipeDetail() {
         initialFocus={saveModalTitleRef}
         autoFocus={false}
         size="md"
-        className="mb-24 max-h-[calc(100dvh-7.5rem)] overflow-hidden !rounded-sm !shadow-none pb-[max(0.75rem,env(safe-area-inset-bottom))] data-enter:duration-200 data-enter:ease-out data-leave:duration-150 data-leave:ease-in data-closed:translate-y-4 data-enter:data-closed:translate-y-4 sm:mb-auto sm:max-h-[calc(100dvh-4rem)] sm:data-closed:translate-y-1"
+        className="mb-24 max-h-[calc(100dvh-7.5rem)] overflow-hidden !rounded-[2rem] !shadow-[var(--sj-shadow)] pb-[max(0.75rem,env(safe-area-inset-bottom))] data-enter:duration-200 data-enter:ease-out data-leave:duration-150 data-leave:ease-in data-closed:translate-y-4 data-enter:data-closed:translate-y-4 sm:mb-auto sm:max-h-[calc(100dvh-4rem)] sm:data-closed:translate-y-1"
       >
         <div className="flex max-h-full flex-col" data-testid="save-modal">
           <DialogTitle ref={saveModalTitleRef} tabIndex={-1}>Save to Cookbook</DialogTitle>
@@ -439,29 +439,29 @@ export default function RecipeDetail() {
                       key={cookbook.id}
                       onClick={() => handleToggleCookbookSave(cookbook.id)}
                       aria-pressed={isSaved}
-                      className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
+                      className={`w-full rounded-2xl border px-4 py-3 text-left transition-colors ${
                         isSaved
-                          ? "bg-blue-50 dark:bg-blue-950/30 hover:bg-blue-100 dark:hover:bg-blue-950/50"
-                          : "bg-zinc-50 dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                          ? "border-[var(--sj-brass)] bg-[color-mix(in_srgb,var(--sj-brass)_14%,var(--sj-panel-solid))] hover:bg-[color-mix(in_srgb,var(--sj-brass)_20%,var(--sj-panel-solid))]"
+                          : "border-[var(--sj-border)] bg-[var(--sj-panel-solid)] hover:bg-[var(--sj-flour)]"
                       }`}
                       data-testid={`cookbook-item-${cookbook.id}`}
                     >
                       <Text className="flex items-center justify-between">
                         <span>{cookbook.title}</span>
-                        {isSaved && <span className="text-blue-500" aria-hidden="true">✓</span>}
+                        {isSaved && <span className="text-[var(--sj-brass)]" aria-hidden="true">✓</span>}
                       </Text>
                     </button>
                   );
                 })}
               </div>
             ) : (
-              <Text className="text-center text-zinc-500 dark:text-zinc-400 py-8">
+              <Text className="py-8 text-center">
                 No cookbooks yet. Create your first one below!
               </Text>
             )}
           </DialogBody>
           <div
-            className="sticky bottom-0 mt-3 shrink-0 border-t border-zinc-200 bg-white pt-4 dark:border-zinc-700 dark:bg-zinc-900"
+            className="sticky bottom-0 mt-3 shrink-0 border-t border-[var(--sj-border)] bg-[var(--sj-panel-solid)] pt-4"
             data-testid="save-modal-footer"
           >
             <createCookbookFetcher.Form
@@ -524,12 +524,18 @@ export default function RecipeDetail() {
 
       {/* Steps Section */}
       <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
-        <Heading level={2} className="mb-6 font-serif text-2xl font-medium tracking-tight sm:text-3xl">
-          Steps
-        </Heading>
+        <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="sj-eyebrow">Cook mode</p>
+            <Heading level={2} className="mt-3 text-3xl/9 font-semibold tracking-[-0.03em] sm:text-4xl/11">
+              Steps
+            </Heading>
+          </div>
+          <Text className="font-sj-ui text-xs uppercase tracking-[0.18em]">Tap ingredients as you go</Text>
+        </div>
 
         {recipe.steps.length === 0 ? (
-          <div className="bg-zinc-100 dark:bg-zinc-800 p-8 rounded-xl text-center">
+          <div className="sj-card rounded-[2rem] p-8 text-center">
             <Text className="mb-4">No steps added yet</Text>
             {/* istanbul ignore next -- @preserve owner-only UI rendering */}
             {isOwner && (
@@ -539,9 +545,9 @@ export default function RecipeDetail() {
             )}
           </div>
         ) : (
-          <div className="border-y border-zinc-200 dark:border-zinc-700">
+          <div className="overflow-hidden rounded-[2rem] border border-[var(--sj-border)] bg-[var(--sj-panel)] shadow-[var(--sj-shadow-soft)] backdrop-blur-xl">
             {recipe.steps.map((step) => (
-              <div key={step.id} id={`step-${step.stepNum}`} className="border-b border-zinc-200 last:border-b-0 dark:border-zinc-700">
+              <div key={step.id} id={`step-${step.stepNum}`} className="border-b border-[var(--sj-border)] last:border-b-0">
                 <StepCard
                   stepNumber={step.stepNum}
                   title={step.stepTitle ?? undefined}

@@ -19,7 +19,7 @@ export interface CookbookCardProps {
 
 /**
  * Cookbook cover: 4+ recipes → 2×2 image grid, fewer → single hero or default.
- * Swiss-alpine aesthetic: sharp corners, thin border, editorial type.
+ * Warm editorial cookbook cover with enough texture to feel like a real object.
  */
 export function CookbookCard({
   id,
@@ -32,7 +32,7 @@ export function CookbookCard({
   const link = href ?? `/cookbooks/${id}`
 
   return (
-    <article className="group relative overflow-hidden rounded-sm border border-zinc-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
+    <article className="sj-card sj-hover-lift group relative overflow-hidden rounded-[1.6rem]">
       {/* Cover image area */}
       <Link href={link} className="block">
         <div className="relative">
@@ -45,7 +45,7 @@ export function CookbookCard({
               className="aspect-[4/3] w-full object-cover"
             />
           ) : (
-            <div className="flex aspect-[4/3] w-full items-center justify-center bg-zinc-100 text-xs tracking-wide text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500">
+            <div className="font-sj-ui flex aspect-[4/3] w-full items-center justify-center bg-[var(--sj-flour)] text-xs uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">
               No recipes yet
             </div>
           )}
@@ -59,7 +59,7 @@ export function CookbookCard({
                 e.preventDefault()
                 onShare?.(id)
               }}
-              className="rounded-sm bg-white/80 p-1.5 text-zinc-600 backdrop-blur-sm transition-colors hover:bg-white hover:text-zinc-900 dark:bg-zinc-900/80 dark:text-zinc-300 dark:hover:bg-zinc-900 dark:hover:text-white"
+              className="rounded-full border border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_82%,transparent)] p-2 text-[var(--sj-ink-soft)] backdrop-blur-sm transition-colors hover:bg-[var(--sj-panel-solid)] hover:text-[var(--sj-tomato)]"
             >
               <Share2 className="h-3.5 w-3.5" />
             </button>
@@ -69,12 +69,12 @@ export function CookbookCard({
 
       {/* Editorial title + recipe count */}
       <div className="px-4 py-3">
-        <Link href={link} className="hover:underline">
-          <Heading level={3} className="text-base/6 font-semibold tracking-tight">
+        <Link href={link} className="no-underline hover:text-[var(--sj-tomato)]">
+          <Heading level={3} className="text-xl/7 font-semibold tracking-[-0.02em]">
             {title}
           </Heading>
         </Link>
-        <p className="mt-1 text-xs text-zinc-400 dark:text-zinc-500">
+        <p className="font-sj-ui mt-1 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--sj-ink-soft)]">
           {recipeCount} {recipeCount === 1 ? 'recipe' : 'recipes'}
         </p>
       </div>

@@ -925,7 +925,8 @@ describe("Recipes $id Route", () => {
       expect(panel?.className).toContain("mb-24");
       expect(panel?.className).toContain("max-h-[calc(100dvh-7.5rem)]");
       expect(panel?.className).toContain("sm:mb-auto");
-      expect(panel).toHaveClass("!rounded-sm", "!shadow-none");
+      expect(panel).toHaveClass("rounded-t-[2rem]");
+      expect(panel?.className).toContain("sm:rounded-[2rem]");
 
       const modalBody = screen.getByTestId("save-modal-body");
       const modalFooter = screen.getByTestId("save-modal-footer");
@@ -1228,7 +1229,7 @@ describe("Recipes $id Route", () => {
       expect(screen.getByText("4")).toBeInTheDocument();
       expect(screen.getByText("No steps added yet")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Add Steps" })).toHaveAttribute("href", "/recipes/recipe-1/edit");
-      expect(screen.getByRole("link", { name: "Back to recipes" })).toHaveAttribute("href", "/recipes");
+      expect(screen.getByRole("link", { name: "← Back to recipes" })).toHaveAttribute("href", "/recipes");
     });
 
     it("should render recipe with no steps (empty state) as non-owner", async () => {

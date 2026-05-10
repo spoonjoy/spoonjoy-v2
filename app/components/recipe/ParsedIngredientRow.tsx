@@ -6,28 +6,25 @@ import type { ParsedIngredient } from '~/lib/ingredient-parse.server'
 
 // Button styles extracted from ~/components/ui/button.tsx for native button compatibility
 const iconButtonBaseStyles = [
-  'relative isolate inline-flex items-center justify-center rounded-lg border text-sm/6 font-semibold',
+  'font-sj-ui relative isolate inline-flex items-center justify-center rounded-full border text-sm/6 font-semibold',
   'min-h-11 min-w-11', // 44px minimum touch target
-  'focus:outline-2 focus:outline-offset-2 focus:outline-blue-500',
+  'focus:outline-2 focus:outline-offset-2 focus:outline-[var(--sj-brass)]',
   'disabled:opacity-50 disabled:cursor-not-allowed',
 ]
 
 const iconButtonPlainStyles = [
   'border-transparent',
-  'text-zinc-950 hover:bg-zinc-950/5',
-  'dark:text-white dark:hover:bg-white/10',
+  'text-[var(--sj-ink)] hover:bg-[var(--sj-flour)]',
 ]
 
 const iconButtonGreenStyles = [
   'border-transparent',
-  'text-green-600 hover:bg-green-600/10',
-  'dark:text-green-400 dark:hover:bg-green-400/10',
+  'text-[var(--sj-herb)] hover:bg-[color-mix(in_srgb,var(--sj-herb)_10%,transparent)]',
 ]
 
 const iconButtonRedStyles = [
   'border-transparent',
-  'text-red-600 hover:bg-red-600/10',
-  'dark:text-red-400 dark:hover:bg-red-400/10',
+  'text-[var(--sj-tomato)] hover:bg-[color-mix(in_srgb,var(--sj-tomato)_10%,transparent)]',
 ]
 
 interface ValidationErrors {
@@ -190,7 +187,7 @@ export function ParsedIngredientRow({
                 invalid={!!showQuantityError}
               />
               {showQuantityError && (
-                <p id="edit-quantity-error" className="text-xs text-red-600 mt-1">
+                <p id="edit-quantity-error" className="mt-1 text-xs text-[var(--sj-tomato)]">
                   {validationErrors.quantity}
                 </p>
               )}
@@ -211,7 +208,7 @@ export function ParsedIngredientRow({
                 invalid={!!showUnitError}
               />
               {showUnitError && (
-                <p id="edit-unit-error" className="text-xs text-red-600 mt-1">
+                <p id="edit-unit-error" className="mt-1 text-xs text-[var(--sj-tomato)]">
                   {validationErrors.unit}
                 </p>
               )}
@@ -232,7 +229,7 @@ export function ParsedIngredientRow({
                 invalid={!!showIngredientNameError}
               />
               {showIngredientNameError && (
-                <p id="edit-ingredient-error" className="text-xs text-red-600 mt-1">
+                <p id="edit-ingredient-error" className="mt-1 text-xs text-[var(--sj-tomato)]">
                   {validationErrors.ingredientName}
                 </p>
               )}
@@ -265,7 +262,7 @@ export function ParsedIngredientRow({
     <li className="flex items-center gap-2 py-2">
       <div className="flex-1 flex items-center gap-2 flex-wrap">
         <span className="font-medium">{formatQuantity(ingredient.quantity)}</span>
-        <span className="text-zinc-600 dark:text-zinc-400">{ingredient.unit}</span>
+        <span className="text-[var(--sj-ink-soft)]">{ingredient.unit}</span>
         <span>{ingredient.ingredientName}</span>
       </div>
       <div className="flex gap-1">

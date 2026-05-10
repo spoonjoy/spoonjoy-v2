@@ -55,7 +55,7 @@ describe("HTML5 validation attributes", () => {
       ]);
 
       render(<Stub initialEntries={["/recipes/new"]} />);
-      await screen.findByRole("heading", { name: "Create New Recipe" });
+      await screen.findByRole("heading", { name: "Write the version future-you can actually cook." });
     };
 
     it("title field has required attribute", async () => {
@@ -103,7 +103,7 @@ describe("HTML5 validation attributes", () => {
       ]);
 
       render(<Stub initialEntries={["/recipes/test-recipe-id/edit"]} />);
-      await screen.findByRole("heading", { name: "Edit Recipe" });
+      await screen.findByRole("heading", { name: "Tune the recipe until it feels cookable." });
     };
 
     it("title field has required attribute", async () => {

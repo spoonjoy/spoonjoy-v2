@@ -5,26 +5,23 @@ import { Link } from './link'
 
 const styles = {
   base: [
-    'relative isolate inline-flex items-baseline justify-center gap-x-2 rounded-sm border text-base/6 font-semibold',
-    'px-[calc(--spacing(3.5)-1px)] py-[calc(--spacing(2.5)-1px)] sm:px-[calc(--spacing(3)-1px)] sm:py-[calc(--spacing(1.5)-1px)] sm:text-sm/6',
-    'focus:not-data-focus:outline-hidden data-focus:outline-2 data-focus:outline-offset-2 data-focus:outline-zinc-500',
+    'font-sj-ui relative isolate inline-flex items-baseline justify-center gap-x-2 rounded-full border text-base/6 font-semibold tracking-[0.01em]',
+    'px-[calc(--spacing(4)-1px)] py-[calc(--spacing(2.75)-1px)] shadow-[0_1px_0_rgba(255,255,255,0.45)_inset,0_10px_24px_rgba(63,34,18,0.10)] transition sm:px-[calc(--spacing(3.5)-1px)] sm:py-[calc(--spacing(1.75)-1px)] sm:text-sm/6',
+    'focus:not-data-focus:outline-hidden data-focus:outline-2 data-focus:outline-offset-2 data-focus:outline-[var(--sj-brass)]',
     'data-disabled:opacity-50',
     '*:data-[slot=icon]:-mx-0.5 *:data-[slot=icon]:my-0.5 *:data-[slot=icon]:size-5 *:data-[slot=icon]:shrink-0 *:data-[slot=icon]:self-center *:data-[slot=icon]:text-(--btn-icon) sm:*:data-[slot=icon]:my-1 sm:*:data-[slot=icon]:size-4 forced-colors:[--btn-icon:ButtonText] forced-colors:data-hover:[--btn-icon:ButtonText]',
   ],
   default: [
-    'border-zinc-300 bg-white text-zinc-900 data-active:bg-zinc-100 data-hover:bg-zinc-50',
-    'dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:data-active:bg-zinc-900 dark:data-hover:bg-zinc-900',
-    '[--btn-icon:var(--color-zinc-600)] data-active:[--btn-icon:var(--color-zinc-700)] data-hover:[--btn-icon:var(--color-zinc-700)] dark:[--btn-icon:var(--color-zinc-400)] dark:data-active:[--btn-icon:var(--color-zinc-300)] dark:data-hover:[--btn-icon:var(--color-zinc-300)]',
+    'border-[var(--sj-ink)] bg-[var(--sj-ink)] text-[var(--sj-paper)] data-active:bg-[var(--sj-brass)] data-hover:-translate-y-0.5 data-hover:border-[var(--sj-tomato)] data-hover:bg-[var(--sj-tomato)]',
+    '[--btn-icon:var(--sj-paper)] data-active:[--btn-icon:var(--sj-paper)] data-hover:[--btn-icon:var(--sj-paper)]',
   ],
   destructive: [
-    'border-zinc-300 bg-white text-red-700 data-active:bg-zinc-100 data-hover:bg-zinc-50',
-    'dark:border-zinc-700 dark:bg-zinc-950 dark:text-red-400 dark:data-active:bg-zinc-900 dark:data-hover:bg-zinc-900',
-    '[--btn-icon:var(--color-red-700)] dark:[--btn-icon:var(--color-red-400)]',
+    'border-[var(--sj-tomato)] bg-[color-mix(in_srgb,var(--sj-tomato)_12%,var(--sj-panel-solid))] text-[var(--sj-tomato)] data-active:bg-[color-mix(in_srgb,var(--sj-tomato)_22%,var(--sj-panel-solid))] data-hover:-translate-y-0.5 data-hover:bg-[var(--sj-tomato)] data-hover:text-[var(--sj-paper)]',
+    '[--btn-icon:var(--sj-tomato)] data-hover:[--btn-icon:var(--sj-paper)]',
   ],
   plain: [
-    'border-transparent bg-transparent text-zinc-900 data-active:bg-zinc-100 data-hover:bg-zinc-100',
-    'dark:text-zinc-100 dark:data-active:bg-zinc-800 dark:data-hover:bg-zinc-800',
-    '[--btn-icon:var(--color-zinc-600)] data-active:[--btn-icon:var(--color-zinc-700)] data-hover:[--btn-icon:var(--color-zinc-700)] dark:[--btn-icon:var(--color-zinc-400)] dark:data-active:[--btn-icon:var(--color-zinc-300)] dark:data-hover:[--btn-icon:var(--color-zinc-300)]',
+    'border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_72%,transparent)] text-[var(--sj-ink)] data-active:bg-[var(--sj-flour)] data-hover:-translate-y-0.5 data-hover:border-[var(--sj-border-strong)] data-hover:bg-[var(--sj-flour)]',
+    '[--btn-icon:var(--sj-ink-soft)] data-active:[--btn-icon:var(--sj-ink)] data-hover:[--btn-icon:var(--sj-ink)]',
   ],
 }
 

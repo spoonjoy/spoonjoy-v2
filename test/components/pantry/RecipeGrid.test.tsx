@@ -76,7 +76,7 @@ describe('RecipeGrid', () => {
   it('renders dot separator between servings and chef name', () => {
     renderWithRouter(<RecipeGrid recipes={recipes} />)
 
-    expect(screen.getByText('·')).toBeInTheDocument()
+    expect(screen.getByText('•')).toBeInTheDocument()
   })
 
   it('does not render metadata row when neither servings nor chefName provided', () => {
@@ -193,19 +193,19 @@ describe('RecipeGrid', () => {
     expect(container.querySelector('.absolute.right-2.top-2')).toBeNull()
   })
 
-  it('uses sharp corners (rounded-sm) not rounded-2xl', () => {
+  it('uses the warm editorial Spoonjoy card treatment', () => {
     const { container } = renderWithRouter(<RecipeGrid recipes={[recipes[0]]} />)
 
     const article = container.querySelector('article')
-    expect(article?.className).toContain('rounded-sm')
-    expect(article?.className).not.toContain('rounded-2xl')
+    expect(article?.className).toContain('sj-card')
+    expect(article?.className).toContain('rounded-[1.6rem]')
   })
 
-  it('uses shadow-sm not heavy shadows', () => {
+  it('adds the intentional hover-lift affordance without legacy heavy shadows', () => {
     const { container } = renderWithRouter(<RecipeGrid recipes={[recipes[0]]} />)
 
     const article = container.querySelector('article')
-    expect(article?.className).toContain('shadow-sm')
+    expect(article?.className).toContain('sj-hover-lift')
     expect(article?.className).not.toContain('shadow-lg')
     expect(article?.className).not.toContain('shadow-md')
   })

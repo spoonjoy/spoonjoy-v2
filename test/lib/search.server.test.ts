@@ -166,6 +166,26 @@ describe("search.server", () => {
     await expect(searchSpoonjoy(db, { query: "!!!", scope: "all" })).resolves.toEqual([]);
   });
 
+  it("rebuilds recipe documents in small D1-safe batches", async () => {
+    const chef = await createChef("batchchef");
+
+    for (let index = 0; index < 12; index += 1) {
+      await db.recipe.create({
+        data: {
+          title: `Batchable Lentil Stew ${index}`,
+          description: "Batch search coverage",
+          chefId: chef.id,
+        },
+      });
+    }
+
+    await expect(rebuildSearchIndex(db)).resolves.toBe(13);
+
+    const results = await searchSpoonjoy(db, { query: "batchable", scope: "recipes", limit: 20 });
+    expect(results).toHaveLength(12);
+    expect(results.every((result) => result.type === "recipe")).toBe(true);
+  });
+
   it("keeps shopping-list search private to the signed-in owner", async () => {
     const owner = await createChef("shopper");
     const otherOwner = await createChef("other_shopper");

@@ -156,77 +156,77 @@ export default function Index() {
 
   if (!kitchenUser) {
     return (
-      <div className="relative isolate overflow-hidden bg-[radial-gradient(circle_at_top_left,_#fef3c7,_transparent_36%),linear-gradient(135deg,_#fff7ed_0%,_#fafaf9_45%,_#ecfccb_100%)] px-4 py-10 dark:bg-[radial-gradient(circle_at_top_left,_rgba(120,53,15,0.36),_transparent_36%),linear-gradient(135deg,_#1c1917_0%,_#18181b_54%,_#102018_100%)] sm:py-16">
+      <div className="sj-page px-4 py-10 sm:py-16">
         <div className="pointer-events-none absolute left-1/2 top-8 -z-10 h-72 w-72 -translate-x-1/2 rounded-full border border-amber-300/50 bg-white/20 blur-3xl dark:border-amber-800/40 dark:bg-amber-950/20" aria-hidden="true" />
         <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
-          <section className="rounded-sm border border-amber-200/80 bg-white/78 p-6 shadow-sm backdrop-blur dark:border-amber-900/40 dark:bg-zinc-950/72 sm:p-8">
-            <div className="inline-flex items-center gap-2 rounded-full border border-amber-300 bg-amber-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-amber-900 dark:border-amber-800 dark:bg-amber-950/70 dark:text-amber-200">
+          <section className="sj-panel rounded-[2rem] p-6 sm:p-8">
+            <div className="sj-eyebrow">
               <Sparkles className="size-3.5" aria-hidden="true" />
               Family recipe OS
             </div>
-            <Heading level={1} className="mt-5 max-w-3xl font-serif text-3xl/9 tracking-tight text-zinc-950 dark:text-zinc-50 sm:text-6xl/16">
+            <Heading level={1} className="mt-5 max-w-3xl text-4xl/11 tracking-[-0.04em] sm:text-7xl/18">
               Recipes, cookbooks, and kitchen memory in one warm place.
             </Heading>
-            <Text className="mt-5 max-w-2xl text-base/7 text-zinc-700 dark:text-zinc-300">
+            <Text className="mt-5 max-w-2xl text-base/7">
               Spoonjoy helps you collect the food you actually cook, organize it into living cookbooks, and share a kitchen that feels personal before it feels technical.
             </Text>
             <div className="mt-7 flex flex-col gap-3 sm:flex-row">
               <Link
                 href="/signup"
-                className="inline-flex items-center justify-center rounded-sm border border-amber-950 bg-amber-950 px-4 py-2.5 text-sm font-semibold text-white no-underline transition hover:bg-amber-900 dark:border-amber-200 dark:bg-amber-200 dark:text-zinc-950 dark:hover:bg-amber-100"
+                className="font-sj-ui inline-flex items-center justify-center rounded-full border border-[var(--sj-ink)] bg-[var(--sj-ink)] px-4 py-2.5 text-sm font-semibold text-[var(--sj-paper)] no-underline transition hover:-translate-y-0.5 hover:border-[var(--sj-tomato)] hover:bg-[var(--sj-tomato)]"
               >
                 Start Your Kitchen
               </Link>
               <Link
                 href="/login"
-                className="inline-flex items-center justify-center rounded-sm border border-amber-300 bg-white/50 px-4 py-2.5 text-sm font-semibold text-amber-950 no-underline transition hover:bg-amber-100 dark:border-amber-800 dark:bg-zinc-950/40 dark:text-amber-100 dark:hover:bg-amber-950/50"
+                className="font-sj-ui inline-flex items-center justify-center rounded-full border border-[var(--sj-border)] bg-[var(--sj-panel-solid)] px-4 py-2.5 text-sm font-semibold text-[var(--sj-ink)] no-underline transition hover:-translate-y-0.5 hover:bg-[var(--sj-flour)]"
               >
                 Log In
               </Link>
               <Link
                 href="/search"
-                className="inline-flex items-center justify-center gap-2 rounded-sm border border-lime-300 bg-lime-50/80 px-4 py-2.5 text-sm font-semibold text-lime-950 no-underline transition hover:bg-lime-100 dark:border-lime-800 dark:bg-lime-950/30 dark:text-lime-100 dark:hover:bg-lime-950/50"
+                className="font-sj-ui inline-flex items-center justify-center gap-2 rounded-full border border-[var(--sj-herb)] bg-[color-mix(in_srgb,var(--sj-herb)_12%,var(--sj-panel-solid))] px-4 py-2.5 text-sm font-semibold text-[var(--sj-ink)] no-underline transition hover:-translate-y-0.5 hover:bg-[color-mix(in_srgb,var(--sj-herb)_20%,var(--sj-panel-solid))]"
               >
                 <SearchIcon className="size-4" aria-hidden="true" />
                 Search Recipes
               </Link>
             </div>
             <dl className="mt-8 grid gap-3 text-sm sm:grid-cols-3">
-              <div className="rounded-sm border border-amber-200 bg-amber-50/80 p-2.5 dark:border-amber-900/50 dark:bg-amber-950/20 sm:p-3">
-                <dt className="font-semibold text-zinc-950 dark:text-zinc-100">Collect</dt>
-                <dd className="mt-0.5 text-xs/5 text-zinc-600 dark:text-zinc-300 sm:mt-1 sm:text-sm/6">Write recipes with the context future-you needs.</dd>
+              <div className="rounded-[1.25rem] border border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-flour)_58%,transparent)] p-2.5 sm:p-3">
+                <dt className="font-sj-ui font-semibold text-[var(--sj-ink)]">Collect</dt>
+                <dd className="mt-0.5 text-xs/5 text-[var(--sj-ink-soft)] sm:mt-1 sm:text-sm/6">Write recipes with the context future-you needs.</dd>
               </div>
-              <div className="rounded-sm border border-lime-200 bg-lime-50/80 p-2.5 dark:border-lime-900/50 dark:bg-lime-950/20 sm:p-3">
-                <dt className="font-semibold text-zinc-950 dark:text-zinc-100">Compose</dt>
-                <dd className="mt-0.5 text-xs/5 text-zinc-600 dark:text-zinc-300 sm:mt-1 sm:text-sm/6">Turn weeknights, holidays, and experiments into cookbooks.</dd>
+              <div className="rounded-[1.25rem] border border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-mint)_44%,transparent)] p-2.5 sm:p-3">
+                <dt className="font-sj-ui font-semibold text-[var(--sj-ink)]">Compose</dt>
+                <dd className="mt-0.5 text-xs/5 text-[var(--sj-ink-soft)] sm:mt-1 sm:text-sm/6">Turn weeknights, holidays, and experiments into cookbooks.</dd>
               </div>
-              <div className="rounded-sm border border-stone-200 bg-stone-50/90 p-2.5 dark:border-zinc-800 dark:bg-zinc-900/70 sm:p-3">
-                <dt className="font-semibold text-zinc-950 dark:text-zinc-100">Share</dt>
-                <dd className="mt-0.5 text-xs/5 text-zinc-600 dark:text-zinc-300 sm:mt-1 sm:text-sm/6">Open a kitchen page without turning dinner into social media.</dd>
+              <div className="rounded-[1.25rem] border border-[var(--sj-border)] bg-[var(--sj-panel-solid)] p-2.5 sm:p-3">
+                <dt className="font-sj-ui font-semibold text-[var(--sj-ink)]">Share</dt>
+                <dd className="mt-0.5 text-xs/5 text-[var(--sj-ink-soft)] sm:mt-1 sm:text-sm/6">Open a kitchen page without turning dinner into social media.</dd>
               </div>
             </dl>
           </section>
 
-          <aside className="relative mt-28 rounded-sm border border-zinc-300 bg-zinc-950 p-4 text-stone-50 shadow-2xl dark:border-zinc-700 lg:mt-0">
-            <div className="absolute -right-3 -top-3 rounded-sm border border-amber-200 bg-amber-100 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-amber-950 shadow-sm dark:border-amber-700 dark:bg-amber-900 dark:text-amber-100">
+          <aside className="relative mt-28 rounded-[2rem] border border-[var(--sj-border)] bg-[#1f1710] p-4 text-stone-50 shadow-2xl lg:mt-0">
+            <div className="font-sj-ui absolute -right-3 -top-3 rounded-full border border-amber-200 bg-amber-100 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-amber-950 shadow-sm">
               Tonight
             </div>
-            <div className="rounded-sm border border-white/10 bg-[linear-gradient(160deg,_rgba(255,255,255,0.16),_rgba(255,255,255,0.04))] p-5">
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-200">Recipe card</p>
-              <h2 className="mt-3 font-serif text-3xl/9 font-semibold text-stone-50">Sunday Tomato Sauce</h2>
+            <div className="rounded-[1.5rem] border border-white/10 bg-[linear-gradient(160deg,_rgba(255,255,255,0.16),_rgba(255,255,255,0.04))] p-5">
+              <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.24em] text-amber-200">Recipe card</p>
+              <h2 className="font-sj-display mt-3 text-4xl/10 font-semibold text-stone-50">Sunday Tomato Sauce</h2>
               <Text className="mt-3 text-sm/6 text-stone-300">
                 Nonna's margin notes, simmer times, and the version that finally tasted like the story.
               </Text>
               <div className="mt-5 grid grid-cols-3 gap-2 text-center text-xs">
-                <div className="rounded-sm bg-white/10 p-3">
+                <div className="rounded-[1rem] bg-white/10 p-3">
                   <span className="block text-lg font-semibold text-white">6</span>
                   servings
                 </div>
-                <div className="rounded-sm bg-white/10 p-3">
+                <div className="rounded-[1rem] bg-white/10 p-3">
                   <span className="block text-lg font-semibold text-white">2h</span>
                   simmer
                 </div>
-                <div className="rounded-sm bg-white/10 p-3">
+                <div className="rounded-[1rem] bg-white/10 p-3">
                   <span className="block text-lg font-semibold text-white">3</span>
                   notes
                 </div>
@@ -238,7 +238,7 @@ export default function Index() {
                 { icon: BookOpen, title: "Cookbooks", copy: "Collections with memory." },
                 { icon: Users, title: "Family-ready", copy: "Clear enough for everyone." },
               ].map((item) => (
-                <div key={item.title} className="rounded-sm border border-white/10 bg-white/[0.06] p-3">
+                <div key={item.title} className="rounded-[1rem] border border-white/10 bg-white/[0.06] p-3">
                   <item.icon className="size-4 text-amber-200" aria-hidden="true" />
                   <p className="mt-3 text-sm font-semibold text-white">{item.title}</p>
                   <p className="mt-1 text-xs/5 text-stone-300">{item.copy}</p>
@@ -254,18 +254,19 @@ export default function Index() {
   const heading = isOwner ? "My Kitchen" : `${kitchenUser.username}'s Kitchen`;
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8 sm:py-10">
-      <section className="rounded-sm border border-zinc-300 bg-stone-50/70 p-5 shadow-sm dark:border-zinc-700 dark:bg-zinc-900/70 sm:p-6">
-        <header className="flex flex-col gap-4 border-b border-zinc-300 pb-4 dark:border-zinc-700 sm:flex-row sm:items-center sm:justify-between">
+    <div className="sj-page px-4 py-8 sm:py-12">
+      <section className="sj-panel mx-auto max-w-6xl rounded-[2rem] p-5 sm:p-7">
+        <header className="flex flex-col gap-4 border-b border-[var(--sj-border)] pb-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
             <Avatar
               src={kitchenUser.photoUrl ?? DEFAULT_CHEF_AVATAR}
               alt={kitchenUser.username}
-              className="size-14 border border-zinc-300 dark:border-zinc-700"
+              className="size-16 border border-[var(--sj-border)] shadow-[var(--sj-shadow-soft)]"
             />
             <div>
-              <Heading level={1} className="font-serif text-3xl/9 tracking-tight">{heading}</Heading>
-              <Text className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">
+              <p className="sj-eyebrow">Kitchen</p>
+              <Heading level={1} className="mt-2 text-4xl/11 tracking-[-0.04em]">{heading}</Heading>
+              <Text className="mt-1 text-sm">
                 {recipes.length} {recipes.length === 1 ? "recipe" : "recipes"} and {cookbooks.length} {cookbooks.length === 1 ? "cookbook" : "cookbooks"}
               </Text>
             </div>
@@ -291,16 +292,16 @@ export default function Index() {
         </header>
 
         <div className="mt-5">
-          <div role="tablist" aria-label="Kitchen sections" className="mb-4 flex items-center gap-2 border-b border-zinc-300 pb-2 dark:border-zinc-700">
+          <div role="tablist" aria-label="Kitchen sections" className="mb-5 flex items-center gap-2 border-b border-[var(--sj-border)] pb-3">
             <Link
               href={tabHref(location.search, "recipes")}
               role="tab"
               aria-selected={tab === "recipes"}
               className={[
-                "rounded-sm border px-3 py-1.5 text-sm font-medium no-underline",
+                "font-sj-ui rounded-full border px-3 py-1.5 text-sm font-semibold no-underline transition",
                 tab === "recipes"
-                  ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-200 dark:bg-zinc-200 dark:text-zinc-900"
-                  : "border-zinc-300 bg-white text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300",
+                  ? "border-[var(--sj-ink)] bg-[var(--sj-ink)] text-[var(--sj-paper)]"
+                  : "border-[var(--sj-border)] bg-[var(--sj-panel-solid)] text-[var(--sj-ink-soft)] hover:bg-[var(--sj-flour)]",
               ].join(" ")}
             >
               Recipes
@@ -310,10 +311,10 @@ export default function Index() {
               role="tab"
               aria-selected={tab === "cookbooks"}
               className={[
-                "rounded-sm border px-3 py-1.5 text-sm font-medium no-underline",
+                "font-sj-ui rounded-full border px-3 py-1.5 text-sm font-semibold no-underline transition",
                 tab === "cookbooks"
-                  ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-200 dark:bg-zinc-200 dark:text-zinc-900"
-                  : "border-zinc-300 bg-white text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300",
+                  ? "border-[var(--sj-ink)] bg-[var(--sj-ink)] text-[var(--sj-paper)]"
+                  : "border-[var(--sj-border)] bg-[var(--sj-panel-solid)] text-[var(--sj-ink-soft)] hover:bg-[var(--sj-flour)]",
               ].join(" ")}
             >
               Cookbooks
@@ -322,16 +323,16 @@ export default function Index() {
 
           <section role="tabpanel" aria-label="Recipes" hidden={tab !== "recipes"}>
             <div className="mb-4 flex items-center justify-between">
-              <Subheading level={2} className="font-serif text-xl/7">Recipes</Subheading>
+              <Subheading level={2} className="text-2xl/8">Recipes</Subheading>
               {isOwner ? <Button href="/recipes/new">New Recipe</Button> : null}
             </div>
 
             {recipes.length === 0 ? (
               isOwner ? (
-                <div className="rounded-sm border border-dashed border-amber-300 bg-white p-8 text-center dark:border-amber-800 dark:bg-zinc-900">
-                  <ChefHat className="mx-auto size-8 text-amber-700 dark:text-amber-300" aria-hidden="true" />
-                  <Subheading level={3} className="mt-3 font-serif text-xl/7">Start your recipe box</Subheading>
-                  <Text className="mx-auto mt-2 max-w-xl text-zinc-600 dark:text-zinc-300">
+                <div className="rounded-[2rem] border border-dashed border-[var(--sj-brass)] bg-[color-mix(in_srgb,var(--sj-flour)_58%,transparent)] p-8 text-center">
+                  <ChefHat className="mx-auto size-8 text-[var(--sj-brass)]" aria-hidden="true" />
+                  <Subheading level={3} className="mt-3 text-2xl/8">Start your recipe box</Subheading>
+                  <Text className="mx-auto mt-2 max-w-xl">
                     Capture the dish you make most often, the family classic everyone asks about, or the weeknight save you never want to lose.
                   </Text>
                   <div className="mt-5">
@@ -339,8 +340,8 @@ export default function Index() {
                   </div>
                 </div>
               ) : (
-                <div className="rounded-sm border border-dashed border-zinc-300 bg-white p-8 text-center dark:border-zinc-700 dark:bg-zinc-900">
-                  <Text className="text-zinc-600 dark:text-zinc-300">No public recipes yet.</Text>
+                <div className="rounded-[2rem] border border-dashed border-[var(--sj-border-strong)] bg-[var(--sj-panel-solid)] p-8 text-center">
+                  <Text>No public recipes yet.</Text>
                 </div>
               )
             ) : (
@@ -351,21 +352,21 @@ export default function Index() {
                     <Link
                       key={recipe.id}
                       href={`/recipes/${recipe.id}`}
-                      className="block overflow-hidden rounded-sm border border-zinc-300 bg-white no-underline transition hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:bg-zinc-800"
+                      className="sj-card sj-hover-lift block overflow-hidden rounded-[1.6rem] no-underline"
                     >
-                      <div className="flex h-36 items-center justify-center border-b border-zinc-300 bg-stone-100 dark:border-zinc-700 dark:bg-zinc-800">
+                      <div className="flex h-40 items-center justify-center border-b border-[var(--sj-border)] bg-[var(--sj-flour)]">
                         {displayImageUrl ? (
                           <img src={displayImageUrl} alt={recipe.title} className="h-full w-full object-cover" />
                         ) : (
-                          <ChefHat className="size-8 text-zinc-400" aria-hidden="true" />
+                          <ChefHat className="size-8 text-[var(--sj-ink-soft)]" aria-hidden="true" />
                         )}
                       </div>
                       <div className="p-3">
-                        <Subheading level={3} className="line-clamp-1">{recipe.title}</Subheading>
+                        <Subheading level={3} className="line-clamp-1 text-xl/7">{recipe.title}</Subheading>
                         {recipe.description ? (
-                          <Text className="mt-1 line-clamp-2 text-sm text-zinc-600 dark:text-zinc-300">{recipe.description}</Text>
+                          <Text className="mt-1 line-clamp-2 text-sm">{recipe.description}</Text>
                         ) : null}
-                        {recipe.servings ? <Text className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Serves {recipe.servings}</Text> : null}
+                        {recipe.servings ? <Text className="font-sj-ui mt-2 text-xs uppercase tracking-[0.14em]">Serves {recipe.servings}</Text> : null}
                       </div>
                     </Link>
                   );
@@ -376,16 +377,16 @@ export default function Index() {
 
           <section role="tabpanel" aria-label="Cookbooks" hidden={tab !== "cookbooks"}>
             <div className="mb-4 flex items-center justify-between">
-              <Subheading level={2} className="font-serif text-xl/7">Cookbooks</Subheading>
+              <Subheading level={2} className="text-2xl/8">Cookbooks</Subheading>
               {isOwner ? <Button href="/cookbooks/new">New Cookbook</Button> : null}
             </div>
 
             {cookbooks.length === 0 ? (
               isOwner ? (
-                <div className="rounded-sm border border-dashed border-lime-300 bg-white p-8 text-center dark:border-lime-800 dark:bg-zinc-900">
-                  <BookOpen className="mx-auto size-8 text-lime-700 dark:text-lime-300" aria-hidden="true" />
-                  <Subheading level={3} className="mt-3 font-serif text-xl/7">Build your first cookbook</Subheading>
-                  <Text className="mx-auto mt-2 max-w-xl text-zinc-600 dark:text-zinc-300">
+                <div className="rounded-[2rem] border border-dashed border-[var(--sj-herb)] bg-[color-mix(in_srgb,var(--sj-mint)_50%,transparent)] p-8 text-center">
+                  <BookOpen className="mx-auto size-8 text-[var(--sj-herb)]" aria-hidden="true" />
+                  <Subheading level={3} className="mt-3 text-2xl/8">Build your first cookbook</Subheading>
+                  <Text className="mx-auto mt-2 max-w-xl">
                     Group recipes into a holiday menu, a weeknight rotation, or a family collection that grows with every good meal.
                   </Text>
                   <div className="mt-5">
@@ -393,8 +394,8 @@ export default function Index() {
                   </div>
                 </div>
               ) : (
-                <div className="rounded-sm border border-dashed border-zinc-300 bg-white p-8 text-center dark:border-zinc-700 dark:bg-zinc-900">
-                  <Text className="text-zinc-600 dark:text-zinc-300">No public cookbooks yet.</Text>
+                <div className="rounded-[2rem] border border-dashed border-[var(--sj-border-strong)] bg-[var(--sj-panel-solid)] p-8 text-center">
+                  <Text>No public cookbooks yet.</Text>
                 </div>
               )
             ) : (

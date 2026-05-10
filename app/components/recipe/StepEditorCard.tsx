@@ -26,16 +26,16 @@ import type { ParsedIngredient } from '~/lib/ingredient-parse.server'
 
 // Button styles extracted for native button compatibility
 const buttonBaseStyles = [
-  'relative isolate inline-flex items-center justify-center gap-x-2 rounded-lg border text-sm/6 font-semibold',
+  'font-sj-ui relative isolate inline-flex items-center justify-center gap-x-2 rounded-full border text-sm/6 font-semibold',
   'px-3 py-1.5',
-  'focus:outline-2 focus:outline-offset-2 focus:outline-blue-500',
+  'focus:outline-2 focus:outline-offset-2 focus:outline-[var(--sj-brass)]',
   'disabled:opacity-50 disabled:cursor-not-allowed',
 ]
 
 const buttonOutlineStyles = [
-  'border-zinc-950/10 dark:border-white/15',
-  'text-zinc-950 dark:text-white',
-  'hover:bg-zinc-950/5 dark:hover:bg-white/5',
+  'border-[var(--sj-border)]',
+  'text-[var(--sj-ink)]',
+  'hover:bg-[var(--sj-flour)]',
 ]
 
 const buttonSolidStyles = [
@@ -44,7 +44,7 @@ const buttonSolidStyles = [
   'before:absolute before:inset-0 before:-z-10 before:rounded-[calc(var(--radius-lg)-1px)] before:bg-(--btn-bg)',
   'before:shadow-sm',
   'dark:before:hidden',
-  'dark:border-white/5',
+  'dark:border-[var(--sj-border)]',
   'after:absolute after:inset-0 after:-z-10 after:rounded-[calc(var(--radius-lg)-1px)]',
   'after:shadow-[inset_0_1px_--theme(--color-white/15%)]',
   'hover:after:bg-(--btn-hover-overlay)',
@@ -53,13 +53,13 @@ const buttonSolidStyles = [
 ]
 
 const buttonGreenStyles = [
-  'text-white [--btn-hover-overlay:var(--color-white)]/10 [--btn-bg:var(--color-green-600)] [--btn-border:var(--color-green-700)]/90',
-  '[--btn-icon:var(--color-white)]/60 hover:[--btn-icon:var(--color-white)]/80',
+  'text-[var(--sj-paper)] [--btn-hover-overlay:var(--color-white)]/10 [--btn-bg:var(--sj-herb)] [--btn-border:var(--sj-herb)]',
+  '[--btn-icon:var(--sj-paper)]',
 ]
 
 const buttonRedStyles = [
-  'text-white [--btn-hover-overlay:var(--color-white)]/10 [--btn-bg:var(--color-red-600)] [--btn-border:var(--color-red-700)]/90',
-  '[--btn-icon:var(--color-white)]/60 hover:[--btn-icon:var(--color-white)]/80',
+  'text-[var(--sj-paper)] [--btn-hover-overlay:var(--color-white)]/10 [--btn-bg:var(--sj-tomato)] [--btn-border:var(--sj-tomato)]',
+  '[--btn-icon:var(--sj-paper)]',
 ]
 
 export interface StepData {
@@ -191,32 +191,32 @@ export function StepEditorCard({
   return (
     <article
       aria-label={`Step ${stepNumber}`}
-      className="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 p-4"
+      className="sj-card rounded-[1.5rem] p-4"
     >
       {/* Header with step number and title */}
       <div className="flex items-center gap-4 mb-4">
         {dragHandle}
         <div
-          className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400 font-bold"
+          className="font-sj-ui flex h-8 w-8 items-center justify-center rounded-full bg-[var(--sj-brass)] font-bold text-[var(--sj-paper)]"
         >
           {stepNumber}
         </div>
         <div className="flex-1">
           {step?.stepTitle && (
-            <h3 className="text-lg font-semibold">{step.stepTitle}</h3>
+            <h3 className="font-sj-display text-lg font-semibold text-[var(--sj-ink)]">{step.stepTitle}</h3>
           )}
           {step?.description && !step.stepTitle && (
-            <p className="text-sm text-zinc-600 dark:text-zinc-400 line-clamp-1">{step.description}</p>
+            <p className="line-clamp-1 text-sm text-[var(--sj-ink-soft)]">{step.description}</p>
           )}
           {!step?.stepTitle && !step?.description && (
-            <span className="text-sm text-zinc-500">Step {stepNumber}</span>
+            <span className="text-sm text-[var(--sj-ink-soft)]">Step {stepNumber}</span>
           )}
         </div>
       </div>
 
       {/* Instructions textarea */}
       <div className="mb-4">
-        <label htmlFor={instructionsId} className="block mb-2 text-sm font-bold">
+        <label htmlFor={instructionsId} className="font-sj-ui mb-2 block text-sm font-bold">
           Instructions
         </label>
         <Textarea
@@ -234,7 +234,7 @@ export function StepEditorCard({
 
       {/* Duration input */}
       <div className="mb-4">
-        <label htmlFor={durationId} className="block mb-2 text-sm font-bold">
+        <label htmlFor={durationId} className="font-sj-ui mb-2 block text-sm font-bold">
           Duration (minutes)
         </label>
         <Input
@@ -249,7 +249,7 @@ export function StepEditorCard({
       </div>
 
       {/* Ingredient input section */}
-      <div className="mb-4 border-t border-zinc-200 dark:border-zinc-700 pt-4">
+      <div className="mb-4 border-t border-[var(--sj-border)] pt-4">
         <div className="mb-4">
           <IngredientInputToggle
             mode={inputMode}
@@ -275,7 +275,7 @@ export function StepEditorCard({
         {/* Display ingredients */}
         <div className="mt-4">
           {ingredients.length === 0 ? (
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">No ingredients added yet</p>
+            <p className="text-sm text-[var(--sj-ink-soft)]">No ingredients added yet</p>
           ) : (
             <ParsedIngredientList
               ingredients={ingredients}
@@ -289,7 +289,7 @@ export function StepEditorCard({
       </div>
 
       {/* Action buttons */}
-      <div className="flex flex-wrap gap-2 border-t border-zinc-200 dark:border-zinc-700 pt-4">
+      <div className="flex flex-wrap gap-2 border-t border-[var(--sj-border)] pt-4">
         <button
           type="button"
           onClick={handleSave}

@@ -1341,8 +1341,7 @@ describe("Recipes $id Edit Route", () => {
 
       render(<Stub initialEntries={["/recipes/recipe-1/edit"]} />);
 
-      // Multiple "Edit Recipe" headings exist (visible + sr-only)
-      const headings = await screen.findAllByRole("heading", { name: "Edit Recipe" });
+      const headings = await screen.findAllByRole("heading", { name: "Tune the recipe until it feels cookable." });
       expect(headings.length).toBeGreaterThan(0);
       expect(screen.getByRole("link", { name: "← Back to recipe" })).toHaveAttribute("href", "/recipes/recipe-1");
       expect(screen.getByLabelText(/Title/)).toHaveValue("Test Recipe");

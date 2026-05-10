@@ -86,7 +86,7 @@ export function StepDependencySelector({
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-sm text-zinc-700 dark:text-zinc-300">Uses output from:</span>
+        <span className="text-sm text-[var(--sj-ink-soft)]">Uses output from:</span>
 
         {/* Selected dependencies as chips */}
         {internalSelections.map((stepNum) => {
@@ -97,14 +97,14 @@ export function StepDependencySelector({
               key={stepNum}
               role="button"
               aria-label={`Step ${stepNum}`}
-              className="inline-flex items-center gap-1 rounded-md bg-blue-100 px-2 py-0.5 text-sm text-blue-800 dark:bg-blue-900/30 dark:text-blue-300"
+              className="inline-flex items-center gap-1 rounded-full border border-[var(--sj-brass)] bg-[color-mix(in_srgb,var(--sj-brass)_12%,var(--sj-panel-solid))] px-2 py-0.5 text-sm text-[var(--sj-ink)]"
             >
               Step {stepNum}
               <button
                 type="button"
                 onClick={() => handleRemove(stepNum)}
                 disabled={disabled}
-                className="ml-1 rounded p-0.5 hover:bg-blue-200 dark:hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50"
+                className="ml-1 rounded-full p-0.5 hover:bg-[color-mix(in_srgb,var(--sj-brass)_20%,transparent)] disabled:cursor-not-allowed disabled:opacity-50"
                 aria-label="Remove"
               >
                 <X className="h-3 w-3" />
@@ -122,13 +122,13 @@ export function StepDependencySelector({
             aria-haspopup="listbox"
             disabled={disabled}
             onClick={() => setIsOpen(!isOpen)}
-            className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-sm text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-white"
+            className="rounded-full border border-[var(--sj-border-strong)] bg-[var(--sj-field)] px-3 py-1 text-sm text-[var(--sj-ink)] focus:border-[var(--sj-brass)] focus:outline-none focus:ring-1 focus:ring-[var(--sj-brass)] disabled:cursor-not-allowed disabled:opacity-50"
           >
             Add step...
           </button>
           <div
             role="listbox"
-            className={`absolute z-10 mt-1 max-h-60 overflow-auto rounded-md bg-white py-1 text-sm shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none dark:bg-zinc-800 dark:ring-white/10 ${
+            className={`absolute z-10 mt-1 max-h-60 overflow-auto rounded-[1rem] border border-[var(--sj-border)] bg-[var(--sj-panel-solid)] py-1 text-sm shadow-[var(--sj-shadow-soft)] focus:outline-none ${
               isOpen ? '' : 'sr-only'
             }`}
           >
@@ -138,7 +138,7 @@ export function StepDependencySelector({
                 role="option"
                 aria-selected={internalSelections.includes(step.stepNum)}
                 onClick={() => handleSelect(step.stepNum)}
-                className="cursor-pointer select-none px-3 py-2 text-zinc-900 hover:bg-blue-500 hover:text-white dark:text-white"
+                className="cursor-pointer select-none px-3 py-2 text-[var(--sj-ink)] hover:bg-[var(--sj-flour)]"
               >
                 Step {step.stepNum}
               </div>
@@ -153,16 +153,16 @@ export function StepDependencySelector({
           {visibleSuggestions.map((suggestion) => (
             <div
               key={suggestion.stepNum}
-              className="flex items-center gap-2 rounded-md bg-amber-50 px-2 py-1 text-sm dark:bg-amber-900/20"
+              className="flex items-center gap-2 rounded-[1rem] border border-[var(--sj-brass)] bg-[color-mix(in_srgb,var(--sj-brass)_10%,var(--sj-panel-solid))] px-2 py-1 text-sm"
             >
-              <span className="text-amber-800 dark:text-amber-300">
+              <span className="text-[var(--sj-ink)]">
                 Step {suggestion.stepNum} looks like a dependency
               </span>
               <button
                 type="button"
                 onClick={() => handleAcceptSuggestion(suggestion.stepNum)}
                 disabled={disabled}
-                className="rounded bg-amber-200 px-2 py-0.5 text-xs font-medium text-amber-900 hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-amber-800 dark:text-amber-100 dark:hover:bg-amber-700"
+                className="rounded-full bg-[var(--sj-brass)] px-2 py-0.5 text-xs font-medium text-[var(--sj-paper)] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Add it
               </button>
@@ -170,7 +170,7 @@ export function StepDependencySelector({
                 type="button"
                 onClick={() => handleDismissSuggestion(suggestion.stepNum)}
                 disabled={disabled}
-                className="rounded bg-zinc-200 px-2 py-0.5 text-xs font-medium text-zinc-700 hover:bg-zinc-300 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-600"
+                className="rounded-full bg-[var(--sj-flour)] px-2 py-0.5 text-xs font-medium text-[var(--sj-ink-soft)] hover:text-[var(--sj-ink)] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Dismiss
               </button>

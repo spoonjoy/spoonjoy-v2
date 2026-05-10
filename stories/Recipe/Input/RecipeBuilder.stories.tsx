@@ -50,8 +50,10 @@ const meta: Meta<typeof RecipeBuilder> = {
   tags: ['autodocs'],
   decorators: [
     (Story) => (
-      <div className="mx-auto max-w-3xl rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+      <div className="sj-page p-4 sm:p-8">
+        <div className="mx-auto max-w-4xl">
         <Story />
+        </div>
       </div>
     ),
   ],

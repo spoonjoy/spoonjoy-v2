@@ -2,6 +2,79 @@
 @source "../../stories";
 @config "../../tailwind.config.js";
 
+:root {
+  color-scheme: light;
+  --font-sj-display: "Fraunces", Georgia, "Times New Roman", serif;
+  --font-sj-body: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --font-sj-ui: "IBM Plex Sans Condensed", "Avenir Next Condensed", "Gill Sans", sans-serif;
+
+  --sj-ink: #2f2117;
+  --sj-ink-soft: #6d5948;
+  --sj-paper: #fff8ea;
+  --sj-page: #fbf1dd;
+  --sj-panel: rgba(255, 252, 243, 0.86);
+  --sj-panel-solid: #fffaf0;
+  --sj-field: rgba(255, 255, 250, 0.94);
+  --sj-flour: #f7ead1;
+  --sj-border: rgba(88, 61, 38, 0.18);
+  --sj-border-strong: rgba(88, 61, 38, 0.28);
+  --sj-brass: #b16a22;
+  --sj-tomato: #bb3f24;
+  --sj-herb: #567c2f;
+  --sj-mint: #d7e8be;
+  --sj-rose: #f2c6af;
+  --sj-shadow: 0 24px 80px rgba(62, 40, 20, 0.14);
+  --sj-shadow-soft: 0 12px 36px rgba(62, 40, 20, 0.10);
+}
+
+.dark {
+  color-scheme: dark;
+  --sj-ink: #fff4df;
+  --sj-ink-soft: #d5c1a8;
+  --sj-paper: #1e1813;
+  --sj-page: #15110d;
+  --sj-panel: rgba(39, 29, 21, 0.84);
+  --sj-panel-solid: #241a13;
+  --sj-field: rgba(22, 18, 14, 0.82);
+  --sj-flour: #37281a;
+  --sj-border: rgba(255, 226, 186, 0.16);
+  --sj-border-strong: rgba(255, 226, 186, 0.28);
+  --sj-brass: #efb15c;
+  --sj-tomato: #f0704d;
+  --sj-herb: #b9d982;
+  --sj-mint: #314528;
+  --sj-rose: #5b2b20;
+  --sj-shadow: 0 28px 90px rgba(0, 0, 0, 0.42);
+  --sj-shadow-soft: 0 16px 44px rgba(0, 0, 0, 0.34);
+}
+
+html {
+  background: var(--sj-page);
+}
+
+body {
+  min-height: 100svh;
+  background:
+    radial-gradient(circle at 12% 4%, color-mix(in srgb, var(--sj-brass) 22%, transparent), transparent 28rem),
+    radial-gradient(circle at 88% 2%, color-mix(in srgb, var(--sj-herb) 20%, transparent), transparent 24rem),
+    var(--sj-page);
+  color: var(--sj-ink);
+  font-family: var(--font-sj-body);
+  font-feature-settings: "liga" 1, "kern" 1;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--sj-brass) 35%, transparent);
+  color: var(--sj-ink);
+}
+
+button,
+input,
+textarea,
+select {
+  font-family: var(--font-sj-ui);
+}
+
 /* Smooth theme transitions */
 html,
 body,
@@ -12,4 +85,142 @@ html * {
 /* Exclude elements where transition causes issues */
 html *:where(input, textarea, select, button) {
   transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out, color 0.15s ease-in-out;
+}
+
+.font-sj-display {
+  font-family: var(--font-sj-display);
+  font-variation-settings: "SOFT" 62, "WONK" 1;
+}
+
+.font-sj-body {
+  font-family: var(--font-sj-body);
+}
+
+.font-sj-ui {
+  font-family: var(--font-sj-ui);
+}
+
+.sj-app-shell {
+  background:
+    linear-gradient(115deg, color-mix(in srgb, var(--sj-paper) 82%, transparent), transparent 56%),
+    radial-gradient(circle at 0 0, color-mix(in srgb, var(--sj-rose) 36%, transparent), transparent 28rem),
+    radial-gradient(circle at 100% 8%, color-mix(in srgb, var(--sj-mint) 42%, transparent), transparent 30rem),
+    var(--sj-page);
+}
+
+.sj-desktop-surface,
+.sj-mobile-surface,
+.sj-page {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.sj-desktop-surface::before,
+.sj-mobile-surface::before,
+.sj-page::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.38;
+  background-image:
+    linear-gradient(90deg, color-mix(in srgb, var(--sj-ink) 8%, transparent) 1px, transparent 1px),
+    linear-gradient(0deg, color-mix(in srgb, var(--sj-ink) 7%, transparent) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: radial-gradient(circle at top, black, transparent 74%);
+}
+
+.sj-page {
+  min-height: 100svh;
+  background:
+    radial-gradient(circle at 12% 0, color-mix(in srgb, var(--sj-brass) 18%, transparent), transparent 26rem),
+    radial-gradient(circle at 92% 8%, color-mix(in srgb, var(--sj-herb) 18%, transparent), transparent 28rem),
+    var(--sj-page);
+}
+
+.sj-panel {
+  border: 1px solid var(--sj-border);
+  background: var(--sj-panel);
+  box-shadow: var(--sj-shadow-soft);
+  backdrop-filter: blur(20px) saturate(1.15);
+}
+
+.sj-card {
+  border: 1px solid var(--sj-border);
+  background: linear-gradient(145deg, var(--sj-panel), color-mix(in srgb, var(--sj-flour) 46%, transparent));
+  box-shadow: var(--sj-shadow-soft);
+}
+
+.sj-receipt {
+  border: 1px solid var(--sj-border);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--sj-panel-solid) 96%, transparent), color-mix(in srgb, var(--sj-flour) 74%, transparent)),
+    repeating-linear-gradient(0deg, transparent 0 31px, color-mix(in srgb, var(--sj-border) 62%, transparent) 32px);
+  box-shadow: var(--sj-shadow-soft);
+}
+
+.sj-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--sj-brass) 48%, var(--sj-border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--sj-brass) 14%, var(--sj-panel-solid));
+  color: var(--sj-ink);
+  font-family: var(--font-sj-ui);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  line-height: 1;
+  padding: 0.45rem 0.72rem;
+  text-transform: uppercase;
+}
+
+.sj-link {
+  color: var(--sj-tomato);
+  font-family: var(--font-sj-ui);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.sj-link:hover {
+  color: var(--sj-brass);
+}
+
+.sj-muted {
+  color: var(--sj-ink-soft);
+}
+
+.sj-form-section {
+  border: 1px solid var(--sj-border);
+  border-radius: 1.5rem;
+  background: color-mix(in srgb, var(--sj-panel) 88%, transparent);
+  padding: clamp(1rem, 2.5vw, 1.5rem);
+  box-shadow: var(--sj-shadow-soft);
+}
+
+.sj-hover-lift {
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.sj-hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--sj-shadow);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.001ms !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+  }
+
+  .sj-hover-lift:hover {
+    transform: none;
+  }
 }

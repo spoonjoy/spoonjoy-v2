@@ -290,7 +290,7 @@ describe('Navbar components', () => {
         const button = container.querySelector('button')
         expect(button?.className).toContain('flex')
         expect(button?.className).toContain('items-center')
-        expect(button?.className).toContain('rounded-lg')
+        expect(button?.className).toContain('rounded-full')
       })
     })
   })

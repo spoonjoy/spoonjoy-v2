@@ -37,29 +37,29 @@ export function BioCard({
     .toUpperCase()
 
   return (
-    <section className="rounded-2xl border border-zinc-950/10 bg-white p-4 shadow-xs dark:border-white/10 dark:bg-zinc-900 sm:p-5">
+    <section className="sj-panel rounded-[2rem] p-4 sm:p-5">
       <div className="flex items-start gap-3">
         <Avatar
           src={avatarUrl}
           initials={initials}
           alt={name}
-          className="size-14 bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
+          className="size-16 border border-[var(--sj-border)] bg-[var(--sj-flour)] text-[var(--sj-ink)] shadow-[var(--sj-shadow-soft)]"
         />
         <div className="min-w-0 flex-1">
           {profileHref ? (
-            <Link href={profileHref} className="hover:underline">
-              <Heading level={2} className="truncate text-lg/6 font-semibold">
+            <Link href={profileHref} className="no-underline hover:text-[var(--sj-tomato)]">
+              <Heading level={2} className="truncate text-2xl/8 font-semibold">
                 {name}
               </Heading>
             </Link>
           ) : (
-            <Heading level={2} className="truncate text-lg/6 font-semibold">
+            <Heading level={2} className="truncate text-2xl/8 font-semibold">
               {name}
             </Heading>
           )}
 
           {(location || joinedLabel) && (
-            <Text className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+            <Text className="font-sj-ui mt-1 text-xs uppercase tracking-[0.14em]">
               {[location, joinedLabel].filter(Boolean).join(' • ')}
             </Text>
           )}
@@ -81,7 +81,7 @@ export function BioCard({
         </div>
       )}
 
-      <div className="mt-5 border-t border-zinc-950/10 pt-4 dark:border-white/10">
+      <div className="mt-5 border-t border-[var(--sj-border)] pt-4">
         <Subheading level={3} className="text-sm">
           Kitchen Snapshot
         </Subheading>

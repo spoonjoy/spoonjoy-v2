@@ -115,7 +115,7 @@ const colors = {
 type Color = keyof typeof colors
 
 export function Checkbox({
-  color = 'dark/zinc',
+  color = 'amber',
   className,
   ...props
 }: {

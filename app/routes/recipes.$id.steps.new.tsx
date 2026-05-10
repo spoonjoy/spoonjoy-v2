@@ -343,13 +343,14 @@ export default function NewStep() {
   };
 
   return (
-    <div className="font-sans leading-relaxed p-8">
-      <div className="max-w-[800px] mx-auto">
+    <div className="sj-page px-4 py-8 sm:px-6 sm:py-12">
+      <div className="mx-auto max-w-4xl">
         <div className="mb-8">
-          <Heading level={1}>Add Step</Heading>
+          <p className="sj-eyebrow">Step {nextStepNum}</p>
+          <Heading level={1} className="mt-4 text-4xl/11 tracking-[-0.04em] sm:text-6xl/15">Add Step</Heading>
           <Link
             href={`/recipes/${recipe.id}/edit`}
-            className="text-blue-600 no-underline"
+            className="sj-link mt-4 inline-flex"
           >
             ← Back to recipe
           </Link>
@@ -359,13 +360,13 @@ export default function NewStep() {
           <ValidationError error={actionData.errors.general} className="mb-4" />
         )}
 
-        <div className="bg-zinc-100 p-4 rounded-lg mb-6">
+        <div className="sj-card mb-6 rounded-[1.5rem] p-4">
           <Text className="m-0">
             <Strong>Step Number:</Strong> {nextStepNum}
           </Text>
         </div>
 
-        <Form method="post" className="space-y-6">
+        <Form method="post" className="sj-panel rounded-[2rem] p-6">
           <Fieldset className="space-y-6">
             <Field>
               <Label>Step Title (optional)</Label>
@@ -388,7 +389,7 @@ export default function NewStep() {
             {nextStepNum === 1 ? (
               <Field>
                 <Label>Uses Output From</Label>
-                <Text className="text-zinc-500 italic">No previous steps available</Text>
+                <Text className="italic">No previous steps available</Text>
               </Field>
             ) : availableSteps.length > 0 && (
               <Field>
@@ -442,7 +443,7 @@ export default function NewStep() {
 
             <Field>
               <Label>Ingredients</Label>
-              <div className="bg-zinc-100 p-6 rounded-lg flex flex-col gap-4">
+              <div className="flex flex-col gap-4 rounded-[1.5rem] border border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-flour)_55%,transparent)] p-6">
                 <IngredientInputToggle mode={ingredientInputMode} onChange={handleModeChange} />
 
                 {ingredientInputMode === "manual" ? (
@@ -480,15 +481,15 @@ export default function NewStep() {
               <input type="hidden" name="ingredientsJson" value={JSON.stringify(ingredients)} />
 
               {ingredients.length === 0 ? (
-                <div className="mt-4 bg-zinc-100 p-6 rounded-lg text-center">
-                  <p className="text-zinc-500">No ingredients added yet</p>
+                <div className="mt-4 rounded-[1.5rem] border border-dashed border-[var(--sj-border-strong)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_70%,transparent)] p-6 text-center">
+                  <p className="text-[var(--sj-ink-soft)]">No ingredients added yet</p>
                 </div>
               ) : (
                 <ul className="mt-4 flex flex-col gap-2 list-none p-0 m-0">
                   {ingredients.map((ingredient, index) => (
                     <li
                       key={`${ingredient.ingredientName}-${index}`}
-                      className="bg-white border border-zinc-200 rounded p-3 px-4 flex justify-between items-center"
+                      className="flex items-center justify-between rounded-[1.25rem] border border-[var(--sj-border)] bg-[var(--sj-panel-solid)] p-3 px-4"
                     >
                       <span>
                         <strong>{ingredient.quantity}</strong> {ingredient.unit} {ingredient.ingredientName}
@@ -506,8 +507,8 @@ export default function NewStep() {
               )}
             </Field>
 
-            <div className="flex gap-4 justify-end pt-4">
-              <Link href={`/recipes/${recipe.id}/edit`}>
+            <div className="flex flex-col-reverse gap-3 border-t border-[var(--sj-border)] pt-4 sm:flex-row sm:justify-end">
+              <Link href={`/recipes/${recipe.id}/edit`} className="sj-link self-center sm:self-auto">
                 Cancel
               </Link>
               <Button type="submit">

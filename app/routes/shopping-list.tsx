@@ -142,12 +142,14 @@ export default function ShoppingList() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8">
+    <div className="sj-page px-4 py-8 sm:px-6 sm:py-12">
+      <div className="mx-auto max-w-4xl">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <Heading level={1}>Shopping List</Heading>
-          <Text className="mt-1">
+          <p className="sj-eyebrow">Market run</p>
+          <Heading level={1} className="mt-4 text-4xl/11 tracking-[-0.04em] sm:text-6xl/15">Shopping List</Heading>
+          <Text className="mt-2 text-base/7">
             {displayItems.length} {displayItems.length === 1 ? "item" : "items"}
             {/* istanbul ignore next -- @preserve */ checkedCount > 0 && (
               <span> ({checkedCount} checked, {uncheckedCount} remaining)</span>
@@ -155,7 +157,7 @@ export default function ShoppingList() {
           </Text>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link href="/">Home</Link>
+          <Link href="/" className="sj-link self-center">Home</Link>
           {/* istanbul ignore next -- @preserve */ checkedCount > 0 && (
             <Form method="post">
               <input type="hidden" name="intent" value="clearCompleted" />
@@ -188,8 +190,8 @@ export default function ShoppingList() {
       </div>
 
       {/* Add Item Form */}
-      <div className="border border-zinc-200 bg-zinc-50/70 p-6 dark:border-zinc-700 dark:bg-zinc-800/30 mb-6">
-        <Subheading level={2}>Add Item</Subheading>
+      <div className="sj-receipt mb-6 rounded-[2rem] p-6">
+        <Subheading level={2} className="text-2xl/8">Add Item</Subheading>
         <Form method="post" className="mt-4">
           <input type="hidden" name="intent" value="addItem" />
           <div className="space-y-4">
@@ -201,12 +203,12 @@ export default function ShoppingList() {
                 required
                 placeholder="e.g., 2 lbs chicken breast or a dozen eggs"
                 defaultValue={actionData?.parseDraft?.originalText || ""}
-                className="before:rounded-none after:rounded-none [&_input]:rounded-none"
+                className="[&_input]:rounded-xl"
               />
             </Field>
             {actionData?.parseDraft && (
-              <div className="border border-zinc-300 p-3 dark:border-zinc-700">
-                <p className="text-sm text-zinc-700 dark:text-zinc-300">
+              <div className="rounded-[1.25rem] border border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_70%,transparent)] p-4">
+                <p className="text-sm text-[var(--sj-ink-soft)]">
                   {actionData?.errors?.parse || "Review the parsed item before adding."}
                 </p>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 mt-3">
@@ -218,7 +220,7 @@ export default function ShoppingList() {
                       step="0.01"
                       placeholder="2"
                       defaultValue={actionData.parseDraft.quantity}
-                      className="before:rounded-none after:rounded-none [&_input]:rounded-none"
+                      className="[&_input]:rounded-xl"
                     />
                   </Field>
                   <Field>
@@ -228,7 +230,7 @@ export default function ShoppingList() {
                       name="unitName"
                       placeholder="lb"
                       defaultValue={actionData.parseDraft.unitName}
-                      className="before:rounded-none after:rounded-none [&_input]:rounded-none"
+                      className="[&_input]:rounded-xl"
                     />
                   </Field>
                   <Field>
@@ -239,7 +241,7 @@ export default function ShoppingList() {
                       required
                       placeholder="chicken breast"
                       defaultValue={actionData.parseDraft.ingredientName}
-                      className="before:rounded-none after:rounded-none [&_input]:rounded-none"
+                      className="[&_input]:rounded-xl"
                     />
                   </Field>
                 </div>
@@ -252,8 +254,8 @@ export default function ShoppingList() {
 
       {/* Add from Recipe */}
       {/* istanbul ignore next -- @preserve */ recipes.length > 0 && (
-        <div className="rounded-lg bg-blue-50 p-6 dark:bg-blue-900/20 mb-6">
-          <Subheading level={2}>Add All Ingredients from Recipe</Subheading>
+        <div className="sj-card mb-6 rounded-[2rem] p-6">
+          <Subheading level={2} className="text-2xl/8">Add All Ingredients from Recipe</Subheading>
           <Form method="post" className="mt-4 flex flex-col sm:flex-row gap-4">
             <input type="hidden" name="intent" value="addFromRecipe" />
             <Select name="recipeId" required className="flex-1">
@@ -273,8 +275,8 @@ export default function ShoppingList() {
 
       {/* Empty State */}
       {displayItems.length === 0 ? (
-        <div className="rounded-lg bg-zinc-50 p-8 dark:bg-zinc-800/50 text-center">
-          <Subheading level={2} className="text-zinc-500 dark:text-zinc-400">
+        <div className="sj-card rounded-[2rem] p-8 text-center">
+          <Subheading level={2} className="text-2xl/8">
             Your shopping list is empty
           </Subheading>
           <Text className="mt-2">
@@ -283,7 +285,7 @@ export default function ShoppingList() {
         </div>
       ) : (
         /* Item List */
-        <div className="space-y-2">
+        <div className="sj-panel rounded-[2rem] p-3">
           <AnimatePresence initial={false}>
             {displayItems.map((item, index) => {
               const affordance = resolveIngredientAffordance(
@@ -302,17 +304,17 @@ export default function ShoppingList() {
               return (
                 <div key={item.id} className="space-y-1">
                   {showCategoryHeader && (
-                    <div className="px-1 text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400" data-testid="shopping-list-category">
+                    <div className="font-sj-ui px-2 pt-3 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)]" data-testid="shopping-list-category">
                       {affordance.categoryLabel}
                     </div>
                   )}
-                  <div className="relative overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-700">
+                  <div className="relative overflow-hidden rounded-[1.35rem] border border-[var(--sj-border)]">
                     {revealedItemId === item.id && (
-                      <div className="absolute inset-y-0 right-0 w-28 bg-red-600 text-white pointer-events-auto">
+                      <div className="pointer-events-auto absolute inset-y-0 right-0 w-28 bg-[var(--sj-tomato)] text-[var(--sj-paper)]">
                         <button
                           type="button"
                           onClick={() => removeItem(item.id)}
-                          className="flex h-full w-full items-center justify-center text-xs font-semibold uppercase tracking-wide"
+                          className="font-sj-ui flex h-full w-full items-center justify-center text-xs font-semibold uppercase tracking-wide"
                           aria-label={`Delete ${item.ingredientRef.name}`}
                         >
                           Delete
@@ -353,7 +355,7 @@ export default function ShoppingList() {
                       transition={{ type: "spring", stiffness: 520, damping: 42, mass: 0.5 }}
                       className={`
                         relative z-10 min-h-11 px-3 py-2
-                        flex items-center gap-2 bg-white dark:bg-zinc-800
+                        flex items-center gap-2 bg-[var(--sj-panel-solid)]
                         ${item.checked ? "opacity-60" : ""}
                       `}
                     >
@@ -376,8 +378,8 @@ export default function ShoppingList() {
                             h-5 w-5 shrink-0 rounded border-2 flex items-center justify-center
                             transition-colors cursor-pointer text-xs font-bold
                             ${item.checked
-                              ? "bg-blue-600 border-blue-600 text-white dark:bg-blue-500 dark:border-blue-500"
-                              : "bg-white border-zinc-300 dark:bg-zinc-800 dark:border-zinc-600"}
+                              ? "border-[var(--sj-brass)] bg-[var(--sj-brass)] text-[var(--sj-paper)]"
+                              : "border-[var(--sj-border-strong)] bg-[var(--sj-field)]"}
                           `}
                           aria-hidden="true"
                         >
@@ -385,10 +387,10 @@ export default function ShoppingList() {
                         </span>
                       </button>
                       <Icon
-                        className="h-4 w-4 shrink-0 text-zinc-500 dark:text-zinc-400"
+                        className="h-4 w-4 shrink-0 text-[var(--sj-brass)]"
                         aria-hidden="true"
                       />
-                      <span className={`min-w-0 flex-1 truncate text-base ${item.checked ? "line-through text-zinc-400 dark:text-zinc-500" : "text-zinc-900 dark:text-zinc-100"}`}>
+                      <span className={`min-w-0 flex-1 truncate text-base ${item.checked ? "line-through text-[var(--sj-ink-soft)]" : "text-[var(--sj-ink)]"}`}>
                         {item.quantity && <strong>{item.quantity}</strong>}
                         {item.quantity && item.unit && " "}
                         {item.unit?.name && <span>{item.unit.name}</span>}
@@ -398,7 +400,7 @@ export default function ShoppingList() {
                       <button
                         type="button"
                         onClick={() => removeItem(item.id)}
-                        className="min-h-11 shrink-0 rounded px-2 text-xs font-semibold uppercase tracking-wide text-red-600 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600 dark:text-red-400 dark:hover:bg-red-950/30"
+                        className="font-sj-ui min-h-11 shrink-0 rounded-full px-2 text-xs font-semibold uppercase tracking-wide text-[var(--sj-tomato)] hover:bg-[color-mix(in_srgb,var(--sj-tomato)_10%,transparent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-tomato)]"
                         aria-label={`Remove ${item.ingredientRef.name}`}
                       >
                         Delete
@@ -411,6 +413,7 @@ export default function ShoppingList() {
           </AnimatePresence>
         </div>
       )}
+      </div>
     </div>
   );
 }

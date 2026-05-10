@@ -121,21 +121,20 @@ describe('CookbookCard', () => {
     expect(onShare).toHaveBeenCalled()
   })
 
-  // Swiss-alpine aesthetic
-  it('uses sharp corners (rounded-sm)', () => {
+  it('uses the warm editorial Spoonjoy card treatment', () => {
     const { container } = renderWithRouter(<CookbookCard {...base} />)
 
     const article = container.querySelector('article')
-    expect(article?.className).toContain('rounded-sm')
+    expect(article?.className).toContain('sj-card')
+    expect(article?.className).toContain('rounded-[1.6rem]')
     expect(article?.className).not.toContain('rounded-lg')
   })
 
-  it('uses shadow-sm and thin border, no blue outline', () => {
+  it('keeps cookbook covers on-brand with no blue outline', () => {
     const { container } = renderWithRouter(<CookbookCard {...base} />)
 
     const article = container.querySelector('article')
-    expect(article?.className).toContain('shadow-sm')
-    expect(article?.className).toContain('border-zinc-200')
+    expect(article?.className).toContain('sj-hover-lift')
     expect(article?.className).not.toContain('border-blue')
   })
 

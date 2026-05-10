@@ -62,36 +62,42 @@ export function RecipeHeader({
   return (
     <header className="w-full">
       {/* Hero Image Section - PROMINENT and beautiful */}
-      {displayImageUrl ? (
-        <div
-          data-testid="recipe-image"
-          className="relative w-full aspect-[4/3] sm:aspect-[16/9] lg:aspect-[21/9] overflow-hidden bg-zinc-100 dark:bg-zinc-800"
-        >
-          <img
-            src={displayImageUrl}
-            alt={`Photo of ${title}`}
-            className="w-full h-full object-cover"
-          />
-          {/* Gradient overlay for text readability on mobile */}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent sm:hidden" />
-        </div>
-      ) : (
-        <div
-          data-testid="recipe-image-placeholder"
-          className="relative w-full aspect-[4/3] sm:aspect-[16/9] lg:aspect-[21/9] bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center"
-        >
-          <div className="flex flex-col items-center gap-2 text-zinc-400 dark:text-zinc-500">
-            <ImageOff className="w-12 h-12 sm:w-16 sm:h-16" aria-hidden="true" />
-            <span className="text-sm">No image available</span>
+      <div className="px-4 pt-5 sm:px-6 lg:px-8">
+        {displayImageUrl ? (
+          <div
+            data-testid="recipe-image"
+            className="relative mx-auto aspect-[4/3] w-full max-w-6xl overflow-hidden rounded-[2rem] border border-[var(--sj-border)] bg-[var(--sj-flour)] shadow-[var(--sj-shadow)] sm:aspect-[16/9] lg:aspect-[21/9]"
+          >
+            <img
+              src={displayImageUrl}
+              alt={`Photo of ${title}`}
+              className="h-full w-full object-cover"
+            />
+            <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.08),transparent_38%,rgba(0,0,0,0.44))]" aria-hidden="true" />
           </div>
-        </div>
-      )}
+        ) : (
+          <div
+            data-testid="recipe-image-placeholder"
+            className="relative mx-auto flex aspect-[4/3] w-full max-w-6xl items-center justify-center overflow-hidden rounded-[2rem] border border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-flour)_72%,transparent)] shadow-[var(--sj-shadow-soft)] sm:aspect-[16/9] lg:aspect-[21/9]"
+          >
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,color-mix(in_srgb,var(--sj-brass)_20%,transparent),transparent_32%),radial-gradient(circle_at_70%_30%,color-mix(in_srgb,var(--sj-herb)_18%,transparent),transparent_34%)]" aria-hidden="true" />
+            <div className="relative flex flex-col items-center gap-3 text-[var(--sj-ink-soft)]">
+              <div className="rounded-full border border-[var(--sj-border)] bg-[var(--sj-panel-solid)] p-5 shadow-[var(--sj-shadow-soft)]">
+                <ImageOff className="size-12 sm:size-16" aria-hidden="true" />
+              </div>
+              <span className="font-sj-ui text-sm font-semibold uppercase tracking-[0.16em]">No image available</span>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Content Section */}
-      <div className="px-4 sm:px-6 lg:px-8 py-6 sm:py-8 max-w-4xl mx-auto">
+      <div className="relative mx-auto -mt-10 max-w-4xl px-4 pb-6 sm:px-6 sm:pb-8 lg:px-8">
+        <div className="sj-panel rounded-[2rem] p-5 sm:p-7">
         {/* Title and Chef Info */}
         <div className="mb-4">
-          <Heading level={1} className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight break-words">
+          <p className="sj-eyebrow mb-4">Recipe</p>
+          <Heading level={1} className="break-words text-4xl/11 font-bold tracking-[-0.04em] sm:text-5xl/13 lg:text-6xl/15">
             {title}
           </Heading>
           <div className="mt-2 flex items-center gap-2">
@@ -100,13 +106,13 @@ export function RecipeHeader({
                 src={chefPhotoUrl}
                 initials={chefName.charAt(0).toUpperCase()}
                 alt={chefName}
-                className="size-8"
+                className="size-9 border border-[var(--sj-border)]"
               />
             </span>
             <Text>
               By{' '}
               {resolvedChefHref ? (
-                <Link href={resolvedChefHref} className="hover:underline">
+                <Link href={resolvedChefHref} className="sj-link">
                   <strong>{chefName}</strong>
                 </Link>
               ) : (
@@ -118,15 +124,15 @@ export function RecipeHeader({
 
         {/* Description */}
         {description && (
-          <div className="mb-6 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl p-4 sm:p-6">
-            <Text className="text-base sm:text-lg leading-relaxed">{description}</Text>
+          <div className="mb-6 rounded-[1.5rem] border border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-flour)_54%,transparent)] p-4 sm:p-6">
+            <Text className="text-base leading-relaxed sm:text-lg">{description}</Text>
           </div>
         )}
 
         {/* Scaling Section */}
-        <div className="flex items-center justify-between gap-3 p-2.5 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl">
+        <div className="flex flex-col gap-3 rounded-[1.5rem] border border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_72%,transparent)] p-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-zinc-600 dark:text-zinc-400">Servings:</span>
+            <span className="font-sj-ui text-sm font-semibold uppercase tracking-[0.12em] text-[var(--sj-ink-soft)]">Servings:</span>
             <ScaleSelector
               value={scaleFactor}
               onChange={onScaleChange}
@@ -137,12 +143,13 @@ export function RecipeHeader({
             <button
               type="button"
               onClick={onClearProgress}
-              className="text-xs font-medium text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+              className="font-sj-ui text-left text-xs font-semibold uppercase tracking-[0.14em] text-[var(--sj-ink-soft)] hover:text-[var(--sj-tomato)] sm:text-right"
               data-testid="clear-progress-button"
             >
               Clear progress
             </button>
           )}
+        </div>
         </div>
       </div>
     </header>

@@ -58,6 +58,7 @@ interface SearchRow {
 
 const DEFAULT_SEARCH_LIMIT = 20;
 const MAX_SEARCH_LIMIT = 50;
+const SEARCH_INDEX_PAGE_SIZE = 10;
 
 const ENTITY_TYPES_BY_SCOPE: Record<SearchScope, readonly SearchEntityType[]> = {
   all: ["recipe", "cookbook", "chef", "shopping-list-item"],
@@ -207,57 +208,73 @@ async function insertSearchDocument(database: PrismaClient, document: SearchDocu
 }
 
 async function recipeDocuments(database: PrismaClient): Promise<SearchDocumentInput[]> {
-  const recipes = await database.recipe.findMany({
-    where: { deletedAt: null },
-    include: {
-      chef: { select: { id: true, username: true } },
-      cookbooks: { include: { cookbook: { select: { title: true } } } },
-      steps: {
-        orderBy: { stepNum: "asc" },
-        include: { ingredients: { include: { unit: true, ingredientRef: true } } },
-      },
-    },
-  });
+  const documents: SearchDocumentInput[] = [];
+  let cursor: string | undefined;
+  let hasMore = true;
 
-  return recipes.map((recipe) => {
-    const ingredientNames = uniqueSorted(
-      recipe.steps.flatMap((step) => step.ingredients.map((ingredient) => ingredient.ingredientRef.name))
+  while (hasMore) {
+    const recipes = await database.recipe.findMany({
+      where: { deletedAt: null },
+      orderBy: { id: "asc" },
+      take: SEARCH_INDEX_PAGE_SIZE,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      include: {
+        chef: { select: { id: true, username: true } },
+        cookbooks: { include: { cookbook: { select: { title: true } } } },
+        steps: {
+          orderBy: { stepNum: "asc" },
+          include: { ingredients: { include: { unit: true, ingredientRef: true } } },
+        },
+      },
+    });
+
+    documents.push(
+      ...recipes.map((recipe) => {
+        const ingredientNames = uniqueSorted(
+          recipe.steps.flatMap((step) => step.ingredients.map((ingredient) => ingredient.ingredientRef.name))
+        );
+        const cookbookTitles = uniqueSorted(recipe.cookbooks.map((item) => item.cookbook.title));
+        const stepText = recipe.steps.flatMap((step) => [
+          step.stepTitle,
+          step.description,
+          ...step.ingredients.map((ingredient) =>
+            compactText([String(ingredient.quantity), ingredient.unit.name, ingredient.ingredientRef.name])
+          ),
+        ]);
+
+        return {
+          type: "recipe" as const,
+          id: recipe.id,
+          ownerId: recipe.chefId,
+          ownerUsername: recipe.chef.username,
+          sortAt: recipe.updatedAt.toISOString(),
+          title: recipe.title,
+          subtitle: `Recipe by ${recipe.chef.username}`,
+          body: compactText([
+            recipe.description,
+            recipe.sourceUrl,
+            recipe.chef.username,
+            ...cookbookTitles,
+            ...stepText,
+          ]),
+          href: `/recipes/${recipe.id}`,
+          imageUrl: recipe.imageUrl,
+          metadata: {
+            servings: recipe.servings,
+            chefUsername: recipe.chef.username,
+            ingredientNames,
+            stepCount: recipe.steps.length,
+            cookbookTitles,
+          },
+        };
+      })
     );
-    const cookbookTitles = uniqueSorted(recipe.cookbooks.map((item) => item.cookbook.title));
-    const stepText = recipe.steps.flatMap((step) => [
-      step.stepTitle,
-      step.description,
-      ...step.ingredients.map((ingredient) =>
-        compactText([String(ingredient.quantity), ingredient.unit.name, ingredient.ingredientRef.name])
-      ),
-    ]);
 
-    return {
-      type: "recipe",
-      id: recipe.id,
-      ownerId: recipe.chefId,
-      ownerUsername: recipe.chef.username,
-      sortAt: recipe.updatedAt.toISOString(),
-      title: recipe.title,
-      subtitle: `Recipe by ${recipe.chef.username}`,
-      body: compactText([
-        recipe.description,
-        recipe.sourceUrl,
-        recipe.chef.username,
-        ...cookbookTitles,
-        ...stepText,
-      ]),
-      href: `/recipes/${recipe.id}`,
-      imageUrl: recipe.imageUrl,
-      metadata: {
-        servings: recipe.servings,
-        chefUsername: recipe.chef.username,
-        ingredientNames,
-        stepCount: recipe.steps.length,
-        cookbookTitles,
-      },
-    };
-  });
+    hasMore = recipes.length === SEARCH_INDEX_PAGE_SIZE;
+    cursor = recipes.at(-1)?.id;
+  }
+
+  return documents;
 }
 
 async function cookbookDocuments(database: PrismaClient): Promise<SearchDocumentInput[]> {

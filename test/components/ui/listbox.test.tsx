@@ -213,7 +213,7 @@ describe('Listbox', () => {
         </Listbox>
       )
       const placeholder = screen.getByText('Select a fruit')
-      expect(placeholder?.className).toContain('text-zinc-500')
+      expect(placeholder?.className).toContain('text-[var(--sj-ink-soft)]')
     })
 
     it('can be used with name prop for form submission', () => {
@@ -369,12 +369,12 @@ describe('Listbox', () => {
       expect(descContainer?.className).toContain('custom-desc')
     })
 
-    it('applies text-zinc-500 class for muted styling', () => {
+    it('applies text-[var(--sj-ink-soft)] class for muted styling', () => {
       const { container } = render(
         <ListboxDescription>Description text</ListboxDescription>
       )
       const descContainer = container.querySelector('span')
-      expect(descContainer?.className).toContain('text-zinc-500')
+      expect(descContainer?.className).toContain('text-[var(--sj-ink-soft)]')
     })
 
     it('applies flex-1 class for flexible sizing', () => {

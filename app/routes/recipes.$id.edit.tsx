@@ -373,13 +373,18 @@ export default function EditRecipe() {
   });
 
   return (
-    <div className="font-sans leading-relaxed p-8">
-      <div className="max-w-[800px] mx-auto">
-        <div className="mb-8">
-          <Heading level={1}>Edit Recipe</Heading>
+    <div className="sj-page px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
+      <div className="mx-auto max-w-5xl">
+        <div className="mb-8 grid gap-5 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-end">
+          <div>
+            <p className="sj-eyebrow">Edit recipe</p>
+            <Heading level={1} className="mt-4 text-4xl/11 tracking-[-0.04em] sm:text-6xl/15">
+              Tune the recipe until it feels cookable.
+            </Heading>
+          </div>
           <Link
             href={`/recipes/${recipe.id}`}
-            className="text-blue-600 no-underline"
+            className="sj-link justify-self-start lg:justify-self-end"
           >
             ← Back to recipe
           </Link>
@@ -421,14 +426,17 @@ export default function EditRecipe() {
           showSteps={false}
         />
 
-        <section aria-label="Recipe Steps" className="space-y-4 mt-10">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold">Recipe Steps</h2>
-            <Link href={`/recipes/${recipe.id}/steps/new`}>+ Add Step</Link>
+        <section aria-label="Recipe Steps" className="sj-form-section mt-10 space-y-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="sj-eyebrow">Method</p>
+              <h2 className="font-sj-display mt-3 text-3xl/9 font-semibold tracking-[-0.03em] text-[var(--sj-ink)]">Recipe Steps</h2>
+            </div>
+            <Link href={`/recipes/${recipe.id}/steps/new`} className="sj-link">+ Add Step</Link>
           </div>
 
           {recipe.steps.length === 0 ? (
-            <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-600">
+            <div className="rounded-[1.5rem] border border-dashed border-[var(--sj-border-strong)] bg-[color-mix(in_srgb,var(--sj-flour)_55%,transparent)] p-6 text-sm text-[var(--sj-ink-soft)]">
               No steps yet. Add your first step.
             </div>
           ) : (
@@ -438,17 +446,17 @@ export default function EditRecipe() {
                 return (
                   <article
                     key={step.id}
-                    className="rounded-lg border border-zinc-200 bg-white p-4"
+                    className="sj-card rounded-[1.5rem] p-4"
                     aria-label={`Step ${step.stepNum}`}
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0">
-                        <p className="m-0 text-sm text-zinc-500">Step {step.stepNum}</p>
-                        <h3 className="m-0 text-base font-semibold truncate">{title}</h3>
-                        <p className="m-0 mt-1 text-sm text-zinc-600">
+                        <p className="font-sj-ui m-0 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">Step {step.stepNum}</p>
+                        <h3 className="font-sj-display m-0 truncate text-xl/7 font-semibold text-[var(--sj-ink)]">{title}</h3>
+                        <p className="m-0 mt-1 text-sm text-[var(--sj-ink-soft)]">
                           {step.description}
                         </p>
-                        <p className="m-0 mt-1 text-sm text-zinc-500">
+                        <p className="m-0 mt-1 text-sm text-[var(--sj-ink-soft)]">
                           {step.ingredients.length} ingredient{step.ingredients.length === 1 ? "" : "s"}
                         </p>
                       </div>
