@@ -1,5 +1,3 @@
-'use client'
-
 /**
  * Quick Actions - Helper utilities for common contextual actions
  * 

@@ -1,5 +1,3 @@
-'use client'
-
 import { useMemo } from 'react'
 import { Edit, ShoppingCart, Share, X, Save, Bookmark, User, Check } from 'lucide-react'
 import { useDockActions, type DockAction } from './dock-context'

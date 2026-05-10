@@ -1,5 +1,3 @@
-'use client'
-
 import { useLocation } from 'react-router'
 import { SpoonDock } from './spoon-dock'
 import { DockItem } from './dock-item'

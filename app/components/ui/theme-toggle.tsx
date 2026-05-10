@@ -1,5 +1,3 @@
-'use client'
-
 import { Sun, Moon, Monitor } from 'lucide-react'
 import { useTheme } from './theme-provider'
 import * as Headless from '@headlessui/react'
