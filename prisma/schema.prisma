@@ -29,9 +29,27 @@ model User {
   shoppingList        ShoppingList?
   cookbooks           Cookbook[]
   addedToCookbooks    RecipeInCookbook[]
+  apiCredentials      ApiCredential[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
+}
+
+model ApiCredential {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  tokenHash   String    @unique
+  tokenPrefix String
+  lastUsedAt  DateTime?
+  revokedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@index([userId])
+  @@index([tokenPrefix])
 }
 
 model UserCredential {

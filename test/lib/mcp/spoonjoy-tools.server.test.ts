@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import { faker } from "@faker-js/faker";
 import { getLocalDb } from "~/lib/db.server";
+import { authenticateApiToken } from "~/lib/api-auth.server";
 import { callSpoonjoyMcpTool, listSpoonjoyMcpTools, type SpoonjoyMcpContext } from "~/lib/mcp/spoonjoy-tools.server";
 import { ACTIVE_RECIPE_TITLE_CONFLICT_ERROR } from "~/lib/recipe-title-uniqueness.server";
 import { cleanupDatabase } from "../../helpers/cleanup";
@@ -28,6 +29,9 @@ describe("spoonjoy MCP tools", () => {
   it("lists stable MCP tool metadata", () => {
     expect(listSpoonjoyMcpTools().map((tool) => tool.name)).toEqual([
       "health",
+      "create_api_token",
+      "list_api_tokens",
+      "revoke_api_token",
       "search_spoonjoy",
       "search_recipes",
       "search_shopping_list",
@@ -50,14 +54,71 @@ describe("spoonjoy MCP tools", () => {
     expect(parseJson(await callSpoonjoyMcpTool("health", {}, context))).toMatchObject({
       ok: true,
       app: "spoonjoy-v2",
+      authenticated: false,
       defaultOwnerEmail: context.defaultOwnerEmail,
       writable: true,
     });
 
     expect(parseJson(await callSpoonjoyMcpTool("health", {}, { db: context.db }))).toMatchObject({
+      authenticated: false,
       defaultOwnerEmail: null,
       writable: false,
     });
+  });
+
+  it("creates, lists, revokes, and authorizes owner-scoped API tokens", async () => {
+    const created = parseJson(await callSpoonjoyMcpTool("create_api_token", {
+      name: "Ouro vault token",
+    }, context));
+    expect(created.token).toMatch(/^sj_/);
+    expect(created.credential).toMatchObject({
+      name: "Ouro vault token",
+      tokenPrefix: created.token.slice(0, 12),
+      lastUsedAt: null,
+      revokedAt: null,
+    });
+
+    const stored = await context.db.apiCredential.findUniqueOrThrow({ where: { id: created.credential.id } });
+    expect(stored.tokenHash).not.toBe(created.token);
+
+    const defaultNamed = parseJson(await callSpoonjoyMcpTool("create_api_token", {}, context));
+    expect(defaultNamed.credential).toMatchObject({ name: "Spoonjoy API token" });
+
+    const principal = await authenticateApiToken(context.db, created.token as string);
+    expect(principal).toMatchObject({
+      email: context.defaultOwnerEmail,
+      source: "bearer",
+      credentialId: created.credential.id,
+    });
+
+    const authedContext: SpoonjoyMcpContext = { db: context.db, principal };
+    const health = parseJson(await callSpoonjoyMcpTool("health", {}, authedContext));
+    expect(health).toMatchObject({ authenticated: true, authSource: "bearer", writable: true });
+
+    const listed = parseJson(await callSpoonjoyMcpTool("list_api_tokens", {}, authedContext));
+    expect(listed.credentials).toHaveLength(2);
+    expect(listed.credentials).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: created.credential.id, name: "Ouro vault token" }),
+      expect.objectContaining({ id: defaultNamed.credential.id, name: "Spoonjoy API token" }),
+    ]));
+    expect(listed.credentials[0].token).toBeUndefined();
+
+    await expect(callSpoonjoyMcpTool("add_shopping_list_item", {
+      ownerEmail: uniqueEmail("token-attacker"),
+      name: "Milk",
+    }, authedContext)).rejects.toThrow("different owner");
+
+    const revoked = parseJson(await callSpoonjoyMcpTool("revoke_api_token", {
+      credentialId: created.credential.id,
+    }, authedContext));
+    expect(revoked).toMatchObject({ revoked: true, credential: { id: created.credential.id } });
+    expect(revoked.credential.revokedAt).toEqual(expect.any(String));
+
+    const revokedAgain = parseJson(await callSpoonjoyMcpTool("revoke_api_token", {
+      credentialId: created.credential.id,
+    }, authedContext));
+    expect(revokedAgain.revoked).toBe(false);
+    await expect(authenticateApiToken(context.db, created.token as string)).rejects.toThrow("Invalid API token");
   });
 
   it("creates, searches, and fetches recipes with steps and ingredients", async () => {
@@ -608,7 +669,7 @@ describe("spoonjoy MCP tools", () => {
     await expect(callSpoonjoyMcpTool("create_recipe", { title: "Bad ingredient", steps: [{ description: "x", ingredients: [null] }] }, context)).rejects.toThrow("steps.ingredients[0] must be an object");
     await expect(callSpoonjoyMcpTool("create_recipe", { title: "Bad quantity", steps: [{ description: "x", ingredients: [{ name: "x", quantity: 0, unit: "cup" }] }] }, context)).rejects.toThrow("quantity must be a positive number");
     await expect(callSpoonjoyMcpTool("create_recipe", { title: "Bad unit", steps: [{ description: "x", ingredients: [{ name: "x", quantity: 1, unit: "" }] }] }, context)).rejects.toThrow("unit is required");
-    await expect(callSpoonjoyMcpTool("missing", {}, context)).rejects.toThrow("Unknown Spoonjoy MCP tool");
+    await expect(callSpoonjoyMcpTool("missing", {}, context)).rejects.toThrow("Unknown Spoonjoy operation");
     await expect(callSpoonjoyMcpTool("add_recipe_to_shopping_list", {}, context)).rejects.toThrow("recipeId is required");
     await expect(callSpoonjoyMcpTool("create_cookbook", { title: "No owner" }, { db: context.db })).rejects.toThrow("ownerEmail is required");
     await expect(callSpoonjoyMcpTool("create_cookbook", { title: "" }, context)).rejects.toThrow("title is required");
@@ -629,5 +690,8 @@ describe("spoonjoy MCP tools", () => {
     await expect(callSpoonjoyMcpTool("set_shopping_list_item_checked", { itemId: "item", checked: "yes" }, context)).rejects.toThrow("checked must be a boolean");
     await expect(callSpoonjoyMcpTool("set_shopping_list_item_checked", { checked: true }, context)).rejects.toThrow("itemId is required");
     await expect(callSpoonjoyMcpTool("remove_shopping_list_item", {}, context)).rejects.toThrow("itemId is required");
+    await expect(callSpoonjoyMcpTool("create_api_token", { name: "No owner" }, { db: context.db })).rejects.toThrow("ownerEmail is required");
+    await expect(callSpoonjoyMcpTool("revoke_api_token", {}, context)).rejects.toThrow("credentialId is required");
+    await expect(callSpoonjoyMcpTool("revoke_api_token", { credentialId: "missing" }, context)).rejects.toThrow("API token not found");
   });
 });
