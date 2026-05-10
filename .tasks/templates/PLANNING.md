@@ -1,6 +1,7 @@
 # Planning Task Template
 
 ## Task: [TITLE]
+**Backlog ID**: [SJ-XXX]
 **Type**: planning
 **Created**: [DATE]
 **Status**: [not-started | analyzing | drafting | review | done]
@@ -12,6 +13,7 @@
 
 ## Inputs
 - [Documents, specs, or context to review]
+- `BACKLOG.md` item [SJ-XXX]
 
 ---
 
@@ -59,6 +61,7 @@ If this task produces coding tasks, list them here:
 ## Completion
 
 When done:
-1. Create any resulting coding tasks in ACTIVE.md
-2. Move summary to COMPLETED.md
-3. Archive this task
+1. Update `BACKLOG.md` with any scope/status changes
+2. Create any resulting task docs with the relevant `SJ-*` ID
+3. Move summary to COMPLETED.md
+4. Archive this task

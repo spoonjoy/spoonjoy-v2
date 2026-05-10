@@ -1,6 +1,7 @@
 # Coding Task Template (TDD)
 
 ## Task: [TITLE]
+**Backlog ID**: [SJ-XXX]
 **Type**: coding
 **Created**: [DATE]
 **Status**: [not-started | spec-writing | spec-complete | implementing | testing | done]
@@ -12,6 +13,7 @@
 
 ## Context
 [Links to relevant files, docs, or prior work]
+- `BACKLOG.md` item [SJ-XXX]
 
 ---
 
@@ -32,7 +34,7 @@ Write the full test suite FIRST. This is your contract/specification.
 
 **Run tests (must FAIL):**
 ```bash
-npm test -- --run [test-file-pattern]
+pnpm test -- --run [test-file-pattern]
 ```
 
 Expected: All new tests fail (no implementation yet)
@@ -61,13 +63,13 @@ Only begin after spec is complete and tests fail as expected.
 
 **Run full test suite:**
 ```bash
-npm run test:coverage
+pnpm run test:coverage
 ```
 
 **Acceptance criteria:**
 - [ ] All new tests pass
 - [ ] No regressions in existing tests
-- [ ] Coverage meets threshold (statements: 95%+, branches: 85%+)
+- [ ] Coverage is 100% for statements, branches, functions, and lines
 - [ ] No new warnings (eslint, type errors)
 
 ---
@@ -82,9 +84,10 @@ npm run test:coverage
 ## Completion
 
 When done:
-1. Move summary to COMPLETED.md
-2. Archive or delete this task from ACTIVE.md
-3. Notify:
+1. Update `BACKLOG.md` status/notes for the relevant `SJ-*` item
+2. Move summary to COMPLETED.md
+3. Archive or delete this task from ACTIVE.md
+4. Notify:
 ```bash
 clawdbot gateway wake --text "Done: [summary]" --mode now
 ```

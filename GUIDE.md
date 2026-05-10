@@ -22,8 +22,8 @@ Let's go! 🚀
 ### Prerequisites
 
 You'll need:
-- **Node.js 18+** (`node --version` to check)
-- **pnpm** (`pnpm --version` to check; install via `corepack enable` if needed)
+- **Node.js 22.x** (`node --version` to check; the app pins `>=22 <23`)
+- **pnpm 10.28.1** (`pnpm --version` to check; install via `corepack enable` if needed)
 - A terminal
 - ~5 minutes
 
@@ -57,7 +57,7 @@ pnpm prisma:generate
 ### Create the Database Tables
 
 ```bash
-pnpm exec wrangler d1 execute spoonjoy-local --local --file=./migrations/init.sql
+pnpm exec wrangler d1 migrations apply DB --local
 ```
 
 That's it! The local D1 database is ready.
@@ -67,7 +67,7 @@ That's it! The local D1 database is ready.
 To populate the database with sample recipes and a demo user:
 
 ```bash
-pnpm exec wrangler d1 execute spoonjoy-local --local --file=./migrations/seed.sql
+pnpm db:seed
 ```
 
 This creates:
@@ -104,7 +104,7 @@ Open **http://localhost:5173** — welcome to Spoonjoy!
 3. Click **Sign Up**
 4. You're redirected to `/recipes` — you're in!
 
-> **Tip:** Passwords are securely hashed with bcrypt. OAuth (Google/Apple) is available but requires API credentials.
+> **Tip:** Passwords are securely hashed with bcrypt. OAuth (Google/Apple) requires API credentials and the `/auth/*` routes tracked in `BACKLOG.md` item `SJ-002`.
 
 ---
 
@@ -114,13 +114,15 @@ Let's make something delicious — how about a classic grilled cheese?
 
 ### Step 1: Add the Recipe
 
-1. Navigate to **Recipes** (you should already be there after signup)
+1. Navigate to **My Kitchen** (you should already be there after signup)
 2. Click **New Recipe**
 3. Fill in:
    - **Title**: `Ultimate Grilled Cheese`
    - **Description**: `The only grilled cheese recipe you'll ever need`
    - **Servings**: `1`
 4. Click **Create Recipe**
+
+> **Current backlog note:** Inline recipe creation is being hardened in `SJ-003` and `SJ-004` so steps, ingredients, and images persist from the single-page RecipeBuilder flow. If you hit a mismatch, use the per-step add/edit routes and check `BACKLOG.md`.
 
 ### Step 2: Add Steps
 
@@ -207,7 +209,7 @@ The components are from [Catalyst](https://tailwindui.com/templates/catalyst), T
 
 ## Part 7: Run the Tests
 
-The test suite has 21,000+ lines of tests covering auth, recipes, steps, ingredients, and all components.
+The test suite has 68,000+ lines of tests covering auth, recipes, steps, ingredients, and all components.
 
 ```bash
 # Run all tests
@@ -258,7 +260,8 @@ spoonjoy-v2/
 ├── prisma/
 │   └── schema.prisma     # Database schema
 ├── migrations/
-│   └── init.sql          # D1 migration (generated from Prisma schema)
+│   ├── 0000_init.sql     # Initial D1 migration
+│   └── 0005_*.sql        # Ordered follow-up migrations
 ├── test/                 # Comprehensive test suite
 ├── stories/              # Storybook documentation
 └── .wrangler/            # Local D1 database (auto-created)
@@ -338,7 +341,7 @@ export default function Recipes() {
 The D1 database tables haven't been created. Run:
 
 ```bash
-pnpm exec wrangler d1 execute spoonjoy-local --local --file=./migrations/init.sql
+pnpm exec wrangler d1 migrations apply DB --local
 ```
 
 ### "Cannot find module '@prisma/client'"
@@ -355,16 +358,15 @@ The dev server will automatically try the next available port (5173 → 5174 →
 
 ### OAuth login not working
 
-OAuth requires API credentials configured in `wrangler.json` under the `vars` section:
+OAuth requires API credentials. For local development, put them in `.dev.vars`; for production, set them with `wrangler secret put`:
 
-```json
-{
-  "vars": {
-    "GOOGLE_CLIENT_ID": "your-client-id",
-    "GOOGLE_CLIENT_SECRET": "your-secret",
-    "GOOGLE_CALLBACK_URL": "http://localhost:5173/auth/google/callback"
-  }
-}
+```bash
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+APPLE_CLIENT_ID=your-apple-client-id
+APPLE_TEAM_ID=your-apple-team-id
+APPLE_KEY_ID=your-apple-key-id
+APPLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----..."
 ```
 
 For local development, email/password login works without any additional setup.

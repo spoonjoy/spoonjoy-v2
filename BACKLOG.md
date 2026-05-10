@@ -49,7 +49,7 @@ Status meanings:
 
 Priority: `P0`
 Lane: `agent-trust`, `workflow`, `docs`
-Status: `proposed`
+Status: `done`
 
 Problem: The repo has several competing backlog and planning artifacts. `.tasks/ACTIVE.md` still presents OAuth as ready-to-start and says OAuth helpers do not exist, while the codebase has OAuth helper libraries, tests, and UI but no registered route endpoints. `feedback/2026-01-29.md` points to a missing `backlog-coding.md`. README/GUIDE also contain stale D1 migration commands.
 
