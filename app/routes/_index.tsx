@@ -1,6 +1,6 @@
 import type { Route } from "./+types/_index";
 import { Form, useLoaderData, useLocation } from "react-router";
-import { BookOpen, ChefHat, Settings, Sparkles, Users } from "lucide-react";
+import { BookOpen, ChefHat, Search as SearchIcon, Settings, Sparkles, Users } from "lucide-react";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { getUserId } from "~/lib/session.server";
 import { Button } from "~/components/ui/button";
@@ -183,6 +183,13 @@ export default function Index() {
               >
                 Log In
               </Link>
+              <Link
+                href="/search"
+                className="inline-flex items-center justify-center gap-2 rounded-sm border border-lime-300 bg-lime-50/80 px-4 py-2.5 text-sm font-semibold text-lime-950 no-underline transition hover:bg-lime-100 dark:border-lime-800 dark:bg-lime-950/30 dark:text-lime-100 dark:hover:bg-lime-950/50"
+              >
+                <SearchIcon className="size-4" aria-hidden="true" />
+                Search Recipes
+              </Link>
             </div>
             <dl className="mt-8 grid gap-3 text-sm sm:grid-cols-3">
               <div className="rounded-sm border border-amber-200 bg-amber-50/80 p-2.5 dark:border-amber-900/50 dark:bg-amber-950/20 sm:p-3">
@@ -264,17 +271,23 @@ export default function Index() {
             </div>
           </div>
 
-          {isOwner ? (
-            <div className="flex items-center gap-2">
-              <Button href="/account/settings" plain aria-label="Open settings">
-                <Settings data-slot="icon" className="size-4" />
-                Settings
-              </Button>
-              <Form method="post" action="/logout">
-                <Button type="submit" variant="destructive">Logout</Button>
-              </Form>
-            </div>
-          ) : null}
+          <div className="flex items-center gap-2">
+            <Button href="/search" plain>
+              <SearchIcon data-slot="icon" className="size-4" />
+              Search
+            </Button>
+            {isOwner ? (
+              <>
+                <Button href="/account/settings" plain aria-label="Open settings">
+                  <Settings data-slot="icon" className="size-4" />
+                  Settings
+                </Button>
+                <Form method="post" action="/logout">
+                  <Button type="submit" variant="destructive">Logout</Button>
+                </Form>
+              </>
+            ) : null}
+          </div>
         </header>
 
         <div className="mt-5">

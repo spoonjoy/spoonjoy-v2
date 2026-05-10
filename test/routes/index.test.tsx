@@ -267,6 +267,7 @@ describe("Kitchen Index Route", () => {
       expect(screen.getByText("Family-ready")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Start Your Kitchen" })).toHaveAttribute("href", "/signup");
       expect(screen.getByRole("link", { name: "Log In" })).toHaveAttribute("href", "/login");
+      expect(screen.getByRole("link", { name: "Search Recipes" })).toHaveAttribute("href", "/search");
       expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
     });
 
@@ -297,6 +298,7 @@ describe("Kitchen Index Route", () => {
       const { container } = render(<Stub initialEntries={["/"]} />);
 
       expect(await screen.findByText("My Kitchen")).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Search" })).toHaveAttribute("href", "/search");
       expect(screen.getByRole("link", { name: "Open settings" })).toHaveAttribute("href", "/account/settings");
       expect(screen.getByRole("button", { name: "Logout" })).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "New Recipe" })).toHaveAttribute("href", "/recipes/new");
@@ -384,6 +386,7 @@ describe("Kitchen Index Route", () => {
       render(<Stub initialEntries={["/?chef=alpinechef"]} />);
 
       expect(await screen.findByText("alpinechef's Kitchen")).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Search" })).toHaveAttribute("href", "/search");
       expect(screen.queryByRole("link", { name: "Settings" })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Logout" })).not.toBeInTheDocument();
       expect(screen.queryByRole("link", { name: "New Recipe" })).not.toBeInTheDocument();
