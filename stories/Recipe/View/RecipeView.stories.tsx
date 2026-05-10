@@ -1,42 +1,206 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
-import { expect, userEvent, within } from 'storybook/test'
 import { useState } from 'react'
+import { ArrowLeft } from 'lucide-react'
+import { Button } from '../../../app/components/ui/button'
+import { Heading } from '../../../app/components/ui/heading'
+import { Text } from '../../../app/components/ui/text'
 import { RecipeHeader } from '../../../app/components/recipe/RecipeHeader'
 import { StepCard } from '../../../app/components/recipe/StepCard'
 import type { Ingredient } from '../../../app/components/recipe/IngredientList'
 import type { StepReference } from '../../../app/components/recipe/StepOutputUseCallout'
-import { SaveToCookbookDropdown, type Cookbook } from '../../../app/components/recipe/SaveToCookbookDropdown'
 
-/**
- * # RecipeView Walkthrough
- *
- * This is the **complete recipe viewing experience** - the full story from
- * hero image to final step. This is what users see when cooking in their
- * kitchen with phone in hand.
- *
- * ## The Kitchen Scenario
- *
- * Imagine you're making Grandma's famous chocolate chip cookies. Your phone
- * is propped up on the counter, flour on your hands. You need:
- *
- * 1. A beautiful hero image to know you're in the right place
- * 2. Easy scaling (your book club grew from 4 to 12 people)
- * 3. Checkable ingredients so you don't forget anything
- * 4. Clear step-by-step instructions
- * 5. References to previous steps when you need to use earlier prep
- *
- * This walkthrough demonstrates all of it working together.
- */
-const meta: Meta = {
+type RecipeStep = {
+  id: string
+  stepNum: number
+  title?: string
+  description: string
+  ingredients: Ingredient[]
+  stepOutputUses: StepReference[]
+}
+
+type RecipeStoryData = {
+  id: string
+  title: string
+  description?: string
+  chefName: string
+  chefId: string
+  chefProfileHref: string
+  chefPhotoUrl?: string
+  imageUrl?: string
+  servings?: string
+  steps: RecipeStep[]
+}
+
+const soupRecipe: RecipeStoryData = {
+  id: 'sunday-tomato-soup',
+  title: 'Sunday Tomato Soup',
+  description: 'A silky tomato soup with enough garlic to announce itself, built for grilled cheese and second helpings.',
+  chefName: 'Ari Mendelow',
+  chefId: 'ari',
+  chefProfileHref: '/users/ari',
+  chefPhotoUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&h=200&fit=crop',
+  imageUrl: 'https://images.unsplash.com/photo-1547592166-23ac45744acd?w=1400&h=900&fit=crop',
+  servings: '4 bowls',
+  steps: [
+    {
+      id: 'step-1',
+      stepNum: 1,
+      title: 'Build the base',
+      description: 'Warm the olive oil in a heavy pot. Add onion, garlic, and salt, then cook until the onion softens and the kitchen starts smelling promising.',
+      ingredients: [
+        { id: 'oil', quantity: 2, unit: 'tbsp', name: 'olive oil', iconKey: 'pantry' },
+        { id: 'onion', quantity: 1, unit: 'medium', name: 'yellow onion, diced', iconKey: 'produce' },
+        { id: 'garlic', quantity: 3, unit: 'cloves', name: 'garlic, sliced', iconKey: 'produce' },
+      ],
+      stepOutputUses: [],
+    },
+    {
+      id: 'step-2',
+      stepNum: 2,
+      title: 'Simmer the soup',
+      description: 'Add tomatoes, stock, and basil. Simmer for 25 minutes, stirring occasionally, until the tomatoes collapse into something cozy.',
+      ingredients: [
+        { id: 'tomatoes', quantity: 28, unit: 'oz', name: 'whole peeled tomatoes', iconKey: 'produce' },
+        { id: 'stock', quantity: 2, unit: 'cups', name: 'vegetable stock', iconKey: 'pantry' },
+        { id: 'basil', quantity: 0.25, unit: 'cup', name: 'fresh basil', iconKey: 'produce' },
+      ],
+      stepOutputUses: [{ id: 'base', stepNumber: 1, stepTitle: 'Build the base' }],
+    },
+    {
+      id: 'step-3',
+      stepNum: 3,
+      title: 'Blend and finish',
+      description: 'Blend until smooth. Stir in cream if you want a softer landing, then taste and adjust salt before serving.',
+      ingredients: [
+        { id: 'cream', quantity: 0.33, unit: 'cup', name: 'cream, optional', iconKey: 'dairy' },
+        { id: 'salt', quantity: null, unit: '', name: 'salt, to taste', iconKey: 'pantry' },
+      ],
+      stepOutputUses: [{ id: 'soup', stepNumber: 2, stepTitle: 'Simmer the soup' }],
+    },
+  ],
+}
+
+const minimalRecipe: RecipeStoryData = {
+  ...soupRecipe,
+  id: 'toast',
+  title: 'Perfect Toast',
+  description: undefined,
+  imageUrl: undefined,
+  servings: '1 snack',
+  steps: [
+    {
+      id: 'step-1',
+      stepNum: 1,
+      title: 'Toast and butter',
+      description: 'Toast bread until deeply golden. Butter immediately so it melts into every corner.',
+      ingredients: [
+        { id: 'bread', quantity: 2, unit: 'slices', name: 'good bread', iconKey: 'pantry' },
+        { id: 'butter', quantity: 1, unit: 'tbsp', name: 'salted butter', iconKey: 'dairy' },
+      ],
+      stepOutputUses: [],
+    },
+  ],
+}
+
+function RecipeViewMock({ recipe, initialScale = 1, isOwner = false }: { recipe: RecipeStoryData; initialScale?: number; isOwner?: boolean }) {
+  const [scaleFactor, setScaleFactor] = useState(initialScale)
+  const [checkedIngredients, setCheckedIngredients] = useState<Set<string>>(new Set())
+  const [checkedStepOutputs, setCheckedStepOutputs] = useState<Set<string>>(new Set())
+
+  const toggleIngredient = (id: string) => {
+    setCheckedIngredients((previous) => {
+      const next = new Set(previous)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleStepOutput = (id: string) => {
+    setCheckedStepOutputs((previous) => {
+      const next = new Set(previous)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const clearProgress = () => {
+    setCheckedIngredients(new Set())
+    setCheckedStepOutputs(new Set())
+  }
+
+  return (
+    <div className="min-h-screen bg-zinc-50 pb-24 dark:bg-zinc-950">
+      <div className="mx-auto max-w-4xl px-4 pt-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between gap-4">
+          <Button href="/recipes" plain>
+            <ArrowLeft data-slot="icon" aria-hidden="true" />
+            Back to recipes
+          </Button>
+          {isOwner ? <Button variant="destructive">Delete Recipe</Button> : null}
+        </div>
+      </div>
+
+      <RecipeHeader
+        title={recipe.title}
+        description={recipe.description}
+        chefName={recipe.chefName}
+        chefId={recipe.chefId}
+        chefProfileHref={recipe.chefProfileHref}
+        chefPhotoUrl={recipe.chefPhotoUrl}
+        imageUrl={recipe.imageUrl}
+        servings={recipe.servings}
+        scaleFactor={scaleFactor}
+        onScaleChange={setScaleFactor}
+        onClearProgress={clearProgress}
+      />
+
+      <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
+        <Heading level={2} className="mb-6 font-serif text-2xl font-medium tracking-tight sm:text-3xl">
+          Steps
+        </Heading>
+
+        {recipe.steps.length === 0 ? (
+          <div className="rounded-xl bg-zinc-100 p-8 text-center dark:bg-zinc-800">
+            <Text className="mb-4">No steps added yet</Text>
+            {isOwner ? <Button href={`/recipes/${recipe.id}/edit`}>Add Steps</Button> : null}
+          </div>
+        ) : (
+          <div className="border-y border-zinc-200 dark:border-zinc-700">
+            {recipe.steps.map((step) => (
+              <div key={step.id} id={`step-${step.stepNum}`} className="border-b border-zinc-200 last:border-b-0 dark:border-zinc-700">
+                <StepCard
+                  stepNumber={step.stepNum}
+                  title={step.title}
+                  description={step.description}
+                  ingredients={step.ingredients}
+                  stepOutputUses={step.stepOutputUses}
+                  scaleFactor={scaleFactor}
+                  checkedIngredientIds={checkedIngredients}
+                  onIngredientToggle={toggleIngredient}
+                  checkedStepOutputIds={checkedStepOutputs}
+                  onStepOutputToggle={toggleStepOutput}
+                  onStepReferenceClick={() => undefined}
+                />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+const meta: Meta<typeof RecipeViewMock> = {
   title: 'Recipe/View/RecipeView',
+  component: RecipeViewMock,
   parameters: {
     layout: 'fullscreen',
     docs: {
       description: {
-        component: `
-The complete recipe viewing experience. Demonstrates the full user flow from
-hero image through all recipe steps, with integrated scaling and ingredient tracking.
-        `,
+        component:
+          'The current recipe-reading surface: hero header, scalable servings, checkable step ingredients, step-output references, and owner actions.',
       },
     },
   },
@@ -44,468 +208,43 @@ hero image through all recipe steps, with integrated scaling and ingredient trac
 }
 
 export default meta
-type Story = StoryObj
+type Story = StoryObj<typeof meta>
 
-// =============================================================================
-// REALISTIC RECIPE DATA
-// =============================================================================
-
-const chocolateChipCookies = {
-  title: 'Classic Chocolate Chip Cookies',
-  description:
-    "Crispy on the edges, chewy in the middle. These aren't just cookies - they're memories in baked form. Perfect for midnight snacking, bake sales, or bribing your neighbors.",
-  chefName: 'Julia Baker',
-  imageUrl: 'https://images.unsplash.com/photo-1499636136210-6f4ee915583e?w=1200&h=800&fit=crop',
-  servings: 'Makes 24 cookies',
-  recipeId: 'cookies-123',
-  steps: [
-    {
-      stepNumber: 1,
-      title: 'Brown the butter',
-      description:
-        'In a light-colored saucepan over medium heat, melt the butter. Continue cooking, swirling occasionally, until the butter turns golden brown and smells nutty, about 3-4 minutes. The milk solids at the bottom should be amber colored. Immediately pour into a heatproof bowl to stop the cooking. Let cool for 10 minutes.',
-      ingredients: [
-        { id: 's1-1', quantity: 1, unit: 'cup', name: 'unsalted butter (2 sticks)' },
-      ] as Ingredient[],
-      stepOutputUses: [] as StepReference[],
-    },
-    {
-      stepNumber: 2,
-      title: 'Mix wet ingredients',
-      description:
-        'Add both sugars to the browned butter and whisk until smooth. Add the egg, egg yolk, and vanilla extract. Whisk vigorously for about 30 seconds until the mixture is smooth and slightly lightened in color.',
-      ingredients: [
-        { id: 's2-1', quantity: 0.75, unit: 'cup', name: 'brown sugar, packed' },
-        { id: 's2-2', quantity: 0.5, unit: 'cup', name: 'granulated sugar' },
-        { id: 's2-3', quantity: 1, unit: '', name: 'large egg' },
-        { id: 's2-4', quantity: 1, unit: '', name: 'egg yolk' },
-        { id: 's2-5', quantity: 2, unit: 'tsp', name: 'vanilla extract' },
-      ] as Ingredient[],
-      stepOutputUses: [
-        { id: 'ref-1', stepNumber: 1, stepTitle: 'Brown the butter' },
-      ] as StepReference[],
-    },
-    {
-      stepNumber: 3,
-      title: 'Prepare dry ingredients',
-      description:
-        'In a medium bowl, whisk together the flour, baking soda, cornstarch, and salt. The cornstarch is the secret to extra-chewy centers!',
-      ingredients: [
-        { id: 's3-1', quantity: 2.25, unit: 'cups', name: 'all-purpose flour' },
-        { id: 's3-2', quantity: 1, unit: 'tsp', name: 'baking soda' },
-        { id: 's3-3', quantity: 2, unit: 'tsp', name: 'cornstarch' },
-        { id: 's3-4', quantity: 1, unit: 'tsp', name: 'fine sea salt' },
-      ] as Ingredient[],
-      stepOutputUses: [] as StepReference[],
-    },
-    {
-      stepNumber: 4,
-      title: 'Combine and add chocolate',
-      description:
-        'Add the dry ingredients to the wet ingredients and stir with a rubber spatula until just combined. Fold in the chocolate chips. The dough will be soft and slightly sticky - that\'s perfect!',
-      ingredients: [
-        { id: 's4-1', quantity: 2, unit: 'cups', name: 'chocolate chips (or chopped chocolate)' },
-      ] as Ingredient[],
-      stepOutputUses: [
-        { id: 'ref-2', stepNumber: 2, stepTitle: 'Mix wet ingredients' },
-        { id: 'ref-3', stepNumber: 3, stepTitle: 'Prepare dry ingredients' },
-      ] as StepReference[],
-    },
-    {
-      stepNumber: 5,
-      title: 'Rest the dough',
-      description:
-        'Cover the bowl with plastic wrap and refrigerate for at least 30 minutes, or up to 72 hours. This rest is crucial - it allows the flour to fully hydrate and develops deeper flavor. The longer you wait, the better the cookies.',
-      ingredients: [] as Ingredient[],
-      stepOutputUses: [
-        { id: 'ref-4', stepNumber: 4, stepTitle: 'Combine and add chocolate' },
-      ] as StepReference[],
-    },
-    {
-      stepNumber: 6,
-      title: 'Shape and bake',
-      description:
-        'Preheat oven to 375°F (190°C). Line baking sheets with parchment paper. Scoop dough into 2-tablespoon balls and place 2 inches apart on prepared sheets. Bake for 10-12 minutes until edges are set but centers look slightly underdone. They\'ll continue cooking as they cool. Sprinkle with flaky sea salt immediately after removing from the oven.',
-      ingredients: [
-        { id: 's6-1', quantity: 1, unit: 'tsp', name: 'flaky sea salt (Maldon)' },
-      ] as Ingredient[],
-      stepOutputUses: [
-        { id: 'ref-5', stepNumber: 5, stepTitle: 'Rest the dough' },
-      ] as StepReference[],
-    },
-  ],
-}
-
-// =============================================================================
-// MOCK COOKBOOKS DATA
-// =============================================================================
-
-const mockCookbooks: Cookbook[] = [
-  { id: 'cb-1', title: 'Weeknight Dinners' },
-  { id: 'cb-2', title: 'Holiday Favorites' },
-  { id: 'cb-3', title: 'Baking Projects' },
-]
-
-// =============================================================================
-// INTERACTIVE FULL RECIPE VIEW
-// =============================================================================
-
-interface FullRecipeViewProps {
-  recipe: typeof chocolateChipCookies
-  initialScale?: number
-  isOwner?: boolean
-}
-
-function FullRecipeView({ recipe, initialScale = 1, isOwner = false }: FullRecipeViewProps) {
-  const [scaleFactor, setScaleFactor] = useState(initialScale)
-  const [checkedIngredients, setCheckedIngredients] = useState<Set<string>>(new Set())
-  const [checkedStepOutputs, setCheckedStepOutputs] = useState<Set<string>>(new Set())
-  const [savedCookbookIds, setSavedCookbookIds] = useState<Set<string>>(new Set())
-
-  const handleIngredientToggle = (id: string) => {
-    const newChecked = new Set(checkedIngredients)
-    if (newChecked.has(id)) {
-      newChecked.delete(id)
-    } else {
-      newChecked.add(id)
-    }
-    setCheckedIngredients(newChecked)
-  }
-
-  const handleStepOutputToggle = (id: string) => {
-    setCheckedStepOutputs(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) {
-        next.delete(id)
-      } else {
-        next.add(id)
-      }
-      return next
-    })
-  }
-
-  const handleSaveToCookbook = (cookbookId: string) => {
-    setSavedCookbookIds(prev => new Set([...prev, cookbookId]))
-    alert(`Saved to cookbook: ${mockCookbooks.find(c => c.id === cookbookId)?.title}`)
-  }
-
-  const handleStepReferenceClick = (stepNumber: number) => {
-    // In a real app, this would scroll to the step
-    const stepElement = document.getElementById(`step-${stepNumber}`)
-    if (stepElement) {
-      stepElement.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }
-  }
-
-  return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
-      {/* Back Link */}
-      <div className="px-4 py-3 sm:px-6 lg:px-8">
-        <a href="#" className="text-blue-600 dark:text-blue-400 text-sm hover:underline">
-          ← Back to recipes
-        </a>
-      </div>
-
-      {/* Recipe Header */}
-      <RecipeHeader
-        title={recipe.title}
-        description={recipe.description}
-        chefName={recipe.chefName}
-        imageUrl={recipe.imageUrl}
-        servings={recipe.servings}
-        scaleFactor={scaleFactor}
-        onScaleChange={setScaleFactor}
-        isOwner={isOwner}
-        recipeId={recipe.recipeId}
-        onDelete={() => alert('Delete clicked!')}
-        onShare={() => {
-          if (navigator.share) {
-            navigator.share({ title: recipe.title, url: window.location.href })
-          } else {
-            alert('Share clicked! (Web Share API not available)')
-          }
-        }}
-        renderSaveButton={() => (
-          <SaveToCookbookDropdown
-            cookbooks={mockCookbooks}
-            savedInCookbookIds={savedCookbookIds}
-            onSave={handleSaveToCookbook}
-            onCreateNew={() => alert('Create new cookbook clicked!')}
-          />
-        )}
-      />
-
-      {/* Steps Section */}
-      <div className="px-4 sm:px-6 lg:px-8 py-6 sm:py-8 max-w-4xl mx-auto">
-        <h2 className="text-2xl font-bold text-zinc-900 dark:text-white mb-6">Steps</h2>
-        <div className="space-y-6">
-          {recipe.steps.map((step) => (
-            <div key={step.stepNumber} id={`step-${step.stepNumber}`}>
-              <StepCard
-                stepNumber={step.stepNumber}
-                title={step.title}
-                description={step.description}
-                ingredients={step.ingredients}
-                stepOutputUses={step.stepOutputUses}
-                scaleFactor={scaleFactor}
-                checkedIngredientIds={checkedIngredients}
-                onIngredientToggle={handleIngredientToggle}
-                checkedStepOutputIds={checkedStepOutputs}
-                onStepOutputToggle={handleStepOutputToggle}
-                onStepReferenceClick={handleStepReferenceClick}
-              />
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// =============================================================================
-// MAIN STORIES
-// =============================================================================
-
-/**
- * ## Complete Recipe Walkthrough
- *
- * The full recipe viewing experience with all features:
- * - Prominent hero image
- * - Recipe title, chef, and description
- * - Interactive scaling
- * - Multiple steps with ingredients
- * - Step-to-step references
- * - Checkable ingredients
- *
- * Try clicking the scale buttons to see ingredients update!
- */
-export const CompleteWalkthrough: Story = {
-  render: () => <FullRecipeView recipe={chocolateChipCookies} />,
-}
-
-/**
- * ## Owner View
- *
- * Same recipe, but viewed by the owner. Edit and Delete buttons are visible.
- */
-export const OwnerWalkthrough: Story = {
-  render: () => <FullRecipeView recipe={chocolateChipCookies} isOwner={true} />,
-}
-
-/**
- * ## Scaled Up (2×)
- *
- * Recipe pre-scaled to double. Perfect for feeding the whole team.
- */
-export const ScaledUpWalkthrough: Story = {
-  render: () => <FullRecipeView recipe={chocolateChipCookies} initialScale={2} />,
-}
-
-/**
- * ## Scaled Down (0.5×)
- *
- * Recipe pre-scaled to half. When you just need a small batch.
- */
-export const ScaledDownWalkthrough: Story = {
-  render: () => <FullRecipeView recipe={chocolateChipCookies} initialScale={0.5} />,
-}
-
-// =============================================================================
-// MOBILE VIEWPORT STORIES
-// =============================================================================
-
-/**
- * ## Mobile View
- *
- * The recipe view on a phone screen - the primary use case for kitchen cooking.
- */
-export const MobileWalkthrough: Story = {
-  render: () => <FullRecipeView recipe={chocolateChipCookies} />,
-  parameters: {
-    viewport: { defaultViewport: 'mobile1' },
+export const ReaderView: Story = {
+  args: {
+    recipe: soupRecipe,
   },
 }
 
-/**
- * ## Tablet View
- *
- * The recipe view on a tablet - nice for propping up on the counter.
- */
-export const TabletWalkthrough: Story = {
-  render: () => <FullRecipeView recipe={chocolateChipCookies} />,
-  parameters: {
-    viewport: { defaultViewport: 'tablet' },
+export const OwnerView: Story = {
+  args: {
+    recipe: soupRecipe,
+    isOwner: true,
   },
 }
 
-// =============================================================================
-// INTERACTION TESTS
-// =============================================================================
-
-/**
- * ## Interactive Scaling Test
- *
- * Verify that scaling updates all ingredient quantities throughout the recipe.
- */
-export const InteractiveScalingTest: Story = {
-  render: () => <FullRecipeView recipe={chocolateChipCookies} />,
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement)
-
-    // Initial state - check servings
-    await expect(canvas.getByText(/makes 24 cookies/i)).toBeInTheDocument()
-
-    // Find and click plus button multiple times to get to 2×
-    const plusButton = canvas.getByTestId('scale-plus')
-    await userEvent.click(plusButton)
-    await userEvent.click(plusButton)
-    await userEvent.click(plusButton)
-    await userEvent.click(plusButton)
-
-    // Verify scale display shows 2×
-    const scaleDisplay = canvas.getByTestId('scale-display')
-    await expect(scaleDisplay).toHaveTextContent('2×')
-
-    // Verify servings updated
-    await expect(canvas.getByText(/makes 48 cookies/i)).toBeInTheDocument()
+export const ScaledForCompany: Story = {
+  args: {
+    recipe: soupRecipe,
+    initialScale: 2,
   },
 }
 
-/**
- * ## Ingredient Tracking Test
- *
- * Verify ingredients can be checked off as you cook.
- */
-export const IngredientTrackingTest: Story = {
-  render: () => <FullRecipeView recipe={chocolateChipCookies} />,
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement)
-
-    // Find checkboxes in the recipe
-    const checkboxes = canvas.getAllByRole('checkbox')
-    await expect(checkboxes.length).toBeGreaterThan(0)
-
-    // Check the first ingredient
-    await expect(checkboxes[0]).not.toBeChecked()
-    await userEvent.click(checkboxes[0])
-    await expect(checkboxes[0]).toBeChecked()
-  },
-}
-
-// =============================================================================
-// EDGE CASES
-// =============================================================================
-
-const minimalRecipe = {
-  title: 'Boiled Water',
-  description: "Sometimes you just need hot water. Here's how.",
-  chefName: 'Chef Obvious',
-  imageUrl: undefined,
-  servings: 'Makes 1 cup',
-  recipeId: 'water-123',
-  steps: [
-    {
-      stepNumber: 1,
-      title: undefined,
-      description: 'Put water in a pot. Turn on the heat. Wait until it bubbles.',
-      ingredients: [
-        { id: 'w1', quantity: 1, unit: 'cup', name: 'water' },
-      ] as Ingredient[],
-      stepOutputUses: [] as StepReference[],
-    },
-  ],
-}
-
-/**
- * ## Minimal Recipe
- *
- * The simplest possible recipe - no image, one step, minimal ingredients.
- */
 export const MinimalRecipe: Story = {
-  render: () => <FullRecipeView recipe={minimalRecipe} />,
-}
-
-/**
- * ## Minimal Recipe Mobile
- *
- * Even simple recipes should look good on mobile.
- */
-export const MinimalRecipeMobile: Story = {
-  render: () => <FullRecipeView recipe={minimalRecipe} />,
-  parameters: {
-    viewport: { defaultViewport: 'mobile1' },
+  args: {
+    recipe: minimalRecipe,
   },
 }
 
-// =============================================================================
-// SHARE/SAVE BUTTON TESTS
-// =============================================================================
-
-/**
- * ## Share Button Test
- *
- * Verify that the share button is visible and clickable.
- */
-export const ShareButtonTest: Story = {
-  render: () => <FullRecipeView recipe={chocolateChipCookies} />,
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement)
-
-    // Share button should be visible
-    const shareButton = canvas.getByRole('button', { name: /share/i })
-    await expect(shareButton).toBeInTheDocument()
-    await expect(shareButton).toBeVisible()
-  },
-}
-
-/**
- * ## Save to Cookbook Test
- *
- * Verify that the save dropdown works correctly.
- */
-export const SaveToCookbookTest: Story = {
-  render: () => <FullRecipeView recipe={chocolateChipCookies} />,
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement)
-
-    // Save button should be visible
-    const saveButton = canvas.getByRole('button', { name: /save/i })
-    await expect(saveButton).toBeInTheDocument()
-
-    // Click to open dropdown
-    await userEvent.click(saveButton)
-
-    // Cookbooks should be visible in dropdown
-    await expect(canvas.getByText('Weeknight Dinners')).toBeInTheDocument()
-    await expect(canvas.getByText('Holiday Favorites')).toBeInTheDocument()
-    await expect(canvas.getByText('Baking Projects')).toBeInTheDocument()
-  },
-}
-
-/**
- * ## Step Output Checkbox Test
- *
- * Verify that step output items can be checked off.
- */
-export const StepOutputCheckboxTest: Story = {
-  render: () => <FullRecipeView recipe={chocolateChipCookies} />,
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement)
-
-    // Find step output items (amber-styled items that reference previous steps)
-    // Step 2 has a step output use (reference to step 1)
-    const stepOutputItems = canvas.getAllByText(/from step/i)
-    await expect(stepOutputItems.length).toBeGreaterThan(0)
-
-    // The checkboxes in step output section should be interactive
-    const checkboxes = canvas.getAllByRole('checkbox')
-    const initialCount = checkboxes.filter(cb => (cb as HTMLInputElement).checked).length
-
-    // Click first unchecked checkbox
-    const uncheckedBox = checkboxes.find(cb => !(cb as HTMLInputElement).checked)
-    if (uncheckedBox) {
-      await userEvent.click(uncheckedBox)
-      await expect(uncheckedBox).toBeChecked()
-    }
+export const EmptyOwnerRecipe: Story = {
+  args: {
+    recipe: {
+      ...soupRecipe,
+      id: 'empty-recipe',
+      title: 'Draft Recipe',
+      imageUrl: undefined,
+      steps: [],
+    },
+    isOwner: true,
   },
 }
