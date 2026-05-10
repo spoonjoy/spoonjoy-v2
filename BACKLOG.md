@@ -505,7 +505,7 @@ Acceptance criteria:
 
 Priority: `P1`
 Lane: `recipes`, `validation`, `data-integrity`
-Status: `proposed`
+Status: `superseded`
 
 Problem: Shared validators exist and per-step routes use them, but bulk recipe creation currently validates only metadata/image fields before creating step rows. Validation should be consistent whether a user creates steps inline during recipe creation or later through per-step routes.
 
@@ -521,6 +521,15 @@ Acceptance criteria:
 - Error shape supports field-specific display in RecipeBuilder.
 - Client max/min attributes match server rules where applicable.
 - Tests prove parity between create-time and later step-edit validation.
+
+Superseded by: `SJ-003`
+
+Notes:
+
+- `SJ-003` added `app/lib/recipe-create.server.ts`, which parses create-time `stepsJson` through shared step title, step description, quantity, unit, and ingredient-name validators.
+- `app/routes/recipes.new.tsx` now rejects invalid create-time step/ingredient payloads before recipe creation and returns `errors.steps` to `RecipeBuilder`.
+- `test/lib/recipe-create.server.test.ts` covers invalid payload containers, invalid step titles/descriptions/durations, invalid ingredient containers, quantities, units, and names.
+- `test/routes/recipes-new.test.tsx` covers invalid create-time steps JSON, invalid submitted step fields, and invalid submitted ingredient fields.
 
 ### SJ-019 - Generated Artifact And Local State Hygiene
 
