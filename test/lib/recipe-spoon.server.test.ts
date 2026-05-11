@@ -36,21 +36,22 @@ describe("recipe-spoon.server", () => {
   });
 
   describe("createSpoon", () => {
-    it("creates a spoon with only a note", async () => {
+    it("creates a spoon with only a note for a non-owner cook", async () => {
       const chef = await makeUser();
+      const cook = await makeUser();
       const recipe = await makeRecipe(chef.id);
       const result = await createSpoon(db, {
-        chefId: chef.id,
+        chefId: cook.id,
         recipeId: recipe.id,
         note: "tasted great",
       });
       expect(result.spoon.recipeId).toBe(recipe.id);
-      expect(result.spoon.chefId).toBe(chef.id);
+      expect(result.spoon.chefId).toBe(cook.id);
       expect(result.spoon.note).toBe("tasted great");
       expect(result.spoon.photoUrl).toBeNull();
       expect(result.spoon.nextTime).toBeNull();
       expect(result.spoon.deletedAt).toBeNull();
-      expect(result.isOriginCook).toBe(true);
+      expect(result.isOriginCook).toBe(false);
     });
 
     it("creates a spoon with only nextTime when chef is not recipe owner", async () => {
