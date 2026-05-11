@@ -1,6 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { z } from "zod";
 
 export type PreflightSeverity = "error" | "warning";
 
@@ -152,6 +153,88 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
     errors: checks.filter((item) => !item.ok && item.severity === "error"),
     warnings: checks.filter((item) => !item.ok && item.severity === "warning"),
   };
+}
+
+export interface WranglerRunResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+}
+
+export type RunWrangler = (args: string[]) => Promise<WranglerRunResult>;
+
+export interface RemoteMigrationCheckDeps {
+  runWrangler: RunWrangler;
+  env?: NodeJS.ProcessEnv;
+}
+
+const RemoteMigrationListSchema = z.array(z.object({ Name: z.string() }));
+
+const AUTH_ERROR_PATTERN = /auth|oauth|login|unauthenticated|api token|10000/i;
+
+export async function checkRemoteMigrations(deps: RemoteMigrationCheckDeps): Promise<PreflightCheck> {
+  const env = deps.env ?? process.env;
+  if (env.SPOONJOY_PREFLIGHT_SKIP_REMOTE === "1") {
+    return check(
+      "remote D1 migrations",
+      true,
+      "Skipped remote D1 migration check (SPOONJOY_PREFLIGHT_SKIP_REMOTE=1).",
+      "warning",
+    );
+  }
+
+  let result: WranglerRunResult;
+  try {
+    result = await deps.runWrangler(["d1", "migrations", "list", "DB", "--remote", "--json"]);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return check("remote D1 migrations", false, `Failed to invoke wrangler: ${message}`);
+  }
+
+  if (result.exitCode !== 0) {
+    if (AUTH_ERROR_PATTERN.test(result.stderr)) {
+      return check(
+        "remote D1 migrations",
+        false,
+        `Could not verify remote D1 migrations (wrangler auth error): ${result.stderr.trim()}`,
+        "warning",
+      );
+    }
+    return check(
+      "remote D1 migrations",
+      false,
+      `wrangler exited with code ${result.exitCode}: ${result.stderr.trim() || result.stdout.trim()}`,
+    );
+  }
+
+  let parsedJson: unknown;
+  try {
+    parsedJson = JSON.parse(result.stdout);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return check("remote D1 migrations", false, `Could not parse wrangler JSON output: ${message}`);
+  }
+
+  const shape = RemoteMigrationListSchema.safeParse(parsedJson);
+  if (!shape.success) {
+    return check(
+      "remote D1 migrations",
+      false,
+      `Unexpected wrangler JSON shape: ${shape.error.issues.map((issue) => issue.message).join("; ")}`,
+    );
+  }
+
+  const pending = shape.data;
+  if (pending.length === 0) {
+    return check("remote D1 migrations", true, "Remote D1 is up to date — no pending migrations.");
+  }
+
+  const names = pending.map((migration) => migration.Name).join(", ");
+  return check(
+    "remote D1 migrations",
+    false,
+    `Remote D1 has ${pending.length} pending migration(s): ${names}. Run \`pnpm exec wrangler d1 migrations apply DB --remote\` (or use \`pnpm deploy:auto\`).`,
+  );
 }
 
 async function readJsonFile(filePath: string): Promise<Record<string, unknown>> {
