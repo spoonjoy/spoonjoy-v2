@@ -354,6 +354,32 @@ describe("checkRemoteMigrations", () => {
   });
 });
 
+describe("deployment docs", () => {
+  it("docs/deployment.md mentions pnpm deploy:auto", async () => {
+    const fs = await import("node:fs/promises");
+    const doc = await fs.readFile(`${process.cwd()}/docs/deployment.md`, "utf8");
+    expect(doc).toContain("pnpm deploy:auto");
+  });
+
+  it("docs/deployment.md documents SPOONJOY_PREFLIGHT_SKIP_REMOTE", async () => {
+    const fs = await import("node:fs/promises");
+    const doc = await fs.readFile(`${process.cwd()}/docs/deployment.md`, "utf8");
+    expect(doc).toContain("SPOONJOY_PREFLIGHT_SKIP_REMOTE");
+  });
+
+  it("DEPLOY.md mentions pnpm deploy:auto", async () => {
+    const fs = await import("node:fs/promises");
+    const doc = await fs.readFile(`${process.cwd()}/DEPLOY.md`, "utf8");
+    expect(doc).toContain("pnpm deploy:auto");
+  });
+
+  it("DEPLOY.md documents SPOONJOY_PREFLIGHT_SKIP_REMOTE", async () => {
+    const fs = await import("node:fs/promises");
+    const doc = await fs.readFile(`${process.cwd()}/DEPLOY.md`, "utf8");
+    expect(doc).toContain("SPOONJOY_PREFLIGHT_SKIP_REMOTE");
+  });
+});
+
 describe("package.json deploy scripts", () => {
   it("deploy chains preflight then build then wrangler deploy via pnpm exec", async () => {
     const pkgRaw = await import("node:fs/promises").then((mod) =>
