@@ -1,8 +1,51 @@
 import type { AppLoadContext } from "react-router";
 import { redirect } from "react-router";
 import { getRequestDb } from "~/lib/route-platform.server";
-import { getRecipeCoverImageUrl } from "~/lib/recipe-cover.server";
+import { createCover, getRecipeCoverImageUrl } from "~/lib/recipe-cover.server";
+import {
+  createSpoon,
+  deleteSpoon,
+  isOriginCookCandidate,
+  listSpoonsForRecipe,
+  SpoonAuthError,
+  SpoonNotFoundError,
+  SpoonValidationError,
+} from "~/lib/recipe-spoon.server";
+import { scheduleSpoonCoverStylization } from "~/lib/spoon-cover-stylization.server";
 import { requireUserId } from "~/lib/session.server";
+
+interface CloudflareContextLike {
+  cloudflare?: {
+    env?: { OPENAI_API_KEY?: string; PHOTOS?: R2Bucket } | null;
+    ctx?: { waitUntil?: (promise: Promise<unknown>) => void };
+  };
+}
+
+function spoonErrorToResponse(error: unknown): never {
+  if (error instanceof SpoonValidationError) {
+    throw new Response(error.message, { status: 400 });
+  }
+  if (error instanceof SpoonAuthError) {
+    throw new Response(error.message, { status: 403 });
+  }
+  if (error instanceof SpoonNotFoundError) {
+    throw new Response(error.message, { status: 404 });
+  }
+  throw error;
+}
+
+function getCloudflareCtx(context: AppLoadContext): {
+  bucket?: R2Bucket;
+  env: { OPENAI_API_KEY?: string } | null;
+  waitUntil?: (promise: Promise<unknown>) => void;
+} {
+  const cf = (context as unknown as CloudflareContextLike).cloudflare;
+  return {
+    bucket: cf?.env?.PHOTOS,
+    env: cf?.env ? { OPENAI_API_KEY: cf.env.OPENAI_API_KEY } : null,
+    waitUntil: cf?.ctx?.waitUntil ? cf.ctx.waitUntil.bind(cf.ctx) : undefined,
+  };
+}
 
 interface RecipeDetailRouteArgs {
   request: Request;
@@ -123,7 +166,103 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
     );
   }
 
-  return { recipe, coverImageUrl, isOwner, cookbooks, savedInCookbookIds, hasIngredientsInShoppingList };
+  const [spoonsRaw, originCookCandidate] = await Promise.all([
+    listSpoonsForRecipe(database, id, { limit: 10 }),
+    isOriginCookCandidate(database, userId, id),
+  ]);
+  const spoons = spoonsRaw.map((spoon) => ({
+    id: spoon.id,
+    cookedAt: spoon.cookedAt.toISOString(),
+    photoUrl: spoon.photoUrl,
+    note: spoon.note,
+    nextTime: spoon.nextTime,
+    chef: spoon.chef,
+  }));
+
+  return {
+    recipe,
+    coverImageUrl,
+    isOwner,
+    cookbooks,
+    savedInCookbookIds,
+    hasIngredientsInShoppingList,
+    spoons,
+    isOriginCookCandidate: originCookCandidate,
+  };
+}
+
+async function handleCreateSpoon(
+  database: Awaited<ReturnType<typeof getRequestDb>>,
+  userId: string,
+  recipeId: string,
+  formData: FormData,
+  context: AppLoadContext,
+) {
+  const photoEntry = formData.get("photo");
+  const photoFile = photoEntry instanceof File && photoEntry.size > 0 ? photoEntry : undefined;
+  const noteRaw = formData.get("note");
+  const nextTimeRaw = formData.get("nextTime");
+  const cookedAtRaw = formData.get("cookedAt");
+  const note = typeof noteRaw === "string" ? noteRaw : undefined;
+  const nextTime = typeof nextTimeRaw === "string" ? nextTimeRaw : undefined;
+  let cookedAt: Date | undefined;
+  if (typeof cookedAtRaw === "string" && cookedAtRaw.trim() !== "") {
+    const parsed = new Date(cookedAtRaw);
+    if (Number.isNaN(parsed.getTime())) {
+      throw new Response("Invalid cookedAt", { status: 400 });
+    }
+    cookedAt = parsed;
+  }
+
+  const { bucket, env, waitUntil } = getCloudflareCtx(context);
+
+  const result = await createSpoon(
+    database,
+    { chefId: userId, recipeId, photoFile, note, nextTime, cookedAt },
+    { bucket },
+  ).catch(spoonErrorToResponse);
+
+  if (result.isOriginCook && result.spoon.photoUrl) {
+    const recipe = await database.recipe.findUniqueOrThrow({
+      where: { id: recipeId },
+      select: { id: true, title: true },
+    });
+    const cover = await createCover(database, {
+      recipeId,
+      imageUrl: result.spoon.photoUrl,
+      sourceType: "spoon",
+      sourceSpoonId: result.spoon.id,
+    });
+    const task = scheduleSpoonCoverStylization({
+      db: database,
+      userId,
+      coverId: cover.id,
+      rawPhotoUrl: result.spoon.photoUrl,
+      recipeTitle: recipe.title,
+      env,
+      bucket,
+    });
+    if (waitUntil) {
+      waitUntil(task);
+    } else {
+      await task;
+    }
+  }
+
+  return { success: true, spoon: { id: result.spoon.id }, isOriginCook: result.isOriginCook };
+}
+
+async function handleDeleteSpoon(
+  database: Awaited<ReturnType<typeof getRequestDb>>,
+  userId: string,
+  formData: FormData,
+) {
+  const spoonId = formData.get("spoonId");
+  if (typeof spoonId !== "string" || !spoonId) {
+    throw new Response("spoonId is required", { status: 400 });
+  }
+  await deleteSpoon(database, spoonId, userId).catch(spoonErrorToResponse);
+  return { success: true };
 }
 
 export async function handleRecipeDetailAction({ request, params, context }: RecipeDetailRouteArgs) {
@@ -133,6 +272,14 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
   const intent = formData.get("intent");
 
   const database = await getRequestDb(context);
+
+  if (intent === "createSpoon") {
+    return handleCreateSpoon(database, userId, id, formData, context);
+  }
+
+  if (intent === "deleteSpoon") {
+    return handleDeleteSpoon(database, userId, formData);
+  }
 
   if (intent === "createCookbookAndSave") {
     const title = formData.get("title")?.toString()?.trim();

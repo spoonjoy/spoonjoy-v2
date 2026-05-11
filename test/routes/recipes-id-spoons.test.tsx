@@ -126,24 +126,36 @@ describe("Recipes $id route — spoons + provenance", () => {
   });
 
   it("renders RecipeProvenance when sourceUrl is set", async () => {
+    const mockData = {
+      recipe: {
+        id: "r1",
+        title: "Mock Recipe",
+        description: null,
+        servings: null,
+        sourceUrl: "https://nyt.com/recipes/spoon-detail",
+        chef: { id: "c1", username: "testchef", photoUrl: null },
+        steps: [],
+      },
+      coverImageUrl: "/p.png",
+      isOwner: false,
+      cookbooks: [],
+      savedInCookbookIds: [],
+      hasIngredientsInShoppingList: false,
+      spoons: [],
+      isOriginCookCandidate: false,
+    };
     const Stub = createTestRoutesStub([
       {
         path: "/recipes/:id",
-        loader,
-        action,
         Component: () => (
           <ToastProvider>
             <RecipeDetail />
           </ToastProvider>
         ),
+        loader: () => mockData,
       },
     ]);
-    render(
-      <Stub
-        initialEntries={[`/recipes/${recipeId}`]}
-        hydrationData={{ loaderData: {} as any }}
-      />,
-    );
+    render(<Stub initialEntries={["/recipes/r1"]} />);
     await waitFor(() => {
       expect(screen.getByText(/originally from/i)).toBeInTheDocument();
     });
@@ -153,55 +165,126 @@ describe("Recipes $id route — spoons + provenance", () => {
   });
 
   it("renders SpoonsStrip with non-deleted spoons from the loader", async () => {
-    await db.recipeSpoon.create({
-      data: { chefId: cookUserId, recipeId, note: "fan note" },
-    });
+    const mockData = {
+      recipe: {
+        id: "r1",
+        title: "Mock Recipe",
+        description: null,
+        servings: null,
+        sourceUrl: null,
+        chef: { id: "c1", username: "testchef", photoUrl: null },
+        steps: [],
+      },
+      coverImageUrl: "/p.png",
+      isOwner: false,
+      cookbooks: [],
+      savedInCookbookIds: [],
+      hasIngredientsInShoppingList: false,
+      spoons: [
+        {
+          id: "s1",
+          cookedAt: new Date().toISOString(),
+          photoUrl: null,
+          note: "fan note",
+          nextTime: null,
+          chef: { id: "c2", username: "cook", photoUrl: null },
+        },
+      ],
+      isOriginCookCandidate: false,
+    };
     const Stub = createTestRoutesStub([
       {
         path: "/recipes/:id",
-        loader,
-        action,
         Component: () => (
           <ToastProvider>
             <RecipeDetail />
           </ToastProvider>
         ),
+        loader: () => mockData,
       },
     ]);
-    render(
-      <Stub
-        initialEntries={[`/recipes/${recipeId}`]}
-        hydrationData={{ loaderData: {} as any }}
-      />,
-    );
+    render(<Stub initialEntries={["/recipes/r1"]} />);
     await waitFor(() => {
       expect(screen.getByText("fan note")).toBeInTheDocument();
     });
   });
 
-  it("clicking 'Log a cook' opens the SpoonDialog", async () => {
+  it("clicking 'Log a cook' opens then closes the SpoonDialog via Cancel", async () => {
+    const mockData = {
+      recipe: {
+        id: "r1",
+        title: "Mock Recipe",
+        description: null,
+        servings: null,
+        sourceUrl: null,
+        chef: { id: "c1", username: "testchef", photoUrl: null },
+        steps: [],
+      },
+      coverImageUrl: "/p.png",
+      isOwner: false,
+      cookbooks: [],
+      savedInCookbookIds: [],
+      hasIngredientsInShoppingList: false,
+      spoons: [],
+      isOriginCookCandidate: false,
+    };
     const Stub = createTestRoutesStub([
       {
         path: "/recipes/:id",
-        loader,
-        action,
         Component: () => (
           <ToastProvider>
             <RecipeDetail />
           </ToastProvider>
         ),
+        loader: () => mockData,
       },
     ]);
-    render(
-      <Stub
-        initialEntries={[`/recipes/${recipeId}`]}
-        hydrationData={{ loaderData: {} as any }}
-      />,
-    );
-    const open = await screen.findByRole("button", { name: /log a cook|i cooked this/i });
+    render(<Stub initialEntries={["/recipes/r1"]} />);
+    const open = await screen.findByRole("button", { name: /log a cook/i });
     await userEvent.click(open);
-    expect(await screen.findByText(/log a cook/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/note/i)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /log a cook/i })).toBeInTheDocument();
+    const cancel = screen.getByRole("button", { name: /cancel/i });
+    await userEvent.click(cancel);
+    await waitFor(() => {
+      expect(screen.queryByRole("heading", { name: /log a cook/i })).toBeNull();
+    });
+  });
+
+  it("clicking 'Log a cook' opens the SpoonDialog", async () => {
+    const mockData = {
+      recipe: {
+        id: "r1",
+        title: "Mock Recipe",
+        description: null,
+        servings: null,
+        sourceUrl: null,
+        chef: { id: "c1", username: "testchef", photoUrl: null },
+        steps: [],
+      },
+      coverImageUrl: "/p.png",
+      isOwner: false,
+      cookbooks: [],
+      savedInCookbookIds: [],
+      hasIngredientsInShoppingList: false,
+      spoons: [],
+      isOriginCookCandidate: false,
+    };
+    const Stub = createTestRoutesStub([
+      {
+        path: "/recipes/:id",
+        Component: () => (
+          <ToastProvider>
+            <RecipeDetail />
+          </ToastProvider>
+        ),
+        loader: () => mockData,
+      },
+    ]);
+    render(<Stub initialEntries={["/recipes/r1"]} />);
+    const open = await screen.findByRole("button", { name: /log a cook/i });
+    await userEvent.click(open);
+    expect(await screen.findByRole("heading", { name: /log a cook/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/^note/i)).toBeInTheDocument();
   });
 
   it("action with intent=createSpoon creates a RecipeSpoon as the requesting user", async () => {
@@ -304,6 +387,164 @@ describe("Recipes $id route — spoons + provenance", () => {
       where: { id: spoon.id },
     });
     expect(reloaded.deletedAt).not.toBeNull();
+  });
+
+  it("action with intent=createSpoon stores a nextTime field when supplied", async () => {
+    const fd = new UndiciFormData();
+    fd.append("intent", "createSpoon");
+    fd.append("nextTime", "more thyme");
+    const request = new UndiciRequest("http://localhost/recipes/x", {
+      method: "POST",
+      headers: { cookie: cookSessionCookie },
+      body: fd,
+    }) as unknown as Request;
+    const response = await action({
+      request,
+      params: { id: recipeId },
+      context: {
+        cloudflare: { env: { OPENAI_API_KEY: "test-key" } },
+      } as any,
+    });
+    const { data } = extractResponseData(response);
+    expect(data?.success).toBe(true);
+    const spoons = await db.recipeSpoon.findMany({
+      where: { recipeId, chefId: cookUserId },
+    });
+    expect(spoons).toHaveLength(1);
+    expect(spoons[0].nextTime).toBe("more thyme");
+  });
+
+  it("action with intent=createSpoon accepts a valid cookedAt timestamp", async () => {
+    const fd = new UndiciFormData();
+    fd.append("intent", "createSpoon");
+    fd.append("note", "ok");
+    fd.append("cookedAt", "2025-08-15T10:30");
+    const request = new UndiciRequest("http://localhost/recipes/x", {
+      method: "POST",
+      headers: { cookie: cookSessionCookie },
+      body: fd,
+    }) as unknown as Request;
+    const response = await action({
+      request,
+      params: { id: recipeId },
+      context: { cloudflare: { env: null } } as any,
+    });
+    const { data } = extractResponseData(response);
+    expect(data?.success).toBe(true);
+    const spoons = await db.recipeSpoon.findMany({
+      where: { recipeId, chefId: cookUserId },
+    });
+    expect(spoons).toHaveLength(1);
+  });
+
+  it("action with intent=createSpoon rejects an invalid cookedAt with 400", async () => {
+    const fd = new UndiciFormData();
+    fd.append("intent", "createSpoon");
+    fd.append("note", "ok");
+    fd.append("cookedAt", "not a date");
+    const request = new UndiciRequest("http://localhost/recipes/x", {
+      method: "POST",
+      headers: { cookie: cookSessionCookie },
+      body: fd,
+    }) as unknown as Request;
+    let caught: unknown = null;
+    try {
+      await action({
+        request,
+        params: { id: recipeId },
+        context: { cloudflare: { env: null } } as any,
+      });
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(Response);
+    expect((caught as Response).status).toBe(400);
+  });
+
+  it("action with intent=createSpoon as the origin cook runs stylization inline when no waitUntil is present", async () => {
+    const fd = new UndiciFormData();
+    fd.append("intent", "createSpoon");
+    fd.append(
+      "photo",
+      new File([new Uint8Array(8)], "spoon.png", { type: "image/png" }),
+    );
+    const request = new UndiciRequest("http://localhost/recipes/x", {
+      method: "POST",
+      headers: { cookie: chefSessionCookie },
+      body: fd,
+    }) as unknown as Request;
+    const response = await action({
+      request,
+      params: { id: recipeId },
+      context: { cloudflare: { env: null } } as any,
+    });
+    const { data } = extractResponseData(response);
+    expect(data?.success).toBe(true);
+    const covers = await db.recipeCover.findMany({ where: { recipeId } });
+    expect(covers).toHaveLength(1);
+  });
+
+  it("action with intent=deleteSpoon requires a spoonId (400)", async () => {
+    const fd = new UndiciFormData();
+    fd.append("intent", "deleteSpoon");
+    const request = new UndiciRequest("http://localhost/recipes/x", {
+      method: "POST",
+      headers: { cookie: cookSessionCookie },
+      body: fd,
+    }) as unknown as Request;
+    let caught: unknown = null;
+    try {
+      await action({
+        request,
+        params: { id: recipeId },
+        context: { cloudflare: { env: null } } as any,
+      });
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(Response);
+    expect((caught as Response).status).toBe(400);
+  });
+
+  it("action with intent=createSpoon rethrows non-spoon errors (e.g. missing recipe FK)", async () => {
+    const fd = new UndiciFormData();
+    fd.append("intent", "createSpoon");
+    fd.append("note", "ok");
+    const request = new UndiciRequest("http://localhost/recipes/x", {
+      method: "POST",
+      headers: { cookie: cookSessionCookie },
+      body: fd,
+    }) as unknown as Request;
+    await expect(
+      action({
+        request,
+        params: { id: "missing-recipe-fk" },
+        context: { cloudflare: { env: null } } as any,
+      }),
+    ).rejects.toThrowError();
+  });
+
+  it("action with intent=deleteSpoon returns 404 for an unknown spoonId", async () => {
+    const fd = new UndiciFormData();
+    fd.append("intent", "deleteSpoon");
+    fd.append("spoonId", "does-not-exist");
+    const request = new UndiciRequest("http://localhost/recipes/x", {
+      method: "POST",
+      headers: { cookie: cookSessionCookie },
+      body: fd,
+    }) as unknown as Request;
+    let caught: unknown = null;
+    try {
+      await action({
+        request,
+        params: { id: recipeId },
+        context: { cloudflare: { env: null } } as any,
+      });
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(Response);
+    expect((caught as Response).status).toBe(404);
   });
 
   it("action with intent=deleteSpoon refuses to delete another user's spoon", async () => {

@@ -15,6 +15,9 @@ import { Heading } from "~/components/ui/heading";
 import { Input } from "~/components/ui/input";
 import { Text } from "~/components/ui/text";
 import { RecipeHeader } from "~/components/recipe/RecipeHeader";
+import { RecipeProvenance } from "~/components/recipe/RecipeProvenance";
+import { SpoonDialog } from "~/components/recipe/SpoonDialog";
+import { SpoonsStrip } from "~/components/recipe/SpoonsStrip";
 import { StepCard } from "~/components/recipe/StepCard";
 import type { Ingredient } from "~/components/recipe/IngredientList";
 import type { StepReference } from "~/components/recipe/StepOutputUseCallout";
@@ -32,6 +35,16 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 type CookbookListItem = { id: string; title: string };
 const EMPTY_COOKBOOKS: CookbookListItem[] = [];
 const EMPTY_SAVED_COOKBOOK_IDS: string[] = [];
+
+type SpoonListItem = {
+  id: string;
+  cookedAt: string;
+  photoUrl: string | null;
+  note: string | null;
+  nextTime: string | null;
+  chef: { id: string; username: string; photoUrl: string | null };
+};
+const EMPTY_SPOONS: SpoonListItem[] = [];
 
 export function applyCreatedCookbookState(
   currentCookbooks: CookbookListItem[],
@@ -57,6 +70,8 @@ export default function RecipeDetail() {
   const { recipe, coverImageUrl, isOwner, hasIngredientsInShoppingList = false } = loaderData;
   const cookbooks = loaderData.cookbooks ?? EMPTY_COOKBOOKS;
   const savedInCookbookIds = loaderData.savedInCookbookIds ?? EMPTY_SAVED_COOKBOOK_IDS;
+  const spoons = loaderData.spoons ?? EMPTY_SPOONS;
+  const isOriginCookCandidate = loaderData.isOriginCookCandidate ?? false;
   const submit = useSubmit();
   const addToListFetcher = useFetcher();
   const createCookbookFetcher = useFetcher<typeof action>();
@@ -195,6 +210,7 @@ export default function RecipeDetail() {
   // State for Save modal (bottom sheet)
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isSpoonDialogOpen, setIsSpoonDialogOpen] = useState(false);
   const [newCookbookTitle, setNewCookbookTitle] = useState("");
   const saveModalTitleRef = useRef<HTMLHeadingElement>(null);
 
@@ -415,6 +431,25 @@ export default function RecipeDetail() {
         onClearProgress={handleClearProgress}
       />
 
+      {/* Provenance + log-a-cook action */}
+      <div className="mx-auto max-w-4xl px-4 pt-4 sm:px-6 lg:px-8 space-y-4">
+        <RecipeProvenance
+          sourceUrl={recipe.sourceUrl ?? undefined}
+        />
+        <div>
+          <Button type="button" onClick={() => setIsSpoonDialogOpen(true)}>
+            Log a cook
+          </Button>
+        </div>
+      </div>
+
+      <SpoonDialog
+        isOpen={isSpoonDialogOpen}
+        onClose={() => setIsSpoonDialogOpen(false)}
+        actionUrl={`/recipes/${recipe.id}`}
+        isOriginCookCandidate={isOriginCookCandidate}
+      />
+
       {/* Save to Cookbook Modal (Bottom Sheet) */}
       <Dialog
         open={isSaveModalOpen}
@@ -565,6 +600,13 @@ export default function RecipeDetail() {
             ))}
           </div>
         )}
+
+        <div className="mt-10 space-y-4">
+          <Heading level={2} className="text-2xl font-semibold tracking-[-0.02em]">
+            Cooks
+          </Heading>
+          <SpoonsStrip spoons={spoons} />
+        </div>
       </div>
     </div>
   );
