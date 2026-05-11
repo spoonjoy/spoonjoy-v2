@@ -3,7 +3,7 @@ import { Heading } from '../ui/heading'
 import { Link } from '../ui/link'
 
 export interface CookbookCardRecipeImage {
-  imageUrl: string
+  coverImageUrl: string
   title: string
 }
 
@@ -40,7 +40,7 @@ export function CookbookCard({
             <CoverGrid images={recipeImages.slice(0, 4)} />
           ) : recipeImages.length > 0 ? (
             <img
-              src={recipeImages[0].imageUrl}
+              src={recipeImages[0].coverImageUrl}
               alt={recipeImages[0].title}
               className="aspect-[4/3] w-full object-cover"
             />
@@ -89,7 +89,7 @@ function CoverGrid({ images }: { images: CookbookCardRecipeImage[] }) {
       {images.map((img, i) => (
         <img
           key={i}
-          src={img.imageUrl}
+          src={img.coverImageUrl}
           alt={img.title}
           className="h-full w-full object-cover"
         />

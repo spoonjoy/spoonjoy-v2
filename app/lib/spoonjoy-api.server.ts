@@ -6,6 +6,7 @@ import {
   type ApiPrincipal,
 } from "~/lib/api-auth.server";
 import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
+import { getRecipeCoverImageUrl } from "~/lib/recipe-cover.server";
 import { normalizeSearchScope, searchSpoonjoy } from "~/lib/search.server";
 
 export interface SpoonjoyApiContext {
@@ -29,6 +30,7 @@ type Database = PrismaClientType | Prisma.TransactionClient;
 type RecipeWithDetails = Prisma.RecipeGetPayload<{
   include: {
     chef: { select: { id: true; email: true; username: true } };
+    covers: true;
     steps: {
       include: {
         ingredients: { include: { unit: true; ingredientRef: true } };
@@ -53,6 +55,7 @@ type CookbookWithRecipes = Prisma.CookbookGetPayload<{
         recipe: {
           include: {
             chef: { select: { id: true; email: true; username: true } };
+            covers: true;
             steps: {
               include: {
                 ingredients: { include: { unit: true; ingredientRef: true } };
@@ -67,8 +70,6 @@ type CookbookWithRecipes = Prisma.CookbookGetPayload<{
 
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 25;
-const DEFAULT_RECIPE_IMAGE_URL =
-  "https://res.cloudinary.com/dpjmyc4uz/image/upload/v1674541350/clbe7wr180009tkhggghtl1qd.png";
 
 const cookbookRecipeInclude = {
   author: { select: { id: true, email: true, username: true } },
@@ -78,6 +79,7 @@ const cookbookRecipeInclude = {
       recipe: {
         include: {
           chef: { select: { id: true, email: true, username: true } },
+          covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
           steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
         },
       },
@@ -221,7 +223,7 @@ function formatRecipe(recipe: RecipeWithDetails) {
     description: recipe.description,
     servings: recipe.servings,
     sourceUrl: recipe.sourceUrl,
-    imageUrl: recipe.imageUrl,
+    imageUrl: getRecipeCoverImageUrl(recipe, recipe.covers),
     chef: recipe.chef,
     steps,
     ingredientCount: steps.reduce((sum, step) => sum + step.ingredients.length, 0),
@@ -296,7 +298,7 @@ function formatCookbookSummary(cookbook: CookbookWithRecipes) {
     recipes: recipes.map((item) => ({
       id: item.recipe.id,
       title: item.recipe.title,
-      imageUrl: item.recipe.imageUrl,
+      imageUrl: getRecipeCoverImageUrl(item.recipe, item.recipe.covers),
     })),
   };
 }
@@ -358,6 +360,7 @@ async function findRecipeByIdOrTitle(db: PrismaClientType, args: Record<string, 
     where: id ? { id, deletedAt: null } : { title, deletedAt: null },
     include: {
       chef: { select: { id: true, email: true, username: true } },
+      covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
       steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
     },
   });
@@ -547,6 +550,7 @@ const searchRecipesTool: SpoonjoyApiOperation = {
           },
           include: {
             chef: { select: { id: true, email: true, username: true } },
+            covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
             steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
           },
         })
@@ -703,7 +707,6 @@ const createRecipeTool: SpoonjoyApiOperation = {
           description: optionalString(args.description) ?? null,
           servings: optionalString(args.servings) ?? null,
           sourceUrl: optionalString(args.sourceUrl) ?? null,
-          imageUrl: DEFAULT_RECIPE_IMAGE_URL,
           chefId: owner.id,
         },
       });
@@ -739,6 +742,7 @@ const createRecipeTool: SpoonjoyApiOperation = {
         where: { id: created.id },
         include: {
           chef: { select: { id: true, email: true, username: true } },
+          covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
           steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
         },
       });

@@ -1,6 +1,7 @@
 import type { AppLoadContext } from "react-router";
 import { redirect } from "react-router";
 import { getRequestDb } from "~/lib/route-platform.server";
+import { getRecipeCoverImageUrl } from "~/lib/recipe-cover.server";
 import { requireUserId } from "~/lib/session.server";
 
 interface RecipeDetailRouteArgs {
@@ -24,6 +25,9 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
           username: true,
           photoUrl: true,
         },
+      },
+      covers: {
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       },
       steps: {
         orderBy: {
@@ -59,6 +63,7 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
   }
 
   const isOwner = recipe.chefId === userId;
+  const coverImageUrl = getRecipeCoverImageUrl(recipe, recipe.covers);
 
   const userCookbooks = await database.cookbook.findMany({
     where: { authorId: userId },
@@ -118,7 +123,7 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
     );
   }
 
-  return { recipe, isOwner, cookbooks, savedInCookbookIds, hasIngredientsInShoppingList };
+  return { recipe, coverImageUrl, isOwner, cookbooks, savedInCookbookIds, hasIngredientsInShoppingList };
 }
 
 export async function handleRecipeDetailAction({ request, params, context }: RecipeDetailRouteArgs) {

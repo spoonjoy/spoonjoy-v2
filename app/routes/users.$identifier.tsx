@@ -10,6 +10,7 @@ import { Text } from "~/components/ui/text";
 import { Link } from "~/components/ui/link";
 import { RecipeGrid } from "~/components/pantry/RecipeGrid";
 import { CookbookCard } from "~/components/pantry/CookbookCard";
+import { getRecipeCoverImageUrl } from "~/lib/recipe-cover.server";
 
 const DEFAULT_CHEF_AVATAR = "/images/chef-rj.png";
 
@@ -76,8 +77,10 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
         id: true,
         title: true,
         description: true,
-        imageUrl: true,
         servings: true,
+        covers: {
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        },
       },
     }),
     database.cookbook.findMany({
@@ -93,8 +96,10 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
           include: {
             recipe: {
               select: {
-                imageUrl: true,
                 title: true,
+                covers: {
+                  orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+                },
               },
             },
           },
@@ -102,6 +107,25 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
       },
     }),
   ]);
+
+  const recipesWithCover = recipes.map(({ covers, ...rest }) => ({
+    ...rest,
+    coverImageUrl: getRecipeCoverImageUrl(rest, covers),
+  }));
+
+  const cookbooksWithCover = cookbooks.map(({ recipes: cookbookRecipes, ...cookbook }) => ({
+    ...cookbook,
+    recipes: cookbookRecipes.map((item) => ({
+      ...item,
+      recipe: {
+        title: item.recipe.title,
+        coverImageUrl: getRecipeCoverImageUrl(
+          { id: item.recipeId, title: item.recipe.title },
+          item.recipe.covers,
+        ),
+      },
+    })),
+  }));
 
   return {
     profile: {
@@ -111,8 +135,8 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
       joinedLabel: joinedLabel(profileUser.createdAt),
     },
     isOwner: currentUserId === profileUser.id,
-    recipes,
-    cookbooks,
+    recipes: recipesWithCover,
+    cookbooks: cookbooksWithCover,
   };
 }
 
@@ -165,7 +189,7 @@ export default function UserProfile() {
                 id: recipe.id,
                 title: recipe.title,
                 description: recipe.description ?? undefined,
-                imageUrl: recipe.imageUrl,
+                coverImageUrl: recipe.coverImageUrl,
                 servings: recipe.servings ?? undefined,
                 chefName: profile.username,
               }))}
@@ -196,7 +220,7 @@ export default function UserProfile() {
                     title={cookbook.title}
                     recipeCount={cookbook._count.recipes}
                     recipeImages={cookbook.recipes.map((item) => ({
-                      imageUrl: item.recipe.imageUrl,
+                      coverImageUrl: item.recipe.coverImageUrl,
                       title: item.recipe.title,
                     }))}
                   />

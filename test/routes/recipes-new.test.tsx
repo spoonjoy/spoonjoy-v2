@@ -168,7 +168,10 @@ describe("Recipes New Route", () => {
       expect(recipes[0].title).toBe("My New Recipe");
       expect(recipes[0].description).toBe("A delicious recipe");
       expect(recipes[0].servings).toBe("4");
-      expect(recipes[0].imageUrl).toBe("");
+      const covers = await db.recipeCover.findMany({ where: { recipeId: recipes[0].id } });
+      expect(covers).toHaveLength(1);
+      expect(covers[0].sourceType).toBe("ai-placeholder");
+      expect(covers[0].imageUrl.startsWith("data:image/svg+xml;base64,")).toBe(true);
     });
 
     it("should redirect when not logged in", async () => {
@@ -208,7 +211,9 @@ describe("Recipes New Route", () => {
       expect(recipes[0].title).toBe("Minimal Recipe");
       expect(recipes[0].description).toBeNull();
       expect(recipes[0].servings).toBeNull();
-      expect(recipes[0].imageUrl).toBe("");
+      const covers = await db.recipeCover.findMany({ where: { recipeId: recipes[0].id } });
+      expect(covers).toHaveLength(1);
+      expect(covers[0].sourceType).toBe("ai-placeholder");
     });
 
     it("should reject duplicate active recipe titles for the same chef", async () => {
@@ -327,7 +332,6 @@ describe("Recipes New Route", () => {
           title: "Recipe Title",
           description: "",
           servings: "  ",
-          imageUrl: "",
         },
         testUserId
       );
@@ -479,7 +483,10 @@ describe("Recipes New Route", () => {
       });
       expect(recipe).not.toBeNull();
       expect(recipe!.title).toBe("Valid Title");
-      expect(recipe!.imageUrl).toMatch(/^data:image\/jpeg;base64,/);
+      const covers = await db.recipeCover.findMany({ where: { recipeId: recipe!.id } });
+      expect(covers).toHaveLength(1);
+      expect(covers[0].sourceType).toBe("chef-upload");
+      expect(covers[0].imageUrl).toMatch(/^data:image\/jpeg;base64,/);
     });
 
     it("should upload valid recipe image to R2 when a bucket is available", async () => {
@@ -504,9 +511,14 @@ describe("Recipes New Route", () => {
       const recipe = await db.recipe.findFirstOrThrow({
         where: { chefId: testUserId, title: "R2 Image Recipe" },
       });
-      expect(recipe.imageUrl).toMatch(new RegExp(`^/photos/recipes/${testUserId}/${recipe.id}/\\d+\\.jpg$`));
+      const covers = await db.recipeCover.findMany({ where: { recipeId: recipe.id } });
+      expect(covers).toHaveLength(1);
+      expect(covers[0].sourceType).toBe("chef-upload");
+      expect(covers[0].imageUrl).toMatch(
+        new RegExp(`^/photos/recipes/${testUserId}/${recipe.id}/\\d+\\.jpg$`),
+      );
       expect(mockR2Bucket.put).toHaveBeenCalledWith(
-        recipe.imageUrl.replace("/photos/", ""),
+        covers[0].imageUrl.replace("/photos/", ""),
         expect.any(File),
         { httpMetadata: { contentType: "image/jpeg" } }
       );

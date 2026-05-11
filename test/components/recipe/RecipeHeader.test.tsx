@@ -9,9 +9,6 @@ function renderWithRouter(ui: React.ReactElement) {
 }
 
 describe('RecipeHeader', () => {
-  const legacyDefaultImageUrl =
-    'https://res.cloudinary.com/dpjmyc4uz/image/upload/v1674541350/clbe7wr180009tkhggghtl1qd.png'
-
   const defaultProps = {
     title: 'Test Recipe',
     chefName: 'Test Chef',
@@ -81,7 +78,7 @@ describe('RecipeHeader', () => {
 
   describe('recipe image', () => {
     it('renders recipe image when imageUrl is provided', () => {
-      renderWithRouter(<RecipeHeader {...defaultProps} imageUrl="https://example.com/recipe.jpg" />)
+      renderWithRouter(<RecipeHeader {...defaultProps} coverImageUrl="https://example.com/recipe.jpg" />)
 
       expect(screen.getByTestId('recipe-image')).toBeInTheDocument()
       const img = screen.getByAltText('Photo of Test Recipe')
@@ -94,8 +91,8 @@ describe('RecipeHeader', () => {
       expect(screen.getByText('No image available')).toBeInTheDocument()
     })
 
-    it('renders placeholder for legacy default image URLs', () => {
-      renderWithRouter(<RecipeHeader {...defaultProps} imageUrl={legacyDefaultImageUrl} />)
+    it('renders placeholder when coverImageUrl is empty', () => {
+      renderWithRouter(<RecipeHeader {...defaultProps} coverImageUrl="" />)
       expect(screen.getByTestId('recipe-image-placeholder')).toBeInTheDocument()
       expect(screen.queryByTestId('recipe-image')).toBeNull()
     })

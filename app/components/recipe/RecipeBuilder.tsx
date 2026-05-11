@@ -36,7 +36,7 @@ export interface RecipeBuilderData {
   title: string
   description: string | null
   servings: string | null
-  imageUrl: string
+  coverImageUrl: string
   imageFile?: File | null
   clearImage?: boolean
   steps: StepData[]
@@ -116,7 +116,7 @@ export function RecipeBuilder({
       title,
       description: description || null,
       servings: servings || null,
-      imageUrl: recipe?.imageUrl ?? '',
+      coverImageUrl: recipe?.coverImageUrl ?? '',
       imageFile,
       clearImage: clearImage || undefined,
       steps,
@@ -162,7 +162,7 @@ export function RecipeBuilder({
   const getDisplayImageUrl = () => {
     if (previewUrl) return previewUrl
     if (clearImage) return ''
-    return recipe?.imageUrl || ''
+    return recipe?.coverImageUrl || ''
   }
 
   const displayImageUrl = getDisplayImageUrl()
@@ -249,7 +249,7 @@ export function RecipeBuilder({
           <Field>
             <Label>Recipe Image</Label>
             <RecipeImageUpload
-              imageUrl={displayImageUrl}
+              coverImageUrl={displayImageUrl}
               onFileSelect={handleImageSelect}
               onClear={handleImageClear}
               disabled={isDisabled}

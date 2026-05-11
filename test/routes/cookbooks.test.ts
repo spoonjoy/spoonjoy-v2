@@ -84,7 +84,6 @@ describe("Cookbook Routes", () => {
                   id: true,
                   title: true,
                   description: true,
-                  imageUrl: true,
                   servings: true,
                   chef: {
                     select: {

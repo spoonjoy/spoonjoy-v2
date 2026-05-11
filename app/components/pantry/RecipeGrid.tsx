@@ -3,13 +3,12 @@ import { Heading, Subheading } from '../ui/heading'
 import { Link } from '../ui/link'
 import { Text } from '../ui/text'
 import { Button } from '../ui/button'
-import { getDisplayRecipeImageUrl } from '~/lib/recipe-image'
 
 export interface PantryRecipeCard {
   id: string
   title: string
   description?: string
-  imageUrl?: string
+  coverImageUrl?: string
   cookTimeMinutes?: number
   difficulty?: 'Easy' | 'Medium' | 'Hard'
   servings?: string
@@ -60,7 +59,7 @@ export function RecipeGrid({
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {recipes.map((recipe) => {
           const href = recipe.href ?? `/recipes/${recipe.id}`
-          const displayImageUrl = getDisplayRecipeImageUrl(recipe.imageUrl)
+          const displayImageUrl = recipe.coverImageUrl && recipe.coverImageUrl.length > 0 ? recipe.coverImageUrl : undefined
           const hasQuickActions = Boolean(onShare || onSave)
 
           return (

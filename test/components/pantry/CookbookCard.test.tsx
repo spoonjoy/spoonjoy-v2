@@ -4,10 +4,10 @@ import { MemoryRouter } from 'react-router'
 import { CookbookCard, type CookbookCardProps } from '~/components/pantry/CookbookCard'
 
 const fourImages = [
-  { imageUrl: '/img/a.jpg', title: 'Recipe A' },
-  { imageUrl: '/img/b.jpg', title: 'Recipe B' },
-  { imageUrl: '/img/c.jpg', title: 'Recipe C' },
-  { imageUrl: '/img/d.jpg', title: 'Recipe D' },
+  { coverImageUrl: '/img/a.jpg', title: 'Recipe A' },
+  { coverImageUrl: '/img/b.jpg', title: 'Recipe B' },
+  { coverImageUrl: '/img/c.jpg', title: 'Recipe C' },
+  { coverImageUrl: '/img/d.jpg', title: 'Recipe D' },
 ]
 
 function renderWithRouter(ui: React.ReactElement) {
@@ -60,7 +60,7 @@ describe('CookbookCard', () => {
   })
 
   it('renders only first 4 images even if more provided', () => {
-    const fiveImages = [...fourImages, { imageUrl: '/img/e.jpg', title: 'Recipe E' }]
+    const fiveImages = [...fourImages, { coverImageUrl: '/img/e.jpg', title: 'Recipe E' }]
     const { container } = renderWithRouter(<CookbookCard {...base} recipeImages={fiveImages} />)
 
     expect(container.querySelectorAll('img').length).toBe(4)

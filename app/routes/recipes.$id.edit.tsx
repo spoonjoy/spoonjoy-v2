@@ -22,6 +22,7 @@ import {
   validateImageFile,
 } from "~/lib/image-storage.server";
 import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
+import { createCover, getRecipeCoverImageUrl } from "~/lib/recipe-cover.server";
 import { Button } from "~/components/ui/button";
 import { Dialog, DialogActions, DialogDescription, DialogTitle } from "~/components/ui/dialog";
 import { useRef, useState } from "react";
@@ -48,6 +49,9 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const recipe = await database.recipe.findUnique({
     where: { id },
     include: {
+      covers: {
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      },
       steps: {
         orderBy: {
           stepNum: "asc",
@@ -72,6 +76,8 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     throw new Response("Unauthorized", { status: 403 });
   }
 
+  const coverImageUrl = getRecipeCoverImageUrl(recipe, recipe.covers);
+
   // Transform steps data for RecipeBuilder
   const formattedSteps = recipe.steps.map((step) => ({
     id: step.id,
@@ -86,7 +92,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     })),
   }));
 
-  return { recipe, formattedSteps };
+  return { recipe, coverImageUrl, formattedSteps };
 }
 
 export async function action({ request, params, context }: Route.ActionArgs) {
@@ -100,12 +106,20 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   // Verify ownership
   const recipe = await database.recipe.findUnique({
     where: { id },
-    select: { chefId: true, deletedAt: true, imageUrl: true },
+    select: {
+      chefId: true,
+      deletedAt: true,
+      covers: {
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        take: 1,
+      },
+    },
   });
 
   if (!recipe || recipe.deletedAt) {
     throw new Response("Recipe not found", { status: 404 });
   }
+  const currentCover = recipe.covers[0] ?? null;
 
   if (recipe.chefId !== userId) {
     throw new Response("Unauthorized", { status: 403 });
@@ -249,7 +263,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   }
 
   const photosBucket = getCloudflareEnv(context)?.PHOTOS;
-  const updateData: { title: string; description: string | null; servings: string | null; imageUrl?: string } = {
+  const updateData: { title: string; description: string | null; servings: string | null } = {
     title: title.trim(),
     description: description.trim() || null,
     servings: servings.trim() || null,
@@ -263,17 +277,15 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         file: imageFile,
         namespace: `recipes/${userId}/${id}`,
       });
-      updateData.imageUrl = uploadedImageUrl;
     } catch {
       return data(
         { errors: { image: "Failed to upload image. Please try again." } },
         { status: 500 }
       );
     }
-  } else if (clearImage) {
+  } else if (clearImage && currentCover) {
     try {
-      await deleteStoredImage({ bucket: photosBucket, imageUrl: recipe.imageUrl });
-      updateData.imageUrl = "";
+      await deleteStoredImage({ bucket: photosBucket, imageUrl: currentCover.imageUrl });
     } catch {
       return data(
         { errors: { image: "Failed to delete image. Please try again." } },
@@ -289,11 +301,26 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     });
 
     if (uploadedImageUrl) {
-      try {
-        await deleteStoredImage({ bucket: photosBucket, imageUrl: recipe.imageUrl });
-      } catch {
-        // Keep the successful replacement visible even if old-object cleanup fails.
+      await createCover(database, {
+        recipeId: id,
+        imageUrl: uploadedImageUrl,
+        sourceType: "chef-upload",
+      });
+      if (currentCover) {
+        try {
+          await deleteStoredImage({ bucket: photosBucket, imageUrl: currentCover.imageUrl });
+        } catch {
+          // Keep the successful replacement visible even if old-object cleanup fails.
+        }
       }
+    } else if (clearImage && currentCover) {
+      // Clearing replaces the visible cover with an empty placeholder cover so the
+      // SVG fallback renders until the chef uploads or AI generation kicks in.
+      await createCover(database, {
+        recipeId: id,
+        imageUrl: "",
+        sourceType: "chef-upload",
+      });
     }
 
     return redirect(`/recipes/${id}`);
@@ -310,7 +337,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 }
 
 export default function EditRecipe() {
-  const { recipe, formattedSteps } = useLoaderData<typeof loader>();
+  const { recipe, coverImageUrl, formattedSteps } = useLoaderData<typeof loader>();
   const actionData = useActionData<ActionData>();
   const navigate = useNavigate();
   const navigation = useNavigation();
@@ -415,7 +442,7 @@ export default function EditRecipe() {
             title: recipe.title,
             description: recipe.description,
             servings: recipe.servings,
-            imageUrl: recipe.imageUrl,
+            coverImageUrl,
             steps: formattedSteps,
           }}
           onSave={handleSave}

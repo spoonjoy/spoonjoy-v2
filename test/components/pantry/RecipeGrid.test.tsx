@@ -8,7 +8,7 @@ const recipes: PantryRecipeCard[] = [
     id: 'r-1',
     title: 'Lemon Pasta',
     description: 'Bright pasta with garlic and lemon zest.',
-    imageUrl: 'https://images.example.com/lemon-pasta.jpg',
+    coverImageUrl: 'https://images.example.com/lemon-pasta.jpg',
     difficulty: 'Easy',
     cookTimeMinutes: 20,
     servings: '4',
@@ -30,9 +30,6 @@ function renderWithRouter(ui: React.ReactElement) {
 }
 
 describe('RecipeGrid', () => {
-  const legacyDefaultImageUrl =
-    'https://res.cloudinary.com/dpjmyc4uz/image/upload/v1674541350/clbe7wr180009tkhggghtl1qd.png'
-
   it('renders recipe cards with titles and links', () => {
     renderWithRouter(<RecipeGrid recipes={recipes} />)
 
@@ -51,19 +48,6 @@ describe('RecipeGrid', () => {
     renderWithRouter(<RecipeGrid recipes={recipes} />)
 
     expect(screen.getByText('No photo')).toBeInTheDocument()
-  })
-
-  it('renders placeholder when image uses legacy default URL', () => {
-    const recipeWithLegacyImage: PantryRecipeCard = {
-      id: 'legacy',
-      title: 'Legacy',
-      imageUrl: legacyDefaultImageUrl,
-    }
-
-    renderWithRouter(<RecipeGrid recipes={[recipeWithLegacyImage]} />)
-
-    expect(screen.getByText('No photo')).toBeInTheDocument()
-    expect(screen.queryByRole('img', { name: 'Legacy' })).toBeNull()
   })
 
   it('renders servings and chef name metadata', () => {

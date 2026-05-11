@@ -54,7 +54,7 @@ export function applyCreatedCookbookState(
 
 export default function RecipeDetail() {
   const loaderData = useLoaderData<typeof loader>();
-  const { recipe, isOwner, hasIngredientsInShoppingList = false } = loaderData;
+  const { recipe, coverImageUrl, isOwner, hasIngredientsInShoppingList = false } = loaderData;
   const cookbooks = loaderData.cookbooks ?? EMPTY_COOKBOOKS;
   const savedInCookbookIds = loaderData.savedInCookbookIds ?? EMPTY_SAVED_COOKBOOK_IDS;
   const submit = useSubmit();
@@ -408,7 +408,7 @@ export default function RecipeDetail() {
         chefId={recipe.chef.id}
         chefProfileHref={`/users/${recipe.chef.username}`}
         chefPhotoUrl={recipe.chef.photoUrl ?? undefined}
-        imageUrl={recipe.imageUrl ?? undefined}
+        coverImageUrl={coverImageUrl}
         servings={recipe.servings ?? undefined}
         scaleFactor={scaleFactor}
         onScaleChange={handleScaleChange}

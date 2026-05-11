@@ -1,6 +1,7 @@
 import type { Route } from "./+types/cookbooks.$id";
 import { redirect, useLoaderData, Form, data, useSubmit } from "react-router";
 import { getRequestDb } from "~/lib/route-platform.server";
+import { getRecipeCoverImageUrl } from "~/lib/recipe-cover.server";
 import { requireUserId } from "~/lib/session.server";
 import { useState, useRef } from "react";
 import { ConfirmationDialog } from "~/components/confirmation-dialog";
@@ -33,8 +34,10 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
               id: true,
               title: true,
               description: true,
-              imageUrl: true,
               servings: true,
+              covers: {
+                orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+              },
               chef: {
                 select: {
                   username: true,
@@ -81,7 +84,25 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       })
     : [];
 
-  return { cookbook, isOwner, availableRecipes };
+  const cookbookWithCovers = {
+    ...cookbook,
+    recipes: cookbook.recipes.map((item) => ({
+      ...item,
+      recipe: {
+        id: item.recipe.id,
+        title: item.recipe.title,
+        description: item.recipe.description,
+        servings: item.recipe.servings,
+        chef: item.recipe.chef,
+        coverImageUrl: getRecipeCoverImageUrl(
+          { id: item.recipe.id, title: item.recipe.title },
+          item.recipe.covers,
+        ),
+      },
+    })),
+  };
+
+  return { cookbook: cookbookWithCovers, isOwner, availableRecipes };
 }
 
 export async function action({ request, params, context }: Route.ActionArgs) {
@@ -311,7 +332,7 @@ export default function CookbookDetail() {
                   <div
                     className="h-[220px] w-full bg-[var(--sj-flour)] bg-cover bg-center"
                     style={{
-                      backgroundImage: item.recipe.imageUrl ? `url(${item.recipe.imageUrl})` : undefined,
+                      backgroundImage: item.recipe.coverImageUrl ? `url(${item.recipe.coverImageUrl})` : undefined,
                     }}
                   />
                   <div className="p-4">

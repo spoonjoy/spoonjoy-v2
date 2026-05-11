@@ -266,10 +266,10 @@ describe("Recipe View Scaling Integration", () => {
           title: "Recipe with Image",
           description: null,
           servings: null,
-          coverImageUrl: "https://example.com/delicious.jpg",
           chef: { id: "user-1", username: "testchef" },
           steps: [],
         },
+        coverImageUrl: "https://example.com/delicious.jpg",
         isOwner: false,
       };
 
