@@ -72,6 +72,18 @@ console.error = (...args: unknown[]) => {
   originalError.apply(console, args);
 };
 
+// Suppress the Node.js ExperimentalWarning emitted when migration tests load
+// node:sqlite to validate raw SQL. The feature is stable in Node 22 LTS for our use
+// and the warning would otherwise count against the zero-warnings test policy.
+process.removeAllListeners('warning');
+process.on('warning', (warning) => {
+  if (warning.name === 'ExperimentalWarning' && /SQLite/.test(warning.message)) {
+    return;
+  }
+  // eslint-disable-next-line no-console
+  console.warn(warning.stack ?? warning.message);
+});
+
 // Extend toBeDisabled to also check aria-disabled for better accessibility testing
 // This allows buttons with aria-disabled="true" (but no native disabled) to pass toBeDisabled()
 // which is important for buttons that should remain in tab order while appearing disabled
