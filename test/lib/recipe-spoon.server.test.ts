@@ -283,6 +283,38 @@ describe("recipe-spoon.server", () => {
       ).rejects.toBeInstanceOf(SpoonValidationError);
     });
 
+    it("leaves note alone when patch.note is undefined", async () => {
+      const chef = await makeUser();
+      const recipe = await makeRecipe(chef.id);
+      const created = await createSpoon(db, {
+        chefId: chef.id,
+        recipeId: recipe.id,
+        photoFile: makePhotoFile(),
+        note: "keep me",
+      });
+      const updated = await updateSpoon(db, created.spoon.id, chef.id, {
+        nextTime: "salt more",
+      });
+      expect(updated.note).toBe("keep me");
+      expect(updated.nextTime).toBe("salt more");
+    });
+
+    it("leaves nextTime alone when patch.nextTime is undefined", async () => {
+      const chef = await makeUser();
+      const recipe = await makeRecipe(chef.id);
+      const created = await createSpoon(db, {
+        chefId: chef.id,
+        recipeId: recipe.id,
+        photoFile: makePhotoFile(),
+        nextTime: "keep next-time",
+      });
+      const updated = await updateSpoon(db, created.spoon.id, chef.id, {
+        note: "fresh note",
+      });
+      expect(updated.note).toBe("fresh note");
+      expect(updated.nextTime).toBe("keep next-time");
+    });
+
     it("trims string patches and treats empty strings as nulls", async () => {
       const chef = await makeUser();
       const recipe = await makeRecipe(chef.id);
@@ -490,6 +522,19 @@ describe("recipe-spoon.server", () => {
       await deleteSpoon(db, created.spoon.id, chef.id);
       const list = await listSpoonsByChef(db, chef.id);
       expect(list).toHaveLength(0);
+    });
+
+    it("includes soft-deleted spoons when includeDeleted=true", async () => {
+      const chef = await makeUser();
+      const recipe = await makeRecipe(chef.id);
+      const created = await createSpoon(db, {
+        chefId: chef.id,
+        recipeId: recipe.id,
+        photoFile: makePhotoFile(),
+      });
+      await deleteSpoon(db, created.spoon.id, chef.id);
+      const list = await listSpoonsByChef(db, chef.id, { includeDeleted: true });
+      expect(list).toHaveLength(1);
     });
 
     it("respects limit and offset; orders by cookedAt desc", async () => {
