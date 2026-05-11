@@ -48,6 +48,33 @@ describe("SpoonDialog", () => {
     expect(submit).not.toBeDisabled();
   });
 
+  it("enables submit when only nextTime is filled", async () => {
+    renderDialog();
+    const submit = await screen.findByRole("button", { name: /save spoon/i });
+    expect(submit).toBeDisabled();
+    await userEvent.type(screen.getByLabelText(/next time/i), "more salt");
+    expect(submit).not.toBeDisabled();
+  });
+
+  it("updates the cookedAt input value on change", async () => {
+    renderDialog();
+    const input = (await screen.findByLabelText(/cooked at/i)) as HTMLInputElement;
+    await userEvent.type(input, "2025-06-01T12:00");
+    expect(input.value).toBe("2025-06-01T12:00");
+  });
+
+  it("clears the photo error when the user removes the selected file", async () => {
+    renderDialog();
+    const fileInput = (await screen.findByLabelText(/photo/i)) as HTMLInputElement;
+    const user = userEvent.setup({ applyAccept: false });
+    await user.upload(fileInput, makeFile("a.svg", "image/svg+xml"));
+    expect(await screen.findByText(/jpg, png, gif, or webp/i)).toBeInTheDocument();
+    await user.upload(fileInput, []);
+    await waitFor(() => {
+      expect(screen.queryByText(/jpg, png, gif, or webp/i)).toBeNull();
+    });
+  });
+
   it("when isOriginCookCandidate=true shows a photo-required hint and disables submit until photo is provided", async () => {
     renderDialog({ isOriginCookCandidate: true });
     expect(await screen.findByText(/photo required/i)).toBeInTheDocument();
@@ -64,14 +91,16 @@ describe("SpoonDialog", () => {
   it("rejects MIME types not in RECIPE_IMAGE_TYPES with an inline error", async () => {
     renderDialog();
     const fileInput = (await screen.findByLabelText(/photo/i)) as HTMLInputElement;
-    await userEvent.upload(fileInput, makeFile("a.svg", "image/svg+xml"));
+    const user = userEvent.setup({ applyAccept: false });
+    await user.upload(fileInput, makeFile("a.svg", "image/svg+xml"));
     expect(await screen.findByText(/jpg, png, gif, or webp/i)).toBeInTheDocument();
   });
 
   it("rejects files >5MB with an inline error", async () => {
     renderDialog();
     const fileInput = (await screen.findByLabelText(/photo/i)) as HTMLInputElement;
-    await userEvent.upload(
+    const user = userEvent.setup({ applyAccept: false });
+    await user.upload(
       fileInput,
       makeFile("big.png", "image/png", 6 * 1024 * 1024),
     );
