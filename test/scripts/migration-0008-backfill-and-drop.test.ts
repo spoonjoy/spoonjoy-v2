@@ -183,7 +183,7 @@ describe("migration 0008 — backfill and drop imageUrl", () => {
     );
   });
 
-  it("preserves Recipe rows and their indexes after the table rebuild", () => {
+  it("preserves Recipe rows and their indexes after the column drop", () => {
     const recipes = db
       .prepare(`SELECT id, title FROM "Recipe" ORDER BY id`)
       .all() as unknown as { id: string; title: string }[];

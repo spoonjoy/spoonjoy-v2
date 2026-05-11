@@ -45,3 +45,18 @@ CREATE TABLE IF NOT EXISTS "ImageGenLedger" (
 
 CREATE UNIQUE INDEX IF NOT EXISTS "ImageGenLedger_userId_kind_bucketStart_key" ON "ImageGenLedger"("userId","kind","bucketStart");
 CREATE INDEX IF NOT EXISTS "ImageGenLedger_userId_bucketStart_idx" ON "ImageGenLedger"("userId","bucketStart");
+
+-- Section 2: backfill RecipeCover rows from any Recipe whose imageUrl is non-empty
+-- AND does not contain the legacy v1 Cloudinary default token.
+INSERT INTO "RecipeCover" ("id","recipeId","imageUrl","sourceType","createdAt")
+SELECT lower(hex(randomblob(12))), id, imageUrl, 'chef-upload', createdAt
+FROM "Recipe"
+WHERE imageUrl IS NOT NULL
+  AND imageUrl != ''
+  AND imageUrl NOT LIKE '%clbe7wr180009tkhggghtl1qd.png%';
+
+-- Section 3: drop Recipe.imageUrl. SQLite 3.35+ supports a direct column drop, which
+-- D1 (>=3.41) also supports. The column has no index or constraint depending on it
+-- (the legacy default was enforced only by a column-level DEFAULT clause), so the drop
+-- is purely metadata + page rewrite — no table rebuild, no FK juggling needed.
+ALTER TABLE "Recipe" DROP COLUMN "imageUrl";
