@@ -1,5 +1,16 @@
-import { describe, expect, it } from "vitest";
-import { runDeploymentPreflight, validateDeploymentConfig, type DeploymentPreflightInputs } from "../../scripts/deployment-preflight";
+import { describe, expect, it, vi } from "vitest";
+import {
+  checkRemoteMigrations,
+  createWranglerRunner,
+  formatCheck,
+  isCliEntry,
+  main,
+  runCliIfEntry,
+  runDeploymentPreflight,
+  validateDeploymentConfig,
+  type CliIO,
+  type DeploymentPreflightInputs,
+} from "../../scripts/deployment-preflight";
 
 function validInputs(): DeploymentPreflightInputs {
   return {
@@ -15,7 +26,9 @@ function validInputs(): DeploymentPreflightInputs {
     packageJson: {
       scripts: {
         build: "react-router build",
-        deploy: "pnpm build && npx -p wrangler@4.55.0 wrangler deploy",
+        deploy: "pnpm deploy:preflight && pnpm build && pnpm exec wrangler deploy",
+        "deploy:auto":
+          "pnpm deploy:preflight && pnpm build && pnpm exec wrangler d1 migrations apply DB --remote && pnpm exec wrangler deploy",
         "deploy:preflight": "tsx scripts/deployment-preflight.ts",
         typecheck: "react-router typegen && tsc",
         "test:coverage": "vitest run --coverage",
@@ -32,10 +45,58 @@ function validInputs(): DeploymentPreflightInputs {
 
 describe("deployment preflight", () => {
   it("passes against the current repository configuration", async () => {
-    const result = await runDeploymentPreflight();
+    const result = await runDeploymentPreflight(process.cwd(), {
+      runWrangler: async () => ({ stdout: "[]", stderr: "", exitCode: 0 }),
+    });
 
     expect(result.errors).toEqual([]);
     expect(result.checks.every((item) => item.ok || item.severity === "warning")).toBe(true);
+    expect(result.checks.map((item) => item.name)).toContain("remote D1 migrations");
+  });
+
+  it("surfaces remote-migration failures as errors", async () => {
+    const result = await runDeploymentPreflight(process.cwd(), {
+      runWrangler: async () => ({
+        stdout: '[{"Name":"0007_api_credentials.sql"}]',
+        stderr: "",
+        exitCode: 0,
+      }),
+    });
+
+    expect(result.errors.map((item) => item.name)).toContain("remote D1 migrations");
+  });
+
+  it("surfaces remote-migration auth errors as warnings only", async () => {
+    const result = await runDeploymentPreflight(process.cwd(), {
+      runWrangler: async () => ({
+        stdout: "",
+        stderr: "Authentication error [code: 10000] please run wrangler login",
+        exitCode: 1,
+      }),
+    });
+
+    const errorNames = result.errors.map((item) => item.name);
+    const warningNames = result.warnings.map((item) => item.name);
+    expect(errorNames).not.toContain("remote D1 migrations");
+    expect(warningNames).toContain("remote D1 migrations");
+  });
+
+  it("uses createWranglerRunner by default when no runWrangler dep is provided", async () => {
+    const originalSkip = process.env.SPOONJOY_PREFLIGHT_SKIP_REMOTE;
+    process.env.SPOONJOY_PREFLIGHT_SKIP_REMOTE = "1";
+    try {
+      const result = await runDeploymentPreflight(process.cwd());
+      const remoteCheck = result.checks.find((item) => item.name === "remote D1 migrations");
+      expect(remoteCheck).toBeDefined();
+      expect(remoteCheck!.ok).toBe(true);
+      expect(remoteCheck!.severity).toBe("warning");
+    } finally {
+      if (originalSkip === undefined) {
+        delete process.env.SPOONJOY_PREFLIGHT_SKIP_REMOTE;
+      } else {
+        process.env.SPOONJOY_PREFLIGHT_SKIP_REMOTE = originalSkip;
+      }
+    }
   });
 
   it("flags missing production-critical bindings and docs", () => {
@@ -52,6 +113,15 @@ describe("deployment preflight", () => {
     );
   });
 
+  it("requires deploy:auto in REQUIRED_PACKAGE_SCRIPTS", () => {
+    const inputs = validInputs();
+    delete (inputs.packageJson.scripts as Record<string, string>)["deploy:auto"];
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("package scripts");
+  });
+
   it("reports NODE_ENV as a warning instead of a hard failure", () => {
     const inputs = validInputs();
     inputs.wrangler.vars = { NODE_ENV: "development" };
@@ -60,5 +130,685 @@ describe("deployment preflight", () => {
 
     expect(result.errors).toEqual([]);
     expect(result.warnings.map((item) => item.name)).toContain("production node env");
+  });
+});
+
+describe("checkRemoteMigrations", () => {
+  it("returns PASS when remote D1 reports no pending migrations", async () => {
+    const runWrangler = vi.fn(async () => ({ stdout: "[]", stderr: "", exitCode: 0 }));
+
+    const check = await checkRemoteMigrations({ runWrangler, env: {} });
+
+    expect(check.name).toBe("remote D1 migrations");
+    expect(check.ok).toBe(true);
+    expect(check.severity).toBe("error");
+    expect(check.message.toLowerCase()).toMatch(/up to date|no pending/);
+    expect(runWrangler).toHaveBeenCalledTimes(1);
+    expect(runWrangler).toHaveBeenCalledWith([
+      "d1",
+      "migrations",
+      "list",
+      "DB",
+      "--remote",
+      "--json",
+    ]);
+  });
+
+  it("FAILS when one migration is pending and includes its name in the message", async () => {
+    const runWrangler = vi.fn(async () => ({
+      stdout: '[{"Name":"0007_api_credentials.sql"}]',
+      stderr: "",
+      exitCode: 0,
+    }));
+
+    const check = await checkRemoteMigrations({ runWrangler, env: {} });
+
+    expect(check.ok).toBe(false);
+    expect(check.severity).toBe("error");
+    expect(check.message).toContain("0007_api_credentials.sql");
+  });
+
+  it("FAILS and lists every pending migration name", async () => {
+    const stdout = JSON.stringify([
+      { Name: "0005_a.sql" },
+      { Name: "0006_b.sql" },
+      { Name: "0007_c.sql" },
+    ]);
+    const runWrangler = vi.fn(async () => ({ stdout, stderr: "", exitCode: 0 }));
+
+    const check = await checkRemoteMigrations({ runWrangler, env: {} });
+
+    expect(check.ok).toBe(false);
+    expect(check.severity).toBe("error");
+    expect(check.message).toContain("0005_a.sql");
+    expect(check.message).toContain("0006_b.sql");
+    expect(check.message).toContain("0007_c.sql");
+  });
+
+  it("WARNS instead of failing when wrangler emits an auth-keyed stderr with non-zero exit", async () => {
+    const runWrangler = vi.fn(async () => ({
+      stdout: "",
+      stderr: "Authentication error [code: 10000] — did you forget to run `wrangler login`?",
+      exitCode: 1,
+    }));
+
+    const check = await checkRemoteMigrations({ runWrangler, env: {} });
+
+    expect(check.ok).toBe(false);
+    expect(check.severity).toBe("warning");
+    expect(check.message.toLowerCase()).toMatch(/auth|login/);
+  });
+
+  it("WARNS when wrangler reports it needs a non-interactive API token", async () => {
+    const runWrangler = vi.fn(async () => ({
+      stdout: "",
+      stderr:
+        "In a non-interactive environment, it's necessary that you specify a Cloudflare API token...",
+      exitCode: 1,
+    }));
+
+    const check = await checkRemoteMigrations({ runWrangler, env: {} });
+
+    expect(check.ok).toBe(false);
+    expect(check.severity).toBe("warning");
+    expect(check.message.toLowerCase()).toMatch(/auth|api token|login|unauthenticated/);
+  });
+
+  it("FAILS with a parse-error message when stdout is not valid JSON", async () => {
+    const runWrangler = vi.fn(async () => ({ stdout: "not json", stderr: "", exitCode: 0 }));
+
+    const check = await checkRemoteMigrations({ runWrangler, env: {} });
+
+    expect(check.ok).toBe(false);
+    expect(check.severity).toBe("error");
+    expect(check.message.toLowerCase()).toContain("parse");
+  });
+
+  it("FAILS with a shape-error message when JSON is a top-level object instead of an array", async () => {
+    const runWrangler = vi.fn(async () => ({
+      stdout: '{"migrations":[]}',
+      stderr: "",
+      exitCode: 0,
+    }));
+
+    const check = await checkRemoteMigrations({ runWrangler, env: {} });
+
+    expect(check.ok).toBe(false);
+    expect(check.severity).toBe("error");
+    expect(check.message.toLowerCase()).toMatch(/shape|schema|unexpected/);
+  });
+
+  it("FAILS with a shape-error message when JSON is an array of strings", async () => {
+    const runWrangler = vi.fn(async () => ({
+      stdout: '["0007.sql"]',
+      stderr: "",
+      exitCode: 0,
+    }));
+
+    const check = await checkRemoteMigrations({ runWrangler, env: {} });
+
+    expect(check.ok).toBe(false);
+    expect(check.severity).toBe("error");
+    expect(check.message.toLowerCase()).toMatch(/shape|schema|unexpected/);
+  });
+
+  it("FAILS with a shape-error message when JSON objects use lowercase name instead of Name", async () => {
+    const runWrangler = vi.fn(async () => ({
+      stdout: '[{"name":"0007.sql"}]',
+      stderr: "",
+      exitCode: 0,
+    }));
+
+    const check = await checkRemoteMigrations({ runWrangler, env: {} });
+
+    expect(check.ok).toBe(false);
+    expect(check.severity).toBe("error");
+    expect(check.message.toLowerCase()).toMatch(/shape|schema|unexpected/);
+  });
+
+  it("FAILS with a clear message when wrangler exits non-zero without an auth-keyed stderr", async () => {
+    const runWrangler = vi.fn(async () => ({
+      stdout: "",
+      stderr: "Internal error: database unavailable",
+      exitCode: 2,
+    }));
+
+    const check = await checkRemoteMigrations({ runWrangler, env: {} });
+
+    expect(check.ok).toBe(false);
+    expect(check.severity).toBe("error");
+    expect(check.message).toContain("Internal error: database unavailable");
+  });
+
+  it("FAILS when the runWrangler promise rejects (spawn/binary error)", async () => {
+    const runWrangler = vi.fn(async () => {
+      throw new Error("ENOENT: wrangler not found");
+    });
+
+    const check = await checkRemoteMigrations({ runWrangler, env: {} });
+
+    expect(check.ok).toBe(false);
+    expect(check.severity).toBe("error");
+    expect(check.message).toContain("ENOENT");
+  });
+
+  it("FAILS with a string representation when runWrangler rejects with a non-Error value", async () => {
+    const runWrangler = vi.fn(async () => {
+      throw "some string failure";
+    });
+
+    const check = await checkRemoteMigrations({ runWrangler, env: {} });
+
+    expect(check.ok).toBe(false);
+    expect(check.severity).toBe("error");
+    expect(check.message).toContain("some string failure");
+  });
+
+  it("FAILS with a string representation when JSON.parse throws a non-Error", async () => {
+    const runWrangler = vi.fn(async () => ({ stdout: "definitely not json", stderr: "", exitCode: 0 }));
+    const originalParse = JSON.parse;
+    const spy = vi.spyOn(JSON, "parse").mockImplementationOnce(() => {
+      throw "weird non-error";
+    });
+
+    try {
+      const check = await checkRemoteMigrations({ runWrangler, env: {} });
+      expect(check.ok).toBe(false);
+      expect(check.severity).toBe("error");
+      expect(check.message).toContain("weird non-error");
+    } finally {
+      spy.mockRestore();
+      expect(JSON.parse).toBe(originalParse);
+    }
+  });
+
+  it("returns a warning PASS when SPOONJOY_PREFLIGHT_SKIP_REMOTE=1 even if the fake would have reported pending migrations", async () => {
+    const runWrangler = vi.fn(async () => ({
+      stdout: '[{"Name":"0007.sql"}]',
+      stderr: "",
+      exitCode: 0,
+    }));
+
+    const check = await checkRemoteMigrations({
+      runWrangler,
+      env: { SPOONJOY_PREFLIGHT_SKIP_REMOTE: "1" },
+    });
+
+    expect(check.ok).toBe(true);
+    expect(check.severity).toBe("warning");
+    expect(check.message).toContain("SPOONJOY_PREFLIGHT_SKIP_REMOTE");
+    expect(runWrangler).not.toHaveBeenCalled();
+  });
+
+  it("falls back to process.env when no env is provided in deps", async () => {
+    const runWrangler = vi.fn(async () => ({ stdout: "[]", stderr: "", exitCode: 0 }));
+    const original = process.env.SPOONJOY_PREFLIGHT_SKIP_REMOTE;
+    process.env.SPOONJOY_PREFLIGHT_SKIP_REMOTE = "1";
+    try {
+      const check = await checkRemoteMigrations({ runWrangler });
+      expect(check.ok).toBe(true);
+      expect(check.severity).toBe("warning");
+      expect(runWrangler).not.toHaveBeenCalled();
+    } finally {
+      if (original === undefined) {
+        delete process.env.SPOONJOY_PREFLIGHT_SKIP_REMOTE;
+      } else {
+        process.env.SPOONJOY_PREFLIGHT_SKIP_REMOTE = original;
+      }
+    }
+  });
+});
+
+describe("deployment docs", () => {
+  it("docs/deployment.md mentions pnpm deploy:auto", async () => {
+    const fs = await import("node:fs/promises");
+    const doc = await fs.readFile(`${process.cwd()}/docs/deployment.md`, "utf8");
+    expect(doc).toContain("pnpm deploy:auto");
+  });
+
+  it("docs/deployment.md documents SPOONJOY_PREFLIGHT_SKIP_REMOTE", async () => {
+    const fs = await import("node:fs/promises");
+    const doc = await fs.readFile(`${process.cwd()}/docs/deployment.md`, "utf8");
+    expect(doc).toContain("SPOONJOY_PREFLIGHT_SKIP_REMOTE");
+  });
+
+  it("DEPLOY.md mentions pnpm deploy:auto", async () => {
+    const fs = await import("node:fs/promises");
+    const doc = await fs.readFile(`${process.cwd()}/DEPLOY.md`, "utf8");
+    expect(doc).toContain("pnpm deploy:auto");
+  });
+
+  it("DEPLOY.md documents SPOONJOY_PREFLIGHT_SKIP_REMOTE", async () => {
+    const fs = await import("node:fs/promises");
+    const doc = await fs.readFile(`${process.cwd()}/DEPLOY.md`, "utf8");
+    expect(doc).toContain("SPOONJOY_PREFLIGHT_SKIP_REMOTE");
+  });
+});
+
+describe("package.json deploy scripts", () => {
+  it("deploy chains preflight then build then wrangler deploy via pnpm exec", async () => {
+    const pkgRaw = await import("node:fs/promises").then((mod) =>
+      mod.readFile(`${process.cwd()}/package.json`, "utf8"),
+    );
+    const pkg = JSON.parse(pkgRaw) as { scripts: Record<string, string> };
+
+    expect(pkg.scripts.deploy).toBe(
+      "pnpm deploy:preflight && pnpm build && pnpm exec wrangler deploy",
+    );
+  });
+
+  it("deploy:auto chains preflight then build then migrate then deploy via pnpm exec in that order", async () => {
+    const pkgRaw = await import("node:fs/promises").then((mod) =>
+      mod.readFile(`${process.cwd()}/package.json`, "utf8"),
+    );
+    const pkg = JSON.parse(pkgRaw) as { scripts: Record<string, string> };
+
+    expect(pkg.scripts["deploy:auto"]).toBe(
+      "pnpm deploy:preflight && pnpm build && pnpm exec wrangler d1 migrations apply DB --remote && pnpm exec wrangler deploy",
+    );
+  });
+});
+
+describe("createWranglerRunner", () => {
+  type Captured = {
+    cmd: string;
+    args: readonly string[];
+    options: { cwd?: string; env?: NodeJS.ProcessEnv };
+  };
+
+  it("invokes the configured wrangler binary with pnpm exec and forwards args", async () => {
+    let captured: Captured | null = null;
+    const stub = vi.fn(
+      (
+        cmd: string,
+        args: readonly string[],
+        options: { cwd?: string; env?: NodeJS.ProcessEnv },
+        callback: (
+          error: (Error & { code?: number | string }) | null,
+          stdout: string,
+          stderr: string,
+        ) => void,
+      ) => {
+        captured = { cmd, args, options };
+        callback(null, "", "");
+      },
+    );
+
+    const runner = createWranglerRunner(stub);
+    await runner(["d1", "migrations", "list", "DB", "--remote", "--json"]);
+
+    expect(stub).toHaveBeenCalledTimes(1);
+    expect(captured).not.toBeNull();
+    expect(captured!.cmd).toBe("pnpm");
+    expect(Array.from(captured!.args)).toEqual([
+      "exec",
+      "wrangler",
+      "d1",
+      "migrations",
+      "list",
+      "DB",
+      "--remote",
+      "--json",
+    ]);
+    expect(captured!.options).toEqual({});
+  });
+
+  it("resolves with stdout/stderr/exitCode when execFile callback signals success", async () => {
+    const stub = vi.fn(
+      (
+        _cmd: string,
+        _args: readonly string[],
+        _options: { cwd?: string; env?: NodeJS.ProcessEnv },
+        callback: (
+          error: (Error & { code?: number | string }) | null,
+          stdout: string,
+          stderr: string,
+        ) => void,
+      ) => {
+        callback(null, "stdoutbody", "");
+      },
+    );
+
+    const runner = createWranglerRunner(stub);
+    const result = await runner(["whoami"]);
+
+    expect(result).toEqual({ stdout: "stdoutbody", stderr: "", exitCode: 0 });
+  });
+
+  it("resolves with non-zero exitCode and stderr when execFile callback signals a process error", async () => {
+    const stub = vi.fn(
+      (
+        _cmd: string,
+        _args: readonly string[],
+        _options: { cwd?: string; env?: NodeJS.ProcessEnv },
+        callback: (
+          error: (Error & { code?: number | string }) | null,
+          stdout: string,
+          stderr: string,
+        ) => void,
+      ) => {
+        const err = Object.assign(new Error("exit 1"), { code: 1 });
+        callback(err, "", "stderrbody");
+      },
+    );
+
+    const runner = createWranglerRunner(stub);
+    const result = await runner(["d1", "migrations", "list", "DB", "--remote", "--json"]);
+
+    expect(result).toEqual({ stdout: "", stderr: "stderrbody", exitCode: 1 });
+  });
+
+  it("rejects with the underlying error when execFile reports a spawn failure (no numeric exit code)", async () => {
+    const stub = vi.fn(
+      (
+        _cmd: string,
+        _args: readonly string[],
+        _options: { cwd?: string; env?: NodeJS.ProcessEnv },
+        callback: (
+          error: (Error & { code?: number | string }) | null,
+          stdout: string,
+          stderr: string,
+        ) => void,
+      ) => {
+        const err = Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+        callback(err, "", "");
+      },
+    );
+
+    const runner = createWranglerRunner(stub);
+
+    await expect(runner(["d1"])).rejects.toThrow("ENOENT");
+  });
+
+  it("exposes a default factory that uses node:child_process execFile", () => {
+    const runner = createWranglerRunner();
+    expect(typeof runner).toBe("function");
+  });
+});
+
+describe("formatCheck", () => {
+  it("prefixes passing checks with PASS", () => {
+    expect(
+      formatCheck({ name: "x", ok: true, severity: "error", message: "ok" }),
+    ).toBe("PASS x: ok");
+  });
+
+  it("prefixes warning checks with WARN", () => {
+    expect(
+      formatCheck({ name: "x", ok: false, severity: "warning", message: "soft" }),
+    ).toBe("WARN x: soft");
+  });
+
+  it("prefixes failing error checks with FAIL", () => {
+    expect(
+      formatCheck({ name: "x", ok: false, severity: "error", message: "bad" }),
+    ).toBe("FAIL x: bad");
+  });
+});
+
+function makeIO(): { io: CliIO; logs: string[]; errors: string[]; exits: number[] } {
+  const logs: string[] = [];
+  const errors: string[] = [];
+  const exits: number[] = [];
+  const io: CliIO = {
+    log: (m) => {
+      logs.push(m);
+    },
+    error: (m) => {
+      errors.push(m);
+    },
+    exit: (code) => {
+      exits.push(code);
+    },
+  };
+  return { io, logs, errors, exits };
+}
+
+describe("main (CLI entrypoint)", () => {
+  it("prints WARN line and a passed-with-warnings summary when wrangler reports an auth-keyed soft failure", async () => {
+    const { io, logs, errors, exits } = makeIO();
+
+    await main({
+      io,
+      runWrangler: async () => ({
+        stdout: "",
+        stderr: "Authentication error: please run wrangler login",
+        exitCode: 1,
+      }),
+      env: { SPOONJOY_PREFLIGHT_SKIP_REMOTE: "0" },
+    });
+
+    expect(exits).toEqual([]);
+    expect(errors).toEqual([]);
+    expect(logs.some((line) => line.startsWith("PASS"))).toBe(true);
+    expect(logs.some((line) => line.startsWith("WARN"))).toBe(true);
+    expect(logs[logs.length - 1]).toBe("Deployment preflight passed with 1 warning(s).");
+  });
+
+  it("prints a passed summary without warning suffix when everything is OK", async () => {
+    const { io, logs, exits, errors } = makeIO();
+
+    await main({
+      io,
+      runWrangler: async () => ({ stdout: "[]", stderr: "", exitCode: 0 }),
+      env: { SPOONJOY_PREFLIGHT_SKIP_REMOTE: "0" },
+    });
+
+    expect(exits).toEqual([]);
+    expect(errors).toEqual([]);
+    expect(logs[logs.length - 1]).toBe("Deployment preflight passed.");
+  });
+
+  it("calls io.error and io.exit(1) when there is a hard failure", async () => {
+    const { io, errors, exits, logs } = makeIO();
+
+    await main({
+      io,
+      runWrangler: async () => ({
+        stdout: '[{"Name":"0007.sql"}]',
+        stderr: "",
+        exitCode: 0,
+      }),
+      env: { SPOONJOY_PREFLIGHT_SKIP_REMOTE: "0" },
+    });
+
+    expect(exits).toEqual([1]);
+    expect(errors.length).toBe(1);
+    expect(errors[0]).toMatch(/Deployment preflight failed with \d+ error\(s\)\./);
+    expect(logs.some((line) => line.startsWith("FAIL"))).toBe(true);
+  });
+
+  it("uses real console.log/console.error/process.exit when io is not injected", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
+      throw new Error(`__exit__:${code ?? 0}`);
+    }) as never);
+
+    try {
+      // Trigger a failure path so we hit error + exit defaults.
+      await expect(
+        main({
+          runWrangler: async () => ({
+            stdout: '[{"Name":"x.sql"}]',
+            stderr: "",
+            exitCode: 0,
+          }),
+          env: { SPOONJOY_PREFLIGHT_SKIP_REMOTE: "0" },
+        }),
+      ).rejects.toThrow("__exit__:1");
+
+      expect(logSpy).toHaveBeenCalled();
+      expect(errSpy).toHaveBeenCalled();
+      expect(exitSpy).toHaveBeenCalledWith(1);
+    } finally {
+      logSpy.mockRestore();
+      errSpy.mockRestore();
+      exitSpy.mockRestore();
+    }
+  });
+});
+
+describe("isCliEntry", () => {
+  it("returns false when argv1 is undefined", () => {
+    expect(isCliEntry(undefined, "file:///x.ts")).toBe(false);
+  });
+
+  it("returns false when argv1 does not resolve to the module url", () => {
+    expect(isCliEntry("/some/other/script.ts", "file:///not/the/same.ts")).toBe(false);
+  });
+
+  it("returns true when argv1 resolves to the same path as moduleUrl", () => {
+    const resolved = "/tmp/fake-preflight-cli-entry.ts";
+    const url = `file://${resolved}`;
+    expect(isCliEntry(resolved, url)).toBe(true);
+  });
+});
+
+describe("runCliIfEntry", () => {
+  it("returns false and does not invoke runMain when argv1 is not the module", () => {
+    const runMain = vi.fn(async () => {});
+    const onError = vi.fn();
+    const result = runCliIfEntry({
+      argv1: "/totally/different.ts",
+      moduleUrl: "file:///somewhere/else.ts",
+      runMain,
+      onError,
+    });
+    expect(result).toBe(false);
+    expect(runMain).not.toHaveBeenCalled();
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("returns true and invokes runMain when argv1 matches the moduleUrl", async () => {
+    const resolved = "/tmp/fake-preflight-cli-entry.ts";
+    const url = `file://${resolved}`;
+    let resolveMain!: () => void;
+    const ran = new Promise<void>((res) => {
+      resolveMain = res;
+    });
+    const runMain = vi.fn(async () => {
+      resolveMain();
+    });
+    const onError = vi.fn();
+
+    const result = runCliIfEntry({ argv1: resolved, moduleUrl: url, runMain, onError });
+    await ran;
+
+    expect(result).toBe(true);
+    expect(runMain).toHaveBeenCalledTimes(1);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("routes runMain errors through onError", async () => {
+    const resolved = "/tmp/fake-preflight-cli-entry.ts";
+    const url = `file://${resolved}`;
+    const runMain = vi.fn(async () => {
+      throw new Error("kaboom");
+    });
+    let captured: unknown = null;
+    const seen = new Promise<void>((resolve) => {
+      // onError will receive the error; resolve when invoked
+      // and capture for assertion.
+      (globalThis as Record<string, unknown>).__captureOnce = (err: unknown) => {
+        captured = err;
+        resolve();
+      };
+    });
+    const onError = (err: unknown) => {
+      (
+        (globalThis as Record<string, unknown>).__captureOnce as (e: unknown) => void
+      )(err);
+    };
+
+    const result = runCliIfEntry({ argv1: resolved, moduleUrl: url, runMain, onError });
+    await seen;
+
+    expect(result).toBe(true);
+    expect(runMain).toHaveBeenCalledTimes(1);
+    expect((captured as Error).message).toBe("kaboom");
+    delete (globalThis as Record<string, unknown>).__captureOnce;
+  });
+
+  it("uses default onError that prints and calls process.exit(1) when runMain rejects with an Error", async () => {
+    const resolved = "/tmp/fake-preflight-cli-entry.ts";
+    const url = `file://${resolved}`;
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((_code?: number) => {
+      // swallow; test asserts on call below
+      return undefined as never;
+    }) as never);
+
+    try {
+      const runMain = async () => {
+        throw new Error("crash");
+      };
+      const result = runCliIfEntry({ argv1: resolved, moduleUrl: url, runMain });
+      // Wait one microtask cycle for the .catch handler to run
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(result).toBe(true);
+      expect(errSpy).toHaveBeenCalledWith(expect.stringContaining("crash"));
+      expect(exitSpy).toHaveBeenCalledWith(1);
+    } finally {
+      errSpy.mockRestore();
+      exitSpy.mockRestore();
+    }
+  });
+
+  it("uses default onError that stringifies non-Error rejections", async () => {
+    const resolved = "/tmp/fake-preflight-cli-entry.ts";
+    const url = `file://${resolved}`;
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((_code?: number) => {
+      return undefined as never;
+    }) as never);
+
+    try {
+      const runMain = async () => {
+        throw "string-failure";
+      };
+      runCliIfEntry({ argv1: resolved, moduleUrl: url, runMain });
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(errSpy).toHaveBeenCalledWith(expect.stringContaining("string-failure"));
+      expect(exitSpy).toHaveBeenCalledWith(1);
+    } finally {
+      errSpy.mockRestore();
+      exitSpy.mockRestore();
+    }
+  });
+
+  it("uses default main when runMain is not provided", async () => {
+    // Override env so the default main() can run quickly and safely.
+    const originalSkip = process.env.SPOONJOY_PREFLIGHT_SKIP_REMOTE;
+    process.env.SPOONJOY_PREFLIGHT_SKIP_REMOTE = "1";
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((_code?: number) => {
+      return undefined as never;
+    }) as never);
+
+    try {
+      const resolved = "/tmp/fake-preflight-cli-entry.ts";
+      const url = `file://${resolved}`;
+      const result = runCliIfEntry({ argv1: resolved, moduleUrl: url });
+      // Let async main() resolve.
+      await new Promise((r) => setTimeout(r, 30));
+      expect(result).toBe(true);
+      expect(logSpy).toHaveBeenCalled();
+      // Should NOT have exited (skip flag → all PASS/WARN, no failure).
+      expect(errSpy).not.toHaveBeenCalled();
+      expect(exitSpy).not.toHaveBeenCalled();
+    } finally {
+      logSpy.mockRestore();
+      errSpy.mockRestore();
+      exitSpy.mockRestore();
+      if (originalSkip === undefined) {
+        delete process.env.SPOONJOY_PREFLIGHT_SKIP_REMOTE;
+      } else {
+        process.env.SPOONJOY_PREFLIGHT_SKIP_REMOTE = originalSkip;
+      }
+    }
   });
 });

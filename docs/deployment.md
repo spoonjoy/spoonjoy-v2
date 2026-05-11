@@ -75,14 +75,49 @@ pnpm deploy:preflight
 The preflight verifies:
 
 - `wrangler.json` has the Worker entry, `nodejs_compat`, D1 `DB`, and R2 `PHOTOS` bindings.
-- `package.json` exposes the expected build, test, e2e, deploy, and preflight scripts.
+- `package.json` exposes the expected build, test, e2e, deploy, `deploy:auto`, and preflight scripts.
 - `app/cloudflare-env.d.ts` types the Cloudflare bindings and documented secrets.
 - README/deployment docs mention required bindings, secrets, and deploy commands.
 - Numbered SQL migrations exist in `migrations/`.
+- **Remote D1 migrations**: the preflight invokes `pnpm exec wrangler d1 migrations apply DB --remote --json` (read-only via `migrations list`) and FAILS if any migrations are pending against the remote database. This guards against deploying application code that depends on a schema the remote database has not yet applied (the failure mode that caused the 2026-05-10 `/search` 500 incident).
+
+### Remote check outcomes
+
+| State | Result |
+| --- | --- |
+| Remote D1 reports no pending migrations | PASS |
+| Remote D1 reports one or more pending migrations | FAIL — names of pending migrations are printed |
+| Wrangler exits with an auth-keyed stderr (missing login, missing API token, code 10000, etc.) | WARN — preflight does not fail the deploy on missing auth, but the operator must verify manually |
+| Wrangler exits non-zero for any other reason | FAIL |
+| Wrangler stdout is not valid JSON, or shape is unexpected | FAIL |
+| Wrangler binary cannot be spawned (`ENOENT`, etc.) | FAIL |
+
+### Skipping the remote check
+
+Set `SPOONJOY_PREFLIGHT_SKIP_REMOTE=1` to skip the remote D1 migration check. The preflight will still emit a WARN line so the skip is visible in CI logs. Use this in:
+
+- CI runs that do not have wrangler credentials.
+- Local dev machines without `wrangler login`.
+- Smoke runs of `pnpm deploy:preflight` from sandboxes.
+
+Do not set this in production deploy workflows — the whole point of the check is to catch unapplied migrations before they reach users.
 
 ## Production Deploy Flow
 
-Use this order for production deploys:
+The shortest path for a production release is `pnpm deploy:auto`, which chains:
+
+```
+pnpm deploy:preflight && pnpm build && pnpm exec wrangler d1 migrations apply DB --remote && pnpm exec wrangler deploy
+```
+
+In one command this:
+
+1. Runs the full preflight (including the remote-migration check).
+2. Builds the client bundle.
+3. Applies any pending remote D1 migrations.
+4. Deploys the Worker.
+
+For full deploys with the longer test/typecheck gate:
 
 ```bash
 pnpm install --frozen-lockfile
@@ -91,11 +126,18 @@ pnpm deploy:preflight
 pnpm typecheck
 pnpm test:coverage
 pnpm test:e2e
+pnpm deploy:auto
+```
+
+If you prefer the manual two-step (no auto-apply of migrations), use:
+
+```bash
+pnpm deploy:preflight
 wrangler d1 migrations apply DB --remote
 pnpm deploy
 ```
 
-`pnpm deploy` runs `pnpm build` before `wrangler deploy`; keep that order so deploys never publish an unbuilt client bundle.
+`pnpm deploy` now runs `pnpm deploy:preflight && pnpm build && pnpm exec wrangler deploy`; keep that chain so deploys never publish an unbuilt client bundle or skip the remote-migration check.
 
 ## Failure Modes
 
@@ -104,5 +146,6 @@ pnpm deploy
 | OAuth buttons redirect back with `oauthError` | Missing or mismatched OAuth secret/callback config | Re-check provider callback URLs and `wrangler secret put` values |
 | Uploaded images work locally but not in production | Missing `PHOTOS` R2 bucket/binding or R2 is not enabled for the deploy account | Enable R2 in the Dashboard, create `spoonjoy-photos`, and verify `wrangler.json` binding |
 | Ingredient parsing returns fallback/manual review | Missing or invalid `OPENAI_API_KEY` | Set the secret or keep deterministic fallback behavior |
-| Production schema is stale | D1 migrations not applied remotely | Run `wrangler d1 migrations apply DB --remote` before deploy |
+| Production schema is stale | D1 migrations not applied remotely | Run `wrangler d1 migrations apply DB --remote` before deploy, or use `pnpm deploy:auto` to apply + deploy in one step |
+| `pnpm deploy:preflight` fails with "Remote D1 has N pending migration(s)" | Local code references a schema change that has not been applied to remote D1 | Run `pnpm exec wrangler d1 migrations apply DB --remote` or `pnpm deploy:auto` (which applies pending migrations before deploying) |
 | Sessions reset across deploys | Missing/rotating `SESSION_SECRET` | Set a stable high-entropy production secret |

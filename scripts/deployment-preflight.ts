@@ -1,6 +1,8 @@
+import { execFile as nodeExecFile } from "node:child_process";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { z } from "zod";
 
 export type PreflightSeverity = "error" | "warning";
 
@@ -40,6 +42,7 @@ const REQUIRED_SECRET_NAMES = [
 const REQUIRED_PACKAGE_SCRIPTS = [
   "build",
   "deploy",
+  "deploy:auto",
   "deploy:preflight",
   "typecheck",
   "test:coverage",
@@ -154,11 +157,131 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
   };
 }
 
+export interface WranglerRunResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+}
+
+export type RunWrangler = (args: string[]) => Promise<WranglerRunResult>;
+
+export interface RemoteMigrationCheckDeps {
+  runWrangler: RunWrangler;
+  env?: NodeJS.ProcessEnv;
+}
+
+type ExecFileLike = (
+  command: string,
+  args: readonly string[],
+  options: { cwd?: string; env?: NodeJS.ProcessEnv },
+  callback: (
+    error: (Error & { code?: number | string }) | null,
+    stdout: string,
+    stderr: string,
+  ) => void,
+) => unknown;
+
+export function createWranglerRunner(
+  execFileImpl: ExecFileLike = nodeExecFile as unknown as ExecFileLike,
+): RunWrangler {
+  return (args) =>
+    new Promise<WranglerRunResult>((resolve, reject) => {
+      execFileImpl("pnpm", ["exec", "wrangler", ...args], {}, (error, stdout, stderr) => {
+        if (error) {
+          if (typeof error.code === "number") {
+            resolve({ stdout, stderr, exitCode: error.code });
+            return;
+          }
+          reject(error);
+          return;
+        }
+        resolve({ stdout, stderr, exitCode: 0 });
+      });
+    });
+}
+
+const RemoteMigrationListSchema = z.array(z.object({ Name: z.string() }));
+
+const AUTH_ERROR_PATTERN = /auth|oauth|login|unauthenticated|api token|10000/i;
+
+export async function checkRemoteMigrations(deps: RemoteMigrationCheckDeps): Promise<PreflightCheck> {
+  const env = deps.env ?? process.env;
+  if (env.SPOONJOY_PREFLIGHT_SKIP_REMOTE === "1") {
+    return check(
+      "remote D1 migrations",
+      true,
+      "Skipped remote D1 migration check (SPOONJOY_PREFLIGHT_SKIP_REMOTE=1).",
+      "warning",
+    );
+  }
+
+  let result: WranglerRunResult;
+  try {
+    result = await deps.runWrangler(["d1", "migrations", "list", "DB", "--remote", "--json"]);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return check("remote D1 migrations", false, `Failed to invoke wrangler: ${message}`);
+  }
+
+  if (result.exitCode !== 0) {
+    if (AUTH_ERROR_PATTERN.test(result.stderr)) {
+      return check(
+        "remote D1 migrations",
+        false,
+        `Could not verify remote D1 migrations (wrangler auth error): ${result.stderr.trim()}`,
+        "warning",
+      );
+    }
+    return check(
+      "remote D1 migrations",
+      false,
+      `wrangler exited with code ${result.exitCode}: ${result.stderr.trim() || result.stdout.trim()}`,
+    );
+  }
+
+  let parsedJson: unknown;
+  try {
+    parsedJson = JSON.parse(result.stdout);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return check("remote D1 migrations", false, `Could not parse wrangler JSON output: ${message}`);
+  }
+
+  const shape = RemoteMigrationListSchema.safeParse(parsedJson);
+  if (!shape.success) {
+    return check(
+      "remote D1 migrations",
+      false,
+      `Unexpected wrangler JSON shape: ${shape.error.issues.map((issue) => issue.message).join("; ")}`,
+    );
+  }
+
+  const pending = shape.data;
+  if (pending.length === 0) {
+    return check("remote D1 migrations", true, "Remote D1 is up to date — no pending migrations.");
+  }
+
+  const names = pending.map((migration) => migration.Name).join(", ");
+  return check(
+    "remote D1 migrations",
+    false,
+    `Remote D1 has ${pending.length} pending migration(s): ${names}. Run \`pnpm exec wrangler d1 migrations apply DB --remote\` (or use \`pnpm deploy:auto\`).`,
+  );
+}
+
 async function readJsonFile(filePath: string): Promise<Record<string, unknown>> {
   return JSON.parse(await readFile(filePath, "utf8")) as Record<string, unknown>;
 }
 
-export async function runDeploymentPreflight(rootDir = process.cwd()): Promise<DeploymentPreflightResult> {
+export interface RunDeploymentPreflightDeps {
+  runWrangler?: RunWrangler;
+  env?: NodeJS.ProcessEnv;
+}
+
+export async function runDeploymentPreflight(
+  rootDir = process.cwd(),
+  deps: RunDeploymentPreflightDeps = {},
+): Promise<DeploymentPreflightResult> {
   const [wrangler, packageJson, cloudflareEnvDts, readme, deploymentDoc, migrationFiles] = await Promise.all([
     readJsonFile(path.join(rootDir, "wrangler.json")),
     readJsonFile(path.join(rootDir, "package.json")),
@@ -168,7 +291,7 @@ export async function runDeploymentPreflight(rootDir = process.cwd()): Promise<D
     readdir(path.join(rootDir, "migrations")),
   ]);
 
-  return validateDeploymentConfig({
+  const baseResult = validateDeploymentConfig({
     wrangler,
     packageJson,
     cloudflareEnvDts,
@@ -176,35 +299,90 @@ export async function runDeploymentPreflight(rootDir = process.cwd()): Promise<D
     deploymentDoc,
     migrationFiles,
   });
+
+  const runWrangler = deps.runWrangler ?? createWranglerRunner();
+  const remoteCheck = await checkRemoteMigrations({ runWrangler, env: deps.env });
+
+  const checks = [...baseResult.checks, remoteCheck];
+  return {
+    checks,
+    errors: checks.filter((item) => !item.ok && item.severity === "error"),
+    warnings: checks.filter((item) => !item.ok && item.severity === "warning"),
+  };
 }
 
-function formatCheck(item: PreflightCheck): string {
+export function formatCheck(item: PreflightCheck): string {
   const prefix = item.ok ? "PASS" : item.severity === "warning" ? "WARN" : "FAIL";
   return `${prefix} ${item.name}: ${item.message}`;
 }
 
-async function main() {
-  const result = await runDeploymentPreflight();
+export interface CliIO {
+  log: (message: string) => void;
+  error: (message: string) => void;
+  exit: (code: number) => void;
+}
+
+export interface MainDeps extends RunDeploymentPreflightDeps {
+  io?: CliIO;
+}
+
+export async function main(deps: MainDeps = {}): Promise<void> {
+  const io: CliIO = deps.io ?? {
+    log: (message) => {
+      console.log(message);
+    },
+    error: (message) => {
+      console.error(message);
+    },
+    exit: (code) => {
+      process.exit(code);
+    },
+  };
+
+  const result = await runDeploymentPreflight(process.cwd(), {
+    runWrangler: deps.runWrangler,
+    env: deps.env,
+  });
   for (const item of result.checks) {
-    console.log(formatCheck(item));
+    io.log(formatCheck(item));
   }
 
   if (result.errors.length > 0) {
-    console.error(`Deployment preflight failed with ${result.errors.length} error(s).`);
-    process.exit(1);
+    io.error(`Deployment preflight failed with ${result.errors.length} error(s).`);
+    io.exit(1);
+    return;
   }
 
   const warningSuffix = result.warnings.length > 0 ? ` with ${result.warnings.length} warning(s)` : "";
-  console.log(`Deployment preflight passed${warningSuffix}.`);
+  io.log(`Deployment preflight passed${warningSuffix}.`);
 }
 
-const executedPath = process.argv[1] ? path.resolve(process.argv[1]) : "";
-const currentPath = fileURLToPath(import.meta.url);
-
-if (executedPath === currentPath) {
-  main().catch((error: unknown) => {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`Deployment preflight failed: ${message}`);
-    process.exit(1);
-  });
+export function isCliEntry(argv1: string | undefined, moduleUrl: string): boolean {
+  if (!argv1) return false;
+  return path.resolve(argv1) === fileURLToPath(moduleUrl);
 }
+
+export interface RunCliIfEntryDeps {
+  argv1?: string;
+  moduleUrl: string;
+  runMain?: () => Promise<void>;
+  onError?: (error: unknown) => void;
+}
+
+export function runCliIfEntry(deps: RunCliIfEntryDeps): boolean {
+  if (!isCliEntry(deps.argv1, deps.moduleUrl)) {
+    return false;
+  }
+  const runMain = deps.runMain ?? main;
+  const onError =
+    deps.onError ??
+    ((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`Deployment preflight failed: ${message}`);
+      process.exit(1);
+    });
+  runMain().catch(onError);
+  return true;
+}
+
+runCliIfEntry({ argv1: process.argv[1], moduleUrl: import.meta.url });

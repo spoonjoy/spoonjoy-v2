@@ -156,13 +156,41 @@ wrangler d1 execute spoonjoy --remote --file=./migrations/0002_seed.sql
 
 ## Step 6: Build and Deploy
 
-```bash
-# Build the application
-pnpm build
+There are two supported deploy paths:
 
-# Deploy to Cloudflare Workers with the repo-pinned Wrangler version
+### `pnpm deploy` — safe, manual migrations
+
+`pnpm deploy` now runs the full preflight (including a remote D1 migration check) before building and deploying. It does **not** apply remote D1 migrations for you. If the preflight detects pending migrations, it fails and tells you which migrations are pending.
+
+```bash
+# Apply any pending migrations first
+pnpm exec wrangler d1 migrations apply DB --remote
+
+# Then deploy (preflight → build → wrangler deploy)
 pnpm deploy
 ```
+
+Use this path when you want to inspect migrations before applying them or when migrations require a manual review.
+
+### `pnpm deploy:auto` — one-shot preflight + migrate + deploy
+
+```bash
+pnpm deploy:auto
+```
+
+This chains `pnpm deploy:preflight && pnpm build && pnpm exec wrangler d1 migrations apply DB --remote && pnpm exec wrangler deploy`. Use this when migrations are routine and you want a single command to fully push a release. This is the recommended path for the common case.
+
+**Why this matters**: on 2026-05-10 a production deploy went out without applying remote D1 migrations, causing `/search` to 500 with `no such column: ...` errors. `pnpm deploy:auto` and the preflight remote-migration check exist to make that failure mode impossible going forward.
+
+### Skipping the remote check in dev or unauthenticated CI
+
+If you run `pnpm deploy:preflight` from an environment without wrangler credentials, set `SPOONJOY_PREFLIGHT_SKIP_REMOTE=1` to skip the remote check. The preflight will emit a WARN line so the skip is visible in logs.
+
+```bash
+SPOONJOY_PREFLIGHT_SKIP_REMOTE=1 pnpm deploy:preflight
+```
+
+Do **not** set this in a real production deploy — the check is what catches unapplied migrations.
 
 The deploy output will show your Worker URL: `https://spoonjoy-v2.<account>.workers.dev`
 
