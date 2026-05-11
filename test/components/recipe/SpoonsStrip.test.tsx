@@ -101,6 +101,101 @@ describe("SpoonsStrip", () => {
     expect(cover).toHaveAttribute("src", "/photos/cover.png");
   });
 
+  it("renders 'just now' for cookedAt within the last 45 seconds", () => {
+    renderWithRouter(
+      <SpoonsStrip
+        spoons={[
+          makeSpoon({ cookedAt: new Date(Date.now() - 5_000).toISOString() }),
+        ]}
+      />,
+    );
+    expect(screen.getByText(/just now/i)).toBeInTheDocument();
+  });
+
+  it("renders hr ago for cookedAt several hours back", () => {
+    renderWithRouter(
+      <SpoonsStrip
+        spoons={[
+          makeSpoon({
+            cookedAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
+          }),
+        ]}
+      />,
+    );
+    expect(screen.getByText(/3 hr ago/i)).toBeInTheDocument();
+  });
+
+  it("renders days ago for cookedAt several days back", () => {
+    renderWithRouter(
+      <SpoonsStrip
+        spoons={[
+          makeSpoon({
+            cookedAt: new Date(
+              Date.now() - 5 * 24 * 60 * 60 * 1000,
+            ).toISOString(),
+          }),
+        ]}
+      />,
+    );
+    expect(screen.getByText(/5 days ago/i)).toBeInTheDocument();
+  });
+
+  it("renders mo ago for cookedAt within the year", () => {
+    renderWithRouter(
+      <SpoonsStrip
+        spoons={[
+          makeSpoon({
+            cookedAt: new Date(
+              Date.now() - 90 * 24 * 60 * 60 * 1000,
+            ).toISOString(),
+          }),
+        ]}
+      />,
+    );
+    expect(screen.getByText(/3 mo ago/i)).toBeInTheDocument();
+  });
+
+  it("renders yr ago for cookedAt over a year back", () => {
+    renderWithRouter(
+      <SpoonsStrip
+        spoons={[
+          makeSpoon({
+            cookedAt: new Date(
+              Date.now() - 400 * 24 * 60 * 60 * 1000,
+            ).toISOString(),
+          }),
+        ]}
+      />,
+    );
+    expect(screen.getByText(/yr ago/i)).toBeInTheDocument();
+  });
+
+  it("does NOT show an expand toggle for short notes", () => {
+    renderWithRouter(
+      <SpoonsStrip
+        spoons={[makeSpoon({ note: "short note" })]}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: /show more/i })).toBeNull();
+  });
+
+  it("renders the recipe link with no cover image when coverImageUrl is null", () => {
+    renderWithRouter(
+      <SpoonsStrip
+        showRecipe
+        spoons={[
+          makeSpoon({
+            recipe: { id: "r1", title: "Lentil Soup", chefId: "u1" },
+            coverImageUrl: null,
+          }),
+        ]}
+      />,
+    );
+    const recipeLink = screen.getByRole("link", { name: /lentil soup/i });
+    expect(recipeLink).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: /cover/i })).toBeNull();
+  });
+
   it("when showRecipe is omitted, no recipe link is rendered", () => {
     renderWithRouter(
       <SpoonsStrip
