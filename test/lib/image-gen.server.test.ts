@@ -138,6 +138,23 @@ describe("generatePlaceholderImage", () => {
       generatePlaceholderImage("X", null, { env: {}, runner }),
     ).rejects.toMatchObject({ name: "ImageGenError", cause });
   });
+
+  it("throws ImageGenError when the bucket fetch returns a non-OK response", async () => {
+    const failingFetch = vi.fn(async () => ({
+      ok: false,
+      status: 503,
+      arrayBuffer: async () => new ArrayBuffer(0),
+    })) as unknown as typeof fetch;
+    await expect(
+      generatePlaceholderImage("X", null, {
+        env: {},
+        runner: mockRunner(),
+        fetchImpl: failingFetch,
+        bucket: mockR2(),
+        now: () => 1,
+      }),
+    ).rejects.toBeInstanceOf(ImageGenError);
+  });
 });
 
 describe("stylizeSpoonPhoto", () => {
@@ -210,6 +227,20 @@ describe("stylizeSpoonPhoto", () => {
     ).rejects.toBeInstanceOf(ImageGenError);
   });
 
+  it("wraps a fallback failure in ImageGenError", async () => {
+    const runner = mockRunner({
+      imageToImage: vi.fn(async () => {
+        throw Object.assign(new Error("primary"), { code: "model_not_found" });
+      }),
+      textToImage: vi.fn(async () => {
+        throw new Error("fallback failed");
+      }),
+    });
+    await expect(
+      stylizeSpoonPhoto("https://photos.test/raw.jpg", "X", { env: {}, runner }),
+    ).rejects.toBeInstanceOf(ImageGenError);
+  });
+
   it("returns the runner URL directly when bucket is absent on success", async () => {
     const runner = mockRunner({
       imageToImage: vi.fn(async () => ({ url: "https://openai.test/raw-stylized.png" })),
@@ -268,5 +299,68 @@ describe("createOpenAIImageRunner", () => {
     await expect(runner.textToImage("p", { model: "dall-e-3" })).rejects.toBeInstanceOf(
       ImageGenError,
     );
+  });
+
+  it("treats non-object thrown values as non-fallback errors", async () => {
+    const runner = mockRunner({
+      imageToImage: vi.fn(async () => {
+        // Throw a string (not an object) — must not enter the fallback branch.
+        // eslint-disable-next-line @typescript-eslint/no-throw-literal
+        throw "boom";
+      }),
+    });
+    await expect(
+      stylizeSpoonPhoto("https://photos.test/raw.jpg", "X", { env: {}, runner }),
+    ).rejects.toBeInstanceOf(ImageGenError);
+  });
+
+  it("treats non-string error codes as non-fallback errors", async () => {
+    const runner = mockRunner({
+      imageToImage: vi.fn(async () => {
+        throw Object.assign(new Error("weird"), { code: 404 });
+      }),
+    });
+    await expect(
+      stylizeSpoonPhoto("https://photos.test/raw.jpg", "X", { env: {}, runner }),
+    ).rejects.toBeInstanceOf(ImageGenError);
+  });
+
+  it("falls back to global fetch and Date.now when no overrides are supplied", async () => {
+    const originalFetch = globalThis.fetch;
+    const originalNow = Date.now;
+    const fetchSpy = vi.fn(async () => ({
+      ok: true,
+      arrayBuffer: async () => new Uint8Array([7, 7, 7]).buffer as ArrayBuffer,
+    }));
+    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+    const stamp = 999_000;
+    Date.now = () => stamp;
+    try {
+      const bucket = mockR2();
+      const url = await generatePlaceholderImage("X", null, {
+        env: {},
+        runner: mockRunner({
+          textToImage: vi.fn(async () => ({ url: "https://openai.test/x.png" })),
+        }),
+        bucket,
+      });
+      expect(url).toBe(`/photos/covers/${stamp}.png`);
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      globalThis.fetch = originalFetch;
+      Date.now = originalNow;
+    }
+  });
+
+  it("throws when imageToImage returns no URL", async () => {
+    const runner = createOpenAIImageRunner({
+      images: {
+        generate: vi.fn(),
+        edit: vi.fn(async () => ({ data: [{}] })),
+      },
+    });
+    await expect(
+      runner.imageToImage("https://x.test/raw.jpg", "p", { model: "gpt-image-1" }),
+    ).rejects.toBeInstanceOf(ImageGenError);
   });
 });

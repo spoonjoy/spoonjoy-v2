@@ -546,6 +546,27 @@ describe("Recipes New Route", () => {
       await expect(db.recipe.count({ where: { chefId: testUserId } })).resolves.toBe(0);
     });
 
+    it("schedules ai-placeholder cover generation via context.cloudflare.ctx.waitUntil when available", async () => {
+      const captured: Promise<unknown>[] = [];
+      const waitUntil = vi.fn((p: Promise<unknown>) => {
+        captured.push(p);
+      });
+      const request = await createFormRequest(
+        { title: "WaitUntil Recipe" },
+        testUserId,
+      );
+      const response = await action({
+        request,
+        context: { cloudflare: { env: null, ctx: { waitUntil } } },
+        params: {},
+      } as any);
+      expect(response).toBeInstanceOf(Response);
+      expect(response.status).toBe(302);
+      expect(waitUntil).toHaveBeenCalledTimes(1);
+      // Allow the captured promise to resolve so cleanup is clean.
+      await Promise.all(captured);
+    });
+
     it("should delete uploaded recipe image when database creation fails", async () => {
       const mockR2Bucket = {
         put: vi.fn().mockResolvedValue(undefined),

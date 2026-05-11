@@ -142,6 +142,34 @@ describe("recipe-cover.server", () => {
       expect(url).toBe("winner");
     });
 
+    it("picks the newer cover when createdAt differs", () => {
+      const url = getRecipeCoverImageUrl(recipe, [
+        fakeCover({ id: "old", imageUrl: "old", createdAt: new Date("2026-01-01") }),
+        fakeCover({ id: "new", imageUrl: "new", createdAt: new Date("2026-03-01") }),
+      ]);
+      expect(url).toBe("new");
+    });
+
+    it("treats identical (createdAt, id) pairs as equal in the comparator", () => {
+      const t = new Date("2026-02-01");
+      const url = getRecipeCoverImageUrl(recipe, [
+        fakeCover({ id: "x", imageUrl: "x", createdAt: t }),
+        fakeCover({ id: "x", imageUrl: "y", createdAt: t }),
+      ]);
+      // Both rows tie on createdAt+id so the first non-empty imageUrl wins by stable order.
+      expect(url).toBe("x");
+    });
+
+    it("exercises both arms of the id-desc tiebreak comparator", () => {
+      const t = new Date("2026-02-01");
+      const url = getRecipeCoverImageUrl(recipe, [
+        fakeCover({ id: "m", imageUrl: "middle", createdAt: t }),
+        fakeCover({ id: "a", imageUrl: "lowest", createdAt: t }),
+        fakeCover({ id: "z", imageUrl: "winner", createdAt: t }),
+      ]);
+      expect(url).toBe("winner");
+    });
+
     it("returns SVG fallback when covers array is empty", () => {
       const url = getRecipeCoverImageUrl(recipe, []);
       expect(url.startsWith("data:image/svg+xml;base64,")).toBe(true);
