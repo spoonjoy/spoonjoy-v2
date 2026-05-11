@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { faker } from "@faker-js/faker";
-import type { Prisma } from "@prisma/client";
 import { getLocalDb } from "~/lib/db.server";
 import {
   callSpoonjoyApiOperation,
@@ -56,15 +55,13 @@ describe("spoonjoy-api spoon operations", () => {
   });
 
   describe("operation registry", () => {
-    it("lists the five new spoon operations", () => {
+    it("lists the create/update/delete spoon operations", () => {
       const names = listSpoonjoyApiOperations().map((op) => op.name);
       expect(names).toEqual(
         expect.arrayContaining([
           "create_spoon",
           "update_spoon",
           "delete_spoon",
-          "list_spoons_for_recipe",
-          "list_spoons_by_chef",
         ]),
       );
     });
@@ -149,6 +146,37 @@ describe("spoonjoy-api spoon operations", () => {
         status: 400,
         message: expect.stringMatching(/photo/i),
       });
+    });
+
+    it("accepts cookedAt as an ISO date string", async () => {
+      const { principal: chef } = await makeUser(db);
+      const { principal: cook } = await makeUser(db);
+      const recipe = await makeRecipe(db, chef.id);
+      const context: SpoonjoyApiContext = { db, principal: cook };
+      const result = (await callSpoonjoyApiOperation(
+        "create_spoon",
+        {
+          recipeId: recipe.id,
+          note: "x",
+          cookedAt: "2025-06-01T12:00:00.000Z",
+        },
+        context,
+      )) as { spoon: { cookedAt: string } };
+      expect(result.spoon.cookedAt).toBe("2025-06-01T12:00:00.000Z");
+    });
+
+    it("rejects invalid cookedAt strings", async () => {
+      const { principal: chef } = await makeUser(db);
+      const { principal: cook } = await makeUser(db);
+      const recipe = await makeRecipe(db, chef.id);
+      const context: SpoonjoyApiContext = { db, principal: cook };
+      await expect(
+        callSpoonjoyApiOperation(
+          "create_spoon",
+          { recipeId: recipe.id, note: "x", cookedAt: "not-a-date" },
+          context,
+        ),
+      ).rejects.toThrow(/cookedAt/);
     });
 
     it("requires recipeId", async () => {
@@ -423,6 +451,85 @@ describe("spoonjoy-api spoon operations", () => {
           context,
         ),
       ).rejects.toMatchObject({ status: 400 });
+    });
+
+    it("accepts nextTime/photoUrl/cookedAt patches", async () => {
+      const { principal: cook } = await makeUser(db);
+      const { principal: chef } = await makeUser(db);
+      const recipe = await makeRecipe(db, chef.id);
+      const created = await db.recipeSpoon.create({
+        data: {
+          chefId: cook.id,
+          recipeId: recipe.id,
+          note: "first",
+          photoUrl: "/photos/old.png",
+        },
+      });
+      const context: SpoonjoyApiContext = { db, principal: cook };
+      const result = (await callSpoonjoyApiOperation(
+        "update_spoon",
+        {
+          spoonId: created.id,
+          nextTime: "salt more",
+          photoUrl: "/photos/new.png",
+          cookedAt: "2025-06-02T00:00:00.000Z",
+        },
+        context,
+      )) as { spoon: { nextTime: string; photoUrl: string; cookedAt: string } };
+      expect(result.spoon.nextTime).toBe("salt more");
+      expect(result.spoon.photoUrl).toBe("/photos/new.png");
+      expect(result.spoon.cookedAt).toBe("2025-06-02T00:00:00.000Z");
+    });
+
+    it("rejects updates that empty all content fields (note=null nulls the note)", async () => {
+      const { principal: cook } = await makeUser(db);
+      const { principal: chef } = await makeUser(db);
+      const recipe = await makeRecipe(db, chef.id);
+      const created = await db.recipeSpoon.create({
+        data: { chefId: cook.id, recipeId: recipe.id, note: "first" },
+      });
+      const context: SpoonjoyApiContext = { db, principal: cook };
+      await expect(
+        callSpoonjoyApiOperation(
+          "update_spoon",
+          { spoonId: created.id, note: null, nextTime: null, photoUrl: null },
+          context,
+        ),
+      ).rejects.toMatchObject({ status: 400 });
+    });
+
+    it("rejects invalid cookedAt patches (malformed string)", async () => {
+      const { principal: cook } = await makeUser(db);
+      const { principal: chef } = await makeUser(db);
+      const recipe = await makeRecipe(db, chef.id);
+      const created = await db.recipeSpoon.create({
+        data: { chefId: cook.id, recipeId: recipe.id, note: "first" },
+      });
+      const context: SpoonjoyApiContext = { db, principal: cook };
+      await expect(
+        callSpoonjoyApiOperation(
+          "update_spoon",
+          { spoonId: created.id, cookedAt: "nope" },
+          context,
+        ),
+      ).rejects.toThrow(/cookedAt/);
+    });
+
+    it("rejects empty cookedAt patches (no usable date)", async () => {
+      const { principal: cook } = await makeUser(db);
+      const { principal: chef } = await makeUser(db);
+      const recipe = await makeRecipe(db, chef.id);
+      const created = await db.recipeSpoon.create({
+        data: { chefId: cook.id, recipeId: recipe.id, note: "first" },
+      });
+      const context: SpoonjoyApiContext = { db, principal: cook };
+      await expect(
+        callSpoonjoyApiOperation(
+          "update_spoon",
+          { spoonId: created.id, cookedAt: "" },
+          context,
+        ),
+      ).rejects.toThrow(/cookedAt/);
     });
 
     it("requires spoonId", async () => {

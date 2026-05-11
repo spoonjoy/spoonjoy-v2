@@ -47,6 +47,9 @@ describe("spoonjoy MCP tools", () => {
       "set_shopping_list_item_checked",
       "remove_shopping_list_item",
       "get_shopping_list",
+      "create_spoon",
+      "update_spoon",
+      "delete_spoon",
     ]);
   });
 

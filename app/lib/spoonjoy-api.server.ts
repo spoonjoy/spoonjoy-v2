@@ -3,16 +3,35 @@ import {
   ApiAuthError,
   assertCanUseOwnerEmail,
   createApiCredential,
+  requireApiPrincipal,
   type ApiPrincipal,
 } from "~/lib/api-auth.server";
 import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
-import { getRecipeCoverImageUrl } from "~/lib/recipe-cover.server";
+import { createCover, getRecipeCoverImageUrl } from "~/lib/recipe-cover.server";
 import { normalizeSearchScope, searchSpoonjoy } from "~/lib/search.server";
+import {
+  createSpoon as createRecipeSpoon,
+  deleteSpoon as deleteRecipeSpoon,
+  isOriginCookCandidate,
+  listSpoonsByChef,
+  listSpoonsForRecipe,
+  updateSpoon as updateRecipeSpoon,
+  SpoonValidationError,
+  SpoonAuthError,
+  SpoonNotFoundError,
+} from "~/lib/recipe-spoon.server";
+import { scheduleSpoonCoverStylization } from "~/lib/spoon-cover-stylization.server";
+import type { ImageGenRunner } from "~/lib/image-gen.server";
 
 export interface SpoonjoyApiContext {
   db: PrismaClientType;
   principal?: ApiPrincipal | null;
   defaultOwnerEmail?: string;
+  waitUntil?: (promise: Promise<unknown>) => void;
+  env?: { OPENAI_API_KEY?: string } | null;
+  bucket?: R2Bucket;
+  imageGenRunner?: ImageGenRunner;
+  logger?: Pick<Console, "error">;
 }
 
 export interface SpoonjoyApiOperationInfo {
@@ -148,6 +167,72 @@ function requireOwnerEmail(args: Record<string, unknown>, context: SpoonjoyApiCo
   const email = ownerEmail(args, context);
   if (!email) throw new ApiAuthError("ownerEmail is required, or authenticate/set SPOONJOY_MCP_USER_EMAIL", 401);
   return email.toLowerCase();
+}
+
+function rejectOwnerEmail(args: Record<string, unknown>): void {
+  if (Object.prototype.hasOwnProperty.call(args, "ownerEmail")) {
+    throw new ApiAuthError(
+      "ownerEmail is not supported on this op; use API token",
+      400,
+    );
+  }
+}
+
+function runOrSchedule(
+  context: SpoonjoyApiContext,
+  task: Promise<unknown>,
+): Promise<unknown> {
+  if (context.waitUntil) {
+    context.waitUntil(task);
+    return Promise.resolve();
+  }
+  return task;
+}
+
+function formatSpoon(spoon: {
+  id: string;
+  chefId: string;
+  recipeId: string;
+  cookedAt: Date;
+  photoUrl: string | null;
+  note: string | null;
+  nextTime: string | null;
+  deletedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}) {
+  return {
+    id: spoon.id,
+    chefId: spoon.chefId,
+    recipeId: spoon.recipeId,
+    cookedAt: spoon.cookedAt.toISOString(),
+    photoUrl: spoon.photoUrl,
+    note: spoon.note,
+    nextTime: spoon.nextTime,
+    deletedAt: spoon.deletedAt ? spoon.deletedAt.toISOString() : null,
+    createdAt: spoon.createdAt.toISOString(),
+    updatedAt: spoon.updatedAt.toISOString(),
+  };
+}
+
+function formatCover(cover: {
+  id: string;
+  recipeId: string;
+  imageUrl: string;
+  stylizedImageUrl: string | null;
+  sourceType: string;
+  sourceSpoonId: string | null;
+  createdAt: Date;
+}) {
+  return {
+    id: cover.id,
+    recipeId: cover.recipeId,
+    imageUrl: cover.imageUrl,
+    stylizedImageUrl: cover.stylizedImageUrl,
+    sourceType: cover.sourceType,
+    sourceSpoonId: cover.sourceSpoonId,
+    createdAt: cover.createdAt.toISOString(),
+  };
 }
 
 function normalizeName(value: string): string {
@@ -1210,6 +1295,141 @@ const getShoppingListTool: SpoonjoyApiOperation = {
   },
 };
 
+const createSpoonTool: SpoonjoyApiOperation = {
+  name: "create_spoon",
+  description: "Create a RecipeSpoon (cook event) authored by the authenticated principal.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      recipeId: { type: "string" },
+      photoUrl: { type: "string" },
+      note: { type: "string" },
+      nextTime: { type: "string" },
+      cookedAt: { type: "string" },
+    },
+    required: ["recipeId"],
+    additionalProperties: false,
+  },
+  async handle(args, context) {
+    rejectOwnerEmail(args);
+    const principal = requireApiPrincipal(context.principal);
+    const recipeId = requiredString(args, "recipeId");
+    const cookedAtRaw = optionalString(args.cookedAt);
+    const cookedAt = cookedAtRaw ? new Date(cookedAtRaw) : undefined;
+    if (cookedAt && Number.isNaN(cookedAt.getTime())) {
+      throw new Error("cookedAt must be a valid ISO date string");
+    }
+
+    const result = await createRecipeSpoon(context.db, {
+      chefId: principal.id,
+      recipeId,
+      photoUrl: optionalString(args.photoUrl) ?? null,
+      note: optionalString(args.note) ?? null,
+      nextTime: optionalString(args.nextTime) ?? null,
+      cookedAt,
+    });
+
+    let coverPayload: ReturnType<typeof formatCover> | null = null;
+    if (result.isOriginCook && result.spoon.photoUrl) {
+      const recipe = await context.db.recipe.findUniqueOrThrow({
+        where: { id: recipeId },
+        select: { id: true, title: true },
+      });
+      const cover = await createCover(context.db, {
+        recipeId,
+        imageUrl: result.spoon.photoUrl,
+        sourceType: "spoon",
+        sourceSpoonId: result.spoon.id,
+      });
+      coverPayload = formatCover(cover);
+      const task = scheduleSpoonCoverStylization({
+        db: context.db,
+        userId: principal.id,
+        coverId: cover.id,
+        rawPhotoUrl: result.spoon.photoUrl,
+        recipeTitle: recipe.title,
+        env: context.env ?? null,
+        bucket: context.bucket,
+        runner: context.imageGenRunner,
+        logger: context.logger,
+      });
+      await runOrSchedule(context, task);
+    }
+
+    return json({
+      spoon: formatSpoon(result.spoon),
+      isOriginCook: result.isOriginCook,
+      cover: coverPayload,
+    });
+  },
+};
+
+const updateSpoonTool: SpoonjoyApiOperation = {
+  name: "update_spoon",
+  description: "Update note, nextTime, photoUrl, or cookedAt on a spoon owned by the authenticated principal.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      spoonId: { type: "string" },
+      note: { type: "string" },
+      nextTime: { type: "string" },
+      photoUrl: { type: ["string", "null"] },
+      cookedAt: { type: "string" },
+    },
+    required: ["spoonId"],
+    additionalProperties: false,
+  },
+  async handle(args, context) {
+    rejectOwnerEmail(args);
+    const principal = requireApiPrincipal(context.principal);
+    const spoonId = requiredString(args, "spoonId");
+    const patch: {
+      note?: string | null;
+      nextTime?: string | null;
+      photoUrl?: string | null;
+      cookedAt?: Date;
+    } = {};
+    if (Object.prototype.hasOwnProperty.call(args, "note")) {
+      patch.note = typeof args.note === "string" ? args.note : null;
+    }
+    if (Object.prototype.hasOwnProperty.call(args, "nextTime")) {
+      patch.nextTime = typeof args.nextTime === "string" ? args.nextTime : null;
+    }
+    if (Object.prototype.hasOwnProperty.call(args, "photoUrl")) {
+      patch.photoUrl = typeof args.photoUrl === "string" ? args.photoUrl : null;
+    }
+    if (Object.prototype.hasOwnProperty.call(args, "cookedAt")) {
+      const cookedAtRaw = optionalString(args.cookedAt);
+      const cookedAt = cookedAtRaw ? new Date(cookedAtRaw) : undefined;
+      if (!cookedAt || Number.isNaN(cookedAt.getTime())) {
+        throw new Error("cookedAt must be a valid ISO date string");
+      }
+      patch.cookedAt = cookedAt;
+    }
+
+    const spoon = await updateRecipeSpoon(context.db, spoonId, principal.id, patch);
+    return json({ spoon: formatSpoon(spoon) });
+  },
+};
+
+const deleteSpoonTool: SpoonjoyApiOperation = {
+  name: "delete_spoon",
+  description: "Soft-delete a spoon owned by the authenticated principal.",
+  inputSchema: {
+    type: "object",
+    properties: { spoonId: { type: "string" } },
+    required: ["spoonId"],
+    additionalProperties: false,
+  },
+  async handle(args, context) {
+    rejectOwnerEmail(args);
+    const principal = requireApiPrincipal(context.principal);
+    const spoonId = requiredString(args, "spoonId");
+    const spoon = await deleteRecipeSpoon(context.db, spoonId, principal.id);
+    return json({ spoon: formatSpoon(spoon) });
+  },
+};
+
 const tools: SpoonjoyApiOperation[] = [
   healthTool,
   createApiTokenTool,
@@ -1230,6 +1450,9 @@ const tools: SpoonjoyApiOperation[] = [
   setShoppingListItemCheckedTool,
   removeShoppingListItemTool,
   getShoppingListTool,
+  createSpoonTool,
+  updateSpoonTool,
+  deleteSpoonTool,
 ];
 
 export function listSpoonjoyApiOperations(): SpoonjoyApiOperationInfo[] {

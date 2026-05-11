@@ -159,7 +159,18 @@ async function handleApiRequest({ request, context, params }: Route.LoaderArgs |
 
     if (!dispatch) notFound(path);
 
-    const data = await callSpoonjoyApiOperation(dispatch.operation, dispatch.args, { db, principal });
+    const cloudflare = context.cloudflare;
+    const ctx = cloudflare?.ctx;
+    const waitUntil = ctx?.waitUntil ? ctx.waitUntil.bind(ctx) : undefined;
+    const cfEnv = cloudflare?.env;
+
+    const data = await callSpoonjoyApiOperation(dispatch.operation, dispatch.args, {
+      db,
+      principal,
+      waitUntil,
+      env: cfEnv ? { OPENAI_API_KEY: cfEnv.OPENAI_API_KEY } : null,
+      bucket: cfEnv?.PHOTOS ?? undefined,
+    });
     return apiJson({ ok: true, data });
   } catch (error) {
     const status = statusForError(error);
