@@ -1,0 +1,14 @@
+
+> spoonjoy-v2@1.0.0 test /Users/arimendelow/Projects/spoonjoy-v2
+> vitest test/scripts/deployment-preflight.test.ts --run
+
+
+[1m[46m RUN [49m[22m [36mv4.0.18 [39m[90m/Users/arimendelow/Projects/spoonjoy-v2[39m
+
+ [32m✓[39m test/scripts/deployment-preflight.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 62[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m3 passed[39m[22m[90m (3)[39m
+[2m   Start at [22m 12:50:25
+[2m   Duration [22m 797ms[2m (transform 54ms, setup 135ms, import 14ms, tests 62ms, environment 245ms)[22m
+
