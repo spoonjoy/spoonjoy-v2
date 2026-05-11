@@ -191,7 +191,6 @@ describe("recipe create helpers", () => {
         title: "Transaction Pancakes",
         description: "Breakfast for agents",
         servings: "4",
-        imageUrl: "",
         chefId: testUserId,
         steps: [
           {
@@ -232,9 +231,11 @@ describe("recipe create helpers", () => {
         title: "Transaction Pancakes",
         description: "Breakfast for agents",
         servings: "4",
-        imageUrl: "",
         chefId: testUserId,
       });
+      expect("imageUrl" in persisted).toBe(false);
+      const covers = await db.recipeCover.findMany({ where: { recipeId: recipe.id } });
+      expect(covers).toEqual([]);
       expect(persisted.steps).toHaveLength(2);
       expect(persisted.steps[0]).toMatchObject({
         stepNum: 1,

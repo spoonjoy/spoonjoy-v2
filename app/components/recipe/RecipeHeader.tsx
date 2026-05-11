@@ -5,7 +5,6 @@ import { Link } from '../ui/link'
 import { Avatar } from '../ui/avatar'
 import { ScaleSelector } from './ScaleSelector'
 import { scaleServingsText } from '~/lib/quantity'
-import { getDisplayRecipeImageUrl } from '~/lib/recipe-image'
 
 export interface RecipeHeaderProps {
   /** Recipe title */
@@ -20,8 +19,8 @@ export interface RecipeHeaderProps {
   chefProfileHref?: string
   /** Chef's photo URL (optional) */
   chefPhotoUrl?: string
-  /** URL to recipe image (optional) */
-  imageUrl?: string
+  /** Cover image URL derived via getRecipeCoverImageUrl. May be a data URL (SVG fallback). */
+  coverImageUrl?: string
   /** Servings text (e.g., "Serves 4") */
   servings?: string
   /** Current scale factor */
@@ -48,7 +47,7 @@ export function RecipeHeader({
   chefId,
   chefProfileHref,
   chefPhotoUrl,
-  imageUrl,
+  coverImageUrl,
   servings,
   scaleFactor,
   onScaleChange,
@@ -56,7 +55,7 @@ export function RecipeHeader({
 }: RecipeHeaderProps) {
   // Scale the servings text based on the scale factor
   const scaledServings = servings ? scaleServingsText(servings, scaleFactor) : undefined
-  const displayImageUrl = getDisplayRecipeImageUrl(imageUrl)
+  const displayImageUrl = coverImageUrl && coverImageUrl.length > 0 ? coverImageUrl : undefined
   const resolvedChefHref = chefProfileHref ?? (chefId ? `/users/${chefId}` : undefined)
 
   return (

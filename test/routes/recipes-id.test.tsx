@@ -880,7 +880,7 @@ describe("Recipes $id Route", () => {
           title: "Save Modal Recipe",
           description: null,
           servings: null,
-          imageUrl: null,
+          coverImageUrl: null,
           chef: { id: "user-1", username: "testchef" },
           steps: [],
         },
@@ -948,7 +948,7 @@ describe("Recipes $id Route", () => {
           title: "Save Modal Recipe",
           description: null,
           servings: null,
-          imageUrl: null,
+          coverImageUrl: null,
           chef: { id: "user-1", username: "testchef" },
           steps: [],
         },
@@ -993,7 +993,7 @@ describe("Recipes $id Route", () => {
           title: "Toggle Cookbook Recipe",
           description: null,
           servings: null,
-          imageUrl: null,
+          coverImageUrl: null,
           chef: { id: "user-1", username: "testchef" },
           steps: [],
         },
@@ -1051,7 +1051,7 @@ describe("Recipes $id Route", () => {
           title: "Blank Cookbook Recipe",
           description: null,
           servings: null,
-          imageUrl: null,
+          coverImageUrl: null,
           chef: { id: "user-1", username: "testchef" },
           steps: [],
         },
@@ -1093,7 +1093,7 @@ describe("Recipes $id Route", () => {
           title: "Shareable Recipe",
           description: "Worth sharing",
           servings: null,
-          imageUrl: null,
+          coverImageUrl: null,
           chef: { id: "user-1", username: "testchef" },
           steps: [],
         },
@@ -1132,7 +1132,7 @@ describe("Recipes $id Route", () => {
           title: "Dock Add Recipe",
           description: null,
           servings: null,
-          imageUrl: null,
+          coverImageUrl: null,
           chef: { id: "user-1", username: "testchef" },
           steps: [
             {
@@ -1203,7 +1203,7 @@ describe("Recipes $id Route", () => {
           title: "Test Recipe",
           description: "A delicious test dish",
           servings: "4",
-          imageUrl: "https://example.com/recipe.jpg",
+          coverImageUrl: "https://example.com/recipe.jpg",
           chef: { id: "user-1", username: "testchef" },
           steps: [],
         },
@@ -1239,7 +1239,7 @@ describe("Recipes $id Route", () => {
           title: "Someone Elses Recipe",
           description: null,
           servings: null,
-          imageUrl: null,
+          coverImageUrl: null,
           chef: { id: "user-2", username: "otherchef" },
           steps: [],
         },
@@ -1271,7 +1271,7 @@ describe("Recipes $id Route", () => {
           title: "Spaghetti Bolognese",
           description: "Classic Italian pasta",
           servings: "4",
-          imageUrl: "https://example.com/spaghetti.jpg",
+          coverImageUrl: "https://example.com/spaghetti.jpg",
           chef: { id: "user-1", username: "testchef" },
           steps: [
             {
@@ -1338,7 +1338,7 @@ describe("Recipes $id Route", () => {
           title: "My Recipe",
           description: null,
           servings: null,
-          imageUrl: null,
+          coverImageUrl: null,
           chef: { id: "user-1", username: "testchef" },
           steps: [],
         },
@@ -1367,7 +1367,7 @@ describe("Recipes $id Route", () => {
           title: "No Desc Recipe",
           description: null,
           servings: "2",
-          imageUrl: null,
+          coverImageUrl: null,
           chef: { id: "user-1", username: "testchef" },
           steps: [],
         },
@@ -1396,7 +1396,7 @@ describe("Recipes $id Route", () => {
           title: "No Servings Recipe",
           description: "Has a description",
           servings: null,
-          imageUrl: null,
+          coverImageUrl: null,
           chef: { id: "user-1", username: "testchef" },
           steps: [],
         },
@@ -1426,7 +1426,7 @@ describe("Recipes $id Route", () => {
           title: "Simple Recipe",
           description: null,
           servings: null,
-          imageUrl: null,
+          coverImageUrl: null,
           chef: { id: "user-1", username: "testchef" },
           steps: [
             {
@@ -1465,7 +1465,7 @@ describe("Recipes $id Route", () => {
           title: "Recipe with Dependencies",
           description: null,
           servings: null,
-          imageUrl: null,
+          coverImageUrl: null,
           chef: { id: "user-1", username: "testchef" },
           steps: [
             {
@@ -1536,7 +1536,7 @@ describe("Recipes $id Route", () => {
           title: "Recipe with Untitled Dependency",
           description: null,
           servings: null,
-          imageUrl: null,
+          coverImageUrl: null,
           chef: { id: "user-1", username: "testchef" },
           steps: [
             {
@@ -1589,7 +1589,7 @@ describe("Recipes $id Route", () => {
           title: "Recipe without Dependencies",
           description: null,
           servings: null,
-          imageUrl: null,
+          coverImageUrl: null,
           chef: { id: "user-1", username: "testchef" },
           steps: [
             {
@@ -1627,7 +1627,7 @@ describe("Recipes $id Route", () => {
           title: "Recipe with Undefined UsingSteps",
           description: null,
           servings: null,
-          imageUrl: null,
+          coverImageUrl: null,
           chef: { id: "user-1", username: "testchef" },
           steps: [
             {
@@ -1667,7 +1667,7 @@ describe("Recipes $id Route", () => {
           title: "Single Step Recipe",
           description: "A simple one-step recipe",
           servings: "2",
-          imageUrl: null,
+          coverImageUrl: null,
           chef: { id: "user-1", username: "testchef" },
           steps: [
             {
@@ -1717,7 +1717,7 @@ describe("Recipes $id Route", () => {
           title: "Recipe with Display Order",
           description: null,
           servings: null,
-          imageUrl: null,
+          coverImageUrl: null,
           chef: { id: "user-1", username: "testchef" },
           steps: [
             {
@@ -1806,7 +1806,7 @@ describe("Recipes $id Route", () => {
           title: "Recipe to Delete",
           description: null,
           servings: null,
-          imageUrl: null,
+          coverImageUrl: null,
           chef: { id: "user-1", username: "testchef" },
           steps: [],
         },
@@ -1841,7 +1841,7 @@ describe("Recipes $id Route", () => {
           title: "Recipe Delete Actions",
           description: null,
           servings: null,
-          imageUrl: null,
+          coverImageUrl: null,
           chef: { id: "user-1", username: "testchef" },
           steps: [],
         },
@@ -1880,7 +1880,7 @@ describe("Recipes $id Route", () => {
           title: "Recipe Delete Confirm",
           description: null,
           servings: null,
-          imageUrl: null,
+          coverImageUrl: null,
           chef: { id: "user-1", username: "testchef" },
           steps: [],
         },
@@ -1919,7 +1919,7 @@ describe("Recipes $id Route", () => {
           title: "Owner Recipe",
           description: null,
           servings: null,
-          imageUrl: null,
+          coverImageUrl: null,
           chef: { id: "user-1", username: "testchef" },
           steps: [],
         },
@@ -1951,7 +1951,7 @@ describe("Recipes $id Route", () => {
           title: "Someone Elses Recipe",
           description: null,
           servings: null,
-          imageUrl: null,
+          coverImageUrl: null,
           chef: { id: "user-2", username: "otherchef" },
           steps: [],
         },
@@ -1985,7 +1985,7 @@ describe("Recipes $id Route", () => {
           title: "Recipe to Save",
           description: null,
           servings: null,
-          imageUrl: null,
+          coverImageUrl: null,
           chef: { id: "user-1", username: "testchef" },
           steps: [],
         },
@@ -2021,7 +2021,7 @@ describe("Recipes $id Route", () => {
           title: "Recipe with Step Outputs",
           description: null,
           servings: null,
-          imageUrl: null,
+          coverImageUrl: null,
           chef: { id: "user-1", username: "testchef" },
           steps: [
             {
@@ -2095,7 +2095,7 @@ describe("Recipes $id Route", () => {
           title: "Recipe with Ingredients",
           description: null,
           servings: null,
-          imageUrl: null,
+          coverImageUrl: null,
           chef: { id: "user-1", username: "testchef" },
           steps: [
             {
@@ -2164,7 +2164,7 @@ describe("Recipes $id Route", () => {
           title: "Scalable Recipe",
           description: null,
           servings: "4",
-          imageUrl: null,
+          coverImageUrl: null,
           chef: { id: "user-1", username: "testchef" },
           steps: [
             {
@@ -2230,7 +2230,7 @@ describe("Recipes $id Route", () => {
           title: "Progress Recipe",
           description: null,
           servings: "4",
-          imageUrl: null,
+          coverImageUrl: null,
           chef: { id: "user-1", username: "testchef" },
           steps: [
             {
@@ -2300,7 +2300,7 @@ describe("Recipes $id Route", () => {
           title: "Recipe to Save to Cookbook",
           description: null,
           servings: null,
-          imageUrl: null,
+          coverImageUrl: null,
           chef: { id: "user-1", username: "testchef" },
           steps: [],
         },

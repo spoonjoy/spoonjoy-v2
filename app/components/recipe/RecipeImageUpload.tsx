@@ -9,7 +9,7 @@ interface RecipeImageUploadProps {
   onFileSelect: (file: File) => void
   onClear?: () => void
   onValidationError?: (message: string) => void
-  imageUrl?: string
+  coverImageUrl?: string
   alt?: string
   disabled?: boolean
   loading?: boolean
@@ -20,7 +20,7 @@ export function RecipeImageUpload({
   onFileSelect,
   onClear,
   onValidationError,
-  imageUrl,
+  coverImageUrl,
   alt,
   disabled = false,
   loading = false,
@@ -139,7 +139,7 @@ export function RecipeImageUpload({
     onFileSelect(file)
   }
 
-  const displayUrl = previewUrl || imageUrl
+  const displayUrl = previewUrl || coverImageUrl
   const hasImage = Boolean(displayUrl)
   const isDisabled = disabled || loading
 

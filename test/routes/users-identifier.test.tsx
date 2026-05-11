@@ -183,14 +183,14 @@ describe("Users $identifier Route", () => {
                 id: "recipe-1",
                 title: "Miso Soup",
                 description: "Comfort in a bowl",
-                imageUrl: "https://example.com/miso.jpg",
+                coverImageUrl: "https://example.com/miso.jpg",
                 servings: "4",
               },
               {
                 id: "recipe-2",
                 title: "Plain Rice",
                 description: null,
-                imageUrl: "",
+                coverImageUrl: "",
                 servings: null,
               },
             ],
@@ -202,7 +202,7 @@ describe("Users $identifier Route", () => {
                 recipes: [
                   {
                     recipe: {
-                      imageUrl: "https://example.com/miso.jpg",
+                      coverImageUrl: "https://example.com/miso.jpg",
                       title: "Miso Soup",
                     },
                   },
@@ -278,7 +278,7 @@ describe("Users $identifier Route", () => {
                 id: "recipe-3",
                 title: "Solo Stew",
                 description: null,
-                imageUrl: "",
+                coverImageUrl: "",
                 servings: null,
               },
             ],

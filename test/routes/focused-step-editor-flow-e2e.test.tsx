@@ -19,7 +19,7 @@ describe("Focused Step Editor Flow (E2E)", () => {
             title: "Test Recipe",
             description: null,
             servings: null,
-            imageUrl: "",
+            coverImageUrl: "",
             steps: [
               {
                 id: "step-1",
@@ -72,7 +72,7 @@ describe("Focused Step Editor Flow (E2E)", () => {
             title: "Test Recipe",
             description: null,
             servings: null,
-            imageUrl: "",
+            coverImageUrl: "",
             steps: [{ id: "step-1", stepNum: 1, stepTitle: "Prep", description: "Mix", duration: null, ingredients: [] }],
           },
           formattedSteps: [],

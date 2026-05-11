@@ -51,7 +51,7 @@ function createTestRecipe(
     title: string;
     description: string | null;
     servings: string | null;
-    imageUrl: string;
+    coverImageUrl: string;
     steps: StepData[];
   }> = {},
 ) {
@@ -60,7 +60,7 @@ function createTestRecipe(
     title: "Test Recipe",
     description: "A test recipe description",
     servings: "4 servings",
-    imageUrl: "",
+    coverImageUrl: "",
     steps: [],
     ...overrides,
   };

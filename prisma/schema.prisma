@@ -30,6 +30,8 @@ model User {
   cookbooks           Cookbook[]
   addedToCookbooks    RecipeInCookbook[]
   apiCredentials      ApiCredential[]
+  spoons              RecipeSpoon[]
+  imageGenLedger      ImageGenLedger[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
@@ -81,15 +83,16 @@ model OAuth {
 
 model Recipe {
   id          String             @id @default(cuid())
-  title       String             
-  description String?            
-  imageUrl    String             @default("https://res.cloudinary.com/dpjmyc4uz/image/upload/v1674541350/clbe7wr180009tkhggghtl1qd.png")
-  servings    String?            
+  title       String
+  description String?
+  servings    String?
   chefId      String
   chef        User               @relation(fields: [chefId], references: [id], onDelete: Cascade)
   deletedAt   DateTime?
   steps       RecipeStep[]
   cookbooks   RecipeInCookbook[]
+  spoons      RecipeSpoon[]
+  covers      RecipeCover[]
 
   sourceRecipeId String?
   sourceRecipe   Recipe? @relation("SourceRecipe", fields: [sourceRecipeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
@@ -248,4 +251,53 @@ model ShoppingListItem {
   @@index([shoppingListId, deletedAt, sortIndex])
   @@index([unitId])
   @@index([ingredientRefId])
+}
+
+model RecipeSpoon {
+  id        String        @id @default(cuid())
+  chefId    String
+  chef      User          @relation(fields: [chefId], references: [id], onDelete: Cascade)
+  recipeId  String
+  recipe    Recipe        @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  cookedAt  DateTime      @default(now())
+  photoUrl  String?
+  note      String?
+  nextTime  String?
+  deletedAt DateTime?
+  covers    RecipeCover[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@index([recipeId, cookedAt])
+  @@index([chefId, cookedAt])
+}
+
+model RecipeCover {
+  id               String       @id @default(cuid())
+  recipeId         String
+  recipe           Recipe       @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  imageUrl         String
+  stylizedImageUrl String?
+  sourceType       String
+  sourceSpoonId    String?
+  sourceSpoon      RecipeSpoon? @relation(fields: [sourceSpoonId], references: [id], onDelete: SetNull)
+  createdAt        DateTime     @default(now())
+
+  @@index([recipeId, createdAt])
+  @@index([sourceSpoonId])
+}
+
+model ImageGenLedger {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind        String
+  bucketStart DateTime
+  count       Int      @default(0)
+
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@unique([userId, kind, bucketStart])
+  @@index([userId, bucketStart])
 }

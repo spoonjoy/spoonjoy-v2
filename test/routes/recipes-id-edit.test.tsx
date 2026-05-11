@@ -914,10 +914,13 @@ describe("Recipes $id Edit Route", () => {
     });
 
     it("should clear image when clearImage is true", async () => {
-      // First set an imageUrl on the recipe
-      await db.recipe.update({
-        where: { id: recipeId },
-        data: { imageUrl: "https://example.com/old-image.jpg" },
+      // First create a cover for the recipe
+      await db.recipeCover.create({
+        data: {
+          recipeId,
+          imageUrl: "https://example.com/old-image.jpg",
+          sourceType: "chef-upload",
+        },
       });
 
       const request = await createFormRequest(
@@ -938,9 +941,13 @@ describe("Recipes $id Edit Route", () => {
       expect(response.status).toBe(302);
       expect(response.headers.get("Location")).toBe(`/recipes/${recipeId}`);
 
-      // Verify imageUrl was set to empty string
-      const recipe = await db.recipe.findUnique({ where: { id: recipeId } });
-      expect(recipe?.imageUrl).toBe("");
+      // Latest cover should now be an empty chef-upload row representing the clear
+      const latest = await db.recipeCover.findFirst({
+        where: { recipeId },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      });
+      expect(latest?.imageUrl).toBe("");
+      expect(latest?.sourceType).toBe("chef-upload");
     });
 
     it("should return validation error for invalid image type", async () => {
@@ -1004,8 +1011,12 @@ describe("Recipes $id Edit Route", () => {
       expect(response).toBeInstanceOf(Response);
       expect(response.status).toBe(302);
 
-      const recipe = await db.recipe.findUniqueOrThrow({ where: { id: recipeId } });
-      expect(recipe.imageUrl).toMatch(/^data:image\/jpeg;base64,/);
+      const cover = await db.recipeCover.findFirst({
+        where: { recipeId },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      });
+      expect(cover?.sourceType).toBe("chef-upload");
+      expect(cover?.imageUrl).toMatch(/^data:image\/jpeg;base64,/);
     });
 
     it("should return validation error for image exceeding 5MB", async () => {
@@ -1042,9 +1053,12 @@ describe("Recipes $id Edit Route", () => {
     });
 
     it("should upload replacement image to R2 and delete old R2 image", async () => {
-      await db.recipe.update({
-        where: { id: recipeId },
-        data: { imageUrl: "/photos/recipes/user-old/recipe-old/111.jpg" },
+      await db.recipeCover.create({
+        data: {
+          recipeId,
+          imageUrl: "/photos/recipes/user-old/recipe-old/111.jpg",
+          sourceType: "chef-upload",
+        },
       });
       const mockR2Bucket = {
         put: vi.fn().mockResolvedValue(undefined),
@@ -1065,10 +1079,15 @@ describe("Recipes $id Edit Route", () => {
       expect(response).toBeInstanceOf(Response);
       expect(response.status).toBe(302);
 
-      const recipe = await db.recipe.findUniqueOrThrow({ where: { id: recipeId } });
-      expect(recipe.imageUrl).toMatch(new RegExp(`^/photos/recipes/${testUserId}/${recipeId}/\\d+\\.png$`));
+      const latest = await db.recipeCover.findFirst({
+        where: { recipeId },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      });
+      expect(latest?.imageUrl).toMatch(
+        new RegExp(`^/photos/recipes/${testUserId}/${recipeId}/\\d+\\.png$`),
+      );
       expect(mockR2Bucket.put).toHaveBeenCalledWith(
-        recipe.imageUrl.replace("/photos/", ""),
+        latest!.imageUrl.replace("/photos/", ""),
         expect.any(File),
         { httpMetadata: { contentType: "image/png" } }
       );
@@ -1076,9 +1095,12 @@ describe("Recipes $id Edit Route", () => {
     });
 
     it("should keep replacement image when old R2 cleanup fails after update", async () => {
-      await db.recipe.update({
-        where: { id: recipeId },
-        data: { imageUrl: "/photos/recipes/user-old/recipe-old/111.jpg" },
+      await db.recipeCover.create({
+        data: {
+          recipeId,
+          imageUrl: "/photos/recipes/user-old/recipe-old/111.jpg",
+          sourceType: "chef-upload",
+        },
       });
       const mockR2Bucket = {
         put: vi.fn().mockResolvedValue(undefined),
@@ -1099,8 +1121,13 @@ describe("Recipes $id Edit Route", () => {
       expect(response).toBeInstanceOf(Response);
       expect(response.status).toBe(302);
 
-      const recipe = await db.recipe.findUniqueOrThrow({ where: { id: recipeId } });
-      expect(recipe.imageUrl).toMatch(new RegExp(`^/photos/recipes/${testUserId}/${recipeId}/\\d+\\.webp$`));
+      const latest = await db.recipeCover.findFirst({
+        where: { recipeId },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      });
+      expect(latest?.imageUrl).toMatch(
+        new RegExp(`^/photos/recipes/${testUserId}/${recipeId}/\\d+\\.webp$`),
+      );
       expect(mockR2Bucket.delete).toHaveBeenCalledWith("recipes/user-old/recipe-old/111.jpg");
     });
 
@@ -1124,14 +1151,18 @@ describe("Recipes $id Edit Route", () => {
       expect(status).toBe(500);
       expect(data.errors.image).toBe("Failed to upload image. Please try again.");
 
-      const recipe = await db.recipe.findUniqueOrThrow({ where: { id: recipeId } });
-      expect(recipe.imageUrl).toMatch(/clbe7wr180009tkhggghtl1qd\.png$/);
+      // No covers added; the upload failed before any cover write.
+      const covers = await db.recipeCover.findMany({ where: { recipeId } });
+      expect(covers).toEqual([]);
     });
 
     it("should return image error when clearing an R2 image fails", async () => {
-      await db.recipe.update({
-        where: { id: recipeId },
-        data: { imageUrl: "/photos/recipes/user-old/recipe-old/111.jpg" },
+      await db.recipeCover.create({
+        data: {
+          recipeId,
+          imageUrl: "/photos/recipes/user-old/recipe-old/111.jpg",
+          sourceType: "chef-upload",
+        },
       });
       const mockR2Bucket = {
         delete: vi.fn().mockRejectedValue(new Error("delete failed")),
@@ -1154,8 +1185,11 @@ describe("Recipes $id Edit Route", () => {
       expect(status).toBe(500);
       expect(data.errors.image).toBe("Failed to delete image. Please try again.");
 
-      const recipe = await db.recipe.findUniqueOrThrow({ where: { id: recipeId } });
-      expect(recipe.imageUrl).toBe("/photos/recipes/user-old/recipe-old/111.jpg");
+      const latest = await db.recipeCover.findFirst({
+        where: { recipeId },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      });
+      expect(latest?.imageUrl).toBe("/photos/recipes/user-old/recipe-old/111.jpg");
     });
 
     it("should delete uploaded replacement image when database update fails", async () => {
@@ -1325,9 +1359,9 @@ describe("Recipes $id Edit Route", () => {
           title: "Test Recipe",
           description: "A delicious dish",
           servings: "4",
-          imageUrl: "https://example.com/recipe.jpg",
           steps: [],
         },
+        coverImageUrl: "https://example.com/recipe.jpg",
         formattedSteps: [],
       };
 
@@ -1359,9 +1393,9 @@ describe("Recipes $id Edit Route", () => {
           title: "Test Recipe",
           description: null,
           servings: null,
-          imageUrl: "",
           steps: [],
         },
+          coverImageUrl: "",
         formattedSteps: [],
       };
 
@@ -1405,7 +1439,7 @@ describe("Recipes $id Edit Route", () => {
           title: "Test Recipe",
           description: null,
           servings: null,
-          imageUrl: "",
+          coverImageUrl: "",
           steps: [
             {
               id: "step-1",
@@ -1454,7 +1488,7 @@ describe("Recipes $id Edit Route", () => {
           title: "Test Recipe",
           description: null,
           servings: null,
-          imageUrl: "",
+          coverImageUrl: "",
           steps: [
             {
               id: "step-1",
@@ -1499,7 +1533,7 @@ describe("Recipes $id Edit Route", () => {
           title: "Test Recipe",
           description: null,
           servings: null,
-          imageUrl: "",
+          coverImageUrl: "",
           steps: [
             {
               id: "step-1",
@@ -1549,7 +1583,7 @@ describe("Recipes $id Edit Route", () => {
           title: "Test Recipe",
           description: null,
           servings: null,
-          imageUrl: "",
+          coverImageUrl: "",
           steps: [
             { id: "step-1", stepNum: 1, stepTitle: null, description: "First step", ingredients: [] },
             { id: "step-2", stepNum: 2, stepTitle: null, description: "Second step", ingredients: [] },
@@ -1593,9 +1627,9 @@ describe("Recipes $id Edit Route", () => {
           title: "Test Recipe",
           description: null,
           servings: null,
-          imageUrl: "",
           steps: [],
         },
+          coverImageUrl: "",
         formattedSteps: [],
       };
 
@@ -1624,9 +1658,9 @@ describe("Recipes $id Edit Route", () => {
           title: "Test Recipe",
           description: null,
           servings: null,
-          imageUrl: "",
           steps: [],
         },
+          coverImageUrl: "",
         formattedSteps: [],
       };
 
@@ -1651,7 +1685,7 @@ describe("Recipes $id Edit Route", () => {
           title: "Test Recipe",
           description: null,
           servings: null,
-          imageUrl: "",
+          coverImageUrl: "",
           steps: [
             {
               id: "step-abc",
@@ -1699,7 +1733,7 @@ describe("Recipes $id Edit Route", () => {
           title: "Test Recipe",
           description: null,
           servings: null,
-          imageUrl: "",
+          coverImageUrl: "",
           steps: [
             {
               id: "step-delete",
@@ -1759,7 +1793,7 @@ describe("Recipes $id Edit Route", () => {
           title: "Test Recipe",
           description: null,
           servings: null,
-          imageUrl: "",
+          coverImageUrl: "",
           steps: [
             {
               id: "step-escape",
@@ -1810,7 +1844,7 @@ describe("Recipes $id Edit Route", () => {
           title: "Test Recipe",
           description: null,
           servings: null,
-          imageUrl: "",
+          coverImageUrl: "",
           steps: [
             {
               id: "step-blocked",
@@ -1866,9 +1900,9 @@ describe("Recipes $id Edit Route", () => {
               title: "Original Title",
               description: "Original description",
               servings: "4",
-              imageUrl: "",
               steps: [],
             },
+              coverImageUrl: "",
             formattedSteps: [],
           }),
           action: async ({ request }: { request: Request }) => {
@@ -1924,9 +1958,9 @@ describe("Recipes $id Edit Route", () => {
           title: "Original Title",
           description: "Original description",
           servings: "4",
-          imageUrl: "",
           steps: [],
         },
+          coverImageUrl: "",
         formattedSteps: [],
       };
 
@@ -1994,9 +2028,9 @@ describe("Recipes $id Edit Route", () => {
               title: "Test Recipe",
               description: null,
               servings: null,
-              imageUrl: "",
               steps: [],
             },
+              coverImageUrl: "",
             formattedSteps: [],
           }),
           action: async ({ request }: { request: Request }) => {
@@ -2042,9 +2076,9 @@ describe("Recipes $id Edit Route", () => {
               title: "Test Recipe",
               description: null,
               servings: null,
-              imageUrl: "",
               steps: [],
             },
+              coverImageUrl: "",
             formattedSteps: [],
           }),
         },
@@ -2078,9 +2112,9 @@ describe("Recipes $id Edit Route", () => {
               title: "Test Recipe",
               description: null,
               servings: null,
-              imageUrl: "https://example.com/existing.jpg",
               steps: [],
             },
+            coverImageUrl: "https://example.com/existing.jpg",
             formattedSteps: [],
           }),
           action: async ({ request }: { request: Request }) => {
@@ -2118,9 +2152,9 @@ describe("Recipes $id Edit Route", () => {
           title: "Test Recipe",
           description: null,
           servings: null,
-          imageUrl: "",
           steps: [],
         },
+          coverImageUrl: "",
         formattedSteps: [],
       };
 
@@ -2154,9 +2188,9 @@ describe("Recipes $id Edit Route", () => {
           title: "Test Recipe",
           description: null,
           servings: null,
-          imageUrl: "",
           steps: [],
         },
+          coverImageUrl: "",
         formattedSteps: [],
       };
 

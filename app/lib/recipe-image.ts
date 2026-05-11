@@ -1,17 +1,6 @@
-const LEGACY_DEFAULT_RECIPE_IMAGE_TOKEN = "clbe7wr180009tkhggghtl1qd.png";
-
 /**
- * Some older records used a stock default image URL to represent "no image".
- * Treat those as missing images so UI placeholders render correctly.
+ * The v1 Cloudinary stock image URL that represented "no cover image". Backfilled
+ * Recipes that pointed at this token are skipped during the S1 migration so the
+ * AI placeholder pipeline can re-generate a real cover for them on first read.
  */
-export function getDisplayRecipeImageUrl(imageUrl?: string | null): string | undefined {
-  const normalized = imageUrl?.trim();
-  if (!normalized) return undefined;
-
-  if (normalized.includes(LEGACY_DEFAULT_RECIPE_IMAGE_TOKEN)) {
-    return undefined;
-  }
-
-  return normalized;
-}
-
+export const LEGACY_DEFAULT_RECIPE_IMAGE_TOKEN = "clbe7wr180009tkhggghtl1qd.png";

@@ -796,10 +796,21 @@ async function seedRecipes(
         title: recipeData.title,
         description: recipeData.description,
         servings: recipeData.servings,
-        imageUrl: recipeData.imageUrl,
         chefId: chef.id,
       },
     });
+
+    // Seed a chef-upload cover when an image URL is provided so the recipe renders
+    // with the same artwork it had under the old Recipe.imageUrl field.
+    if (recipeData.imageUrl) {
+      await prisma.recipeCover.create({
+        data: {
+          recipeId: recipe.id,
+          imageUrl: recipeData.imageUrl,
+          sourceType: "chef-upload",
+        },
+      });
+    }
 
     // Create steps with ingredients
     for (let stepIdx = 0; stepIdx < recipeData.steps.length; stepIdx++) {

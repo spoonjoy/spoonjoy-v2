@@ -89,7 +89,7 @@ describe("HTML5 validation attributes", () => {
       title: "Test Recipe",
       description: "Test description",
       servings: "4",
-      imageUrl: "https://example.com/image.jpg",
+      coverImageUrl: "https://example.com/image.jpg",
       steps: [],
     };
 

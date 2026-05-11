@@ -31,8 +31,8 @@ describe("Recipe Model", () => {
       expect(recipe).toBeDefined();
       expect(recipe.title).toBe(recipeData.title);
       expect(recipe.chefId).toBe(testUserId);
-      expect(recipe.imageUrl).toBeDefined();
       expect(recipe.deletedAt).toBeNull();
+      expect("imageUrl" in recipe).toBe(false);
     });
 
     it("should create a recipe with optional fields", async () => {
@@ -40,13 +40,11 @@ describe("Recipe Model", () => {
       const recipe = await db.recipe.create({
         data: {
           ...recipeData,
-          imageUrl: "https://example.com/image.jpg",
         },
       });
 
       expect(recipe.description).toBe(recipeData.description);
       expect(recipe.servings).toBe(recipeData.servings);
-      expect(recipe.imageUrl).toBe("https://example.com/image.jpg");
     });
 
   });

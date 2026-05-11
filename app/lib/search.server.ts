@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
+import { getRecipeCoverImageUrl } from "~/lib/recipe-cover.server";
 
 export const SEARCH_SCOPES = ["all", "recipes", "cookbooks", "chefs", "shopping-list"] as const;
 export type SearchScope = (typeof SEARCH_SCOPES)[number];
@@ -221,6 +222,7 @@ async function recipeDocuments(database: PrismaClient): Promise<SearchDocumentIn
       include: {
         chef: { select: { id: true, username: true } },
         cookbooks: { include: { cookbook: { select: { title: true } } } },
+        covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
         steps: {
           orderBy: { stepNum: "asc" },
           include: { ingredients: { include: { unit: true, ingredientRef: true } } },
@@ -258,7 +260,7 @@ async function recipeDocuments(database: PrismaClient): Promise<SearchDocumentIn
             ...stepText,
           ]),
           href: `/recipes/${recipe.id}`,
-          imageUrl: recipe.imageUrl,
+          imageUrl: getRecipeCoverImageUrl(recipe, recipe.covers),
           metadata: {
             servings: recipe.servings,
             chefUsername: recipe.chef.username,

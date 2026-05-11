@@ -287,7 +287,7 @@ describe("Kitchen Index Route", () => {
                 title: "Fondue",
                 description: "Cheese and wine",
                 servings: "4",
-                imageUrl: null,
+                coverImageUrl: null,
               },
             ],
             cookbooks: [],
@@ -352,7 +352,7 @@ describe("Kitchen Index Route", () => {
                 title: "Image Dish",
                 description: null,
                 servings: null,
-                imageUrl: "https://example.com/dish.jpg",
+                coverImageUrl: "https://example.com/dish.jpg",
               },
             ],
             cookbooks: [],
@@ -415,7 +415,7 @@ describe("Kitchen Index Route", () => {
                 recipes: [
                   {
                     recipe: {
-                      imageUrl: "https://example.com/cookbook-recipe.jpg",
+                      coverImageUrl: "https://example.com/cookbook-recipe.jpg",
                       title: "Rosti",
                     },
                   },

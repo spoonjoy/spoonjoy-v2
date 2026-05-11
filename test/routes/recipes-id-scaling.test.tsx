@@ -20,7 +20,7 @@ describe("Recipe View Scaling Integration", () => {
           title: "Test Recipe",
           description: "A test recipe for scaling",
           servings: "Serves 4",
-          imageUrl: "https://example.com/image.jpg",
+          coverImageUrl: "https://example.com/image.jpg",
           chef: { id: "user-1", username: "testchef" },
           steps: [
             {
@@ -72,7 +72,7 @@ describe("Recipe View Scaling Integration", () => {
           title: "Test Recipe",
           description: null,
           servings: "Serves 4",
-          imageUrl: null,
+          coverImageUrl: null,
           chef: { id: "user-1", username: "testchef" },
           steps: [],
         },
@@ -116,7 +116,7 @@ describe("Recipe View Scaling Integration", () => {
           title: "Multi-Step Recipe",
           description: null,
           servings: "Serves 2",
-          imageUrl: null,
+          coverImageUrl: null,
           chef: { id: "user-1", username: "testchef" },
           steps: [
             {
@@ -192,7 +192,7 @@ describe("Recipe View Scaling Integration", () => {
           title: "Recipe with Checkboxes",
           description: null,
           servings: "Serves 2",
-          imageUrl: null,
+          coverImageUrl: null,
           chef: { id: "user-1", username: "testchef" },
           steps: [
             {
@@ -266,10 +266,10 @@ describe("Recipe View Scaling Integration", () => {
           title: "Recipe with Image",
           description: null,
           servings: null,
-          imageUrl: "https://example.com/delicious.jpg",
           chef: { id: "user-1", username: "testchef" },
           steps: [],
         },
+        coverImageUrl: "https://example.com/delicious.jpg",
         isOwner: false,
       };
 
@@ -297,7 +297,7 @@ describe("Recipe View Scaling Integration", () => {
           title: "Recipe without Image",
           description: null,
           servings: null,
-          imageUrl: null,
+          coverImageUrl: null,
           chef: { id: "user-1", username: "testchef" },
           steps: [],
         },
@@ -328,7 +328,7 @@ describe("Recipe View Scaling Integration", () => {
           title: "Multi-Step Recipe",
           description: null,
           servings: null,
-          imageUrl: null,
+          coverImageUrl: null,
           chef: { id: "user-1", username: "testchef" },
           steps: [
             {
@@ -396,7 +396,7 @@ describe("Recipe View Scaling Integration", () => {
           title: "Recipe with Step References",
           description: null,
           servings: null,
-          imageUrl: null,
+          coverImageUrl: null,
           chef: { id: "user-1", username: "testchef" },
           steps: [
             {
@@ -453,7 +453,7 @@ describe("Recipe View Scaling Integration", () => {
           title: "My Recipe",
           description: null,
           servings: null,
-          imageUrl: null,
+          coverImageUrl: null,
           chef: { id: "user-1", username: "me" },
           steps: [],
         },
@@ -484,7 +484,7 @@ describe("Recipe View Scaling Integration", () => {
           title: "Someone Else's Recipe",
           description: null,
           servings: null,
-          imageUrl: null,
+          coverImageUrl: null,
           chef: { id: "user-2", username: "someone" },
           steps: [],
         },
@@ -515,7 +515,7 @@ describe("Recipe View Scaling Integration", () => {
           title: "Recipe with Range Servings",
           description: null,
           servings: "Feeds 2-4 people",
-          imageUrl: null,
+          coverImageUrl: null,
           chef: { id: "user-1", username: "testchef" },
           steps: [],
         },

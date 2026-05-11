@@ -20,6 +20,8 @@ import {
   validateImageFile,
 } from "~/lib/image-storage.server";
 import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
+import { createCover, makeFallbackPlaceholderSvg } from "~/lib/recipe-cover.server";
+import { scheduleAiPlaceholderCover } from "~/lib/ai-placeholder-cover.server";
 import { useRef } from "react";
 
 interface ActionData {
@@ -101,13 +103,14 @@ export async function action({ request, context }: Route.ActionArgs) {
     return data({ errors: { title: titleUniquenessResult.error } }, { status: 400 });
   }
 
-  const photosBucket = getCloudflareEnv(context)?.PHOTOS;
+  const cloudflareEnv = getCloudflareEnv(context);
+  const photosBucket = cloudflareEnv?.PHOTOS;
   const recipeId = crypto.randomUUID();
-  let imageUrl = "";
+  let uploadedImageUrl = "";
 
   if (imageFile) {
     try {
-      imageUrl = await storeImage({
+      uploadedImageUrl = await storeImage({
         bucket: photosBucket,
         file: imageFile,
         namespace: `recipes/${userId}/${recipeId}`,
@@ -121,20 +124,51 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   try {
+    const trimmedTitle = title.trim();
+    const trimmedDescription = description.trim() || null;
     const recipe = await createRecipeDraft(database, {
       id: recipeId,
-      title: title.trim(),
-      description: description.trim() || null,
+      title: trimmedTitle,
+      description: trimmedDescription,
       servings: servings.trim() || null,
-      imageUrl,
       chefId: userId,
       steps: recipeSteps,
     });
 
+    if (uploadedImageUrl) {
+      await createCover(database, {
+        recipeId: recipe.id,
+        imageUrl: uploadedImageUrl,
+        sourceType: "chef-upload",
+      });
+    } else {
+      const fallback = makeFallbackPlaceholderSvg(trimmedTitle);
+      const placeholderCover = await createCover(database, {
+        recipeId: recipe.id,
+        imageUrl: fallback.url,
+        sourceType: "ai-placeholder",
+      });
+      const waitUntil = context.cloudflare?.ctx?.waitUntil;
+      const task = scheduleAiPlaceholderCover({
+        db: database,
+        userId,
+        coverId: placeholderCover.id,
+        title: trimmedTitle,
+        description: trimmedDescription,
+        env: cloudflareEnv,
+        bucket: photosBucket,
+      });
+      if (waitUntil) {
+        waitUntil.call(context.cloudflare!.ctx!, task);
+      } else {
+        await task;
+      }
+    }
+
     return redirect(`/recipes/${recipe.id}`);
   } catch (error) {
-    if (imageUrl) {
-      await deleteStoredImage({ bucket: photosBucket, imageUrl });
+    if (uploadedImageUrl) {
+      await deleteStoredImage({ bucket: photosBucket, imageUrl: uploadedImageUrl });
     }
 
     return data(

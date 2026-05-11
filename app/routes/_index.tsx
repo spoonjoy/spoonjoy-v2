@@ -9,7 +9,7 @@ import { Heading, Subheading } from "~/components/ui/heading";
 import { Text } from "~/components/ui/text";
 import { Avatar } from "~/components/ui/avatar";
 import { CookbookCard } from "~/components/pantry/CookbookCard";
-import { getDisplayRecipeImageUrl } from "~/lib/recipe-image";
+import { getRecipeCoverImageUrl } from "~/lib/recipe-cover.server";
 
 const DEFAULT_CHEF_AVATAR = "/images/chef-rj.png";
 
@@ -109,8 +109,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
         id: true,
         title: true,
         description: true,
-        imageUrl: true,
         servings: true,
+        covers: {
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        },
       },
     }),
     database.cookbook.findMany({
@@ -130,8 +132,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
           include: {
             recipe: {
               select: {
-                imageUrl: true,
                 title: true,
+                covers: {
+                  orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+                },
               },
             },
           },
@@ -140,13 +144,29 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     }),
   ]);
 
+  const recipesWithCover = recipes.map(({ covers, ...rest }) => ({
+    ...rest,
+    coverImageUrl: getRecipeCoverImageUrl(rest, covers),
+  }));
+
+  const cookbooksWithCover = cookbooks.map(({ recipes: cookbookRecipes, ...cookbook }) => ({
+    ...cookbook,
+    recipes: cookbookRecipes.map((item) => ({
+      ...item,
+      recipe: {
+        title: item.recipe.title,
+        coverImageUrl: getRecipeCoverImageUrl({ id: item.recipeId, title: item.recipe.title }, item.recipe.covers),
+      },
+    })),
+  }));
+
   return {
     tab,
     viewer,
     kitchenUser,
     isOwner: viewer?.id === kitchenUser.id,
-    recipes,
-    cookbooks,
+    recipes: recipesWithCover,
+    cookbooks: cookbooksWithCover,
   };
 }
 
@@ -347,7 +367,7 @@ export default function Index() {
             ) : (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {recipes.map((recipe) => {
-                  const displayImageUrl = getDisplayRecipeImageUrl(recipe.imageUrl);
+                  const displayImageUrl = recipe.coverImageUrl && recipe.coverImageUrl.length > 0 ? recipe.coverImageUrl : undefined;
                   return (
                     <Link
                       key={recipe.id}
@@ -407,7 +427,7 @@ export default function Index() {
                     title={cookbook.title}
                     recipeCount={cookbook._count.recipes}
                     recipeImages={cookbook.recipes.map((item) => ({
-                      imageUrl: item.recipe.imageUrl,
+                      coverImageUrl: item.recipe.coverImageUrl,
                       title: item.recipe.title,
                     }))}
                   />

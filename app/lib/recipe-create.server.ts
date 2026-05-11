@@ -31,7 +31,6 @@ export interface CreateRecipeDraftInput {
   title: string;
   description: string | null;
   servings: string | null;
-  imageUrl: string;
   chefId: string;
   steps: RecipeStepDraft[];
 }
@@ -237,7 +236,6 @@ export async function createRecipeDraft(
         title: input.title,
         description: input.description,
         servings: input.servings,
-        imageUrl: input.imageUrl,
         chefId: input.chefId,
       },
     });

@@ -45,7 +45,7 @@ describe("RecipeBuilder Route Integration", () => {
         title: "Test Recipe " + faker.string.alphanumeric(6),
         description: "Test description",
         servings: "4",
-        imageUrl: "https://example.com/test.jpg",
+
         chefId: testUserId,
       },
     });
@@ -308,9 +308,9 @@ describe("RecipeBuilder Route Integration", () => {
             title: "Test Recipe",
             description: "Test description",
             servings: "4",
-            imageUrl: "https://example.com/test.jpg",
             steps: [],
           },
+            coverImageUrl: "https://example.com/test.jpg",
           formattedSteps: [],
         };
 
@@ -339,9 +339,9 @@ describe("RecipeBuilder Route Integration", () => {
             title: "Test Recipe",
             description: "Test description",
             servings: "4",
-            imageUrl: "https://example.com/test.jpg",
             steps: [],
           },
+            coverImageUrl: "https://example.com/test.jpg",
           formattedSteps: [],
         };
 
@@ -375,9 +375,9 @@ describe("RecipeBuilder Route Integration", () => {
             title: "Existing Recipe Title",
             description: "Existing description text",
             servings: "6-8",
-            imageUrl: "https://example.com/existing.jpg",
             steps: [],
           },
+            coverImageUrl: "https://example.com/existing.jpg",
           formattedSteps: [],
         };
 
@@ -406,9 +406,9 @@ describe("RecipeBuilder Route Integration", () => {
             title: "Recipe with Nulls",
             description: null,
             servings: null,
-            imageUrl: "",
             steps: [],
           },
+            coverImageUrl: "",
           formattedSteps: [],
         };
 
@@ -441,9 +441,9 @@ describe("RecipeBuilder Route Integration", () => {
             title: "Recipe with Image",
             description: null,
             servings: null,
-            imageUrl: "https://example.com/existing.jpg",
             steps: [],
           },
+            coverImageUrl: "https://example.com/existing.jpg",
           formattedSteps: [],
         };
 
@@ -491,9 +491,9 @@ describe("RecipeBuilder Route Integration", () => {
             title: "Recipe with Image",
             description: null,
             servings: null,
-            imageUrl: "https://example.com/existing.jpg",
             steps: [],
           },
+            coverImageUrl: "https://example.com/existing.jpg",
           formattedSteps: [],
         };
 
@@ -550,9 +550,9 @@ describe("RecipeBuilder Route Integration", () => {
             title: "Original Title",
             description: "Original description",
             servings: "4",
-            imageUrl: "",
             steps: [],
           },
+            coverImageUrl: "",
           formattedSteps: [],
         };
 
@@ -594,9 +594,9 @@ describe("RecipeBuilder Route Integration", () => {
             title: "Test Recipe",
             description: null,
             servings: null,
-            imageUrl: "",
             steps: [],
           },
+            coverImageUrl: "",
           formattedSteps: [],
         };
 
@@ -644,7 +644,7 @@ describe("RecipeBuilder Route Integration", () => {
             title: "Test Recipe",
             description: null,
             servings: null,
-            imageUrl: "",
+            coverImageUrl: "",
             steps: [
               {
                 id: "step-1",
@@ -691,9 +691,9 @@ describe("RecipeBuilder Route Integration", () => {
             title: "Test Recipe",
             description: null,
             servings: null,
-            imageUrl: "",
             steps: [],
           },
+            coverImageUrl: "",
           formattedSteps: [],
         };
 
@@ -724,9 +724,9 @@ describe("RecipeBuilder Route Integration", () => {
             title: "Test Recipe",
             description: null,
             servings: null,
-            imageUrl: "",
             steps: [],
           },
+            coverImageUrl: "",
           formattedSteps: [],
         };
 
@@ -783,9 +783,9 @@ describe("RecipeBuilder Route Integration", () => {
           title: "Test Recipe",
           description: null,
           servings: null,
-          imageUrl: "",
           steps: [],
         },
+          coverImageUrl: "",
         formattedSteps: [],
       };
 

@@ -88,7 +88,7 @@ describe('RecipeImageUpload', () => {
       render(
         <RecipeImageUpload
           onFileSelect={vi.fn()}
-          imageUrl="https://example.com/recipe.jpg"
+          coverImageUrl="https://example.com/recipe.jpg"
         />
       )
 
@@ -100,7 +100,7 @@ describe('RecipeImageUpload', () => {
       render(
         <RecipeImageUpload
           onFileSelect={vi.fn()}
-          imageUrl="https://example.com/recipe.jpg"
+          coverImageUrl="https://example.com/recipe.jpg"
           alt="Chocolate cake"
         />
       )
@@ -112,7 +112,7 @@ describe('RecipeImageUpload', () => {
       render(
         <RecipeImageUpload
           onFileSelect={vi.fn()}
-          imageUrl="https://example.com/recipe.jpg"
+          coverImageUrl="https://example.com/recipe.jpg"
         />
       )
 
@@ -123,7 +123,7 @@ describe('RecipeImageUpload', () => {
       render(
         <RecipeImageUpload
           onFileSelect={vi.fn()}
-          imageUrl="https://example.com/recipe.jpg"
+          coverImageUrl="https://example.com/recipe.jpg"
         />
       )
 
@@ -238,7 +238,7 @@ describe('RecipeImageUpload', () => {
         <RecipeImageUpload
           onFileSelect={vi.fn()}
           onClear={onClear}
-          imageUrl="https://example.com/recipe.jpg"
+          coverImageUrl="https://example.com/recipe.jpg"
         />
       )
 
@@ -328,7 +328,7 @@ describe('RecipeImageUpload', () => {
         <RecipeImageUpload
           onFileSelect={vi.fn()}
           onClear={vi.fn()}
-          imageUrl="https://example.com/recipe.jpg"
+          coverImageUrl="https://example.com/recipe.jpg"
           disabled
         />
       )
@@ -342,7 +342,7 @@ describe('RecipeImageUpload', () => {
       render(
         <RecipeImageUpload
           onFileSelect={vi.fn()}
-          imageUrl="https://example.com/recipe.jpg"
+          coverImageUrl="https://example.com/recipe.jpg"
           disabled
         />
       )
@@ -571,7 +571,7 @@ describe('RecipeImageUpload', () => {
       render(
         <RecipeImageUpload
           onFileSelect={vi.fn()}
-          imageUrl="https://example.com/recipe.jpg"
+          coverImageUrl="https://example.com/recipe.jpg"
         />
       )
 
@@ -584,7 +584,7 @@ describe('RecipeImageUpload', () => {
       render(
         <RecipeImageUpload
           onFileSelect={vi.fn()}
-          imageUrl="https://example.com/recipe.jpg"
+          coverImageUrl="https://example.com/recipe.jpg"
         />
       )
 
@@ -606,7 +606,7 @@ describe('RecipeImageUpload', () => {
         <RecipeImageUpload
           onFileSelect={vi.fn()}
           onClear={vi.fn()}
-          imageUrl="https://example.com/recipe.jpg"
+          coverImageUrl="https://example.com/recipe.jpg"
         />
       )
 
@@ -638,7 +638,7 @@ describe('RecipeImageUpload', () => {
       render(
         <RecipeImageUpload
           onFileSelect={vi.fn()}
-          imageUrl="https://example.com/recipe.jpg"
+          coverImageUrl="https://example.com/recipe.jpg"
           alt="Delicious pasta dish"
         />
       )
@@ -650,7 +650,7 @@ describe('RecipeImageUpload', () => {
       render(
         <RecipeImageUpload
           onFileSelect={vi.fn()}
-          imageUrl="https://example.com/recipe.jpg"
+          coverImageUrl="https://example.com/recipe.jpg"
         />
       )
 
