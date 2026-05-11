@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   checkRemoteMigrations,
+  createWranglerRunner,
   runDeploymentPreflight,
   validateDeploymentConfig,
   type DeploymentPreflightInputs,
@@ -295,5 +296,122 @@ describe("checkRemoteMigrations", () => {
         process.env.SPOONJOY_PREFLIGHT_SKIP_REMOTE = original;
       }
     }
+  });
+});
+
+describe("createWranglerRunner", () => {
+  type Captured = {
+    cmd: string;
+    args: readonly string[];
+    options: { cwd?: string; env?: NodeJS.ProcessEnv };
+  };
+
+  it("invokes the configured wrangler binary with pnpm exec and forwards args", async () => {
+    let captured: Captured | null = null;
+    const stub = vi.fn(
+      (
+        cmd: string,
+        args: readonly string[],
+        options: { cwd?: string; env?: NodeJS.ProcessEnv },
+        callback: (
+          error: (Error & { code?: number | string }) | null,
+          stdout: string,
+          stderr: string,
+        ) => void,
+      ) => {
+        captured = { cmd, args, options };
+        callback(null, "", "");
+      },
+    );
+
+    const runner = createWranglerRunner(stub);
+    await runner(["d1", "migrations", "list", "DB", "--remote", "--json"]);
+
+    expect(stub).toHaveBeenCalledTimes(1);
+    expect(captured).not.toBeNull();
+    expect(captured!.cmd).toBe("pnpm");
+    expect(Array.from(captured!.args)).toEqual([
+      "exec",
+      "wrangler",
+      "d1",
+      "migrations",
+      "list",
+      "DB",
+      "--remote",
+      "--json",
+    ]);
+    expect(captured!.options).toEqual({});
+  });
+
+  it("resolves with stdout/stderr/exitCode when execFile callback signals success", async () => {
+    const stub = vi.fn(
+      (
+        _cmd: string,
+        _args: readonly string[],
+        _options: { cwd?: string; env?: NodeJS.ProcessEnv },
+        callback: (
+          error: (Error & { code?: number | string }) | null,
+          stdout: string,
+          stderr: string,
+        ) => void,
+      ) => {
+        callback(null, "stdoutbody", "");
+      },
+    );
+
+    const runner = createWranglerRunner(stub);
+    const result = await runner(["whoami"]);
+
+    expect(result).toEqual({ stdout: "stdoutbody", stderr: "", exitCode: 0 });
+  });
+
+  it("resolves with non-zero exitCode and stderr when execFile callback signals a process error", async () => {
+    const stub = vi.fn(
+      (
+        _cmd: string,
+        _args: readonly string[],
+        _options: { cwd?: string; env?: NodeJS.ProcessEnv },
+        callback: (
+          error: (Error & { code?: number | string }) | null,
+          stdout: string,
+          stderr: string,
+        ) => void,
+      ) => {
+        const err = Object.assign(new Error("exit 1"), { code: 1 });
+        callback(err, "", "stderrbody");
+      },
+    );
+
+    const runner = createWranglerRunner(stub);
+    const result = await runner(["d1", "migrations", "list", "DB", "--remote", "--json"]);
+
+    expect(result).toEqual({ stdout: "", stderr: "stderrbody", exitCode: 1 });
+  });
+
+  it("rejects with the underlying error when execFile reports a spawn failure (no numeric exit code)", async () => {
+    const stub = vi.fn(
+      (
+        _cmd: string,
+        _args: readonly string[],
+        _options: { cwd?: string; env?: NodeJS.ProcessEnv },
+        callback: (
+          error: (Error & { code?: number | string }) | null,
+          stdout: string,
+          stderr: string,
+        ) => void,
+      ) => {
+        const err = Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+        callback(err, "", "");
+      },
+    );
+
+    const runner = createWranglerRunner(stub);
+
+    await expect(runner(["d1"])).rejects.toThrow("ENOENT");
+  });
+
+  it("exposes a default factory that uses node:child_process execFile", () => {
+    const runner = createWranglerRunner();
+    expect(typeof runner).toBe("function");
   });
 });
