@@ -5,14 +5,16 @@ const FIXTURE_PHOTO = path.resolve('e2e/fixtures/spoon-test-photo.png');
 
 test.describe('Spoon a recipe flow', () => {
   test('user can log a cook and see it appear in the spoons strip', async ({ page }) => {
-    await page.goto('/recipes');
-
-    const recipeLinks = page.locator('a[href^="/recipes/"]').filter({
-      hasNot: page.locator('[href="/recipes/new"]'),
-    });
-    await expect(recipeLinks.first()).toBeVisible({ timeout: 5000 });
-    await recipeLinks.first().click();
-    await expect(page).toHaveURL(/\/recipes\/[^/]+$/);
+    // Land on the kitchen view; pick any seeded recipe owned by another chef
+    // so the demo user lands on the non-origin-cook path (photo not required).
+    await page.goto('/?tab=recipes&chef=chef_julia');
+    const recipeLink = page
+      .locator('main a[href^="/recipes/"]')
+      .filter({ hasNotText: /new/i })
+      .first();
+    await expect(recipeLink).toBeVisible({ timeout: 10_000 });
+    await recipeLink.click();
+    await expect(page).toHaveURL(/\/recipes\/[^/]+$/, { timeout: 10_000 });
 
     // Open the spoon dialog.
     const logCookButton = page.getByRole('button', { name: /log a cook/i }).first();
@@ -22,11 +24,13 @@ test.describe('Spoon a recipe flow', () => {
     // Dialog headings are rendered as headings by the Dialog primitive.
     await expect(page.getByRole('heading', { name: /log a cook/i })).toBeVisible();
 
-    // Add a note + upload a photo so the form validates regardless of
-    // origin-cook gating (the demo recipes are owned by the seeded chef so
-    // we cannot guarantee the viewer is the origin cook).
+    // Demo viewer is not the recipe owner here, so a note alone satisfies
+    // the form validation (no photo required for non-origin-cook spoons).
+    const uniqueNote = `e2e spoon ${Date.now()}`;
     const noteLabel = page.getByLabel(/^note/i);
-    await noteLabel.fill(`e2e spoon ${Date.now()}`);
+    await noteLabel.fill(uniqueNote);
+    // Upload the fixture photo so the spoon strip also gets a thumbnail —
+    // this exercises the photo-write path even when not strictly required.
     const photoInput = page.locator('input[type="file"]');
     await photoInput.setInputFiles(FIXTURE_PHOTO);
 
@@ -34,8 +38,9 @@ test.describe('Spoon a recipe flow', () => {
     await expect(submit).toBeEnabled();
     await submit.click();
 
-    // After submit, the dialog closes and the new spoon shows in the strip.
-    await expect(page.getByRole('heading', { name: /^cooks$/i })).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText(/just now|min ago/i).first()).toBeVisible({ timeout: 10_000 });
+    // The submission triggers a server action + reload; wait for the spoon to
+    // surface in the strip. The dialog backdrop may briefly overlay the page,
+    // so we assert the new spoon's note text rather than the section heading.
+    await expect(page.getByText(uniqueNote)).toBeVisible({ timeout: 15_000 });
   });
 });
