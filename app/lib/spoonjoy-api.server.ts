@@ -1412,6 +1412,106 @@ const updateSpoonTool: SpoonjoyApiOperation = {
   },
 };
 
+function formatSpoonWithChef(spoon: {
+  id: string;
+  chefId: string;
+  recipeId: string;
+  cookedAt: Date;
+  photoUrl: string | null;
+  note: string | null;
+  nextTime: string | null;
+  deletedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  chef: { id: string; username: string; photoUrl: string | null };
+}) {
+  return {
+    ...formatSpoon(spoon),
+    chef: spoon.chef,
+  };
+}
+
+const listSpoonsForRecipeTool: SpoonjoyApiOperation = {
+  name: "list_spoons_for_recipe",
+  description: "List the most-recent non-deleted spoons for a recipe.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      recipeId: { type: "string" },
+      limit: { type: "number" },
+      offset: { type: "number" },
+    },
+    required: ["recipeId"],
+    additionalProperties: false,
+  },
+  async handle(args, context) {
+    rejectOwnerEmail(args);
+    requireApiPrincipal(context.principal);
+    const recipeId = requiredString(args, "recipeId");
+    const limit = typeof args.limit === "number" ? args.limit : undefined;
+    const offset = typeof args.offset === "number" ? args.offset : undefined;
+    const spoons = await listSpoonsForRecipe(context.db, recipeId, {
+      limit,
+      offset,
+    });
+    const recipe = await context.db.recipe.findUnique({
+      where: { id: recipeId },
+      include: {
+        covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
+      },
+    });
+    const coverImageUrl = recipe
+      ? getRecipeCoverImageUrl(recipe, recipe.covers)
+      : null;
+    return json({
+      spoons: spoons.map((spoon) => ({
+        ...formatSpoonWithChef(spoon),
+        coverImageUrl,
+      })),
+    });
+  },
+};
+
+const listSpoonsByChefTool: SpoonjoyApiOperation = {
+  name: "list_spoons_by_chef",
+  description: "List the chef's most-recent non-deleted spoons across all recipes.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      chefIdOrUsername: { type: "string" },
+      limit: { type: "number" },
+      offset: { type: "number" },
+    },
+    required: ["chefIdOrUsername"],
+    additionalProperties: false,
+  },
+  async handle(args, context) {
+    rejectOwnerEmail(args);
+    requireApiPrincipal(context.principal);
+    const chefIdOrUsername = requiredString(args, "chefIdOrUsername");
+    const limit = typeof args.limit === "number" ? args.limit : undefined;
+    const offset = typeof args.offset === "number" ? args.offset : undefined;
+    const spoons = await listSpoonsByChef(context.db, chefIdOrUsername, {
+      limit,
+      offset,
+    });
+    return json({
+      spoons: spoons.map((spoon) => ({
+        ...formatSpoonWithChef(spoon),
+        recipe: {
+          id: spoon.recipe.id,
+          title: spoon.recipe.title,
+          chefId: spoon.recipe.chefId,
+        },
+        coverImageUrl: getRecipeCoverImageUrl(
+          { id: spoon.recipe.id, title: spoon.recipe.title },
+          spoon.recipe.covers,
+        ),
+      })),
+    });
+  },
+};
+
 const deleteSpoonTool: SpoonjoyApiOperation = {
   name: "delete_spoon",
   description: "Soft-delete a spoon owned by the authenticated principal.",
@@ -1453,6 +1553,8 @@ const tools: SpoonjoyApiOperation[] = [
   createSpoonTool,
   updateSpoonTool,
   deleteSpoonTool,
+  listSpoonsForRecipeTool,
+  listSpoonsByChefTool,
 ];
 
 export function listSpoonjoyApiOperations(): SpoonjoyApiOperationInfo[] {

@@ -654,6 +654,17 @@ describe("spoonjoy-api spoon operations", () => {
         ),
       ).rejects.toMatchObject({ status: 401 });
     });
+
+    it("returns coverImageUrl=null when the recipe row is missing", async () => {
+      const { principal: chef } = await makeUser(db);
+      const context: SpoonjoyApiContext = { db, principal: chef };
+      const result = (await callSpoonjoyApiOperation(
+        "list_spoons_for_recipe",
+        { recipeId: "missing-recipe-id" },
+        context,
+      )) as { spoons: unknown[] };
+      expect(result.spoons).toHaveLength(0);
+    });
   });
 
   describe("list_spoons_by_chef", () => {
