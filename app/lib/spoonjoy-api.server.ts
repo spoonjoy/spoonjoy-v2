@@ -23,6 +23,11 @@ import {
 import { scheduleSpoonCoverStylization } from "~/lib/spoon-cover-stylization.server";
 import type { ImageGenRunner } from "~/lib/image-gen.server";
 import * as recipeImport from "~/lib/recipe-import.server";
+import {
+  forkRecipe,
+  ForkSourceNotFoundError,
+  ForkTitleExhaustedError,
+} from "~/lib/recipe-fork.server";
 
 export interface SpoonjoyApiContext {
   db: PrismaClientType;
@@ -309,6 +314,7 @@ function formatRecipe(recipe: RecipeWithDetails) {
     description: recipe.description,
     servings: recipe.servings,
     sourceUrl: recipe.sourceUrl,
+    sourceRecipeId: recipe.sourceRecipeId,
     imageUrl: getRecipeCoverImageUrl(recipe, recipe.covers),
     chef: recipe.chef,
     steps,
@@ -1587,6 +1593,57 @@ async function resolveImportChefId(context: SpoonjoyApiContext): Promise<string>
   return user.id;
 }
 
+const forkRecipeTool: SpoonjoyApiOperation = {
+  name: "fork_recipe",
+  description:
+    "Fork an existing Spoonjoy recipe into the authenticated principal's kitchen. Clones title, description, servings, steps, ingredients, and step-output uses; snapshots the source's latest cover; sets sourceRecipeId on the new recipe.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      sourceRecipeId: { type: "string" },
+      title: {
+        type: "string",
+        description:
+          "Optional title override. Subject to the same `(chefId, title)` collision suffixing as the default title.",
+      },
+    },
+    required: ["sourceRecipeId"],
+    additionalProperties: false,
+  },
+  async handle(args, context) {
+    rejectOwnerEmail(args);
+    const principal = requireApiPrincipal(context.principal);
+    const sourceRecipeId = requiredString(args, "sourceRecipeId");
+    const titleOverride = optionalString(args.title) ?? null;
+
+    try {
+      const result = await forkRecipe(context.db, {
+        sourceRecipeId,
+        viewerId: principal.id,
+        titleOverride,
+      });
+      return json({
+        recipeId: result.recipe.id,
+        recipe: formatRecipe(result.recipe),
+        attribution: result.attribution,
+        appliedTitle: result.appliedTitle,
+        titleWasSuffixed: result.titleWasSuffixed,
+      });
+    } catch (err) {
+      if (err instanceof ForkSourceNotFoundError) {
+        throw new ApiAuthError("Source recipe not found", 404);
+      }
+      if (err instanceof ForkTitleExhaustedError) {
+        throw new ApiAuthError(
+          "Could not resolve a unique title for the fork",
+          409,
+        );
+      }
+      throw err;
+    }
+  },
+};
+
 const tools: SpoonjoyApiOperation[] = [
   healthTool,
   createApiTokenTool,
@@ -1598,6 +1655,7 @@ const tools: SpoonjoyApiOperation[] = [
   getRecipeTool,
   createRecipeTool,
   importRecipeFromUrlTool,
+  forkRecipeTool,
   addRecipeToShoppingListTool,
   listCookbooksTool,
   getCookbookTool,
