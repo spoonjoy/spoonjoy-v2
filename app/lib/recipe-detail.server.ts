@@ -69,6 +69,14 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
           photoUrl: true,
         },
       },
+      sourceRecipe: {
+        select: {
+          id: true,
+          title: true,
+          deletedAt: true,
+          chef: { select: { username: true } },
+        },
+      },
       covers: {
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       },
