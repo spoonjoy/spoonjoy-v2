@@ -1,9 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { db } from "~/lib/db.server";
 import {
+  IMPORT_DAILY_CAP,
   PLACEHOLDER_DAILY_CAP,
   STYLIZATION_DAILY_CAP,
   tryConsumeImageGenQuota,
+  type ImageGenKind,
 } from "~/lib/image-gen-ledger.server";
 import { createTestUser } from "../utils";
 import { cleanupDatabase } from "../helpers/cleanup";
@@ -105,5 +107,83 @@ describe("image-gen-ledger.server", () => {
     expect(ok).toBe(true);
     const row = await db.imageGenLedger.findFirst({ where: { userId, kind: "placeholder" } });
     expect(row?.count).toBe(1);
+  });
+
+  describe("kind=import", () => {
+    it("exposes IMPORT_DAILY_CAP = 50", () => {
+      expect(IMPORT_DAILY_CAP).toBe(50);
+    });
+
+    it("ImageGenKind type includes 'import' (compile-time)", () => {
+      const k: ImageGenKind = "import";
+      expect(k).toBe("import");
+    });
+
+    it("creates ledger row with kind=import on first consume of day", async () => {
+      const now = () => new Date("2026-05-11T08:30:00Z");
+      const ok = await tryConsumeImageGenQuota(db, userId, "import", { now });
+      expect(ok).toBe(true);
+      const row = await db.imageGenLedger.findFirst({ where: { userId, kind: "import" } });
+      expect(row?.count).toBe(1);
+    });
+
+    it("increments when row exists and count < IMPORT_DAILY_CAP", async () => {
+      const now = () => new Date("2026-05-11T08:30:00Z");
+      for (let i = 0; i < 3; i++) {
+        const ok = await tryConsumeImageGenQuota(db, userId, "import", { now });
+        expect(ok).toBe(true);
+      }
+      const row = await db.imageGenLedger.findFirst({ where: { userId, kind: "import" } });
+      expect(row?.count).toBe(3);
+    });
+
+    it("returns false when count == IMPORT_DAILY_CAP", async () => {
+      const now = () => new Date("2026-05-11T08:30:00Z");
+      const bucketStart = new Date("2026-05-11T00:00:00Z");
+      await db.imageGenLedger.create({
+        data: { userId, kind: "import", bucketStart, count: IMPORT_DAILY_CAP },
+      });
+      const ok = await tryConsumeImageGenQuota(db, userId, "import", { now });
+      expect(ok).toBe(false);
+    });
+
+    it("returns false when count > IMPORT_DAILY_CAP (defensive)", async () => {
+      const now = () => new Date("2026-05-11T08:30:00Z");
+      const bucketStart = new Date("2026-05-11T00:00:00Z");
+      await db.imageGenLedger.create({
+        data: { userId, kind: "import", bucketStart, count: IMPORT_DAILY_CAP + 5 },
+      });
+      const ok = await tryConsumeImageGenQuota(db, userId, "import", { now });
+      expect(ok).toBe(false);
+    });
+
+    it("kind=import cap differs from placeholder (50 vs 30)", () => {
+      expect(IMPORT_DAILY_CAP).toBe(50);
+      expect(PLACEHOLDER_DAILY_CAP).toBe(30);
+    });
+
+    it("kind=import and kind=placeholder rows are independent for same user/day", async () => {
+      const now = () => new Date("2026-05-11T08:30:00Z");
+      await tryConsumeImageGenQuota(db, userId, "import", { now });
+      await tryConsumeImageGenQuota(db, userId, "placeholder", { now });
+      const importRow = await db.imageGenLedger.findFirst({ where: { userId, kind: "import" } });
+      const placeholderRow = await db.imageGenLedger.findFirst({
+        where: { userId, kind: "placeholder" },
+      });
+      expect(importRow?.count).toBe(1);
+      expect(placeholderRow?.count).toBe(1);
+    });
+
+    it("concurrent first-consume race for kind=import ends with both successful", async () => {
+      const now = () => new Date("2026-05-11T08:30:00Z");
+      const [a, b] = await Promise.all([
+        tryConsumeImageGenQuota(db, userId, "import", { now }),
+        tryConsumeImageGenQuota(db, userId, "import", { now }),
+      ]);
+      expect(a).toBe(true);
+      expect(b).toBe(true);
+      const row = await db.imageGenLedger.findFirst({ where: { userId, kind: "import" } });
+      expect(row?.count).toBe(2);
+    });
   });
 });
