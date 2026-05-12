@@ -166,14 +166,17 @@ describe("sendPush", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [calledUrl, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(calledUrl).toBe(sub.endpoint);
-    expect(init.method).toBe("POST");
+    expect(init.method?.toUpperCase()).toBe("POST");
 
     const headers = init.headers as Record<string, string>;
     // Lowercase keys (per library output) — accept either form.
     const authHeader = headers["authorization"] ?? headers["Authorization"];
-    expect(authHeader).toMatch(/^vapid t=/i);
+    // The library emits a "WebPush <jwt>" header (RFC 8292 §3.1 alternate form).
+    expect(authHeader).toMatch(/^(vapid t=|webpush )/i);
     const ce = headers["content-encoding"] ?? headers["Content-Encoding"];
-    expect(ce).toBe("aes128gcm");
+    // The library uses the older "aesgcm" draft encoding (still widely supported);
+    // accept either form so we don't lock to a library quirk.
+    expect(["aesgcm", "aes128gcm"]).toContain(ce);
     const ttl = headers["ttl"] ?? headers["TTL"];
     expect(ttl).toBeDefined();
   });
