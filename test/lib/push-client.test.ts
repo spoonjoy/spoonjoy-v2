@@ -42,6 +42,7 @@ afterEach(() => {
   (globalThis as unknown as { isSecureContext?: boolean }).isSecureContext = origSecure;
   globalThis.fetch = origFetch;
   (globalThis as unknown as { Notification?: unknown }).Notification = origNotification;
+  delete (globalThis as unknown as { PushManager?: unknown }).PushManager;
 });
 
 describe("base64UrlToUint8Array", () => {
@@ -214,7 +215,9 @@ describe("subscribeToPush", () => {
           getRegistration: vi.fn(async () => ({ scope: "/" })),
         },
       },
+      isSecureContext: true,
     });
+    (globalThis as unknown as { PushManager?: unknown }).PushManager = function () {};
     (globalThis as unknown as { Notification?: unknown }).Notification = {
       requestPermission: vi.fn(async () => permission),
     };
@@ -225,7 +228,9 @@ describe("subscribeToPush", () => {
     const { subscribe } = setupPushable("granted");
     const fetchMock = vi.fn(async (url: string) => {
       if (url === "/api/push/public-key") {
-        return new Response(JSON.stringify({ key: "PUB" }), { status: 200 });
+        return new Response(JSON.stringify({ key: "BHpzJ01VsKtS08clJYyuN-WasvuNNaWOtg_nkE60YRoy0Ez9X2F-ITgDKWbh8EzAMLpx9rskKADfMbadO3yo5rQ" }), {
+          status: 200,
+        });
       }
       return new Response(null, { status: 201 });
     });
@@ -245,7 +250,7 @@ describe("subscribeToPush", () => {
     setupPushable("granted");
     const fetchMock = vi.fn(async () => new Response(null, { status: 201 }));
     globalThis.fetch = fetchMock as unknown as typeof fetch;
-    const result = await subscribeToPush("PRESET_KEY");
+    const result = await subscribeToPush("BHpzJ01VsKtS08clJYyuN-WasvuNNaWOtg_nkE60YRoy0Ez9X2F-ITgDKWbh8EzAMLpx9rskKADfMbadO3yo5rQ");
     expect(result).toEqual({ ok: true });
     expect(
       fetchMock.mock.calls.find((c) => c[0] === "/api/push/public-key"),
@@ -256,7 +261,7 @@ describe("subscribeToPush", () => {
     setupPushable("denied");
     const fetchMock = vi.fn(async () => new Response(null, { status: 201 }));
     globalThis.fetch = fetchMock as unknown as typeof fetch;
-    const result = await subscribeToPush("KEY");
+    const result = await subscribeToPush("BHpzJ01VsKtS08clJYyuN-WasvuNNaWOtg_nkE60YRoy0Ez9X2F-ITgDKWbh8EzAMLpx9rskKADfMbadO3yo5rQ");
     expect(result).toEqual({ ok: false, reason: "permission_denied" });
   });
 
@@ -264,13 +269,13 @@ describe("subscribeToPush", () => {
     setupPushable("default");
     const fetchMock = vi.fn(async () => new Response(null, { status: 201 }));
     globalThis.fetch = fetchMock as unknown as typeof fetch;
-    const result = await subscribeToPush("KEY");
+    const result = await subscribeToPush("BHpzJ01VsKtS08clJYyuN-WasvuNNaWOtg_nkE60YRoy0Ez9X2F-ITgDKWbh8EzAMLpx9rskKADfMbadO3yo5rQ");
     expect(result).toEqual({ ok: false, reason: "permission_dismissed" });
   });
 
   it("returns unsupported when push is not supported", async () => {
     setGlobals({ navigator: {} });
-    const result = await subscribeToPush("KEY");
+    const result = await subscribeToPush("BHpzJ01VsKtS08clJYyuN-WasvuNNaWOtg_nkE60YRoy0Ez9X2F-ITgDKWbh8EzAMLpx9rskKADfMbadO3yo5rQ");
     expect(result).toEqual({ ok: false, reason: "unsupported" });
   });
 
@@ -286,7 +291,9 @@ describe("subscribeToPush", () => {
     const fetchMock = vi.fn(async (url: string) =>
       url === "/api/push/subscriptions"
         ? new Response("err", { status: 500 })
-        : new Response(JSON.stringify({ key: "K" }), { status: 200 }),
+        : new Response(JSON.stringify({ key: "BHpzJ01VsKtS08clJYyuN-WasvuNNaWOtg_nkE60YRoy0Ez9X2F-ITgDKWbh8EzAMLpx9rskKADfMbadO3yo5rQ" }), {
+            status: 200,
+          }),
     );
     globalThis.fetch = fetchMock as unknown as typeof fetch;
     const result = await subscribeToPush();

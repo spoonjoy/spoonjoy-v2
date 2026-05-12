@@ -14,6 +14,7 @@ import { usePostHog } from "@posthog/react";
 import { getUserId } from "~/lib/session.server";
 import { toAnalyticsPageUrl } from "~/lib/analytics";
 import { applyStorageSchemaMigration } from "~/lib/client-storage-schema";
+import { registerServiceWorker } from "~/lib/push-client";
 import { ThemeProvider } from "~/components/ui/theme-provider";
 import { ToastProvider } from "~/components/ui/toast";
 import { ThemeToggle } from "~/components/ui/theme-toggle";
@@ -233,6 +234,7 @@ export default function App() {
   // Apply storage schema migration after hydration (client-side only)
   useEffect(() => {
     applyStorageSchemaMigration();
+    void registerServiceWorker();
   }, []);
 
   // Track page views on route changes
