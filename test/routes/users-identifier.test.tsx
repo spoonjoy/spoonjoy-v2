@@ -83,6 +83,52 @@ describe("Users $identifier Route", () => {
       expect(result.cookbooks).toHaveLength(1);
       expect(result.cookbooks[0]._count.recipes).toBe(1);
       expect(result.cookbooks[0].recipes[0].recipe.title).toBe(recipe.title);
+      expect(result.fellowChefsCount).toBe(0);
+      expect(result.kitchenVisitorsCount).toBe(0);
+    });
+
+    it("computes fellowChefsCount and kitchenVisitorsCount via the new helpers", async () => {
+      const owner = await createProfileUser();
+      const other = await createProfileUser();
+      const otherRecipe = await db.recipe.create({
+        data: {
+          title: `R ${faker.string.alphanumeric(6)}`,
+          chefId: other.id,
+        },
+      });
+      const ownRecipe = await db.recipe.create({
+        data: {
+          title: `R ${faker.string.alphanumeric(6)}`,
+          chefId: owner.id,
+        },
+      });
+      await db.recipeSpoon.create({
+        data: {
+          chefId: owner.id,
+          recipeId: otherRecipe.id,
+          cookedAt: new Date("2026-01-01T00:00:00Z"),
+        },
+      });
+      await db.recipeSpoon.create({
+        data: {
+          chefId: other.id,
+          recipeId: ownRecipe.id,
+          cookedAt: new Date("2026-02-01T00:00:00Z"),
+        },
+      });
+
+      const request = new UndiciRequest(
+        `http://localhost:3000/users/${owner.username}`,
+      );
+
+      const result = await loader({
+        request,
+        context: { cloudflare: { env: null } },
+        params: { identifier: owner.username },
+      } as any);
+
+      expect(result.fellowChefsCount).toBe(1);
+      expect(result.kitchenVisitorsCount).toBe(1);
     });
 
     it("marks the profile as owned when the session user matches", async () => {
@@ -291,6 +337,70 @@ describe("Users $identifier Route", () => {
 
       expect(await screen.findByText("Joined May 2026 • 1 recipe • 0 cookbooks")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Solo Stew" })).toHaveAttribute("href", "/recipes/recipe-3");
+    });
+
+    it("renders Fellow chefs and Kitchen visitors entry-point links with counts (owner view)", async () => {
+      const Stub = createTestRoutesStub([
+        {
+          path: "/users/:identifier",
+          Component: UserProfile,
+          loader: () => ({
+            profile: {
+              id: "user-1",
+              username: "chef-rowan",
+              photoUrl: null,
+              joinedLabel: "Joined May 2026",
+            },
+            isOwner: true,
+            recipes: [],
+            cookbooks: [],
+            recentSpoons: [],
+            fellowChefsCount: 7,
+            kitchenVisitorsCount: 3,
+          }),
+        },
+      ]);
+      render(<Stub initialEntries={["/users/chef-rowan"]} />);
+      await screen.findByRole("heading", { name: "chef-rowan" });
+      expect(
+        screen.getByRole("link", { name: /fellow chefs/i }),
+      ).toHaveAttribute("href", "/users/chef-rowan/fellow-chefs");
+      expect(
+        screen.getByRole("link", { name: /kitchen visitors/i }),
+      ).toHaveAttribute("href", "/users/chef-rowan/kitchen-visitors");
+      expect(screen.getByText(/fellow chefs.*7/i)).toBeInTheDocument();
+      expect(screen.getByText(/kitchen visitors.*3/i)).toBeInTheDocument();
+    });
+
+    it("renders Fellow chefs and Kitchen visitors entry-point links with counts (visitor view)", async () => {
+      const Stub = createTestRoutesStub([
+        {
+          path: "/users/:identifier",
+          Component: UserProfile,
+          loader: () => ({
+            profile: {
+              id: "user-2",
+              username: "chef-other",
+              photoUrl: null,
+              joinedLabel: "Joined May 2026",
+            },
+            isOwner: false,
+            recipes: [],
+            cookbooks: [],
+            recentSpoons: [],
+            fellowChefsCount: 0,
+            kitchenVisitorsCount: 0,
+          }),
+        },
+      ]);
+      render(<Stub initialEntries={["/users/chef-other"]} />);
+      await screen.findByRole("heading", { name: "chef-other" });
+      expect(
+        screen.getByRole("link", { name: /fellow chefs/i }),
+      ).toHaveAttribute("href", "/users/chef-other/fellow-chefs");
+      expect(
+        screen.getByRole("link", { name: /kitchen visitors/i }),
+      ).toHaveAttribute("href", "/users/chef-other/kitchen-visitors");
     });
 
     it("renders visitor empty states without owner calls to action", async () => {
