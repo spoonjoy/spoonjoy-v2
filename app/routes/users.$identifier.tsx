@@ -13,6 +13,10 @@ import { CookbookCard } from "~/components/pantry/CookbookCard";
 import { getRecipeCoverImageUrl } from "~/lib/recipe-cover.server";
 import { listSpoonsByChef } from "~/lib/recipe-spoon.server";
 import { SpoonsStrip } from "~/components/recipe/SpoonsStrip";
+import {
+  countFellowChefs,
+  countKitchenVisitors,
+} from "~/lib/fellow-chefs.server";
 
 const DEFAULT_CHEF_AVATAR = "/images/chef-rj.png";
 
@@ -81,7 +85,7 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
     return redirect(`/users/${profileUser.username}`);
   }
 
-  const [recipes, cookbooks, recentSpoonsRaw] = await Promise.all([
+  const [recipes, cookbooks, recentSpoonsRaw, fellowChefsCount, kitchenVisitorsCount] = await Promise.all([
     database.recipe.findMany({
       where: {
         chefId: profileUser.id,
@@ -122,6 +126,8 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
       },
     }),
     listSpoonsByChef(database, profileUser.id, { limit: 10 }),
+    countFellowChefs(database, profileUser.id),
+    countKitchenVisitors(database, profileUser.id),
   ]);
 
   const recipesWithCover = recipes.map(({ covers, ...rest }) => ({
@@ -176,11 +182,21 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
     recipes: recipesWithCover,
     cookbooks: cookbooksWithCover,
     recentSpoons,
+    fellowChefsCount,
+    kitchenVisitorsCount,
   };
 }
 
 export default function UserProfile() {
-  const { profile, isOwner, recipes, cookbooks, recentSpoons = EMPTY_SPOONS } = useLoaderData<typeof loader>();
+  const {
+    profile,
+    isOwner,
+    recipes,
+    cookbooks,
+    recentSpoons = EMPTY_SPOONS,
+    fellowChefsCount = 0,
+    kitchenVisitorsCount = 0,
+  } = useLoaderData<typeof loader>();
   const profileHref = `/users/${profile.username}`;
 
   return (
@@ -205,6 +221,15 @@ export default function UserProfile() {
               <Link href={`/?chef=${profile.username}`} className="sj-link mt-2 inline-block text-sm">
                 Open kitchen view
               </Link>
+              <Text className="mt-2 text-sm">
+                <Link href={`${profileHref}/fellow-chefs`} className="sj-link">
+                  Fellow chefs · {fellowChefsCount}
+                </Link>
+                {" · "}
+                <Link href={`${profileHref}/kitchen-visitors`} className="sj-link">
+                  Kitchen visitors · {kitchenVisitorsCount}
+                </Link>
+              </Text>
             </div>
           </div>
 
