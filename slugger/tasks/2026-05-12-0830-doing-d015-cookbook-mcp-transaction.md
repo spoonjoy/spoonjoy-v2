@@ -60,7 +60,7 @@ Fix the deployed-worker failure in the MCP/API `add_recipe_to_cookbook` operatio
 **Output**: Test commit that is red against the current implementation.
 **Acceptance**: Targeted test run fails for the new regression and the failure proves interactive transaction use.
 
-### ⬜ Unit 1b: Refactor Cookbook Add To Sequential Writes
+### ✅ Unit 1b: Refactor Cookbook Add To Sequential Writes
 **What**: Replace the callback-style transaction in `addRecipeToCookbookTool` with sequential top-level reads/writes while preserving idempotency, owner scoping, active-recipe checks, cookbook reloads, and notification metadata.
 **Output**: Implementation commit that makes the regression and existing targeted tests pass.
 **Acceptance**: Targeted cookbook MCP tests and cookbook notification tests pass with zero warnings, and build succeeds.
@@ -83,3 +83,4 @@ Fix the deployed-worker failure in the MCP/API `add_recipe_to_cookbook` operatio
 - 2026-05-12 08:30 Created from planning doc.
 - 2026-05-12 08:30 Unit 0 complete: confirmed `addRecipeToCookbookTool` uses callback-style `$transaction`, existing MCP cookbook and notification tests cover behavior, and recipe create/fork modules show the D1-compatible sequential-write pattern.
 - 2026-05-12 08:37 Unit 1a complete: added an MCP regression with a D1 transaction guard; targeted run failed red with "D1 interactive transactions are not supported" at `addRecipeToCookbookTool`.
+- 2026-05-12 08:39 Unit 1b complete: refactored `addRecipeToCookbookTool` to top-level sequential writes; regression, cookbook MCP tests, notification tests, and production build passed.
