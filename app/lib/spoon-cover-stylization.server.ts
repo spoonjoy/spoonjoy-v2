@@ -47,6 +47,7 @@ export async function scheduleSpoonCoverStylization(
       input.db,
       input.userId,
       "stylization",
+      input.now ? { now: () => new Date(input.now!()) } : {},
     );
     if (!consumed) return;
 

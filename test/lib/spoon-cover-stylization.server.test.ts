@@ -67,9 +67,10 @@ describe("scheduleSpoonCoverStylization", () => {
   });
 
   it("does nothing when stylization quota is exhausted", async () => {
-    const today = new Date();
+    // Pin time to a fixed UTC date so the quota bucket is deterministic across CI day boundaries.
+    const fixed = new Date("2026-05-11T08:30:00Z");
     const bucketStart = new Date(
-      Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()),
+      Date.UTC(fixed.getUTCFullYear(), fixed.getUTCMonth(), fixed.getUTCDate()),
     );
     await db.imageGenLedger.create({
       data: { userId, kind: "stylization", bucketStart, count: 50 },
@@ -82,6 +83,7 @@ describe("scheduleSpoonCoverStylization", () => {
       rawPhotoUrl: "https://stub.test/raw.png",
       recipeTitle: "Stylize Me",
       runner,
+      now: () => fixed.getTime(),
       logger: errorSpy,
     });
     expect(runner.imageToImage).not.toHaveBeenCalled();

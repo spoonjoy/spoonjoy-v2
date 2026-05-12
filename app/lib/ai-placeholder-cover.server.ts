@@ -50,6 +50,7 @@ export async function scheduleAiPlaceholderCover(
       input.db,
       input.userId,
       "placeholder",
+      input.now ? { now: () => new Date(input.now!()) } : {},
     );
     if (!consumed) return;
 
