@@ -354,9 +354,12 @@ describe("Recipes New Route", () => {
     });
 
     it("should return generic error for database errors", async () => {
-      // Mock the transaction wrapper to throw a generic database error
-      const originalTransaction = db.$transaction;
-      db.$transaction = vi.fn().mockRejectedValue(new Error("Database connection failed"));
+      // createRecipeDraft now writes sequentially against the top-level client
+      // (Cloudflare D1 doesn't support interactive `$transaction(async ...)`).
+      // Force the first DB write — recipe.create — to throw to exercise the
+      // catch in the route action.
+      const originalCreate = db.recipe.create;
+      db.recipe.create = vi.fn().mockRejectedValue(new Error("Database connection failed")) as any;
 
       try {
         const request = await createFormRequest({ title: "My Recipe" }, testUserId);
@@ -372,7 +375,7 @@ describe("Recipes New Route", () => {
         expect(data.errors.general).toBe("Failed to create recipe. Please try again.");
       } finally {
         // Restore original function
-        db.$transaction = originalTransaction;
+        db.recipe.create = originalCreate;
       }
     });
 
@@ -572,8 +575,11 @@ describe("Recipes New Route", () => {
         put: vi.fn().mockResolvedValue(undefined),
         delete: vi.fn().mockResolvedValue(undefined),
       };
-      const originalTransaction = db.$transaction;
-      db.$transaction = vi.fn().mockRejectedValue(new Error("Database connection failed"));
+      // See "should return generic error for database errors" above — D1 has
+      // no interactive transaction support, so the failure-injection point is
+      // recipe.create, the first write in the sequence.
+      const originalCreate = db.recipe.create;
+      db.recipe.create = vi.fn().mockRejectedValue(new Error("Database connection failed")) as any;
 
       try {
         const formData = new UndiciFormData();
@@ -594,7 +600,7 @@ describe("Recipes New Route", () => {
         const uploadedKey = mockR2Bucket.put.mock.calls[0][0];
         expect(mockR2Bucket.delete).toHaveBeenCalledWith(uploadedKey);
       } finally {
-        db.$transaction = originalTransaction;
+        db.recipe.create = originalCreate;
       }
     });
 
