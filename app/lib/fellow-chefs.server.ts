@@ -53,32 +53,23 @@ export const DEFAULT_LIMIT = 50;
 export const MAX_LIMIT = 100;
 
 function normalizeLimit(input: number | undefined): number {
-  if (input === undefined || !Number.isFinite(input) || input <= 0) {
-    return DEFAULT_LIMIT;
-  }
-  return Math.min(Math.floor(input), MAX_LIMIT);
+  if (input === undefined) return DEFAULT_LIMIT;
+  return Math.min(input, MAX_LIMIT);
 }
 
 function normalizeOffset(input: number | undefined): number {
-  if (input === undefined || !Number.isFinite(input) || input < 0) {
-    return 0;
-  }
-  return Math.floor(input);
+  return input ?? 0;
 }
 
-function toNumber(value: unknown): number {
-  if (typeof value === "number") return value;
-  if (typeof value === "bigint") return Number(value);
-  if (typeof value === "string") return Number(value);
-  return 0;
+// D1/SQLite aggregate returns: SUM/COUNT come back as BigInt; MAX(datetimeCol)
+// also comes back as BigInt (milliseconds since epoch) from the local Prisma
+// SQLite client. Coerce both at the JS boundary.
+function toNumber(value: bigint): number {
+  return Number(value);
 }
 
-function toDate(value: unknown): Date {
-  if (value instanceof Date) return value;
-  if (typeof value === "string") return new Date(value);
-  if (typeof value === "number") return new Date(value);
-  if (typeof value === "bigint") return new Date(Number(value));
-  return new Date(0);
+function toDate(value: bigint): Date {
+  return new Date(Number(value));
 }
 
 type Side = "viewer" | "chef";
@@ -126,14 +117,14 @@ interface RawAggregateRow {
   otherChefId: string;
   username: string;
   photoUrl: string | null;
-  spoons: unknown;
-  forks: unknown;
-  cookbookSaves: unknown;
-  latestInteractionAt: unknown;
+  spoons: bigint;
+  forks: bigint;
+  cookbookSaves: bigint;
+  latestInteractionAt: bigint;
 }
 
 interface RawCountRow {
-  total: unknown;
+  total: bigint;
 }
 
 async function runList(
@@ -199,7 +190,8 @@ async function runList(
     latestInteractionAt: toDate(row.latestInteractionAt),
   }));
 
-  const total = rawCount.length > 0 ? toNumber(rawCount[0].total) : 0;
+  // COUNT(*) always yields exactly one row, so rawCount[0] is safe.
+  const total = toNumber(rawCount[0].total);
 
   return { rows, total };
 }
@@ -226,7 +218,7 @@ async function runCount(
     focalUserId,
     focalUserId,
   );
-  return rows.length > 0 ? toNumber(rows[0].total) : 0;
+  return toNumber(rows[0].total);
 }
 
 export async function listFellowChefs(
