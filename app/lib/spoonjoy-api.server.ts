@@ -28,13 +28,15 @@ import {
   ForkSourceNotFoundError,
   ForkTitleExhaustedError,
 } from "~/lib/recipe-fork.server";
+import { notifySpoonOnMyRecipe } from "~/lib/notification-triggers.server";
+import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
 
 export interface SpoonjoyApiContext {
   db: PrismaClientType;
   principal?: ApiPrincipal | null;
   defaultOwnerEmail?: string;
   waitUntil?: (promise: Promise<unknown>) => void;
-  env?: { OPENAI_API_KEY?: string } | null;
+  env?: ({ OPENAI_API_KEY?: string } & VapidEnv) | null;
   bucket?: R2Bucket;
   imageGenRunner?: ImageGenRunner;
   logger?: Pick<Console, "error">;
@@ -1335,6 +1337,19 @@ const createSpoonTool: SpoonjoyApiOperation = {
       nextTime: optionalString(args.nextTime) ?? null,
       cookedAt,
     });
+
+    // Notify the recipe owner when someone else cooks their recipe.
+    try {
+      const vapid = getVapidConfig((context.env ?? {}) as VapidEnv);
+      const notifyTask = notifySpoonOnMyRecipe(
+        context.db,
+        { recipeId, spoonerId: principal.id },
+        { vapid, waitUntil: context.waitUntil },
+      );
+      await runOrSchedule(context, notifyTask);
+    } catch {
+      // VAPID not configured — skip silently.
+    }
 
     let coverPayload: ReturnType<typeof formatCover> | null = null;
     if (result.isOriginCook && result.spoon.photoUrl) {

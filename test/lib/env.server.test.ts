@@ -3,6 +3,7 @@ import {
   getGoogleOAuthConfig,
   getAppleOAuthConfig,
   validateOAuthEnv,
+  getVapidConfig,
 } from '~/lib/env.server'
 
 /**
@@ -256,6 +257,88 @@ describe('Environment Config Validation', () => {
 
       expect(() => validateOAuthEnv(env)).toThrow(
         /Missing required environment variables:.*GOOGLE_CLIENT_SECRET.*APPLE_KEY_ID/
+      )
+    })
+  })
+
+  describe('getVapidConfig', () => {
+    it('returns the VAPID config when all three env vars are present', () => {
+      const env = {
+        VAPID_PUBLIC_KEY: 'pub-key',
+        VAPID_PRIVATE_KEY: 'priv-key',
+        VAPID_SUBJECT: 'mailto:test@example.com',
+      }
+
+      expect(getVapidConfig(env)).toEqual({
+        publicKey: 'pub-key',
+        privateKey: 'priv-key',
+        subject: 'mailto:test@example.com',
+      })
+    })
+
+    it('throws when VAPID_PUBLIC_KEY is missing', () => {
+      const env = {
+        VAPID_PRIVATE_KEY: 'priv-key',
+        VAPID_SUBJECT: 'mailto:test@example.com',
+      }
+      expect(() => getVapidConfig(env)).toThrow(
+        'Missing required environment variable: VAPID_PUBLIC_KEY',
+      )
+    })
+
+    it('throws when VAPID_PRIVATE_KEY is missing', () => {
+      const env = {
+        VAPID_PUBLIC_KEY: 'pub-key',
+        VAPID_SUBJECT: 'mailto:test@example.com',
+      }
+      expect(() => getVapidConfig(env)).toThrow(
+        'Missing required environment variable: VAPID_PRIVATE_KEY',
+      )
+    })
+
+    it('throws when VAPID_SUBJECT is missing', () => {
+      const env = {
+        VAPID_PUBLIC_KEY: 'pub-key',
+        VAPID_PRIVATE_KEY: 'priv-key',
+      }
+      expect(() => getVapidConfig(env)).toThrow(
+        'Missing required environment variable: VAPID_SUBJECT',
+      )
+    })
+
+    it('throws when VAPID_PUBLIC_KEY is empty string', () => {
+      expect(() =>
+        getVapidConfig({
+          VAPID_PUBLIC_KEY: '',
+          VAPID_PRIVATE_KEY: 'p',
+          VAPID_SUBJECT: 's',
+        }),
+      ).toThrow('Missing required environment variable: VAPID_PUBLIC_KEY')
+    })
+
+    it('throws when VAPID_PRIVATE_KEY is empty string', () => {
+      expect(() =>
+        getVapidConfig({
+          VAPID_PUBLIC_KEY: 'p',
+          VAPID_PRIVATE_KEY: '',
+          VAPID_SUBJECT: 's',
+        }),
+      ).toThrow('Missing required environment variable: VAPID_PRIVATE_KEY')
+    })
+
+    it('throws when VAPID_SUBJECT is empty string', () => {
+      expect(() =>
+        getVapidConfig({
+          VAPID_PUBLIC_KEY: 'p',
+          VAPID_PRIVATE_KEY: 'k',
+          VAPID_SUBJECT: '',
+        }),
+      ).toThrow('Missing required environment variable: VAPID_SUBJECT')
+    })
+
+    it('throws when env is fully empty', () => {
+      expect(() => getVapidConfig({})).toThrow(
+        'Missing required environment variable: VAPID_PUBLIC_KEY',
       )
     })
   })

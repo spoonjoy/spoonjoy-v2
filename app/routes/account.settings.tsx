@@ -14,6 +14,7 @@ import { Field, Label, ErrorMessage } from "~/components/ui/fieldset";
 import { Input } from "~/components/ui/input";
 import { Avatar } from "~/components/ui/avatar";
 import { OAuthError } from "~/components/ui/oauth";
+import { NotificationsSection } from "~/components/notifications-section";
 
 const DEFAULT_AVATAR_URL =
   "https://res.cloudinary.com/dpjmyc4uz/image/upload/v1674541350/chef-rj.png";
@@ -90,7 +91,7 @@ function ProfilePhotoUpload({ photoUrl }: { photoUrl: string | null }) {
 }
 
 export default function AccountSettings() {
-  const { user, oauthError } = useLoaderData<AccountSettingsLoaderData>();
+  const { user, oauthError, notifications } = useLoaderData<AccountSettingsLoaderData>();
   const actionData = useActionData<AccountSettingsActionResult>();
   const [isEditing, setIsEditing] = useState(false);
   const [unlinkingProvider, setUnlinkingProvider] = useState<string | null>(null);
@@ -438,6 +439,8 @@ export default function AccountSettings() {
           )}
         </div>
       </section>
+
+      <NotificationsSection initiallySubscribed={notifications.pushSubscribed} />
       </div>
     </div>
   );

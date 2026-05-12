@@ -14,6 +14,7 @@ import { usePostHog } from "@posthog/react";
 import { getUserId } from "~/lib/session.server";
 import { toAnalyticsPageUrl } from "~/lib/analytics";
 import { applyStorageSchemaMigration } from "~/lib/client-storage-schema";
+import { registerServiceWorker } from "~/lib/push-client";
 import { ThemeProvider } from "~/components/ui/theme-provider";
 import { ToastProvider } from "~/components/ui/toast";
 import { ThemeToggle } from "~/components/ui/theme-toggle";
@@ -51,6 +52,7 @@ export function links() {
     },
     { rel: "icon", href: "/logos/sj_black.svg", type: "image/svg+xml" },
     { rel: "apple-touch-icon", href: "/logos/sj_black.svg" },
+    { rel: "manifest", href: "/manifest.webmanifest" },
   ];
 }
 
@@ -233,6 +235,7 @@ export default function App() {
   // Apply storage schema migration after hydration (client-side only)
   useEffect(() => {
     applyStorageSchemaMigration();
+    void registerServiceWorker();
   }, []);
 
   // Track page views on route changes
@@ -256,6 +259,9 @@ export default function App() {
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="theme-color" content="#f6e9cf" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <Meta />
         <Links />
         {/* Prevent flash of wrong theme */}

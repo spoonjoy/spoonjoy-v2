@@ -142,6 +142,36 @@ wrangler secret put APPLE_PRIVATE_KEY
 wrangler secret put OPENAI_API_KEY
 ```
 
+### Web Push (VAPID) Secrets
+
+Required for the in-app web push notification system (D-006). Without these the
+`/api/push/public-key` endpoint will return 500 and the in-app "Enable
+notifications" button will surface an error toast — the rest of the app works
+normally.
+
+| Secret | Description |
+|--------|-------------|
+| `VAPID_PUBLIC_KEY` | Base64url-encoded uncompressed P-256 public key (65 bytes). May also be set in `wrangler.json` `vars` since it is, by definition, public. |
+| `VAPID_PRIVATE_KEY` | Base64url-encoded P-256 private key (32 bytes). MUST be a Wrangler secret. |
+| `VAPID_SUBJECT` | `mailto:` URL or `https://` URL identifying the application owner (per RFC 8292 §2.1). |
+
+Generate a fresh keypair (one-time, idempotent re-run is safe but produces new
+keys):
+
+```bash
+tsx scripts/generate-vapid-keys.ts
+```
+
+The script prints a dotenv-style block to stdout. Set the production secrets:
+
+```bash
+wrangler secret put VAPID_PUBLIC_KEY
+wrangler secret put VAPID_PRIVATE_KEY
+wrangler secret put VAPID_SUBJECT
+```
+
+For local dev, copy the printed block into `.dev.vars` (gitignored).
+
 ## Step 5: Run Database Migrations
 
 ```bash

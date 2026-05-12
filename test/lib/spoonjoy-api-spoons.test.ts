@@ -376,6 +376,80 @@ describe("spoonjoy-api spoon operations", () => {
       expect(cover.stylizedImageUrl).toBeNull();
       expect(logger.error).toHaveBeenCalled();
     });
+
+    it("writes a NotificationEvent for the recipe owner when the spooner is not the owner (with VAPID env)", async () => {
+      const { principal: chef } = await makeUser(db);
+      const { principal: cook } = await makeUser(db);
+      const recipe = await makeRecipe(db, chef.id);
+      const captured: Promise<unknown>[] = [];
+      const context: SpoonjoyApiContext = {
+        db,
+        principal: cook,
+        waitUntil: (p) => captured.push(p),
+        env: {
+          VAPID_PUBLIC_KEY: "pub",
+          VAPID_PRIVATE_KEY: "priv",
+          VAPID_SUBJECT: "mailto:test@example.com",
+        },
+      };
+      await callSpoonjoyApiOperation(
+        "create_spoon",
+        { recipeId: recipe.id, note: "yum" },
+        context,
+      );
+      await Promise.all(captured);
+      const events = await db.notificationEvent.findMany({
+        where: { recipientId: chef.id, kind: "spoon_on_my_recipe" },
+      });
+      expect(events).toHaveLength(1);
+    });
+
+    it("does NOT write a NotificationEvent when the spooner IS the owner", async () => {
+      const { principal: chef } = await makeUser(db);
+      const recipe = await makeRecipe(db, chef.id);
+      // Seed a prior spoon so this owner spoon isn't an origin-cook.
+      await db.recipeSpoon.create({
+        data: { chefId: chef.id, recipeId: recipe.id, note: "seed" },
+      });
+      const captured: Promise<unknown>[] = [];
+      await callSpoonjoyApiOperation(
+        "create_spoon",
+        { recipeId: recipe.id, note: "self" },
+        {
+          db,
+          principal: chef,
+          waitUntil: (p) => captured.push(p),
+          env: {
+            VAPID_PUBLIC_KEY: "pub",
+            VAPID_PRIVATE_KEY: "priv",
+            VAPID_SUBJECT: "mailto:test@example.com",
+          },
+        },
+      );
+      await Promise.all(captured);
+      const count = await db.notificationEvent.count();
+      expect(count).toBe(0);
+    });
+
+    it("does not write a NotificationEvent when VAPID env is absent (graceful skip)", async () => {
+      const { principal: chef } = await makeUser(db);
+      const { principal: cook } = await makeUser(db);
+      const recipe = await makeRecipe(db, chef.id);
+      const captured: Promise<unknown>[] = [];
+      await callSpoonjoyApiOperation(
+        "create_spoon",
+        { recipeId: recipe.id, note: "no-vapid" },
+        {
+          db,
+          principal: cook,
+          waitUntil: (p) => captured.push(p),
+          env: null,
+        },
+      );
+      await Promise.all(captured);
+      const events = await db.notificationEvent.count();
+      expect(events).toBe(0);
+    });
   });
 
   describe("update_spoon", () => {

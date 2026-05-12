@@ -13,10 +13,14 @@ import {
 } from "~/lib/recipe-spoon.server";
 import { scheduleSpoonCoverStylization } from "~/lib/spoon-cover-stylization.server";
 import { requireUserId } from "~/lib/session.server";
+import { notifySpoonOnMyRecipe } from "~/lib/notification-triggers.server";
+import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
 
 interface CloudflareContextLike {
   cloudflare?: {
-    env?: { OPENAI_API_KEY?: string; PHOTOS?: R2Bucket } | null;
+    env?:
+      | ({ OPENAI_API_KEY?: string; PHOTOS?: R2Bucket } & VapidEnv)
+      | null;
     ctx?: { waitUntil?: (promise: Promise<unknown>) => void };
   };
 }
@@ -37,12 +41,19 @@ function spoonErrorToResponse(error: unknown): never {
 function getCloudflareCtx(context: AppLoadContext): {
   bucket?: R2Bucket;
   env: { OPENAI_API_KEY?: string } | null;
+  vapidEnv: VapidEnv;
   waitUntil?: (promise: Promise<unknown>) => void;
 } {
   const cf = (context as unknown as CloudflareContextLike).cloudflare;
+  const envSource = cf?.env ?? null;
   return {
     bucket: cf?.env?.PHOTOS,
-    env: cf?.env ? { OPENAI_API_KEY: cf.env.OPENAI_API_KEY } : null,
+    env: envSource ? { OPENAI_API_KEY: envSource.OPENAI_API_KEY } : null,
+    vapidEnv: {
+      VAPID_PUBLIC_KEY: envSource?.VAPID_PUBLIC_KEY,
+      VAPID_PRIVATE_KEY: envSource?.VAPID_PRIVATE_KEY,
+      VAPID_SUBJECT: envSource?.VAPID_SUBJECT,
+    },
     waitUntil: cf?.ctx?.waitUntil ? cf.ctx.waitUntil.bind(cf.ctx) : undefined,
   };
 }
@@ -222,13 +233,30 @@ async function handleCreateSpoon(
     cookedAt = parsed;
   }
 
-  const { bucket, env, waitUntil } = getCloudflareCtx(context);
+  const { bucket, env, vapidEnv, waitUntil } = getCloudflareCtx(context);
 
   const result = await createSpoon(
     database,
     { chefId: userId, recipeId, photoFile, note, nextTime, cookedAt },
     { bucket },
   ).catch(spoonErrorToResponse);
+
+  // Notify the recipe owner when someone else cooks their recipe.
+  try {
+    const vapid = getVapidConfig(vapidEnv);
+    const notifyTask = notifySpoonOnMyRecipe(
+      database,
+      { recipeId, spoonerId: userId },
+      { vapid, waitUntil },
+    );
+    if (waitUntil) {
+      waitUntil(notifyTask);
+    } else {
+      await notifyTask;
+    }
+  } catch {
+    // VAPID not configured locally — skip silently.
+  }
 
   if (result.isOriginCook && result.spoon.photoUrl) {
     const recipe = await database.recipe.findUniqueOrThrow({
