@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta property="og:image" content="https://cdn.example.com/recipes-list.jpg">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Recipe",
+      "name": "Salt Cookies",
+      "description": "Briny but bright.",
+      "recipeIngredient": ["1 cup flour", "1 tsp salt"],
+      "recipeInstructions": [
+        { "@type": "HowToStep", "text": "Mix." },
+        { "@type": "HowToStep", "text": "Bake." }
+      ]
+    },
+    {
+      "@type": "Recipe",
+      "name": "Pepper Cookies",
+      "description": "Surprisingly spicy.",
+      "recipeIngredient": ["1 cup flour", "1 tsp black pepper"],
+      "recipeInstructions": [
+        { "@type": "HowToStep", "text": "Mix." },
+        { "@type": "HowToStep", "text": "Bake." }
+      ]
+    }
+  ]
+}
+</script>
+</head>
+<body><h1>Two recipes</h1></body>
+</html>

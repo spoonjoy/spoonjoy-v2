@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta property="og:image" content="https://cdn.example.com/sectioned.jpg">
+<script type="application/ld+json">
+{
+  "@type": "Recipe",
+  "name": "Layered Lasagna",
+  "description": "Sectioned recipe with prep and cook phases.",
+  "recipeYield": "6",
+  "recipeIngredient": [
+    "1 pound ground beef",
+    "12 oz lasagna noodles",
+    "2 cups ricotta"
+  ],
+  "recipeInstructions": [
+    {
+      "@type": "HowToSection",
+      "name": "Prep",
+      "itemListElement": [
+        { "@type": "HowToStep", "text": "Cook noodles." },
+        { "@type": "HowToStep", "text": "Brown beef." }
+      ]
+    },
+    {
+      "@type": "HowToSection",
+      "name": "Assemble",
+      "itemListElement": [
+        { "@type": "HowToStep", "text": "Layer noodles, beef, ricotta." },
+        { "@type": "HowToStep", "text": "Bake 35 minutes at 375F." }
+      ]
+    }
+  ]
+}
+</script>
+</head>
+<body><h1>Layered Lasagna</h1></body>
+</html>
