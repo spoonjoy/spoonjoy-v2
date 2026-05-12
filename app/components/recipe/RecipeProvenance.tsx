@@ -5,6 +5,12 @@ export interface RecipeProvenanceSourceRecipe {
   title: string;
   chefId: string;
   chef: { username: string };
+  /**
+   * When non-null, the source recipe has been soft-deleted; the provenance line
+   * renders as plain text "[deleted recipe]" instead of a link. RRv7 serializes
+   * Dates over the wire, so both Date and ISO strings are accepted.
+   */
+  deletedAt?: Date | string | null;
 }
 
 export interface RecipeProvenanceProps {
@@ -59,17 +65,24 @@ export function RecipeProvenance({ sourceUrl, sourceRecipe }: RecipeProvenancePr
         </p>
       ) : null}
       {hasForked ? (
-        <p>
-          <span>forked from </span>
-          <Link
-            to={`/recipes/${sourceRecipe!.id}`}
-            className="underline hover:text-stone-900 dark:hover:text-stone-100"
-          >
-            <span>{sourceRecipe!.chef.username}</span>
-            <span aria-hidden> · </span>
-            <span title={title}>{displayTitle}</span>
-          </Link>
-        </p>
+        sourceRecipe!.deletedAt ? (
+          <p>
+            <span>forked from </span>
+            <span>[deleted recipe]</span>
+          </p>
+        ) : (
+          <p>
+            <span>forked from </span>
+            <Link
+              to={`/recipes/${sourceRecipe!.id}`}
+              className="underline hover:text-stone-900 dark:hover:text-stone-100"
+            >
+              <span>{sourceRecipe!.chef.username}</span>
+              <span aria-hidden> · </span>
+              <span title={title}>{displayTitle}</span>
+            </Link>
+          </p>
+        )
       ) : null}
     </div>
   );
