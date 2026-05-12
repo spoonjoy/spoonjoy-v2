@@ -510,6 +510,42 @@ describe("fetchOEmbedMetadata — timeout", () => {
   });
 });
 
+describe("fetchOEmbedMetadata — edge cases", () => {
+  it("rejects with code=oembed-failed when response has no body", async () => {
+    // Construct a Response-like with body: null. Body-stream readers can't
+    // read this, so we surface it as oembed-failed.
+    const noBody = {
+      ok: true,
+      status: 200,
+      headers: new Headers({ "content-type": "application/json" }),
+      body: null,
+    } as unknown as Response;
+    await expect(
+      fetchOEmbedMetadata("https://www.youtube.com/watch?v=abc", "youtube", {
+        fetchImpl: mockFetch(noBody),
+      }),
+    ).rejects.toMatchObject({ code: "oembed-failed", status: 502 });
+  });
+
+  it("falls back to global fetch when no fetchImpl is provided", async () => {
+    // Tests both the default-arg `deps = {}` and the `?? fetch` fallback.
+    const fixture = loadFixture("youtube-pasta.json");
+    const spy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(streamingJsonResponse(jsonBody(fixture)));
+    try {
+      const result = await fetchOEmbedMetadata(
+        "https://www.youtube.com/watch?v=abc",
+        "youtube",
+      );
+      expect(result.title).toBe("One-Pot Pasta Recipe");
+      expect(spy).toHaveBeenCalledTimes(1);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});
+
 describe("OEmbedError", () => {
   it("exposes name=OEmbedError and the supplied code/status/message", () => {
     const err = new OEmbedError("video-unavailable", 502, "private");
