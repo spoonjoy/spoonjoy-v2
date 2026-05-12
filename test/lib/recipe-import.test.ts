@@ -102,6 +102,25 @@ function baseDeps(overrides: Partial<ImportRecipeDeps> = {}): ImportRecipeDeps {
   };
 }
 
+function withD1TransactionGuard(database: ImportRecipeDeps["db"]): ImportRecipeDeps["db"] {
+  return new Proxy(database, {
+    get(target, property, receiver) {
+      if (property !== "$transaction") {
+        return Reflect.get(target, property, receiver);
+      }
+
+      return (input: unknown, ...rest: unknown[]) => {
+        if (typeof input === "function") {
+          throw new Error("D1 interactive transactions are not supported");
+        }
+
+        const transaction = Reflect.get(target, property, receiver) as (...args: unknown[]) => unknown;
+        return transaction.apply(target, [input, ...rest]);
+      };
+    },
+  }) as ImportRecipeDeps["db"];
+}
+
 describe("importRecipeFromUrl — extraction paths", () => {
   beforeEach(async () => {
     await cleanupDatabase();
@@ -163,6 +182,22 @@ describe("importRecipeFromUrl — extraction paths", () => {
       });
       // 3 ingredients in the JSON-LD; ingredientParser returns 1 per string.
       expect(ingredients).toHaveLength(3);
+    });
+
+    it("persists without callback-style transactions", async () => {
+      const fixture = await loadFixture("nyt-style-jsonld.html");
+      const chef = await makeChef();
+      const result = await importRecipeFromUrl(
+        { url: "https://example.com/r", chefId: chef.id },
+        baseDeps({
+          db: withD1TransactionGuard(db),
+          fetchImpl: makeFetchImpl(fixture),
+        }),
+      );
+
+      await expect(db.recipe.findUnique({ where: { id: result.recipeId! } })).resolves.toMatchObject({
+        title: "Pasta al Limone",
+      });
     });
 
     it("returns formatted recipe + recipeId on success", async () => {

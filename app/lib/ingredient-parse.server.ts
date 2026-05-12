@@ -5,8 +5,8 @@
  * (e.g., "2 cups flour") into structured data (quantity, unit, ingredient name).
  */
 
-import OpenAI from 'openai'
 import { z } from 'zod'
+import { createOpenAIClient } from '~/lib/openai-client.server'
 
 export const DEFAULT_INGREDIENT_PARSE_PROVIDER = 'openai'
 export const DEFAULT_INGREDIENT_PARSE_MODEL = 'gpt-4o-mini'
@@ -255,7 +255,7 @@ export async function parseIngredients(
     throw new IngredientParseError('OpenAI API key is required')
   }
 
-  const openai = new OpenAI({
+  const openai = createOpenAIClient({
     apiKey: config.apiKey,
     timeout: config.timeoutMs,
     maxRetries: config.maxRetries,

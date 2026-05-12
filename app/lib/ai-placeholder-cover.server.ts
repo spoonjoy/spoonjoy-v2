@@ -1,11 +1,11 @@
 import type { PrismaClient } from "@prisma/client";
-import OpenAI from "openai";
 import {
   createOpenAIImageRunner,
   generatePlaceholderImage,
   type ImageGenRunner,
 } from "~/lib/image-gen.server";
 import { tryConsumeImageGenQuota } from "~/lib/image-gen-ledger.server";
+import { createOpenAIClient } from "~/lib/openai-client.server";
 
 export interface SchedulePlaceholderInput {
   db: PrismaClient;
@@ -25,14 +25,7 @@ function createDefaultRunner(
   env: { OPENAI_API_KEY?: string } | null | undefined,
 ): ImageGenRunner | null {
   if (!env?.OPENAI_API_KEY) return null;
-  // Cloudflare Workers and other workerd-like runtimes are detected as browser
-  // environments by the OpenAI SDK. The dangerouslyAllowBrowser flag is required
-  // because the key never reaches the browser — it is read from a Worker secret
-  // binding (Cloudflare env), so the "browser" warning does not apply here.
-  const client = new OpenAI({
-    apiKey: env.OPENAI_API_KEY,
-    dangerouslyAllowBrowser: true,
-  });
+  const client = createOpenAIClient({ apiKey: env.OPENAI_API_KEY });
   return createOpenAIImageRunner(client as never);
 }
 

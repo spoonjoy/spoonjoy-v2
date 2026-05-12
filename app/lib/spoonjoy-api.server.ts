@@ -792,61 +792,57 @@ const createRecipeTool: SpoonjoyApiOperation = {
     const title = requiredString(args, "title");
     const steps = parseSteps(args.steps);
 
-    const recipe = await context.db.$transaction(async (tx) => {
-      const owner = await getOrCreateOwner(tx, email);
-      const titleUniqueness = await validateActiveRecipeTitleUnique(tx, {
-        chefId: owner.id,
-        title,
-      });
-      if (!titleUniqueness.valid) throw new Error(titleUniqueness.error);
+    const owner = await getOrCreateOwner(context.db, email);
+    const titleUniqueness = await validateActiveRecipeTitleUnique(context.db, {
+      chefId: owner.id,
+      title,
+    });
+    if (!titleUniqueness.valid) throw new Error(titleUniqueness.error);
 
-      const created = await tx.recipe.create({
+    const created = await context.db.recipe.create({
+      data: {
+        title,
+        description: optionalString(args.description) ?? null,
+        servings: optionalString(args.servings) ?? null,
+        sourceUrl: optionalString(args.sourceUrl) ?? null,
+        chefId: owner.id,
+      },
+    });
+
+    for (const [index, step] of steps.entries()) {
+      const stepNum = index + 1;
+      await context.db.recipeStep.create({
         data: {
-          title,
-          description: optionalString(args.description) ?? null,
-          servings: optionalString(args.servings) ?? null,
-          sourceUrl: optionalString(args.sourceUrl) ?? null,
-          chefId: owner.id,
+          recipeId: created.id,
+          stepNum,
+          stepTitle: step.title ?? null,
+          description: step.description,
+          duration: step.duration ?? null,
         },
       });
 
-      for (const [index, step] of steps.entries()) {
-        const stepNum = index + 1;
-        await tx.recipeStep.create({
+      for (const ingredient of step.ingredients) {
+        const unit = await getOrCreateUnit(context.db, ingredient.unit);
+        const ingredientRef = await getOrCreateIngredientRef(context.db, ingredient.name);
+        await context.db.ingredient.create({
           data: {
             recipeId: created.id,
             stepNum,
-            stepTitle: step.title ?? null,
-            description: step.description,
-            duration: step.duration ?? null,
+            quantity: ingredient.quantity,
+            unitId: unit.id,
+            ingredientRefId: ingredientRef.id,
           },
         });
-
-        for (const ingredient of step.ingredients) {
-          const unit = await getOrCreateUnit(tx, ingredient.unit);
-          const ingredientRef = await getOrCreateIngredientRef(tx, ingredient.name);
-          await tx.ingredient.create({
-            data: {
-              recipeId: created.id,
-              stepNum,
-              quantity: ingredient.quantity,
-              unitId: unit.id,
-              ingredientRefId: ingredientRef.id,
-            },
-          });
-        }
       }
+    }
 
-      const fullRecipe = await tx.recipe.findUniqueOrThrow({
-        where: { id: created.id },
-        include: {
-          chef: { select: { id: true, email: true, username: true } },
-          covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
-          steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
-        },
-      });
-
-      return fullRecipe;
+    const recipe = await context.db.recipe.findUniqueOrThrow({
+      where: { id: created.id },
+      include: {
+        chef: { select: { id: true, email: true, username: true } },
+        covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
+        steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
+      },
     });
 
     return json({ recipe: formatRecipe(recipe) });
@@ -869,60 +865,57 @@ const addRecipeToShoppingListTool: SpoonjoyApiOperation = {
     const email = requireOwnerEmail(args, context);
     const recipeId = requiredString(args, "recipeId");
 
-    const result = await context.db.$transaction(async (tx) => {
-      const owner = await getOrCreateOwner(tx, email);
-      const shoppingList = await getOrCreateShoppingList(tx, owner.id);
-      const ingredients = await tx.ingredient.findMany({
-        where: { recipeId },
-        include: { unit: true, ingredientRef: true },
+    const owner = await getOrCreateOwner(context.db, email);
+    const shoppingList = await getOrCreateShoppingList(context.db, owner.id);
+    const ingredients = await context.db.ingredient.findMany({
+      where: { recipeId },
+      include: { unit: true, ingredientRef: true },
+    });
+
+    let created = 0;
+    let updated = 0;
+
+    for (const ingredient of ingredients) {
+      const existing = await context.db.shoppingListItem.findUnique({
+        where: {
+          shoppingListId_unitId_ingredientRefId: {
+            shoppingListId: shoppingList.id,
+            unitId: ingredient.unitId,
+            ingredientRefId: ingredient.ingredientRefId,
+          },
+        },
       });
 
-      let created = 0;
-      let updated = 0;
-
-      for (const ingredient of ingredients) {
-        const existing = await tx.shoppingListItem.findUnique({
-          where: {
-            shoppingListId_unitId_ingredientRefId: {
-              shoppingListId: shoppingList.id,
-              unitId: ingredient.unitId,
-              ingredientRefId: ingredient.ingredientRefId,
-            },
+      if (existing) {
+        updated += 1;
+        await context.db.shoppingListItem.update({
+          where: { id: existing.id },
+          data: {
+            quantity: (existing.quantity ?? 0) + ingredient.quantity,
+            checked: false,
+            checkedAt: null,
+            deletedAt: null,
           },
         });
-
-        if (existing) {
-          updated += 1;
-          await tx.shoppingListItem.update({
-            where: { id: existing.id },
-            data: {
-              quantity: (existing.quantity ?? 0) + ingredient.quantity,
-              checked: false,
-              checkedAt: null,
-              deletedAt: null,
-            },
-          });
-        } else {
-          created += 1;
-          await tx.shoppingListItem.create({
-            data: {
-              shoppingListId: shoppingList.id,
-              quantity: ingredient.quantity,
-              unitId: ingredient.unitId,
-              ingredientRefId: ingredient.ingredientRefId,
-              sortIndex: await nextSortIndex(tx, shoppingList.id),
-            },
-          });
-        }
+      } else {
+        created += 1;
+        await context.db.shoppingListItem.create({
+          data: {
+            shoppingListId: shoppingList.id,
+            quantity: ingredient.quantity,
+            unitId: ingredient.unitId,
+            ingredientRefId: ingredient.ingredientRefId,
+            sortIndex: await nextSortIndex(context.db, shoppingList.id),
+          },
+        });
       }
+    }
 
-      const reloaded = await tx.shoppingList.findUniqueOrThrow({
-        where: { id: shoppingList.id },
-        include: { items: { include: { unit: true, ingredientRef: true } } },
-      });
-
-      return { created, updated, shoppingList: reloaded };
-    });
+    const result = {
+      created,
+      updated,
+      shoppingList: await reloadShoppingList(context.db, shoppingList.id),
+    };
 
     return json({
       created: result.created,
@@ -1001,26 +994,21 @@ const createCookbookTool: SpoonjoyApiOperation = {
     const email = requireOwnerEmail(args, context);
     const title = requiredString(args, "title");
 
-    const result = await context.db.$transaction(async (tx) => {
-      const owner = await getOrCreateOwner(tx, email);
-      const existing = await tx.cookbook.findFirst({
-        where: { authorId: owner.id, title },
-        include: cookbookRecipeInclude,
-      });
-
-      if (existing) {
-        return { created: false, cookbook: existing };
-      }
-
-      const created = await tx.cookbook.create({
-        data: { authorId: owner.id, title },
-      });
-
-      return {
-        created: true,
-        cookbook: await reloadOwnerCookbook(tx, owner.id, created.id),
-      };
+    const owner = await getOrCreateOwner(context.db, email);
+    const existing = await context.db.cookbook.findFirst({
+      where: { authorId: owner.id, title },
+      include: cookbookRecipeInclude,
     });
+    const result = existing
+      ? { created: false, cookbook: existing }
+      : {
+          created: true,
+          cookbook: await reloadOwnerCookbook(
+            context.db,
+            owner.id,
+            (await context.db.cookbook.create({ data: { authorId: owner.id, title } })).id,
+          ),
+        };
 
     return json({ created: result.created, cookbook: formatCookbook(result.cookbook) });
   },
@@ -1123,23 +1111,20 @@ const removeRecipeFromCookbookTool: SpoonjoyApiOperation = {
     const email = requireOwnerEmail(args, context);
     const recipeId = requiredString(args, "recipeId");
 
-    const result = await context.db.$transaction(async (tx) => {
-      const owner = await getOrCreateOwner(tx, email);
-      const cookbook = await findOwnerCookbook(tx, owner.id, args);
-      if (!cookbook) throw new Error("Cookbook not found");
+    const owner = await getOrCreateOwner(context.db, email);
+    const cookbook = await findOwnerCookbook(context.db, owner.id, args);
+    if (!cookbook) throw new Error("Cookbook not found");
 
-      const deleted = await tx.recipeInCookbook.deleteMany({
-        where: {
-          cookbookId: cookbook.id,
-          recipeId,
-        },
-      });
-
-      return {
-        removed: deleted.count > 0,
-        cookbook: await reloadOwnerCookbook(tx, owner.id, cookbook.id),
-      };
+    const deleted = await context.db.recipeInCookbook.deleteMany({
+      where: {
+        cookbookId: cookbook.id,
+        recipeId,
+      },
     });
+    const result = {
+      removed: deleted.count > 0,
+      cookbook: await reloadOwnerCookbook(context.db, owner.id, cookbook.id),
+    };
 
     return json({ removed: result.removed, cookbook: formatCookbook(result.cookbook) });
   },
@@ -1169,51 +1154,50 @@ const addShoppingListItemTool: SpoonjoyApiOperation = {
     const categoryKey = optionalString(args.categoryKey) ?? null;
     const iconKey = optionalString(args.iconKey) ?? null;
 
-    const result = await context.db.$transaction(async (tx) => {
-      const owner = await getOrCreateOwner(tx, email);
-      const shoppingList = await getOrCreateShoppingList(tx, owner.id);
-      const ingredientRef = await getOrCreateIngredientRef(tx, name);
-      const unit = unitName ? await getOrCreateUnit(tx, unitName) : null;
-      const existing = await tx.shoppingListItem.findFirst({
-        where: {
-          shoppingListId: shoppingList.id,
-          ingredientRefId: ingredientRef.id,
-          unitId: unit?.id ?? null,
+    const owner = await getOrCreateOwner(context.db, email);
+    const shoppingList = await getOrCreateShoppingList(context.db, owner.id);
+    const ingredientRef = await getOrCreateIngredientRef(context.db, name);
+    const unit = unitName ? await getOrCreateUnit(context.db, unitName) : null;
+    const existing = await context.db.shoppingListItem.findFirst({
+      where: {
+        shoppingListId: shoppingList.id,
+        ingredientRefId: ingredientRef.id,
+        unitId: unit?.id ?? null,
+      },
+    });
+
+    let result: { created: number; updated: number; shoppingList: ShoppingListWithItems };
+    if (existing) {
+      const shouldMoveToEnd = Boolean(existing.checked || existing.checkedAt || existing.deletedAt);
+      await context.db.shoppingListItem.update({
+        where: { id: existing.id },
+        data: {
+          quantity: quantity === null ? existing.quantity : (existing.quantity ?? 0) + quantity,
+          checked: false,
+          checkedAt: null,
+          deletedAt: null,
+          sortIndex: shouldMoveToEnd ? await nextSortIndex(context.db, shoppingList.id) : existing.sortIndex,
+          categoryKey: categoryKey ?? existing.categoryKey,
+          iconKey: iconKey ?? existing.iconKey,
         },
       });
 
-      if (existing) {
-        const shouldMoveToEnd = Boolean(existing.checked || existing.checkedAt || existing.deletedAt);
-        await tx.shoppingListItem.update({
-          where: { id: existing.id },
-          data: {
-            quantity: quantity === null ? existing.quantity : (existing.quantity ?? 0) + quantity,
-            checked: false,
-            checkedAt: null,
-            deletedAt: null,
-            sortIndex: shouldMoveToEnd ? await nextSortIndex(tx, shoppingList.id) : existing.sortIndex,
-            categoryKey: categoryKey ?? existing.categoryKey,
-            iconKey: iconKey ?? existing.iconKey,
-          },
-        });
-
-        return { created: 0, updated: 1, shoppingList: await reloadShoppingList(tx, shoppingList.id) };
-      }
-
-      await tx.shoppingListItem.create({
+      result = { created: 0, updated: 1, shoppingList: await reloadShoppingList(context.db, shoppingList.id) };
+    } else {
+      await context.db.shoppingListItem.create({
         data: {
           shoppingListId: shoppingList.id,
           quantity,
           unitId: unit?.id ?? null,
           ingredientRefId: ingredientRef.id,
-          sortIndex: await nextSortIndex(tx, shoppingList.id),
+          sortIndex: await nextSortIndex(context.db, shoppingList.id),
           categoryKey,
           iconKey,
         },
       });
 
-      return { created: 1, updated: 0, shoppingList: await reloadShoppingList(tx, shoppingList.id) };
-    });
+      result = { created: 1, updated: 0, shoppingList: await reloadShoppingList(context.db, shoppingList.id) };
+    }
 
     return json({
       created: result.created,
@@ -1241,25 +1225,23 @@ const setShoppingListItemCheckedTool: SpoonjoyApiOperation = {
     const itemId = requiredString(args, "itemId");
     const checked = requiredBoolean(args, "checked");
 
-    const result = await context.db.$transaction(async (tx) => {
-      const owner = await getOrCreateOwner(tx, email);
-      const shoppingList = await getOrCreateShoppingList(tx, owner.id);
-      const item = await tx.shoppingListItem.findFirst({
-        where: { id: itemId, shoppingListId: shoppingList.id, deletedAt: null },
-      });
-      if (!item) throw new Error("Shopping list item not found");
-
-      await tx.shoppingListItem.update({
-        where: { id: item.id },
-        data: {
-          checked,
-          checkedAt: checked ? new Date() : null,
-          sortIndex: checked ? await nextSortIndex(tx, shoppingList.id) : item.sortIndex,
-        },
-      });
-
-      return reloadShoppingList(tx, shoppingList.id);
+    const owner = await getOrCreateOwner(context.db, email);
+    const shoppingList = await getOrCreateShoppingList(context.db, owner.id);
+    const item = await context.db.shoppingListItem.findFirst({
+      where: { id: itemId, shoppingListId: shoppingList.id, deletedAt: null },
     });
+    if (!item) throw new Error("Shopping list item not found");
+
+    await context.db.shoppingListItem.update({
+      where: { id: item.id },
+      data: {
+        checked,
+        checkedAt: checked ? new Date() : null,
+        sortIndex: checked ? await nextSortIndex(context.db, shoppingList.id) : item.sortIndex,
+      },
+    });
+
+    const result = await reloadShoppingList(context.db, shoppingList.id);
 
     return json({ shoppingList: formatShoppingList(result) });
   },
@@ -1281,23 +1263,21 @@ const removeShoppingListItemTool: SpoonjoyApiOperation = {
     const email = requireOwnerEmail(args, context);
     const itemId = requiredString(args, "itemId");
 
-    const result = await context.db.$transaction(async (tx) => {
-      const owner = await getOrCreateOwner(tx, email);
-      const shoppingList = await getOrCreateShoppingList(tx, owner.id);
-      const item = await tx.shoppingListItem.findFirst({
-        where: { id: itemId, shoppingListId: shoppingList.id },
-      });
-      if (!item) throw new Error("Shopping list item not found");
-
-      if (!item.deletedAt) {
-        await tx.shoppingListItem.update({
-          where: { id: item.id },
-          data: { deletedAt: new Date() },
-        });
-      }
-
-      return reloadShoppingList(tx, shoppingList.id);
+    const owner = await getOrCreateOwner(context.db, email);
+    const shoppingList = await getOrCreateShoppingList(context.db, owner.id);
+    const item = await context.db.shoppingListItem.findFirst({
+      where: { id: itemId, shoppingListId: shoppingList.id },
     });
+    if (!item) throw new Error("Shopping list item not found");
+
+    if (!item.deletedAt) {
+      await context.db.shoppingListItem.update({
+        where: { id: item.id },
+        data: { deletedAt: new Date() },
+      });
+    }
+
+    const result = await reloadShoppingList(context.db, shoppingList.id);
 
     return json({ shoppingList: formatShoppingList(result) });
   },

@@ -1,16 +1,12 @@
 /**
  * LLM fallback extractor for recipe-import.
  *
- * Mirrors `ingredient-parse.server.ts`'s pattern of inlining `new OpenAI({...})`
- * per call. D-008 inch-worm discovery tracks centralizing this into a shared
- * `createOpenAIClient` factory across I2 prep work.
- *
  * The runner is dependency-injectable via `clientFactory` so unit tests never
  * touch a real OpenAI client and no real OpenAI calls occur.
  */
 
-import OpenAI from "openai";
 import { z } from "zod";
+import { createOpenAIClient } from "~/lib/openai-client.server";
 
 export const DEFAULT_RECIPE_LLM_MODEL = "gpt-4o-mini";
 export const DEFAULT_RECIPE_LLM_TIMEOUT_MS = 30_000;
@@ -162,7 +158,7 @@ function defaultClientFactory(config: {
   apiKey: string;
   timeout: number;
 }): OpenAIRecipeLlmClient {
-  return new OpenAI({
+  return createOpenAIClient({
     apiKey: config.apiKey,
     timeout: config.timeout,
   }) as unknown as OpenAIRecipeLlmClient;

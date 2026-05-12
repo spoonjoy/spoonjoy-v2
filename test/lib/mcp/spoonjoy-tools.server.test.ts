@@ -388,20 +388,42 @@ describe("spoonjoy MCP tools", () => {
     });
   });
 
-  it("adds recipes to cookbooks without callback-style transactions", async () => {
-    const cookbook = parseJson(await callSpoonjoyMcpTool("create_cookbook", {
-      title: "D1 Safe Menus",
-    }, context));
-    const recipe = parseJson(await callSpoonjoyMcpTool("create_recipe", {
-      title: "D1 Safe Soup",
-      description: "Soup for D1 runtime parity",
-    }, context));
+  it("runs owner-scoped write tools without callback-style transactions", async () => {
     const guardedContext = {
       ...context,
       db: withD1TransactionGuard(context.db),
     };
 
+    const cookbook = parseJson(await callSpoonjoyMcpTool("create_cookbook", {
+      title: "D1 Safe Menus",
+    }, guardedContext));
+    const recipe = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+      title: "D1 Safe Soup",
+      description: "Soup for D1 runtime parity",
+      steps: [{ description: "Simmer", ingredients: [{ name: "Carrot", quantity: 2, unit: "Each" }] }],
+    }, guardedContext));
     const added = parseJson(await callSpoonjoyMcpTool("add_recipe_to_cookbook", {
+      cookbookId: cookbook.cookbook.id,
+      recipeId: recipe.recipe.id,
+    }, guardedContext));
+    const fromRecipe = parseJson(await callSpoonjoyMcpTool("add_recipe_to_shopping_list", {
+      recipeId: recipe.recipe.id,
+    }, guardedContext));
+    const manualItem = parseJson(await callSpoonjoyMcpTool("add_shopping_list_item", {
+      name: "Milk",
+      quantity: 1,
+      unit: "Gallon",
+    }, guardedContext));
+    const milkItem = manualItem.shoppingList.items.find((item: { name: string }) => item.name === "milk");
+    if (!milkItem) throw new Error("Expected milk item");
+    const checked = parseJson(await callSpoonjoyMcpTool("set_shopping_list_item_checked", {
+      itemId: milkItem.id,
+      checked: true,
+    }, guardedContext));
+    const removedItem = parseJson(await callSpoonjoyMcpTool("remove_shopping_list_item", {
+      itemId: milkItem.id,
+    }, guardedContext));
+    const removedRecipe = parseJson(await callSpoonjoyMcpTool("remove_recipe_from_cookbook", {
       cookbookId: cookbook.cookbook.id,
       recipeId: recipe.recipe.id,
     }, guardedContext));
@@ -414,6 +436,10 @@ describe("spoonjoy MCP tools", () => {
         recipes: [{ recipe: { id: recipe.recipe.id, title: "D1 Safe Soup" } }],
       },
     });
+    expect(fromRecipe).toMatchObject({ created: 1, updated: 0 });
+    expect(checked.shoppingList.items).toContainEqual(expect.objectContaining({ name: "milk", checked: true }));
+    expect(removedItem.shoppingList.items).not.toContainEqual(expect.objectContaining({ name: "milk" }));
+    expect(removedRecipe).toMatchObject({ removed: true, cookbook: { recipeCount: 0, recipes: [] } });
   });
 
   it("keeps cookbook MCP reads and writes scoped to the owning agent", async () => {

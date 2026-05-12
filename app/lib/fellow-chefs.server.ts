@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
+import { toDate, toNumber } from "~/lib/d1-coerce.server";
 
 /**
  * Derived chef-graph helpers.
@@ -59,17 +60,6 @@ function normalizeLimit(input: number | undefined): number {
 
 function normalizeOffset(input: number | undefined): number {
   return input ?? 0;
-}
-
-// D1/SQLite aggregate returns: SUM/COUNT come back as BigInt; MAX(datetimeCol)
-// also comes back as BigInt (milliseconds since epoch) from the local Prisma
-// SQLite client. Coerce both at the JS boundary.
-function toNumber(value: bigint): number {
-  return Number(value);
-}
-
-function toDate(value: bigint): Date {
-  return new Date(Number(value));
 }
 
 type Side = "viewer" | "chef";

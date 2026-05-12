@@ -1152,6 +1152,7 @@ describe('Ingredient Parsing', () => {
           apiKey: TEST_API_KEY,
           timeout: 12000,
           maxRetries: 0,
+          dangerouslyAllowBrowser: true,
         })
         expect(mockCreate).toHaveBeenCalledWith(
           expect.objectContaining({

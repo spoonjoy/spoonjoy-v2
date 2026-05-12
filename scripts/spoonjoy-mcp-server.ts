@@ -1,7 +1,8 @@
 import { createInterface } from "node:readline";
 import { authenticateApiToken, principalFromUserEmail, type ApiPrincipal } from "../app/lib/api-auth.server";
 import { getLocalDb } from "../app/lib/db.server";
-import { handleJsonRpcLine, type JsonRpcToolRouter } from "../app/lib/mcp/json-rpc.server";
+import { createJsonRpcLineSession } from "../app/lib/mcp/json-rpc-stdio.server";
+import type { JsonRpcToolRouter } from "../app/lib/mcp/json-rpc.server";
 import { callSpoonjoyMcpTool, listSpoonjoyMcpTools } from "../app/lib/mcp/spoonjoy-tools.server";
 
 async function getProtocolSafeDb() {
@@ -36,19 +37,19 @@ const router: JsonRpcToolRouter = {
 
 const reader = createInterface({ input: process.stdin });
 
-reader.on("line", (line) => {
-  handleJsonRpcLine(line, router)
-    .then((response) => {
-      if (response) process.stdout.write(`${JSON.stringify(response)}\n`);
-    })
-    .catch((error: unknown) => {
-      const message = error instanceof Error ? error.message : String(error);
-      process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id: null, error: { code: -32603, message } })}\n`);
-    });
+const session = createJsonRpcLineSession(router, {
+  write(line) {
+    process.stdout.write(line);
+  },
+  async disconnect() {
+    await db.$disconnect();
+  },
 });
 
+reader.on("line", session.onLine);
+
 reader.on("close", () => {
-  db.$disconnect()
+  session.close()
     .catch(() => undefined)
     .finally(() => process.exit(0));
 });

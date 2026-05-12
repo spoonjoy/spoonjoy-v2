@@ -392,48 +392,46 @@ async function persistRecipe(
     for (const p of parsed) allIngredients.push(p);
   }
 
-  return db.$transaction(async (tx) => {
-    const created = await tx.recipe.create({
+  const created = await db.recipe.create({
+    data: {
+      title,
+      description: draft.description,
+      servings: draft.servings,
+      sourceUrl: draft.sourceUrl,
+      chefId,
+    },
+  });
+
+  for (let i = 0; i < draft.steps.length; i++) {
+    await db.recipeStep.create({
       data: {
-        title,
-        description: draft.description,
-        servings: draft.servings,
-        sourceUrl: draft.sourceUrl,
-        chefId,
+        recipeId: created.id,
+        stepNum: i + 1,
+        description: draft.steps[i],
       },
     });
+  }
 
-    for (let i = 0; i < draft.steps.length; i++) {
-      await tx.recipeStep.create({
-        data: {
-          recipeId: created.id,
-          stepNum: i + 1,
-          description: draft.steps[i],
-        },
-      });
-    }
-
-    // Attach all ingredients to step 1.
-    for (const ingredient of allIngredients) {
-      const unit = await getOrCreateUnit(tx, ingredient.unit);
-      const ref = await getOrCreateIngredientRef(tx, ingredient.ingredientName);
-      await tx.ingredient.create({
-        data: {
-          recipeId: created.id,
-          stepNum: 1,
-          quantity: ingredient.quantity,
-          unitId: unit.id,
-          ingredientRefId: ref.id,
-        },
-      });
-    }
-
-    const full = await tx.recipe.findUniqueOrThrow({
-      where: { id: created.id },
-      include: recipeInclude,
+  // Attach all ingredients to step 1.
+  for (const ingredient of allIngredients) {
+    const unit = await getOrCreateUnit(db, ingredient.unit);
+    const ref = await getOrCreateIngredientRef(db, ingredient.ingredientName);
+    await db.ingredient.create({
+      data: {
+        recipeId: created.id,
+        stepNum: 1,
+        quantity: ingredient.quantity,
+        unitId: unit.id,
+        ingredientRefId: ref.id,
+      },
     });
-    return { id: created.id, recipe: full, title };
+  }
+
+  const full = await db.recipe.findUniqueOrThrow({
+    where: { id: created.id },
+    include: recipeInclude,
   });
+  return { id: created.id, recipe: full, title };
 }
 
 const COVER_FETCH_TIMEOUT_MS = 15_000;
