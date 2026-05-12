@@ -75,8 +75,24 @@ describe("isBlockedHost", () => {
     ["8.8.8.8"],
     ["2606:4700::1"],
     ["example.com"],
+    ["a.b.c.d"], // IPv4-shaped but non-numeric → falls through
+    ["999.0.0.0"], // numeric > 255 → falls through
+    ["g::1"], // invalid IPv6 chars → falls through
+    ["2001:db8::1234"], // public IPv6 with `::`
+    ["2606:4700:4700:0:0:0:0:1111"], // public IPv6 with no `::` (full 8 hextets)
+    ["1:2:3:4:5:6:7:8:9:10"], // too many hextets
+    ["12345::1"], // hextet too long
+    ["1:2:3:4:5:6:7"], // no `::` and fewer than 8 hextets
   ])("returns false for public host %s", (host) => {
     expect(isBlockedHost(host)).toBe(false);
+  });
+
+  it("returns true for empty hostname", () => {
+    expect(isBlockedHost("")).toBe(true);
+  });
+
+  it("returns true for bracketed IPv6 [fe80::1]", () => {
+    expect(isBlockedHost("[fe80::1]")).toBe(true);
   });
 });
 
@@ -288,6 +304,92 @@ describe("fetchRecipeHtml — og:image extraction", () => {
     });
     expect(result.url).toBe("https://example.com/r");
     expect(result.finalUrl).toBe("https://example.com/final");
+  });
+});
+
+describe("fetchRecipeHtml — default fetchImpl", () => {
+  it("falls back to global fetch when deps.fetchImpl is undefined", async () => {
+    const stub = vi.fn(async () => streamingResponse(htmlBody("<html>ok</html>")));
+    const originalFetch = globalThis.fetch;
+    (globalThis as { fetch: typeof fetch }).fetch = stub as unknown as typeof fetch;
+    try {
+      const result = await fetchRecipeHtml("https://example.com/r");
+      expect(result.html).toBe("<html>ok</html>");
+      expect(stub).toHaveBeenCalled();
+    } finally {
+      (globalThis as { fetch: typeof fetch }).fetch = originalFetch;
+    }
+  });
+});
+
+describe("fetchRecipeHtml — non-og meta tags", () => {
+  it("skips meta tags that are not og:image", async () => {
+    const html =
+      '<html><head>' +
+      '<meta charset="utf-8">' +
+      '<meta name="viewport" content="width=device-width">' +
+      '<meta property="og:image" content="https://cdn.example.com/a.jpg">' +
+      "</head></html>";
+    const result = await fetchRecipeHtml("https://example.com/r", {
+      fetchImpl: mockFetch(streamingResponse(htmlBody(html))),
+    });
+    expect(result.ogImageUrl).toBe("https://cdn.example.com/a.jpg");
+  });
+});
+
+describe("fetchRecipeHtml — non-abort fetch error", () => {
+  it("re-throws non-AbortError from fetch", async () => {
+    const err = new TypeError("network down");
+    await expect(
+      fetchRecipeHtml("https://example.com/r", { fetchImpl: mockFetch(err) }),
+    ).rejects.toBe(err);
+  });
+});
+
+describe("fetchRecipeHtml — malformed og:image", () => {
+  it("returns ogImageUrl=null when og:image content is empty string", async () => {
+    const html =
+      '<html><head><meta property="og:image" content=""></head></html>';
+    const result = await fetchRecipeHtml("https://example.com/r", {
+      fetchImpl: mockFetch(streamingResponse(htmlBody(html))),
+    });
+    expect(result.ogImageUrl).toBeNull();
+  });
+
+  it("falls back to null when og:image content cannot be parsed against finalUrl", async () => {
+    // Spy on URL constructor: relative parse against http: URL is generally valid
+    // unless we feed an utterly invalid scheme-relative target like a malformed
+    // protocol. The implementation catches URL parse errors. We craft a payload
+    // that asserts the catch path executes.
+    const html =
+      '<html><head><meta property="og:image" content="http://[::g]/"></head></html>';
+    const result = await fetchRecipeHtml("https://example.com/r", {
+      fetchImpl: mockFetch(streamingResponse(htmlBody(html))),
+    });
+    expect(result.ogImageUrl).toBeNull();
+  });
+});
+
+describe("fetchRecipeHtml — finalUrl fallback", () => {
+  it("uses input URL when response.url is empty", async () => {
+    const headers = new Headers();
+    headers.set("content-type", "text/html");
+    const response = {
+      ok: true,
+      status: 200,
+      url: "",
+      headers,
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode("<html/>"));
+          controller.close();
+        },
+      }),
+    } as unknown as Response;
+    const result = await fetchRecipeHtml("https://example.com/r", {
+      fetchImpl: mockFetch(response),
+    });
+    expect(result.finalUrl).toBe("https://example.com/r");
   });
 });
 
