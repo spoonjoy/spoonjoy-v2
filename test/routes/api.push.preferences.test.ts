@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { Request as UndiciRequest } from "undici";
 import { action } from "~/routes/api.push.preferences";
 import { getLocalDb } from "~/lib/db.server";
 import { sessionStorage } from "~/lib/session.server";
@@ -32,7 +33,7 @@ afterEach(async () => {
 
 describe("PATCH /api/push/preferences", () => {
   it("returns 401 when not authenticated", async () => {
-    const request = new Request("http://localhost/api/push/preferences", {
+    const request = new UndiciRequest("http://localhost/api/push/preferences", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ notifySpoonOnMyRecipe: false }),
@@ -47,7 +48,7 @@ describe("PATCH /api/push/preferences", () => {
 
     const response = await action(
       routeArgs(
-        new Request("http://localhost/api/push/preferences", {
+        new UndiciRequest("http://localhost/api/push/preferences", {
           method: "PATCH",
           headers: { "Content-Type": "application/json", Cookie: cookie },
           body: JSON.stringify({ notifySpoonOnMyRecipe: false }),
@@ -79,7 +80,7 @@ describe("PATCH /api/push/preferences", () => {
 
     const response = await action(
       routeArgs(
-        new Request("http://localhost/api/push/preferences", {
+        new UndiciRequest("http://localhost/api/push/preferences", {
           method: "PATCH",
           headers: { "Content-Type": "application/json", Cookie: cookie },
           body: JSON.stringify({ notifySpoonOnMyRecipe: true }),
@@ -100,7 +101,7 @@ describe("PATCH /api/push/preferences", () => {
     const cookie = await sessionCookie(user.id);
     const response = await action(
       routeArgs(
-        new Request("http://localhost/api/push/preferences", {
+        new UndiciRequest("http://localhost/api/push/preferences", {
           method: "PATCH",
           headers: { "Content-Type": "application/json", Cookie: cookie },
           body: JSON.stringify({ notifyForkOfMyRecipe: false }),
@@ -122,7 +123,7 @@ describe("PATCH /api/push/preferences", () => {
     const cookie = await sessionCookie(user.id);
     const response = await action(
       routeArgs(
-        new Request("http://localhost/api/push/preferences", {
+        new UndiciRequest("http://localhost/api/push/preferences", {
           method: "PATCH",
           headers: { "Content-Type": "application/json", Cookie: cookie },
           body: "not json",
@@ -137,7 +138,7 @@ describe("PATCH /api/push/preferences", () => {
     const cookie = await sessionCookie(user.id);
     const response = await action(
       routeArgs(
-        new Request("http://localhost/api/push/preferences", {
+        new UndiciRequest("http://localhost/api/push/preferences", {
           method: "PATCH",
           headers: { "Content-Type": "application/json", Cookie: cookie },
           body: JSON.stringify({ notifySpoonOnMyRecipe: false, someBogus: true }),
@@ -152,7 +153,7 @@ describe("PATCH /api/push/preferences", () => {
     const cookie = await sessionCookie(user.id);
     const response = await action(
       routeArgs(
-        new Request("http://localhost/api/push/preferences", {
+        new UndiciRequest("http://localhost/api/push/preferences", {
           method: "PATCH",
           headers: { "Content-Type": "application/json", Cookie: cookie },
           body: JSON.stringify({ notifySpoonOnMyRecipe: "yes please" }),
@@ -167,7 +168,7 @@ describe("PATCH /api/push/preferences", () => {
     const cookie = await sessionCookie(user.id);
     const response = await action(
       routeArgs(
-        new Request("http://localhost/api/push/preferences", {
+        new UndiciRequest("http://localhost/api/push/preferences", {
           method: "DELETE",
           headers: { Cookie: cookie },
         }),

@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { Request as UndiciRequest } from "undici";
 import { action } from "~/routes/api.push.subscriptions";
 import { getLocalDb } from "~/lib/db.server";
 import { sessionStorage } from "~/lib/session.server";
@@ -32,7 +33,7 @@ afterEach(async () => {
 
 describe("POST /api/push/subscriptions", () => {
   it("returns 401 when not authenticated", async () => {
-    const request = new Request("http://localhost/api/push/subscriptions", {
+    const request = new UndiciRequest("http://localhost/api/push/subscriptions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ endpoint: "https://e", keys: { p256dh: "p", auth: "a" } }),
@@ -44,7 +45,7 @@ describe("POST /api/push/subscriptions", () => {
   it("returns 400 on missing endpoint", async () => {
     const user = await createUser();
     const cookie = await sessionCookie(user.id);
-    const request = new Request("http://localhost/api/push/subscriptions", {
+    const request = new UndiciRequest("http://localhost/api/push/subscriptions", {
       method: "POST",
       headers: { "Content-Type": "application/json", Cookie: cookie },
       body: JSON.stringify({ keys: { p256dh: "p", auth: "a" } }),
@@ -56,7 +57,7 @@ describe("POST /api/push/subscriptions", () => {
   it("returns 400 on missing keys.p256dh", async () => {
     const user = await createUser();
     const cookie = await sessionCookie(user.id);
-    const request = new Request("http://localhost/api/push/subscriptions", {
+    const request = new UndiciRequest("http://localhost/api/push/subscriptions", {
       method: "POST",
       headers: { "Content-Type": "application/json", Cookie: cookie },
       body: JSON.stringify({ endpoint: "https://e", keys: { auth: "a" } }),
@@ -68,7 +69,7 @@ describe("POST /api/push/subscriptions", () => {
   it("returns 400 on missing keys.auth", async () => {
     const user = await createUser();
     const cookie = await sessionCookie(user.id);
-    const request = new Request("http://localhost/api/push/subscriptions", {
+    const request = new UndiciRequest("http://localhost/api/push/subscriptions", {
       method: "POST",
       headers: { "Content-Type": "application/json", Cookie: cookie },
       body: JSON.stringify({ endpoint: "https://e", keys: { p256dh: "p" } }),
@@ -80,7 +81,7 @@ describe("POST /api/push/subscriptions", () => {
   it("returns 400 on missing keys object", async () => {
     const user = await createUser();
     const cookie = await sessionCookie(user.id);
-    const request = new Request("http://localhost/api/push/subscriptions", {
+    const request = new UndiciRequest("http://localhost/api/push/subscriptions", {
       method: "POST",
       headers: { "Content-Type": "application/json", Cookie: cookie },
       body: JSON.stringify({ endpoint: "https://e" }),
@@ -92,7 +93,7 @@ describe("POST /api/push/subscriptions", () => {
   it("returns 400 on malformed JSON", async () => {
     const user = await createUser();
     const cookie = await sessionCookie(user.id);
-    const request = new Request("http://localhost/api/push/subscriptions", {
+    const request = new UndiciRequest("http://localhost/api/push/subscriptions", {
       method: "POST",
       headers: { "Content-Type": "application/json", Cookie: cookie },
       body: "{not json",
@@ -104,7 +105,7 @@ describe("POST /api/push/subscriptions", () => {
   it("creates the subscription row and returns 201 on first POST", async () => {
     const user = await createUser();
     const cookie = await sessionCookie(user.id);
-    const request = new Request("http://localhost/api/push/subscriptions", {
+    const request = new UndiciRequest("http://localhost/api/push/subscriptions", {
       method: "POST",
       headers: { "Content-Type": "application/json", Cookie: cookie },
       body: JSON.stringify({
@@ -133,7 +134,7 @@ describe("POST /api/push/subscriptions", () => {
     });
     const first = await action(
       routeArgs(
-        new Request("http://localhost/api/push/subscriptions", {
+        new UndiciRequest("http://localhost/api/push/subscriptions", {
           method: "POST",
           headers: { "Content-Type": "application/json", Cookie: cookie },
           body,
@@ -147,7 +148,7 @@ describe("POST /api/push/subscriptions", () => {
 
     const second = await action(
       routeArgs(
-        new Request("http://localhost/api/push/subscriptions", {
+        new UndiciRequest("http://localhost/api/push/subscriptions", {
           method: "POST",
           headers: { "Content-Type": "application/json", Cookie: cookie },
           body,
@@ -164,7 +165,7 @@ describe("POST /api/push/subscriptions", () => {
 
 describe("DELETE /api/push/subscriptions", () => {
   it("returns 401 when not authenticated", async () => {
-    const request = new Request("http://localhost/api/push/subscriptions", {
+    const request = new UndiciRequest("http://localhost/api/push/subscriptions", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ endpoint: "https://e" }),
@@ -176,7 +177,7 @@ describe("DELETE /api/push/subscriptions", () => {
   it("returns 400 on missing endpoint", async () => {
     const user = await createUser();
     const cookie = await sessionCookie(user.id);
-    const request = new Request("http://localhost/api/push/subscriptions", {
+    const request = new UndiciRequest("http://localhost/api/push/subscriptions", {
       method: "DELETE",
       headers: { "Content-Type": "application/json", Cookie: cookie },
       body: JSON.stringify({}),
@@ -192,7 +193,7 @@ describe("DELETE /api/push/subscriptions", () => {
     await db.pushSubscription.create({
       data: { userId: user.id, endpoint: "https://e/x", p256dh: "p", authSecret: "a" },
     });
-    const request = new Request("http://localhost/api/push/subscriptions", {
+    const request = new UndiciRequest("http://localhost/api/push/subscriptions", {
       method: "DELETE",
       headers: { "Content-Type": "application/json", Cookie: cookie },
       body: JSON.stringify({ endpoint: "https://e/x" }),
@@ -211,7 +212,7 @@ describe("DELETE /api/push/subscriptions", () => {
     await db.pushSubscription.create({
       data: { userId: owner.id, endpoint: "https://e/foreign", p256dh: "p", authSecret: "a" },
     });
-    const request = new Request("http://localhost/api/push/subscriptions", {
+    const request = new UndiciRequest("http://localhost/api/push/subscriptions", {
       method: "DELETE",
       headers: { "Content-Type": "application/json", Cookie: cookie },
       body: JSON.stringify({ endpoint: "https://e/foreign" }),
@@ -225,7 +226,7 @@ describe("subscriptions route — other methods", () => {
   it("returns 405 for unsupported methods", async () => {
     const user = await createUser();
     const cookie = await sessionCookie(user.id);
-    const request = new Request("http://localhost/api/push/subscriptions", {
+    const request = new UndiciRequest("http://localhost/api/push/subscriptions", {
       method: "PUT",
       headers: { "Content-Type": "application/json", Cookie: cookie },
       body: "{}",
