@@ -123,6 +123,66 @@ describe("Account Settings Route", () => {
       expect(result.user.hasPassword).toBe(true);
     });
 
+    it("returns default-true notification preferences when no row exists", async () => {
+      const session = await sessionStorage.getSession();
+      session.set("userId", testUserId);
+      const setCookieHeader = await sessionStorage.commitSession(session);
+      const cookieValue = setCookieHeader.split(";")[0];
+
+      const headers = new Headers();
+      headers.set("Cookie", cookieValue);
+
+      const request = new UndiciRequest("http://localhost:3000/account/settings", { headers });
+
+      const result = await loader({
+        request,
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+
+      expect(result.notifications.preferences).toEqual({
+        notifySpoonOnMyRecipe: true,
+        notifyForkOfMyRecipe: true,
+        notifyCookbookSaveOfMine: true,
+        notifyFellowChefOriginCook: true,
+      });
+    });
+
+    it("returns persisted notification preferences when a row exists", async () => {
+      await db.notificationPreference.create({
+        data: {
+          userId: testUserId,
+          notifySpoonOnMyRecipe: false,
+          notifyForkOfMyRecipe: true,
+          notifyCookbookSaveOfMine: false,
+          notifyFellowChefOriginCook: true,
+        },
+      });
+
+      const session = await sessionStorage.getSession();
+      session.set("userId", testUserId);
+      const setCookieHeader = await sessionStorage.commitSession(session);
+      const cookieValue = setCookieHeader.split(";")[0];
+
+      const headers = new Headers();
+      headers.set("Cookie", cookieValue);
+
+      const request = new UndiciRequest("http://localhost:3000/account/settings", { headers });
+
+      const result = await loader({
+        request,
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+
+      expect(result.notifications.preferences).toEqual({
+        notifySpoonOnMyRecipe: false,
+        notifyForkOfMyRecipe: true,
+        notifyCookbookSaveOfMine: false,
+        notifyFellowChefOriginCook: true,
+      });
+    });
+
     it("should indicate if OAuth-only user has no password", async () => {
       // Create an OAuth-only user (no password)
       const oauthEmail = faker.internet.email();
