@@ -148,6 +148,9 @@ beforeAll(async () => {
   // Delete all data in the correct order to respect foreign key constraints.
   // Tables must exist before tests run — ensured by `prisma db push` in CI
   // and by running `pnpm prisma:push` locally (see README / DEPLOY.md).
+  await db.notificationPreference.deleteMany({});
+  await db.notificationEvent.deleteMany({});
+  await db.pushSubscription.deleteMany({});
   await db.shoppingListItem.deleteMany({});
   await db.shoppingList.deleteMany({});
   await db.stepOutputUse.deleteMany({});

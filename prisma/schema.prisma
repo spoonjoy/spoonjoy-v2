@@ -33,6 +33,10 @@ model User {
   spoons              RecipeSpoon[]
   imageGenLedger      ImageGenLedger[]
 
+  pushSubscriptions      PushSubscription[]
+  notificationEvents     NotificationEvent[]
+  notificationPreference NotificationPreference?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
 }
@@ -300,4 +304,41 @@ model ImageGenLedger {
 
   @@unique([userId, kind, bucketStart])
   @@index([userId, bucketStart])
+}
+
+model PushSubscription {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint   String   @unique
+  p256dh     String
+  authSecret String
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now()) @updatedAt
+
+  @@index([userId])
+}
+
+model NotificationEvent {
+  id              String    @id @default(cuid())
+  recipientId     String
+  recipient       User      @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+  kind            String
+  payload         String
+  createdAt       DateTime  @default(now())
+  readAt          DateTime?
+  pushDeliveredAt DateTime?
+
+  @@index([recipientId, createdAt])
+}
+
+model NotificationPreference {
+  userId                     String   @id
+  user                       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notifySpoonOnMyRecipe      Boolean  @default(true)
+  notifyForkOfMyRecipe       Boolean  @default(true)
+  notifyCookbookSaveOfMine   Boolean  @default(true)
+  notifyFellowChefOriginCook Boolean  @default(true)
+  updatedAt                  DateTime @default(now()) @updatedAt
 }
