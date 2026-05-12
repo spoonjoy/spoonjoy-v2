@@ -150,8 +150,20 @@ describe("checkRemoteMigrations", () => {
       "list",
       "DB",
       "--remote",
-      "--json",
     ]);
+  });
+
+  it("returns PASS when current Wrangler text output reports no pending migrations", async () => {
+    const runWrangler = vi.fn(async () => ({
+      stdout: "\n ⛅️ wrangler 4.90.0\n─────────────────────────────────────────────\nResource location: remote \n\n✅ No migrations to apply!\n",
+      stderr: "",
+      exitCode: 0,
+    }));
+
+    const check = await checkRemoteMigrations({ runWrangler, env: {} });
+
+    expect(check.ok).toBe(true);
+    expect(check.message.toLowerCase()).toMatch(/up to date|no pending/);
   });
 
   it("FAILS when one migration is pending and includes its name in the message", async () => {
@@ -185,6 +197,27 @@ describe("checkRemoteMigrations", () => {
     expect(check.message).toContain("0007_c.sql");
   });
 
+  it("FAILS and lists pending migration names from current Wrangler text output", async () => {
+    const runWrangler = vi.fn(async () => ({
+      stdout: [
+        " ⛅️ wrangler 4.90.0",
+        "Resource location: remote",
+        "Pending migrations:",
+        "│ 0007_api_credentials.sql │",
+        "│ 0008_s1_spoon_foundation.sql │",
+      ].join("\n"),
+      stderr: "",
+      exitCode: 0,
+    }));
+
+    const check = await checkRemoteMigrations({ runWrangler, env: {} });
+
+    expect(check.ok).toBe(false);
+    expect(check.severity).toBe("error");
+    expect(check.message).toContain("0007_api_credentials.sql");
+    expect(check.message).toContain("0008_s1_spoon_foundation.sql");
+  });
+
   it("WARNS instead of failing when wrangler emits an auth-keyed stderr with non-zero exit", async () => {
     const runWrangler = vi.fn(async () => ({
       stdout: "",
@@ -214,7 +247,7 @@ describe("checkRemoteMigrations", () => {
     expect(check.message.toLowerCase()).toMatch(/auth|api token|login|unauthenticated/);
   });
 
-  it("FAILS with a parse-error message when stdout is not valid JSON", async () => {
+  it("FAILS with a parse-error message when stdout is neither JSON nor current Wrangler text", async () => {
     const runWrangler = vi.fn(async () => ({ stdout: "not json", stderr: "", exitCode: 0 }));
 
     const check = await checkRemoteMigrations({ runWrangler, env: {} });
@@ -305,7 +338,7 @@ describe("checkRemoteMigrations", () => {
   });
 
   it("FAILS with a string representation when JSON.parse throws a non-Error", async () => {
-    const runWrangler = vi.fn(async () => ({ stdout: "definitely not json", stderr: "", exitCode: 0 }));
+    const runWrangler = vi.fn(async () => ({ stdout: "[malformed json", stderr: "", exitCode: 0 }));
     const originalParse = JSON.parse;
     const spy = vi.spyOn(JSON, "parse").mockImplementationOnce(() => {
       throw "weird non-error";
@@ -435,7 +468,7 @@ describe("createWranglerRunner", () => {
     );
 
     const runner = createWranglerRunner(stub);
-    await runner(["d1", "migrations", "list", "DB", "--remote", "--json"]);
+    await runner(["d1", "migrations", "list", "DB", "--remote"]);
 
     expect(stub).toHaveBeenCalledTimes(1);
     expect(captured).not.toBeNull();
@@ -448,7 +481,6 @@ describe("createWranglerRunner", () => {
       "list",
       "DB",
       "--remote",
-      "--json",
     ]);
     expect(captured!.options).toEqual({});
   });
@@ -493,7 +525,7 @@ describe("createWranglerRunner", () => {
     );
 
     const runner = createWranglerRunner(stub);
-    const result = await runner(["d1", "migrations", "list", "DB", "--remote", "--json"]);
+    const result = await runner(["d1", "migrations", "list", "DB", "--remote"]);
 
     expect(result).toEqual({ stdout: "", stderr: "stderrbody", exitCode: 1 });
   });

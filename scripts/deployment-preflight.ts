@@ -203,6 +203,46 @@ export function createWranglerRunner(
 const RemoteMigrationListSchema = z.array(z.object({ Name: z.string() }));
 
 const AUTH_ERROR_PATTERN = /auth|oauth|login|unauthenticated|api token|10000/i;
+const NO_PENDING_MIGRATIONS_PATTERN = /no migrations to apply/i;
+const MIGRATION_FILE_PATTERN = /\b\d{4}_[A-Za-z0-9_.-]+\.sql\b/g;
+
+function parseRemoteMigrationList(stdout: string): { migrations: { Name: string }[]; error?: string } {
+  const trimmed = stdout.trim();
+
+  if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+    let parsedJson: unknown;
+    try {
+      parsedJson = JSON.parse(stdout);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { migrations: [], error: `Could not parse wrangler JSON output: ${message}` };
+    }
+
+    const shape = RemoteMigrationListSchema.safeParse(parsedJson);
+    if (!shape.success) {
+      return {
+        migrations: [],
+        error: `Unexpected wrangler JSON shape: ${shape.error.issues.map((issue) => issue.message).join("; ")}`,
+      };
+    }
+
+    return { migrations: shape.data };
+  }
+
+  if (NO_PENDING_MIGRATIONS_PATTERN.test(stdout)) {
+    return { migrations: [] };
+  }
+
+  const names = Array.from(new Set(stdout.match(MIGRATION_FILE_PATTERN) ?? []));
+  if (names.length > 0) {
+    return { migrations: names.map((Name) => ({ Name })) };
+  }
+
+  return {
+    migrations: [],
+    error: "Could not parse wrangler migration output: expected JSON, a no-migrations message, or migration filenames.",
+  };
+}
 
 export async function checkRemoteMigrations(deps: RemoteMigrationCheckDeps): Promise<PreflightCheck> {
   const env = deps.env ?? process.env;
@@ -217,7 +257,7 @@ export async function checkRemoteMigrations(deps: RemoteMigrationCheckDeps): Pro
 
   let result: WranglerRunResult;
   try {
-    result = await deps.runWrangler(["d1", "migrations", "list", "DB", "--remote", "--json"]);
+    result = await deps.runWrangler(["d1", "migrations", "list", "DB", "--remote"]);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return check("remote D1 migrations", false, `Failed to invoke wrangler: ${message}`);
@@ -239,24 +279,12 @@ export async function checkRemoteMigrations(deps: RemoteMigrationCheckDeps): Pro
     );
   }
 
-  let parsedJson: unknown;
-  try {
-    parsedJson = JSON.parse(result.stdout);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return check("remote D1 migrations", false, `Could not parse wrangler JSON output: ${message}`);
+  const parsed = parseRemoteMigrationList(result.stdout);
+  if (parsed.error) {
+    return check("remote D1 migrations", false, parsed.error);
   }
 
-  const shape = RemoteMigrationListSchema.safeParse(parsedJson);
-  if (!shape.success) {
-    return check(
-      "remote D1 migrations",
-      false,
-      `Unexpected wrangler JSON shape: ${shape.error.issues.map((issue) => issue.message).join("; ")}`,
-    );
-  }
-
-  const pending = shape.data;
+  const pending = parsed.migrations;
   if (pending.length === 0) {
     return check("remote D1 migrations", true, "Remote D1 is up to date — no pending migrations.");
   }

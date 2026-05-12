@@ -79,7 +79,7 @@ The preflight verifies:
 - `app/cloudflare-env.d.ts` types the Cloudflare bindings and documented secrets.
 - README/deployment docs mention required bindings, secrets, and deploy commands.
 - Numbered SQL migrations exist in `migrations/`.
-- **Remote D1 migrations**: the preflight invokes `pnpm exec wrangler d1 migrations apply DB --remote --json` (read-only via `migrations list`) and FAILS if any migrations are pending against the remote database. This guards against deploying application code that depends on a schema the remote database has not yet applied (the failure mode that caused the 2026-05-10 `/search` 500 incident).
+- **Remote D1 migrations**: the preflight invokes `pnpm exec wrangler d1 migrations list DB --remote` and FAILS if any migrations are pending against the remote database. This guards against deploying application code that depends on a schema the remote database has not yet applied (the failure mode that caused the 2026-05-10 `/search` 500 incident).
 
 ### Remote check outcomes
 
@@ -89,7 +89,7 @@ The preflight verifies:
 | Remote D1 reports one or more pending migrations | FAIL — names of pending migrations are printed |
 | Wrangler exits with an auth-keyed stderr (missing login, missing API token, code 10000, etc.) | WARN — preflight does not fail the deploy on missing auth, but the operator must verify manually |
 | Wrangler exits non-zero for any other reason | FAIL |
-| Wrangler stdout is not valid JSON, or shape is unexpected | FAIL |
+| Wrangler stdout is not parseable as migration status | FAIL |
 | Wrangler binary cannot be spawned (`ENOENT`, etc.) | FAIL |
 
 ### Skipping the remote check
