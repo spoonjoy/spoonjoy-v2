@@ -175,6 +175,7 @@ describe("Account Settings Route", () => {
           hasPassword: true,
           oauthAccounts: [],
         },
+        notifications: { pushSubscribed: false },
       };
 
       const Stub = createTestRoutesStub([
@@ -199,6 +200,7 @@ describe("Account Settings Route", () => {
           hasPassword: true,
           oauthAccounts: [],
         },
+        notifications: { pushSubscribed: false },
       };
 
       const Stub = createTestRoutesStub([
@@ -227,6 +229,7 @@ describe("Account Settings Route", () => {
           hasPassword: true,
           oauthAccounts: [],
         },
+        notifications: { pushSubscribed: false },
       };
 
       const Stub = createTestRoutesStub([
@@ -252,6 +255,7 @@ describe("Account Settings Route", () => {
           hasPassword: true,
           oauthAccounts: [],
         },
+        notifications: { pushSubscribed: false },
       };
 
       const Stub = createTestRoutesStub([
@@ -277,6 +281,7 @@ describe("Account Settings Route", () => {
           hasPassword: true,
           oauthAccounts: [],
         },
+        notifications: { pushSubscribed: false },
       };
 
       const Stub = createTestRoutesStub([
@@ -305,6 +310,7 @@ describe("Account Settings Route", () => {
             { provider: "apple", providerUsername: "Apple User" },
           ],
         },
+        notifications: { pushSubscribed: false },
       };
 
       const Stub = createTestRoutesStub([
@@ -334,6 +340,7 @@ describe("Account Settings Route", () => {
           hasPassword: true,
           oauthAccounts: [],
         },
+        notifications: { pushSubscribed: false },
       };
 
       const Stub = createTestRoutesStub([
@@ -361,6 +368,7 @@ describe("Account Settings Route", () => {
           hasPassword: true,
           oauthAccounts: [{ provider: "google", providerUsername: "testuser@gmail.com" }],
         },
+        notifications: { pushSubscribed: false },
       };
 
       const Stub = createTestRoutesStub([
@@ -387,6 +395,7 @@ describe("Account Settings Route", () => {
           hasPassword: true,
           oauthAccounts: [],
         },
+        notifications: { pushSubscribed: false },
       };
 
       const Stub = createTestRoutesStub([
@@ -412,6 +421,7 @@ describe("Account Settings Route", () => {
           hasPassword: false,
           oauthAccounts: [{ provider: "google", providerUsername: "testuser@gmail.com" }],
         },
+        notifications: { pushSubscribed: false },
       };
 
       const Stub = createTestRoutesStub([
@@ -437,6 +447,7 @@ describe("Account Settings Route", () => {
           hasPassword: true,
           oauthAccounts: [{ provider: "google", providerUsername: "testuser@gmail.com" }],
         },
+        notifications: { pushSubscribed: false },
       };
 
       const Stub = createTestRoutesStub([
@@ -465,6 +476,7 @@ describe("Account Settings Route", () => {
           hasPassword: true,
           oauthAccounts: [{ provider: "google", providerUsername: "testuser@gmail.com" }],
         },
+        notifications: { pushSubscribed: false },
       };
 
       const Stub = createTestRoutesStub([
@@ -496,6 +508,7 @@ describe("Account Settings Route", () => {
           hasPassword: true,
           oauthAccounts: [],
         },
+        notifications: { pushSubscribed: false },
       };
 
       const Stub = createTestRoutesStub([
@@ -526,6 +539,7 @@ describe("Account Settings Route", () => {
           hasPassword: true,
           oauthAccounts: [],
         },
+        notifications: { pushSubscribed: false },
       };
 
       const Stub = createTestRoutesStub([
@@ -552,6 +566,7 @@ describe("Account Settings Route", () => {
           hasPassword: true,
           oauthAccounts: [],
         },
+        notifications: { pushSubscribed: false },
       };
 
       const Stub = createTestRoutesStub([
@@ -585,6 +600,7 @@ describe("Account Settings Route", () => {
           hasPassword: true,
           oauthAccounts: [],
         },
+        notifications: { pushSubscribed: false },
       };
 
       const Stub = createTestRoutesStub([
@@ -618,6 +634,7 @@ describe("Account Settings Route", () => {
           hasPassword: true,
           oauthAccounts: [],
         },
+        notifications: { pushSubscribed: false },
       };
 
       const Stub = createTestRoutesStub([
@@ -1147,7 +1164,8 @@ describe("Account Settings Route", () => {
             oauthAccounts: [],
             photoUrl: null,
           },
-        };
+          notifications: { pushSubscribed: false },
+      };
 
         const Stub = createTestRoutesStub([
           {
@@ -1180,7 +1198,8 @@ describe("Account Settings Route", () => {
             oauthAccounts: [],
             photoUrl: customPhotoUrl,
           },
-        };
+          notifications: { pushSubscribed: false },
+      };
 
         const Stub = createTestRoutesStub([
           {
@@ -1211,7 +1230,8 @@ describe("Account Settings Route", () => {
             oauthAccounts: [],
             photoUrl: null,
           },
-        };
+          notifications: { pushSubscribed: false },
+      };
 
         const Stub = createTestRoutesStub([
           {
@@ -1243,7 +1263,8 @@ describe("Account Settings Route", () => {
             oauthAccounts: [],
             photoUrl: null,
           },
-        };
+          notifications: { pushSubscribed: false },
+      };
 
         const Stub = createTestRoutesStub([
           {
@@ -1269,7 +1290,8 @@ describe("Account Settings Route", () => {
             oauthAccounts: [],
             photoUrl: "https://example.com/existing-photo.jpg",
           },
-        };
+          notifications: { pushSubscribed: false },
+      };
 
         const Stub = createTestRoutesStub([
           {
@@ -1295,7 +1317,8 @@ describe("Account Settings Route", () => {
             oauthAccounts: [],
             photoUrl: "https://example.com/existing-photo.jpg",
           },
-        };
+          notifications: { pushSubscribed: false },
+      };
 
         const Stub = createTestRoutesStub([
           {
@@ -1321,7 +1344,8 @@ describe("Account Settings Route", () => {
             oauthAccounts: [],
             photoUrl: null,
           },
-        };
+          notifications: { pushSubscribed: false },
+      };
 
         const Stub = createTestRoutesStub([
           {
@@ -1347,7 +1371,8 @@ describe("Account Settings Route", () => {
             oauthAccounts: [],
             photoUrl: null,
           },
-        };
+          notifications: { pushSubscribed: false },
+      };
 
         const Stub = createTestRoutesStub([
           {
@@ -1379,7 +1404,8 @@ describe("Account Settings Route", () => {
             oauthAccounts: [],
             photoUrl: null,
           },
-        };
+          notifications: { pushSubscribed: false },
+      };
 
         const Stub = createTestRoutesStub([
           {
@@ -1419,7 +1445,8 @@ describe("Account Settings Route", () => {
             oauthAccounts: [],
             photoUrl: null,
           },
-        };
+          notifications: { pushSubscribed: false },
+      };
 
         let actionCalled = false;
         const Stub = createTestRoutesStub([
@@ -1464,7 +1491,8 @@ describe("Account Settings Route", () => {
             oauthAccounts: [],
             photoUrl: null,
           },
-        };
+          notifications: { pushSubscribed: false },
+      };
 
         let actionCalled = false;
         const Stub = createTestRoutesStub([
@@ -2434,7 +2462,8 @@ describe("Account Settings Route", () => {
             oauthAccounts: [{ provider: "google", providerUsername: "testuser@gmail.com" }],
             photoUrl: null,
           },
-        };
+          notifications: { pushSubscribed: false },
+      };
 
         const Stub = createTestRoutesStub([
           {
@@ -2467,7 +2496,8 @@ describe("Account Settings Route", () => {
             oauthAccounts: [{ provider: "google", providerUsername: "testuser@gmail.com" }],
             photoUrl: null,
           },
-        };
+          notifications: { pushSubscribed: false },
+      };
 
         const Stub = createTestRoutesStub([
           {
@@ -2504,7 +2534,8 @@ describe("Account Settings Route", () => {
             oauthAccounts: [{ provider: "google", providerUsername: "testuser@gmail.com" }], // Only one OAuth
             photoUrl: null,
           },
-        };
+          notifications: { pushSubscribed: false },
+      };
 
         const Stub = createTestRoutesStub([
           {
@@ -2533,7 +2564,8 @@ describe("Account Settings Route", () => {
             oauthAccounts: [{ provider: "google", providerUsername: "testuser@gmail.com" }], // Only one OAuth
             photoUrl: null,
           },
-        };
+          notifications: { pushSubscribed: false },
+      };
 
         const Stub = createTestRoutesStub([
           {
@@ -2563,7 +2595,8 @@ describe("Account Settings Route", () => {
             oauthAccounts: [{ provider: "google", providerUsername: "testuser@gmail.com" }],
             photoUrl: null,
           },
-        };
+          notifications: { pushSubscribed: false },
+      };
 
         let actionResult = {
           success: false,
@@ -2608,7 +2641,8 @@ describe("Account Settings Route", () => {
             oauthAccounts: [], // After unlink, no OAuth accounts
             photoUrl: null,
           },
-        };
+          notifications: { pushSubscribed: false },
+      };
 
         let actionResult = {
           success: true,
@@ -3494,7 +3528,8 @@ describe("Account Settings Route", () => {
             oauthAccounts: [],
             photoUrl: null,
           },
-        };
+          notifications: { pushSubscribed: false },
+      };
 
         const Stub = createTestRoutesStub([
           {
@@ -3529,7 +3564,8 @@ describe("Account Settings Route", () => {
             oauthAccounts: [{ provider: "google", providerUsername: "testuser@gmail.com" }],
             photoUrl: null,
           },
-        };
+          notifications: { pushSubscribed: false },
+      };
 
         const Stub = createTestRoutesStub([
           {
@@ -3563,7 +3599,8 @@ describe("Account Settings Route", () => {
             oauthAccounts: [{ provider: "google", providerUsername: "testuser@gmail.com" }],
             photoUrl: null,
           },
-        };
+          notifications: { pushSubscribed: false },
+      };
 
         const Stub = createTestRoutesStub([
           {
@@ -3589,7 +3626,8 @@ describe("Account Settings Route", () => {
             oauthAccounts: [],
             photoUrl: null,
           },
-        };
+          notifications: { pushSubscribed: false },
+      };
 
         const Stub = createTestRoutesStub([
           {
@@ -3615,7 +3653,8 @@ describe("Account Settings Route", () => {
             oauthAccounts: [],
             photoUrl: null,
           },
-        };
+          notifications: { pushSubscribed: false },
+      };
 
         const actionResult = {
           success: false,
@@ -3663,7 +3702,8 @@ describe("Account Settings Route", () => {
             oauthAccounts: [],
             photoUrl: null,
           },
-        };
+          notifications: { pushSubscribed: false },
+      };
 
         const actionResult = {
           success: true,
@@ -3707,7 +3747,8 @@ describe("Account Settings Route", () => {
             oauthAccounts: [],
             photoUrl: null,
           },
-        };
+          notifications: { pushSubscribed: false },
+      };
 
         const Stub = createTestRoutesStub([
           {
@@ -3748,7 +3789,8 @@ describe("Account Settings Route", () => {
             oauthAccounts: [{ provider: "google", providerUsername: "testuser@gmail.com" }],
             photoUrl: null,
           },
-        };
+          notifications: { pushSubscribed: false },
+      };
 
         const Stub = createTestRoutesStub([
           {
@@ -3783,7 +3825,8 @@ describe("Account Settings Route", () => {
             oauthAccounts: [{ provider: "google", providerUsername: "testuser@gmail.com" }],
             photoUrl: null,
           },
-        };
+          notifications: { pushSubscribed: false },
+      };
 
         const Stub = createTestRoutesStub([
           {
@@ -3824,7 +3867,8 @@ describe("Account Settings Route", () => {
             oauthAccounts: [{ provider: "google", providerUsername: "testuser@gmail.com" }],
             photoUrl: null,
           },
-        };
+          notifications: { pushSubscribed: false },
+      };
 
         const Stub = createTestRoutesStub([
           {
@@ -3865,7 +3909,8 @@ describe("Account Settings Route", () => {
             oauthAccounts: [],
             photoUrl: null,
           },
-        };
+          notifications: { pushSubscribed: false },
+      };
 
         const Stub = createTestRoutesStub([
           {
@@ -3978,7 +4023,8 @@ describe("Account Settings Route", () => {
             oauthAccounts: [],
             photoUrl: null,
           },
-        };
+          notifications: { pushSubscribed: false },
+      };
 
         const Stub = createTestRoutesStub([
           {
@@ -4009,7 +4055,8 @@ describe("Account Settings Route", () => {
             oauthAccounts: [],
             photoUrl: null,
           },
-        };
+          notifications: { pushSubscribed: false },
+      };
 
         const actionResult = {
           success: false,
@@ -4057,7 +4104,8 @@ describe("Account Settings Route", () => {
             oauthAccounts: [],
             photoUrl: null,
           },
-        };
+          notifications: { pushSubscribed: false },
+      };
 
         const actionResult = {
           success: false,
@@ -4104,7 +4152,8 @@ describe("Account Settings Route", () => {
             oauthAccounts: [],
             photoUrl: null,
           },
-        };
+          notifications: { pushSubscribed: false },
+      };
 
         const actionResult = {
           success: false,
@@ -4158,7 +4207,8 @@ describe("Account Settings Route", () => {
             oauthAccounts: [{ provider: "google", providerUsername: "testuser@gmail.com" }],
             photoUrl: null,
           },
-        };
+          notifications: { pushSubscribed: false },
+      };
 
         const actionResult = {
           success: false,
@@ -4213,7 +4263,8 @@ describe("Account Settings Route", () => {
             oauthAccounts: [],
             photoUrl: null,
           },
-        };
+          notifications: { pushSubscribed: false },
+      };
 
         const actionResult = {
           success: false,

@@ -23,6 +23,9 @@ export interface AccountSettingsLoaderData {
       providerUsername: string;
     }>;
   };
+  notifications: {
+    pushSubscribed: boolean;
+  };
   oauthError?: string;
 }
 
@@ -106,6 +109,8 @@ export async function loadAccountSettings({
     throw new Response("User not found", { status: 404 });
   }
 
+  const pushCount = await database.pushSubscription.count({ where: { userId } });
+
   return {
     user: {
       id: user.id,
@@ -114,6 +119,9 @@ export async function loadAccountSettings({
       hasPassword: user.hashedPassword !== null,
       photoUrl: user.photoUrl,
       oauthAccounts: user.OAuth,
+    },
+    notifications: {
+      pushSubscribed: pushCount > 0,
     },
     oauthError,
   };

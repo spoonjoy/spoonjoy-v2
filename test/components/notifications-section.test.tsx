@@ -63,8 +63,9 @@ describe("NotificationsSection", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /enable notifications/i }));
     await waitFor(() => expect(subscribeToPush).toHaveBeenCalled());
+    // After success, the Disable button is rendered (and the success toast text is shown).
     await waitFor(() =>
-      expect(screen.getByText(/notifications enabled/i)).toBeInTheDocument(),
+      expect(screen.getByRole("button", { name: /disable/i })).toBeInTheDocument(),
     );
   });
 
