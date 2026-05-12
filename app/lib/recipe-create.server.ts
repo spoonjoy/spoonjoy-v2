@@ -229,44 +229,52 @@ export async function createRecipeDraft(
   db: PrismaClientType,
   input: CreateRecipeDraftInput
 ): Promise<Recipe> {
-  return db.$transaction(async (tx) => {
-    const recipe = await tx.recipe.create({
+  // Cloudflare D1 (used in both local dev and production) does not support
+  // Prisma's interactive `$transaction(async (tx) => ...)` form. Mirror the
+  // F1 forkRecipe pattern (see `recipe-fork.server.ts`) and persist the
+  // recipe graph as a sequence of writes against the top-level client.
+  //
+  // Trade-off: a mid-sequence failure can leave a partial recipe row in the
+  // database. This is the same risk F1 accepted; the schema's
+  // `@@unique([chefId, title, deletedAt])` index still protects against
+  // duplicate-title races at the storage layer, and single-user create flows
+  // are not contention-prone.
+  const recipe = await db.recipe.create({
+    data: {
+      id: input.id,
+      title: input.title,
+      description: input.description,
+      servings: input.servings,
+      chefId: input.chefId,
+    },
+  });
+
+  for (const [stepIndex, step] of input.steps.entries()) {
+    const stepNum = stepIndex + 1;
+    await db.recipeStep.create({
       data: {
-        id: input.id,
-        title: input.title,
-        description: input.description,
-        servings: input.servings,
-        chefId: input.chefId,
+        recipeId: recipe.id,
+        stepNum,
+        stepTitle: step.stepTitle,
+        description: step.description,
+        duration: step.duration,
       },
     });
 
-    for (const [stepIndex, step] of input.steps.entries()) {
-      const stepNum = stepIndex + 1;
-      await tx.recipeStep.create({
+    for (const ingredient of step.ingredients) {
+      const unit = await getOrCreateUnit(db, ingredient.unit);
+      const ingredientRef = await getOrCreateIngredientRef(db, ingredient.ingredientName);
+      await db.ingredient.create({
         data: {
           recipeId: recipe.id,
           stepNum,
-          stepTitle: step.stepTitle,
-          description: step.description,
-          duration: step.duration,
+          quantity: ingredient.quantity,
+          unitId: unit.id,
+          ingredientRefId: ingredientRef.id,
         },
       });
-
-      for (const ingredient of step.ingredients) {
-        const unit = await getOrCreateUnit(tx, ingredient.unit);
-        const ingredientRef = await getOrCreateIngredientRef(tx, ingredient.ingredientName);
-        await tx.ingredient.create({
-          data: {
-            recipeId: recipe.id,
-            stepNum,
-            quantity: ingredient.quantity,
-            unitId: unit.id,
-            ingredientRefId: ingredientRef.id,
-          },
-        });
-      }
     }
+  }
 
-    return recipe;
-  });
+  return recipe;
 }
