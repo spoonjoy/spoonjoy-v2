@@ -55,7 +55,7 @@ Fix the deployed-worker failure in the MCP/API `add_recipe_to_cookbook` operatio
 **Output**: Verified target files and regression strategy.
 **Acceptance**: Relevant paths and operation behavior are identified before test edits.
 
-### ⬜ Unit 1a: Add Cookbook MCP D1 Regression Test
+### ✅ Unit 1a: Add Cookbook MCP D1 Regression Test
 **What**: Add a failing test around `add_recipe_to_cookbook` that throws if the operation invokes callback-style `$transaction`.
 **Output**: Test commit that is red against the current implementation.
 **Acceptance**: Targeted test run fails for the new regression and the failure proves interactive transaction use.
@@ -82,3 +82,4 @@ Fix the deployed-worker failure in the MCP/API `add_recipe_to_cookbook` operatio
 ## Progress Log
 - 2026-05-12 08:30 Created from planning doc.
 - 2026-05-12 08:30 Unit 0 complete: confirmed `addRecipeToCookbookTool` uses callback-style `$transaction`, existing MCP cookbook and notification tests cover behavior, and recipe create/fork modules show the D1-compatible sequential-write pattern.
+- 2026-05-12 08:37 Unit 1a complete: added an MCP regression with a D1 transaction guard; targeted run failed red with "D1 interactive transactions are not supported" at `addRecipeToCookbookTool`.
