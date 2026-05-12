@@ -529,6 +529,511 @@ describe("importRecipeFromUrl — extraction paths", () => {
     });
   });
 
+  describe("LLM runner edge cases", () => {
+    it("throws llm-failed when LLM runner is required but not provided", async () => {
+      const fixture = await loadFixture("no-jsonld-rich-html.html");
+      const chef = await makeChef();
+      await expect(
+        importRecipeFromUrl(
+          { url: "https://example.com/r", chefId: chef.id },
+          baseDeps({ fetchImpl: makeFetchImpl(fixture), llmRunner: undefined }),
+        ),
+      ).rejects.toMatchObject({ code: "llm-failed" });
+    });
+
+    it("re-throws non-RecipeLlmError from llmRunner.extract", async () => {
+      const fixture = await loadFixture("no-jsonld-rich-html.html");
+      const chef = await makeChef();
+      const llmRunner: RecipeLlmRunner = {
+        extract: vi.fn(async () => {
+          throw new TypeError("strange failure");
+        }),
+      };
+      await expect(
+        importRecipeFromUrl(
+          { url: "https://example.com/r", chefId: chef.id },
+          baseDeps({ fetchImpl: makeFetchImpl(fixture), llmRunner }),
+        ),
+      ).rejects.toBeInstanceOf(TypeError);
+    });
+  });
+
+  describe("mixed path partial-JSON-LD variations", () => {
+    it("uses JSON-LD ingredients when present and LLM only fills steps", async () => {
+      // Partial JSON-LD with ingredients but no steps; LLM gap-fills steps.
+      const html =
+        "<html><head><script type=\"application/ld+json\">" +
+        JSON.stringify({
+          "@type": "Recipe",
+          name: "Hybrid Recipe",
+          recipeIngredient: ["1 cup flour", "1 tsp salt"],
+        }) +
+        "</script></head><body><p>body</p></body></html>";
+      const chef = await makeChef();
+      const llmRunner = makeLlmRunner({
+        title: "Hybrid Recipe",
+        ingredients: ["should not be used"],
+        steps: ["Mix everything", "Bake until done"],
+      });
+      const result = await importRecipeFromUrl(
+        { url: "https://example.com/r", chefId: chef.id },
+        baseDeps({ fetchImpl: makeFetchImpl(html), llmRunner }),
+      );
+      expect(result.source).toBe("mixed");
+      const ingredients = await db.ingredient.findMany({
+        where: { recipeId: result.recipeId! },
+        include: { ingredientRef: true },
+      });
+      const ingNames = ingredients.map((i) => i.ingredientRef.name).sort();
+      // JSON-LD ingredients used: "1 cup flour" / "1 tsp salt" via stub
+      expect(ingNames).toEqual(["1 cup flour", "1 tsp salt"]);
+    });
+
+    it("uses JSON-LD steps when present and LLM only fills ingredients", async () => {
+      const html =
+        "<html><head><script type=\"application/ld+json\">" +
+        JSON.stringify({
+          "@type": "Recipe",
+          name: "Hybrid Recipe Two",
+          recipeInstructions: [
+            { "@type": "HowToStep", text: "Step One" },
+            { "@type": "HowToStep", text: "Step Two" },
+          ],
+        }) +
+        "</script></head><body/></html>";
+      const chef = await makeChef();
+      const llmRunner = makeLlmRunner({
+        title: "Hybrid Recipe Two",
+        ingredients: ["1 cup sugar"],
+        steps: ["should not be used"],
+      });
+      const result = await importRecipeFromUrl(
+        { url: "https://example.com/r", chefId: chef.id },
+        baseDeps({ fetchImpl: makeFetchImpl(html), llmRunner }),
+      );
+      expect(result.source).toBe("mixed");
+      const steps = await db.recipeStep.findMany({
+        where: { recipeId: result.recipeId! },
+        orderBy: { stepNum: "asc" },
+      });
+      expect(steps.map((s) => s.description)).toEqual(["Step One", "Step Two"]);
+    });
+  });
+
+  describe("cover scheduling edge cases", () => {
+    function mockBucket(): R2Bucket {
+      return {
+        put: vi.fn(async () => ({})),
+        delete: vi.fn(async () => undefined),
+        get: vi.fn(),
+        head: vi.fn(),
+        list: vi.fn(),
+        createMultipartUpload: vi.fn(),
+        resumeMultipartUpload: vi.fn(),
+      } as unknown as R2Bucket;
+    }
+
+    function pageThen(
+      pageHtml: string,
+      imageRespOrError: Response | Error,
+    ): typeof fetch {
+      let call = 0;
+      return vi.fn(async () => {
+        call++;
+        if (call === 1) return streamingResponse(pageHtml, { url: "https://example.com/r" });
+        if (imageRespOrError instanceof Error) throw imageRespOrError;
+        return imageRespOrError;
+      }) as unknown as typeof fetch;
+    }
+
+    it("image fetch returns non-2xx → logger.error, recipe still exists", async () => {
+      const fixture = await loadFixture("nyt-style-jsonld.html");
+      const chef = await makeChef();
+      const bucket = mockBucket();
+      const waitUntil = vi.fn();
+      const logger = { error: vi.fn() };
+      const fetchImpl = pageThen(fixture, {
+        ok: false,
+        status: 404,
+        headers: new Headers([["content-type", "image/jpeg"]]),
+        arrayBuffer: async () => new ArrayBuffer(0),
+      } as unknown as Response);
+      const result = await importRecipeFromUrl(
+        { url: "https://example.com/r", chefId: chef.id },
+        baseDeps({ fetchImpl, bucket, waitUntil, logger }),
+      );
+      await waitUntil.mock.calls[0][0];
+      expect(logger.error).toHaveBeenCalled();
+      const covers = await db.recipeCover.findMany({
+        where: { recipeId: result.recipeId! },
+      });
+      expect(covers).toHaveLength(0);
+    });
+
+    it("image fetch returns non-image content-type → logger.error, no cover", async () => {
+      const fixture = await loadFixture("nyt-style-jsonld.html");
+      const chef = await makeChef();
+      const bucket = mockBucket();
+      const waitUntil = vi.fn();
+      const logger = { error: vi.fn() };
+      const fetchImpl = pageThen(fixture, {
+        ok: true,
+        status: 200,
+        headers: new Headers([["content-type", "application/pdf"]]),
+        arrayBuffer: async () => new ArrayBuffer(4),
+      } as unknown as Response);
+      const result = await importRecipeFromUrl(
+        { url: "https://example.com/r", chefId: chef.id },
+        baseDeps({ fetchImpl, bucket, waitUntil, logger }),
+      );
+      await waitUntil.mock.calls[0][0];
+      expect(logger.error).toHaveBeenCalled();
+      const covers = await db.recipeCover.findMany({
+        where: { recipeId: result.recipeId! },
+      });
+      expect(covers).toHaveLength(0);
+    });
+
+    it("image response with no content-type header defaults to image/jpeg", async () => {
+      const fixture = await loadFixture("nyt-style-jsonld.html");
+      const chef = await makeChef();
+      const bucket = mockBucket();
+      const waitUntil = vi.fn();
+      const fetchImpl = pageThen(fixture, {
+        ok: true,
+        status: 200,
+        // No headers attribute at all on the response — exercises the default.
+        arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+      } as unknown as Response);
+      const result = await importRecipeFromUrl(
+        { url: "https://example.com/r", chefId: chef.id },
+        baseDeps({ fetchImpl, bucket, waitUntil }),
+      );
+      await waitUntil.mock.calls[0][0];
+      const covers = await db.recipeCover.findMany({
+        where: { recipeId: result.recipeId! },
+      });
+      expect(covers).toHaveLength(1);
+      expect(covers[0].imageUrl).toMatch(/\.jpg$/);
+    });
+
+    it("png content-type produces .png extension", async () => {
+      const fixture = await loadFixture("nyt-style-jsonld.html");
+      const chef = await makeChef();
+      const bucket = mockBucket();
+      const waitUntil = vi.fn();
+      const fetchImpl = pageThen(fixture, {
+        ok: true,
+        status: 200,
+        headers: new Headers([["content-type", "image/png"]]),
+        arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+      } as unknown as Response);
+      const result = await importRecipeFromUrl(
+        { url: "https://example.com/r", chefId: chef.id },
+        baseDeps({ fetchImpl, bucket, waitUntil }),
+      );
+      await waitUntil.mock.calls[0][0];
+      const covers = await db.recipeCover.findMany({
+        where: { recipeId: result.recipeId! },
+      });
+      expect(covers[0].imageUrl).toMatch(/\.png$/);
+    });
+
+    it("webp content-type produces .webp extension", async () => {
+      const fixture = await loadFixture("nyt-style-jsonld.html");
+      const chef = await makeChef();
+      const bucket = mockBucket();
+      const waitUntil = vi.fn();
+      const fetchImpl = pageThen(fixture, {
+        ok: true,
+        status: 200,
+        headers: new Headers([["content-type", "image/webp"]]),
+        arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+      } as unknown as Response);
+      const result = await importRecipeFromUrl(
+        { url: "https://example.com/r", chefId: chef.id },
+        baseDeps({ fetchImpl, bucket, waitUntil }),
+      );
+      await waitUntil.mock.calls[0][0];
+      const covers = await db.recipeCover.findMany({
+        where: { recipeId: result.recipeId! },
+      });
+      expect(covers[0].imageUrl).toMatch(/\.webp$/);
+    });
+
+    it("image fetch timeout (AbortError on signal) → logger.error", async () => {
+      // We exercise the abort path (which is what the 15s timer triggers in
+      // production) by having fetchImpl reject with AbortError on the next
+      // microtask. The setTimeout itself fires after 15s; rather than
+      // advance fake timers (which interacts poorly with Prisma's async
+      // bookkeeping), we trigger the same AbortError exit edge directly.
+      const fixture = await loadFixture("nyt-style-jsonld.html");
+      const chef = await makeChef();
+      const bucket = mockBucket();
+      const waitUntil = vi.fn();
+      const logger = { error: vi.fn() };
+      let call = 0;
+      const fetchImpl = vi.fn(async () => {
+        call++;
+        if (call === 1) return streamingResponse(fixture, { url: "https://example.com/r" });
+        const err = new Error("Aborted");
+        err.name = "AbortError";
+        throw err;
+      }) as unknown as typeof fetch;
+      const result = await importRecipeFromUrl(
+        { url: "https://example.com/r", chefId: chef.id },
+        baseDeps({ fetchImpl, bucket, waitUntil, logger }),
+      );
+      await waitUntil.mock.calls[0][0];
+      expect(logger.error).toHaveBeenCalled();
+      const covers = await db.recipeCover.findMany({
+        where: { recipeId: result.recipeId! },
+      });
+      expect(covers).toHaveLength(0);
+    });
+
+    it("image fetch 15s setTimeout callback aborts the request", async () => {
+      // Capture the timer callback by spying on setTimeout. The callback,
+      // when invoked, calls controller.abort(); the in-flight fetch then
+      // rejects with AbortError and the uploadImportCover catches it.
+      const fixture = await loadFixture("nyt-style-jsonld.html");
+      const chef = await makeChef();
+      const bucket = mockBucket();
+      const waitUntil = vi.fn();
+      const logger = { error: vi.fn() };
+      let pageDone = false;
+      const fetchImpl = vi.fn(async (_input: unknown, init?: { signal?: AbortSignal }) => {
+        if (!pageDone) {
+          pageDone = true;
+          return streamingResponse(fixture, { url: "https://example.com/r" });
+        }
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => {
+            const err = new Error("Aborted");
+            err.name = "AbortError";
+            reject(err);
+          });
+        });
+      }) as unknown as typeof fetch;
+
+      // Spy on setTimeout: capture all callbacks scheduled with a 15_000ms
+      // delay (the cover-fetch timeout). We invoke them synchronously to
+      // simulate the timer firing.
+      const realSetTimeout = globalThis.setTimeout;
+      const captured: Array<() => void> = [];
+      const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout").mockImplementation(
+        ((handler: TimerHandler, delay?: number, ...args: unknown[]) => {
+          if (typeof handler === "function" && delay === 15_000) {
+            captured.push(handler as () => void);
+            return 0 as unknown as ReturnType<typeof setTimeout>;
+          }
+          // Delegate everything else (Prisma uses timers internally).
+          return realSetTimeout(handler, delay, ...args);
+        }) as typeof setTimeout,
+      );
+      try {
+        const result = await importRecipeFromUrl(
+          { url: "https://example.com/r", chefId: chef.id },
+          baseDeps({ fetchImpl, bucket, waitUntil, logger }),
+        );
+        // Fire the cover-fetch timeout callback.
+        expect(captured.length).toBeGreaterThan(0);
+        for (const cb of captured) cb();
+        await waitUntil.mock.calls[0][0];
+        expect(logger.error).toHaveBeenCalled();
+        const covers = await db.recipeCover.findMany({
+          where: { recipeId: result.recipeId! },
+        });
+        expect(covers).toHaveLength(0);
+      } finally {
+        setTimeoutSpy.mockRestore();
+      }
+    });
+
+    it("gif content-type produces .gif extension", async () => {
+      const fixture = await loadFixture("nyt-style-jsonld.html");
+      const chef = await makeChef();
+      const bucket = mockBucket();
+      const waitUntil = vi.fn();
+      const fetchImpl = pageThen(fixture, {
+        ok: true,
+        status: 200,
+        headers: new Headers([["content-type", "image/gif"]]),
+        arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+      } as unknown as Response);
+      const result = await importRecipeFromUrl(
+        { url: "https://example.com/r", chefId: chef.id },
+        baseDeps({ fetchImpl, bucket, waitUntil }),
+      );
+      await waitUntil.mock.calls[0][0];
+      const covers = await db.recipeCover.findMany({
+        where: { recipeId: result.recipeId! },
+      });
+      expect(covers[0].imageUrl).toMatch(/\.gif$/);
+    });
+  });
+
+  describe("orchestrator fallbacks", () => {
+    it("re-throws non-SafeFetchError raised by fetchImpl", async () => {
+      const chef = await makeChef();
+      const fetchImpl = vi.fn(async () => {
+        throw new TypeError("not a SafeFetchError");
+      }) as unknown as typeof fetch;
+      await expect(
+        importRecipeFromUrl(
+          { url: "https://example.com/r", chefId: chef.id },
+          baseDeps({ fetchImpl }),
+        ),
+      ).rejects.toBeInstanceOf(TypeError);
+    });
+
+    it("default fetchImpl is used when deps.fetchImpl is undefined (bad-scheme exits early)", async () => {
+      const chef = await makeChef();
+      // We exit at bad-scheme BEFORE any fetch is attempted; this still
+      // exercises the `deps.fetchImpl ?? fetch` line because we don't pass
+      // fetchImpl. The scheduleCover() default never runs because we throw.
+      await expect(
+        importRecipeFromUrl(
+          { url: "file:///etc/passwd", chefId: chef.id },
+          baseDeps({ fetchImpl: undefined }),
+        ),
+      ).rejects.toMatchObject({ code: "bad-url" });
+    });
+
+    function localMockBucket(): R2Bucket {
+      return {
+        put: vi.fn(async () => ({})),
+        delete: vi.fn(async () => undefined),
+        get: vi.fn(),
+        head: vi.fn(),
+        list: vi.fn(),
+        createMultipartUpload: vi.fn(),
+        resumeMultipartUpload: vi.fn(),
+      } as unknown as R2Bucket;
+    }
+
+    it("default fetchImpl falls back to global fetch when deps.fetchImpl is undefined", async () => {
+      const fixture = await loadFixture("nyt-style-jsonld.html");
+      const chef = await makeChef();
+      const bucket = localMockBucket();
+      const waitUntil = vi.fn();
+      const stub = vi.fn(async (input: unknown) => {
+        const url = String(input);
+        if (url === "https://example.com/r") {
+          return streamingResponse(fixture, { url: "https://example.com/r" });
+        }
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers([["content-type", "image/jpeg"]]),
+          arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+        } as unknown as Response;
+      });
+      const originalFetch = globalThis.fetch;
+      (globalThis as { fetch: typeof fetch }).fetch = stub as unknown as typeof fetch;
+      try {
+        const result = await importRecipeFromUrl(
+          { url: "https://example.com/r", chefId: chef.id },
+          {
+            db,
+            ingredientParser: makeIngredientParser(),
+            // fetchImpl omitted → defaults to global fetch
+            // env omitted → defaults to {}
+            bucket,
+            waitUntil,
+          },
+        );
+        await waitUntil.mock.calls[0][0];
+        const covers = await db.recipeCover.findMany({
+          where: { recipeId: result.recipeId! },
+        });
+        expect(covers).toHaveLength(1);
+      } finally {
+        (globalThis as { fetch: typeof fetch }).fetch = originalFetch;
+      }
+    });
+
+    it("default logger is console when deps.logger is undefined", async () => {
+      const fixture = await loadFixture("nyt-style-jsonld.html");
+      const chef = await makeChef();
+      const bucket = {
+        put: vi.fn(async () => {
+          throw new Error("simulated R2 outage");
+        }),
+      } as unknown as R2Bucket;
+      void localMockBucket;
+      const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      try {
+        let call = 0;
+        const fetchImpl = vi.fn(async () => {
+          call++;
+          if (call === 1) return streamingResponse(fixture, { url: "https://example.com/r" });
+          return {
+            ok: true,
+            status: 200,
+            headers: new Headers([["content-type", "image/jpeg"]]),
+            arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+          } as unknown as Response;
+        }) as unknown as typeof fetch;
+        const result = await importRecipeFromUrl(
+          { url: "https://example.com/r", chefId: chef.id },
+          baseDeps({ fetchImpl, bucket, logger: undefined }),
+        );
+        expect(result.recipeId).toBeTruthy();
+        expect(errSpy).toHaveBeenCalled();
+      } finally {
+        errSpy.mockRestore();
+      }
+    });
+
+    it("default now is wall-clock when deps.now is undefined", async () => {
+      const fixture = await loadFixture("nyt-style-jsonld.html");
+      const chef = await makeChef();
+      const result = await importRecipeFromUrl(
+        { url: "https://example.com/r", chefId: chef.id },
+        baseDeps({ fetchImpl: makeFetchImpl(fixture), now: undefined }),
+      );
+      expect(result.recipeId).toBeTruthy();
+    });
+
+    it("default ingredient parser is parseIngredients (env propagated)", async () => {
+      const fixture = await loadFixture("nyt-style-jsonld.html");
+      const chef = await makeChef();
+      // We CAN'T actually call OpenAI in tests. Instead, we exercise the
+      // default-parser line by relying on parseIngredients's "OPENAI_API_KEY
+      // required" guard: pass empty env to trigger that synchronous error.
+      // The default parser is invoked because we omit deps.ingredientParser.
+      await expect(
+        importRecipeFromUrl(
+          { url: "https://example.com/r", chefId: chef.id },
+          {
+            db,
+            env: { OPENAI_API_KEY: "" },
+            fetchImpl: makeFetchImpl(fixture),
+            // No ingredientParser → defaults to parseIngredients
+            // No llmRunner needed (JSON-LD covers everything)
+          },
+        ),
+      ).rejects.toThrow(/OpenAI API key/i);
+    });
+
+    it("default ingredient parser works when env is null", async () => {
+      const fixture = await loadFixture("nyt-style-jsonld.html");
+      const chef = await makeChef();
+      // Force the env-null branch of the default parser arrow.
+      await expect(
+        importRecipeFromUrl(
+          { url: "https://example.com/r", chefId: chef.id },
+          {
+            db,
+            env: null,
+            fetchImpl: makeFetchImpl(fixture),
+          },
+        ),
+      ).rejects.toThrow(/OpenAI API key/i);
+    });
+  });
+
   describe("ImportRecipeError", () => {
     it("is an Error with code and status fields", () => {
       const e = new ImportRecipeError("rate-limited", 429, "msg");
@@ -905,6 +1410,26 @@ describe("importRecipeFromUrl — extraction paths", () => {
         where: { id: result.recipeId! },
       });
       expect(recipe?.title).toBe("Pasta al Limone (imported 07:05)");
+    });
+
+    it("ingredient-ref cache hit (reuse existing ingredient row across imports)", async () => {
+      const fixture = await loadFixture("nyt-style-jsonld.html");
+      const chefA = await makeChef();
+      const chefB = await makeChef();
+      // First import — creates a "spaghetti" ingredient ref
+      await importRecipeFromUrl(
+        { url: "https://example.com/r", chefId: chefA.id },
+        baseDeps({ fetchImpl: makeFetchImpl(fixture) }),
+      );
+      // Second import — should hit the existing ingredient_ref by name
+      await importRecipeFromUrl(
+        { url: "https://example.com/r", chefId: chefB.id },
+        baseDeps({ fetchImpl: makeFetchImpl(fixture) }),
+      );
+      const refs = await db.ingredientRef.findMany({});
+      // We expect each *normalized* ingredient name to exist only once.
+      const names = refs.map((r) => r.name);
+      expect(new Set(names).size).toBe(names.length);
     });
 
     it("third-collision throws title-conflict (409)", async () => {

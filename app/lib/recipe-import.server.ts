@@ -35,7 +35,11 @@ import {
 } from "~/lib/ingredient-parse.server";
 import { tryConsumeImageGenQuota } from "~/lib/image-gen-ledger.server";
 import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
-import type { ImageGenRunner } from "~/lib/image-gen.server";
+import { createCover } from "~/lib/recipe-cover.server";
+import {
+  generatePlaceholderImage,
+  type ImageGenRunner,
+} from "~/lib/image-gen.server";
 
 type Database = PrismaClient | Prisma.TransactionClient;
 
@@ -189,7 +193,7 @@ async function runExtraction(
     const llm = await runLlm(html, deps);
     return {
       draft: {
-        title: draft.title || llm.title,
+        title: draft.title,
         description: draft.description ?? llm.description,
         servings: draft.servings ?? llm.servings,
         ingredients:
@@ -266,38 +270,50 @@ async function findExistingRecipeId(
   return existing?.id ?? null;
 }
 
+function pad2(n: number): string {
+  return n.toString().padStart(2, "0");
+}
+
+async function resolveTitleWithRetry(
+  db: PrismaClient,
+  chefId: string,
+  baseTitle: string,
+  now: () => Date,
+): Promise<string> {
+  const trimmed = baseTitle.trim();
+  const attempts = [
+    trimmed,
+    `${trimmed} (imported)`,
+    (() => {
+      const d = now();
+      return `${trimmed} (imported ${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())})`;
+    })(),
+  ];
+  for (const candidate of attempts) {
+    const result = await validateActiveRecipeTitleUnique(db, {
+      chefId,
+      title: candidate,
+    });
+    if (result.valid) return candidate;
+  }
+  throw new ImportRecipeError(
+    "title-conflict",
+    409,
+    "Title already in use after retry suffixes",
+  );
+}
+
 async function persistRecipe(
   db: PrismaClient,
   chefId: string,
   draft: ImportRecipeDraftView,
   ingredientParser: NonNullable<ImportRecipeDeps["ingredientParser"]>,
   env: ImportRecipeDeps["env"],
-): Promise<{ id: string; recipe: unknown }> {
-  const title = draft.title.trim();
-  // First-attempt collision check (full retry logic lands in Unit 4d).
-  const conflict = await validateActiveRecipeTitleUnique(db, {
-    chefId,
-    title,
-  });
-  if (!conflict.valid) {
-    throw new ImportRecipeError(
-      "title-conflict",
-      409,
-      conflict.error ?? "Title already in use",
-    );
-  }
+  now: () => Date,
+): Promise<{ id: string; recipe: unknown; title: string }> {
+  const title = await resolveTitleWithRetry(db, chefId, draft.title, now);
 
-  // Parse ingredient strings up-front (outside the transaction — these
-  // calls can be slow and we don't want to hold a write transaction open).
-  const parsedPerStep: ParsedIngredient[][] = [];
-  for (const _ of draft.steps) {
-    parsedPerStep.push([]);
-  }
-  // Map: per-step ingredient list. The JSON-LD recipeIngredient[] is flat —
-  // we attach all ingredients to step 1 to preserve them. This matches
-  // current Spoonjoy data model behaviour where ingredients reference a
-  // step number.
-  const stepCount = Math.max(draft.steps.length, 1);
+  // Parse ingredient strings up-front (outside the transaction).
   const allIngredients: ParsedIngredient[] = [];
   for (const ingredientText of draft.ingredients) {
     const parsed = await ingredientParser(ingredientText, env);
@@ -315,14 +331,12 @@ async function persistRecipe(
       },
     });
 
-    const stepsToInsert =
-      draft.steps.length > 0 ? draft.steps : ["(No steps provided.)"];
-    for (let i = 0; i < stepsToInsert.length; i++) {
+    for (let i = 0; i < draft.steps.length; i++) {
       await tx.recipeStep.create({
         data: {
           recipeId: created.id,
           stepNum: i + 1,
-          description: stepsToInsert[i],
+          description: draft.steps[i],
         },
       });
     }
@@ -346,8 +360,103 @@ async function persistRecipe(
       where: { id: created.id },
       include: recipeInclude,
     });
-    return { id: created.id, recipe: full };
+    return { id: created.id, recipe: full, title };
   });
+}
+
+const COVER_FETCH_TIMEOUT_MS = 15_000;
+const COVER_MAX_BYTES = 5 * 1024 * 1024;
+
+async function fetchImageBytes(
+  url: string,
+  fetchImpl: typeof fetch,
+): Promise<{ bytes: Uint8Array; contentType: string }> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), COVER_FETCH_TIMEOUT_MS);
+  let response: Response;
+  try {
+    response = await fetchImpl(url, { signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+  if (!response.ok) {
+    throw new Error(`Image fetch failed: ${response.status}`);
+  }
+  const headers = (response as { headers?: Headers }).headers;
+  const contentType = headers?.get("content-type") ?? "image/jpeg";
+  if (!contentType.toLowerCase().startsWith("image/")) {
+    throw new Error(`Image content-type rejected: ${contentType}`);
+  }
+  const buffer = await response.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  if (bytes.byteLength > COVER_MAX_BYTES) {
+    throw new Error("Image exceeds 5MB cap");
+  }
+  return { bytes, contentType };
+}
+
+function extensionFor(contentType: string): string {
+  const lower = contentType.toLowerCase();
+  if (lower.includes("png")) return "png";
+  if (lower.includes("webp")) return "webp";
+  if (lower.includes("gif")) return "gif";
+  return "jpg";
+}
+
+async function uploadImportCover(
+  db: PrismaClient,
+  bucket: R2Bucket,
+  fetchImpl: typeof fetch,
+  recipeId: string,
+  coverSourceUrl: string,
+  logger: Pick<Console, "error">,
+  now: () => Date,
+): Promise<void> {
+  try {
+    const { bytes, contentType } = await fetchImageBytes(coverSourceUrl, fetchImpl);
+    const stamp = now().getTime();
+    const key = `covers/import/${stamp}.${extensionFor(contentType)}`;
+    await bucket.put(key, bytes, {
+      httpMetadata: { contentType },
+    });
+    await createCover(db, {
+      recipeId,
+      imageUrl: `/photos/${key}`,
+      sourceType: "import",
+    });
+  } catch (err) {
+    logger.error("recipe-import cover upload failed", err);
+  }
+}
+
+async function uploadPlaceholderCover(
+  db: PrismaClient,
+  recipeId: string,
+  title: string,
+  description: string | null,
+  deps: {
+    env: { OPENAI_API_KEY?: string };
+    runner: ImageGenRunner;
+    bucket: R2Bucket;
+    fetchImpl: typeof fetch;
+    logger: Pick<Console, "error">;
+  },
+): Promise<void> {
+  try {
+    const imageUrl = await generatePlaceholderImage(title, description, {
+      env: deps.env,
+      runner: deps.runner,
+      bucket: deps.bucket,
+      fetchImpl: deps.fetchImpl,
+    });
+    await createCover(db, {
+      recipeId,
+      imageUrl,
+      sourceType: "ai-placeholder",
+    });
+  } catch (err) {
+    deps.logger.error("recipe-import placeholder cover failed", err);
+  }
 }
 
 export async function importRecipeFromUrl(
@@ -415,7 +524,24 @@ export async function importRecipeFromUrl(
     extraction.draft,
     ingredientParser,
     deps.env,
+    now ?? (() => new Date()),
   );
+
+  // 7. Cover scheduling.
+  const coverPending = await scheduleCover({
+    db: deps.db,
+    bucket: deps.bucket,
+    waitUntil: deps.waitUntil,
+    fetchImpl: deps.fetchImpl ?? fetch,
+    imageGenRunner: deps.imageGenRunner,
+    env: deps.env ?? {},
+    logger: deps.logger ?? console,
+    now: now ?? (() => new Date()),
+    recipeId: persisted.id,
+    title: persisted.title,
+    description: extraction.draft.description,
+    coverSourceUrl: extraction.draft.imageUrl,
+  });
 
   return {
     recipeId: persisted.id,
@@ -423,6 +549,53 @@ export async function importRecipeFromUrl(
     confidence: extraction.confidence,
     source: extraction.source,
     existingRecipeId,
-    coverPending: false,
+    coverPending,
   };
+}
+
+interface ScheduleCoverArgs {
+  db: PrismaClient;
+  bucket: R2Bucket | undefined;
+  waitUntil: ((p: Promise<unknown>) => void) | undefined;
+  fetchImpl: typeof fetch;
+  imageGenRunner: ImageGenRunner | undefined;
+  env: { OPENAI_API_KEY?: string };
+  logger: Pick<Console, "error">;
+  now: () => Date;
+  recipeId: string;
+  title: string;
+  description: string | null;
+  coverSourceUrl: string | null;
+}
+
+async function scheduleCover(args: ScheduleCoverArgs): Promise<boolean> {
+  const { bucket } = args;
+  if (!bucket) return false;
+  let task: Promise<void> | null = null;
+  if (args.coverSourceUrl) {
+    task = uploadImportCover(
+      args.db,
+      bucket,
+      args.fetchImpl,
+      args.recipeId,
+      args.coverSourceUrl,
+      args.logger,
+      args.now,
+    );
+  } else if (args.imageGenRunner) {
+    task = uploadPlaceholderCover(args.db, args.recipeId, args.title, args.description, {
+      env: args.env,
+      runner: args.imageGenRunner,
+      bucket,
+      fetchImpl: args.fetchImpl,
+      logger: args.logger,
+    });
+  }
+  if (!task) return false;
+  if (args.waitUntil) {
+    args.waitUntil(task);
+  } else {
+    await task;
+  }
+  return true;
 }
