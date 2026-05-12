@@ -15,6 +15,38 @@ describe("image storage helpers", () => {
     fileTooLarge: "Image must be less than 5MB",
   };
 
+  const textEncoder = new TextEncoder();
+
+  function jpegWithSegments(segments: Uint8Array[], scanData = new Uint8Array([0xff, 0xda, 0x00, 0x02, 0x11, 0x22])) {
+    return new Uint8Array([
+      0xff,
+      0xd8,
+      ...segments.flatMap((segment) => Array.from(segment)),
+      ...scanData,
+    ]);
+  }
+
+  function jpegSegment(marker: number, payload: string): Uint8Array {
+    const payloadBytes = textEncoder.encode(payload);
+    const length = payloadBytes.length + 2;
+
+    return new Uint8Array([
+      0xff,
+      marker,
+      (length >> 8) & 0xff,
+      length & 0xff,
+      ...payloadBytes,
+    ]);
+  }
+
+  async function fileBytes(file: File): Promise<Uint8Array> {
+    return new Uint8Array(await file.arrayBuffer());
+  }
+
+  function bytesAsText(bytes: Uint8Array): string {
+    return new TextDecoder().decode(bytes);
+  }
+
   describe("hasUploadedImageFile", () => {
     it("returns true only for non-empty File values", () => {
       expect(hasUploadedImageFile(new File(["image"], "photo.jpg", { type: "image/jpeg" }))).toBe(true);
@@ -88,6 +120,109 @@ describe("image storage helpers", () => {
         file,
         { httpMetadata: { contentType: "image/webp" } }
       );
+    });
+
+    it("strips JPEG APP1 metadata before uploading to R2", async () => {
+      const bucket = {
+        put: vi.fn().mockResolvedValue(undefined),
+      };
+      const imageBytes = jpegWithSegments([
+        jpegSegment(0xe0, "JFIF public header"),
+        jpegSegment(0xe1, "Exif\0\0GPSLatitude private location"),
+      ]);
+      const file = new File([imageBytes], "dish.jpg", { type: "image/jpeg" });
+
+      const imageUrl = await storeImage({
+        bucket: bucket as unknown as R2Bucket,
+        file,
+        namespace: "spoons/user-1/recipe-1",
+        now: () => 24680,
+      });
+
+      expect(imageUrl).toBe("/photos/spoons/user-1/recipe-1/24680.jpg");
+      const uploadedFile = bucket.put.mock.calls[0][1] as File;
+      expect(uploadedFile).not.toBe(file);
+      expect(uploadedFile.type).toBe("image/jpeg");
+      const uploadedText = bytesAsText(await fileBytes(uploadedFile));
+      expect(uploadedText).toContain("JFIF public header");
+      expect(uploadedText).not.toContain("GPSLatitude");
+    });
+
+    it("strips JPEG APP1 metadata before falling back to a local data URL", async () => {
+      const imageBytes = jpegWithSegments([
+        jpegSegment(0xe1, "Exif\0\0GPSLongitude private location"),
+      ]);
+
+      const imageUrl = await storeImage({
+        file: new File([imageBytes], "local.jpg", { type: "image/jpeg" }),
+        namespace: "recipes/user-1/recipe-1",
+      });
+
+      const encoded = imageUrl.replace("data:image/jpeg;base64,", "");
+      const decoded = bytesAsText(Uint8Array.from(atob(encoded), (char) => char.charCodeAt(0)));
+      expect(decoded).not.toContain("GPSLongitude");
+    });
+
+    it("leaves JPEG uploads unchanged when they have no APP1 metadata", async () => {
+      const bucket = {
+        put: vi.fn().mockResolvedValue(undefined),
+      };
+      const file = new File(
+        [jpegWithSegments([jpegSegment(0xe0, "JFIF public header")])],
+        "plain.jpeg",
+        { type: "image/jpeg" },
+      );
+
+      await storeImage({
+        bucket: bucket as unknown as R2Bucket,
+        file,
+        namespace: "recipes/user-1/recipe-1",
+        now: () => 13579,
+      });
+
+      expect(bucket.put.mock.calls[0][1]).toBe(file);
+    });
+
+    it("leaves malformed JPEG uploads unchanged instead of corrupting them", async () => {
+      const bucket = {
+        put: vi.fn().mockResolvedValue(undefined),
+      };
+      const malformed = new Uint8Array([0xff, 0xd8, 0xff, 0xe1, 0x00, 0x20, 0x45, 0x78]);
+      const file = new File([malformed], "truncated.jpg", { type: "image/jpeg" });
+
+      await storeImage({
+        bucket: bucket as unknown as R2Bucket,
+        file,
+        namespace: "recipes/user-1/recipe-1",
+        now: () => 97531,
+      });
+
+      expect(bucket.put.mock.calls[0][1]).toBe(file);
+    });
+
+    it("does not strip APP1-like bytes once JPEG scan data has started", async () => {
+      const bucket = {
+        put: vi.fn().mockResolvedValue(undefined),
+      };
+      const imageBytes = jpegWithSegments([], new Uint8Array([
+        0xff,
+        0xda,
+        0x00,
+        0x02,
+        0xff,
+        0xe1,
+        ...textEncoder.encode("scan bytes"),
+      ]));
+      const file = new File([imageBytes], "scan.jpg", { type: "image/jpeg" });
+
+      await storeImage({
+        bucket: bucket as unknown as R2Bucket,
+        file,
+        namespace: "recipes/user-1/recipe-1",
+        now: () => 11223,
+      });
+
+      expect(bucket.put.mock.calls[0][1]).toBe(file);
     });
 
     it("falls back to a data URL when no bucket is available", async () => {
