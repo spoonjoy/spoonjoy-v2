@@ -29,6 +29,7 @@ export default [
   route("users/:identifier", "routes/users.$identifier.tsx"),
   route("users/:identifier/fellow-chefs", "routes/users.$identifier.fellow-chefs.tsx"),
   route("users/:identifier/kitchen-visitors", "routes/users.$identifier.kitchen-visitors.tsx"),
+  route("api/push/public-key", "routes/api.push.public-key.ts"),
   route("api/*", "routes/api.$.ts"),
   route("photos/*", "routes/photos.$.tsx"),
   route(".well-known/appspecific/com.chrome.devtools.json", "routes/devtools-well-known.tsx"),
