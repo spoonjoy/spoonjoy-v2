@@ -32,6 +32,18 @@ export interface OAuthEnv {
   APPLE_PRIVATE_KEY?: string;
 }
 
+export interface VapidConfig {
+  publicKey: string;
+  privateKey: string;
+  subject: string;
+}
+
+export interface VapidEnv {
+  VAPID_PUBLIC_KEY?: string;
+  VAPID_PRIVATE_KEY?: string;
+  VAPID_SUBJECT?: string;
+}
+
 /**
  * Validates and returns Google OAuth configuration.
  * Throws an error if any required environment variable is missing or empty.
@@ -104,4 +116,28 @@ export function validateOAuthEnv(env: OAuthEnv): true {
   }
 
   return true;
+}
+
+/**
+ * Validates and returns the VAPID push-notification configuration.
+ * Throws if any of VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT
+ * is missing or empty. Empty strings are treated as missing — same pattern
+ * as the OAuth helpers above.
+ */
+export function getVapidConfig(env: VapidEnv): VapidConfig {
+  if (!env.VAPID_PUBLIC_KEY) {
+    throw new Error("Missing required environment variable: VAPID_PUBLIC_KEY");
+  }
+  if (!env.VAPID_PRIVATE_KEY) {
+    throw new Error("Missing required environment variable: VAPID_PRIVATE_KEY");
+  }
+  if (!env.VAPID_SUBJECT) {
+    throw new Error("Missing required environment variable: VAPID_SUBJECT");
+  }
+
+  return {
+    publicKey: env.VAPID_PUBLIC_KEY,
+    privateKey: env.VAPID_PRIVATE_KEY,
+    subject: env.VAPID_SUBJECT,
+  };
 }
