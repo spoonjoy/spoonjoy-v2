@@ -15,6 +15,7 @@ export default [
     route("new", "routes/recipes.new.tsx"),
     route(":id", "routes/recipes.$id.tsx"),
     route(":id/edit", "routes/recipes.$id.edit.tsx"),
+    route(":id/fork", "routes/recipes.$id.fork.tsx"),
     route(":id/steps/new", "routes/recipes.$id.steps.new.tsx"),
     route(":id/steps/:stepId/edit", "routes/recipes.$id.steps.$stepId.edit.tsx"),
   ]),

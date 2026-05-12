@@ -47,10 +47,12 @@ function makeRequest(): Request {
   return new Request("http://localhost/recipes/abc/fork", { method: "POST" });
 }
 
-function makeArgs(overrides?: { id?: string | undefined }) {
+function makeArgs(overrides?: { id?: string | undefined; idAbsent?: boolean }) {
+  const idAbsent = overrides?.idAbsent === true;
+  const id = idAbsent ? undefined : overrides?.id ?? "abc";
   return {
     request: makeRequest(),
-    params: { id: overrides?.id ?? "abc" },
+    params: { id },
     context: {} as unknown as Parameters<typeof action>[0]["context"],
   } as unknown as Parameters<typeof action>[0];
 }
@@ -108,7 +110,7 @@ describe("recipes.$id.fork action", () => {
 
     let thrown: unknown;
     try {
-      await action(makeArgs({ id: undefined }));
+      await action(makeArgs({ idAbsent: true }));
     } catch (err) {
       thrown = err;
     }
