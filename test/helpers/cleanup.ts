@@ -20,6 +20,8 @@ export async function cleanupDatabase() {
   await db.recipeStep.deleteMany({});
   await db.recipeInCookbook.deleteMany({});
   await db.cookbook.deleteMany({});
+  // Clear fork attribution before deleting recipes (Recipe.sourceRecipe uses onDelete: Restrict).
+  await db.recipe.updateMany({ data: { sourceRecipeId: null } });
   await db.recipe.deleteMany({});
   await db.ingredientRef.deleteMany({});
   await db.unit.deleteMany({});
