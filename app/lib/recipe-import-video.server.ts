@@ -7,8 +7,17 @@
  */
 
 import { z } from "zod";
+import type { RecipeLlmRunner } from "~/lib/recipe-import-llm.server";
 
 export type ImportSource = "youtube" | "tiktok" | "web";
+
+const VIDEO_LLM_PROMPT_PREFIX =
+  "You are extracting a recipe from a social-media video's metadata. " +
+  "You are given the video's title, the author's display name, and (sometimes) a description. " +
+  "The full recipe is rarely present — leave fields null or arrays empty when uncertain. " +
+  "Do not invent quantities. If the metadata clearly references a recipe, extract what you can; " +
+  "otherwise return empty strings/arrays. If you include the author, fold the credit into the description " +
+  "(e.g., \"Recipe by joe's_kitchen on YouTube\"). English only.";
 
 const OEMBED_TIMEOUT_MS = 15_000;
 const OEMBED_MAX_BYTES = 1 * 1024 * 1024;
@@ -211,4 +220,38 @@ export async function fetchOEmbedMetadata(
     source,
     sourceUrl: url,
   };
+}
+
+export interface VideoRecipeExtractionDeps {
+  llmRunner: RecipeLlmRunner;
+}
+
+export interface VideoRecipeExtraction {
+  title: string;
+  description: string | null;
+  servings: string | null;
+  ingredients: string[];
+  steps: string[];
+}
+
+/**
+ * Extract a recipe from oEmbed metadata via the shared LLM runner.
+ *
+ * Tells the model explicitly that this is video metadata where the full recipe
+ * may not be present, and folds the author credit into the description. Does
+ * NOT catch `RecipeLlmError` — the orchestrator maps it to `llm-failed`/502.
+ */
+export async function extractVideoRecipe(
+  meta: OEmbedMetadata,
+  deps: VideoRecipeExtractionDeps,
+): Promise<VideoRecipeExtraction> {
+  const text = [
+    VIDEO_LLM_PROMPT_PREFIX,
+    "",
+    `Source: ${meta.source}`,
+    `Title: ${meta.title}`,
+    `Author: ${meta.authorName ?? "unknown"}`,
+    `Description: ${meta.description ?? "(none)"}`,
+  ].join("\n");
+  return deps.llmRunner.extract(text);
 }
