@@ -24,13 +24,13 @@ Fix the deployed-worker failure in the MCP/API `add_recipe_to_cookbook` operatio
 - Fixing D-010, D-002, D-008, D-014, or other follow-up backlog items.
 
 ## Completion Criteria
-- [ ] `add_recipe_to_cookbook` no longer calls interactive `$transaction(async tx => ...)`.
-- [ ] Regression coverage fails before the implementation change and passes after the refactor.
-- [ ] Existing cookbook MCP behavior remains covered and unchanged.
-- [ ] Notification trigger tests for `cookbook_save_of_mine` still pass.
-- [ ] 100% test coverage on all new code
-- [ ] All tests pass
-- [ ] No warnings
+- [x] `add_recipe_to_cookbook` no longer calls interactive `$transaction(async tx => ...)`.
+- [x] Regression coverage fails before the implementation change and passes after the refactor.
+- [x] Existing cookbook MCP behavior remains covered and unchanged.
+- [x] Notification trigger tests for `cookbook_save_of_mine` still pass.
+- [x] 100% test coverage on all new code
+- [x] All tests pass
+- [x] No warnings
 
 ## Code Coverage Requirements
 **MANDATORY: 100% coverage on all new code.**
@@ -60,3 +60,4 @@ The essential bug is the interactive transaction callback, not the cookbook sema
 
 ## Progress Log
 - 2026-05-12 08:30 Created from D-015 handoff and current code inspection.
+- 2026-05-12 08:46 Completion criteria verified by red test, targeted tests, full coverage, and production build.

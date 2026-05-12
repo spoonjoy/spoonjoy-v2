@@ -1,6 +1,6 @@
 # Doing: D-015 Cookbook MCP Transaction Fix
 
-**Status**: READY_FOR_EXECUTION
+**Status**: done
 **Execution Mode**: direct
 **Created**: 2026-05-12 08:30
 **Planning**: ./2026-05-12-0830-planning-d015-cookbook-mcp-transaction.md
@@ -19,13 +19,13 @@ Fix the deployed-worker failure in the MCP/API `add_recipe_to_cookbook` operatio
 - D-015
 
 ## Completion Criteria
-- [ ] `add_recipe_to_cookbook` no longer calls interactive `$transaction(async tx => ...)`.
-- [ ] Regression coverage fails before the implementation change and passes after the refactor.
-- [ ] Existing cookbook MCP behavior remains covered and unchanged.
-- [ ] Notification trigger tests for `cookbook_save_of_mine` still pass.
-- [ ] 100% test coverage on all new code
-- [ ] All tests pass
-- [ ] No warnings
+- [x] `add_recipe_to_cookbook` no longer calls interactive `$transaction(async tx => ...)`.
+- [x] Regression coverage fails before the implementation change and passes after the refactor.
+- [x] Existing cookbook MCP behavior remains covered and unchanged.
+- [x] Notification trigger tests for `cookbook_save_of_mine` still pass.
+- [x] 100% test coverage on all new code
+- [x] All tests pass
+- [x] No warnings
 
 ## Code Coverage Requirements
 **MANDATORY: 100% coverage on all new code.**
@@ -65,7 +65,7 @@ Fix the deployed-worker failure in the MCP/API `add_recipe_to_cookbook` operatio
 **Output**: Implementation commit that makes the regression and existing targeted tests pass.
 **Acceptance**: Targeted cookbook MCP tests and cookbook notification tests pass with zero warnings, and build succeeds.
 
-### ⬜ Unit 1c: Coverage And Final Verification
+### ✅ Unit 1c: Coverage And Final Verification
 **What**: Run coverage and full validation, then update task docs with verified completion evidence.
 **Output**: Coverage/test/build artifacts and completed docs.
 **Acceptance**: Full coverage is 100%, all tests pass, no warnings are present, and docs reflect completion.
@@ -84,3 +84,4 @@ Fix the deployed-worker failure in the MCP/API `add_recipe_to_cookbook` operatio
 - 2026-05-12 08:30 Unit 0 complete: confirmed `addRecipeToCookbookTool` uses callback-style `$transaction`, existing MCP cookbook and notification tests cover behavior, and recipe create/fork modules show the D1-compatible sequential-write pattern.
 - 2026-05-12 08:37 Unit 1a complete: added an MCP regression with a D1 transaction guard; targeted run failed red with "D1 interactive transactions are not supported" at `addRecipeToCookbookTool`.
 - 2026-05-12 08:39 Unit 1b complete: refactored `addRecipeToCookbookTool` to top-level sequential writes; regression, cookbook MCP tests, notification tests, and production build passed.
+- 2026-05-12 08:46 Unit 1c complete: full coverage passed with 202 files, 4514 tests, and 100% statements/branches/functions/lines; final production build passed.
