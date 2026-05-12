@@ -313,29 +313,13 @@ describe("createOpenAIRecipeLlmRunner", () => {
   });
 
   it("uses the default OpenAI client factory when opts is omitted", () => {
-    // Exercises the `defaultClientFactory` path. In the test environment
-    // (happy-dom), `new OpenAI()` throws a browser-environment warning; that
-    // throw confirms `defaultClientFactory` was reached. We assert the throw
-    // is NOT the API-key-missing error to prove we reached the factory.
-    let caught: unknown = null;
-    try {
-      createOpenAIRecipeLlmRunner({ OPENAI_API_KEY: "sk-test" });
-    } catch (err) {
-      caught = err;
-    }
-    expect(caught).not.toBeNull();
-    expect(String(caught)).not.toContain("OPENAI_API_KEY is required");
+    const runner = createOpenAIRecipeLlmRunner({ OPENAI_API_KEY: "sk-test" });
+    expect(runner.extract).toBeInstanceOf(Function);
   });
 
   it("uses the default OpenAI client factory when opts.clientFactory is omitted", () => {
-    let caught: unknown = null;
-    try {
-      createOpenAIRecipeLlmRunner({ OPENAI_API_KEY: "sk-test" }, {});
-    } catch (err) {
-      caught = err;
-    }
-    expect(caught).not.toBeNull();
-    expect(String(caught)).not.toContain("OPENAI_API_KEY is required");
+    const runner = createOpenAIRecipeLlmRunner({ OPENAI_API_KEY: "sk-test" }, {});
+    expect(runner.extract).toBeInstanceOf(Function);
   });
 });
 

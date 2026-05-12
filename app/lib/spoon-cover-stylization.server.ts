@@ -1,11 +1,11 @@
 import type { PrismaClient } from "@prisma/client";
-import OpenAI from "openai";
 import {
   createOpenAIImageRunner,
   stylizeSpoonPhoto,
   type ImageGenRunner,
 } from "~/lib/image-gen.server";
 import { tryConsumeImageGenQuota } from "~/lib/image-gen-ledger.server";
+import { createOpenAIClient } from "~/lib/openai-client.server";
 
 export interface ScheduleSpoonStylizationInput {
   db: PrismaClient;
@@ -25,10 +25,7 @@ function createDefaultRunner(
   env: { OPENAI_API_KEY?: string } | null | undefined,
 ): ImageGenRunner | null {
   if (!env?.OPENAI_API_KEY) return null;
-  const client = new OpenAI({
-    apiKey: env.OPENAI_API_KEY,
-    dangerouslyAllowBrowser: true,
-  });
+  const client = createOpenAIClient({ apiKey: env.OPENAI_API_KEY });
   return createOpenAIImageRunner(client as never);
 }
 
