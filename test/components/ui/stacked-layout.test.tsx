@@ -82,15 +82,15 @@ describe('StackedLayout', () => {
       expect(main.className).toContain('flex-col')
     })
 
-    it('wraps content in max-width container', () => {
+    it('lets pages own their max-width container', () => {
       const { container } = render(
         <StackedLayout navbar={<div>Navbar</div>} sidebar={<nav>Sidebar</nav>}>
           <div data-testid="content">Content</div>
         </StackedLayout>
       )
-      const maxWidthContainer = container.querySelector('.mx-auto.max-w-6xl')
-      expect(maxWidthContainer).toBeInTheDocument()
-      expect(maxWidthContainer).toContainElement(screen.getByTestId('content'))
+      const contentContainer = container.querySelector('.mx-auto.w-full')
+      expect(contentContainer).toBeInTheDocument()
+      expect(contentContainer).toContainElement(screen.getByTestId('content'))
     })
 
     it('header contains navbar in flex layout', () => {
@@ -351,15 +351,15 @@ describe('StackedLayout', () => {
       expect(navbarWrapper?.className).toContain('min-w-0')
     })
 
-    it('main content has responsive padding', () => {
+    it('main content avoids an extra framed padding shell', () => {
       render(
         <StackedLayout navbar={<div>Navbar</div>} sidebar={<nav>Sidebar</nav>}>
           <div>Content</div>
         </StackedLayout>
       )
       const main = screen.getByRole('main')
-      expect(main.className).toContain('pb-3')
-      expect(main.className).toContain('lg:px-3')
+      expect(main.className).toContain('flex')
+      expect(main.className).not.toContain('lg:px-3')
     })
   })
 
@@ -383,7 +383,7 @@ describe('StackedLayout', () => {
       )
       const contentWrapper = container.querySelector('.grow')
       expect(contentWrapper?.className).toContain('sj-desktop-surface')
-      expect(contentWrapper?.className).toContain('backdrop-blur-xl')
+      expect(contentWrapper?.className).not.toContain('backdrop-blur-xl')
     })
 
     it('mobile sidebar panel uses the branded panel shell', async () => {
@@ -401,7 +401,7 @@ describe('StackedLayout', () => {
         const panelContent = dialog.querySelector('.sj-panel')
         expect(panelContent).toBeInTheDocument()
         expect(panelContent?.className).toContain('flex')
-        expect(panelContent?.className).toContain('rounded-[1.75rem]')
+        expect(panelContent?.className).toContain('rounded-[var(--sj-radius-hero)]')
       })
     })
   })
@@ -595,29 +595,28 @@ describe('StackedLayout', () => {
   })
 
   describe('content styling', () => {
-    it('content wrapper has proper background and shadow classes', () => {
+    it('content wrapper removes the old card shell classes', () => {
       const { container } = render(
         <StackedLayout navbar={<div>Navbar</div>} sidebar={<nav>Sidebar</nav>}>
           <div>Content</div>
         </StackedLayout>
       )
       const contentWrapper = container.querySelector('.grow')
-      expect(contentWrapper?.className).toContain('rounded-[1.75rem]')
-      expect(contentWrapper?.className).toContain('bg-[color-mix(in_srgb,var(--sj-panel)_82%,transparent)]')
-      expect(contentWrapper?.className).toContain('shadow-[var(--sj-shadow-soft)]')
-      expect(contentWrapper?.className).toContain('border')
-      expect(contentWrapper?.className).toContain('border-[var(--sj-border)]')
+      expect(contentWrapper?.className).toContain('sj-desktop-surface')
+      expect(contentWrapper?.className).not.toContain('rounded-[1.75rem]')
+      expect(contentWrapper?.className).not.toContain('shadow-[var(--sj-shadow-soft)]')
+      expect(contentWrapper?.className).not.toContain('border')
     })
 
-    it('content wrapper has proper padding', () => {
+    it('content wrapper leaves page padding to the route', () => {
       const { container } = render(
         <StackedLayout navbar={<div>Navbar</div>} sidebar={<nav>Sidebar</nav>}>
           <div>Content</div>
         </StackedLayout>
       )
       const contentWrapper = container.querySelector('.grow')
-      expect(contentWrapper?.className).toContain('p-6')
-      expect(contentWrapper?.className).toContain('lg:p-10')
+      expect(contentWrapper?.className).not.toContain('p-6')
+      expect(contentWrapper?.className).not.toContain('lg:p-10')
     })
 
     it('header has proper padding', () => {
@@ -646,7 +645,7 @@ describe('StackedLayout', () => {
         const dialog = screen.getByRole('dialog')
         const panelInner = dialog.querySelector('.sj-panel')
         expect(panelInner).toBeInTheDocument()
-        expect(panelInner?.className).toContain('rounded-[1.75rem]')
+        expect(panelInner?.className).toContain('rounded-[var(--sj-radius-hero)]')
       })
     })
 

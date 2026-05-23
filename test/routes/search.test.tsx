@@ -118,7 +118,7 @@ describe("Search Route", () => {
 
       render(<Stub initialEntries={["/search"]} />);
 
-      expect(await screen.findByRole("heading", { name: /find the recipe, person/i })).toBeInTheDocument();
+      expect(await screen.findByRole("heading", { name: /search the kitchen/i })).toBeInTheDocument();
       expect(screen.getByRole("searchbox")).toHaveAttribute("name", "q");
       expect(screen.getByRole("combobox")).toHaveValue("all");
       expect(screen.getByRole("button", { name: "Search" })).toBeInTheDocument();
@@ -149,7 +149,7 @@ describe("Search Route", () => {
                 subtitle: "Recipe by chef-ari",
                 snippet: "tomato basil simmer",
                 href: "/recipes/recipe-1",
-                coverImageUrl: null,
+                imageUrl: "https://example.com/tomato.jpg",
                 score: -1,
                 metadata: {},
               },
@@ -162,7 +162,7 @@ describe("Search Route", () => {
                 subtitle: "Cookbook by chef-ari",
                 snippet: "Tomato Sauce",
                 href: "/cookbooks/cookbook-1",
-                coverImageUrl: null,
+                imageUrl: "",
                 score: -0.5,
                 metadata: {},
               },
@@ -175,7 +175,7 @@ describe("Search Route", () => {
                 subtitle: "Chef kitchen",
                 snippet: "recipes 1 cookbooks 1",
                 href: "/users/chef-ari",
-                coverImageUrl: "https://example.com/avatar.jpg",
+                imageUrl: "https://example.com/avatar.jpg",
                 score: -0.3,
                 metadata: {},
               },
@@ -188,7 +188,7 @@ describe("Search Route", () => {
                 subtitle: "Shopping list item for chef-ari",
                 snippet: "tomato paste pantry unchecked",
                 href: "/shopping-list",
-                coverImageUrl: null,
+                imageUrl: null,
                 score: -0.1,
                 metadata: { checked: false },
               },
@@ -197,10 +197,11 @@ describe("Search Route", () => {
         },
       ]);
 
-      render(<Stub initialEntries={["/search?q=tomato"]} />);
+      const { container } = render(<Stub initialEntries={["/search?q=tomato"]} />);
 
       expect(await screen.findByText('Results for "tomato"')).toBeInTheDocument();
       expect(screen.getByText("4 results")).toBeInTheDocument();
+      expect(container.querySelector('img[src="https://example.com/tomato.jpg"]')).toBeInTheDocument();
       expect(screen.getByRole("link", { name: /Recipe Tomato Sauce/i })).toHaveAttribute("href", "/recipes/recipe-1");
       expect(screen.getByRole("link", { name: /Cookbook Sunday Sauces/i })).toHaveAttribute("href", "/cookbooks/cookbook-1");
       expect(screen.getByRole("link", { name: /Chef chef-ari/i })).toHaveAttribute("href", "/users/chef-ari");
@@ -243,7 +244,7 @@ describe("Search Route", () => {
                 subtitle: "Chef kitchen",
                 snippet: "recipes 0 cookbooks 0",
                 href: "/users/chef-one",
-                coverImageUrl: null,
+                imageUrl: null,
                 score: 0,
                 metadata: {},
               },

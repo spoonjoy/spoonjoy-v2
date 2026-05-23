@@ -5,7 +5,7 @@ import { Link } from './link'
 
 const styles = {
   base: [
-    'font-sj-ui relative isolate inline-flex items-baseline justify-center gap-x-2 rounded-full border text-base/6 font-semibold tracking-[0.01em]',
+    'font-sj-ui relative isolate inline-flex items-baseline justify-center gap-x-2 rounded-[var(--sj-radius-control)] border text-base/6 font-semibold tracking-[0.01em]',
     'px-[calc(--spacing(4)-1px)] py-[calc(--spacing(2.75)-1px)] shadow-[0_1px_0_rgba(255,255,255,0.45)_inset,0_10px_24px_rgba(63,34,18,0.10)] transition sm:px-[calc(--spacing(3.5)-1px)] sm:py-[calc(--spacing(1.75)-1px)] sm:text-sm/6',
     'focus:not-data-focus:outline-hidden data-focus:outline-2 data-focus:outline-offset-2 data-focus:outline-[var(--sj-brass)]',
     'data-disabled:opacity-50',

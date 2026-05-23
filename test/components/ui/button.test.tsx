@@ -41,7 +41,7 @@ describe('Button', () => {
       const { container } = render(<Button>Default</Button>)
       const button = container.querySelector('button')
       expect(button).toHaveClass('cursor-default')
-      expect(button).toHaveClass('rounded-full')
+      expect(button).toHaveClass('rounded-[var(--sj-radius-control)]')
       expect(button).toHaveClass('border-[var(--sj-ink)]')
     })
 

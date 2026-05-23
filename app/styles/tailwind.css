@@ -25,6 +25,11 @@
   --sj-rose: #f2c6af;
   --sj-shadow: 0 24px 80px rgba(62, 40, 20, 0.14);
   --sj-shadow-soft: 0 12px 36px rgba(62, 40, 20, 0.10);
+  --sj-radius-control: 999px;
+  --sj-radius-small: 0.875rem;
+  --sj-radius-surface: 1.25rem;
+  --sj-radius-photo: 1.5rem;
+  --sj-radius-hero: 2rem;
 }
 
 .dark {
@@ -54,10 +59,7 @@ html {
 
 body {
   min-height: 100svh;
-  background:
-    radial-gradient(circle at 12% 4%, color-mix(in srgb, var(--sj-brass) 22%, transparent), transparent 28rem),
-    radial-gradient(circle at 88% 2%, color-mix(in srgb, var(--sj-herb) 20%, transparent), transparent 24rem),
-    var(--sj-page);
+  background: var(--sj-page);
   color: var(--sj-ink);
   font-family: var(--font-sj-body);
   font-feature-settings: "liga" 1, "kern" 1;
@@ -102,9 +104,7 @@ html *:where(input, textarea, select, button) {
 
 .sj-app-shell {
   background:
-    linear-gradient(115deg, color-mix(in srgb, var(--sj-paper) 82%, transparent), transparent 56%),
-    radial-gradient(circle at 0 0, color-mix(in srgb, var(--sj-rose) 36%, transparent), transparent 28rem),
-    radial-gradient(circle at 100% 8%, color-mix(in srgb, var(--sj-mint) 42%, transparent), transparent 30rem),
+    linear-gradient(180deg, color-mix(in srgb, var(--sj-panel-solid) 76%, transparent), transparent 22rem),
     var(--sj-page);
 }
 
@@ -124,19 +124,18 @@ html *:where(input, textarea, select, button) {
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  opacity: 0.38;
+  opacity: 0.16;
   background-image:
     linear-gradient(90deg, color-mix(in srgb, var(--sj-ink) 8%, transparent) 1px, transparent 1px),
     linear-gradient(0deg, color-mix(in srgb, var(--sj-ink) 7%, transparent) 1px, transparent 1px);
-  background-size: 42px 42px;
-  mask-image: radial-gradient(circle at top, black, transparent 74%);
+  background-size: 48px 48px;
+  mask-image: linear-gradient(180deg, black, transparent 78%);
 }
 
 .sj-page {
   min-height: 100svh;
   background:
-    radial-gradient(circle at 12% 0, color-mix(in srgb, var(--sj-brass) 18%, transparent), transparent 26rem),
-    radial-gradient(circle at 92% 8%, color-mix(in srgb, var(--sj-herb) 18%, transparent), transparent 28rem),
+    linear-gradient(180deg, color-mix(in srgb, var(--sj-paper) 72%, transparent), transparent 28rem),
     var(--sj-page);
 }
 
@@ -149,8 +148,92 @@ html *:where(input, textarea, select, button) {
 
 .sj-card {
   border: 1px solid var(--sj-border);
-  background: linear-gradient(145deg, var(--sj-panel), color-mix(in srgb, var(--sj-flour) 46%, transparent));
+  background: color-mix(in srgb, var(--sj-panel-solid) 86%, transparent);
   box-shadow: var(--sj-shadow-soft);
+}
+
+.sj-dark-canvas {
+  --sj-on-dark: #fff7e8;
+  --sj-on-dark-soft: rgba(255, 247, 232, 0.72);
+  background:
+    linear-gradient(180deg, rgba(22, 18, 15, 0.28), rgba(22, 18, 15, 0.82)),
+    #16120f;
+  color: var(--sj-on-dark);
+}
+
+.sj-dark-canvas :where(h1, h2, h3, p, span, dt, dd) {
+  color: inherit;
+}
+
+.sj-dark-muted {
+  color: rgba(255, 247, 232, 0.72);
+}
+
+.sj-food-photo {
+  position: relative;
+  overflow: hidden;
+  background: #16120f;
+  box-shadow: 0 24px 90px rgba(28, 18, 11, 0.26);
+}
+
+.sj-food-photo > img {
+  height: 100%;
+  width: 100%;
+  object-fit: cover;
+}
+
+.sj-food-photo::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.08), transparent 34%, rgba(0, 0, 0, 0.78)),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.42), transparent 56%);
+}
+
+.sj-kicker-dark {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid rgba(255, 247, 232, 0.24);
+  border-radius: 999px;
+  background: rgba(255, 247, 232, 0.10);
+  color: #fff7e8;
+  font-family: var(--font-sj-ui);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  line-height: 1;
+  padding: 0.46rem 0.72rem;
+  text-transform: uppercase;
+}
+
+.sj-photo-tile {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--sj-border) 82%, transparent);
+  background: #17120f;
+  box-shadow: var(--sj-shadow-soft);
+}
+
+.sj-photo-tile img {
+  height: 100%;
+  width: 100%;
+  object-fit: cover;
+  transition: transform 0.28s ease;
+}
+
+.sj-photo-tile:hover img {
+  transform: scale(1.035);
+}
+
+.sj-photo-tile::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent 34%, rgba(0, 0, 0, 0.80));
 }
 
 .sj-receipt {

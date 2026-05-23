@@ -177,27 +177,27 @@ describe('RecipeGrid', () => {
     expect(container.querySelector('.absolute.right-2.top-2')).toBeNull()
   })
 
-  it('uses the warm editorial Spoonjoy card treatment', () => {
+  it('uses the photo-tile Spoonjoy treatment instead of a card shell', () => {
     const { container } = renderWithRouter(<RecipeGrid recipes={[recipes[0]]} />)
 
-    const article = container.querySelector('article')
-    expect(article?.className).toContain('sj-card')
-    expect(article?.className).toContain('rounded-[1.6rem]')
+    const tile = container.querySelector('.sj-photo-tile')
+    expect(tile?.className).toContain('rounded-[var(--sj-radius-photo)]')
+    expect(container.querySelector('.sj-card')).toBeNull()
   })
 
-  it('adds the intentional hover-lift affordance without legacy heavy shadows', () => {
+  it('keeps the layout free of generic hover-lift card affordances', () => {
     const { container } = renderWithRouter(<RecipeGrid recipes={[recipes[0]]} />)
 
     const article = container.querySelector('article')
-    expect(article?.className).toContain('sj-hover-lift')
+    expect(article?.className).not.toContain('sj-hover-lift')
     expect(article?.className).not.toContain('shadow-lg')
     expect(article?.className).not.toContain('shadow-md')
   })
 
-  it('renders image with aspect-[4/3] for dominant hero layout', () => {
+  it('renders image inside a portrait photo tile for a feed layout', () => {
     const { container } = renderWithRouter(<RecipeGrid recipes={[recipes[0]]} />)
 
-    const img = container.querySelector('img')
-    expect(img?.className).toContain('aspect-[4/3]')
+    const tile = container.querySelector('.sj-photo-tile')
+    expect(tile?.className).toContain('aspect-[4/5]')
   })
 })

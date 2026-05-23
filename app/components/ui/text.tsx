@@ -6,7 +6,7 @@ export function Text({ className, ...props }: React.ComponentPropsWithoutRef<'p'
     <p
       data-slot="text"
       {...props}
-      className={clsx(className, 'text-base/6 text-[var(--sj-ink-soft)] sm:text-sm/6')}
+      className={clsx('text-base/6 text-[var(--sj-ink-soft)]', className)}
     />
   )
 }
@@ -16,15 +16,15 @@ export function TextLink({ className, ...props }: React.ComponentPropsWithoutRef
     <Link
       {...props}
       className={clsx(
-        className,
-        'font-sj-ui font-semibold text-[var(--sj-tomato)] underline decoration-[color-mix(in_srgb,var(--sj-tomato)_45%,transparent)] data-hover:text-[var(--sj-brass)] data-hover:decoration-[var(--sj-brass)]'
+        'font-sj-ui font-semibold text-[var(--sj-tomato)] underline decoration-[color-mix(in_srgb,var(--sj-tomato)_45%,transparent)] data-hover:text-[var(--sj-brass)] data-hover:decoration-[var(--sj-brass)]',
+        className
       )}
     />
   )
 }
 
 export function Strong({ className, ...props }: React.ComponentPropsWithoutRef<'strong'>) {
-  return <strong {...props} className={clsx(className, 'font-medium text-[var(--sj-ink)]')} />
+  return <strong {...props} className={clsx('font-medium text-[var(--sj-ink)]', className)} />
 }
 
 export function Code({ className, ...props }: React.ComponentPropsWithoutRef<'code'>) {
@@ -32,8 +32,8 @@ export function Code({ className, ...props }: React.ComponentPropsWithoutRef<'co
     <code
       {...props}
       className={clsx(
-        className,
-        'rounded-sm border border-[var(--sj-border)] bg-[var(--sj-flour)] px-0.5 text-sm font-medium text-[var(--sj-ink)] sm:text-[0.8125rem]'
+        'rounded-sm border border-[var(--sj-border)] bg-[var(--sj-flour)] px-0.5 text-sm font-medium text-[var(--sj-ink)] sm:text-[0.8125rem]',
+        className
       )}
     />
   )

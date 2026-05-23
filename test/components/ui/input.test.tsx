@@ -85,7 +85,7 @@ describe('Input', () => {
     it('applies basic layout classes to input', () => {
       const { container } = render(<Input />)
       const input = container.querySelector('input')
-      expect(input?.className).toContain('rounded-lg')
+      expect(input?.className).toContain('rounded-[var(--sj-radius-small)]')
       expect(input?.className).toContain('w-full')
     })
 

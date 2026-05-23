@@ -588,7 +588,7 @@ export default function RecipeDetail() {
             )}
           </div>
         ) : (
-          <div className="overflow-hidden rounded-[2rem] border border-[var(--sj-border)] bg-[var(--sj-panel)] shadow-[var(--sj-shadow-soft)] backdrop-blur-xl">
+          <div className="mt-24 overflow-hidden rounded-[var(--sj-radius-hero)] border border-[var(--sj-border)] bg-[var(--sj-panel)] shadow-[var(--sj-shadow-soft)] backdrop-blur-xl sm:mt-0">
             {recipe.steps.map((step) => (
               <div key={step.id} id={`step-${step.stepNum}`} className="border-b border-[var(--sj-border)] last:border-b-0">
                 <StepCard
