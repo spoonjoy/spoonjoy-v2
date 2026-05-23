@@ -1,6 +1,4 @@
 import { ImageOff } from 'lucide-react'
-import { Heading } from '../ui/heading'
-import { Text } from '../ui/text'
 import { Link } from '../ui/link'
 import { Avatar } from '../ui/avatar'
 import { ScaleSelector } from './ScaleSelector'
@@ -60,76 +58,93 @@ export function RecipeHeader({
 
   return (
     <header className="w-full">
-      {/* Hero Image Section - PROMINENT and beautiful */}
-      <div className="px-4 pt-5 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl px-3 pt-4 sm:px-6 lg:px-8">
         {displayImageUrl ? (
           <div
             data-testid="recipe-image"
-            className="relative mx-auto aspect-[4/3] w-full max-w-6xl overflow-hidden rounded-[2rem] border border-[var(--sj-border)] bg-[var(--sj-flour)] shadow-[var(--sj-shadow)] sm:aspect-[16/9] lg:aspect-[21/9]"
+            className="sj-food-photo mx-auto aspect-[4/5] w-full rounded-[var(--sj-radius-hero)] sm:aspect-[16/9] lg:aspect-[2.18/1]"
           >
             <img
               src={displayImageUrl}
               alt={`Photo of ${title}`}
               className="h-full w-full object-cover"
             />
-            <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.08),transparent_38%,rgba(0,0,0,0.44))]" aria-hidden="true" />
+            <div className="absolute inset-x-0 bottom-0 z-10 p-5 sm:p-8 lg:p-10">
+              <p className="sj-kicker-dark">Recipe</p>
+              <h1 className="font-sj-display mt-4 max-w-5xl break-words text-5xl/12 font-bold tracking-[-0.04em] text-[#fff7e8] sm:text-7xl/18 lg:text-8xl/20">
+                {title}
+              </h1>
+              <div className="mt-4 flex items-center gap-2">
+                <span data-testid="chef-avatar">
+                  <Avatar
+                    src={chefPhotoUrl}
+                    initials={chefName.charAt(0).toUpperCase()}
+                    alt={chefName}
+                    className="size-9 border border-white/30"
+                  />
+                </span>
+                <p className="font-sj-ui text-sm font-semibold text-white/82">
+                  By{' '}
+                  {resolvedChefHref ? (
+                    <Link href={resolvedChefHref} className="text-[#fff7e8] underline decoration-white/30 underline-offset-4 hover:text-[#ffe0b0]">
+                      <strong>{chefName}</strong>
+                    </Link>
+                  ) : (
+                    <strong className="text-[#fff7e8]">{chefName}</strong>
+                  )}
+                </p>
+              </div>
+              {description && (
+                <p className="mt-5 max-w-2xl text-base/7 text-white/78 sm:text-lg/8">{description}</p>
+              )}
+            </div>
           </div>
         ) : (
           <div
             data-testid="recipe-image-placeholder"
-            className="relative mx-auto flex aspect-[4/3] w-full max-w-6xl items-center justify-center overflow-hidden rounded-[2rem] border border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-flour)_72%,transparent)] shadow-[var(--sj-shadow-soft)] sm:aspect-[16/9] lg:aspect-[21/9]"
+            className="sj-dark-canvas relative mx-auto flex aspect-[4/5] w-full items-center justify-center overflow-hidden rounded-[var(--sj-radius-hero)] border border-[var(--sj-border)] sm:aspect-[16/9] lg:aspect-[2.18/1]"
           >
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,color-mix(in_srgb,var(--sj-brass)_20%,transparent),transparent_32%),radial-gradient(circle_at_70%_30%,color-mix(in_srgb,var(--sj-herb)_18%,transparent),transparent_34%)]" aria-hidden="true" />
-            <div className="relative flex flex-col items-center gap-3 text-[var(--sj-ink-soft)]">
-              <div className="rounded-full border border-[var(--sj-border)] bg-[var(--sj-panel-solid)] p-5 shadow-[var(--sj-shadow-soft)]">
+            <div className="relative flex flex-col items-center gap-3 text-[#fff7e8]">
+              <div className="rounded-[var(--sj-radius-control)] border border-white/15 bg-white/10 p-5">
                 <ImageOff className="size-12 sm:size-16" aria-hidden="true" />
               </div>
               <span className="font-sj-ui text-sm font-semibold uppercase tracking-[0.16em]">No image available</span>
+            </div>
+            <div className="absolute inset-x-0 bottom-0 z-10 p-5 sm:p-8 lg:p-10">
+              <p className="sj-kicker-dark">Recipe</p>
+              <h1 className="font-sj-display mt-4 max-w-5xl break-words text-5xl/12 font-bold tracking-[-0.04em] text-[#fff7e8] sm:text-7xl/18 lg:text-8xl/20">
+                {title}
+              </h1>
+              <div className="mt-4 flex items-center gap-2">
+                <span data-testid="chef-avatar">
+                  <Avatar
+                    src={chefPhotoUrl}
+                    initials={chefName.charAt(0).toUpperCase()}
+                    alt={chefName}
+                    className="size-9 border border-white/30"
+                  />
+                </span>
+                <p className="font-sj-ui text-sm font-semibold text-white/82">
+                  By{' '}
+                  {resolvedChefHref ? (
+                    <Link href={resolvedChefHref} className="text-[#fff7e8] underline decoration-white/30 underline-offset-4 hover:text-[#ffe0b0]">
+                      <strong>{chefName}</strong>
+                    </Link>
+                  ) : (
+                    <strong className="text-[#fff7e8]">{chefName}</strong>
+                  )}
+                </p>
+              </div>
+              {description && (
+                <p className="mt-5 max-w-2xl text-base/7 text-white/78 sm:text-lg/8">{description}</p>
+              )}
             </div>
           </div>
         )}
       </div>
 
-      {/* Content Section */}
-      <div className="relative mx-auto -mt-10 max-w-4xl px-4 pb-6 sm:px-6 sm:pb-8 lg:px-8">
-        <div className="sj-panel rounded-[2rem] p-5 sm:p-7">
-        {/* Title and Chef Info */}
-        <div className="mb-4">
-          <p className="sj-eyebrow mb-4">Recipe</p>
-          <Heading level={1} className="break-words text-4xl/11 font-bold tracking-[-0.04em] sm:text-5xl/13 lg:text-6xl/15">
-            {title}
-          </Heading>
-          <div className="mt-2 flex items-center gap-2">
-            <span data-testid="chef-avatar">
-              <Avatar
-                src={chefPhotoUrl}
-                initials={chefName.charAt(0).toUpperCase()}
-                alt={chefName}
-                className="size-9 border border-[var(--sj-border)]"
-              />
-            </span>
-            <Text>
-              By{' '}
-              {resolvedChefHref ? (
-                <Link href={resolvedChefHref} className="sj-link">
-                  <strong>{chefName}</strong>
-                </Link>
-              ) : (
-                <strong>{chefName}</strong>
-              )}
-            </Text>
-          </div>
-        </div>
-
-        {/* Description */}
-        {description && (
-          <div className="mb-6 rounded-[1.5rem] border border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-flour)_54%,transparent)] p-4 sm:p-6">
-            <Text className="text-base leading-relaxed sm:text-lg">{description}</Text>
-          </div>
-        )}
-
-        {/* Scaling Section */}
-        <div className="flex flex-col gap-3 rounded-[1.5rem] border border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_72%,transparent)] p-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mx-auto max-w-5xl px-3 py-4 sm:px-6 lg:px-8">
+        <div className="flex flex-col gap-3 rounded-[var(--sj-radius-surface)] border border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_78%,transparent)] p-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
             <span className="font-sj-ui text-sm font-semibold uppercase tracking-[0.12em] text-[var(--sj-ink-soft)]">Servings:</span>
             <ScaleSelector
@@ -148,7 +163,6 @@ export function RecipeHeader({
               Clear progress
             </button>
           )}
-        </div>
         </div>
       </div>
     </header>

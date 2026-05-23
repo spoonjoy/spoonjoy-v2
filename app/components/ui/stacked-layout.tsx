@@ -29,7 +29,7 @@ function MobileSidebar({ open, close, children }: React.PropsWithChildren<{ open
         transition
         className="fixed inset-y-0 w-full max-w-80 p-2 transition duration-300 ease-in-out data-closed:-translate-x-full"
       >
-        <div className="sj-panel flex h-full flex-col rounded-[1.75rem]">
+        <div className="sj-panel flex h-full flex-col rounded-[var(--sj-radius-hero)]">
           <div className="-mb-3 px-4 pt-3">
             <Headless.CloseButton as={NavbarItem} aria-label="Close navigation">
               <CloseMenuIcon />
@@ -67,9 +67,9 @@ export function StackedLayout({
       </header>
 
       {/* Content */}
-      <main className="flex flex-1 flex-col pb-3 lg:px-3">
-        <div className="sj-desktop-surface grow rounded-[1.75rem] border border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-panel)_82%,transparent)] p-6 shadow-[var(--sj-shadow-soft)] backdrop-blur-xl lg:p-10">
-          <div className="mx-auto max-w-6xl">{children}</div>
+      <main className="flex flex-1 flex-col">
+        <div className="sj-desktop-surface grow">
+          <div className="mx-auto w-full">{children}</div>
         </div>
       </main>
     </div>

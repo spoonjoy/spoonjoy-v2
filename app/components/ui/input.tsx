@@ -43,9 +43,9 @@ export const Input = forwardRef(function Input(
         // Basic layout
         'relative block w-full',
         // Background color + shadow applied to inset pseudo element, so shadow blends with border in light mode
-        'before:absolute before:inset-px before:rounded-[calc(var(--radius-lg)-1px)] before:bg-[var(--sj-field)] before:shadow-sm',
+        'before:absolute before:inset-px before:rounded-[var(--sj-radius-small)] before:bg-[var(--sj-field)] before:shadow-sm',
         // Focus ring
-        'after:pointer-events-none after:absolute after:inset-0 after:rounded-lg after:ring-transparent after:ring-inset sm:focus-within:after:ring-2 sm:focus-within:after:ring-[var(--sj-brass)]',
+        'after:pointer-events-none after:absolute after:inset-0 after:rounded-[var(--sj-radius-small)] after:ring-transparent after:ring-inset sm:focus-within:after:ring-2 sm:focus-within:after:ring-[var(--sj-brass)]',
         // Disabled state
         'has-data-disabled:opacity-50 has-data-disabled:before:bg-[color-mix(in_srgb,var(--sj-field)_72%,transparent)] has-data-disabled:before:shadow-none',
       ])}
@@ -72,7 +72,7 @@ export const Input = forwardRef(function Input(
               '[&::-webkit-datetime-edit-meridiem-field]:p-0',
             ],
           // Basic layout
-          'relative block w-full appearance-none rounded-lg px-[calc(--spacing(3.5)-1px)] py-[calc(--spacing(2.75)-1px)] sm:px-[calc(--spacing(3)-1px)] sm:py-[calc(--spacing(1.75)-1px)]',
+          'relative block w-full appearance-none rounded-[var(--sj-radius-small)] px-[calc(--spacing(3.5)-1px)] py-[calc(--spacing(2.75)-1px)] sm:px-[calc(--spacing(3)-1px)] sm:py-[calc(--spacing(1.75)-1px)]',
           // Typography
           'font-sj-ui text-base/6 text-[var(--sj-ink)] placeholder:text-[var(--sj-ink-soft)] sm:text-sm/6',
           // Border

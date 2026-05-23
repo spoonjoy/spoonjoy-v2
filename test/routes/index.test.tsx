@@ -258,13 +258,13 @@ describe("Kitchen Index Route", () => {
 
       render(<Stub initialEntries={["/"]} />);
 
-      expect(await screen.findByRole("heading", { name: /recipes, cookbooks, and kitchen memory/i })).toBeInTheDocument();
+      expect(await screen.findByRole("heading", { name: /your food should look as good as it tastes/i })).toBeInTheDocument();
       expect(screen.getByText("Family recipe OS")).toBeInTheDocument();
-      expect(screen.getByText(/share a kitchen that feels personal/i)).toBeInTheDocument();
-      expect(screen.getByText("Sunday Tomato Sauce")).toBeInTheDocument();
+      expect(screen.getByText(/photo-first kitchen/i)).toBeInTheDocument();
+      expect(screen.getByText("Classic Margherita Pizza")).toBeInTheDocument();
       expect(screen.getByText("Personal kitchens")).toBeInTheDocument();
       expect(screen.getByText("Cookbooks")).toBeInTheDocument();
-      expect(screen.getByText("Family-ready")).toBeInTheDocument();
+      expect(screen.getByText("Phone to editorial")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Start Your Kitchen" })).toHaveAttribute("href", "/signup");
       expect(screen.getByRole("link", { name: "Log In" })).toHaveAttribute("href", "/login");
       expect(screen.getByRole("link", { name: "Search Recipes" })).toHaveAttribute("href", "/search");
