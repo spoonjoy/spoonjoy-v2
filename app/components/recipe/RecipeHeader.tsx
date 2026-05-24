@@ -89,23 +89,26 @@ export function RecipeHeader({
   )
 
   return (
-    <header className="w-full border-b border-[var(--sj-border-strong)]">
-      <div className="mx-auto grid max-w-[94rem] lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
+    <header className="w-full overflow-hidden border-b border-[var(--sj-border-strong)]">
+      <div
+        className="grid lg:min-h-[clamp(34rem,72svh,50rem)] lg:grid-cols-[minmax(0,58vw)_minmax(28rem,1fr)] xl:grid-cols-[minmax(0,60vw)_minmax(30rem,1fr)]"
+        data-testid="recipe-header-layout"
+      >
         {displayImageUrl ? (
           <div
             data-testid="recipe-image"
-            className="min-h-[70svh] bg-[var(--sj-photo-charcoal)] lg:min-h-[calc(100svh-4.75rem)]"
+            className="h-[36svh] min-h-[16rem] max-h-[20rem] bg-[var(--sj-photo-charcoal)] lg:h-[clamp(34rem,72svh,50rem)] lg:max-h-none lg:min-h-0"
           >
             <img
               src={displayImageUrl}
               alt={`Photo of ${title}`}
-              className="h-full min-h-[70svh] w-full object-cover lg:min-h-[calc(100svh-4.75rem)]"
+              className="h-full min-h-[16rem] w-full object-cover lg:min-h-0"
             />
           </div>
         ) : (
           <div
             data-testid="recipe-image-placeholder"
-            className="flex min-h-[70svh] items-center justify-center bg-[var(--sj-flour)] lg:min-h-[calc(100svh-4.75rem)]"
+            className="flex h-[36svh] min-h-[16rem] max-h-[20rem] items-center justify-center bg-[var(--sj-flour)] lg:h-[clamp(34rem,72svh,50rem)] lg:max-h-none lg:min-h-0"
           >
             <div className="flex flex-col items-center gap-3 text-[var(--sj-ink-soft)]">
               <div className="rounded-[var(--sj-radius-control)] border border-[var(--sj-border-strong)] p-5">
@@ -116,15 +119,15 @@ export function RecipeHeader({
           </div>
         )}
 
-        <div className="flex min-h-[70svh] flex-col px-5 py-8 sm:px-8 lg:min-h-[calc(100svh-4.75rem)] lg:px-12 lg:py-10">
+        <div className="flex flex-col justify-center px-5 py-6 sm:px-8 sm:py-8 lg:min-h-[clamp(34rem,72svh,50rem)] lg:px-10 lg:py-10 xl:px-14">
           {masthead ? (
             <div className="border-b border-[var(--sj-border)] pb-4" data-testid="recipe-masthead">
               {masthead}
             </div>
           ) : null}
 
-          <div className="mt-10">
-            <h1 className="font-sj-display max-w-4xl break-words text-6xl/14 font-extrabold text-[var(--sj-ink)] sm:text-7xl/16 lg:text-8xl/18">
+          <div className="mt-6 max-w-[43rem] lg:mt-10">
+            <h1 className="font-sj-display max-w-4xl break-words text-5xl/12 font-extrabold text-[var(--sj-ink)] sm:text-6xl/14 xl:text-7xl/16 2xl:text-8xl/18">
               {title}
             </h1>
             {chefLine}
@@ -140,7 +143,7 @@ export function RecipeHeader({
             )}
           </div>
 
-          <div className="mt-auto pt-10">
+          <div className="mt-8 max-w-[43rem]" data-testid="recipe-header-controls">
             <div className="grid gap-4 sm:grid-cols-[minmax(16rem,26rem)_auto] sm:items-center sm:justify-between">
               <ScaleSelector
                 value={scaleFactor}

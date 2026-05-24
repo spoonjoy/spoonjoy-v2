@@ -95,6 +95,20 @@ describe('RecipeHeader', () => {
   })
 
   describe('recipe image', () => {
+    it('uses a full-bleed editorial spread instead of a constrained split hero', () => {
+      renderWithRouter(<RecipeHeader {...defaultProps} coverImageUrl="https://example.com/recipe.jpg" />)
+
+      const layout = screen.getByTestId('recipe-header-layout')
+      const image = screen.getByTestId('recipe-image')
+      const controls = screen.getByTestId('recipe-header-controls')
+
+      expect(layout).toHaveClass('lg:grid-cols-[minmax(0,58vw)_minmax(28rem,1fr)]')
+      expect(layout.className).not.toContain('max-w-[94rem]')
+      expect(image).toHaveClass('h-[36svh]', 'max-h-[20rem]', 'lg:h-[clamp(34rem,72svh,50rem)]', 'lg:min-h-0')
+      expect(controls).toHaveClass('mt-8')
+      expect(controls.className).not.toContain('mt-auto')
+    })
+
     it('renders recipe image when imageUrl is provided', () => {
       renderWithRouter(<RecipeHeader {...defaultProps} coverImageUrl="https://example.com/recipe.jpg" />)
 
