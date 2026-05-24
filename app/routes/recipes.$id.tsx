@@ -1,6 +1,7 @@
 import type { Route } from "./+types/recipes.$id";
 import { useFetcher, useLoaderData, useSubmit } from "react-router";
 import { useState, useEffect, useRef, useCallback } from "react";
+import type { MouseEvent } from "react";
 import { usePostHog } from "@posthog/react";
 import { ArrowLeft } from "lucide-react";
 import {
@@ -56,6 +57,14 @@ const recipeMastheadActionClass =
 
 const recipeMastheadPrimaryActionClass =
   "text-[var(--sj-action)] hover:text-[var(--sj-tomato)]";
+
+export function findRecipeStepsScrollTarget(doc: Document): HTMLElement | null {
+  const candidates = Array.from(doc.querySelectorAll<HTMLElement>("#steps"));
+  return candidates.find((candidate) => {
+    const rect = candidate.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  }) ?? candidates[0] ?? null;
+}
 
 export function applyCreatedCookbookState(
   currentCookbooks: CookbookListItem[],
@@ -246,6 +255,17 @@ export default function RecipeDetail() {
     }
   }, [addToListFetcher, recipe.id, scaleFactor, posthog]);
 
+  const handleEnterCookMode = useCallback((event: MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault();
+    const stepsTarget = findRecipeStepsScrollTarget(document);
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${window.location.search}#steps`
+    );
+    stepsTarget?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
+
   const addToListLabel = addToListFetcher.state !== "idle"
     ? "Adding"
     : isAlreadyInList
@@ -271,6 +291,7 @@ export default function RecipeDetail() {
       >
         <Link
           href="#steps"
+          onClick={handleEnterCookMode}
           className={`${recipeMastheadActionClass} ${recipeMastheadPrimaryActionClass} border-r border-[var(--sj-border)] sm:border-r-0`}
           data-testid="recipe-header-cook-action"
         >

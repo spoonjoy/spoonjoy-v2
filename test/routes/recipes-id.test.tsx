@@ -16,7 +16,7 @@ vi.mock("~/components/navigation", async () => {
 });
 
 import { shareContent, useRecipeDetailActions } from "~/components/navigation";
-import { loader, action, applyCreatedCookbookState } from "~/routes/recipes.$id";
+import { loader, action, applyCreatedCookbookState, findRecipeStepsScrollTarget } from "~/routes/recipes.$id";
 import RecipeDetail from "~/routes/recipes.$id";
 import { createUser } from "~/lib/auth.server";
 import { sessionStorage } from "~/lib/session.server";
@@ -67,6 +67,44 @@ describe("Recipes $id Route", () => {
 
   afterEach(async () => {
     await cleanupDatabase();
+  });
+
+  describe("findRecipeStepsScrollTarget", () => {
+    it("prefers the rendered steps container when a zero-size snapshot exists first", () => {
+      const testDocument = document.implementation.createHTMLDocument();
+      const snapshot = testDocument.createElement("div");
+      const rendered = testDocument.createElement("div");
+      snapshot.id = "steps";
+      rendered.id = "steps";
+      snapshot.getBoundingClientRect = vi.fn(() => ({
+        width: 0,
+        height: 0,
+      }) as DOMRect);
+      rendered.getBoundingClientRect = vi.fn(() => ({
+        width: 320,
+        height: 900,
+      }) as DOMRect);
+      testDocument.body.append(snapshot, rendered);
+
+      expect(findRecipeStepsScrollTarget(testDocument)).toBe(rendered);
+    });
+
+    it("falls back to the first steps container when no rendered candidate has dimensions", () => {
+      const testDocument = document.implementation.createHTMLDocument();
+      const snapshot = testDocument.createElement("div");
+      snapshot.id = "steps";
+      snapshot.getBoundingClientRect = vi.fn(() => ({
+        width: 0,
+        height: 0,
+      }) as DOMRect);
+      testDocument.body.append(snapshot);
+
+      expect(findRecipeStepsScrollTarget(testDocument)).toBe(snapshot);
+    });
+
+    it("returns null when no steps container exists", () => {
+      expect(findRecipeStepsScrollTarget(document.implementation.createHTMLDocument())).toBeNull();
+    });
   });
 
   describe("loader", () => {
@@ -1233,6 +1271,29 @@ describe("Recipes $id Route", () => {
       expect(screen.getByRole("link", { name: "Cook mode" })).toHaveAttribute("href", "/recipes/recipe-1#steps");
       expect(screen.getByRole("button", { name: "Add to list" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Log cook" })).toBeInTheDocument();
+
+      const scrollIntoView = vi.fn();
+      const originalScrollIntoView = Element.prototype.scrollIntoView;
+      Object.defineProperty(Element.prototype, "scrollIntoView", {
+        configurable: true,
+        value: scrollIntoView,
+      });
+      try {
+        await userEvent.click(screen.getByRole("link", { name: "Cook mode" }));
+
+        expect(window.location.hash).toBe("#steps");
+        expect(scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
+      } finally {
+        if (originalScrollIntoView) {
+          Object.defineProperty(Element.prototype, "scrollIntoView", {
+            configurable: true,
+            value: originalScrollIntoView,
+          });
+        } else {
+          delete (Element.prototype as { scrollIntoView?: Element["scrollIntoView"] }).scrollIntoView;
+        }
+        window.history.replaceState(null, "", "/");
+      }
     });
 
     it("should render recipe with no steps (empty state) as non-owner", async () => {

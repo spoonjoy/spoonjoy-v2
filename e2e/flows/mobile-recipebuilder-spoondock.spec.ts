@@ -109,9 +109,10 @@ test.describe('Mobile RecipeBuilder and SpoonDock audit', () => {
     await expect(page.getByRole('heading').first()).toBeVisible();
     await expect(page.getByRole('navigation', { name: 'Spoonjoy navigation' })).toHaveCount(0);
 
+    const cookModeAction = page.getByRole('link', { name: 'Cook mode' });
     const actions = [
       page.getByRole('link', { name: 'Recipes' }),
-      page.getByRole('link', { name: 'Cook mode' }),
+      cookModeAction,
       page.getByRole('button', { name: /add to list|in list/i }),
       page.getByRole('button', { name: 'Log cook' }),
     ];
@@ -119,6 +120,16 @@ test.describe('Mobile RecipeBuilder and SpoonDock audit', () => {
     for (const [index, action] of actions.entries()) {
       await expectTouchTarget(action, `recipe detail masthead action ${index + 1}`);
     }
+
+    await cookModeAction.click();
+    await expect(page).toHaveURL(/#steps$/);
+    await page.waitForFunction(() => {
+      const target = [...document.querySelectorAll<HTMLElement>('#steps')].find((element) => {
+        const rect = element.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      });
+      return target ? Math.abs(target.getBoundingClientRect().top) <= 2 : false;
+    });
   });
 
   test('shopping-list mobile controls have touch targets and dock clearance', async ({ page }) => {
