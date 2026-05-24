@@ -3290,7 +3290,7 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
         fireEvent.click(removeButton);
 
         // Dialog should be open
-        expect(await screen.findByText("Remove this ingredient? 🥕")).toBeInTheDocument();
+        expect(await screen.findByText("Remove this ingredient?")).toBeInTheDocument();
 
         // Click "Remove it" to trigger onConfirm (exercises the if (ingredientToRemove) branch)
         const confirmButton = screen.getByRole("button", { name: "Remove it" });
@@ -3303,7 +3303,7 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
 
         // Dialog should close after submission
         await waitFor(() => {
-          expect(screen.queryByText("Remove this ingredient? 🥕")).not.toBeInTheDocument();
+          expect(screen.queryByText("Remove this ingredient?")).not.toBeInTheDocument();
         });
       });
 

@@ -2,9 +2,11 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen, act } from '@testing-library/react'
 import { renderHook } from '@testing-library/react'
 import {
+  configFromActions,
   DockContextProvider,
   useDockContext,
   useDockActions,
+  useDockConfig,
   type DockAction,
 } from '~/components/navigation/dock-context'
 import { ArrowLeft, Edit, Share, ShoppingCart } from 'lucide-react'
@@ -117,6 +119,92 @@ describe('DockContext', () => {
   })
 
   describe('useDockActions', () => {
+    it('converts legacy side actions into a dock config with fallback slots', () => {
+      const onlyLeftActions: DockAction[] = [
+        { id: 'cancel', icon: ArrowLeft, label: 'Cancel', onAction: '/recipes', position: 'left' },
+        { id: 'save', icon: Edit, label: 'Save', onAction: vi.fn(), position: 'left' },
+      ]
+      const singleLeftAction: DockAction[] = [
+        { id: 'back', icon: ArrowLeft, label: 'Back', onAction: '/recipes', position: 'left' },
+      ]
+      const onlyRightActions: DockAction[] = [
+        { id: 'edit', icon: Edit, label: 'Edit', onAction: vi.fn(), position: 'right' },
+        { id: 'share', icon: Share, label: 'Share', onAction: vi.fn(), position: 'right' },
+      ]
+
+      expect(configFromActions(null)).toBeNull()
+      expect(configFromActions([])).toBeNull()
+      expect(configFromActions(onlyLeftActions)).toMatchObject({
+        left: { id: 'cancel', sublabel: 'back' },
+        primary: { id: 'save' },
+        tools: [],
+        variant: 'context',
+      })
+      expect(configFromActions(singleLeftAction)).toMatchObject({
+        left: { id: 'back', sublabel: 'back' },
+        primary: { id: 'back' },
+        tools: [],
+        variant: 'context',
+      })
+      expect(configFromActions(onlyRightActions)).toMatchObject({
+        left: { id: 'edit', sublabel: 'back' },
+        primary: { id: 'edit' },
+        tools: [{ id: 'share' }],
+        variant: 'context',
+      })
+    })
+
+    it('registers explicit dock config and mirrors it into legacy actions', () => {
+      function TestPage({ mode }: { mode: 'task' | 'plain' | 'clear' }) {
+        const config = mode === 'clear'
+          ? null
+          : {
+              variant: mode === 'task' ? 'task' as const : undefined,
+              left: { id: 'back', icon: ArrowLeft, label: 'Back', onAction: '/recipes' },
+              primary: { id: 'save', icon: Edit, label: 'Save', onAction: vi.fn() },
+              tools: mode === 'task' ? [{ id: 'share', icon: Share, label: 'Share', onAction: vi.fn() }] : [],
+            }
+        useDockConfig(config)
+        return <div>Configured Page</div>
+      }
+
+      function TestApp({ mode }: { mode: 'task' | 'plain' | 'clear' }) {
+        const context = useDockContext()
+        return (
+          <>
+            <div data-testid="config-variant">{context.config?.variant ?? 'none'}</div>
+            <div data-testid="legacy-action-count">{context.actions?.length ?? 0}</div>
+            <TestPage mode={mode} />
+          </>
+        )
+      }
+
+      const { rerender } = render(
+        <DockContextProvider>
+          <TestApp mode="task" />
+        </DockContextProvider>
+      )
+
+      expect(screen.getByTestId('config-variant')).toHaveTextContent('task')
+      expect(screen.getByTestId('legacy-action-count')).toHaveTextContent('3')
+
+      rerender(
+        <DockContextProvider>
+          <TestApp mode="plain" />
+        </DockContextProvider>
+      )
+      expect(screen.getByTestId('config-variant')).toHaveTextContent('none')
+      expect(screen.getByTestId('legacy-action-count')).toHaveTextContent('2')
+
+      rerender(
+        <DockContextProvider>
+          <TestApp mode="clear" />
+        </DockContextProvider>
+      )
+      expect(screen.getByTestId('config-variant')).toHaveTextContent('none')
+      expect(screen.getByTestId('legacy-action-count')).toHaveTextContent('0')
+    })
+
     it('registers actions when component mounts', () => {
       function TestPage() {
         useDockActions(sampleActions)

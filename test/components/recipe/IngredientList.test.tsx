@@ -86,7 +86,7 @@ describe('IngredientList', () => {
       />
     )
 
-    expect(screen.getByRole('checkbox', { name: /mark flour as used/i })).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: 'flour' })).toBeInTheDocument()
   })
 
   it('calls onToggle when ingredient name is clicked', async () => {
@@ -101,7 +101,7 @@ describe('IngredientList', () => {
     const onToggle = vi.fn()
     render(<IngredientList ingredients={sampleIngredients} checkedIds={new Set()} onToggle={onToggle} />)
 
-    await userEvent.click(screen.getByRole('checkbox', { name: /mark sugar as used/i }))
+    await userEvent.click(screen.getByRole('checkbox', { name: 'sugar' }))
     expect(onToggle).toHaveBeenCalledWith('2')
   })
 
@@ -247,9 +247,9 @@ describe('IngredientList', () => {
       />
     )
 
-    const buttons = screen.getAllByRole('button')
-    for (const button of buttons) {
-      expect(button).toHaveClass('min-h-11')
+    const checkboxes = screen.getAllByRole('checkbox')
+    for (const checkbox of checkboxes) {
+      expect(checkbox).toHaveClass('min-h-14')
     }
   })
 

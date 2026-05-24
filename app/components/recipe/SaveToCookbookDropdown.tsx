@@ -107,7 +107,7 @@ export function SaveToCookbookDropdown({
           <Bookmark className="w-4 h-4" aria-hidden="true" />
           Save
         </Button>
-        <div className="sj-panel absolute right-0 top-full z-50 mt-1 w-64 rounded-[1.5rem] p-3">
+        <div className="absolute right-0 top-full z-50 mt-1 w-64 border border-[var(--sj-border)] bg-[var(--sj-panel-solid)] p-3 shadow-[var(--sj-shadow-soft)]">
           <label htmlFor="new-cookbook-input" className="font-sj-ui mb-1 block text-sm font-medium text-[var(--sj-ink-soft)]">
             New cookbook name
           </label>

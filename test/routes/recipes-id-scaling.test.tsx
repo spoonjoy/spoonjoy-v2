@@ -235,8 +235,8 @@ describe("Recipe View Scaling Integration", () => {
       await screen.findByRole("heading", { name: "Recipe with Checkboxes" });
 
       // Find and check the first ingredient
-      const flourCheckbox = screen.getByRole("checkbox", { name: "Mark flour as used" });
-      const sugarCheckbox = screen.getByRole("checkbox", { name: "Mark sugar as used" });
+      const flourCheckbox = screen.getByRole("checkbox", { name: "flour" });
+      const sugarCheckbox = screen.getByRole("checkbox", { name: "sugar" });
       expect(flourCheckbox).not.toBeChecked();
 
       fireEvent.click(flourCheckbox);
@@ -255,7 +255,7 @@ describe("Recipe View Scaling Integration", () => {
       fireEvent.click(plusButton);
 
       // The checkbox should still be checked
-      expect(screen.getByRole("checkbox", { name: "Mark flour as used" })).toBeChecked();
+      expect(screen.getByRole("checkbox", { name: "flour" })).toBeChecked();
       expect(sugarCheckbox).not.toBeChecked();
     });
 

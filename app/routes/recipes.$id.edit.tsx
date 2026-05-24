@@ -1,11 +1,10 @@
 import type { Route } from "./+types/recipes.$id.edit";
 import { Form, redirect, data, useActionData, useLoaderData, useNavigate, useNavigation, useSubmit } from "react-router";
-import { useRecipeEditActions } from "~/components/navigation";
 import { getCloudflareEnv, getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
-import { Heading } from "~/components/ui/heading";
 import { Link } from "~/components/ui/link";
 import { ValidationError } from "~/components/ui/validation-error";
+import { CookbookHeader, CookbookPage, CookbookSectionTitle, RuledEmptyState } from "~/components/cookbook/page";
 import { RecipeBuilder, type RecipeBuilderData } from "~/components/recipe/RecipeBuilder";
 import {
   validateTitle,
@@ -345,7 +344,6 @@ export default function EditRecipe() {
   const formRef = useRef<HTMLFormElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [stepToDelete, setStepToDelete] = useState<{ id: string; stepNum: number } | null>(null);
-  const [dockSaveRequest, setDockSaveRequest] = useState(0);
   const isLoading = navigation.state === 'submitting';
 
   const handleCancel = () => {
@@ -394,29 +392,15 @@ export default function EditRecipe() {
     setStepToDelete(null);
   };
 
-  useRecipeEditActions({
-    recipeId: recipe.id,
-    onSave: () => setDockSaveRequest((request) => request + 1),
-  });
-
   return (
-    <div className="sj-page px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
-      <div className="mx-auto max-w-5xl">
-        <div className="mb-8 grid gap-5 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-end">
-          <div>
-            <p className="sj-eyebrow">Edit recipe</p>
-            <Heading level={1} className="mt-4 text-4xl/11 tracking-[-0.04em] sm:text-6xl/15">
-              Tune the recipe until it feels cookable.
-            </Heading>
-          </div>
-          <Link
-            href={`/recipes/${recipe.id}`}
-            className="sj-link justify-self-start lg:justify-self-end"
-          >
-            ← Back to recipe
-          </Link>
-        </div>
+    <CookbookPage>
+      <CookbookHeader
+        eyebrow="Edit recipe"
+        title="Edit Recipe"
+        action={<Link href={`/recipes/${recipe.id}`} className="sj-link">← Back to recipe</Link>}
+      />
 
+      <div className="mt-8 max-w-5xl">
         <Form ref={formRef} method="post" encType="multipart/form-data" className="hidden" aria-hidden="true">
           <input type="hidden" name="id" value={recipe.id} />
           <input type="hidden" name="title" />
@@ -449,68 +433,62 @@ export default function EditRecipe() {
           onCancel={handleCancel}
           errors={actionData?.errors}
           loading={isLoading}
-          saveRequestSignal={dockSaveRequest}
           showSteps={false}
         />
 
-        <section aria-label="Recipe Steps" className="sj-form-section mt-10 space-y-4">
+        <section aria-label="Recipe Steps" className="mt-10">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <p className="sj-eyebrow">Method</p>
-              <h2 className="font-sj-display mt-3 text-3xl/9 font-semibold tracking-[-0.03em] text-[var(--sj-ink)]">Recipe Steps</h2>
-            </div>
+            <CookbookSectionTitle className="my-0 flex-1">Recipe Steps</CookbookSectionTitle>
             <Link href={`/recipes/${recipe.id}/steps/new`} className="sj-link">+ Add Step</Link>
           </div>
 
           {recipe.steps.length === 0 ? (
-            <div className="rounded-[1.5rem] border border-dashed border-[var(--sj-border-strong)] bg-[color-mix(in_srgb,var(--sj-flour)_55%,transparent)] p-6 text-sm text-[var(--sj-ink-soft)]">
-              No steps yet. Add your first step.
-            </div>
+            <RuledEmptyState title="No steps yet.">
+              Add the first step when you are ready to turn the dish into a cooking path.
+            </RuledEmptyState>
           ) : (
-            <div className="space-y-3">
+            <div className="sj-list-ruled mt-5">
               {recipe.steps.map((step, index) => {
                 const title = step.stepTitle?.trim() || step.description;
                 return (
                   <article
                     key={step.id}
-                    className="sj-card rounded-[1.5rem] p-4"
+                    className="grid gap-4 border-b border-[var(--sj-border)] py-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center"
                     aria-label={`Step ${step.stepNum}`}
                   >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="min-w-0">
-                        <p className="font-sj-ui m-0 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">Step {step.stepNum}</p>
-                        <h3 className="font-sj-display m-0 truncate text-xl/7 font-semibold text-[var(--sj-ink)]">{title}</h3>
-                        <p className="m-0 mt-1 text-sm text-[var(--sj-ink-soft)]">
-                          {step.description}
-                        </p>
-                        <p className="m-0 mt-1 text-sm text-[var(--sj-ink-soft)]">
-                          {step.ingredients.length} ingredient{step.ingredients.length === 1 ? "" : "s"}
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2 justify-end">
-                        <Form method="post" className="m-0">
-                          <input type="hidden" name="intent" value="reorderStep" />
-                          <input type="hidden" name="stepId" value={step.id} />
-                          <input type="hidden" name="direction" value="up" />
-                          <Button type="submit" disabled={index === 0}>Move Up</Button>
-                        </Form>
+                    <div className="min-w-0">
+                      <p className="font-sj-ui m-0 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">Step {step.stepNum}</p>
+                      <h3 className="font-sj-display m-0 truncate text-xl/7 font-semibold text-[var(--sj-ink)]">{title}</h3>
+                      <p className="m-0 mt-1 line-clamp-2 text-sm/6 text-[var(--sj-ink-soft)]">
+                        {step.description}
+                      </p>
+                      <p className="m-0 mt-1 text-sm text-[var(--sj-ink-soft)]">
+                        {step.ingredients.length} ingredient{step.ingredients.length === 1 ? "" : "s"}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                      <Form method="post" className="m-0">
+                        <input type="hidden" name="intent" value="reorderStep" />
+                        <input type="hidden" name="stepId" value={step.id} />
+                        <input type="hidden" name="direction" value="up" />
+                        <Button type="submit" plain disabled={index === 0}>Move Up</Button>
+                      </Form>
 
-                        <Form method="post" className="m-0">
-                          <input type="hidden" name="intent" value="reorderStep" />
-                          <input type="hidden" name="stepId" value={step.id} />
-                          <input type="hidden" name="direction" value="down" />
-                          <Button type="submit" disabled={index === recipe.steps.length - 1}>Move Down</Button>
-                        </Form>
+                      <Form method="post" className="m-0">
+                        <input type="hidden" name="intent" value="reorderStep" />
+                        <input type="hidden" name="stepId" value={step.id} />
+                        <input type="hidden" name="direction" value="down" />
+                        <Button type="submit" plain disabled={index === recipe.steps.length - 1}>Move Down</Button>
+                      </Form>
 
-                        <Button href={`/recipes/${recipe.id}/steps/${step.id}/edit`}>Edit</Button>
-                        <Button
-                          type="button"
-                          variant="destructive"
-                          onClick={() => setStepToDelete({ id: step.id, stepNum: step.stepNum })}
-                        >
-                          Delete
-                        </Button>
-                      </div>
+                      <Button href={`/recipes/${recipe.id}/steps/${step.id}/edit`}>Edit</Button>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        onClick={() => setStepToDelete({ id: step.id, stepNum: step.stepNum })}
+                      >
+                        Delete
+                      </Button>
                     </div>
                   </article>
                 );
@@ -534,6 +512,6 @@ export default function EditRecipe() {
           </DialogActions>
         </Dialog>
       </div>
-    </div>
+    </CookbookPage>
   );
 }

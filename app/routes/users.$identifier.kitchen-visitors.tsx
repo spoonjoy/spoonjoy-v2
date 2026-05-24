@@ -1,6 +1,6 @@
 import type { Route } from "./+types/users.$identifier.kitchen-visitors";
 import { redirect, useLoaderData } from "react-router";
-import { Heading, Subheading } from "~/components/ui/heading";
+import { Subheading } from "~/components/ui/heading";
 import { Text } from "~/components/ui/text";
 import { Link } from "~/components/ui/link";
 import { getRequestDb } from "~/lib/route-platform.server";
@@ -11,6 +11,7 @@ import {
   type FellowChefRow,
 } from "~/lib/fellow-chefs.server";
 import { FellowChefList } from "~/components/users/FellowChefList";
+import { CookbookPage, CookbookHeader } from "~/components/cookbook/page";
 
 interface SerializedFellowChefRow extends Omit<FellowChefRow, "latestInteractionAt"> {
   latestInteractionAt: string;
@@ -125,17 +126,15 @@ export default function KitchenVisitorsPage() {
   }));
 
   return (
-    <div className="sj-page px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
-      <section className="sj-panel mx-auto max-w-3xl rounded-[2rem] p-5 sm:p-7">
-        <p className="sj-eyebrow">Chef profile</p>
-        <Heading level={1} className="mt-2 text-3xl/10 tracking-[-0.04em]">
-          Kitchen visitors
-        </Heading>
-        <Subheading level={2} className="mt-1 text-base/6">
+    <CookbookPage>
+      <section className="mx-auto max-w-3xl">
+        <CookbookHeader eyebrow="Chef profile" title="Kitchen visitors">
+        <Subheading level={2} className="text-base/6">
           {viewerIsOwner
             ? "Chefs who've engaged with your recipes"
             : `Chefs who've engaged with ${profileUsername}'s recipes`}
         </Subheading>
+        </CookbookHeader>
 
         <div className="mt-6">
           <FellowChefList rows={renderRows} emptyStateText={emptyStateText} />
@@ -166,6 +165,6 @@ export default function KitchenVisitorsPage() {
           </nav>
         )}
       </section>
-    </div>
+    </CookbookPage>
   );
 }

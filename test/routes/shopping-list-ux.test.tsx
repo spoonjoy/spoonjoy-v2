@@ -257,13 +257,13 @@ describe("shopping list UX updates", () => {
     render(<Stub initialEntries={["/shopping-list"]} />);
 
     expect(await screen.findByText("chicken thigh")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Clear All" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Clear it all" }));
+    fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Clear all" }));
 
     await waitFor(() => expect(submittedIntents).toContain("clearAll"));
   });
 
-  it("uses rounded receipt row shells and closes all reveals when check-off reorders rows", async () => {
+  it("uses ruled receipt rows and closes all reveals when check-off reorders rows", async () => {
     const Stub = createTestRoutesStub([
       {
         path: "/shopping-list",
@@ -301,10 +301,10 @@ describe("shopping list UX updates", () => {
     const { container } = render(<Stub initialEntries={["/shopping-list"]} />);
 
     expect(await screen.findByText("apples")).toBeInTheDocument();
-    const seamContainer = container.querySelector(".relative.overflow-hidden.rounded-\\[1\\.35rem\\].border");
-    const rowShell = container.querySelector(".relative.z-10.px-3.py-2");
+    const seamContainer = container.querySelector(".relative.overflow-hidden");
+    const rowShell = container.querySelector(".relative.z-10.bg-\\[var\\(--sj-page\\)\\]");
     expect(seamContainer).toBeInTheDocument();
-    expect(rowShell?.className).toContain("bg-[var(--sj-panel-solid)]");
+    expect(rowShell).toBeInTheDocument();
 
     const bananasLabel = await screen.findByText("bananas");
     const bananasRow = bananasLabel.closest("[data-motion-x]");

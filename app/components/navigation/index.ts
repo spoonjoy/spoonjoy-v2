@@ -8,7 +8,10 @@ export {
   DockContextProvider,
   useDockContext,
   useDockActions,
+  useDockConfig,
   type DockAction,
+  type DockButton,
+  type DockConfig,
   type DockContextValue,
   type DockContextProviderProps,
 } from './dock-context'

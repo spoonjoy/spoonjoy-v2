@@ -175,7 +175,7 @@ export function RecipeBuilder({
       {errors?.general && (
         <div
           role="alert"
-          className="rounded-2xl border border-[var(--sj-tomato)] bg-[color-mix(in_srgb,var(--sj-tomato)_10%,var(--sj-panel-solid))] p-4 text-sm text-[var(--sj-tomato)]"
+          className="border-y border-[var(--sj-tomato)] bg-[color-mix(in_srgb,var(--sj-tomato)_10%,var(--sj-panel-solid))] py-4 text-sm text-[var(--sj-tomato)]"
         >
           {errors.general}
         </div>
@@ -261,7 +261,7 @@ export function RecipeBuilder({
       </fieldset>
 
       {showSteps && (
-        <section aria-label="Recipe Steps" className="sj-form-section space-y-4">
+        <section aria-label="Recipe Steps" className="space-y-4 border-t border-[var(--sj-border)] pt-6">
           <div>
             <p className="sj-eyebrow">Method</p>
             <h2 className="font-sj-display mt-3 text-3xl/9 font-semibold tracking-[-0.03em] text-[var(--sj-ink)]">
@@ -271,7 +271,7 @@ export function RecipeBuilder({
           {errors?.steps && (
             <div
               role="alert"
-              className="rounded-2xl border border-[var(--sj-tomato)] bg-[color-mix(in_srgb,var(--sj-tomato)_10%,var(--sj-panel-solid))] p-4 text-sm text-[var(--sj-tomato)]"
+              className="border-y border-[var(--sj-tomato)] bg-[color-mix(in_srgb,var(--sj-tomato)_10%,var(--sj-panel-solid))] py-4 text-sm text-[var(--sj-tomato)]"
             >
               {errors.steps}
             </div>

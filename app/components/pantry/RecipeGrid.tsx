@@ -3,6 +3,7 @@ import { Subheading } from '../ui/heading'
 import { Link } from '../ui/link'
 import { Text } from '../ui/text'
 import { Button } from '../ui/button'
+import { RuledEmptyState } from '~/components/cookbook/page'
 
 export interface PantryRecipeCard {
   id: string
@@ -35,8 +36,7 @@ export function RecipeGrid({
 }: RecipeGridProps) {
   if (recipes.length === 0) {
     return (
-      <section className="rounded-[var(--sj-radius-hero)] border border-dashed border-[var(--sj-border-strong)] bg-[color-mix(in_srgb,var(--sj-flour)_55%,transparent)] p-6">
-        <Subheading level={2}>{emptyTitle}</Subheading>
+      <RuledEmptyState title={emptyTitle}>
         <Text className="mt-2">{emptyMessage}</Text>
         {emptyCtaHref ? (
           <div className="mt-4">
@@ -45,7 +45,7 @@ export function RecipeGrid({
             </Button>
           </div>
         ) : null}
-      </section>
+      </RuledEmptyState>
     )
   }
 

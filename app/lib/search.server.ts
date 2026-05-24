@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
+import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
 import { getRecipeCoverImageUrl } from "~/lib/recipe-cover.server";
 
 export const SEARCH_SCOPES = ["all", "recipes", "cookbooks", "chefs", "shopping-list"] as const;
@@ -333,7 +334,7 @@ async function chefDocuments(database: PrismaClient): Promise<SearchDocumentInpu
     subtitle: "Chef kitchen",
     body: compactText([user.username, `recipes ${user._count.recipes}`, `cookbooks ${user._count.cookbooks}`]),
     href: `/users/${user.username}`,
-    imageUrl: user.photoUrl,
+    imageUrl: resolveChefAvatarUrl(user.photoUrl),
     metadata: {
       username: user.username,
       recipeCount: user._count.recipes,

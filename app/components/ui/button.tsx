@@ -12,7 +12,7 @@ const styles = {
     '*:data-[slot=icon]:-mx-0.5 *:data-[slot=icon]:my-0.5 *:data-[slot=icon]:size-5 *:data-[slot=icon]:shrink-0 *:data-[slot=icon]:self-center *:data-[slot=icon]:text-(--btn-icon) sm:*:data-[slot=icon]:my-1 sm:*:data-[slot=icon]:size-4 forced-colors:[--btn-icon:ButtonText] forced-colors:data-hover:[--btn-icon:ButtonText]',
   ],
   default: [
-    'border-[var(--sj-ink)] bg-[var(--sj-ink)] text-[var(--sj-paper)] data-active:bg-[var(--sj-brass)] data-hover:-translate-y-0.5 data-hover:border-[var(--sj-tomato)] data-hover:bg-[var(--sj-tomato)]',
+    'border-[var(--sj-action-deep)] bg-[linear-gradient(180deg,var(--sj-action),var(--sj-action-deep))] text-[var(--sj-on-photo)] data-active:bg-[var(--sj-action-deep)] data-hover:-translate-y-0.5 data-hover:border-[var(--sj-action-deep)] data-hover:bg-[var(--sj-action-deep)]',
     '[--btn-icon:var(--sj-paper)] data-active:[--btn-icon:var(--sj-paper)] data-hover:[--btn-icon:var(--sj-paper)]',
   ],
   destructive: [

@@ -15,7 +15,7 @@ describe('Recipe Page Dock Integration', () => {
     capturedActions = null
   })
 
-  it('detail actions for owner: edit/add-to-list/save/share', async () => {
+  it('detail actions for owner: back/cook/list/edit', async () => {
     const onAddToList = vi.fn()
     const onSave = vi.fn()
     const onShare = vi.fn()
@@ -23,30 +23,26 @@ describe('Recipe Page Dock Integration', () => {
     function P() { useRecipeDetailActions({ recipeId: 'recipe-1', chefId: 'chef-1', isOwner: true, onSave, onAddToList, onShare }); return null }
     render(<MemoryRouter><DockContextProvider><ContextDisplay /><P /></DockContextProvider></MemoryRouter>)
 
-    expect(screen.getByTestId('action-ids')).toHaveTextContent('edit,add-to-list,save,share')
+    expect(screen.getByTestId('action-ids')).toHaveTextContent('recipe-back,cook,add-to-list,edit')
 
     expect(capturedActions?.find(a => a.id === 'edit')?.onAction).toBe('/recipes/recipe-1/edit')
 
-    const saveAction = capturedActions?.find(a => a.id === 'save')?.onAction
     const addToListAction = capturedActions?.find(a => a.id === 'add-to-list')?.onAction
-    const shareAction = capturedActions?.find(a => a.id === 'share')?.onAction
 
-    if (typeof saveAction === 'function') saveAction()
     if (typeof addToListAction === 'function') addToListAction()
-    if (typeof shareAction === 'function') shareAction()
 
-    expect(onSave).toHaveBeenCalled()
+    expect(onSave).not.toHaveBeenCalled()
     expect(onAddToList).toHaveBeenCalled()
-    expect(onShare).toHaveBeenCalled()
+    expect(onShare).not.toHaveBeenCalled()
   })
 
-  it('detail actions for non-owner: view-chef-profile/add-to-list/save/share', () => {
+  it('detail actions for non-owner: back/cook/list/save', () => {
     function P() { useRecipeDetailActions({ recipeId: 'recipe-1', chefId: 'chef-1', isOwner: false }); return null }
     render(<MemoryRouter><DockContextProvider><ContextDisplay /><P /></DockContextProvider></MemoryRouter>)
 
-    expect(screen.getByTestId('action-ids')).toHaveTextContent('view-chef-profile,add-to-list,save,share')
+    expect(screen.getByTestId('action-ids')).toHaveTextContent('recipe-back,cook,add-to-list,save')
     expect(capturedActions?.find(a => a.id === 'edit')).toBeUndefined()
-    expect(capturedActions?.find(a => a.id === 'view-chef-profile')?.onAction).toBe('/users/chef-1')
+    expect(capturedActions?.find(a => a.id === 'recipe-back')?.onAction).toBe('/recipes')
   })
 
   it('does not thrash dock context when callbacks are recreated across rerenders', () => {
@@ -81,7 +77,7 @@ describe('Recipe Page Dock Integration', () => {
     )
 
     expect(screen.getByTestId('is-contextual')).toHaveTextContent('yes')
-    expect(screen.getByTestId('action-ids')).toHaveTextContent('edit,add-to-list,save,share')
+    expect(screen.getByTestId('action-ids')).toHaveTextContent('recipe-back,cook,add-to-list,edit')
   })
 
   it('detail actions use no-op fallbacks', () => {
@@ -97,7 +93,7 @@ describe('Recipe Page Dock Integration', () => {
       if (typeof action === 'function') action()
     }).not.toThrow()
     expect(() => {
-      const action = capturedActions?.find(a => a.id === 'share')?.onAction
+      const action = capturedActions?.find(a => a.id === 'cook')?.onAction
       if (typeof action === 'function') action()
     }).not.toThrow()
   })

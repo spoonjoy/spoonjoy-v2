@@ -52,8 +52,8 @@ const buttonSolidStyles = [
   'disabled:before:shadow-none disabled:after:shadow-none',
 ]
 
-const buttonGreenStyles = [
-  'text-[var(--sj-paper)] [--btn-hover-overlay:color-mix(in_srgb,var(--sj-bone)_12%,transparent)] [--btn-bg:var(--sj-herb)] [--btn-border:var(--sj-herb)]',
+const buttonActionStyles = [
+  'text-[var(--sj-on-photo)] [--btn-hover-overlay:color-mix(in_srgb,var(--sj-bone)_12%,transparent)] [--btn-bg:var(--sj-action)] [--btn-border:var(--sj-action-deep)]',
   '[--btn-icon:var(--sj-paper)]',
 ]
 
@@ -191,13 +191,13 @@ export function StepEditorCard({
   return (
     <article
       aria-label={`Step ${stepNumber}`}
-      className="sj-card rounded-[1.5rem] p-4"
+      className="border-b border-[var(--sj-border)] py-5"
     >
       {/* Header with step number and title */}
       <div className="flex items-center gap-4 mb-4">
         {dragHandle}
         <div
-          className="font-sj-ui flex h-8 w-8 items-center justify-center rounded-full bg-[var(--sj-brass)] font-bold text-[var(--sj-paper)]"
+          className="font-sj-ui flex h-8 w-8 items-center justify-center rounded-[var(--sj-radius-small)] bg-[var(--sj-ink)] font-bold text-[var(--sj-paper)]"
         >
           {stepNumber}
         </div>
@@ -294,7 +294,7 @@ export function StepEditorCard({
           type="button"
           onClick={handleSave}
           disabled={disabled}
-          className={clsx(buttonBaseStyles, buttonSolidStyles, buttonGreenStyles, 'cursor-default')}
+          className={clsx(buttonBaseStyles, buttonSolidStyles, buttonActionStyles, 'cursor-default')}
         >
           <TouchTarget>
             <Save className="size-4" aria-hidden="true" />

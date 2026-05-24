@@ -856,8 +856,8 @@ describe("Cookbooks $id Route", () => {
       expect(await screen.findByText("Someone Elses Cookbook")).toBeInTheDocument();
       expect(screen.getByText("This cookbook is empty")).toBeInTheDocument();
       // Non-owner should not see edit/delete buttons
-      expect(screen.queryByText("Edit Title")).not.toBeInTheDocument();
-      expect(screen.queryByText("Delete Cookbook")).not.toBeInTheDocument();
+      expect(screen.queryByText("Edit title")).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Delete cookbook" })).not.toBeInTheDocument();
     });
 
     it("should render cookbook with recipes", async () => {
@@ -973,12 +973,12 @@ describe("Cookbooks $id Route", () => {
 
       render(<Stub initialEntries={["/cookbooks/cookbook-1"]} />);
 
-      expect(await screen.findByText("Add Recipe to Cookbook")).toBeInTheDocument();
+      expect(await screen.findByText("Add recipe to cookbook")).toBeInTheDocument();
       expect(screen.getByRole("combobox")).toBeInTheDocument();
       expect(screen.getByText("Select a recipe...")).toBeInTheDocument();
       expect(screen.getByText("Available Recipe 1")).toBeInTheDocument();
       expect(screen.getByText("Available Recipe 2")).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Add Recipe" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Add recipe" })).toBeInTheDocument();
     });
 
     it("should show owner controls (edit title, delete cookbook, remove recipe)", async () => {
@@ -1014,9 +1014,9 @@ describe("Cookbooks $id Route", () => {
 
       render(<Stub initialEntries={["/cookbooks/cookbook-1"]} />);
 
-      expect(await screen.findByRole("button", { name: "Edit Title" })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Delete Cookbook" })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Remove from Cookbook" })).toBeInTheDocument();
+      expect(await screen.findByRole("button", { name: "Edit title" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Delete cookbook" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Remove from cookbook" })).toBeInTheDocument();
     });
 
     it("should show edit title form when clicking edit title button", async () => {
@@ -1041,7 +1041,7 @@ describe("Cookbooks $id Route", () => {
 
       render(<Stub initialEntries={["/cookbooks/cookbook-1"]} />);
 
-      const editButton = await screen.findByRole("button", { name: "Edit Title" });
+      const editButton = await screen.findByRole("button", { name: "Edit title" });
       fireEvent.click(editButton);
 
       // Now editing mode should show input and Save/Cancel buttons
@@ -1073,7 +1073,7 @@ describe("Cookbooks $id Route", () => {
       render(<Stub initialEntries={["/cookbooks/cookbook-1"]} />);
 
       // Enter edit mode
-      const editButton = await screen.findByRole("button", { name: "Edit Title" });
+      const editButton = await screen.findByRole("button", { name: "Edit title" });
       fireEvent.click(editButton);
 
       // Cancel edit
@@ -1081,7 +1081,7 @@ describe("Cookbooks $id Route", () => {
       fireEvent.click(cancelButton);
 
       // Should be back to view mode
-      expect(screen.getByRole("button", { name: "Edit Title" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Edit title" })).toBeInTheDocument();
       expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
     });
 
@@ -1110,7 +1110,7 @@ describe("Cookbooks $id Route", () => {
       // Should show title as heading, not in input
       expect(await screen.findByRole("heading", { name: "My Cookbook" })).toBeInTheDocument();
       // But Edit Title button should be visible
-      expect(screen.getByRole("button", { name: "Edit Title" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Edit title" })).toBeInTheDocument();
     });
 
     it("should open delete cookbook dialog and allow confirmation", async () => {
@@ -1141,11 +1141,11 @@ describe("Cookbooks $id Route", () => {
       render(<Stub initialEntries={["/cookbooks/cookbook-1"]} />);
 
       // Click delete button
-      const deleteButton = await screen.findByRole("button", { name: "Delete Cookbook" });
+      const deleteButton = await screen.findByRole("button", { name: "Delete cookbook" });
       fireEvent.click(deleteButton);
 
       // Dialog should be open
-      expect(await screen.findByText("Banish this cookbook? 📚")).toBeInTheDocument();
+      expect(await screen.findByText("Delete this cookbook?")).toBeInTheDocument();
       expect(screen.getByText(/This will permanently delete/)).toBeInTheDocument();
 
       // Click confirm button
@@ -1154,7 +1154,7 @@ describe("Cookbooks $id Route", () => {
 
       // Dialog should close (may need to wait for animation)
       await waitFor(() => {
-        expect(screen.queryByText("Banish this cookbook? 📚")).not.toBeInTheDocument();
+        expect(screen.queryByText("Delete this cookbook?")).not.toBeInTheDocument();
       });
     });
 
@@ -1181,7 +1181,7 @@ describe("Cookbooks $id Route", () => {
       render(<Stub initialEntries={["/cookbooks/cookbook-1"]} />);
 
       // Click delete button
-      const deleteButton = await screen.findByRole("button", { name: "Delete Cookbook" });
+      const deleteButton = await screen.findByRole("button", { name: "Delete cookbook" });
       fireEvent.click(deleteButton);
 
       // Click cancel
@@ -1190,7 +1190,7 @@ describe("Cookbooks $id Route", () => {
 
       // Dialog should close (may need to wait for animation)
       await waitFor(() => {
-        expect(screen.queryByText("Banish this cookbook? 📚")).not.toBeInTheDocument();
+        expect(screen.queryByText("Delete this cookbook?")).not.toBeInTheDocument();
       });
     });
 
@@ -1229,11 +1229,11 @@ describe("Cookbooks $id Route", () => {
       render(<Stub initialEntries={["/cookbooks/cookbook-1"]} />);
 
       // Click remove button
-      const removeButton = await screen.findByRole("button", { name: "Remove from Cookbook" });
+      const removeButton = await screen.findByRole("button", { name: "Remove from cookbook" });
       fireEvent.click(removeButton);
 
       // Dialog should be open
-      expect(await screen.findByText("Remove from cookbook? 🍳")).toBeInTheDocument();
+      expect(await screen.findByText("Remove from cookbook?")).toBeInTheDocument();
 
       // Click confirm button
       const confirmButton = screen.getByRole("button", { name: "Remove it" });
@@ -1241,7 +1241,7 @@ describe("Cookbooks $id Route", () => {
 
       // Dialog should close after submission (may need to wait for animation)
       await waitFor(() => {
-        expect(screen.queryByText("Remove from cookbook? 🍳")).not.toBeInTheDocument();
+        expect(screen.queryByText("Remove from cookbook?")).not.toBeInTheDocument();
       });
     });
 
@@ -1279,7 +1279,7 @@ describe("Cookbooks $id Route", () => {
       render(<Stub initialEntries={["/cookbooks/cookbook-1"]} />);
 
       // Click remove button
-      const removeButton = await screen.findByRole("button", { name: "Remove from Cookbook" });
+      const removeButton = await screen.findByRole("button", { name: "Remove from cookbook" });
       fireEvent.click(removeButton);
 
       // Click cancel
@@ -1288,7 +1288,7 @@ describe("Cookbooks $id Route", () => {
 
       // Dialog should close (may need to wait for animation)
       await waitFor(() => {
-        expect(screen.queryByText("Remove from cookbook? 🍳")).not.toBeInTheDocument();
+        expect(screen.queryByText("Remove from cookbook?")).not.toBeInTheDocument();
       });
     });
   });

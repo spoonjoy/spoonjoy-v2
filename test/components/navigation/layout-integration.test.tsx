@@ -161,8 +161,8 @@ describe('SpoonDock v3 Layout Integration', () => {
     })
   })
 
-  describe('fixed-width grid layout', () => {
-    it('dock uses 3-column grid with fixed side columns', () => {
+  describe('mobile cookbook grid layout', () => {
+    it('dock uses place / primary / tools columns', () => {
       render(
         <MemoryRouter>
           <AssembledSpoonDock />
@@ -171,7 +171,7 @@ describe('SpoonDock v3 Layout Integration', () => {
 
       const nav = screen.getByRole('navigation')
       expect(nav).toHaveClass('grid')
-      expect(nav).toHaveClass('grid-cols-[72px_1fr_72px]')
+      expect(nav).toHaveClass('grid-cols-[minmax(0,1fr)_minmax(5.5rem,auto)_minmax(0,1fr)]')
     })
   })
 

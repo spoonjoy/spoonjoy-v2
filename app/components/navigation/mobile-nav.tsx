@@ -1,147 +1,225 @@
-import { useLocation } from 'react-router'
-import { SpoonDock } from './spoon-dock'
-import { DockItem } from './dock-item'
-import { DockCenter } from './dock-center'
-import { useDockContext, type DockAction } from './dock-context'
-import { Plus, ShoppingCart, Home, User } from 'lucide-react'
+import { useLocation } from "react-router";
+import {
+  ArrowLeft,
+  Home,
+  Plus,
+  Search,
+  Settings,
+  ShoppingBag,
+  User,
+} from "lucide-react";
+import { SpoonDock } from "./spoon-dock";
+import { DockItem } from "./dock-item";
+import { configFromActions, useDockContext, type DockButton, type DockConfig } from "./dock-context";
 
-/**
- * MobileNav - Mobile navigation dock (v3 — 3-slot IA)
- *
- * 3-slot structure:
- *   LEFT:   NEW (+) → /recipes/new
- *   CENTER: Logo → / (Kitchen home)
- *   RIGHT:  LIST (cart) → /shopping-list
- *
- * Supports L2 contextual actions via DockContext — when a page registers
- * contextual actions, those replace the L1 navigation items while the
- * center logo remains.
- *
- * @param isAuthenticated - When false, shows unauthenticated variant (Home, Logo, Login)
- */
+function buttonHref(action: DockButton) {
+  return typeof action.onAction === "string" ? action.onAction : undefined;
+}
 
-// Navigation items for authenticated users (v3 — 3 slots)
-const authenticatedNavItems = [
-  { icon: Plus, label: 'New', href: '/recipes/new', position: 'left' },
-  // Center is the logo
-  { icon: ShoppingCart, label: 'List', href: '/shopping-list', position: 'right' },
-] as const
+function buttonOnClick(action: DockButton) {
+  return typeof action.onAction === "function" ? action.onAction : undefined;
+}
 
-// Navigation items for unauthenticated users
-const unauthenticatedNavItems = [
-  { icon: Home, label: 'Home', href: '/', position: 'left' },
-  // Center is the logo
-  { icon: User, label: 'Login', href: '/login', position: 'right' },
-] as const
+function isPath(pathname: string, href: string) {
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
 
-type NavItem = { icon: typeof Home; label: string; href: string; position: 'left' | 'right' }
-
-/**
- * Determine which nav item is active based on current path
- */
-function getActiveHref(pathname: string, navItems: readonly NavItem[]): string | null {
-  for (const item of navItems) {
-    if (item.href === '/') {
-      if (pathname === '/') {
-        return item.href
-      }
-    } else if (pathname.startsWith(item.href)) {
-      return item.href
-    }
+function shouldHideDock(pathname: string, isAuthenticated: boolean) {
+  if (!isAuthenticated) {
+    return pathname === "/login" || pathname === "/signup";
   }
-  return null
+
+  if (pathname === "/recipes/new" || pathname === "/cookbooks/new" || pathname.startsWith("/cookbooks/")) {
+    return true;
+  }
+
+  return pathname.startsWith("/recipes/")
+    && (pathname.endsWith("/edit") || pathname.endsWith("/steps/new") || (pathname.includes("/steps/") && pathname.endsWith("/edit")));
+}
+
+function rootConfig(pathname: string, isAuthenticated: boolean): DockConfig {
+  if (!isAuthenticated) {
+    return {
+      variant: "root",
+      left: {
+        id: "public-home",
+        icon: Home,
+        label: "Spoonjoy",
+        sublabel: "public",
+        onAction: "/",
+        active: pathname === "/",
+      },
+      primary: {
+        id: "login",
+        icon: User,
+        label: "Log in",
+        onAction: "/login",
+      },
+      tools: [
+        { id: "search", icon: Search, label: "Search", onAction: "/search", active: isPath(pathname, "/search") },
+      ],
+    };
+  }
+
+  if (pathname.startsWith("/search")) {
+    return {
+      variant: "root",
+      left: {
+        id: "search-place",
+        icon: Search,
+        label: "Search",
+        sublabel: "index",
+        onAction: "/search",
+        active: true,
+      },
+      primary: { id: "new-recipe", icon: Plus, label: "+", ariaLabel: "Create recipe", onAction: "/recipes/new" },
+      tools: [
+        { id: "kitchen", icon: Home, label: "Kitchen", onAction: "/" },
+        { id: "shopping", icon: ShoppingBag, label: "Shopping list", onAction: "/shopping-list" },
+      ],
+    };
+  }
+
+  if (pathname.startsWith("/shopping-list")) {
+    return {
+      variant: "root",
+      left: {
+        id: "shopping-place",
+        icon: ShoppingBag,
+        label: "List",
+        sublabel: "market",
+        onAction: "/shopping-list",
+        active: true,
+      },
+      primary: { id: "add-shopping-item", icon: Plus, label: "Add", onAction: "/shopping-list#add-item" },
+      tools: [
+        { id: "search", icon: Search, label: "Search", onAction: "/search" },
+        { id: "kitchen", icon: Home, label: "Kitchen", onAction: "/" },
+      ],
+    };
+  }
+
+  if (pathname.startsWith("/account")) {
+    return {
+      variant: "root",
+      left: {
+        id: "account-place",
+        icon: Settings,
+        label: "Account",
+        sublabel: "settings",
+        onAction: "/account/settings",
+        active: true,
+      },
+      primary: { id: "new-recipe", icon: Plus, label: "+", ariaLabel: "Create recipe", onAction: "/recipes/new" },
+      tools: [
+        { id: "kitchen", icon: Home, label: "Kitchen", onAction: "/" },
+        { id: "search", icon: Search, label: "Search", onAction: "/search" },
+      ],
+    };
+  }
+
+  if (pathname.startsWith("/cookbooks")) {
+    return {
+      variant: "root",
+      left: {
+        id: "cookbooks-place",
+        icon: Home,
+        label: "Shelf",
+        sublabel: "cookbooks",
+        onAction: "/cookbooks",
+        active: true,
+      },
+      primary: { id: "new-cookbook", icon: Plus, label: "+", ariaLabel: "Create cookbook", onAction: "/cookbooks/new" },
+      tools: [
+        { id: "search", icon: Search, label: "Search", onAction: "/search" },
+        { id: "shopping", icon: ShoppingBag, label: "Shopping list", onAction: "/shopping-list" },
+      ],
+    };
+  }
+
+  if (pathname.startsWith("/users")) {
+    return {
+      variant: "context",
+      left: {
+        id: "back-kitchen",
+        icon: ArrowLeft,
+        label: "Back",
+        sublabel: "kitchen",
+        onAction: "/",
+      },
+      primary: { id: "new-recipe", icon: Plus, label: "+", ariaLabel: "Create recipe", onAction: "/recipes/new" },
+      tools: [
+        { id: "search", icon: Search, label: "Search", onAction: "/search" },
+        { id: "shopping", icon: ShoppingBag, label: "Shopping list", onAction: "/shopping-list" },
+      ],
+    };
+  }
+
+  return {
+    variant: "root",
+    left: {
+      id: "kitchen-place",
+      icon: Home,
+      label: "Kitchen",
+      sublabel: "home",
+      onAction: "/",
+      active: pathname === "/",
+    },
+    primary: { id: "new-recipe", icon: Plus, label: "+", ariaLabel: "Create recipe", onAction: "/recipes/new" },
+    tools: [
+      { id: "search", icon: Search, label: "Search", onAction: "/search" },
+      { id: "shopping", icon: ShoppingBag, label: "Shopping list", onAction: "/shopping-list" },
+    ],
+  };
 }
 
 interface MobileNavProps {
-  isAuthenticated?: boolean
-}
-
-function renderContextualItem(action: DockAction) {
-  if (typeof action.onAction === 'string') {
-    return (
-      <DockItem
-        key={action.id}
-        icon={action.icon}
-        label={action.label}
-        ariaLabel={action.ariaLabel}
-        iconClassName={action.iconClassName}
-        labelClassName={action.labelClassName}
-        href={action.onAction}
-      />
-    )
-  }
-
-  return (
-    <DockItem
-      key={action.id}
-      icon={action.icon}
-      label={action.label}
-      ariaLabel={action.ariaLabel}
-      iconClassName={action.iconClassName}
-      labelClassName={action.labelClassName}
-      onClick={action.onAction}
-    />
-  )
+  isAuthenticated?: boolean;
 }
 
 export function MobileNav({ isAuthenticated = true }: MobileNavProps) {
-  const location = useLocation()
-  const { actions, isContextual } = useDockContext()
-  const defaultNavItems = isAuthenticated ? authenticatedNavItems : unauthenticatedNavItems
-  const activeHref = getActiveHref(location.pathname, defaultNavItems)
+  const location = useLocation();
+  const { config, actions } = useDockContext();
 
-  // When contextual, use actions from context; otherwise use default nav
-  const leftItems = isContextual
-    ? (actions ?? []).filter((a) => a.position === 'left')
-    : defaultNavItems.filter((item) => item.position === 'left')
-  const rightItems = isContextual
-    ? (actions ?? []).filter((a) => a.position === 'right')
-    : defaultNavItems.filter((item) => item.position === 'right')
+  if (shouldHideDock(location.pathname, isAuthenticated)) {
+    return null;
+  }
+
+  const activeConfig = config ?? configFromActions(actions) ?? rootConfig(location.pathname, isAuthenticated);
+  const tools = activeConfig.tools.slice(0, 2);
 
   return (
-    <SpoonDock layout={isContextual ? 'contextual' : 'default'}>
-      {/* Left slot — fixed width via grid */}
-      <div className={`flex items-center justify-center ${isContextual ? 'gap-1' : ''}`}>
-        {leftItems.map((item) => {
-          if (isContextual) {
-            const action = item as DockAction
-            return renderContextualItem(action)
-          }
-          const navItem = item as NavItem
-          return (
-            <DockItem
-              key={navItem.href}
-              icon={navItem.icon}
-              label={navItem.label}
-              href={navItem.href}
-              active={activeHref === navItem.href}
-            />
-          )
-        })}
+    <SpoonDock aria-label={activeConfig.ariaLabel ?? "Spoonjoy navigation"}>
+      <div className="flex min-w-0 justify-start">
+        <DockItem
+          {...activeConfig.left}
+          variant="place"
+          href={buttonHref(activeConfig.left)}
+          onClick={buttonOnClick(activeConfig.left)}
+        />
       </div>
 
-      {/* Center slot — logo, hero of the dock */}
-      <DockCenter href="/" />
+      <div className="flex justify-center" data-testid="dock-center">
+        <DockItem
+          {...activeConfig.primary}
+          variant="primary"
+          tone={activeConfig.primary.tone ?? "primary"}
+          href={buttonHref(activeConfig.primary)}
+          onClick={buttonOnClick(activeConfig.primary)}
+        />
+      </div>
 
-      {/* Right slot — fixed width via grid */}
-      <div className={`flex items-center justify-center ${isContextual ? 'gap-1' : ''}`}>
-        {rightItems.map((item) => {
-          if (isContextual) {
-            const action = item as DockAction
-            return renderContextualItem(action)
-          }
-          const navItem = item as NavItem
-          return (
-            <DockItem
-              key={navItem.href}
-              icon={navItem.icon}
-              label={navItem.label}
-              href={navItem.href}
-              active={activeHref === navItem.href}
-            />
-          )
-        })}
+      <div className="flex justify-end gap-1">
+        {tools.map((tool) => (
+          <DockItem
+            key={tool.id}
+            {...tool}
+            variant="tool"
+            href={buttonHref(tool)}
+            onClick={buttonOnClick(tool)}
+          />
+        ))}
       </div>
     </SpoonDock>
-  )
+  );
 }

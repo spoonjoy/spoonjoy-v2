@@ -25,8 +25,8 @@ const buttonSolidStyles = [
   'disabled:before:shadow-none disabled:after:shadow-none',
 ]
 
-const buttonGreenStyles = [
-  'text-[var(--sj-paper)] [--btn-hover-overlay:color-mix(in_srgb,var(--sj-bone)_12%,transparent)] [--btn-bg:var(--sj-herb)] [--btn-border:var(--sj-herb)]',
+const buttonActionStyles = [
+  'text-[var(--sj-on-photo)] [--btn-hover-overlay:color-mix(in_srgb,var(--sj-bone)_12%,transparent)] [--btn-bg:var(--sj-action)] [--btn-border:var(--sj-action-deep)]',
   '[--btn-icon:var(--sj-paper)] hover:[--btn-icon:var(--sj-paper)]',
 ]
 
@@ -92,7 +92,7 @@ export function ParsedIngredientList({
           disabled={isDisabled}
           aria-busy={loading}
           aria-label={`Add all ${ingredients.length} ingredients to recipe`}
-          className={clsx(buttonBaseStyles, buttonSolidStyles, buttonGreenStyles, 'cursor-default')}
+          className={clsx(buttonBaseStyles, buttonSolidStyles, buttonActionStyles, 'cursor-default')}
         >
           <Plus className="size-4" aria-hidden="true" />
           Add All ({ingredients.length})

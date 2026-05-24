@@ -1375,7 +1375,7 @@ describe("Recipes $id Edit Route", () => {
 
       render(<Stub initialEntries={["/recipes/recipe-1/edit"]} />);
 
-      const headings = await screen.findAllByRole("heading", { name: "Tune the recipe until it feels cookable." });
+      const headings = await screen.findAllByRole("heading", { name: "Edit Recipe" });
       expect(headings.length).toBeGreaterThan(0);
       expect(screen.getByRole("link", { name: "← Back to recipe" })).toHaveAttribute("href", "/recipes/recipe-1");
       expect(screen.getByLabelText(/Title/)).toHaveValue("Test Recipe");
@@ -1409,7 +1409,8 @@ describe("Recipes $id Edit Route", () => {
 
       render(<Stub initialEntries={["/recipes/recipe-1/edit"]} />);
 
-      expect(await screen.findByText("No steps yet. Add your first step.")).toBeInTheDocument();
+      expect(await screen.findByRole("heading", { name: "No steps yet." })).toBeInTheDocument();
+      expect(screen.getByText("Add the first step when you are ready to turn the dish into a cooking path.")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "+ Add Step" })).toHaveAttribute("href", "/recipes/recipe-1/steps/new");
     });
 
@@ -1948,7 +1949,7 @@ describe("Recipes $id Edit Route", () => {
       expect(submittedData.steps).toBeDefined();
     });
 
-    it("should populate hidden form and submit when dock Save is clicked", async () => {
+    it("should keep the mobile dock off edit forms and submit from the in-flow Save Recipe button", async () => {
       const user = userEvent.setup();
       let submittedData: any = null;
 
@@ -1990,6 +1991,7 @@ describe("Recipes $id Edit Route", () => {
       render(<Stub initialEntries={["/recipes/recipe-1/edit"]} />);
 
       await screen.findByRole("button", { name: "Save Recipe" });
+      expect(screen.queryByRole("navigation", { name: "Spoonjoy navigation" })).not.toBeInTheDocument();
 
       const titleInput = screen.getByLabelText(/^Title$/i);
       const descriptionInput = screen.getByLabelText(/Description/);
@@ -2002,7 +2004,7 @@ describe("Recipes $id Edit Route", () => {
       await user.clear(servingsInput);
       await user.type(servingsInput, "6");
 
-      await user.click(await screen.findByRole("button", { name: "Save" }));
+      await user.click(screen.getByRole("button", { name: "Save Recipe" }));
 
       await waitFor(() => {
         expect(submittedData).not.toBeNull();

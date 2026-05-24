@@ -55,10 +55,10 @@ describe('DockItem', () => {
       expect(link.className).toContain('custom-class')
     })
 
-    it('applies icon and label class overrides', () => {
+    it('applies icon and place label class overrides', () => {
       render(
         <RouterWrapper>
-          <DockItem {...defaultProps} iconClassName="icon-custom" labelClassName="label-custom" />
+          <DockItem {...defaultProps} variant="place" iconClassName="icon-custom" labelClassName="label-custom" />
         </RouterWrapper>
       )
 
@@ -77,8 +77,8 @@ describe('DockItem', () => {
       )
       
       const link = screen.getByRole('link')
-      // Should have min-h-[44px] and min-w-[44px] or equivalent
-      expect(link.className).toMatch(/min-[wh]-\[44px\]|min-[wh]-11/)
+      expect(link).toHaveClass('min-h-[50px]')
+      expect(link).toHaveClass('w-[50px]')
     })
 
     it('touch target is clickable', () => {
@@ -119,10 +119,10 @@ describe('DockItem', () => {
       expect(activeClass).not.toBe(inactiveClass)
     })
 
-    it('active label has glow effect', () => {
+    it('active place label uses on-photo text', () => {
       render(
         <RouterWrapper>
-          <DockItem {...defaultProps} active={true} />
+          <DockItem {...defaultProps} variant="place" active={true} />
         </RouterWrapper>
       )
       
@@ -130,15 +130,25 @@ describe('DockItem', () => {
       expect(label.className).toContain('text-[var(--sj-on-photo)]')
     })
 
-    it('inactive label has reduced opacity', () => {
+    it('inactive tool icon has reduced contrast', () => {
       render(
         <RouterWrapper>
           <DockItem {...defaultProps} active={false} />
         </RouterWrapper>
       )
       
-      const label = screen.getByText('Home')
-      expect(label.className).toContain('text-[var(--sj-on-photo-soft)]')
+      const icon = screen.getByRole('link').querySelector('svg')
+      expect(icon?.getAttribute('class')).toContain('text-[var(--sj-on-photo-soft)]')
+    })
+
+    it('uses tomato styling for dangerous primary actions', () => {
+      render(
+        <RouterWrapper>
+          <DockItem {...defaultProps} variant="primary" tone="danger" label="Delete" href="/danger" />
+        </RouterWrapper>
+      )
+
+      expect(screen.getByRole('link', { name: /delete/i }).className).toContain('bg-[var(--sj-tomato)]')
     })
   })
 
@@ -157,28 +167,26 @@ describe('DockItem', () => {
   })
 
   describe('liquid glass label styling', () => {
-    it('has small font size', () => {
+    it('has small place label typography', () => {
       render(
         <RouterWrapper>
-          <DockItem {...defaultProps} />
+          <DockItem {...defaultProps} variant="place" />
         </RouterWrapper>
       )
       
       const label = screen.getByText('Home')
-      // Should have text-xs or text-[10px] or similar
-      expect(label.className).toMatch(/text-\[?\d+px\]?|text-xs/)
+      expect(label.className).toContain('text-sm')
     })
 
-    it('has letter spacing', () => {
+    it('uses tight, readable place label spacing', () => {
       render(
         <RouterWrapper>
-          <DockItem {...defaultProps} />
+          <DockItem {...defaultProps} variant="place" sublabel="home" />
         </RouterWrapper>
       )
       
-      const label = screen.getByText('Home')
-      // Should have tracking-wide or similar
-      expect(label.className).toMatch(/tracking-/)
+      const sublabel = screen.getByText('home')
+      expect(sublabel.className).toContain('tracking-[0.12em]')
     })
   })
 

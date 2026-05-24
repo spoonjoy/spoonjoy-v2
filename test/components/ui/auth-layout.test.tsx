@@ -72,49 +72,44 @@ describe('AuthLayout', () => {
         </AuthLayout>
       )
       const main = screen.getByRole('main')
-      expect(main).toHaveClass('flex')
       expect(main).toHaveClass('min-h-dvh')
-      expect(main).toHaveClass('flex-col')
-      expect(main).toHaveClass('p-3')
+      expect(main).toHaveClass('sj-page')
     })
 
-    it('applies centered content wrapper styles', () => {
+    it('applies editorial split wrapper styles', () => {
       const { container } = render(
         <AuthLayout>
           <p>Content</p>
         </AuthLayout>
       )
       const wrapper = container.querySelector('main > div')
-      expect(wrapper).toHaveClass('flex')
-      expect(wrapper).toHaveClass('grow')
-      expect(wrapper).toHaveClass('items-center')
-      expect(wrapper).toHaveClass('justify-center')
-      expect(wrapper).toHaveClass('p-4')
+      expect(wrapper).toHaveClass('grid')
+      expect(wrapper).toHaveClass('min-h-dvh')
+      expect(wrapper).toHaveClass('lg:grid-cols-[minmax(0,0.92fr)_minmax(24rem,0.58fr)]')
     })
 
-    it('applies branded panel styles to the auth card', () => {
+    it('applies printed-cookbook intro section styles', () => {
       const { container } = render(
         <AuthLayout>
           <p>Content</p>
         </AuthLayout>
       )
-      const authCard = container.querySelector('main > div > section')
-      expect(authCard).toHaveClass('sj-panel')
-      expect(authCard).toHaveClass('rounded-[var(--sj-radius-hero)]')
-      expect(authCard).toHaveClass('p-6')
-      expect(authCard).toHaveClass('sm:p-8')
-      expect(authCard).toHaveClass('overflow-hidden')
+      const intro = container.querySelector('main > div > section:first-child')
+      expect(intro).toHaveClass('flex')
+      expect(intro).toHaveClass('flex-col')
+      expect(intro).toHaveClass('justify-between')
+      expect(intro).toHaveClass('px-5')
     })
 
-    it('keeps the card constrained for focused auth flows', () => {
+    it('keeps the form constrained for focused auth flows', () => {
       const { container } = render(
         <AuthLayout>
           <p>Content</p>
         </AuthLayout>
       )
-      const authCard = container.querySelector('main > div > section')
-      expect(authCard).toHaveClass('w-full')
-      expect(authCard).toHaveClass('max-w-md')
+      const formColumn = container.querySelector('main > div > section:nth-child(2) > div')
+      expect(formColumn).toHaveClass('w-full')
+      expect(formColumn).toHaveClass('max-w-md')
     })
   })
 })

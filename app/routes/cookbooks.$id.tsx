@@ -31,11 +31,11 @@ function getNotificationCtx(context: AppLoadContext): {
 }
 import { ConfirmationDialog } from "~/components/confirmation-dialog";
 import { Button } from "~/components/ui/button";
-import { Heading, Subheading } from "~/components/ui/heading";
 import { Text, Strong } from "~/components/ui/text";
 import { Link } from "~/components/ui/link";
 import { Input } from "~/components/ui/input";
 import { Select } from "~/components/ui/select";
+import { CookbookPage, CookbookHeader, CookbookSectionTitle, ObjectRow, RuledEmptyState, SettingsPanel } from "~/components/cookbook/page";
 
 export async function loader({ request, params, context }: Route.LoaderArgs) {
   const userId = await requireUserId(request);
@@ -244,9 +244,9 @@ export default function CookbookDetail() {
   const deleteFormRef = useRef<HTMLFormElement>(null);
 
   return (
-    <div className="sj-page px-4 py-8 sm:px-6 sm:py-12">
+    <CookbookPage>
       <div className="mx-auto max-w-6xl">
-        <div className="mb-8">
+        <div className="mb-6">
           <Link
             href="/cookbooks"
             className="sj-link"
@@ -255,86 +255,84 @@ export default function CookbookDetail() {
           </Link>
         </div>
 
-        <div className="sj-panel mb-8 flex flex-col gap-5 rounded-[2rem] p-6 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex-1">
-            {isEditingTitle && isOwner ? (
-              <Form method="post" className="mb-2 flex flex-col gap-3 sm:flex-row sm:items-center">
-                <input type="hidden" name="intent" value="updateTitle" />
-                <Input
-                  type="text"
-                  name="title"
-                  defaultValue={cookbook.title}
-                  required
-                  autoFocus
-                  className="[&_input]:text-2xl [&_input]:font-bold"
-                />
-                <Button type="submit">
-                  Save
-                </Button>
-                <Button
-                  type="button"
-                  plain
-                  onClick={() => setIsEditingTitle(false)}
-                >
-                  Cancel
-                </Button>
-              </Form>
-            ) : (
-              <div className="mb-2 flex flex-col gap-3 sm:flex-row sm:items-center">
-                <div>
-                  <p className="sj-eyebrow">Cookbook</p>
-                  <Heading level={1} className="m-0 mt-3 text-4xl/11 tracking-[-0.04em] sm:text-6xl/15">{cookbook.title}</Heading>
-                </div>
-                {isOwner && (
-                  <Button
-                    onClick={() => setIsEditingTitle(true)}
-                    plain
-                    className="text-sm"
-                  >
-                    Edit Title
-                  </Button>
-                )}
-              </div>
-            )}
-            <Text className="m-0">
-              By <Strong>{cookbook.author.username}</Strong>
-            </Text>
-            <Text className="mt-2 mb-0 text-sm">
-              {cookbook.recipes.length} {cookbook.recipes.length === 1 ? "recipe" : "recipes"}
-            </Text>
-          </div>
-          {isOwner && (
+        <CookbookHeader
+          eyebrow="Cookbook"
+          title={cookbook.title}
+          action={isOwner ? (
             <>
+              <Button
+                onClick={() => setIsEditingTitle(true)}
+                plain
+                className="text-sm"
+              >
+                Edit title
+              </Button>
               <Form method="post" ref={deleteFormRef}>
                 <input type="hidden" name="intent" value="delete" />
                 <Button
                   type="button"
                   variant="destructive"
+                  aria-label="Delete cookbook"
                   onClick={() => setShowDeleteDialog(true)}
                 >
-                  Delete Cookbook
+                  Delete
                 </Button>
               </Form>
-              <ConfirmationDialog
+            </>
+          ) : null}
+        >
+          <Text className="m-0">
+            By <Strong>{cookbook.author.username}</Strong> ·{" "}
+            <span>
+              {cookbook.recipes.length} {cookbook.recipes.length === 1 ? "recipe" : "recipes"}
+            </span>
+          </Text>
+        </CookbookHeader>
+
+        {isEditingTitle && isOwner ? (
+          <SettingsPanel title="Rename cookbook">
+            <Form method="post" className="mb-2 flex flex-col gap-3 sm:flex-row sm:items-center">
+              <input type="hidden" name="intent" value="updateTitle" />
+              <Input
+                type="text"
+                name="title"
+                defaultValue={cookbook.title}
+                required
+                autoFocus
+                className="[&_input]:text-2xl [&_input]:font-bold"
+              />
+              <Button type="submit">
+                Save
+              </Button>
+              <Button
+                type="button"
+                plain
+                onClick={() => setIsEditingTitle(false)}
+              >
+                Cancel
+              </Button>
+            </Form>
+          </SettingsPanel>
+        ) : null}
+
+        {isOwner && (
+          <ConfirmationDialog
                 open={showDeleteDialog}
                 onClose={() => setShowDeleteDialog(false)}
                 onConfirm={() => {
                   setShowDeleteDialog(false);
                   deleteFormRef.current?.submit();
                 }}
-                title="Banish this cookbook? 📚"
+                title="Delete this cookbook?"
                 description="This will permanently delete the cookbook and remove all recipe associations. The recipes themselves will not be deleted."
                 confirmLabel="Delete it"
                 cancelLabel="Keep it"
                 destructive
-              />
-            </>
-          )}
-        </div>
+          />
+        )}
 
         {isOwner && availableRecipes.length > 0 && (
-          <div className="sj-card mb-8 rounded-[2rem] p-6">
-            <Subheading level={3} className="m-0 mb-4 text-2xl/8">Add Recipe to Cookbook</Subheading>
+          <SettingsPanel title="Add recipe to cookbook">
             <Form method="post" className="flex flex-col gap-4 sm:flex-row">
               <input type="hidden" name="intent" value="addRecipe" />
               <Select
@@ -350,62 +348,47 @@ export default function CookbookDetail() {
                 ))}
               </Select>
               <Button type="submit">
-                Add Recipe
+                Add recipe
               </Button>
             </Form>
-          </div>
+          </SettingsPanel>
         )}
 
         {cookbook.recipes.length === 0 ? (
-          <div className="sj-card rounded-[2rem] p-12 text-center">
-            <Subheading level={2} className="text-2xl/8">No recipes yet</Subheading>
+          <RuledEmptyState title="No recipes yet">
             <Text className="mb-6">
               {isOwner ? "Add recipes to your cookbook using the form above" : "This cookbook is empty"}
             </Text>
-          </div>
+          </RuledEmptyState>
         ) : (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-6">
+          <div>
+            <CookbookSectionTitle>Recipes</CookbookSectionTitle>
+            <div className="sj-list-ruled">
             {cookbook.recipes.map((item) => (
-              <div
-                key={item.id}
-                className="sj-card sj-hover-lift overflow-hidden rounded-[1.6rem]"
-              >
-                <Link
+              <div key={item.id} className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                <ObjectRow
                   href={`/recipes/${item.recipe.id}`}
-                  className="block text-inherit no-underline"
-                >
-                  <div
-                    className="h-[220px] w-full bg-[var(--sj-flour)] bg-cover bg-center"
-                    style={{
-                      backgroundImage: item.recipe.coverImageUrl ? `url(${item.recipe.coverImageUrl})` : undefined,
-                    }}
-                  />
-                  <div className="p-4">
-                    <Subheading level={3} className="m-0 mb-2 text-xl/7">{item.recipe.title}</Subheading>
-                    {item.recipe.description && (
-                      <Text className="text-sm m-0 mb-2 line-clamp-2">
-                        {item.recipe.description}
-                      </Text>
-                    )}
-                    <Text className="text-sm m-0">
-                      By {item.recipe.chef.username}
-                    </Text>
-                  </div>
-                </Link>
+                  imageUrl={item.recipe.coverImageUrl}
+                  title={item.recipe.title}
+                  subtitle={item.recipe.description ?? `By ${item.recipe.chef.username}`}
+                  stamp="cook"
+                />
                 {isOwner && (
-                  <div className="px-4 pb-4">
+                  <div className="pb-3 sm:pb-0">
                     <Button
                       type="button"
                       variant="destructive"
                       className="w-full text-sm"
+                      aria-label="Remove from cookbook"
                       onClick={() => setRecipeToRemove(item.id)}
                     >
-                      Remove from Cookbook
+                      Remove
                     </Button>
                   </div>
                 )}
               </div>
             ))}
+            </div>
           </div>
         )}
       </div>
@@ -424,12 +407,12 @@ export default function CookbookDetail() {
             setRecipeToRemove(null);
           }
         }}
-        title="Remove from cookbook? 🍳"
+        title="Remove from cookbook?"
         description="This recipe will be removed from this cookbook. The recipe itself won't be deleted."
         confirmLabel="Remove it"
         cancelLabel="Keep it"
         destructive
       />
-    </div>
+    </CookbookPage>
   );
 }

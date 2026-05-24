@@ -552,7 +552,7 @@ describe("E2E: Step Reorder Protection", () => {
 
       // Wait for the page to render.
       await waitFor(() => {
-        const headings = screen.getAllByRole("heading", { name: /Tune the recipe/i });
+        const headings = screen.getAllByRole("heading", { name: /Edit Recipe/i });
         expect(headings.length).toBeGreaterThan(0);
       });
 
@@ -602,7 +602,7 @@ describe("E2E: Step Reorder Protection", () => {
 
       // Wait for the page to render.
       await waitFor(() => {
-        const headings = screen.getAllByRole("heading", { name: /Tune the recipe/i });
+        const headings = screen.getAllByRole("heading", { name: /Edit Recipe/i });
         expect(headings.length).toBeGreaterThan(0);
       });
 
@@ -637,7 +637,7 @@ describe("E2E: Step Reorder Protection", () => {
 
       // Wait for the page to render.
       await waitFor(() => {
-        const headings = screen.getAllByRole("heading", { name: /Tune the recipe/i });
+        const headings = screen.getAllByRole("heading", { name: /Edit Recipe/i });
         expect(headings.length).toBeGreaterThan(0);
       });
 

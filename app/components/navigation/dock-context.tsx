@@ -1,148 +1,159 @@
 import {
   createContext,
-  useContext,
-  useState,
-  useEffect,
   useCallback,
+  useContext,
+  useEffect,
   useMemo,
-  type ReactNode,
+  useState,
   type ElementType,
-} from 'react'
+  type ReactNode,
+} from "react";
+
+export type DockActionHandler = (() => void) | string;
+
+export interface DockButton {
+  id: string;
+  icon: ElementType;
+  label: string;
+  sublabel?: string;
+  ariaLabel?: string;
+  onAction: DockActionHandler;
+  active?: boolean;
+  tone?: "default" | "primary" | "danger" | "quiet";
+  iconClassName?: string;
+  labelClassName?: string;
+}
+
+export interface DockConfig {
+  left: DockButton;
+  primary: DockButton;
+  tools: DockButton[];
+  ariaLabel?: string;
+  variant?: "root" | "context" | "task";
+}
 
 /**
- * DockContext - Context provider for contextual dock navigation
- * 
- * Allows pages to register custom actions that replace the default
- * navigation items in the dock. When a page unmounts, the dock
- * automatically returns to default navigation.
- * 
- * ## Usage
- * 
- * ```tsx
- * // In root layout
- * <DockContextProvider>
- *   <App />
- * </DockContextProvider>
- * 
- * // In a page component
- * function RecipeDetailPage() {
- *   useDockActions([
- *     { id: 'back', icon: ArrowLeft, label: 'Back', onAction: '/recipes', position: 'left' },
- *     { id: 'edit', icon: Edit, label: 'Edit', onAction: handleEdit, position: 'right' },
- *   ])
- *   return <div>...</div>
- * }
- * ```
+ * Legacy action shape kept for small callers/tests that still register a pair
+ * of side actions. New route code should prefer DockConfig.
  */
-
-/** Action definition for contextual dock items */
-export interface DockAction {
-  /** Unique identifier for the action */
-  id: string
-  /** Lucide icon component */
-  icon: ElementType
-  /** Label text */
-  label: string
-  /** Optional accessible label when the visible dock label is intentionally short */
-  ariaLabel?: string
-  /** Optional icon class overrides */
-  iconClassName?: string
-  /** Optional label class overrides */
-  labelClassName?: string
-  /** Action handler or route href */
-  onAction: (() => void) | string
-  /** Position in dock (left of center or right of center) */
-  position: 'left' | 'right'
+export interface DockAction extends DockButton {
+  position: "left" | "right";
 }
 
-/** Context value type */
 export interface DockContextValue {
-  /** Current contextual actions (null = use default nav) */
-  actions: DockAction[] | null
-  /** Register contextual actions */
-  setActions: (actions: DockAction[] | null) => void
-  /** Whether the dock is in contextual mode */
-  isContextual: boolean
+  config: DockConfig | null;
+  actions: DockAction[] | null;
+  setConfig: (config: DockConfig | null) => void;
+  setActions: (actions: DockAction[] | null) => void;
+  isContextual: boolean;
 }
 
-/** Default context value */
 const defaultValue: DockContextValue = {
+  config: null,
   actions: null,
+  setConfig: () => {},
   setActions: () => {},
   isContextual: false,
-}
+};
 
-/** The React context */
-export const DockContext = createContext<DockContextValue>(defaultValue)
+export const DockContext = createContext<DockContextValue>(defaultValue);
 
-/** Provider props */
 export interface DockContextProviderProps {
-  children: ReactNode
+  children: ReactNode;
 }
 
-/**
- * Provider component that manages contextual dock state
- */
+export function configFromActions(actions: DockAction[] | null): DockConfig | null {
+  if (!actions || actions.length === 0) return null;
+
+  const left = actions.find((action) => action.position === "left") ?? actions[0];
+  const rightActions = actions.filter((action) => action.position === "right");
+  const primary = rightActions[0] ?? actions[1] ?? left;
+  const tools = rightActions.slice(1, 3);
+
+  return {
+    left: { ...left, sublabel: left.sublabel ?? "back" },
+    primary,
+    tools,
+    variant: "context",
+  };
+}
+
+function actionsFromConfig(config: DockConfig | null): DockAction[] | null {
+  if (!config) return null;
+  return [
+    { ...config.left, position: "left" },
+    { ...config.primary, position: "right" },
+    ...config.tools.map((tool) => ({ ...tool, position: "right" as const })),
+  ];
+}
+
 export function DockContextProvider({ children }: DockContextProviderProps) {
-  const [actions, setActionsState] = useState<DockAction[] | null>(null)
+  const [config, setConfigState] = useState<DockConfig | null>(null);
+  const [actions, setActionsState] = useState<DockAction[] | null>(null);
+
+  const setConfig = useCallback((newConfig: DockConfig | null) => {
+    setActionsState(actionsFromConfig(newConfig));
+    setConfigState(newConfig);
+  }, []);
 
   const setActions = useCallback((newActions: DockAction[] | null) => {
-    setActionsState(newActions)
-  }, [])
+    setActionsState(newActions);
+    setConfigState(configFromActions(newActions));
+  }, []);
 
-  const isContextual = actions !== null
+  const isContextual = config !== null;
 
   const value = useMemo<DockContextValue>(
     () => ({
+      config,
       actions,
+      setConfig,
       setActions,
       isContextual,
     }),
-    [actions, setActions, isContextual]
-  )
+    [config, actions, setConfig, setActions, isContextual],
+  );
 
-  return (
-    <DockContext.Provider value={value}>
-      {children}
-    </DockContext.Provider>
-  )
+  return <DockContext.Provider value={value}>{children}</DockContext.Provider>;
 }
 
-/**
- * Hook to access dock context
- * @returns The dock context value
- */
 export function useDockContext(): DockContextValue {
-  const context = useContext(DockContext)
-  return context
+  return useContext(DockContext);
 }
 
-/**
- * Hook to register contextual actions (for pages)
- * 
- * Automatically registers actions on mount and clears them on unmount.
- * Updates actions if the actions prop changes.
- * 
- * Uses a stable string key (derived from action ids) to prevent infinite
- * re-render loops when action callbacks change reference but content is the same.
- * 
- * @param actions - Array of dock actions to register, or null to use default
- */
-export function useDockActions(actions: DockAction[] | null): void {
-  const { setActions } = useDockContext()
-
-  // Only update registered actions when their identity key actually changes.
-  // This avoids effect churn and potential update loops from unstable callback refs.
-  const actionsKey = actions ? actions.map((action) => action.id).join(',') : ''
+export function useDockConfig(config: DockConfig | null): void {
+  const { setConfig } = useDockContext();
+  const configKey = config
+    ? [
+        config.left.id,
+        config.primary.id,
+        ...config.tools.map((tool) => tool.id),
+        config.variant ?? "",
+      ].join(",")
+    : "";
 
   useEffect(() => {
-    setActions(actions)
-  }, [actionsKey, setActions])
+    setConfig(config);
+  }, [configKey, setConfig]);
 
-  // Clear actions only when the registering component unmounts.
   useEffect(() => {
     return () => {
-      setActions(null)
-    }
-  }, [setActions])
+      setConfig(null);
+    };
+  }, [setConfig]);
+}
+
+export function useDockActions(actions: DockAction[] | null): void {
+  const { setActions } = useDockContext();
+  const actionsKey = actions ? actions.map((action) => action.id).join(",") : "";
+
+  useEffect(() => {
+    setActions(actions);
+  }, [actionsKey, setActions]);
+
+  useEffect(() => {
+    return () => {
+      setActions(null);
+    };
+  }, [setActions]);
 }

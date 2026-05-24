@@ -1,9 +1,8 @@
-import { AnimatePresence, motion } from 'framer-motion'
-import type React from 'react'
 import { Checkbox } from '../ui/checkbox'
 import type { StepReference } from './StepOutputUseCallout'
-import { INGREDIENT_ICON_COMPONENTS, type IngredientIconKey } from '~/lib/ingredient-affordances'
+import type { IngredientIconKey } from '~/lib/ingredient-affordances'
 import { formatQuantity, scaleQuantity } from '~/lib/quantity'
+import { ChecklistRow } from '~/components/shopping/checklist-row'
 
 export interface Ingredient {
   /** Unique identifier */
@@ -128,28 +127,21 @@ export function IngredientList({
         </li>
       )}
 
-      <AnimatePresence initial={false}>
-        {orderedIngredients.map(({ ingredient, checked }) => (
-          <motion.li
-            key={ingredient.id}
-            layout
-            initial={{ opacity: 0, y: -6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 6 }}
-            transition={{ type: 'spring', stiffness: 520, damping: 42, mass: 0.5 }}
-            className="border-b border-[var(--sj-border)] py-2 last:border-b-0"
-            data-testid={`ingredient-item-${ingredient.id}`}
-          >
-            <IngredientRow
-              ingredient={ingredient}
-              scaleFactor={scaleFactor}
-              isChecked={checked}
-              showCheckboxes={showCheckboxes}
-              onToggle={onToggle}
-            />
-          </motion.li>
-        ))}
-      </AnimatePresence>
+      {orderedIngredients.map(({ ingredient, checked }) => (
+        <li
+          key={ingredient.id}
+          className="border-b border-[var(--sj-border)] last:border-b-0"
+          data-testid={`ingredient-item-${ingredient.id}`}
+        >
+          <IngredientRow
+            ingredient={ingredient}
+            scaleFactor={scaleFactor}
+            isChecked={checked}
+            showCheckboxes={showCheckboxes}
+            onToggle={onToggle}
+          />
+        </li>
+      ))}
     </ul>
   )
 }
@@ -167,76 +159,18 @@ function IngredientRow({
   showCheckboxes: boolean
   onToggle?: (id: string) => void
 }) {
-  const Icon = ingredient.iconKey ? INGREDIENT_ICON_COMPONENTS[ingredient.iconKey] : null
   const quantityText = getScaledAmountLabel(ingredient, scaleFactor)
   const shouldShowCheckbox = showCheckboxes && onToggle
 
   return (
-    <div className={`grid min-h-11 items-center gap-3 ${shouldShowCheckbox ? 'grid-cols-[minmax(0,1fr)_auto_auto]' : 'grid-cols-[minmax(0,1fr)_auto]'}`}>
-      {shouldShowCheckbox ? (
-        <button
-          type="button"
-          onClick={() => onToggle(ingredient.id)}
-          className="flex min-h-11 min-w-0 items-center gap-2 text-left"
-        >
-          <IngredientIcon Icon={Icon} />
-          <span
-            className={`truncate text-base ${
-              isChecked
-                ? 'line-through text-[var(--sj-ink-soft)] opacity-60'
-                : 'text-[var(--sj-ink)]'
-            }`}
-          >
-            {ingredient.name}
-          </span>
-        </button>
-      ) : (
-        <div className="flex min-w-0 items-center gap-2">
-          <IngredientIcon Icon={Icon} />
-          <span
-            className={`truncate text-base ${
-              isChecked
-                ? 'line-through text-[var(--sj-ink-soft)] opacity-60'
-                : 'text-[var(--sj-ink)]'
-            }`}
-          >
-            {ingredient.name}
-          </span>
-        </div>
-      )}
-      <span
-        data-testid={`ingredient-quantity-${ingredient.id}`}
-        className={`whitespace-nowrap text-right text-sm tabular-nums ${
-          isChecked
-            ? 'line-through text-[var(--sj-ink-soft)] opacity-60'
-            : 'text-[var(--sj-ink-soft)]'
-        }`}
-      >
-        {quantityText || '\u00A0'}
-      </span>
-      {shouldShowCheckbox && (
-        <Checkbox
-          checked={isChecked}
-          onChange={() => onToggle(ingredient.id)}
-          aria-label={`Mark ${ingredient.name} as used`}
-        />
-      )}
-    </div>
-  )
-}
-
-function IngredientIcon({ Icon }: { Icon: React.ComponentType<{ className?: string; 'aria-hidden'?: boolean }> | null }) {
-  if (Icon) {
-    return <Icon className="h-4 w-4 shrink-0 text-[var(--sj-brass)]" aria-hidden />
-  }
-
-  return (
-    <span
-      className="flex h-4 w-4 shrink-0 items-center justify-center text-[var(--sj-ink-soft)]"
-      aria-hidden="true"
-    >
-      •
-    </span>
+    <ChecklistRow
+      checked={isChecked}
+      name={ingredient.name}
+      quantity={quantityText}
+      quantityTestId={`ingredient-quantity-${ingredient.id}`}
+      note={isChecked ? 'used' : ingredient.categoryLabel}
+      onToggle={shouldShowCheckbox ? () => onToggle(ingredient.id) : undefined}
+    />
   )
 }
 

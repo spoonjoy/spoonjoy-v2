@@ -3,6 +3,7 @@ import { Link } from "~/components/ui/link";
 import { Text } from "~/components/ui/text";
 import { formatRelativeTime } from "~/lib/time";
 import type { FellowChefRow } from "~/lib/fellow-chefs.server";
+import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
 
 export interface FellowChefListProps {
   rows: FellowChefRow[];
@@ -35,17 +36,17 @@ export function FellowChefList({ rows, emptyStateText }: FellowChefListProps) {
   }
 
   return (
-    <ul className="flex flex-col divide-y divide-[var(--sj-border)]">
+    <ul className="sj-list-ruled">
       {rows.map((row) => {
         const summary = summarizeInteractions(row.interactionCounts);
         const initials = row.username.charAt(0).toUpperCase();
         return (
           <li
             key={row.chefId}
-            className="flex items-center gap-3 py-3 first:pt-0 last:pb-0"
+            className="flex min-h-17 items-center gap-3 py-3"
           >
             <Avatar
-              src={row.photoUrl ?? undefined}
+              src={resolveChefAvatarUrl(row.photoUrl)}
               alt={row.username}
               initials={initials}
               className="size-10 border border-[var(--sj-border)] bg-[var(--sj-flour)] text-[var(--sj-ink)]"

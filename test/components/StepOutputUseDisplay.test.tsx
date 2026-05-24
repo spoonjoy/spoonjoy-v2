@@ -113,9 +113,9 @@ describe("StepOutputUseDisplay", () => {
       const { container } = render(<StepOutputUseDisplay usingSteps={usingSteps} />);
 
       const outerDiv = container.firstChild as HTMLElement;
-      expect(outerDiv).toHaveClass("bg-[color-mix(in_srgb,var(--sj-flour)_55%,transparent)]");
-      expect(outerDiv).toHaveClass("p-4");
-      expect(outerDiv).toHaveClass("rounded-[1.25rem]");
+      expect(outerDiv).toHaveClass("border-y");
+      expect(outerDiv).toHaveClass("border-[var(--sj-border)]");
+      expect(outerDiv).toHaveClass("py-4");
       expect(outerDiv).toHaveClass("mt-4");
     });
 

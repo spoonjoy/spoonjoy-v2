@@ -1,22 +1,26 @@
-import clsx from 'clsx'
-import type { ElementType } from 'react'
-import { Link } from '~/components/ui/link'
+import clsx from "clsx";
+import type { ElementType } from "react";
+import { Link } from "~/components/ui/link";
 
 export interface DockItemProps {
-  icon: ElementType
-  label: string
-  ariaLabel?: string
-  href?: string
-  active?: boolean
-  className?: string
-  iconClassName?: string
-  labelClassName?: string
-  onClick?: () => void
+  icon: ElementType;
+  label: string;
+  sublabel?: string;
+  ariaLabel?: string;
+  href?: string;
+  active?: boolean;
+  className?: string;
+  iconClassName?: string;
+  labelClassName?: string;
+  onClick?: () => void;
+  variant?: "place" | "primary" | "tool";
+  tone?: "default" | "primary" | "danger" | "quiet";
 }
 
 export function DockItem({
   icon: Icon,
   label,
+  sublabel,
   ariaLabel,
   href,
   active = false,
@@ -24,44 +28,60 @@ export function DockItem({
   iconClassName,
   labelClassName,
   onClick,
+  variant = "tool",
+  tone = "default",
 }: DockItemProps) {
+  const isPlace = variant === "place";
+  const isPrimary = variant === "primary";
+
   const baseClassName = clsx(
-    'flex flex-col items-center justify-center gap-1',
-    'min-w-[44px] min-h-[44px]',
-    'px-2 py-1',
-    'transition-transform duration-100 ease-out',
-    'active:scale-95',
-    'no-underline',
-    active && 'dock-item-active',
-    className
-  )
+    "min-h-[50px] rounded-full border-0 no-underline transition duration-150 active:scale-95",
+    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-on-photo)]",
+    isPlace && "flex min-w-0 items-center gap-2.5 bg-[color-mix(in_srgb,var(--sj-on-photo)_10%,transparent)] px-3 text-left",
+    isPrimary && [
+      "grid min-w-[5.5rem] place-items-center px-4 font-sj-ui text-sm font-bold",
+      tone === "danger"
+        ? "bg-[var(--sj-tomato)] text-[var(--sj-on-photo)]"
+        : "bg-[linear-gradient(180deg,var(--sj-action),var(--sj-action-deep))] text-[var(--sj-on-photo)]",
+    ],
+    variant === "tool" && "grid w-[50px] place-items-center bg-[color-mix(in_srgb,var(--sj-on-photo)_10%,transparent)]",
+    active && "dock-item-active",
+    className,
+  );
 
   const content = (
     <>
-      <Icon
-        className={clsx(
-          'h-5 w-5',
-          'transition-colors duration-150',
-          active ? 'text-[var(--sj-on-photo)]' : 'text-[var(--sj-on-photo-soft)]',
-          iconClassName
-        )}
-      />
-      <span
-        className={clsx(
-          'text-[10px]',
-          'tracking-wide',
-          'uppercase',
-          'font-medium',
-          'transition-all duration-150',
-          active ? 'text-[var(--sj-on-photo)]' : 'text-[var(--sj-on-photo-soft)]',
-          labelClassName
-        )}
-        style={active ? { textShadow: '0 0 8px color-mix(in srgb, var(--sj-on-photo) 40%, transparent)' } : undefined}
-      >
-        {label}
-      </span>
+      {!isPrimary && (
+        <Icon
+          className={clsx(
+            "h-5 w-5 shrink-0 text-[var(--sj-on-photo-soft)]",
+            active && "text-[var(--sj-on-photo)]",
+            iconClassName,
+          )}
+          aria-hidden="true"
+        />
+      )}
+      {isPlace ? (
+        <span className="min-w-0">
+          <span
+            className={clsx(
+              "block truncate font-sj-ui text-sm font-bold leading-none text-[var(--sj-on-photo)]",
+              labelClassName,
+            )}
+          >
+            {label}
+          </span>
+          {sublabel ? (
+            <span className="mt-1 block truncate font-sj-ui text-[0.62rem] font-bold uppercase leading-none tracking-[0.12em] text-[var(--sj-on-photo-soft)]">
+              {sublabel}
+            </span>
+          ) : null}
+        </span>
+      ) : null}
+      {isPrimary ? <span className={labelClassName}>{label}</span> : null}
+      {variant === "tool" ? <span className="sr-only">{label}</span> : null}
     </>
-  )
+  );
 
   if (href) {
     return (
@@ -69,17 +89,17 @@ export function DockItem({
         href={href}
         onClick={onClick}
         className={baseClassName}
-        aria-current={active ? 'page' : undefined}
+        aria-current={active ? "page" : undefined}
         aria-label={ariaLabel}
       >
         {content}
       </Link>
-    )
+    );
   }
 
   return (
     <button type="button" onClick={onClick} className={baseClassName} aria-label={ariaLabel}>
       {content}
     </button>
-  )
+  );
 }

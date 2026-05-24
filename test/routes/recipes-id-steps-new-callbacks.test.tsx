@@ -120,7 +120,8 @@ describe("Recipes $id Steps New callback rendering", () => {
     expect(screen.queryByLabelText("Parsed ingredient mock")).not.toBeInTheDocument();
 
     const list = screen.getByRole("list");
-    expect(list).toHaveTextContent("4 oz edited butter");
+    expect(list).toHaveTextContent("edited butter");
+    expect(list).toHaveTextContent("4 oz");
     expect((document.querySelector('input[name="ingredientsJson"]') as HTMLInputElement).value).toBe(
       JSON.stringify([{ quantity: 4, unit: "oz", ingredientName: "edited butter" }])
     );
@@ -137,7 +138,8 @@ describe("Recipes $id Steps New callback rendering", () => {
     expect(screen.getByText("Current mode: manual")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Add manual ingredient" }));
-    expect(screen.getByRole("list")).toHaveTextContent("1.5 cups manual flour");
+    expect(screen.getByRole("list")).toHaveTextContent("manual flour");
+    expect(screen.getByRole("list")).toHaveTextContent("1.5 cups");
     expect((document.querySelector('input[name="ingredientsJson"]') as HTMLInputElement).value).toBe(
       JSON.stringify([{ quantity: 1.5, unit: "cups", ingredientName: "manual flour" }])
     );

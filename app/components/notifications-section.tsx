@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Subheading } from "~/components/ui/heading";
 import { Text } from "~/components/ui/text";
 import { Button } from "~/components/ui/button";
 import { useToast } from "~/components/ui/toast";
@@ -18,6 +17,7 @@ import {
   subscribeToPush,
   unsubscribeFromPush,
 } from "~/lib/push-client";
+import { SettingsPanel } from "~/components/cookbook/page";
 
 export interface NotificationPreferenceFlags {
   notifySpoonOnMyRecipe: boolean;
@@ -71,12 +71,11 @@ export function NotificationsSection({
 
   if (!support.supported) {
     return (
-      <section className="sj-panel mt-8 rounded-[2rem] p-6">
-        <Subheading className="text-2xl/8">Notifications</Subheading>
+      <SettingsPanel title="Notifications">
         <Text className="mt-2">
           Not supported on this browser ({support.reason}).
         </Text>
-      </section>
+      </SettingsPanel>
     );
   }
 
@@ -140,8 +139,7 @@ export function NotificationsSection({
   }
 
   return (
-    <section className="sj-panel mt-8 rounded-[2rem] p-6">
-      <Subheading className="text-2xl/8">Notifications</Subheading>
+    <SettingsPanel title="Notifications">
       {subscribed ? (
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <Text>Notifications enabled.</Text>
@@ -187,6 +185,6 @@ export function NotificationsSection({
           </Button>
         </DialogActions>
       </Dialog>
-    </section>
+    </SettingsPanel>
   );
 }

@@ -1,118 +1,113 @@
-import { useMemo } from 'react'
-import { Edit, ShoppingCart, Share, X, Save, Bookmark, User, Check } from 'lucide-react'
-import { useDockActions, type DockAction } from './dock-context'
+import { useMemo } from "react";
+import { ArrowLeft, Bookmark, Check, Edit, Save, Search, ShoppingBag, X } from "lucide-react";
+import { useDockConfig, type DockConfig } from "./dock-context";
 
 export interface UseRecipeDetailActionsOptions {
-  recipeId: string
-  chefId: string
-  chefProfileHref?: string
-  isOwner: boolean
-  isInShoppingList?: boolean
-  onSave?: () => void
-  onAddToList?: () => void
-  onShare?: () => void
+  recipeId: string;
+  chefId: string;
+  chefProfileHref?: string;
+  isOwner: boolean;
+  isInShoppingList?: boolean;
+  onSave?: () => void;
+  onAddToList?: () => void;
+  onShare?: () => void;
 }
 
 function AddedListIcon({ className }: { className?: string }) {
   return (
     <span className="relative">
-      <ShoppingCart className={className} />
-      <Check className="absolute -right-1.5 -top-1.5 h-3.5 w-3.5 rounded-full bg-[color-mix(in_srgb,var(--sj-charcoal)_78%,transparent)] p-[1px] text-[var(--sj-on-photo-muted)]" />
+      <ShoppingBag className={className} />
+      <Check className="absolute -right-1.5 -top-1.5 h-3.5 w-3.5 rounded-full bg-[var(--sj-on-photo)] p-[1px] text-[var(--sj-charcoal)]" />
     </span>
-  )
+  );
 }
 
 export function useRecipeDetailActions({
   recipeId,
-  chefId,
-  chefProfileHref,
   isOwner,
   isInShoppingList = false,
   onSave,
   onAddToList,
   onShare,
 }: UseRecipeDetailActionsOptions): void {
-  const actions = useMemo<DockAction[]>(() => {
-    const listAction: DockAction = {
-      id: 'add-to-list',
-      icon: isInShoppingList ? AddedListIcon : ShoppingCart,
-      label: 'List',
-      ariaLabel: isInShoppingList ? 'Ingredients already in shopping list' : 'Add ingredients to shopping list',
-      iconClassName: isInShoppingList ? 'fill-[var(--sj-on-photo-muted)] text-[var(--sj-on-photo-muted)]' : undefined,
-      labelClassName: isInShoppingList ? 'text-[var(--sj-on-photo-soft)] tracking-[0.14em]' : undefined,
+  const config = useMemo<DockConfig>(() => {
+    const listAction = {
+      id: "add-to-list",
+      icon: isInShoppingList ? AddedListIcon : ShoppingBag,
+      label: "List",
+      ariaLabel: isInShoppingList ? "Ingredients already in shopping list" : "Add ingredients to shopping list",
       onAction: onAddToList || (() => {}),
-      position: 'left',
-    }
+    };
 
-    const leftActions: DockAction[] = isOwner
-      ? [
-          {
-            id: 'edit',
-            icon: Edit,
-            label: 'Edit',
-            onAction: `/recipes/${recipeId}/edit`,
-            position: 'left',
-          },
-          listAction,
-        ]
-      : [
-          {
-            id: 'view-chef-profile',
-            icon: User,
-            label: 'View Chef Profile',
-            onAction: chefProfileHref ?? `/users/${chefId}`,
-            position: 'left',
-          },
-          listAction,
-        ]
+    const saveAction = {
+      id: "save",
+      icon: Bookmark,
+      label: "Save",
+      onAction: onSave || (() => {}),
+    };
 
-    return [
-      ...leftActions,
-      {
-        id: 'save',
-        icon: Bookmark,
-        label: 'Save',
-        onAction: onSave || (() => {}),
-        position: 'right',
+    const editAction = {
+      id: "edit",
+      icon: Edit,
+      label: "Edit",
+      onAction: `/recipes/${recipeId}/edit`,
+    };
+
+    return {
+      variant: "context",
+      left: {
+        id: "recipe-back",
+        icon: ArrowLeft,
+        label: "Back",
+        sublabel: "recipes",
+        onAction: "/recipes",
       },
-      {
-        id: 'share',
-        icon: Share,
-        label: 'Share',
-        onAction: onShare || (() => {}),
-        position: 'right',
+      primary: {
+        id: "cook",
+        icon: Check,
+        label: "Cook",
+        onAction: "#steps",
       },
-    ]
-  }, [recipeId, chefId, chefProfileHref, isOwner, isInShoppingList, onSave, onAddToList, onShare])
+      tools: isOwner ? [listAction, editAction] : [listAction, saveAction],
+    };
+  }, [recipeId, isOwner, isInShoppingList, onSave, onAddToList, onShare]);
 
-  useDockActions(actions)
+  useDockConfig(config);
 }
 
 export interface UseRecipeEditActionsOptions {
-  recipeId: string
-  onSave?: () => void
+  recipeId: string;
+  onSave?: () => void;
 }
 
 export function useRecipeEditActions({
   recipeId,
   onSave,
 }: UseRecipeEditActionsOptions): void {
-  const actions = useMemo<DockAction[]>(() => [
-    {
-      id: 'cancel',
+  const config = useMemo<DockConfig>(() => ({
+    variant: "task",
+    left: {
+      id: "cancel",
       icon: X,
-      label: 'Cancel',
+      label: "Cancel",
+      sublabel: "recipe",
       onAction: `/recipes/${recipeId}`,
-      position: 'left',
     },
-    {
-      id: 'save',
+    primary: {
+      id: "save",
       icon: Save,
-      label: 'Save',
+      label: "Save",
       onAction: onSave || (() => {}),
-      position: 'right',
     },
-  ], [recipeId, onSave])
+    tools: [
+      {
+        id: "search",
+        icon: Search,
+        label: "Search",
+        onAction: "/search",
+      },
+    ],
+  }), [recipeId, onSave]);
 
-  useDockActions(actions)
+  useDockConfig(config);
 }

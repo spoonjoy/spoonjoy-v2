@@ -251,7 +251,14 @@ describe("Kitchen Index Route", () => {
             viewer: null,
             kitchenUser: null,
             recipes: [],
-            cookbooks: [],
+            cookbooks: [
+              {
+                id: "cookbook-owner",
+                title: "Cheese Night",
+                _count: { recipes: 1 },
+                recipes: [],
+              },
+            ],
           }),
         },
       ]);
@@ -261,17 +268,16 @@ describe("Kitchen Index Route", () => {
       expect(await screen.findByRole("heading", { name: /your food should look as good as it tastes/i })).toBeInTheDocument();
       expect(screen.getByText("Family recipe OS")).toBeInTheDocument();
       expect(screen.getByText(/photo-first kitchen/i)).toBeInTheDocument();
-      expect(screen.getByText("Classic Margherita Pizza")).toBeInTheDocument();
-      expect(screen.getByText("Personal kitchens")).toBeInTheDocument();
-      expect(screen.getByText("Cookbooks")).toBeInTheDocument();
-      expect(screen.getByText("Phone to editorial")).toBeInTheDocument();
+      expect(screen.getByText("Collect")).toBeInTheDocument();
+      expect(screen.getByText("Cook")).toBeInTheDocument();
+      expect(screen.getByText("Share")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Start Your Kitchen" })).toHaveAttribute("href", "/signup");
       expect(screen.getByRole("link", { name: "Log In" })).toHaveAttribute("href", "/login");
       expect(screen.getByRole("link", { name: "Search Recipes" })).toHaveAttribute("href", "/search");
       expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
     });
 
-    it("renders owner kitchen with settings, admin controls, and recipes tab", async () => {
+    it("renders owner kitchen as a cookbook spread with settings and admin controls", async () => {
       const Stub = createTestRoutesStub([
         {
           path: "/",
@@ -289,8 +295,29 @@ describe("Kitchen Index Route", () => {
                 servings: "4",
                 coverImageUrl: null,
               },
+              {
+                id: "recipe-2",
+                title: "Rosti",
+                description: "Crisp potatoes",
+                servings: "2",
+                coverImageUrl: null,
+              },
+              {
+                id: "recipe-3",
+                title: "Broth",
+                description: null,
+                servings: null,
+                coverImageUrl: null,
+              },
             ],
-            cookbooks: [],
+            cookbooks: [
+              {
+                id: "cookbook-owner",
+                title: "Cheese Night",
+                _count: { recipes: 1 },
+                recipes: [],
+              },
+            ],
           }),
         },
       ]);
@@ -298,12 +325,22 @@ describe("Kitchen Index Route", () => {
       const { container } = render(<Stub initialEntries={["/"]} />);
 
       expect(await screen.findByText("My Kitchen")).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: "Search" })).toHaveAttribute("href", "/search");
-      expect(screen.getByRole("link", { name: "Open settings" })).toHaveAttribute("href", "/account/settings");
-      expect(screen.getByRole("button", { name: "Logout" })).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: "New Recipe" })).toHaveAttribute("href", "/recipes/new");
-      expect(screen.getByRole("tab", { name: "Recipes" })).toHaveAttribute("aria-selected", "true");
+      expect(screen.getByRole("link", { name: "Create Recipe" })).toHaveAttribute("href", "/recipes/new");
+      expect(screen.queryByRole("link", { name: "Open settings" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Logout" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: "New Recipe" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+      expect(screen.getByRole("region", { name: "Latest from the kitchen" })).toBeInTheDocument();
+      expect(screen.getByRole("complementary", { name: "Recipe index" })).toBeInTheDocument();
+      expect(screen.getByRole("region", { name: "Cookbook shelf" })).toBeInTheDocument();
+      expect(screen.getByText("3 recipes and 1 cookbook")).toBeInTheDocument();
+      expect(screen.getByText("Cheese Night")).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Open Recipe" })).toHaveAttribute("href", "/recipes/recipe-1");
       expect(screen.getByText("Fondue")).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /Rosti/ })).toHaveAttribute("href", "/recipes/recipe-2");
+      expect(screen.getByText("Crisp potatoes")).toBeInTheDocument();
+      expect(screen.getByText("Serves 2")).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /Broth/ })).toHaveAttribute("href", "/recipes/recipe-3");
 
       const styles = container.querySelectorAll("[style]");
       expect(styles.length).toBe(0);
@@ -386,17 +423,17 @@ describe("Kitchen Index Route", () => {
       render(<Stub initialEntries={["/?chef=alpinechef"]} />);
 
       expect(await screen.findByText("alpinechef's Kitchen")).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: "Search" })).toHaveAttribute("href", "/search");
+      expect(screen.getByRole("link", { name: "Search Recipes" })).toHaveAttribute("href", "/search");
       expect(screen.queryByRole("link", { name: "Settings" })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Logout" })).not.toBeInTheDocument();
       expect(screen.queryByRole("link", { name: "New Recipe" })).not.toBeInTheDocument();
       expect(screen.queryByRole("link", { name: "Create First Recipe" })).not.toBeInTheDocument();
       expect(screen.queryByRole("link", { name: "Create First Cookbook", hidden: true })).not.toBeInTheDocument();
-      expect(screen.getByText("No public recipes yet.")).toBeInTheDocument();
+      expect(screen.getAllByText("No public recipes yet.").length).toBeGreaterThan(0);
       expect(screen.getByText("No public cookbooks yet.")).toBeInTheDocument();
     });
 
-    it("renders cookbooks tab content and hides recipe panel when selected", async () => {
+    it("renders recipes and cookbooks together instead of hiding content behind tabs", async () => {
       const Stub = createTestRoutesStub([
         {
           path: "/",
@@ -406,7 +443,7 @@ describe("Kitchen Index Route", () => {
             isOwner: true,
             viewer: { id: "viewer-1", username: "chef", email: "chef@example.com", photoUrl: null },
             kitchenUser: { id: "viewer-1", username: "chef", photoUrl: null },
-            recipes: [{ id: "recipe-1", title: "Hidden Recipe", description: null, servings: null, imageUrl: null }],
+            recipes: [{ id: "recipe-1", title: "Visible Recipe", description: null, servings: null, coverImageUrl: null }],
             cookbooks: [
               {
                 id: "cookbook-1",
@@ -421,6 +458,19 @@ describe("Kitchen Index Route", () => {
                   },
                 ],
               },
+              {
+                id: "cookbook-2",
+                title: "No Photo Book",
+                _count: { recipes: 2 },
+                recipes: [
+                  {
+                    recipe: {
+                      coverImageUrl: null,
+                      title: "Plain Soup",
+                    },
+                  },
+                ],
+              },
             ],
           }),
         },
@@ -428,16 +478,15 @@ describe("Kitchen Index Route", () => {
 
       render(<Stub initialEntries={["/?tab=cookbooks"]} />);
 
-      expect(await screen.findByRole("tab", { name: "Cookbooks" })).toHaveAttribute("aria-selected", "true");
+      expect(await screen.findByText("Visible Recipe")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "New Cookbook" })).toHaveAttribute("href", "/cookbooks/new");
       expect(screen.getByText("Swiss Weeknight")).toBeInTheDocument();
-
-      const [recipesPanel, cookbooksPanel] = screen.getAllByRole("tabpanel", { hidden: true });
-      expect(recipesPanel).toHaveAttribute("hidden");
-      expect(cookbooksPanel).not.toHaveAttribute("hidden");
+      expect(screen.getByText("No Photo Book")).toBeInTheDocument();
+      expect(screen.getByText("2 recipes")).toBeInTheDocument();
+      expect(screen.queryByRole("tabpanel")).not.toBeInTheDocument();
     });
 
-    it("keeps chef query params when switching tabs", async () => {
+    it("does not render tab navigation for visitor kitchens", async () => {
       const Stub = createTestRoutesStub([
         {
           path: "/",
@@ -455,14 +504,9 @@ describe("Kitchen Index Route", () => {
 
       render(<Stub initialEntries={["/?chef=alpinechef&tab=recipes"]} />);
 
-      expect(await screen.findByRole("tab", { name: "Cookbooks" })).toHaveAttribute(
-        "href",
-        "/?chef=alpinechef&tab=cookbooks"
-      );
-      expect(screen.getByRole("tab", { name: "Recipes" })).toHaveAttribute(
-        "href",
-        "/?chef=alpinechef&tab=recipes"
-      );
+      expect(await screen.findByText("alpinechef's Kitchen")).toBeInTheDocument();
+      expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+      expect(screen.getByRole("region", { name: "Cookbook shelf" })).toBeInTheDocument();
     });
   });
 });

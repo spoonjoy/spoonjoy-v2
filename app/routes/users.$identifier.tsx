@@ -17,8 +17,8 @@ import {
   countFellowChefs,
   countKitchenVisitors,
 } from "~/lib/fellow-chefs.server";
-
-const DEFAULT_CHEF_AVATAR = "/images/chef-rj.png";
+import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
+import { CookbookPage, SettingsPanel } from "~/components/cookbook/page";
 
 type RecentSpoonItem = {
   id: string;
@@ -200,19 +200,19 @@ export default function UserProfile() {
   const profileHref = `/users/${profile.username}`;
 
   return (
-    <div className="sj-page px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
-      <section className="sj-panel mx-auto max-w-6xl rounded-[2rem] p-5 sm:p-7">
-        <header className="flex flex-col gap-4 border-b border-[var(--sj-border)] pb-5 sm:flex-row sm:items-start sm:justify-between">
+    <CookbookPage>
+      <section className="mx-auto max-w-6xl">
+        <header className="sj-rule-block flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-center gap-4">
             <Avatar
-              src={profile.photoUrl ?? DEFAULT_CHEF_AVATAR}
+              src={resolveChefAvatarUrl(profile.photoUrl)}
               alt={profile.username}
               initials={profile.username.charAt(0).toUpperCase()}
               className="size-18 border border-[var(--sj-border)] bg-[var(--sj-flour)] text-[var(--sj-ink)] shadow-[var(--sj-shadow-soft)]"
             />
             <div>
               <p className="sj-eyebrow">Chef profile</p>
-              <Heading level={1} className="mt-2 text-4xl/11 tracking-[-0.04em]">
+              <Heading level={1} className="mt-2 text-5xl/12 tracking-normal">
                 {profile.username}
               </Heading>
               <Text className="mt-1 text-sm">
@@ -270,7 +270,7 @@ export default function UserProfile() {
             </div>
 
             {cookbooks.length === 0 ? (
-              <div className="rounded-[2rem] border border-dashed border-[var(--sj-border-strong)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_70%,transparent)] p-5">
+              <div className="border-y border-dashed border-[var(--sj-border-strong)] py-5">
                 <Text>
                   {isOwner ? "No cookbooks yet." : `${profile.username} has not shared any cookbooks yet.`}
                 </Text>
@@ -294,12 +294,11 @@ export default function UserProfile() {
           </aside>
         </div>
 
-        <section className="mt-8 border-t border-[var(--sj-border)] pt-6">
-          <Subheading level={2} className="text-2xl/8">Recent cooks</Subheading>
+        <SettingsPanel title="Recent cooks">
           <div className="mt-4">
             <SpoonsStrip spoons={recentSpoons} showRecipe />
           </div>
-        </section>
+        </SettingsPanel>
 
         <div className="mt-8 border-t border-[var(--sj-border)] pt-4 text-sm">
           <Link href={profileHref} className="sj-link text-[var(--sj-ink-soft)]">
@@ -307,6 +306,6 @@ export default function UserProfile() {
           </Link>
         </div>
       </section>
-    </div>
+    </CookbookPage>
   );
 }

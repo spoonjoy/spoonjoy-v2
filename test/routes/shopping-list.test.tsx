@@ -403,7 +403,7 @@ describe("Shopping List Routes", () => {
 
       render(<Stub initialEntries={["/shopping-list"]} />);
 
-      expect(await screen.findByRole("heading", { name: "Shopping List" })).toBeInTheDocument();
+      expect(await screen.findByRole("heading", { name: "Shopping list" })).toBeInTheDocument();
       expect(screen.getByText("0 items")).toBeInTheDocument();
       expect(screen.getByText("Your shopping list is empty")).toBeInTheDocument();
       expect(screen.getByText("Add items manually or add all ingredients from a recipe")).toBeInTheDocument();
@@ -448,8 +448,7 @@ describe("Shopping List Routes", () => {
       render(<Stub initialEntries={["/shopping-list"]} />);
 
       expect(await screen.findByText("2 items")).toBeInTheDocument();
-      expect(screen.getByText("2")).toBeInTheDocument();
-      expect(screen.getByText("lbs")).toBeInTheDocument();
+      expect(screen.getByText("2 lbs")).toBeInTheDocument();
       expect(screen.getByText("chicken")).toBeInTheDocument();
       expect(screen.getByText("salt")).toBeInTheDocument();
       expect(screen.getAllByText("Protein").length).toBeGreaterThan(0);
@@ -530,7 +529,7 @@ describe("Shopping List Routes", () => {
       expect(await screen.findByText("3 items")).toBeInTheDocument();
       expect(screen.getByText("(2 checked, 1 remaining)")).toBeInTheDocument();
       // Should show Clear Completed button when there are checked items
-      expect(screen.getByRole("button", { name: "Clear Completed" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Clear checked" })).toBeInTheDocument();
     });
 
     it("should show Clear All button when items exist", async () => {
@@ -560,7 +559,7 @@ describe("Shopping List Routes", () => {
 
       render(<Stub initialEntries={["/shopping-list"]} />);
 
-      expect(await screen.findByRole("button", { name: "Clear All" })).toBeInTheDocument();
+      expect(await screen.findByRole("button", { name: "Clear all" })).toBeInTheDocument();
     });
 
     it("should show add from recipe form when recipes exist", async () => {
@@ -585,7 +584,7 @@ describe("Shopping List Routes", () => {
 
       render(<Stub initialEntries={["/shopping-list"]} />);
 
-      expect(await screen.findByText("Add All Ingredients from Recipe")).toBeInTheDocument();
+      expect(await screen.findByText("Add from recipe")).toBeInTheDocument();
       expect(screen.getByRole("combobox")).toBeInTheDocument();
       expect(screen.getByText("Select a recipe...")).toBeInTheDocument();
       expect(screen.getByText("Spaghetti Bolognese")).toBeInTheDocument();
@@ -612,8 +611,8 @@ describe("Shopping List Routes", () => {
 
       render(<Stub initialEntries={["/shopping-list"]} />);
 
-      expect(await screen.findByText("Shopping List")).toBeInTheDocument();
-      expect(screen.queryByText("Add All Ingredients from Recipe")).not.toBeInTheDocument();
+      expect(await screen.findByText("Shopping list")).toBeInTheDocument();
+      expect(screen.queryByText("Add from recipe")).not.toBeInTheDocument();
     });
 
     it("should show add item form", async () => {
@@ -635,7 +634,7 @@ describe("Shopping List Routes", () => {
 
       render(<Stub initialEntries={["/shopping-list"]} />);
 
-      expect(await screen.findByText("Add Item")).toBeInTheDocument();
+      expect(await screen.findByText("Add item")).toBeInTheDocument();
       expect(screen.getByLabelText("Item")).toBeInTheDocument();
       expect(
         screen.getByPlaceholderText("e.g., 2 lbs chicken breast or a dozen eggs")
@@ -810,7 +809,7 @@ describe("Shopping List Routes", () => {
       expect(screen.queryByText("Red meat")).not.toBeInTheDocument();
     });
 
-    it("should have Home link", async () => {
+    it("should have Kitchen link", async () => {
       const mockData = {
         shoppingList: {
           id: "list-1",
@@ -829,7 +828,7 @@ describe("Shopping List Routes", () => {
 
       render(<Stub initialEntries={["/shopping-list"]} />);
 
-      expect(await screen.findByRole("link", { name: "Home" })).toHaveAttribute("href", "/");
+      expect(await screen.findByRole("link", { name: "Kitchen" })).toHaveAttribute("href", "/");
     });
   });
 
@@ -866,7 +865,7 @@ describe("Shopping List Routes", () => {
       const { container } = render(<Stub initialEntries={["/shopping-list"]} />);
 
       // Wait for content to load
-      await screen.findByText("Shopping List");
+      await screen.findByText("Shopping list");
 
       // Verify no user-defined inline styles by checking specific elements
       // Catalyst components may add their own style attributes for functionality
@@ -905,12 +904,12 @@ describe("Shopping List Routes", () => {
       render(<Stub initialEntries={["/shopping-list"]} />);
 
       // Wait for content to load
-      await screen.findByText("Shopping List");
+      await screen.findByText("Shopping list");
 
       // Should have a proper heading
       const heading = screen.getByRole("heading", { level: 1 });
       expect(heading).toBeInTheDocument();
-      expect(heading).toHaveTextContent("Shopping List");
+      expect(heading).toHaveTextContent("Shopping list");
     });
 
     it("should use Catalyst Button for actions", async () => {
@@ -933,7 +932,7 @@ describe("Shopping List Routes", () => {
       const { container } = render(<Stub initialEntries={["/shopping-list"]} />);
 
       // Wait for content to load
-      await screen.findByText("Shopping List");
+      await screen.findByText("Shopping list");
 
       // Buttons should not have inline styles
       const buttons = container.querySelectorAll('button');
@@ -962,7 +961,7 @@ describe("Shopping List Routes", () => {
       const { container } = render(<Stub initialEntries={["/shopping-list"]} />);
 
       // Wait for content to load
-      await screen.findByText("Shopping List");
+      await screen.findByText("Shopping list");
 
       // Inputs should not have inline styles
       const inputs = container.querySelectorAll('input');
@@ -1037,7 +1036,7 @@ describe("Shopping List Routes", () => {
       render(<Stub initialEntries={["/shopping-list"]} />);
 
       // Click clear all button
-      const clearAllButton = await screen.findByRole("button", { name: "Clear All" });
+      const clearAllButton = await screen.findByRole("button", { name: "Clear all" });
       fireEvent.click(clearAllButton);
 
       // Dialog should be open
@@ -1045,7 +1044,7 @@ describe("Shopping List Routes", () => {
       expect(screen.getByText(/All items will be cleared/)).toBeInTheDocument();
 
       // Click confirm button
-      const confirmButton = screen.getByRole("button", { name: "Clear it all" });
+      const confirmButton = screen.getByRole("button", { name: "Clear all" });
       fireEvent.click(confirmButton);
 
       // Dialog should close after submission (may need to wait for animation)
@@ -1082,11 +1081,11 @@ describe("Shopping List Routes", () => {
       render(<Stub initialEntries={["/shopping-list"]} />);
 
       // Click clear all button
-      const clearAllButton = await screen.findByRole("button", { name: "Clear All" });
+      const clearAllButton = await screen.findByRole("button", { name: "Clear all" });
       fireEvent.click(clearAllButton);
 
       // Click cancel
-      const cancelButton = screen.getByRole("button", { name: "Keep my stuff" });
+      const cancelButton = screen.getByRole("button", { name: "Keep list" });
       fireEvent.click(cancelButton);
 
       // Dialog should close (may need to wait for animation)

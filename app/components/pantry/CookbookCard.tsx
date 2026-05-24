@@ -32,7 +32,7 @@ export function CookbookCard({
   const link = href ?? `/cookbooks/${id}`
 
   return (
-    <article className="sj-card sj-hover-lift group relative overflow-hidden rounded-[1.6rem]">
+    <article className="sj-hover-lift group relative overflow-hidden border border-[var(--sj-border-strong)] bg-[var(--sj-panel-solid)]">
       {/* Cover image area */}
       <Link href={link} className="block">
         <div className="relative">
@@ -59,7 +59,7 @@ export function CookbookCard({
                 e.preventDefault()
                 onShare?.(id)
               }}
-              className="rounded-full border border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_82%,transparent)] p-2 text-[var(--sj-ink-soft)] backdrop-blur-sm transition-colors hover:bg-[var(--sj-panel-solid)] hover:text-[var(--sj-tomato)]"
+              className="rounded-[var(--sj-radius-control)] border border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_82%,transparent)] p-2 text-[var(--sj-ink-soft)] backdrop-blur-sm transition-colors hover:bg-[var(--sj-panel-solid)] hover:text-[var(--sj-tomato)]"
             >
               <Share2 className="h-3.5 w-3.5" />
             </button>
