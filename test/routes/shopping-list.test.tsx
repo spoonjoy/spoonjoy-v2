@@ -9,7 +9,7 @@ vi.mock("framer-motion", () => {
     children,
     onDragEnd,
     animate,
-    layout: _layout,
+    layout,
     drag: _drag,
     dragConstraints: _dragConstraints,
     dragElastic: _dragElastic,
@@ -23,11 +23,13 @@ vi.mock("framer-motion", () => {
     children: React.ReactNode;
     onDragEnd?: (_event: unknown, info: { offset: { x: number; y: number } }) => void;
     animate?: { x?: number };
+    layout?: boolean | "position";
     [key: string]: unknown;
   }) => (
     <div
       {...props}
       data-motion-x={String(animate?.x ?? 0)}
+      data-layout={layout ? String(layout) : undefined}
       onPointerUp={(event) => {
         const offsetX = Number(
           (event.currentTarget as HTMLDivElement).dataset.dragOffsetX ?? "0"
@@ -41,6 +43,7 @@ vi.mock("framer-motion", () => {
 
   return {
     AnimatePresence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+    LayoutGroup: ({ children }: { children: React.ReactNode }) => <>{children}</>,
     motion: { div: MotionDiv },
   };
 });

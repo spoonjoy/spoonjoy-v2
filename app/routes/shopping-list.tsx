@@ -1,6 +1,6 @@
 import type { Route } from "./+types/shopping-list";
 import { useEffect, useMemo, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
 import { useLoaderData, Form, useSubmit, useFetcher, useActionData } from "react-router";
 import {
   handleShoppingListAction,
@@ -235,99 +235,109 @@ export default function ShoppingList() {
         </RuledEmptyState>
       ) : (
         /* Item List */
-        <div className="sj-list-ruled mt-6">
-          <AnimatePresence initial={false}>
-            {filteredItems.map((item, index) => {
-              const affordance = resolveIngredientAffordance(
-                item.ingredientRef.name,
-                item.categoryKey,
-                null
-              );
-              const prev = index > 0 ? resolveIngredientAffordance(
-                filteredItems[index - 1].ingredientRef.name,
-                filteredItems[index - 1].categoryKey,
-                null
-              ) : null;
-              const showCategoryHeader = !prev || prev.categoryLabel !== affordance.categoryLabel;
+        <LayoutGroup id="shopping-list-items">
+          <div className="sj-list-ruled mt-6">
+            <AnimatePresence initial={false}>
+              {filteredItems.map((item, index) => {
+                const affordance = resolveIngredientAffordance(
+                  item.ingredientRef.name,
+                  item.categoryKey,
+                  null
+                );
+                const prev = index > 0 ? resolveIngredientAffordance(
+                  filteredItems[index - 1].ingredientRef.name,
+                  filteredItems[index - 1].categoryKey,
+                  null
+                ) : null;
+                const showCategoryHeader = !prev || prev.categoryLabel !== affordance.categoryLabel;
 
-              return (
-                <div key={item.id} className="space-y-1">
-                  {showCategoryHeader && (
-                    <div className="font-sj-ui pt-5 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-brass)]" data-testid="shopping-list-category">
-                      {affordance.categoryLabel}
-                    </div>
-                  )}
-                  <div className="relative overflow-hidden">
-                    {revealedItemId === item.id && (
-                      <div className="pointer-events-auto absolute inset-y-0 right-0 w-28 bg-[var(--sj-tomato)] text-[var(--sj-paper)]">
-                        <button
-                          type="button"
-                          onClick={() => removeItem(item.id)}
-                          className="font-sj-ui flex h-full w-full items-center justify-center text-xs font-semibold uppercase tracking-wide"
-                          aria-label={`Delete ${item.ingredientRef.name}`}
-                        >
-                          Delete
-                        </button>
+                return (
+                  <motion.div
+                    key={item.id}
+                    layout="position"
+                    initial={{ opacity: 0, y: -6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 6 }}
+                    transition={{
+                      layout: { type: "spring", stiffness: 360, damping: 34, mass: 0.75 },
+                      opacity: { duration: 0.16 },
+                      y: { type: "spring", stiffness: 460, damping: 38, mass: 0.55 },
+                    }}
+                    className="space-y-1"
+                    data-testid="shopping-list-motion-item"
+                  >
+                    {showCategoryHeader && (
+                      <div className="font-sj-ui pt-5 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-brass)]" data-testid="shopping-list-category">
+                        {affordance.categoryLabel}
                       </div>
                     )}
-                    <motion.div
-                      layout
-                      drag="x"
-                      animate={{
-                        opacity: 1,
-                        y: 0,
-                        x: revealedItemId === item.id ? -SWIPE_REVEAL_OFFSET : 0,
-                      }}
-                      dragConstraints={{ left: -168, right: 0 }}
-                      dragElastic={0}
-                      dragMomentum={false}
-                      dragDirectionLock
-                      onDragEnd={(_, info) => {
-                        const action = resolveSwipeAction(info.offset.x, revealedItemId === item.id);
-
-                        if (action === "confirmDelete") {
-                          removeItem(item.id);
-                          return;
-                        }
-
-                        if (action === "reveal") {
-                          setRevealedItemId(item.id);
-                          return;
-                        }
-
-                        if (action === "dismiss") {
-                          setRevealedItemId(null);
-                        }
-                      }}
-                      initial={{ opacity: 0, y: -8 }}
-                      exit={{ opacity: 0, y: 8 }}
-                      transition={{ type: "spring", stiffness: 520, damping: 42, mass: 0.5 }}
-                      className="relative z-10 bg-[var(--sj-page)]"
-                    >
-                      <ChecklistRow
-                        checked={item.checked}
-                        name={item.ingredientRef.name}
-                        quantity={amountLabel(item)}
-                        note={item.checked ? "already in basket" : null}
-                        onToggle={() => toggleItem(item)}
-                        action={(
+                    <div className="relative overflow-hidden">
+                      {revealedItemId === item.id && (
+                        <div className="pointer-events-auto absolute inset-y-0 right-0 w-28 bg-[var(--sj-tomato)] text-[var(--sj-paper)]">
                           <button
                             type="button"
                             onClick={() => removeItem(item.id)}
-                            className="sr-only"
-                            aria-label={`Remove ${item.ingredientRef.name}`}
+                            className="font-sj-ui flex h-full w-full items-center justify-center text-xs font-semibold uppercase tracking-wide"
+                            aria-label={`Delete ${item.ingredientRef.name}`}
                           >
-                            Remove
+                            Delete
                           </button>
-                        )}
-                      />
-                    </motion.div>
-                  </div>
-                </div>
-              );
-            })}
-          </AnimatePresence>
-        </div>
+                        </div>
+                      )}
+                      <motion.div
+                        drag="x"
+                        animate={{
+                          x: revealedItemId === item.id ? -SWIPE_REVEAL_OFFSET : 0,
+                        }}
+                        dragConstraints={{ left: -168, right: 0 }}
+                        dragElastic={0}
+                        dragMomentum={false}
+                        dragDirectionLock
+                        onDragEnd={(_, info) => {
+                          const action = resolveSwipeAction(info.offset.x, revealedItemId === item.id);
+
+                          if (action === "confirmDelete") {
+                            removeItem(item.id);
+                            return;
+                          }
+
+                          if (action === "reveal") {
+                            setRevealedItemId(item.id);
+                            return;
+                          }
+
+                          if (action === "dismiss") {
+                            setRevealedItemId(null);
+                          }
+                        }}
+                        transition={{ type: "spring", stiffness: 520, damping: 42, mass: 0.5 }}
+                        className="relative z-10 bg-[var(--sj-page)]"
+                      >
+                        <ChecklistRow
+                          checked={item.checked}
+                          name={item.ingredientRef.name}
+                          quantity={amountLabel(item)}
+                          note={item.checked ? "already in basket" : null}
+                          onToggle={() => toggleItem(item)}
+                          action={(
+                            <button
+                              type="button"
+                              onClick={() => removeItem(item.id)}
+                              className="sr-only"
+                              aria-label={`Remove ${item.ingredientRef.name}`}
+                            >
+                              Remove
+                            </button>
+                          )}
+                        />
+                      </motion.div>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </AnimatePresence>
+          </div>
+        </LayoutGroup>
       )}
 
       {/* Add Item Form */}
