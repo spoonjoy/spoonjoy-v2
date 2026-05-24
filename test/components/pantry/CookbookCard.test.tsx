@@ -121,12 +121,13 @@ describe('CookbookCard', () => {
     expect(onShare).toHaveBeenCalled()
   })
 
-  it('uses the warm editorial Spoonjoy card treatment', () => {
+  it('uses a restrained cookbook-cover treatment', () => {
     const { container } = renderWithRouter(<CookbookCard {...base} />)
 
     const article = container.querySelector('article')
-    expect(article?.className).toContain('sj-card')
-    expect(article?.className).toContain('rounded-[1.6rem]')
+    expect(article?.className).toContain('border-[var(--sj-border-strong)]')
+    expect(article?.className).toContain('bg-[var(--sj-panel-solid)]')
+    expect(article?.className).not.toContain('sj-card')
     expect(article?.className).not.toContain('rounded-lg')
   })
 

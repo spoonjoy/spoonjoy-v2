@@ -162,7 +162,7 @@ export function StepList({ steps, recipeId, onChange, disabled = false }: StepLi
           axis="y"
           values={steps}
           onReorder={handleReorder}
-          className="space-y-4 mb-4"
+          className="sj-list-ruled mb-4"
         >
           {steps.map((step, index) => (
             <Reorder.Item
@@ -203,7 +203,7 @@ export function StepList({ steps, recipeId, onChange, disabled = false }: StepLi
       {recipeId && !recipeId.startsWith('new-') ? (
         <Link
           href={`/recipes/${recipeId}/steps/new`}
-          className="inline-flex items-center gap-2"
+          className="sj-link inline-flex items-center gap-2"
         >
           + Add Step
         </Link>

@@ -117,9 +117,9 @@ describe('Root layout responsive behavior', () => {
         </MemoryRouter>
       )
 
-      // Authenticated users should see the v3 3-slot dock actions
-      expect(screen.getByText('New')).toBeInTheDocument()
-      expect(screen.getByText('List')).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: /kitchen home/i })).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: /create recipe/i })).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: /shopping list/i })).toBeInTheDocument()
     })
 
     it('shows unauthenticated nav items in SpoonDock for unauthenticated users', () => {
@@ -129,17 +129,12 @@ describe('Root layout responsive behavior', () => {
         </MemoryRouter>
       )
 
-      // Unauthenticated users should see Home and Login in the SpoonDock
       const navigations = screen.getAllByRole('navigation')
       const mobileNav = navigations.find(nav => nav.className.includes('lg:hidden'))
 
-      // MobileNav with isAuthenticated=false shows Home and Login
       expect(mobileNav).toBeInTheDocument()
-      // Check for the nav items specific to unauthenticated users
-      // Use getAllByRole since center logo also links to home
-      const homeLinks = screen.getAllByRole('link', { name: /home/i })
-      expect(homeLinks.length).toBeGreaterThan(0)
-      expect(screen.getByRole('link', { name: /login/i })).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: /spoonjoy public/i })).toHaveAttribute('href', '/')
+      expect(screen.getByRole('link', { name: /log in/i })).toHaveAttribute('href', '/login')
     })
   })
 

@@ -402,7 +402,7 @@ export default function RecipeDetail() {
         <div className="flex items-center justify-between gap-4">
           <Button href="/recipes" plain>
             <ArrowLeft data-slot="icon" />
-            ← Back to recipes
+            Back to recipes
           </Button>
           {/* istanbul ignore next -- @preserve owner-only UI rendering */}
           {isOwner && (
@@ -433,7 +433,7 @@ export default function RecipeDetail() {
       />
 
       {/* Provenance + log-a-cook action */}
-      <div className="mx-auto max-w-4xl px-4 pt-4 sm:px-6 lg:px-8 space-y-4">
+      <div className="mx-auto max-w-4xl space-y-4 px-4 pt-4 sm:px-6 lg:px-8">
         <RecipeProvenance
           sourceUrl={recipe.sourceUrl ?? undefined}
           sourceRecipe={recipe.sourceRecipe ?? undefined}
@@ -465,7 +465,7 @@ export default function RecipeDetail() {
         initialFocus={saveModalTitleRef}
         autoFocus={false}
         size="md"
-        className="mb-24 max-h-[calc(100dvh-7.5rem)] overflow-hidden !rounded-[2rem] !shadow-[var(--sj-shadow)] pb-[max(0.75rem,env(safe-area-inset-bottom))] data-enter:duration-200 data-enter:ease-out data-leave:duration-150 data-leave:ease-in data-closed:translate-y-4 data-enter:data-closed:translate-y-4 sm:mb-auto sm:max-h-[calc(100dvh-4rem)] sm:data-closed:translate-y-1"
+        className="mb-24 max-h-[calc(100dvh-7.5rem)] overflow-hidden !rounded-[var(--sj-radius-surface)] !shadow-[var(--sj-shadow)] pb-[max(0.75rem,env(safe-area-inset-bottom))] data-enter:duration-200 data-enter:ease-out data-leave:duration-150 data-leave:ease-in data-closed:translate-y-4 data-enter:data-closed:translate-y-4 sm:mb-auto sm:max-h-[calc(100dvh-4rem)] sm:data-closed:translate-y-1"
       >
         <div className="flex max-h-full flex-col" data-testid="save-modal">
           <DialogTitle ref={saveModalTitleRef} tabIndex={-1}>Save to Cookbook</DialogTitle>
@@ -482,10 +482,10 @@ export default function RecipeDetail() {
                       key={cookbook.id}
                       onClick={() => handleToggleCookbookSave(cookbook.id)}
                       aria-pressed={isSaved}
-                      className={`w-full rounded-2xl border px-4 py-3 text-left transition-colors ${
+                      className={`w-full border-y px-4 py-3 text-left transition-colors ${
                         isSaved
                           ? "border-[var(--sj-brass)] bg-[color-mix(in_srgb,var(--sj-brass)_14%,var(--sj-panel-solid))] hover:bg-[color-mix(in_srgb,var(--sj-brass)_20%,var(--sj-panel-solid))]"
-                          : "border-[var(--sj-border)] bg-[var(--sj-panel-solid)] hover:bg-[var(--sj-flour)]"
+                          : "border-[var(--sj-border)] bg-transparent hover:bg-[var(--sj-flour)]"
                       }`}
                       data-testid={`cookbook-item-${cookbook.id}`}
                     >
@@ -566,8 +566,8 @@ export default function RecipeDetail() {
       </Dialog>
 
       {/* Steps Section */}
-      <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
-        <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      <div id="steps" className="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
+        <div className="mb-6 flex flex-col gap-2 border-t border-[var(--sj-border-strong)] pt-6 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="sj-eyebrow">Cook mode</p>
             <Heading level={2} className="mt-3 text-3xl/9 font-semibold tracking-[-0.03em] sm:text-4xl/11">
@@ -578,7 +578,7 @@ export default function RecipeDetail() {
         </div>
 
         {recipe.steps.length === 0 ? (
-          <div className="sj-card rounded-[2rem] p-8 text-center">
+          <div className="border-y border-dashed border-[var(--sj-border-strong)] py-8 text-center">
             <Text className="mb-4">No steps added yet</Text>
             {/* istanbul ignore next -- @preserve owner-only UI rendering */}
             {isOwner && (
@@ -588,7 +588,7 @@ export default function RecipeDetail() {
             )}
           </div>
         ) : (
-          <div className="mt-24 overflow-hidden rounded-[var(--sj-radius-hero)] border border-[var(--sj-border)] bg-[var(--sj-panel)] shadow-[var(--sj-shadow-soft)] backdrop-blur-xl sm:mt-0">
+          <div className="mt-24 border-y border-[var(--sj-border)] sm:mt-0">
             {recipe.steps.map((step) => (
               <div key={step.id} id={`step-${step.stepNum}`} className="border-b border-[var(--sj-border)] last:border-b-0">
                 <StepCard

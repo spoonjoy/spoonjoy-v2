@@ -17,9 +17,9 @@ const iconButtonPlainStyles = [
   'text-[var(--sj-ink)] hover:bg-[var(--sj-flour)]',
 ]
 
-const iconButtonGreenStyles = [
+const iconButtonActionStyles = [
   'border-transparent',
-  'text-[var(--sj-herb)] hover:bg-[color-mix(in_srgb,var(--sj-herb)_10%,transparent)]',
+  'text-[var(--sj-action)] hover:bg-[color-mix(in_srgb,var(--sj-action)_10%,transparent)]',
 ]
 
 const iconButtonRedStyles = [
@@ -239,7 +239,7 @@ export function ParsedIngredientRow({
             <button
               type="button"
               onClick={handleSave}
-              className={clsx(iconButtonBaseStyles, iconButtonGreenStyles, 'cursor-default')}
+              className={clsx(iconButtonBaseStyles, iconButtonActionStyles, 'cursor-default')}
               aria-label="Save"
             >
               <Check className="size-4" aria-hidden="true" />

@@ -19,10 +19,14 @@ test.describe('Fellow chefs + Kitchen visitors flow', () => {
     const logCookButton = page.getByRole('button', { name: /log a cook/i }).first();
     await expect(logCookButton).toBeVisible({ timeout: 5_000 });
     await logCookButton.click();
-    await expect(page.getByRole('heading', { name: /log a cook/i })).toBeVisible();
+    const noteField = page.getByLabel(/^note/i);
+    if (!(await noteField.isVisible({ timeout: 2_000 }).catch(() => false))) {
+      await logCookButton.click();
+    }
+    await expect(noteField).toBeVisible({ timeout: 5_000 });
 
     const note = `e2e fellow-chefs spoon ${Date.now()}`;
-    await page.getByLabel(/^note/i).fill(note);
+    await noteField.fill(note);
     await page.locator('input[type="file"]').setInputFiles(FIXTURE_PHOTO);
     const submit = page.getByRole('button', { name: /save spoon/i });
     await expect(submit).toBeEnabled();

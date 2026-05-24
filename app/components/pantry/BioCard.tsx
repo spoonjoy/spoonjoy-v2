@@ -4,6 +4,7 @@ import { Button } from '../ui/button'
 import { Heading, Subheading } from '../ui/heading'
 import { Link } from '../ui/link'
 import { Text } from '../ui/text'
+import { resolveChefAvatarUrl } from '~/lib/chef-avatar'
 
 export interface BioCardProps {
   name: string
@@ -37,10 +38,10 @@ export function BioCard({
     .toUpperCase()
 
   return (
-    <section className="sj-panel rounded-[2rem] p-4 sm:p-5">
+    <section className="border-y border-[var(--sj-border)] py-5">
       <div className="flex items-start gap-3">
         <Avatar
-          src={avatarUrl}
+          src={resolveChefAvatarUrl(avatarUrl)}
           initials={initials}
           alt={name}
           className="size-16 border border-[var(--sj-border)] bg-[var(--sj-flour)] text-[var(--sj-ink)] shadow-[var(--sj-shadow-soft)]"
@@ -69,8 +70,8 @@ export function BioCard({
       <Text className="mt-4 text-sm/6">{bio}</Text>
 
       <div className="mt-4 flex flex-wrap gap-2">
-        <Badge color="blue">{recipeCount} recipes</Badge>
-        <Badge color="emerald">{cookbookCount} cookbooks</Badge>
+        <Badge color="zinc">{recipeCount} recipes</Badge>
+        <Badge color="amber">{cookbookCount} cookbooks</Badge>
       </div>
 
       {onEditProfile && (

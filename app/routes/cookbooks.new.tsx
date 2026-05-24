@@ -5,10 +5,10 @@ import { requireUserId } from "~/lib/session.server";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Fieldset, Field, Label, ErrorMessage } from "~/components/ui/fieldset";
-import { Heading } from "~/components/ui/heading";
 import { Link } from "~/components/ui/link";
 import { Text } from "~/components/ui/text";
 import { ValidationError } from "~/components/ui/validation-error";
+import { CookbookPage, CookbookHeader, SettingsPanel } from "~/components/cookbook/page";
 
 interface ActionData {
   errors?: {
@@ -69,13 +69,9 @@ export default function NewCookbook() {
   const actionData = useActionData<ActionData>();
 
   return (
-    <div className="sj-page px-4 py-8 sm:px-6 sm:py-12">
+    <CookbookPage>
       <div className="mx-auto max-w-3xl">
-        <div className="mb-8">
-          <p className="sj-eyebrow">New cookbook</p>
-          <Heading level={1} className="mt-4 text-4xl/11 tracking-[-0.04em] sm:text-6xl/15">
-            Make a collection worth coming back to.
-          </Heading>
+        <CookbookHeader eyebrow="New cookbook" title="Make a collection worth coming back to.">
           <Text className="mt-4 max-w-2xl text-base/7">
             Start with a clear title. Add recipes next and let the cover become a living collage.
           </Text>
@@ -85,13 +81,14 @@ export default function NewCookbook() {
           >
             ← Back to cookbooks
           </Link>
-        </div>
+        </CookbookHeader>
 
         {/* istanbul ignore next -- @preserve */ actionData?.errors?.general && (
           <ValidationError error={actionData.errors.general} className="mb-4" />
         )}
 
-        <Form method="post" className="sj-panel rounded-[2rem] p-6">
+        <SettingsPanel title="Cookbook title">
+        <Form method="post">
           <Fieldset className="space-y-6">
             <Field>
               <Label>Cookbook Title *</Label>
@@ -119,7 +116,8 @@ export default function NewCookbook() {
             </div>
           </Fieldset>
         </Form>
+        </SettingsPanel>
       </div>
-    </div>
+    </CookbookPage>
   );
 }

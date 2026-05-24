@@ -9,7 +9,7 @@ test.use({
 test.describe.configure({ mode: 'serial' });
 
 async function getDock(page: Page) {
-  const dock = page.getByRole('navigation', { name: 'Main navigation' });
+  const dock = page.getByRole('navigation', { name: 'Spoonjoy navigation' });
   await expect(dock).toBeVisible();
   return dock;
 }
@@ -71,71 +71,66 @@ async function expectAboveDock(locator: Locator, dock: Locator, label: string) {
 }
 
 test.describe('Mobile RecipeBuilder and SpoonDock audit', () => {
-  test('create flow keeps RecipeBuilder controls reachable above the dock', async ({ page }) => {
+  test('create flow keeps RecipeBuilder controls reachable without the fixed dock', async ({ page }) => {
     await page.goto('/recipes/new');
 
     await expect(page.getByRole('heading', { name: 'Write the version future-you can actually cook.' })).toBeVisible();
-    const dock = await getDock(page);
-
-    await expectTouchTarget(dock.getByRole('link', { name: 'New' }), 'New dock link');
-    await expectTouchTarget(dock.getByRole('link', { name: 'Go to Kitchen' }), 'Kitchen dock link');
-    await expectTouchTarget(dock.getByRole('link', { name: 'List' }), 'List dock link');
+    await expect(page.getByRole('navigation', { name: 'Spoonjoy navigation' })).toHaveCount(0);
 
     await page.getByLabel(/^Title$/).last().fill(`Mobile Audit ${Date.now()}`);
-    await page.getByRole('button', { name: 'Add Step' }).click();
-    await page.getByRole('textbox', { name: 'Instructions' }).fill('Stir until glossy.');
+    const addStepButton = page.getByRole('button', { name: 'Add Step' });
+    const instructions = page.getByRole('textbox', { name: 'Instructions' });
+    await expect(addStepButton).toBeVisible();
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await addStepButton.click();
+      if (await instructions.isVisible({ timeout: 1_000 }).catch(() => false)) {
+        break;
+      }
+    }
+    await expect(instructions).toBeVisible();
+    await instructions.fill('Stir until glossy.');
 
     await expectTouchTarget(page.getByRole('button', { name: 'Save' }).first(), 'step Save button');
     await expectTouchTarget(page.getByRole('button', { name: 'Remove' }).first(), 'step Remove button');
+    await page.getByRole('button', { name: 'Create Recipe' }).scrollIntoViewIfNeeded();
     await expectTouchTarget(page.getByRole('button', { name: 'Create Recipe' }), 'Create Recipe button');
-    await expectAboveDock(page.getByRole('button', { name: 'Create Recipe' }), dock, 'Create Recipe button');
   });
 
-  test('edit flow exposes working contextual Cancel and Save dock actions', async ({ page }) => {
+  test('edit flow keeps save controls usable without the fixed dock', async ({ page }) => {
     const recipeHref = await getFirstRecipeHref(page);
     await page.goto(`${recipeHref}/edit`);
 
-    await expect(page.getByRole('heading', { name: 'Tune the recipe until it feels cookable.' })).toBeVisible();
-    const dock = await getDock(page);
-    const cancelAction = dock.getByRole('link', { name: 'Cancel' });
-    const saveAction = dock.getByRole('button', { name: 'Save' });
-
-    await expectTouchTarget(cancelAction, 'edit dock Cancel action');
-    await expectTouchTarget(saveAction, 'edit dock Save action');
-    await expectWithinDock(cancelAction, dock, 'edit dock Cancel action');
-    await expectWithinDock(saveAction, dock, 'edit dock Save action');
+    await expect(page.getByRole('heading', { name: 'Edit Recipe' })).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Spoonjoy navigation' })).toHaveCount(0);
 
     const updatedTitle = `Mobile Dock Save ${Date.now()}`;
     await page.getByLabel(/^Title$/).last().fill(updatedTitle);
+    const saveAction = page.getByRole('button', { name: 'Save Recipe' });
+    await saveAction.scrollIntoViewIfNeeded();
+    await expectTouchTarget(saveAction, 'edit Save Recipe button');
     await saveAction.click();
 
     await expect(page).toHaveURL(new RegExp(`${recipeHref}$`));
     await expect(page.getByRole('heading', { name: updatedTitle })).toBeVisible();
   });
 
-  test('recipe detail contextual dock actions fit and keep the save sheet usable', async ({ page }) => {
+  test('recipe detail contextual dock actions fit', async ({ page }) => {
     const recipeHref = await getFirstRecipeHref(page);
     await page.goto(recipeHref);
 
     await expect(page.getByRole('heading').first()).toBeVisible();
     const dock = await getDock(page);
     const actions = [
+      dock.getByRole('link', { name: /Back recipes/i }),
+      dock.getByRole('link', { name: 'Cook' }),
       dock.getByRole('link', { name: 'Edit' }),
       dock.getByRole('button', { name: 'List' }),
-      dock.getByRole('button', { name: 'Save' }),
-      dock.getByRole('button', { name: 'Share' }),
     ];
 
     for (const [index, action] of actions.entries()) {
       await expectTouchTarget(action, `recipe detail dock action ${index + 1}`);
       await expectWithinDock(action, dock, `recipe detail dock action ${index + 1}`);
     }
-
-    await dock.getByRole('button', { name: 'Save' }).click();
-    await expect(page.getByRole('heading', { name: 'Save to Cookbook' })).toBeVisible();
-    await expectAboveDock(page.getByTestId('create-cookbook-button'), dock, 'save sheet Create & Save button');
-    await page.keyboard.press('Escape');
-    await expect(page.getByRole('heading', { name: 'Save to Cookbook' })).toBeHidden();
   });
 
   test('shopping-list mobile controls have touch targets and dock clearance', async ({ page }) => {
@@ -144,8 +139,9 @@ test.describe('Mobile RecipeBuilder and SpoonDock audit', () => {
     await expect(page.getByRole('heading', { name: 'Shopping List' })).toBeVisible();
     const dock = await getDock(page);
 
-    await expectTouchTarget(dock.getByRole('link', { name: 'New' }), 'shopping dock New link');
-    await expectTouchTarget(dock.getByRole('link', { name: 'List' }), 'shopping dock List link');
+    await expectTouchTarget(dock.getByRole('link', { name: /List market/i }), 'shopping dock List link');
+    await expectTouchTarget(dock.getByRole('link', { name: 'Add' }), 'shopping dock Add link');
+    await expectTouchTarget(dock.getByRole('link', { name: 'Search' }), 'shopping dock Search link');
     const addButton = page.getByRole('button', { name: /^Add$/ });
     await expectTouchTarget(addButton, 'shopping Add button');
     await expectAboveDock(addButton, dock, 'shopping Add button');

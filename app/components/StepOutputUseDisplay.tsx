@@ -19,7 +19,7 @@ export function StepOutputUseDisplay({ usingSteps }: StepOutputUseDisplayProps) 
   }
 
   return (
-    <div className="mt-4 rounded-[1.25rem] border border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-flour)_55%,transparent)] p-4">
+    <div className="mt-4 border-y border-[var(--sj-border)] py-4">
       <Subheading level={4} className="m-0 mb-3 text-sm uppercase text-[var(--sj-ink-soft)]">
         Using outputs from
       </Subheading>

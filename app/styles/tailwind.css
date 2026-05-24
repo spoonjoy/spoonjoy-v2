@@ -4,19 +4,21 @@
 
 :root {
   color-scheme: light;
-  --font-sj-display: "Fraunces", Georgia, "Times New Roman", serif;
-  --font-sj-body: "Source Serif 4", Georgia, "Times New Roman", serif;
-  --font-sj-ui: "IBM Plex Sans Condensed", "Avenir Next Condensed", "Gill Sans", sans-serif;
+  --font-sj-display: "Newsreader", Georgia, "Times New Roman", serif;
+  --font-sj-body: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-sj-ui: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
 
-  /* Cookbook palette: bone and charcoal are the system anchors; accents are sparse and role-bound. */
-  --sj-bone: #f4eee1;
-  --sj-bone-lift: #fbf7ef;
-  --sj-vellum: #eadfcd;
-  --sj-charcoal: #28231d;
-  --sj-charcoal-soft: #625a50;
-  --sj-brass: #9b6834;
-  --sj-tomato: #9f432f;
-  --sj-herb: #5f6d49;
+  /* Cookbook palette: clean bone paper and charcoal are the anchors; accents are sparse and role-bound. */
+  --sj-bone: #fbfaf6;
+  --sj-bone-lift: #fffef9;
+  --sj-vellum: #e9e4dc;
+  --sj-charcoal: #282622;
+  --sj-charcoal-soft: #625f58;
+  --sj-brass: #8b6641;
+  --sj-action: #946735;
+  --sj-action-deep: #7c5528;
+  --sj-tomato: #a24a38;
+  --sj-herb: #596a4f;
   --sj-ink: var(--sj-charcoal);
   --sj-ink-soft: var(--sj-charcoal-soft);
   --sj-paper: var(--sj-bone);
@@ -31,34 +33,36 @@
   --sj-on-photo-muted: color-mix(in srgb, var(--sj-bone) 76%, transparent);
   --sj-on-photo-soft: color-mix(in srgb, var(--sj-bone) 62%, transparent);
   --sj-on-photo-warm: color-mix(in srgb, var(--sj-bone) 78%, var(--sj-brass));
-  --sj-photo-charcoal: #211d18;
+  --sj-photo-charcoal: #211f1b;
   --sj-photo-shade: color-mix(in srgb, var(--sj-photo-charcoal) 82%, transparent);
   --sj-photo-shade-soft: color-mix(in srgb, var(--sj-photo-charcoal) 42%, transparent);
   --sj-photo-glass: color-mix(in srgb, var(--sj-bone) 10%, transparent);
   --sj-photo-line: color-mix(in srgb, var(--sj-bone) 24%, transparent);
   --sj-shadow: 0 24px 80px color-mix(in srgb, var(--sj-charcoal) 14%, transparent);
-  --sj-shadow-soft: 0 12px 36px color-mix(in srgb, var(--sj-charcoal) 10%, transparent);
+  --sj-shadow-soft: 0 12px 36px color-mix(in srgb, var(--sj-charcoal) 8%, transparent);
   --sj-radius-control: 999px;
-  --sj-radius-small: 0.875rem;
-  --sj-radius-surface: 1.25rem;
-  --sj-radius-photo: 1.5rem;
-  --sj-radius-hero: 2rem;
+  --sj-radius-small: 0.25rem;
+  --sj-radius-surface: 0.5rem;
+  --sj-radius-photo: 0.5rem;
+  --sj-radius-hero: 0.5rem;
 }
 
 .dark {
   color-scheme: dark;
-  --sj-bone: #efe3cf;
-  --sj-bone-lift: #302923;
-  --sj-vellum: #3b332b;
-  --sj-charcoal: #221e19;
-  --sj-charcoal-soft: #cdbda8;
-  --sj-brass: #c99858;
-  --sj-tomato: #d76d50;
-  --sj-herb: #aabb78;
+  --sj-bone: #f2eee6;
+  --sj-bone-lift: #282522;
+  --sj-vellum: #34302b;
+  --sj-charcoal: #1f1d1a;
+  --sj-charcoal-soft: #c8c0b4;
+  --sj-brass: #c4945c;
+  --sj-action: #b9854b;
+  --sj-action-deep: #95683a;
+  --sj-tomato: #d26850;
+  --sj-herb: #a4b578;
   --sj-ink: var(--sj-bone);
   --sj-ink-soft: var(--sj-charcoal-soft);
   --sj-paper: var(--sj-charcoal);
-  --sj-page: #1f1b17;
+  --sj-page: #1e1c19;
   --sj-panel: color-mix(in srgb, var(--sj-bone-lift) 84%, transparent);
   --sj-panel-solid: var(--sj-bone-lift);
   --sj-field: color-mix(in srgb, var(--sj-charcoal) 82%, var(--sj-vellum));
@@ -116,7 +120,6 @@ html *:where(input, textarea, select, button) {
 
 .font-sj-display {
   font-family: var(--font-sj-display);
-  font-variation-settings: "SOFT" 62, "WONK" 1;
 }
 
 .font-sj-body {
@@ -141,27 +144,9 @@ html *:where(input, textarea, select, button) {
   overflow: hidden;
 }
 
-.sj-desktop-surface::before,
-.sj-mobile-surface::before,
-.sj-page::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  opacity: 0.16;
-  background-image:
-    linear-gradient(90deg, color-mix(in srgb, var(--sj-ink) 8%, transparent) 1px, transparent 1px),
-    linear-gradient(0deg, color-mix(in srgb, var(--sj-ink) 7%, transparent) 1px, transparent 1px);
-  background-size: 48px 48px;
-  mask-image: linear-gradient(180deg, black, transparent 78%);
-}
-
 .sj-page {
   min-height: 100svh;
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--sj-paper) 72%, transparent), transparent 28rem),
-    var(--sj-page);
+  background: var(--sj-page);
 }
 
 .sj-panel {
@@ -175,6 +160,37 @@ html *:where(input, textarea, select, button) {
   border: 1px solid var(--sj-border);
   background: color-mix(in srgb, var(--sj-panel-solid) 86%, transparent);
   box-shadow: var(--sj-shadow-soft);
+}
+
+.sj-page-frame {
+  margin-inline: auto;
+  width: min(100%, 92rem);
+  padding: 1.5rem 1.25rem 7rem;
+}
+
+@media (min-width: 640px) {
+  .sj-page-frame {
+    padding: 2rem 1.5rem 7rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .sj-page-frame {
+    padding: 3rem 2.5rem;
+  }
+}
+
+.sj-rule-block {
+  border-block: 1px solid var(--sj-border-strong);
+  padding-block: 1.25rem;
+}
+
+.sj-list-ruled {
+  border-top: 1px solid var(--sj-border);
+}
+
+.sj-list-ruled > * {
+  border-bottom: 1px solid var(--sj-border);
 }
 
 .sj-dark-canvas {
@@ -311,16 +327,12 @@ html *:where(input, textarea, select, button) {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  border: 1px solid color-mix(in srgb, var(--sj-brass) 48%, var(--sj-border));
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--sj-brass) 14%, var(--sj-panel-solid));
-  color: var(--sj-ink);
+  color: var(--sj-ink-soft);
   font-family: var(--font-sj-ui);
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.18em;
   line-height: 1;
-  padding: 0.45rem 0.72rem;
   text-transform: uppercase;
 }
 
@@ -341,7 +353,7 @@ html *:where(input, textarea, select, button) {
 
 .sj-form-section {
   border: 1px solid var(--sj-border);
-  border-radius: 1.5rem;
+  border-radius: var(--sj-radius-surface);
   background: color-mix(in srgb, var(--sj-panel) 88%, transparent);
   padding: clamp(1rem, 2.5vw, 1.5rem);
   box-shadow: var(--sj-shadow-soft);

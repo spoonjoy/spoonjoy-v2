@@ -612,7 +612,7 @@ describe("Signup Route", () => {
 
         render(<Stub initialEntries={["/signup"]} />);
 
-        const heading = await screen.findByRole("heading", { level: 1 });
+        const heading = await screen.findByRole("heading", { level: 1, name: "Sign Up" });
         expect(heading).toBeInTheDocument();
         expect(heading).toHaveTextContent("Sign Up");
       });

@@ -583,11 +583,10 @@ describe("Account Settings Route", () => {
 
       await screen.findByRole("heading", { name: /account settings/i });
 
-      // Verify all section subheadings are present
-      expect(screen.getByText("User Information")).toBeInTheDocument();
-      expect(screen.getByText("Profile Photo")).toBeInTheDocument();
-      expect(screen.getByText("Connected Accounts")).toBeInTheDocument();
-      expect(screen.getByText("Password")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: /user information/i })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: /profile photo/i })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: /connected accounts/i })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: /password/i })).toBeInTheDocument();
     });
 
     it("should render edit button in user info section", async () => {
@@ -1161,8 +1160,7 @@ describe("Account Settings Route", () => {
 
   describe("profile photo", () => {
     // Default avatar URL - chef RJ from spoonjoy v1
-    const DEFAULT_AVATAR_URL =
-      "https://res.cloudinary.com/dpjmyc4uz/image/upload/v1674541350/chef-rj.png";
+    const DEFAULT_AVATAR_URL = "/images/chef-rj.png";
 
     describe("loader - photo data", () => {
       it("should return user photoUrl when user has a custom photo", async () => {

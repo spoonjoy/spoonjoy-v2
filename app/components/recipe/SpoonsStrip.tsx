@@ -73,11 +73,11 @@ export function SpoonsStrip({ spoons, showRecipe = false }: SpoonsStripProps) {
   }
 
   return (
-    <ul className="space-y-4">
+    <ul className="sj-list-ruled">
       {spoons.map((spoon) => (
         <li
           key={spoon.id}
-          className="rounded-2xl border border-[var(--sj-border)] bg-[var(--sj-panel-solid)] p-4 space-y-3"
+          className="space-y-3 border-b border-[var(--sj-border)] py-4"
         >
           <div className="flex items-center justify-between text-sm">
             <Link
@@ -94,7 +94,7 @@ export function SpoonsStrip({ spoons, showRecipe = false }: SpoonsStripProps) {
             <img
               src={spoon.photoUrl}
               alt={`Cook by ${spoon.chef.username}`}
-              className="aspect-square w-full rounded-xl object-cover"
+              className="aspect-square w-full object-cover"
             />
           ) : null}
           {spoon.note ? <NoteBlock note={spoon.note} /> : null}
@@ -107,13 +107,13 @@ export function SpoonsStrip({ spoons, showRecipe = false }: SpoonsStripProps) {
           {showRecipe && spoon.recipe ? (
             <Link
               to={`/recipes/${spoon.recipe.id}`}
-              className="flex items-center gap-3 rounded-xl border border-[var(--sj-border)] p-2 hover:bg-[var(--sj-flour)]"
+              className="flex items-center gap-3 border-y border-[var(--sj-border)] py-2 hover:bg-[var(--sj-flour)]"
             >
               {spoon.coverImageUrl ? (
                 <img
                   src={spoon.coverImageUrl}
                   alt={`${spoon.recipe.title} cover`}
-                  className="h-12 w-12 rounded-md object-cover"
+                  className="h-12 w-12 object-cover"
                 />
               ) : null}
               <span className="text-sm font-medium">{spoon.recipe.title}</span>

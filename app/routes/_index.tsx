@@ -1,6 +1,6 @@
 import type { Route } from "./+types/_index";
-import { Form, useLoaderData, useLocation } from "react-router";
-import { BookOpen, ChefHat, Search as SearchIcon, Settings, Sparkles } from "lucide-react";
+import { useLoaderData } from "react-router";
+import { ArrowRight, BookOpen, ChefHat, Plus, Search as SearchIcon } from "lucide-react";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { getUserId } from "~/lib/session.server";
 import { Button } from "~/components/ui/button";
@@ -8,10 +8,10 @@ import { Link } from "~/components/ui/link";
 import { Heading, Subheading } from "~/components/ui/heading";
 import { Text } from "~/components/ui/text";
 import { Avatar } from "~/components/ui/avatar";
-import { CookbookCard } from "~/components/pantry/CookbookCard";
+import { CookbookPage } from "~/components/cookbook/page";
 import { getRecipeCoverImageUrl } from "~/lib/recipe-cover.server";
+import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
 
-const DEFAULT_CHEF_AVATAR = "/images/chef-rj.png";
 const LANDING_FOOD_PHOTOS = [
   {
     src: "https://images.unsplash.com/photo-1574071318508-1cdbab80d002?auto=format&fit=crop&w=1200&q=85",
@@ -32,12 +32,6 @@ type KitchenUserWhere = { id: string } | { username: string };
 
 function normalizeTab(value: string | null): KitchenTab {
   return value === "cookbooks" ? "cookbooks" : "recipes";
-}
-
-function tabHref(currentSearch: string, tab: KitchenTab): string {
-  const params = new URLSearchParams(currentSearch);
-  params.set("tab", tab);
-  return `/?${params.toString()}`;
 }
 
 export function meta({}: Route.MetaArgs) {
@@ -185,265 +179,306 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 }
 
 export default function Index() {
-  const { tab, kitchenUser, isOwner, recipes, cookbooks } = useLoaderData<typeof loader>();
-  const location = useLocation();
+  const { kitchenUser, isOwner, recipes, cookbooks } = useLoaderData<typeof loader>();
 
   if (!kitchenUser) {
     return (
       <div className="sj-page">
-        <section className="mx-auto grid min-h-[calc(100svh-3.5rem)] max-w-[96rem] lg:grid-cols-[minmax(0,0.78fr)_minmax(38rem,1.22fr)]">
-          <div className="flex flex-col justify-center px-5 pb-28 pt-12 sm:px-8 lg:px-12 lg:py-12">
-            <div className="max-w-2xl">
-              <div className="sj-eyebrow">
-                <Sparkles className="size-3.5" aria-hidden="true" />
-                Family recipe OS
-              </div>
-              <Heading level={1} className="mt-6 max-w-2xl text-5xl/13 tracking-[-0.04em] sm:text-7xl/18">
-                Your food should look as good as it tastes.
-              </Heading>
-              <Text className="mt-6 max-w-xl text-lg/8">
-                Spoonjoy is a photo-first kitchen for the recipes you actually cook, the notes you learn by doing, and the cookbooks that grow out of real meals.
-              </Text>
-              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                <Link
-                  href="/signup"
-                  className="font-sj-ui inline-flex items-center justify-center rounded-[var(--sj-radius-control)] border border-[var(--sj-ink)] bg-[var(--sj-ink)] px-4 py-2.5 text-sm font-semibold text-[var(--sj-paper)] no-underline transition hover:-translate-y-0.5 hover:border-[var(--sj-tomato)] hover:bg-[var(--sj-tomato)]"
-                >
-                  Start Your Kitchen
-                </Link>
-                <Link
-                  href="/login"
-                  className="font-sj-ui inline-flex items-center justify-center rounded-[var(--sj-radius-control)] border border-[var(--sj-border)] bg-[var(--sj-panel-solid)] px-4 py-2.5 text-sm font-semibold text-[var(--sj-ink)] no-underline transition hover:-translate-y-0.5 hover:bg-[var(--sj-flour)]"
-                >
-                  Log In
-                </Link>
-                <Link
-                  href="/search"
-                  className="font-sj-ui inline-flex items-center justify-center gap-2 rounded-[var(--sj-radius-control)] border border-[var(--sj-border-strong)] bg-transparent px-4 py-2.5 text-sm font-semibold text-[var(--sj-ink)] no-underline transition hover:-translate-y-0.5 hover:border-[var(--sj-herb)] hover:bg-[color-mix(in_srgb,var(--sj-herb)_10%,transparent)]"
-                >
-                  <SearchIcon className="size-4" aria-hidden="true" />
-                  Search Recipes
-                </Link>
-              </div>
+        <section className="relative min-h-[92svh] overflow-hidden">
+          <img
+            src={LANDING_FOOD_PHOTOS[2].src}
+            alt={LANDING_FOOD_PHOTOS[2].alt}
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(34,32,28,0.82),rgba(34,32,28,0.34)_58%,rgba(34,32,28,0.10)),linear-gradient(0deg,rgba(34,32,28,0.56),transparent_42%)]" />
+          <div className="relative z-10 flex min-h-[92svh] flex-col justify-end px-5 pb-[calc(9rem+env(safe-area-inset-bottom))] pt-20 sm:px-8 sm:pb-24 lg:px-12 lg:pb-28">
+            <p className="font-sj-ui text-xs font-bold uppercase tracking-[0.2em] text-[var(--sj-on-photo-muted)]">
+              Family recipe OS
+            </p>
+            <Heading level={1} className="mt-5 max-w-4xl text-4xl/10 text-[var(--sj-on-photo)] sm:text-6xl/14 lg:text-7xl/16 xl:text-8xl/20">
+              Your food should look as good as it tastes.
+            </Heading>
+            <Text className="mt-5 max-w-2xl text-lg/8 text-[var(--sj-on-photo-muted)]">
+              Spoonjoy is a photo-first kitchen for the recipes you actually cook, the notes you learn by doing, and the cookbooks that grow out of real meals.
+            </Text>
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+              <Button href="/signup">Start Your Kitchen</Button>
+              <Button href="/login" plain>Log In</Button>
+              <Button href="/search" plain>
+                <SearchIcon data-slot="icon" className="size-4" aria-hidden="true" />
+                Search Recipes
+              </Button>
             </div>
-
-            <dl className="mt-12 hidden gap-5 border-t border-[var(--sj-border)] pt-6 sm:grid sm:grid-cols-3">
-              {[
-                ["Collect", "Write recipes with the context future-you needs."],
-                ["Cook", "Log the dishes you made and what changed."],
-                ["Share", "Open a kitchen without turning dinner into social media."],
-              ].map(([title, copy]) => (
-                <div key={title} className="border-l border-[var(--sj-border)] pl-4">
-                  <dt className="font-sj-ui text-sm font-semibold uppercase tracking-[0.14em] text-[var(--sj-ink)]">{title}</dt>
-                  <dd className="mt-2 text-sm/6 text-[var(--sj-ink-soft)]">{copy}</dd>
-                </div>
-              ))}
-            </dl>
           </div>
+        </section>
 
-          <aside className="sj-dark-canvas relative mt-36 min-h-[42rem] overflow-hidden lg:mt-0 lg:min-h-[calc(100svh-3.5rem)]">
-            <div className="grid h-full min-h-[42rem] grid-cols-6 grid-rows-[1fr_0.72fr] gap-3 p-3 sm:gap-4 sm:p-5 lg:p-8">
-              <figure className="sj-food-photo col-span-6 rounded-[var(--sj-radius-hero)]">
-                <img src={LANDING_FOOD_PHOTOS[0].src} alt={LANDING_FOOD_PHOTOS[0].alt} />
-                <figcaption className="absolute inset-x-0 bottom-0 z-10 p-5 sm:p-7">
-                  <p className="sj-kicker-dark">Phone to editorial</p>
-                  <h2 className="font-sj-display sj-on-photo mt-4 max-w-xl text-4xl/10 font-semibold tracking-[-0.03em] sm:text-6xl/15">
-                    Classic Margherita Pizza
-                  </h2>
-                  <p className="sj-dark-muted mt-3 max-w-lg text-base/7">
-                    Same plate, same table, same dinner. Just lit like it deserves to be remembered.
-                  </p>
-                </figcaption>
-              </figure>
-
-              <figure className="sj-photo-tile col-span-3 rounded-[var(--sj-radius-photo)]">
-                <img src={LANDING_FOOD_PHOTOS[1].src} alt={LANDING_FOOD_PHOTOS[1].alt} />
-                <figcaption className="absolute inset-x-0 bottom-0 z-10 p-4">
-                  <p className="font-sj-ui sj-on-photo text-xs font-semibold uppercase tracking-[0.14em]">Cookbooks</p>
-                  <p className="sj-dark-muted mt-1 text-sm/5">Collections with memory.</p>
-                </figcaption>
-              </figure>
-
-              <figure className="sj-photo-tile col-span-3 rounded-[var(--sj-radius-photo)]">
-                <img src={LANDING_FOOD_PHOTOS[2].src} alt={LANDING_FOOD_PHOTOS[2].alt} />
-                <figcaption className="absolute inset-x-0 bottom-0 z-10 p-4">
-                  <p className="font-sj-ui sj-on-photo text-xs font-semibold uppercase tracking-[0.14em]">Personal kitchens</p>
-                  <p className="sj-dark-muted mt-1 text-sm/5">A home for every chef.</p>
-                </figcaption>
-              </figure>
+        <section className="mx-auto grid max-w-6xl gap-6 px-5 py-10 sm:grid-cols-3 sm:px-8 lg:px-12">
+          {[
+            ["Collect", "Write recipes with the context future-you needs."],
+            ["Cook", "Log the dishes you made and what changed."],
+            ["Share", "Open a kitchen without turning dinner into social media."],
+          ].map(([title, copy]) => (
+            <div key={title} className="border-t border-[var(--sj-border)] pt-5">
+              <h2 className="font-sj-ui text-sm font-semibold uppercase tracking-[0.14em] text-[var(--sj-ink)]">{title}</h2>
+              <p className="mt-2 text-sm/6 text-[var(--sj-ink-soft)]">{copy}</p>
             </div>
-          </aside>
+          ))}
         </section>
       </div>
     );
   }
 
   const heading = isOwner ? "My Kitchen" : `${kitchenUser.username}'s Kitchen`;
+  const featuredRecipe = recipes[0] ?? null;
+  const indexedRecipes = featuredRecipe ? recipes.slice(1) : recipes;
 
   return (
-    <div className="sj-page px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
-      <section className="mx-auto max-w-7xl">
-        <header className="grid gap-5 border-b border-[var(--sj-border)] pb-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
-          <div className="flex items-center gap-3">
+    <CookbookPage>
+      <section>
+        <header className="grid gap-6 border-y border-[var(--sj-border-strong)] py-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+          <div className="flex items-end gap-4">
             <Avatar
-              src={kitchenUser.photoUrl ?? DEFAULT_CHEF_AVATAR}
+              src={resolveChefAvatarUrl(kitchenUser.photoUrl)}
               alt={kitchenUser.username}
-              className="size-16 border border-[var(--sj-border)] shadow-[var(--sj-shadow-soft)]"
+              className="size-16 border border-[var(--sj-border)] shadow-[var(--sj-shadow-soft)] sm:size-20"
             />
             <div>
-              <p className="sj-eyebrow">Kitchen</p>
-              <Heading level={1} className="mt-2 text-4xl/11 tracking-[-0.04em]">{heading}</Heading>
-              <Text className="mt-1 text-sm">
+              <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.22em] text-[var(--sj-brass)]">Kitchen</p>
+              <Heading level={1} className="mt-1 text-5xl/13 tracking-[-0.04em] sm:text-6xl/15">{heading}</Heading>
+              <Text className="mt-2 text-sm">
                 {recipes.length} {recipes.length === 1 ? "recipe" : "recipes"} and {cookbooks.length} {cookbooks.length === 1 ? "cookbook" : "cookbooks"}
               </Text>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <Button href="/search" plain>
-              <SearchIcon data-slot="icon" className="size-4" />
-              Search
-            </Button>
+          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
             {isOwner ? (
-              <>
-                <Button href="/account/settings" plain aria-label="Open settings">
-                  <Settings data-slot="icon" className="size-4" />
-                  Settings
-                </Button>
-                <Form method="post" action="/logout">
-                  <Button type="submit" variant="destructive">Logout</Button>
-                </Form>
-              </>
-            ) : null}
+              <Button href="/recipes/new">
+                <Plus data-slot="icon" className="size-4" />
+                Create Recipe
+              </Button>
+            ) : (
+              <Button href="/search" plain>
+                <SearchIcon data-slot="icon" className="size-4" />
+                Search Recipes
+              </Button>
+            )}
           </div>
         </header>
 
-        <div className="mt-6">
-          <div role="tablist" aria-label="Kitchen sections" className="mb-7 flex items-center gap-2 border-b border-[var(--sj-border)] pb-3">
-            <Link
-              href={tabHref(location.search, "recipes")}
-              role="tab"
-              aria-selected={tab === "recipes"}
-              className={[
-                "font-sj-ui rounded-[var(--sj-radius-control)] border px-3 py-1.5 text-sm font-semibold no-underline transition",
-                tab === "recipes"
-                  ? "border-[var(--sj-ink)] bg-[var(--sj-ink)] text-[var(--sj-paper)]"
-                  : "border-[var(--sj-border)] bg-[var(--sj-panel-solid)] text-[var(--sj-ink-soft)] hover:bg-[var(--sj-flour)]",
-              ].join(" ")}
-            >
-              Recipes
-            </Link>
-            <Link
-              href={tabHref(location.search, "cookbooks")}
-              role="tab"
-              aria-selected={tab === "cookbooks"}
-              className={[
-                "font-sj-ui rounded-[var(--sj-radius-control)] border px-3 py-1.5 text-sm font-semibold no-underline transition",
-                tab === "cookbooks"
-                  ? "border-[var(--sj-ink)] bg-[var(--sj-ink)] text-[var(--sj-paper)]"
-                  : "border-[var(--sj-border)] bg-[var(--sj-panel-solid)] text-[var(--sj-ink-soft)] hover:bg-[var(--sj-flour)]",
-              ].join(" ")}
-            >
-              Cookbooks
-            </Link>
+        <div className="mt-10 grid gap-8 xl:grid-cols-[minmax(0,1.5fr)_minmax(23rem,0.5fr)] xl:items-start">
+          <RecipeLead recipe={featuredRecipe} isOwner={isOwner} />
+          <RecipeIndex recipes={indexedRecipes} isOwner={isOwner} hasLead={Boolean(featuredRecipe)} />
+        </div>
+
+        <CookbookShelf cookbooks={cookbooks} isOwner={isOwner} />
+      </section>
+    </CookbookPage>
+  );
+}
+
+type KitchenRecipe = {
+  id: string;
+  title: string;
+  description: string | null;
+  servings: string | null;
+  coverImageUrl: string | null;
+};
+
+type KitchenCookbook = {
+  id: string;
+  title: string;
+  _count: { recipes: number };
+  recipes: Array<{
+    recipe: {
+      coverImageUrl: string | null;
+      title: string;
+    };
+  }>;
+};
+
+function RecipeLead({ recipe, isOwner }: { recipe: KitchenRecipe | null; isOwner: boolean }) {
+  if (!recipe) {
+    return (
+      <section className="border-y border-dashed border-[var(--sj-border-strong)] py-10">
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(18rem,0.55fr)] lg:items-center">
+          <div className="flex aspect-[16/10] items-center justify-center bg-[color-mix(in_srgb,var(--sj-flour)_58%,transparent)]">
+            <ChefHat className="size-10 text-[var(--sj-brass)]" aria-hidden="true" />
           </div>
-
-          <section role="tabpanel" aria-label="Recipes" hidden={tab !== "recipes"}>
-            <div className="mb-4 flex items-center justify-between">
-              <Subheading level={2} className="text-2xl/8">Recipes</Subheading>
-              {isOwner ? <Button href="/recipes/new">New Recipe</Button> : null}
-            </div>
-
-            {recipes.length === 0 ? (
-              isOwner ? (
-                <div className="rounded-[var(--sj-radius-hero)] border border-dashed border-[var(--sj-brass)] bg-[color-mix(in_srgb,var(--sj-flour)_58%,transparent)] p-8 text-center">
-                  <ChefHat className="mx-auto size-8 text-[var(--sj-brass)]" aria-hidden="true" />
-                  <Subheading level={3} className="mt-3 text-2xl/8">Start your recipe box</Subheading>
-                  <Text className="mx-auto mt-2 max-w-xl">
-                    Capture the dish you make most often, the family classic everyone asks about, or the weeknight save you never want to lose.
-                  </Text>
-                  <div className="mt-5">
-                    <Button href="/recipes/new">Create First Recipe</Button>
-                  </div>
-                </div>
-              ) : (
-                <div className="rounded-[var(--sj-radius-hero)] border border-dashed border-[var(--sj-border-strong)] bg-[var(--sj-panel-solid)] p-8 text-center">
-                  <Text>No public recipes yet.</Text>
-                </div>
-              )
-            ) : (
-              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {recipes.map((recipe) => {
-                  const displayImageUrl = recipe.coverImageUrl && recipe.coverImageUrl.length > 0 ? recipe.coverImageUrl : undefined;
-                  return (
-                    <Link
-                      key={recipe.id}
-                      href={`/recipes/${recipe.id}`}
-                      className="group block no-underline"
-                    >
-                      <div className="sj-photo-tile flex aspect-[4/5] items-center justify-center rounded-[var(--sj-radius-photo)]">
-                        {displayImageUrl ? (
-                          <img src={displayImageUrl} alt={recipe.title} className="h-full w-full object-cover" />
-                        ) : (
-                          <ChefHat className="sj-on-photo size-8" aria-hidden="true" />
-                        )}
-                        <div className="absolute inset-x-0 bottom-0 z-10 p-4">
-                          <h3 className="font-sj-display sj-on-photo line-clamp-2 text-2xl/8 font-semibold tracking-[-0.02em] transition group-hover:text-[var(--sj-on-photo-warm)]">{recipe.title}</h3>
-                          {recipe.description ? (
-                            <p className="sj-on-photo-muted mt-2 line-clamp-2 text-sm/5">{recipe.description}</p>
-                          ) : null}
-                          {recipe.servings ? <p className="font-sj-ui sj-on-photo-soft mt-3 text-xs font-semibold uppercase tracking-[0.14em]">Serves {recipe.servings}</p> : null}
-                        </div>
-                      </div>
-                    </Link>
-                  );
-                })}
+          <div>
+            <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.22em] text-[var(--sj-brass)]">Recipe box</p>
+            <Subheading level={2} className="mt-3 text-3xl/9 tracking-[-0.03em]">Start your recipe box</Subheading>
+            <Text className="mt-3 max-w-md">
+              Capture the dish you make most often, the family classic everyone asks about, or the weeknight save you never want to lose.
+            </Text>
+            {isOwner ? (
+              <div className="mt-6">
+                <Button href="/recipes/new">
+                  <Plus data-slot="icon" className="size-4" />
+                  Create First Recipe
+                </Button>
               </div>
-            )}
-          </section>
-
-          <section role="tabpanel" aria-label="Cookbooks" hidden={tab !== "cookbooks"}>
-            <div className="mb-4 flex items-center justify-between">
-              <Subheading level={2} className="text-2xl/8">Cookbooks</Subheading>
-              {isOwner ? <Button href="/cookbooks/new">New Cookbook</Button> : null}
-            </div>
-
-            {cookbooks.length === 0 ? (
-              isOwner ? (
-                <div className="rounded-[var(--sj-radius-hero)] border border-dashed border-[var(--sj-herb)] bg-[color-mix(in_srgb,var(--sj-mint)_50%,transparent)] p-8 text-center">
-                  <BookOpen className="mx-auto size-8 text-[var(--sj-herb)]" aria-hidden="true" />
-                  <Subheading level={3} className="mt-3 text-2xl/8">Build your first cookbook</Subheading>
-                  <Text className="mx-auto mt-2 max-w-xl">
-                    Group recipes into a holiday menu, a weeknight rotation, or a family collection that grows with every good meal.
-                  </Text>
-                  <div className="mt-5">
-                    <Button href="/cookbooks/new">Create First Cookbook</Button>
-                  </div>
-                </div>
-              ) : (
-                <div className="rounded-[var(--sj-radius-hero)] border border-dashed border-[var(--sj-border-strong)] bg-[var(--sj-panel-solid)] p-8 text-center">
-                  <Text>No public cookbooks yet.</Text>
-                </div>
-              )
             ) : (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {cookbooks.map((cookbook) => (
-                  <CookbookCard
-                    key={cookbook.id}
-                    id={cookbook.id}
-                    title={cookbook.title}
-                    recipeCount={cookbook._count.recipes}
-                    recipeImages={cookbook.recipes.map((item) => ({
-                      coverImageUrl: item.recipe.coverImageUrl,
-                      title: item.recipe.title,
-                    }))}
-                  />
-                ))}
-              </div>
+              <Text className="mt-6 text-sm">No public recipes yet.</Text>
             )}
-          </section>
+          </div>
         </div>
       </section>
-    </div>
+    );
+  }
+
+  const displayImageUrl = recipe.coverImageUrl && recipe.coverImageUrl.length > 0 ? recipe.coverImageUrl : undefined;
+
+  return (
+    <section aria-label="Latest from the kitchen" className="mb-20 border-b border-[var(--sj-border-strong)] pb-8 xl:mb-0">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.08fr)_minmax(17rem,0.42fr)] lg:items-end">
+        <Link
+          href={`/recipes/${recipe.id}`}
+          className="group block overflow-hidden bg-[var(--sj-photo-charcoal)] no-underline"
+          aria-label={recipe.title}
+        >
+          <div className="relative aspect-[16/10]">
+            {displayImageUrl ? (
+              <img src={displayImageUrl} alt={recipe.title} className="h-full w-full object-cover text-[0px] text-transparent transition duration-300 group-hover:scale-[1.015]" />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center bg-[color-mix(in_srgb,var(--sj-flour)_62%,transparent)]">
+                <ChefHat className="size-10 text-[var(--sj-brass)]" aria-hidden="true" />
+              </div>
+            )}
+          </div>
+        </Link>
+
+        <div className="border-l border-[var(--sj-border)] pl-5">
+          <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.22em] text-[var(--sj-brass)]">Latest from the kitchen</p>
+          <Link href={`/recipes/${recipe.id}`} className="block no-underline">
+            <Heading level={2} className="mt-4 text-4xl/11 tracking-[-0.04em] hover:text-[var(--sj-tomato)] sm:text-5xl/13">{recipe.title}</Heading>
+          </Link>
+          {recipe.description ? <Text className="mt-4 max-w-md text-base/7">{recipe.description}</Text> : null}
+          {recipe.servings ? (
+            <p className="font-sj-ui mt-5 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">
+              Serves {recipe.servings}
+            </p>
+          ) : null}
+          <div className="mt-7 hidden flex-wrap gap-2 sm:flex">
+            <Button href={`/recipes/${recipe.id}`}>
+              Open Recipe
+              <ArrowRight data-slot="icon" className="size-4" />
+            </Button>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function RecipeIndex({ recipes, isOwner, hasLead }: { recipes: KitchenRecipe[]; isOwner: boolean; hasLead: boolean }) {
+  return (
+    <aside aria-label="Recipe index" className="xl:max-h-[44rem] xl:overflow-y-auto xl:border-l xl:border-[var(--sj-border)] xl:pl-6 xl:pr-1">
+      <div className="flex items-end justify-between gap-4 border-b border-[var(--sj-border-strong)] pb-3">
+        <div>
+          <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.22em] text-[var(--sj-brass)]">Index</p>
+          <Subheading level={2} className="mt-1 text-2xl/8">Recipe index</Subheading>
+        </div>
+      </div>
+
+      {recipes.length > 0 ? (
+        <div className="divide-y divide-[var(--sj-border)]">
+          {recipes.map((recipe, index) => (
+            <RecipeIndexRow key={recipe.id} recipe={recipe} ordinal={index + 1} />
+          ))}
+        </div>
+      ) : (
+        <div className="py-6">
+          <Text className="text-sm">
+            {hasLead ? "No older recipes yet." : isOwner ? "Your next recipe will appear here after the first one." : "No public recipes yet."}
+          </Text>
+        </div>
+      )}
+    </aside>
+  );
+}
+
+function RecipeIndexRow({ recipe, ordinal }: { recipe: KitchenRecipe; ordinal: number }) {
+  return (
+    <Link href={`/recipes/${recipe.id}`} className="group grid grid-cols-[2.5rem_minmax(0,1fr)] gap-4 py-4 no-underline">
+      <div className="font-sj-ui pt-1 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-brass)]">
+        {String(ordinal).padStart(2, "0")}
+      </div>
+      <div className="min-w-0 self-center">
+        <h3 className="font-sj-display line-clamp-2 text-xl/6 font-semibold tracking-[-0.02em] text-[var(--sj-ink)] group-hover:text-[var(--sj-tomato)]">
+          {recipe.title}
+        </h3>
+        {recipe.description ? <p className="mt-1 line-clamp-2 text-sm/5 text-[var(--sj-ink-soft)]">{recipe.description}</p> : null}
+        {recipe.servings ? (
+          <p className="font-sj-ui mt-2 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--sj-ink-soft)]">Serves {recipe.servings}</p>
+        ) : null}
+      </div>
+    </Link>
+  );
+}
+
+function CookbookShelf({ cookbooks, isOwner }: { cookbooks: KitchenCookbook[]; isOwner: boolean }) {
+  return (
+    <section aria-label="Cookbook shelf" className="mt-12 border-t border-[var(--sj-border-strong)] pt-7">
+      <div className="mb-5 flex items-end justify-between gap-4">
+        <div>
+          <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.22em] text-[var(--sj-brass)]">Shelf</p>
+          <Subheading level={2} className="mt-1 text-2xl/8">Cookbooks</Subheading>
+        </div>
+        {isOwner ? <Button href="/cookbooks/new" plain>New Cookbook</Button> : null}
+      </div>
+
+      {cookbooks.length > 0 ? (
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(10rem,13rem))] gap-4">
+          {cookbooks.map((cookbook) => (
+            <CookbookCover key={cookbook.id} cookbook={cookbook} />
+          ))}
+        </div>
+      ) : (
+        <div className="grid gap-4 border-y border-dashed border-[var(--sj-border-strong)] py-7 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center">
+          <BookOpen className="size-8 text-[var(--sj-action)]" aria-hidden="true" />
+          <div>
+            <Subheading level={3} className="text-2xl/8">{isOwner ? "Build your first cookbook" : "No public cookbooks yet."}</Subheading>
+            <Text className="mt-1 max-w-2xl">
+              {isOwner
+                ? "Group recipes into a holiday menu, a weeknight rotation, or a family collection that grows with every good meal."
+                : "This kitchen has not published a cookbook yet."}
+            </Text>
+          </div>
+          {isOwner ? <Button href="/cookbooks/new">Create First Cookbook</Button> : null}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function CookbookCover({ cookbook }: { cookbook: KitchenCookbook }) {
+  const cover = cookbook.recipes.find((item) => item.recipe.coverImageUrl)?.recipe;
+
+  return (
+    <Link href={`/cookbooks/${cookbook.id}`} className="group block no-underline">
+      <article className="relative flex aspect-[3/4] overflow-hidden border border-[var(--sj-border-strong)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_86%,var(--sj-flour))] shadow-[var(--sj-shadow-soft)] transition group-hover:-translate-y-0.5 group-hover:border-[var(--sj-brass)]">
+        <span className="w-2 shrink-0 bg-[color-mix(in_srgb,var(--sj-charcoal)_24%,var(--sj-brass))]" aria-hidden="true" />
+        <div className="flex min-w-0 flex-1 flex-col p-3">
+          <div className="aspect-[4/3] overflow-hidden rounded-[var(--sj-radius-small)] border border-[var(--sj-border)] bg-[var(--sj-flour)]">
+            {cover?.coverImageUrl ? (
+              <img src={cover.coverImageUrl} alt="" className="h-full w-full object-cover text-[0px] text-transparent transition duration-300 group-hover:scale-[1.025]" />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center">
+                <BookOpen className="size-6 text-[var(--sj-action)]" aria-hidden="true" />
+              </div>
+            )}
+          </div>
+          <div className="mt-auto min-w-0 pt-4">
+            <h3 className="font-sj-display line-clamp-3 text-2xl/7 font-semibold tracking-[-0.02em] text-[var(--sj-ink)] group-hover:text-[var(--sj-tomato)]">
+              {cookbook.title}
+            </h3>
+            <p className="font-sj-ui mt-3 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--sj-ink-soft)]">
+              {cookbook._count.recipes} {cookbook._count.recipes === 1 ? "recipe" : "recipes"}
+            </p>
+          </div>
+        </div>
+      </article>
+    </Link>
   );
 }

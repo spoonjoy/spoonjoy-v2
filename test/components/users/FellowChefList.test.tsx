@@ -79,7 +79,7 @@ describe("FellowChefList", () => {
     expect(screen.getByText("2 spoons · 4 forks · 3 saves")).toBeInTheDocument();
   });
 
-  it("renders Avatar initials fallback when photoUrl is null", () => {
+  it("renders Chef RJ when photoUrl is null", () => {
     renderList([
       row({
         chefId: "u-d",
@@ -88,9 +88,8 @@ describe("FellowChefList", () => {
         interactionCounts: { spoons: 1, forks: 0, cookbookSaves: 0 },
       }),
     ]);
-    // Initials fallback rendered inside Avatar's SVG <title> uses the alt text
-    // and <text> uses the initials.
-    expect(screen.getByText("D")).toBeInTheDocument();
+    const img = screen.getByRole("img", { name: "dakota" });
+    expect(img).toHaveAttribute("src", "/images/chef-rj.png");
   });
 
   it("renders a relative-time suffix for latestInteractionAt", () => {

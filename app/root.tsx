@@ -48,7 +48,7 @@ export function links() {
     { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
     {
       rel: "stylesheet",
-      href: "https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,500..900,50..100,0..1&family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400..800&display=swap",
+      href: "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,420;6..72,580;6..72,680&display=swap",
     },
     { rel: "icon", href: "/logos/sj_black.svg", type: "image/svg+xml" },
     { rel: "apple-touch-icon", href: "/logos/sj_black.svg" },
@@ -117,10 +117,10 @@ function AppNavbar({ userId }: { userId: string | null }) {
               <User data-slot="icon" />
             </NavbarItem>
             <Form method="post" action="/logout" className="m-0">
-              <Button type="submit" variant="destructive">
+              <NavbarItem type="submit" aria-label="Log out">
                 <LogOut data-slot="icon" />
-                Logout
-              </Button>
+                <NavbarLabel className="sr-only">Logout</NavbarLabel>
+              </NavbarItem>
             </Form>
           </NavbarSection>
         </>
@@ -259,7 +259,7 @@ export default function App() {
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta name="theme-color" content="#f4eee1" />
+        <meta name="theme-color" content="#fbfaf6" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <Meta />

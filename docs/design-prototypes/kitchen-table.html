@@ -1,0 +1,841 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Spoonjoy Kitchen Table Prototypes</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,500..900,60..100,0..1&family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400..800&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bone: #f4eee1;
+        --bone-lift: #fbf7ef;
+        --vellum: #eadfcd;
+        --charcoal: #28231d;
+        --soft: #625a50;
+        --brass: #9b6834;
+        --tomato: #9f432f;
+        --herb: #5f6d49;
+        --line: color-mix(in srgb, var(--charcoal) 22%, transparent);
+        --line-strong: color-mix(in srgb, var(--charcoal) 34%, transparent);
+        --shadow: 0 24px 72px color-mix(in srgb, var(--charcoal) 12%, transparent);
+        --display: "Fraunces", Georgia, serif;
+        --body: "Source Serif 4", Georgia, serif;
+        --ui: "IBM Plex Sans Condensed", "Avenir Next Condensed", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: #211d18;
+        color: var(--charcoal);
+      }
+
+      body {
+        padding: 32px;
+        font-family: var(--body);
+      }
+
+      .shot {
+        position: relative;
+        isolation: isolate;
+        width: 1440px;
+        min-height: 920px;
+        margin: 0 0 40px;
+        overflow: hidden;
+        background:
+          linear-gradient(90deg, color-mix(in srgb, var(--charcoal) 5%, transparent) 1px, transparent 1px),
+          linear-gradient(0deg, color-mix(in srgb, var(--charcoal) 4%, transparent) 1px, transparent 1px),
+          radial-gradient(circle at 80% 0%, color-mix(in srgb, var(--bone-lift) 74%, transparent), transparent 34rem),
+          var(--bone);
+        background-size: 96px 96px, 96px 96px, auto, auto;
+      }
+
+      .inner {
+        padding: 28px 40px 44px;
+      }
+
+      .nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 54px;
+        border-bottom: 1px solid var(--line);
+        font-family: var(--ui);
+        font-size: 15px;
+        font-weight: 700;
+        letter-spacing: 0.01em;
+      }
+
+      .brand,
+      .nav-links,
+      .nav-actions {
+        display: flex;
+        align-items: center;
+        gap: 22px;
+      }
+
+      .mark {
+        display: grid;
+        width: 26px;
+        height: 20px;
+        place-items: center;
+        border: 2px solid var(--charcoal);
+        border-radius: 5px 1px 5px 1px;
+        font-family: var(--ui);
+        font-size: 10px;
+        line-height: 1;
+      }
+
+      .icon-link {
+        color: var(--soft);
+      }
+
+      .eyebrow {
+        font-family: var(--ui);
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.28em;
+        text-transform: uppercase;
+        color: var(--brass);
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      .display {
+        font-family: var(--display);
+        font-weight: 800;
+        letter-spacing: -0.04em;
+        color: var(--charcoal);
+      }
+
+      .body-copy {
+        max-width: 34ch;
+        color: var(--soft);
+        font-size: 20px;
+        line-height: 1.45;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 40px;
+        gap: 8px;
+        border: 1px solid var(--charcoal);
+        border-radius: 999px;
+        background: var(--charcoal);
+        color: var(--bone);
+        font-family: var(--ui);
+        font-size: 15px;
+        font-weight: 700;
+        padding: 0 18px;
+        box-shadow: 0 16px 32px color-mix(in srgb, var(--charcoal) 14%, transparent);
+      }
+
+      .ghost-pill {
+        border-color: var(--line);
+        background: color-mix(in srgb, var(--bone-lift) 82%, transparent);
+        color: var(--charcoal);
+      }
+
+      .photo {
+        overflow: hidden;
+        border: 1px solid var(--line-strong);
+        border-radius: 8px;
+        background-color: #211d18;
+        background-position: center;
+        background-size: cover;
+        box-shadow: var(--shadow);
+      }
+
+      .kitchen .masthead {
+        display: grid;
+        grid-template-columns: 72px minmax(0, 1fr) auto;
+        align-items: end;
+        gap: 22px;
+        padding: 34px 0 28px;
+        border-block: 1px solid var(--line-strong);
+      }
+
+      .avatar {
+        width: 72px;
+        height: 72px;
+        border: 1px solid var(--line-strong);
+        border-radius: 999px;
+        background: url("../../public/images/chef-rj.png") center / cover, var(--vellum);
+        box-shadow: var(--shadow);
+      }
+
+      .kitchen h1 {
+        font-size: 72px;
+        line-height: 0.9;
+      }
+
+      .kitchen .spread {
+        display: grid;
+        grid-template-columns: minmax(0, 1.42fr) minmax(300px, 0.62fr);
+        gap: 32px;
+        padding-top: 40px;
+      }
+
+      .lead-block {
+        display: grid;
+        grid-template-columns: minmax(0, 1.04fr) minmax(250px, 0.46fr);
+        align-items: end;
+        gap: 24px;
+        padding-bottom: 30px;
+        border-bottom: 1px solid var(--line-strong);
+      }
+
+      .lead-photo {
+        aspect-ratio: 16 / 10;
+        background-image: url("https://images.unsplash.com/photo-1455619452474-d2be8b1e70cd?auto=format&fit=crop&w=1400&q=86");
+      }
+
+      .lead-copy {
+        border-left: 1px solid var(--line);
+        padding-left: 22px;
+      }
+
+      .lead-copy h2 {
+        margin-top: 20px;
+        font-size: 58px;
+        line-height: 0.98;
+      }
+
+      .meta {
+        margin-top: 22px;
+        font-family: var(--ui);
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--soft);
+      }
+
+      .index {
+        border-left: 1px solid var(--line);
+        padding-left: 24px;
+      }
+
+      .index-head {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        padding-bottom: 14px;
+        border-bottom: 1px solid var(--line-strong);
+      }
+
+      .index h3,
+      .shelf h3 {
+        margin-top: 6px;
+        font-family: var(--display);
+        font-size: 22px;
+        line-height: 1;
+      }
+
+      .row {
+        display: grid;
+        grid-template-columns: 42px minmax(0, 1fr);
+        gap: 14px;
+        padding: 17px 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .num {
+        padding-top: 4px;
+        font-family: var(--ui);
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.16em;
+        color: var(--brass);
+      }
+
+      .row-title {
+        font-family: var(--display);
+        font-size: 25px;
+        font-weight: 800;
+        line-height: 1.08;
+        letter-spacing: -0.025em;
+      }
+
+      .row-copy {
+        margin-top: 5px;
+        color: var(--soft);
+        font-size: 16px;
+        line-height: 1.25;
+      }
+
+      .shelf {
+        margin-top: 48px;
+        padding-top: 26px;
+        border-top: 1px solid var(--line-strong);
+      }
+
+      .covers {
+        display: flex;
+        gap: 18px;
+        margin-top: 22px;
+      }
+
+      .cover {
+        position: relative;
+        width: 204px;
+        aspect-ratio: 3 / 4;
+        border: 1px solid var(--line-strong);
+        background: color-mix(in srgb, var(--bone-lift) 86%, var(--vellum));
+        box-shadow: var(--shadow);
+        padding: 14px 14px 20px 24px;
+      }
+
+      .cover::before {
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: 9px;
+        content: "";
+        background: color-mix(in srgb, var(--charcoal) 24%, var(--brass));
+      }
+
+      .cover-photo {
+        height: 104px;
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        background-position: center;
+        background-size: cover;
+      }
+
+      .cover h4 {
+        margin: 42px 0 0;
+        font-family: var(--display);
+        font-size: 32px;
+        line-height: 0.96;
+        letter-spacing: -0.035em;
+      }
+
+      .recipe .layout {
+        display: grid;
+        grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+        min-height: 866px;
+      }
+
+      .recipe-photo {
+        min-height: 866px;
+        border-radius: 0;
+        border: 0;
+        background-image:
+          linear-gradient(180deg, transparent 48%, color-mix(in srgb, #211d18 82%, transparent)),
+          url("https://images.unsplash.com/photo-1574071318508-1cdbab80d002?auto=format&fit=crop&w=1400&q=86");
+      }
+
+      .recipe-panel {
+        padding: 42px 50px;
+      }
+
+      .recipe h1 {
+        margin-top: 38px;
+        font-size: 88px;
+        line-height: 0.86;
+      }
+
+      .recipe-actions {
+        display: flex;
+        gap: 10px;
+        margin-top: 28px;
+      }
+
+      .provenance {
+        margin-top: 20px;
+        padding-left: 18px;
+        border-left: 3px solid var(--brass);
+        color: var(--soft);
+        font-size: 19px;
+        line-height: 1.4;
+      }
+
+      .recipe-grid {
+        display: grid;
+        grid-template-columns: 260px minmax(0, 1fr);
+        gap: 34px;
+        margin-top: 48px;
+        border-top: 1px solid var(--line-strong);
+        padding-top: 30px;
+      }
+
+      .receipt {
+        border: 1px solid var(--line-strong);
+        background:
+          linear-gradient(180deg, color-mix(in srgb, var(--bone-lift) 96%, transparent), color-mix(in srgb, var(--vellum) 48%, transparent)),
+          repeating-linear-gradient(0deg, transparent 0 31px, color-mix(in srgb, var(--line) 60%, transparent) 32px);
+        padding: 20px;
+      }
+
+      .receipt ul,
+      .method ol,
+      .results ul,
+      .grocery ul {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .receipt li,
+      .grocery li {
+        display: flex;
+        justify-content: space-between;
+        gap: 14px;
+        padding: 9px 0;
+        border-bottom: 1px solid color-mix(in srgb, var(--line) 65%, transparent);
+        font-size: 17px;
+      }
+
+      .method li {
+        display: grid;
+        grid-template-columns: 42px minmax(0, 1fr);
+        gap: 20px;
+        padding: 0 0 26px;
+      }
+
+      .method .step {
+        font-family: var(--display);
+        font-size: 34px;
+        font-weight: 800;
+        color: var(--brass);
+      }
+
+      .method h3 {
+        margin: 0 0 8px;
+        font-family: var(--display);
+        font-size: 30px;
+        letter-spacing: -0.025em;
+      }
+
+      .method p {
+        color: var(--soft);
+        font-size: 19px;
+        line-height: 1.42;
+      }
+
+      .search .top {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 330px;
+        gap: 34px;
+        padding: 36px 0 28px;
+        border-bottom: 1px solid var(--line-strong);
+      }
+
+      .search h1 {
+        margin-top: 12px;
+        font-size: 84px;
+        line-height: 0.88;
+      }
+
+      .search-field {
+        display: flex;
+        align-items: center;
+        height: 72px;
+        margin-top: 30px;
+        border: 1px solid var(--line-strong);
+        border-radius: 8px;
+        background: color-mix(in srgb, var(--bone-lift) 82%, transparent);
+        padding: 0 22px;
+        font-family: var(--display);
+        font-size: 34px;
+        letter-spacing: -0.03em;
+      }
+
+      .results {
+        display: grid;
+        grid-template-columns: 220px minmax(0, 1fr);
+        gap: 36px;
+        padding-top: 32px;
+      }
+
+      .rail {
+        border-right: 1px solid var(--line);
+        padding-right: 24px;
+        font-family: var(--ui);
+        font-size: 15px;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+
+      .rail div {
+        display: flex;
+        justify-content: space-between;
+        padding: 13px 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .result-row {
+        display: grid;
+        grid-template-columns: 110px minmax(0, 1fr) 160px;
+        gap: 22px;
+        padding: 18px 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .thumb {
+        height: 76px;
+        border-radius: 4px;
+        border: 1px solid var(--line);
+        background-position: center;
+        background-size: cover;
+      }
+
+      .result-row h2 {
+        font-family: var(--display);
+        font-size: 33px;
+        line-height: 0.98;
+        letter-spacing: -0.03em;
+      }
+
+      .result-row p {
+        margin-top: 6px;
+        color: var(--soft);
+        font-size: 17px;
+      }
+
+      .tag {
+        align-self: start;
+        justify-self: end;
+        border: 1px solid color-mix(in srgb, var(--brass) 45%, var(--line));
+        border-radius: 999px;
+        color: var(--brass);
+        font-family: var(--ui);
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        padding: 5px 10px;
+        text-transform: uppercase;
+      }
+
+      .phone-shot {
+        width: 393px;
+        min-height: 852px;
+        padding: 22px 22px 118px;
+      }
+
+      .phone-shot .mini-nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding-bottom: 18px;
+        border-bottom: 1px solid var(--line-strong);
+        font-family: var(--ui);
+        font-weight: 700;
+      }
+
+      .phone-shot h1 {
+        margin-top: 28px;
+        font-size: 46px;
+        line-height: 0.9;
+      }
+
+      .timer {
+        margin-top: 18px;
+        border-block: 1px solid var(--line-strong);
+        padding: 14px 0;
+        font-family: var(--ui);
+        font-size: 15px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .step-card {
+        margin-top: 18px;
+        border-left: 3px solid var(--brass);
+        padding-left: 18px;
+      }
+
+      .step-card h2 {
+        font-family: var(--display);
+        font-size: 34px;
+        line-height: 0.98;
+        letter-spacing: -0.035em;
+      }
+
+      .step-card p {
+        margin-top: 14px;
+        color: var(--soft);
+        font-size: 20px;
+        line-height: 1.36;
+      }
+
+      .cook-photo {
+        height: 150px;
+        margin-top: 20px;
+        background-image: url("https://images.unsplash.com/photo-1455619452474-d2be8b1e70cd?auto=format&fit=crop&w=900&q=86");
+      }
+
+      .dock {
+        position: absolute;
+        inset: auto 20px 20px;
+        display: grid;
+        grid-template-columns: 1fr 74px 1fr;
+        align-items: center;
+        height: 76px;
+        border: 1px solid color-mix(in srgb, var(--bone) 30%, transparent);
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--charcoal) 88%, transparent);
+        color: var(--bone);
+        font-family: var(--ui);
+        font-size: 14px;
+        font-weight: 700;
+        text-align: center;
+        box-shadow: 0 18px 40px color-mix(in srgb, var(--charcoal) 30%, transparent);
+      }
+
+      .dock-center {
+        display: grid;
+        width: 74px;
+        height: 74px;
+        place-items: center;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--bone) 13%, transparent);
+        font-family: var(--display);
+        font-size: 26px;
+      }
+
+      .grocery h1 {
+        font-size: 48px;
+      }
+
+      .store-tabs {
+        display: flex;
+        gap: 8px;
+        margin-top: 18px;
+      }
+
+      .store-tabs span {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 7px 11px;
+        font-family: var(--ui);
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      .store-tabs span:first-child {
+        border-color: var(--charcoal);
+        background: var(--charcoal);
+        color: var(--bone);
+      }
+
+      .grocery-section {
+        margin-top: 22px;
+      }
+
+      .grocery-section h2 {
+        margin-bottom: 8px;
+        font-family: var(--ui);
+        font-size: 15px;
+        font-weight: 700;
+        letter-spacing: 0.2em;
+        color: var(--brass);
+        text-transform: uppercase;
+      }
+
+      .check {
+        display: inline-grid;
+        width: 24px;
+        height: 24px;
+        margin-right: 10px;
+        place-items: center;
+        border: 1px solid var(--line-strong);
+        border-radius: 999px;
+        font-family: var(--ui);
+        font-size: 13px;
+      }
+
+      .done {
+        color: color-mix(in srgb, var(--soft) 58%, transparent);
+        text-decoration: line-through;
+      }
+    </style>
+  </head>
+  <body>
+    <section id="prototype-kitchen" class="shot kitchen">
+      <div class="inner">
+        <nav class="nav">
+          <div class="brand"><span class="mark">SJ</span><span>Spoonjoy</span></div>
+          <div class="nav-links"><span>Search</span><span>Recipes</span><span>Cookbooks</span><span>List</span></div>
+          <div class="nav-actions"><span class="icon-link">Display</span><span class="icon-link">Account</span></div>
+        </nav>
+        <header class="masthead">
+          <div class="avatar"></div>
+          <div>
+            <div class="eyebrow">Kitchen</div>
+            <h1 class="display">My Kitchen</h1>
+            <p class="body-copy">10 recipes and 2 cookbooks</p>
+          </div>
+          <span class="pill">+ Create Recipe</span>
+        </header>
+        <main class="spread">
+          <div>
+            <section class="lead-block">
+              <div class="photo lead-photo"></div>
+              <div class="lead-copy">
+                <div class="eyebrow">Latest from the kitchen</div>
+                <h2 class="display">Thai Green Curry</h2>
+                <p class="body-copy" style="margin-top: 22px">Aromatic coconut curry with tender chicken and vegetables. Restaurant-quality Thai food at home.</p>
+                <p class="meta">Serves 4 servings</p>
+                <span class="pill" style="margin-top: 28px">Open Recipe -></span>
+              </div>
+            </section>
+            <section class="shelf">
+              <div class="eyebrow">Shelf</div>
+              <h3>Cookbooks</h3>
+              <div class="covers">
+                <article class="cover">
+                  <div class="cover-photo" style="background-image: url('https://images.unsplash.com/photo-1574071318508-1cdbab80d002?auto=format&fit=crop&w=800&q=86')"></div>
+                  <h4>Italian Favorites</h4>
+                  <p class="meta">2 recipes</p>
+                </article>
+                <article class="cover">
+                  <div class="cover-photo" style="background-image: url('https://images.unsplash.com/photo-1615870216519-2f9fa575fa5c?auto=format&fit=crop&w=800&q=86')"></div>
+                  <h4>Party Appetizers</h4>
+                  <p class="meta">1 recipe</p>
+                </article>
+              </div>
+            </section>
+          </div>
+          <aside class="index">
+            <div class="index-head"><div><div class="eyebrow">Index</div><h3>Recipe index</h3></div><span class="meta">New +</span></div>
+            <div class="row"><div class="num">01</div><div><div class="row-title">Eggs Benedict</div><p class="row-copy">Poached eggs, Canadian bacon, and hollandaise.</p><p class="meta">Serves 4</p></div></div>
+            <div class="row"><div class="num">02</div><div><div class="row-title">Classic Margherita Pizza</div><p class="row-copy">Tomatoes, mozzarella, basil, and a hot oven.</p><p class="meta">Serves 2</p></div></div>
+            <div class="row"><div class="num">03</div><div><div class="row-title">Pan-Seared Salmon</div><p class="row-copy">Crispy skin, lemon butter, ready in 20 minutes.</p><p class="meta">Serves 2</p></div></div>
+            <div class="row"><div class="num">04</div><div><div class="row-title">Mushroom Risotto</div><p class="row-copy">Slow rice, wine, stock, and patience.</p><p class="meta">Serves 6</p></div></div>
+            <div class="row"><div class="num">05</div><div><div class="row-title">Fresh Guacamole</div><p class="row-copy">Avocado, lime, cilantro, jalapeno.</p><p class="meta">Serves 6</p></div></div>
+          </aside>
+        </main>
+      </div>
+    </section>
+
+    <section id="prototype-recipe" class="shot recipe">
+      <div class="layout">
+        <div class="photo recipe-photo"></div>
+        <main class="recipe-panel">
+          <nav class="nav" style="height: 40px"><div class="brand"><span class="mark">SJ</span><span>Recipe</span></div><div class="nav-actions"><span>Fork</span><span>Spoon</span><span>Save</span></div></nav>
+          <div class="eyebrow" style="margin-top: 42px">Origin recipe</div>
+          <h1 class="display">Classic Margherita Pizza</h1>
+          <p class="provenance">Imported from Naples notes. Forked twice. Last cooked by @demo_chef on May 22.</p>
+          <div class="recipe-actions"><span class="pill">Spoon this</span><span class="pill ghost-pill">Fork</span><span class="pill ghost-pill">Save</span></div>
+          <section class="recipe-grid">
+            <aside class="receipt">
+              <div class="eyebrow">Ingredients</div>
+              <ul style="margin-top: 16px">
+                <li><span>Pizza dough</span><strong>1 ball</strong></li>
+                <li><span>San Marzano tomatoes</span><strong>1 cup</strong></li>
+                <li><span>Fresh mozzarella</span><strong>6 oz</strong></li>
+                <li><span>Basil leaves</span><strong>12</strong></li>
+                <li><span>Olive oil</span><strong>2 tbsp</strong></li>
+              </ul>
+            </aside>
+            <ol class="method">
+              <li><div class="step">01</div><div><h3>Heat the stone</h3><p>Put the stone on the highest rack and give the oven a full 45 minutes at 550F. The crust needs stored heat, not just hot air.</p></div></li>
+              <li><div class="step">02</div><div><h3>Dress lightly</h3><p>Crush tomatoes by hand, tear the mozzarella, and keep the center sparse so the dough does not steam.</p></div></li>
+              <li><div class="step">03</div><div><h3>Finish with basil</h3><p>Slide, blister, and add basil after the bake so it perfumes the pizza without burning.</p></div></li>
+            </ol>
+          </section>
+        </main>
+      </div>
+    </section>
+
+    <section id="prototype-search" class="shot search">
+      <div class="inner">
+        <nav class="nav"><div class="brand"><span class="mark">SJ</span><span>Spoonjoy</span></div><div class="nav-links"><span>Recipes</span><span>Cookbooks</span><span>Chefs</span></div></nav>
+        <header class="top">
+          <div>
+            <div class="eyebrow">Kitchen index</div>
+            <h1 class="display">Find the thing you meant to cook.</h1>
+            <div class="search-field">tomato basil</div>
+          </div>
+          <div class="receipt">
+            <div class="eyebrow">Quick filters</div>
+            <ul style="margin-top: 14px">
+              <li><span>Ready tonight</span><strong>18</strong></li>
+              <li><span>From my cookbooks</span><strong>6</strong></li>
+              <li><span>Recently spooned</span><strong>4</strong></li>
+              <li><span>Needs groceries</span><strong>9</strong></li>
+            </ul>
+          </div>
+        </header>
+        <main class="results">
+          <aside class="rail"><div><span>Recipes</span><span>24</span></div><div><span>Cookbooks</span><span>3</span></div><div><span>Chefs</span><span>5</span></div><div><span>Lists</span><span>7</span></div></aside>
+          <section>
+            <article class="result-row"><div class="thumb" style="background-image: url('https://images.unsplash.com/photo-1574071318508-1cdbab80d002?auto=format&fit=crop&w=500&q=86')"></div><div><h2>Classic Margherita Pizza</h2><p>@demo_chef - tomatoes, basil, mozzarella - spooned 3 times</p></div><span class="tag">Recipe</span></article>
+            <article class="result-row"><div class="thumb" style="background-image: url('https://images.unsplash.com/photo-1615870216519-2f9fa575fa5c?auto=format&fit=crop&w=500&q=86')"></div><div><h2>Fresh Tomato Guacamole</h2><p>@chef_julia - lime, cilantro, cherry tomatoes - added to Party Appetizers</p></div><span class="tag">Recipe</span></article>
+            <article class="result-row"><div class="thumb" style="background-image: url('https://images.unsplash.com/photo-1467003909585-2f8a72700288?auto=format&fit=crop&w=500&q=86')"></div><div><h2>Italian Favorites</h2><p>Cookbook - 12 recipes - pizza, pasta, sauces, late summer tomatoes</p></div><span class="tag">Cookbook</span></article>
+            <article class="result-row"><div class="thumb" style="background-image: url('../../public/images/chef-rj.png')"></div><div><h2>@chef_julia</h2><p>Fellow chef - 8 recipes you have cooked or saved</p></div><span class="tag">Chef</span></article>
+          </section>
+        </main>
+      </div>
+    </section>
+
+    <section id="prototype-cooking" class="shot phone-shot cooking">
+      <div class="mini-nav"><span>Thai Green Curry</span><span>Step 3 of 7</span></div>
+      <h1 class="display">Bloom the curry paste.</h1>
+      <div class="timer">Medium heat - 3 minutes</div>
+      <div class="photo cook-photo"></div>
+      <section class="step-card">
+        <div class="eyebrow">Do this now</div>
+        <h2>Stir until the oil turns green at the edges.</h2>
+        <p>The paste should smell rounded and spicy, not raw. If it darkens too fast, pull the pan off heat for ten seconds.</p>
+      </section>
+      <aside class="receipt" style="margin-top: 26px">
+        <div class="eyebrow">Needed now</div>
+        <ul style="margin-top: 10px">
+          <li><span>Curry paste</span><strong>3 tbsp</strong></li>
+          <li><span>Coconut cream</span><strong>1/2 cup</strong></li>
+        </ul>
+      </aside>
+      <div class="dock"><span>Back</span><span class="dock-center">SJ</span><span>Next</span></div>
+    </section>
+
+    <section id="prototype-grocery" class="shot phone-shot grocery">
+      <div class="mini-nav"><span>Shopping List</span><span>12 items</span></div>
+      <h1 class="display">Union Market run.</h1>
+      <div class="store-tabs"><span>All</span><span>Produce</span><span>Dairy</span><span>Pantry</span></div>
+      <section class="grocery-section">
+        <h2>Produce</h2>
+        <ul>
+          <li><span><span class="check"></span>Basil</span><strong>1 bunch</strong></li>
+          <li><span><span class="check"></span>Cherry tomatoes</span><strong>2 pints</strong></li>
+          <li class="done"><span><span class="check">x</span>Limes</span><strong>4</strong></li>
+        </ul>
+      </section>
+      <section class="grocery-section">
+        <h2>Dairy</h2>
+        <ul>
+          <li><span><span class="check"></span>Fresh mozzarella</span><strong>8 oz</strong></li>
+          <li><span><span class="check"></span>Butter</span><strong>1 lb</strong></li>
+        </ul>
+      </section>
+      <section class="grocery-section">
+        <h2>Pantry</h2>
+        <ul>
+          <li><span><span class="check"></span>Arborio rice</span><strong>2 cups</strong></li>
+          <li><span><span class="check"></span>San Marzano tomatoes</span><strong>1 can</strong></li>
+        </ul>
+      </section>
+      <div class="dock"><span>Add</span><span class="dock-center">SJ</span><span>Cook</span></div>
+    </section>
+  </body>
+</html>

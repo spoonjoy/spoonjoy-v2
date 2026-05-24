@@ -19,7 +19,9 @@ import { Field, Label } from "~/components/ui/fieldset";
 import { Select } from "~/components/ui/select";
 import { Link } from "~/components/ui/link";
 import { ConfirmationDialog } from "~/components/confirmation-dialog";
-import { INGREDIENT_ICON_COMPONENTS, resolveIngredientAffordance } from "~/lib/ingredient-affordances";
+import { resolveIngredientAffordance } from "~/lib/ingredient-affordances";
+import { CookbookPage, CookbookHeader, CookbookSectionTitle, RuledEmptyState } from "~/components/cookbook/page";
+import { ChecklistRow } from "~/components/shopping/checklist-row";
 
 export { __internal__, parseShoppingItemFallback };
 
@@ -56,6 +58,10 @@ export function resolveSwipeAction(offsetX: number, isRevealed: boolean): SwipeA
 
 export function shouldDeleteOnSwipe(offsetX: number, isRevealed = false) {
   return resolveSwipeAction(offsetX, isRevealed) === "confirmDelete";
+}
+
+function amountLabel(item: { quantity: number | string | null; unit?: { name: string } | null }) {
+  return [item.quantity, item.unit?.name].filter(Boolean).join(" ").trim();
 }
 
 export default function ShoppingList() {
@@ -142,56 +148,56 @@ export default function ShoppingList() {
   };
 
   return (
-    <div className="sj-page px-4 py-8 sm:px-6 sm:py-12">
+    <CookbookPage>
       <div className="mx-auto max-w-4xl">
-      {/* Header */}
-      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="sj-eyebrow">Market run</p>
-          <Heading level={1} className="mt-4 text-4xl/11 tracking-[-0.04em] sm:text-6xl/15">Shopping List</Heading>
-          <Text className="mt-2 text-base/7">
+      <CookbookHeader
+        eyebrow="Market run"
+        title="Shopping list"
+        action={(
+          <>
+            <Link href="/" className="sj-link self-center">Kitchen</Link>
+            {/* istanbul ignore next -- @preserve */ checkedCount > 0 && (
+              <Form method="post">
+                <input type="hidden" name="intent" value="clearCompleted" />
+                <Button type="submit" plain>
+                  Clear checked
+                </Button>
+              </Form>
+            )}
+            {/* istanbul ignore next -- @preserve */ displayItems.length > 0 && (
+              <>
+                <Button
+                  variant="destructive"
+                  onClick={() => setShowClearDialog(true)}
+                >
+                  Clear all
+                </Button>
+                <ConfirmationDialog
+                  open={showClearDialog}
+                  onClose={() => setShowClearDialog(false)}
+                  onConfirm={handleClearAllConfirm}
+                  title="Start fresh?"
+                  description="All items will be cleared from your shopping list."
+                  confirmLabel="Clear all"
+                  cancelLabel="Keep list"
+                  destructive
+                />
+              </>
+            )}
+          </>
+        )}
+      >
+        <Text>
             {displayItems.length} {displayItems.length === 1 ? "item" : "items"}
             {/* istanbul ignore next -- @preserve */ checkedCount > 0 && (
               <span> ({checkedCount} checked, {uncheckedCount} remaining)</span>
             )}
           </Text>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Link href="/" className="sj-link self-center">Home</Link>
-          {/* istanbul ignore next -- @preserve */ checkedCount > 0 && (
-            <Form method="post">
-              <input type="hidden" name="intent" value="clearCompleted" />
-              <Button type="submit" plain>
-                Clear Completed
-              </Button>
-            </Form>
-          )}
-          {/* istanbul ignore next -- @preserve */ displayItems.length > 0 && (
-            <>
-              <Button
-                variant="destructive"
-                onClick={() => setShowClearDialog(true)}
-              >
-                Clear All
-              </Button>
-              <ConfirmationDialog
-                open={showClearDialog}
-                onClose={() => setShowClearDialog(false)}
-                onConfirm={handleClearAllConfirm}
-                title="Start fresh?"
-                description="All items will be cleared from your shopping list. Your cart will be squeaky clean!"
-                confirmLabel="Clear it all"
-                cancelLabel="Keep my stuff"
-                destructive
-              />
-            </>
-          )}
-        </div>
-      </div>
+      </CookbookHeader>
 
       {/* Add Item Form */}
-      <div className="sj-receipt mb-6 rounded-[2rem] p-6">
-        <Subheading level={2} className="text-2xl/8">Add Item</Subheading>
+      <div id="add-item" className="border-b border-[var(--sj-border)] py-6">
+        <CookbookSectionTitle>Add item</CookbookSectionTitle>
         <Form method="post" className="mt-4">
           <input type="hidden" name="intent" value="addItem" />
           <div className="space-y-4">
@@ -207,7 +213,7 @@ export default function ShoppingList() {
               />
             </Field>
             {actionData?.parseDraft && (
-              <div className="rounded-[1.25rem] border border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_70%,transparent)] p-4">
+              <div className="border-y border-[var(--sj-border)] py-4">
                 <p className="text-sm text-[var(--sj-ink-soft)]">
                   {actionData?.errors?.parse || "Review the parsed item before adding."}
                 </p>
@@ -254,8 +260,8 @@ export default function ShoppingList() {
 
       {/* Add from Recipe */}
       {/* istanbul ignore next -- @preserve */ recipes.length > 0 && (
-        <div className="sj-card mb-6 rounded-[2rem] p-6">
-          <Subheading level={2} className="text-2xl/8">Add All Ingredients from Recipe</Subheading>
+        <div className="border-b border-[var(--sj-border)] py-6">
+          <CookbookSectionTitle>Add from recipe</CookbookSectionTitle>
           <Form method="post" className="mt-4 flex flex-col sm:flex-row gap-4">
             <input type="hidden" name="intent" value="addFromRecipe" />
             <Select name="recipeId" required className="flex-1">
@@ -275,17 +281,14 @@ export default function ShoppingList() {
 
       {/* Empty State */}
       {displayItems.length === 0 ? (
-        <div className="sj-card rounded-[2rem] p-8 text-center">
-          <Subheading level={2} className="text-2xl/8">
-            Your shopping list is empty
-          </Subheading>
+        <RuledEmptyState title="Your shopping list is empty">
           <Text className="mt-2">
             Add items manually or add all ingredients from a recipe
           </Text>
-        </div>
+        </RuledEmptyState>
       ) : (
         /* Item List */
-        <div className="sj-panel rounded-[2rem] p-3">
+        <div className="sj-list-ruled">
           <AnimatePresence initial={false}>
             {displayItems.map((item, index) => {
               const affordance = resolveIngredientAffordance(
@@ -293,7 +296,6 @@ export default function ShoppingList() {
                 item.categoryKey,
                 null
               );
-              const Icon = INGREDIENT_ICON_COMPONENTS[affordance.iconKey];
               const prev = index > 0 ? resolveIngredientAffordance(
                 displayItems[index - 1].ingredientRef.name,
                 displayItems[index - 1].categoryKey,
@@ -304,11 +306,11 @@ export default function ShoppingList() {
               return (
                 <div key={item.id} className="space-y-1">
                   {showCategoryHeader && (
-                    <div className="font-sj-ui px-2 pt-3 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)]" data-testid="shopping-list-category">
+                    <div className="font-sj-ui pt-5 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)]" data-testid="shopping-list-category">
                       {affordance.categoryLabel}
                     </div>
                   )}
-                  <div className="relative overflow-hidden rounded-[1.35rem] border border-[var(--sj-border)]">
+                  <div className="relative overflow-hidden">
                     {revealedItemId === item.id && (
                       <div className="pointer-events-auto absolute inset-y-0 right-0 w-28 bg-[var(--sj-tomato)] text-[var(--sj-paper)]">
                         <button
@@ -353,58 +355,31 @@ export default function ShoppingList() {
                       initial={{ opacity: 0, y: -8 }}
                       exit={{ opacity: 0, y: 8 }}
                       transition={{ type: "spring", stiffness: 520, damping: 42, mass: 0.5 }}
-                      className={`
-                        relative z-10 min-h-11 px-3 py-2
-                        flex items-center gap-2 bg-[var(--sj-panel-solid)]
-                        ${item.checked ? "opacity-60" : ""}
-                      `}
+                      className="relative z-10 bg-[var(--sj-page)]"
                     >
-                      <button
-                        type="button"
-                        onClick={() => {
+                      <ChecklistRow
+                        checked={item.checked}
+                        name={item.ingredientRef.name}
+                        quantity={amountLabel(item)}
+                        note={item.checked ? "already in basket" : null}
+                        onToggle={() => {
                           if (revealedItemId === item.id) {
                             setRevealedItemId(null);
                             return;
                           }
                           toggleItem(item);
                         }}
-                        className="flex min-h-11 min-w-11 shrink-0 items-center justify-center"
-                        role="checkbox"
-                        aria-checked={item.checked}
-                        aria-label={item.ingredientRef.name}
-                      >
-                        <span
-                          className={`
-                            h-5 w-5 shrink-0 rounded border-2 flex items-center justify-center
-                            transition-colors cursor-pointer text-xs font-bold
-                            ${item.checked
-                              ? "border-[var(--sj-brass)] bg-[var(--sj-brass)] text-[var(--sj-paper)]"
-                              : "border-[var(--sj-border-strong)] bg-[var(--sj-field)]"}
-                          `}
-                          aria-hidden="true"
-                        >
-                          {item.checked && "✓"}
-                        </span>
-                      </button>
-                      <Icon
-                        className="h-4 w-4 shrink-0 text-[var(--sj-brass)]"
-                        aria-hidden="true"
+                        action={(
+                          <button
+                            type="button"
+                            onClick={() => removeItem(item.id)}
+                            className="font-sj-ui min-h-11 shrink-0 px-2 text-xs font-semibold uppercase tracking-wide text-[var(--sj-tomato)] hover:bg-[color-mix(in_srgb,var(--sj-tomato)_10%,transparent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-tomato)]"
+                            aria-label={`Remove ${item.ingredientRef.name}`}
+                          >
+                            Delete
+                          </button>
+                        )}
                       />
-                      <span className={`min-w-0 flex-1 truncate text-base ${item.checked ? "line-through text-[var(--sj-ink-soft)]" : "text-[var(--sj-ink)]"}`}>
-                        {item.quantity && <strong>{item.quantity}</strong>}
-                        {item.quantity && item.unit && " "}
-                        {item.unit?.name && <span>{item.unit.name}</span>}
-                        {(item.quantity || item.unit) && " "}
-                        {item.ingredientRef.name}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => removeItem(item.id)}
-                        className="font-sj-ui min-h-11 shrink-0 rounded-full px-2 text-xs font-semibold uppercase tracking-wide text-[var(--sj-tomato)] hover:bg-[color-mix(in_srgb,var(--sj-tomato)_10%,transparent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-tomato)]"
-                        aria-label={`Remove ${item.ingredientRef.name}`}
-                      >
-                        Delete
-                      </button>
                     </motion.div>
                   </div>
                 </div>
@@ -414,6 +389,6 @@ export default function ShoppingList() {
         </div>
       )}
       </div>
-    </div>
+    </CookbookPage>
   );
 }

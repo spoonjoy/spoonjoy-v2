@@ -3,11 +3,12 @@ import { test, expect } from '@playwright/test';
 test.describe('Recipe Flow', () => {
   test('recipes page shows recipe cards', async ({ page }) => {
     await page.goto('/recipes');
-    
-    // Should show Recipes heading (from tab panel)
-    await expect(page.getByRole('heading', { name: /recipes/i }).filter({ hasNot: page.locator('button, form') })).toBeVisible();
-    
-    // Should show recipe cards (links to recipe detail pages, excluding /recipes/new)
+
+    // /recipes redirects into the owner's cookbook-style kitchen index.
+    await expect(page.getByRole('heading', { name: /my kitchen/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /recipe index/i })).toBeVisible();
+
+    // Should show recipe rows/cards (links to recipe detail pages, excluding /recipes/new)
     const recipeLinks = page.locator('a[href^="/recipes/"]').filter({ hasNot: page.locator('button') });
     await expect(recipeLinks.first()).toBeVisible();
   });

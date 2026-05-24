@@ -225,35 +225,41 @@ interface SeedUser {
   oauth?: { provider: string; providerUserId: string; providerUsername: string };
 }
 
+const CHEF_RJ_AVATAR_URL = "/images/chef-rj.png";
+
+function isGeneratedSeedAvatarUrl(photoUrl: string | null | undefined): boolean {
+  return Boolean(photoUrl?.includes("api.dicebear.com"));
+}
+
 const SEED_USERS: SeedUser[] = [
   {
     email: "demo@spoonjoy.com",
     username: "demo_chef",
     password: "demo1234",
-    photoUrl: "https://api.dicebear.com/7.x/initials/svg?seed=DC&backgroundColor=f4a261&fontFamily=Georgia",
+    photoUrl: CHEF_RJ_AVATAR_URL,
   },
   {
     email: "chef.julia@example.com",
     username: "chef_julia",
     password: "password123",
-    photoUrl: "https://api.dicebear.com/7.x/initials/svg?seed=CJ&backgroundColor=e76f51&fontFamily=Georgia",
+    photoUrl: CHEF_RJ_AVATAR_URL,
   },
   {
     email: "marco.rossi@example.com",
     username: "marco_rossi",
     password: "password123",
-    photoUrl: "https://api.dicebear.com/7.x/initials/svg?seed=MR&backgroundColor=2a9d8f&fontFamily=Georgia",
+    photoUrl: CHEF_RJ_AVATAR_URL,
   },
   {
     email: "sarah.chen@example.com",
     username: "sarah_chen",
     password: "password123",
-    photoUrl: "https://api.dicebear.com/7.x/initials/svg?seed=SC&backgroundColor=264653&fontFamily=Georgia",
+    photoUrl: CHEF_RJ_AVATAR_URL,
   },
   {
     email: "alex.google@example.com",
     username: "alex_gourmet",
-    photoUrl: "https://api.dicebear.com/7.x/initials/svg?seed=AG&backgroundColor=e9c46a&fontFamily=Georgia",
+    photoUrl: CHEF_RJ_AVATAR_URL,
     oauth: {
       provider: "google",
       providerUserId: "google_123456789",
@@ -263,7 +269,7 @@ const SEED_USERS: SeedUser[] = [
   {
     email: "jamie.apple@example.com",
     username: "jamie_kitchen",
-    photoUrl: "https://api.dicebear.com/7.x/initials/svg?seed=JK&backgroundColor=606c38&fontFamily=Georgia",
+    photoUrl: CHEF_RJ_AVATAR_URL,
     oauth: {
       provider: "apple",
       providerUserId: "apple_987654321",
@@ -284,6 +290,12 @@ async function seedUsers() {
     });
 
     if (existing) {
+      if (isGeneratedSeedAvatarUrl(existing.photoUrl) && userData.photoUrl) {
+        await prisma.user.update({
+          where: { id: existing.id },
+          data: { photoUrl: userData.photoUrl },
+        });
+      }
       users.push({ id: existing.id, email: existing.email, username: existing.username });
       continue;
     }

@@ -1229,7 +1229,7 @@ describe("Recipes $id Route", () => {
       expect(screen.getByText("4")).toBeInTheDocument();
       expect(screen.getByText("No steps added yet")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Add Steps" })).toHaveAttribute("href", "/recipes/recipe-1/edit");
-      expect(screen.getByRole("link", { name: "← Back to recipes" })).toHaveAttribute("href", "/recipes");
+      expect(screen.getByRole("link", { name: "Back to recipes" })).toHaveAttribute("href", "/recipes");
     });
 
     it("should render recipe with no steps (empty state) as non-owner", async () => {

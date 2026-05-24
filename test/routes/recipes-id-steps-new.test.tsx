@@ -1266,8 +1266,11 @@ describe("Recipes $id Steps New Route", () => {
       render(<Stub initialEntries={["/recipes/recipe-1/steps/new"]} />);
 
       // Submit the form to trigger action
-      const form = await screen.findByRole("button", { name: /Create/i });
-      expect(form).toBeInTheDocument();
+      const createButton = await screen.findByRole("button", { name: /Create/i });
+      fireEvent.change(screen.getByLabelText(/Description/i), { target: { value: "Stir until glossy." } });
+      fireEvent.click(createButton);
+
+      expect(await screen.findByText("Failed to create step. Please try again.")).toBeInTheDocument();
     });
 
     it("should display description validation error when present", async () => {

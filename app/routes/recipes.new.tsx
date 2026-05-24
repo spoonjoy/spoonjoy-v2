@@ -2,9 +2,9 @@ import type { Route } from "./+types/recipes.new";
 import { redirect, data, useActionData, useNavigate, useNavigation, Form } from "react-router";
 import { getCloudflareEnv, getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
-import { Heading } from "~/components/ui/heading";
 import { Link } from "~/components/ui/link";
 import { Text } from "~/components/ui/text";
+import { CookbookHeader, CookbookPage } from "~/components/cookbook/page";
 import { RecipeBuilder, type RecipeBuilderData } from "~/components/recipe/RecipeBuilder";
 import {
   validateTitle,
@@ -218,36 +218,28 @@ export default function NewRecipe() {
   };
 
   return (
-    <div className="sj-page px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
-      <div className="mx-auto max-w-5xl">
-        <div className="mb-8 grid gap-5 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-end">
-          <div>
-            <p className="sj-eyebrow">New recipe</p>
-            <Heading level={1} className="mt-4 text-4xl/11 tracking-[-0.04em] sm:text-6xl/15">
-              Write the version future-you can actually cook.
-            </Heading>
-            <Text className="mt-4 max-w-2xl text-base/7">
-              Start with the story and the photo, then shape the method into steps when the dish is ready.
-            </Text>
-          </div>
-          <Link
-            href="/recipes"
-            className="sj-link justify-self-start lg:justify-self-end"
-          >
-            ← Back to recipes
-          </Link>
-        </div>
+    <CookbookPage>
+      <CookbookHeader
+        eyebrow="New recipe"
+        title="Write the version future-you can actually cook."
+        action={<Link href="/recipes" className="sj-link">← Back to recipes</Link>}
+      >
+        <Text>
+          Start with the story and the photo, then shape the method into steps when the dish is ready.
+        </Text>
+      </CookbookHeader>
 
-        {/* Hidden form for submitting data to the action */}
-        <Form ref={formRef} method="post" encType="multipart/form-data" className="hidden">
-          <input type="hidden" name="title" />
-          <textarea name="description" className="hidden" />
-          <input type="hidden" name="servings" />
-          <input type="hidden" name="steps" />
-          <input type="hidden" name="clearImage" />
-          <input ref={fileInputRef} type="file" name="image" accept="image/*" />
-        </Form>
+      {/* Hidden form for submitting data to the action */}
+      <Form ref={formRef} method="post" encType="multipart/form-data" className="hidden">
+        <input type="hidden" name="title" />
+        <textarea name="description" className="hidden" />
+        <input type="hidden" name="servings" />
+        <input type="hidden" name="steps" />
+        <input type="hidden" name="clearImage" />
+        <input ref={fileInputRef} type="file" name="image" accept="image/*" />
+      </Form>
 
+      <div className="mt-8 max-w-5xl">
         <RecipeBuilder
           onSave={handleSave}
           onCancel={handleCancel}
@@ -255,6 +247,6 @@ export default function NewRecipe() {
           loading={isLoading}
         />
       </div>
-    </div>
+    </CookbookPage>
   );
 }

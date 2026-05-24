@@ -6,6 +6,7 @@ import { Heading, Subheading } from "~/components/ui/heading";
 import { Input, InputGroup } from "~/components/ui/input";
 import { Link } from "~/components/ui/link";
 import { Text } from "~/components/ui/text";
+import { CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { getUserId } from "~/lib/session.server";
 import {
@@ -131,9 +132,9 @@ export default function Search() {
   const showPrivatePrompt = scope === "shopping-list" && !isAuthenticated;
 
   return (
-    <div className="sj-page px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
-      <section className="mx-auto max-w-7xl">
-        <header className="grid gap-8 border-b border-[var(--sj-border)] pb-7 lg:grid-cols-[minmax(0,0.9fr)_minmax(28rem,1.1fr)] lg:items-end">
+    <CookbookPage>
+      <section>
+        <header className="sj-rule-block grid gap-6 lg:grid-cols-[minmax(0,0.85fr)_minmax(28rem,1.15fr)] lg:items-end">
           <div className="max-w-3xl">
             <div className="sj-eyebrow">
               <SearchIcon className="size-3.5" aria-hidden="true" />
@@ -172,7 +173,7 @@ export default function Search() {
         </header>
 
         <div className="grid gap-8 py-7 lg:grid-cols-[17rem_minmax(0,1fr)]">
-          <aside className="border-l border-[var(--sj-border)] pl-4">
+          <aside className="border-t border-[var(--sj-border)] pt-4 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0">
             <Subheading level={2} className="text-xl/7">{SCOPE_LABELS[scope]}</Subheading>
             <Text className="mt-2 text-sm/6">{SCOPE_DESCRIPTIONS[scope]}</Text>
             <div className="mt-5 flex gap-2 overflow-x-auto pb-1 lg:grid lg:overflow-visible lg:pb-0">
@@ -202,7 +203,7 @@ export default function Search() {
             </Text>
           </aside>
 
-          <main className="pt-32 lg:pt-0">
+          <main>
             <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <Subheading level={2} className="text-2xl/8">{hasQuery ? `Results for "${query.trim()}"` : "Recently searchable"}</Subheading>
@@ -211,13 +212,13 @@ export default function Search() {
             </div>
 
             {showPrivatePrompt ? (
-              <div className="mb-4 rounded-[var(--sj-radius-surface)] border border-[var(--sj-brass)] bg-[color-mix(in_srgb,var(--sj-brass)_12%,var(--sj-panel-solid))] p-4 text-sm text-[var(--sj-ink)]">
+              <div className="mb-4 border-y border-[var(--sj-brass)] bg-[color-mix(in_srgb,var(--sj-brass)_12%,var(--sj-panel-solid))] py-4 text-sm text-[var(--sj-ink)]">
                 Log in to search your private shopping list.
               </div>
             ) : null}
 
             {!hasQuery ? (
-              <div className="mb-4 rounded-[var(--sj-radius-surface)] border border-dashed border-[var(--sj-border-strong)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_70%,transparent)] p-4">
+              <div className="mb-4 border-y border-dashed border-[var(--sj-border-strong)] py-4">
                 <Text className="text-sm/6">
                   Try searching by ingredient, step wording, cookbook theme, chef username, or shopping-list category.
                 </Text>
@@ -231,17 +232,15 @@ export default function Search() {
                 ))}
               </div>
             ) : (
-              <div className="rounded-[var(--sj-radius-hero)] border border-dashed border-[var(--sj-border-strong)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_72%,transparent)] p-8 text-center">
-                <SearchIcon className="mx-auto size-8 text-[var(--sj-ink-soft)]" aria-hidden="true" />
-                <Subheading level={2} className="mt-3 text-xl/7">No matches yet</Subheading>
+              <RuledEmptyState title="No matches yet">
                 <Text className="mx-auto mt-2 max-w-xl">
                   Broaden the scope, try an ingredient, or search for a chef username.
                 </Text>
-              </div>
+              </RuledEmptyState>
             )}
           </main>
         </div>
       </section>
-    </div>
+    </CookbookPage>
   );
 }

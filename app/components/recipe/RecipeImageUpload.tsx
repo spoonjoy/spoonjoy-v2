@@ -148,7 +148,7 @@ export function RecipeImageUpload({
       <div
         data-drop-zone
         className={clsx(
-          'relative w-full aspect-video overflow-hidden rounded-[1.5rem] border-2 border-dashed transition-colors',
+          'relative w-full aspect-video overflow-hidden rounded-[var(--sj-radius-surface)] border-2 border-dashed transition-colors',
           isDragging
             ? 'drag-active border-[var(--sj-brass)] bg-[color-mix(in_srgb,var(--sj-brass)_14%,var(--sj-panel-solid))]'
             : 'border-[var(--sj-border-strong)] bg-[color-mix(in_srgb,var(--sj-flour)_46%,transparent)]',
@@ -167,7 +167,7 @@ export function RecipeImageUpload({
           />
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center text-[var(--sj-ink-soft)]">
-            <div className="rounded-full border border-[var(--sj-border)] bg-[var(--sj-panel-solid)] p-4 shadow-[var(--sj-shadow-soft)]">
+            <div className="rounded-[var(--sj-radius-surface)] border border-[var(--sj-border)] bg-[var(--sj-panel-solid)] p-4 shadow-[var(--sj-shadow-soft)]">
               <ImageIcon className="size-10" />
             </div>
             <p className="font-sj-ui text-sm font-semibold uppercase tracking-[0.12em]">Drag, drop, or upload a recipe photo</p>
@@ -178,7 +178,7 @@ export function RecipeImageUpload({
           <div
             role="status"
             aria-busy="true"
-            className="absolute inset-0 flex items-center justify-center rounded-[1.5rem] bg-[color-mix(in_srgb,var(--sj-panel-solid)_78%,transparent)]"
+            className="absolute inset-0 flex items-center justify-center rounded-[var(--sj-radius-surface)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_78%,transparent)]"
           >
             <Loader2 className="size-8 animate-spin text-[var(--sj-brass)]" />
           </div>

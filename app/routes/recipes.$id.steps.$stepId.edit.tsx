@@ -11,9 +11,10 @@ import { ErrorMessage, Field, Label } from "~/components/ui/fieldset";
 import { Text } from "~/components/ui/text";
 import { Link } from "~/components/ui/link";
 import { ValidationError } from "~/components/ui/validation-error";
-import { Heading } from "~/components/ui/heading";
 import { useToast } from "~/components/ui/toast";
 import { Listbox, ListboxOption, ListboxLabel } from "~/components/ui/listbox";
+import { CookbookHeader, CookbookPage, RuledEmptyState, SettingsPanel } from "~/components/cookbook/page";
+import { ChecklistRow } from "~/components/shopping/checklist-row";
 import {
   deleteExistingStepOutputUses,
   createStepOutputUses,
@@ -442,25 +443,21 @@ export default function EditStep() {
   };
 
   return (
-    <div className="sj-page px-4 py-8 sm:px-6 sm:py-12">
-      <div className="mx-auto max-w-4xl">
-        <div className="mb-8">
-          <p className="sj-eyebrow">Step {step.stepNum}</p>
-          <Heading level={1} className="mt-4 text-4xl/11 tracking-[-0.04em] sm:text-6xl/15">Edit Step</Heading>
-          <Text>Step {step.stepNum}</Text>
-          <Link
-            href={`/recipes/${recipe.id}/edit`}
-            className="sj-link mt-4 inline-flex"
-          >
-            ← Back to recipe
-          </Link>
-        </div>
+    <CookbookPage>
+      <CookbookHeader
+        eyebrow={`Step ${step.stepNum}`}
+        title="Edit Step"
+        action={<Link href={`/recipes/${recipe.id}/edit`} className="sj-link">← Back to recipe</Link>}
+      >
+        <Text>Keep the method for {recipe.title} easy to follow in the kitchen.</Text>
+      </CookbookHeader>
 
+      <div className="mt-8 max-w-4xl">
         {actionData?.errors?.general && (
           <ValidationError error={actionData.errors.general} className="mb-4" />
         )}
 
-        <Form method="post" className="sj-panel flex flex-col gap-6 rounded-[2rem] p-6">
+        <Form method="post" className="sj-form-section flex flex-col gap-6">
           <Field>
             <Label>
               Step Title (optional)
@@ -548,19 +545,19 @@ export default function EditStep() {
 
         <div className="mt-4">{stepDeletionErrorElement}</div>
 
-        <div className="sj-panel mt-12 rounded-[2rem] p-6">
-          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <h2 className="font-sj-display m-0 text-3xl/9 font-semibold text-[var(--sj-ink)]">Ingredients</h2>
-            <Button
-              onClick={() => setShowIngredientForm(!showIngredientForm)}
-
-            >
+        <SettingsPanel
+          title="Ingredients"
+          action={
+            <Button onClick={() => setShowIngredientForm(!showIngredientForm)}>
               {showIngredientForm ? "Cancel" : "+ Add Ingredient"}
             </Button>
+          }
+        >
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           </div>
 
           {showIngredientForm && (
-            <div className="mb-4 flex flex-col gap-4 rounded-[1.5rem] border border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-flour)_55%,transparent)] p-6">
+            <div className="mb-4 border-y border-[var(--sj-border)] py-5">
               {/* Toggle between AI and Manual modes */}
               <IngredientInputToggle onChange={handleModeChange} />
 
@@ -589,31 +586,36 @@ export default function EditStep() {
           )}
 
           {step.ingredients.length === 0 ? (
-            <div className="rounded-[1.5rem] border border-dashed border-[var(--sj-border-strong)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_70%,transparent)] p-8 text-center">
-              <p className="text-[var(--sj-ink-soft)]">No ingredients added yet</p>
-            </div>
+            <RuledEmptyState title="No ingredients added yet" />
           ) : (
-            <div className="flex flex-col gap-2">
+            <div className="sj-list-ruled">
               {step.ingredients.map((ingredient) => (
                 <div
                   key={ingredient.id}
-                  className="flex items-center justify-between rounded-[1.25rem] border border-[var(--sj-border)] bg-[var(--sj-panel-solid)] p-3 px-4"
+                  className="border-b border-[var(--sj-border)]"
                 >
-                  <span>
-                    <strong>{ingredient.quantity}</strong> {ingredient.unit.name} {ingredient.ingredientRef.name}
+                  <ChecklistRow
+                    name={ingredient.ingredientRef.name}
+                    quantity={`${ingredient.quantity} ${ingredient.unit.name}`}
+                    action={
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        onClick={() => setIngredientToRemove(ingredient.id)}
+                      >
+                        Remove
+                      </Button>
+                    }
+                  />
+                  <span className="sr-only">{ingredient.quantity}</span>
+                  <span className="sr-only">
+                    {ingredient.unit.name} {ingredient.ingredientRef.name}
                   </span>
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    onClick={() => setIngredientToRemove(ingredient.id)}
-                  >
-                    Remove
-                  </Button>
                 </div>
               ))}
             </div>
           )}
-        </div>
+        </SettingsPanel>
 
         {/* Remove ingredient confirmation dialog */}
         <ConfirmationDialog
@@ -628,13 +630,13 @@ export default function EditStep() {
             submit(formData, { method: "post" });
             setIngredientToRemove(null);
           }}
-          title="Remove this ingredient? 🥕"
+          title="Remove this ingredient?"
           description="This ingredient will be removed from the step."
           confirmLabel="Remove it"
           cancelLabel="Keep it"
           destructive
         />
       </div>
-    </div>
+    </CookbookPage>
   );
 }

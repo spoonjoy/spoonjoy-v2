@@ -7,7 +7,6 @@ import {
   type AccountSettingsActionResult,
   type AccountSettingsLoaderData,
 } from "~/lib/account-settings.server";
-import { Heading, Subheading } from "~/components/ui/heading";
 import { Text } from "~/components/ui/text";
 import { Button } from "~/components/ui/button";
 import { Field, Label, ErrorMessage } from "~/components/ui/fieldset";
@@ -15,9 +14,8 @@ import { Input } from "~/components/ui/input";
 import { Avatar } from "~/components/ui/avatar";
 import { OAuthError } from "~/components/ui/oauth";
 import { NotificationsSection } from "~/components/notifications-section";
-
-const DEFAULT_AVATAR_URL =
-  "https://res.cloudinary.com/dpjmyc4uz/image/upload/v1674541350/chef-rj.png";
+import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
+import { CookbookPage, CookbookHeader, SettingsPanel } from "~/components/cookbook/page";
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   return loadAccountSettings({ request, context });
@@ -41,7 +39,7 @@ function ProfilePhotoUpload({ photoUrl }: { photoUrl: string | null }) {
     fileInputRef.current?.click();
   };
 
-  const currentPhotoUrl = actionData?.photoUrl || photoUrl || DEFAULT_AVATAR_URL;
+  const currentPhotoUrl = resolveChefAvatarUrl(actionData?.photoUrl || photoUrl);
   const buttonText = photoUrl ? "Change Photo" : "Upload Photo";
 
   return (
@@ -117,25 +115,23 @@ export default function AccountSettings() {
   const canRemovePassword = user.oauthAccounts.length > 0;
 
   return (
-    <div className="sj-page px-4 py-8 sm:px-6 sm:py-12">
+    <CookbookPage>
       <div className="mx-auto max-w-4xl">
-      <div className="mb-8">
-        <p className="sj-eyebrow">Kitchen identity</p>
-        <Heading className="mt-4 text-4xl/11 tracking-[-0.04em] sm:text-6xl/15">Account Settings</Heading>
+      <CookbookHeader eyebrow="Kitchen identity" title="Account settings">
         <Text className="mt-4 max-w-2xl text-base/7">
           Keep your chef profile, sign-in methods, and photo ready for family, guests, and agents.
         </Text>
-      </div>
+      </CookbookHeader>
 
       <OAuthError error={oauthError} className="mt-4" />
 
       {/* Success/Error Messages (only show global banner when there are no field-level errors) */}
       {actionData?.message && !actionData?.fieldErrors && (
         <div
-          className={`mt-4 rounded-lg p-4 ${
+          className={`mt-4 border-y py-4 ${
             actionData.success
-              ? "border border-[var(--sj-herb)] bg-[color-mix(in_srgb,var(--sj-herb)_12%,var(--sj-panel-solid))] text-[var(--sj-herb)]"
-              : "border border-[var(--sj-tomato)] bg-[color-mix(in_srgb,var(--sj-tomato)_10%,var(--sj-panel-solid))] text-[var(--sj-tomato)]"
+              ? "border-[var(--sj-border-strong)] bg-[color-mix(in_srgb,var(--sj-action)_10%,var(--sj-panel-solid))] text-[var(--sj-ink)]"
+              : "border-[var(--sj-tomato)] bg-[color-mix(in_srgb,var(--sj-tomato)_10%,var(--sj-panel-solid))] text-[var(--sj-tomato)]"
           }`}
         >
           {actionData.message}
@@ -143,18 +139,16 @@ export default function AccountSettings() {
       )}
 
       {/* User Info Section */}
-      <section data-testid="user-info-section" className="sj-panel mt-8 rounded-[2rem] p-6">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <Subheading className="text-2xl/8">User Information</Subheading>
-            <Text className="mt-1">The email and username attached to your kitchen.</Text>
-          </div>
-          {!isEditing && (
+      <SettingsPanel
+        testId="user-info-section"
+        title="User information"
+        action={!isEditing ? (
             <Button plain onClick={() => setIsEditing(true)}>
               Edit
             </Button>
-          )}
-        </div>
+        ) : null}
+      >
+        <Text>The email and username attached to your kitchen.</Text>
         {isEditing ? (
           <Form method="post" className="mt-4 space-y-4">
             <input type="hidden" name="intent" value="updateUserInfo" />
@@ -193,33 +187,31 @@ export default function AccountSettings() {
           </Form>
         ) : (
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <Text className="rounded-[1.25rem] border border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_68%,transparent)] p-4">
+            <Text className="border-y border-[var(--sj-border)] py-4">
               <span className="font-sj-ui block text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">Email</span>
               {user.email}
             </Text>
-            <Text className="rounded-[1.25rem] border border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_68%,transparent)] p-4">
+            <Text className="border-y border-[var(--sj-border)] py-4">
               <span className="font-sj-ui block text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">Username</span>
               {user.username}
             </Text>
           </div>
         )}
-      </section>
+      </SettingsPanel>
 
       {/* Profile Photo Section */}
-      <section data-testid="profile-photo-section" className="sj-panel mt-8 rounded-[2rem] p-6">
-        <Subheading className="text-2xl/8">Profile Photo</Subheading>
+      <SettingsPanel testId="profile-photo-section" title="Profile photo">
         <Text className="mt-1">Make your kitchen feel human before anyone reads a recipe.</Text>
         <ProfilePhotoUpload photoUrl={user.photoUrl} />
-      </section>
+      </SettingsPanel>
 
       {/* OAuth Providers Section */}
-      <section data-testid="oauth-providers-section" className="sj-panel mt-8 rounded-[2rem] p-6">
-        <Subheading className="text-2xl/8">Connected Accounts</Subheading>
+      <SettingsPanel testId="oauth-providers-section" title="Connected accounts">
         <Text className="mt-1">Use OAuth when it helps, but never make it the only way in unless you choose to.</Text>
 
         {/* Warning when can't unlink */}
         {!canUnlinkOAuth && user.oauthAccounts.length > 0 && (
-          <Text className="mt-3 rounded-[1.25rem] border border-[var(--sj-brass)] bg-[color-mix(in_srgb,var(--sj-brass)_12%,var(--sj-panel-solid))] p-3 text-sm text-[var(--sj-brass)]">
+          <Text className="mt-3 border-y border-[var(--sj-brass)] bg-[color-mix(in_srgb,var(--sj-brass)_12%,var(--sj-panel-solid))] py-3 text-sm text-[var(--sj-brass)]">
             You cannot unlink your OAuth provider because it is your only authentication method. Please set a password first.
           </Text>
         )}
@@ -233,7 +225,7 @@ export default function AccountSettings() {
             return (
               <div
                 key={provider}
-                className="flex flex-col gap-3 rounded-[1.5rem] border border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_68%,transparent)] p-4 sm:flex-row sm:items-center sm:justify-between"
+                className="flex flex-col gap-3 border-b border-[var(--sj-border)] py-4 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div>
                   {isLinked ? (
@@ -304,11 +296,10 @@ export default function AccountSettings() {
             );
           })}
         </div>
-      </section>
+      </SettingsPanel>
 
       {/* Password Section */}
-      <section data-testid="password-section" className="sj-panel mt-8 rounded-[2rem] p-6">
-        <Subheading className="text-2xl/8">Password</Subheading>
+      <SettingsPanel testId="password-section" title="Password">
         <Text className="mt-1">A first-class fallback for any client, browser, or future importer.</Text>
         <div className="mt-4">
           {user.hasPassword ? (
@@ -438,13 +429,13 @@ export default function AccountSettings() {
             )
           )}
         </div>
-      </section>
+      </SettingsPanel>
 
       <NotificationsSection
         initiallySubscribed={notifications.pushSubscribed}
         initialPreferences={notifications.preferences}
       />
       </div>
-    </div>
+    </CookbookPage>
   );
 }

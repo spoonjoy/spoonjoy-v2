@@ -12,7 +12,7 @@ describe('SpoonDock', () => {
     it('has aria-label for accessibility', () => {
       render(<SpoonDock />)
       const nav = screen.getByRole('navigation')
-      expect(nav).toHaveAttribute('aria-label', 'Main navigation')
+      expect(nav).toHaveAttribute('aria-label', 'Spoonjoy navigation')
     })
 
     it('supports custom aria-label', () => {
@@ -55,18 +55,18 @@ describe('SpoonDock', () => {
   })
 
   describe('3-column grid layout', () => {
-    it('uses grid layout with fixed-width side columns', () => {
+    it('uses the mobile cookbook dock columns', () => {
       render(<SpoonDock />)
       const nav = screen.getByRole('navigation')
       expect(nav).toHaveClass('grid')
-      expect(nav).toHaveClass('grid-cols-[72px_1fr_72px]')
+      expect(nav).toHaveClass('grid-cols-[minmax(0,1fr)_minmax(5.5rem,auto)_minmax(0,1fr)]')
     })
 
-    it('uses wider balanced side columns for contextual action clusters', () => {
-      render(<SpoonDock layout="contextual" />)
+    it('uses one consistent layout for root and contextual docks', () => {
+      render(<SpoonDock />)
       const nav = screen.getByRole('navigation')
       expect(nav).toHaveClass('grid')
-      expect(nav).toHaveClass('grid-cols-[minmax(96px,1fr)_52px_minmax(96px,1fr)]')
+      expect(nav).toHaveClass('grid-cols-[minmax(0,1fr)_minmax(5.5rem,auto)_minmax(0,1fr)]')
       expect(nav).not.toHaveClass('grid-cols-[72px_1fr_72px]')
     })
 
@@ -87,7 +87,7 @@ describe('SpoonDock', () => {
     it('has semi-transparent background', () => {
       render(<SpoonDock />)
       const nav = screen.getByRole('navigation')
-      expect(nav.className).toContain('bg-[color-mix(in_srgb,var(--sj-charcoal)_82%,transparent)]')
+      expect(nav.className).toContain('bg-[color-mix(in_srgb,var(--sj-charcoal)_92%,transparent)]')
     })
 
     it('has subtle border for glass edge', () => {
@@ -126,10 +126,10 @@ describe('SpoonDock', () => {
       expect(nav).toHaveClass('rounded-full')
     })
 
-    it('has 64px height for center logo breathing room', () => {
+    it('has 68px height for thumbable controls', () => {
       render(<SpoonDock />)
       const nav = screen.getByRole('navigation')
-      expect(nav).toHaveClass('h-16')
+      expect(nav).toHaveClass('h-17')
     })
 
     it('has z-50 to float above content', () => {

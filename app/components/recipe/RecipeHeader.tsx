@@ -3,6 +3,7 @@ import { Link } from '../ui/link'
 import { Avatar } from '../ui/avatar'
 import { ScaleSelector } from './ScaleSelector'
 import { scaleServingsText } from '~/lib/quantity'
+import { resolveChefAvatarUrl } from '~/lib/chef-avatar'
 
 export interface RecipeHeaderProps {
   /** Recipe title */
@@ -55,14 +56,15 @@ export function RecipeHeader({
   const scaledServings = servings ? scaleServingsText(servings, scaleFactor) : undefined
   const displayImageUrl = coverImageUrl && coverImageUrl.length > 0 ? coverImageUrl : undefined
   const resolvedChefHref = chefProfileHref ?? (chefId ? `/users/${chefId}` : undefined)
+  const resolvedChefPhotoUrl = resolveChefAvatarUrl(chefPhotoUrl)
 
   return (
     <header className="w-full">
-      <div className="mx-auto max-w-7xl px-3 pt-4 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl lg:px-8">
         {displayImageUrl ? (
           <div
             data-testid="recipe-image"
-            className="sj-food-photo mx-auto aspect-[4/5] w-full rounded-[var(--sj-radius-hero)] sm:aspect-[16/9] lg:aspect-[2.18/1]"
+            className="sj-food-photo mx-auto aspect-[4/5] w-full sm:aspect-[16/9] lg:aspect-[2.18/1]"
           >
             <img
               src={displayImageUrl}
@@ -77,7 +79,7 @@ export function RecipeHeader({
               <div className="mt-4 flex items-center gap-2">
                 <span data-testid="chef-avatar">
                   <Avatar
-                    src={chefPhotoUrl}
+                    src={resolvedChefPhotoUrl}
                     initials={chefName.charAt(0).toUpperCase()}
                     alt={chefName}
                     className="size-9 border border-[var(--sj-photo-line)]"
@@ -102,7 +104,7 @@ export function RecipeHeader({
         ) : (
           <div
             data-testid="recipe-image-placeholder"
-            className="sj-dark-canvas relative mx-auto flex aspect-[4/5] w-full items-center justify-center overflow-hidden rounded-[var(--sj-radius-hero)] border border-[var(--sj-border)] sm:aspect-[16/9] lg:aspect-[2.18/1]"
+            className="sj-dark-canvas relative mx-auto flex aspect-[4/5] w-full items-center justify-center overflow-hidden border border-[var(--sj-border)] sm:aspect-[16/9] lg:aspect-[2.18/1]"
           >
             <div className="sj-on-photo relative flex flex-col items-center gap-3">
               <div className="rounded-[var(--sj-radius-control)] border border-[var(--sj-photo-line)] bg-[var(--sj-photo-glass)] p-5">
@@ -118,7 +120,7 @@ export function RecipeHeader({
               <div className="mt-4 flex items-center gap-2">
                 <span data-testid="chef-avatar">
                   <Avatar
-                    src={chefPhotoUrl}
+                    src={resolvedChefPhotoUrl}
                     initials={chefName.charAt(0).toUpperCase()}
                     alt={chefName}
                     className="size-9 border border-[var(--sj-photo-line)]"
@@ -144,7 +146,7 @@ export function RecipeHeader({
       </div>
 
       <div className="mx-auto max-w-5xl px-3 py-4 sm:px-6 lg:px-8">
-        <div className="flex flex-col gap-3 rounded-[var(--sj-radius-surface)] border border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_78%,transparent)] p-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 border-y border-[var(--sj-border)] py-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
             <span className="font-sj-ui text-sm font-semibold uppercase tracking-[0.12em] text-[var(--sj-ink-soft)]">Servings:</span>
             <ScaleSelector
