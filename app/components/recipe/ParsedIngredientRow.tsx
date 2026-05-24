@@ -4,9 +4,8 @@ import { useState, useMemo, useRef, useEffect } from 'react'
 import { Input } from '~/components/ui/input'
 import type { ParsedIngredient } from '~/lib/ingredient-parse.server'
 
-// Button styles extracted from ~/components/ui/button.tsx for native button compatibility
 const iconButtonBaseStyles = [
-  'font-sj-ui relative isolate inline-flex items-center justify-center rounded-full border text-sm/6 font-semibold',
+  'font-sj-ui relative isolate inline-flex items-center justify-center rounded-[var(--sj-radius-control)] border text-sm/6 font-semibold transition',
   'min-h-11 min-w-11', // 44px minimum touch target
   'focus:outline-2 focus:outline-offset-2 focus:outline-[var(--sj-brass)]',
   'disabled:opacity-50 disabled:cursor-not-allowed',

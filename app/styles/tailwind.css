@@ -40,7 +40,7 @@
   --sj-photo-line: color-mix(in srgb, var(--sj-bone) 24%, transparent);
   --sj-shadow: 0 24px 80px color-mix(in srgb, var(--sj-charcoal) 14%, transparent);
   --sj-shadow-soft: 0 12px 36px color-mix(in srgb, var(--sj-charcoal) 8%, transparent);
-  --sj-radius-control: 999px;
+  --sj-radius-control: 0.375rem;
   --sj-radius-small: 0.25rem;
   --sj-radius-surface: 0.5rem;
   --sj-radius-photo: 0.5rem;

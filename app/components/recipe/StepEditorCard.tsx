@@ -12,10 +12,9 @@
  * - Save, remove, and reorder controls
  */
 
-import clsx from 'clsx'
 import { ArrowDown, ArrowUp, Save, Trash2 } from 'lucide-react'
 import { useEffect, useId, useRef, useState } from 'react'
-import { TouchTarget } from '~/components/ui/button'
+import { Button } from '~/components/ui/button'
 import { Input } from '~/components/ui/input'
 import { Textarea } from '~/components/ui/textarea'
 import { IngredientInputToggle, type IngredientInputMode } from './IngredientInputToggle'
@@ -23,44 +22,6 @@ import { IngredientParseInput } from './IngredientParseInput'
 import { ManualIngredientInput } from './ManualIngredientInput'
 import { ParsedIngredientList } from './ParsedIngredientList'
 import type { ParsedIngredient } from '~/lib/ingredient-parse.server'
-
-// Button styles extracted for native button compatibility
-const buttonBaseStyles = [
-  'font-sj-ui relative isolate inline-flex items-center justify-center gap-x-2 rounded-full border text-sm/6 font-semibold',
-  'px-3 py-1.5',
-  'focus:outline-2 focus:outline-offset-2 focus:outline-[var(--sj-brass)]',
-  'disabled:opacity-50 disabled:cursor-not-allowed',
-]
-
-const buttonOutlineStyles = [
-  'border-[var(--sj-border)]',
-  'text-[var(--sj-ink)]',
-  'hover:bg-[var(--sj-flour)]',
-]
-
-const buttonSolidStyles = [
-  'border-transparent bg-(--btn-border)',
-  'dark:bg-(--btn-bg)',
-  'before:absolute before:inset-0 before:-z-10 before:rounded-[calc(var(--radius-lg)-1px)] before:bg-(--btn-bg)',
-  'before:shadow-sm',
-  'dark:before:hidden',
-  'dark:border-[var(--sj-border)]',
-  'after:absolute after:inset-0 after:-z-10 after:rounded-[calc(var(--radius-lg)-1px)]',
-  'after:shadow-[inset_0_1px_color-mix(in_srgb,var(--sj-bone)_18%,transparent)]',
-  'hover:after:bg-(--btn-hover-overlay)',
-  'dark:after:-inset-px dark:after:rounded-lg',
-  'disabled:before:shadow-none disabled:after:shadow-none',
-]
-
-const buttonActionStyles = [
-  'text-[var(--sj-on-photo)] [--btn-hover-overlay:color-mix(in_srgb,var(--sj-bone)_12%,transparent)] [--btn-bg:var(--sj-action)] [--btn-border:var(--sj-action-deep)]',
-  '[--btn-icon:var(--sj-paper)]',
-]
-
-const buttonRedStyles = [
-  'text-[var(--sj-paper)] [--btn-hover-overlay:color-mix(in_srgb,var(--sj-bone)_12%,transparent)] [--btn-bg:var(--sj-tomato)] [--btn-border:var(--sj-tomato)]',
-  '[--btn-icon:var(--sj-paper)]',
-]
 
 export interface StepData {
   id: string
@@ -290,56 +251,47 @@ export function StepEditorCard({
 
       {/* Action buttons */}
       <div className="flex flex-wrap gap-2 border-t border-[var(--sj-border)] pt-4">
-        <button
+        <Button
           type="button"
           onClick={handleSave}
           disabled={disabled}
-          className={clsx(buttonBaseStyles, buttonSolidStyles, buttonActionStyles, 'cursor-default')}
         >
-          <TouchTarget>
-            <Save className="size-4" aria-hidden="true" />
-            Save
-          </TouchTarget>
-        </button>
+          <Save data-slot="icon" aria-hidden="true" />
+          Save
+        </Button>
 
-        <button
+        <Button
           type="button"
+          variant="destructive"
           onClick={handleRemove}
           disabled={disabled}
-          className={clsx(buttonBaseStyles, buttonSolidStyles, buttonRedStyles, 'cursor-default')}
         >
-          <TouchTarget>
-            <Trash2 className="size-4" aria-hidden="true" />
-            Remove
-          </TouchTarget>
-        </button>
+          <Trash2 data-slot="icon" aria-hidden="true" />
+          Remove
+        </Button>
 
         {onMoveUp && (
-          <button
+          <Button
             type="button"
+            plain
             onClick={handleMoveUp}
             disabled={disabled || !canMoveUp}
-            className={clsx(buttonBaseStyles, buttonOutlineStyles, 'cursor-default')}
           >
-            <TouchTarget>
-              <ArrowUp className="size-4" aria-hidden="true" />
-              Move Up
-            </TouchTarget>
-          </button>
+            <ArrowUp data-slot="icon" aria-hidden="true" />
+            Move Up
+          </Button>
         )}
 
         {onMoveDown && (
-          <button
+          <Button
             type="button"
+            plain
             onClick={handleMoveDown}
             disabled={disabled || !canMoveDown}
-            className={clsx(buttonBaseStyles, buttonOutlineStyles, 'cursor-default')}
           >
-            <TouchTarget>
-              <ArrowDown className="size-4" aria-hidden="true" />
-              Move Down
-            </TouchTarget>
-          </button>
+            <ArrowDown data-slot="icon" aria-hidden="true" />
+            Move Down
+          </Button>
         )}
       </div>
     </article>

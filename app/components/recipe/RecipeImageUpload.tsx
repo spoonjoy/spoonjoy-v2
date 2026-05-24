@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { Upload, X, ImageIcon, Loader2 } from 'lucide-react'
+import { Button } from '~/components/ui/button'
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
 const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
@@ -198,47 +199,35 @@ export function RecipeImageUpload({
       <div className="flex gap-2">
         {hasImage ? (
           <>
-            <button
+            <Button
               type="button"
+              plain
               onClick={handleUploadClick}
               disabled={isDisabled}
-              className={clsx(
-                'font-sj-ui inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm font-semibold transition-colors',
-                'border-[var(--sj-border-strong)] text-[var(--sj-ink)] hover:bg-[var(--sj-flour)]',
-                'disabled:opacity-50 disabled:cursor-not-allowed'
-              )}
             >
-              <Upload className="size-4" />
+              <Upload data-slot="icon" aria-hidden="true" />
               Change Image
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="destructive"
               onClick={handleClear}
               disabled={isDisabled}
-              className={clsx(
-                'font-sj-ui inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm font-semibold transition-colors',
-                'border-[var(--sj-tomato)] text-[var(--sj-tomato)] hover:bg-[color-mix(in_srgb,var(--sj-tomato)_10%,transparent)]',
-                'disabled:opacity-50 disabled:cursor-not-allowed'
-              )}
             >
-              <X className="size-4" />
+              <X data-slot="icon" aria-hidden="true" />
               Remove
-            </button>
+            </Button>
           </>
         ) : (
-          <button
+          <Button
             type="button"
+            plain
             onClick={handleUploadClick}
             disabled={isDisabled}
-            className={clsx(
-              'font-sj-ui inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm font-semibold transition-colors',
-              'border-[var(--sj-border-strong)] text-[var(--sj-ink)] hover:bg-[var(--sj-flour)]',
-              'disabled:opacity-50 disabled:cursor-not-allowed'
-            )}
           >
-            <Upload className="size-4" />
+            <Upload data-slot="icon" aria-hidden="true" />
             Upload Image
-          </button>
+          </Button>
         )}
       </div>
 
