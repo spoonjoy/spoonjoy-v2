@@ -9,7 +9,7 @@ vi.mock("framer-motion", () => {
     children,
     onDragEnd,
     animate,
-    layout: _layout,
+    layout,
     drag: _drag,
     dragConstraints: _dragConstraints,
     dragElastic: _dragElastic,
@@ -23,11 +23,13 @@ vi.mock("framer-motion", () => {
     children: React.ReactNode;
     onDragEnd?: (_event: unknown, info: { offset: { x: number; y: number } }) => void;
     animate?: { x?: number };
+    layout?: boolean | "position";
     [key: string]: unknown;
   }) => (
     <div
       {...props}
       data-motion-x={String(animate?.x ?? 0)}
+      data-layout={layout ? String(layout) : undefined}
       onPointerUp={(event) => {
         const offsetX = Number(
           (event.currentTarget as HTMLDivElement).dataset.dragOffsetX ?? "0"
@@ -41,6 +43,7 @@ vi.mock("framer-motion", () => {
 
   return {
     AnimatePresence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+    LayoutGroup: ({ children }: { children: React.ReactNode }) => <>{children}</>,
     motion: { div: MotionDiv },
   };
 });
@@ -301,6 +304,10 @@ describe("shopping list UX updates", () => {
     const { container } = render(<Stub initialEntries={["/shopping-list"]} />);
 
     expect(await screen.findByText("apples")).toBeInTheDocument();
+    expect(screen.getAllByTestId("shopping-list-motion-item")).toHaveLength(2);
+    for (const listItem of screen.getAllByTestId("shopping-list-motion-item")) {
+      expect(listItem).toHaveAttribute("data-layout", "position");
+    }
     const seamContainer = container.querySelector(".relative.overflow-hidden");
     const rowShell = container.querySelector(".relative.z-10.bg-\\[var\\(--sj-page\\)\\]");
     expect(seamContainer).toBeInTheDocument();
@@ -317,6 +324,12 @@ describe("shopping list UX updates", () => {
     const applesCheck = within(applesRow!).getByRole("checkbox", { name: "apples" });
     fireEvent.click(applesCheck);
 
+    await waitFor(() => {
+      expect(screen.getAllByRole("checkbox").map((checkbox) => checkbox.getAttribute("aria-label"))).toEqual([
+        "bananas",
+        "apples",
+      ]);
+    });
     await waitFor(() => expect(bananasRow).toHaveAttribute("data-motion-x", "0"));
   });
 });
