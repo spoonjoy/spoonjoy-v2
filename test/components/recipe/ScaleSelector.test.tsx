@@ -34,6 +34,23 @@ describe('ScaleSelector', () => {
       render(<ScaleSelector value={1} displayValue="4" onChange={vi.fn()} />)
       expect(screen.getByTestId('scale-display')).toHaveTextContent('4')
     })
+
+    it('renders as an editorial yield rule instead of circular controls', () => {
+      render(<ScaleSelector value={1} displayValue="Serves 4" onChange={vi.fn()} />)
+
+      expect(screen.getByTestId('scale-selector')).toHaveClass('grid')
+      expect(screen.getByTestId('scale-selector')).toHaveClass('border-y')
+      expect(screen.getByText('Yield')).toBeInTheDocument()
+      expect(screen.getByTestId('scale-minus')).toHaveClass('border-r')
+      expect(screen.getByTestId('scale-minus')).not.toHaveClass('rounded-full')
+      expect(screen.getByTestId('scale-plus')).toHaveClass('border-l')
+      expect(screen.getByTestId('scale-plus')).not.toHaveClass('rounded-full')
+    })
+
+    it('labels plain scale values as scale when no servings display is provided', () => {
+      render(<ScaleSelector value={1} onChange={vi.fn()} />)
+      expect(screen.getByText('Scale')).toBeInTheDocument()
+    })
   })
 
   describe('increment behavior', () => {

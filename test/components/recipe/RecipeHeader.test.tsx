@@ -101,18 +101,20 @@ describe('RecipeHeader', () => {
   describe('scaling', () => {
     it('renders scale selector with current scale factor', () => {
       renderWithRouter(<RecipeHeader {...defaultProps} scaleFactor={2} />)
-      expect(screen.getByText('Servings:')).toBeInTheDocument()
+      expect(screen.getByTestId('scale-selector')).toBeInTheDocument()
+      expect(screen.getByText('Scale')).toBeInTheDocument()
     })
 
     it('calls onScaleChange when scale is changed', () => {
       const onScaleChange = vi.fn()
       renderWithRouter(<RecipeHeader {...defaultProps} onScaleChange={onScaleChange} />)
-      expect(screen.getByText('Servings:')).toBeInTheDocument()
+      expect(screen.getByTestId('scale-selector')).toBeInTheDocument()
     })
 
     it('displays scaled servings when servings text is provided', () => {
       renderWithRouter(<RecipeHeader {...defaultProps} servings="Serves 4" scaleFactor={2} />)
       expect(screen.getByText('Serves 8')).toBeInTheDocument()
+      expect(screen.getByText('Yield')).toBeInTheDocument()
     })
 
     it('does not display original servings note when scale factor is not 1', () => {

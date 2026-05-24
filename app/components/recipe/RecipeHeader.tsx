@@ -132,20 +132,17 @@ export function RecipeHeader({
           </div>
 
           <div className="mt-auto pt-10">
-            <div className="flex flex-col gap-3 border-y border-[var(--sj-border)] py-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-2">
-                <span className="font-sj-ui text-sm font-semibold uppercase tracking-[0.12em] text-[var(--sj-ink-soft)]">Servings:</span>
-                <ScaleSelector
-                  value={scaleFactor}
-                  onChange={onScaleChange}
-                  displayValue={scaledServings}
-                />
-              </div>
+            <div className="grid gap-4 sm:grid-cols-[minmax(16rem,26rem)_auto] sm:items-center sm:justify-between">
+              <ScaleSelector
+                value={scaleFactor}
+                onChange={onScaleChange}
+                displayValue={scaledServings}
+              />
               {onClearProgress && (
                 <button
                   type="button"
                   onClick={onClearProgress}
-                  className="font-sj-ui text-left text-xs font-semibold uppercase tracking-[0.14em] text-[var(--sj-ink-soft)] hover:text-[var(--sj-tomato)] sm:text-right"
+                  className="font-sj-ui text-left text-xs font-semibold uppercase tracking-[0.14em] text-[var(--sj-ink-soft)] hover:text-[var(--sj-tomato)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)] sm:text-right"
                   data-testid="clear-progress-button"
                 >
                   Clear progress

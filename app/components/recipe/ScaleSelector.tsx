@@ -1,5 +1,4 @@
 import { Minus, Plus } from 'lucide-react'
-import { Button } from '../ui/button'
 
 export interface ScaleSelectorProps {
   /** Current scale factor */
@@ -17,12 +16,12 @@ export interface ScaleSelectorProps {
 }
 
 /**
- * A scale factor selector with +/− buttons for recipe scaling.
+ * A recipe-yield selector with +/− buttons for recipe scaling.
  *
  * Features:
- * - Large 44×44px touch targets for kitchen use
+ * - Full-width mobile touch targets for kitchen use
  * - 0.25 increments for recipe-friendly scaling
- * - Clear scale display with "×" suffix
+ * - Editorial yield display that fits the cookbook page
  * - Disabled state at min/max boundaries
  */
 export function ScaleSelector({
@@ -64,41 +63,48 @@ export function ScaleSelector({
     return `${parseFloat(v.toFixed(2))}×`
   }
 
+  const visibleValue = displayValue ?? formatDisplayValue(value)
+  const caption = displayValue ? 'Yield' : 'Scale'
+
   return (
-    <div className="inline-flex items-center gap-0.5">
-      {/* Minus button */}
-      <Button
+    <div
+      data-testid="scale-selector"
+      className="grid w-full grid-cols-[3rem_minmax(0,1fr)_3rem] items-stretch border-y border-[var(--sj-border-strong)] text-[var(--sj-ink)] sm:max-w-[26rem]"
+    >
+      <button
         type="button"
-        plain
         disabled={isAtMin}
         onClick={handleDecrement}
         aria-label="Decrease scale"
         data-testid="scale-minus"
-        className="!p-1.5 !min-w-7 !min-h-7 flex items-center justify-center"
+        className="grid min-h-16 place-items-center border-r border-[var(--sj-border)] text-[var(--sj-ink)] transition hover:bg-[var(--sj-flour)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)] disabled:text-[var(--sj-border-strong)] disabled:hover:bg-transparent"
       >
-        <Minus className="h-4 w-4" aria-hidden="true" />
-      </Button>
+        <Minus className="size-5" aria-hidden="true" />
+      </button>
 
-      {/* Scale display */}
-      <span
-        data-testid="scale-display"
-        className="min-w-[2.5rem] text-center text-sm font-semibold tabular-nums text-[var(--sj-ink)]"
-      >
-        {displayValue ?? formatDisplayValue(value)}
+      <span className="grid min-h-16 min-w-0 place-items-center px-4 py-2 text-center">
+        <span className="font-sj-ui text-[0.62rem]/4 font-bold uppercase tracking-[0.22em] text-[var(--sj-ink-soft)]">
+          {caption}
+        </span>
+        <span
+          data-testid="scale-display"
+          aria-live="polite"
+          className="font-sj-display truncate text-2xl/8 font-semibold text-[var(--sj-ink)] sm:text-3xl/9"
+        >
+          {visibleValue}
+        </span>
       </span>
 
-      {/* Plus button */}
-      <Button
+      <button
         type="button"
-        plain
         disabled={isAtMax}
         onClick={handleIncrement}
         aria-label="Increase scale"
         data-testid="scale-plus"
-        className="!p-1.5 !min-w-7 !min-h-7 flex items-center justify-center"
+        className="grid min-h-16 place-items-center border-l border-[var(--sj-border)] text-[var(--sj-ink)] transition hover:bg-[var(--sj-flour)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)] disabled:text-[var(--sj-border-strong)] disabled:hover:bg-transparent"
       >
-        <Plus className="h-4 w-4" aria-hidden="true" />
-      </Button>
+        <Plus className="size-5" aria-hidden="true" />
+      </button>
     </div>
   )
 }

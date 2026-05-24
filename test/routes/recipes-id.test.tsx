@@ -2201,7 +2201,8 @@ describe("Recipes $id Route", () => {
 
       // Wait for recipe to render
       await screen.findByRole("heading", { name: "Scalable Recipe" });
-      expect(screen.getByText("Servings:")).toBeInTheDocument();
+      expect(screen.getByTestId("scale-selector")).toBeInTheDocument();
+      expect(screen.getByText("Yield")).toBeInTheDocument();
 
       // Initial scale should show scaled servings value.
       const scaleDisplay = screen.getByTestId("scale-display");
