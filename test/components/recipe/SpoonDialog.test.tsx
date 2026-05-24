@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { createTestRoutesStub } from "../../utils";
@@ -40,6 +40,40 @@ describe("SpoonDialog", () => {
     expect(screen.getByLabelText(/cooked at/i)).toBeInTheDocument();
   });
 
+  it("renders a clear photo picker target instead of the native file text", async () => {
+    renderDialog();
+    const fileInput = (await screen.findByLabelText(/photo/i)) as HTMLInputElement;
+    const picker = screen.getByTestId("spoon-photo-picker");
+
+    expect(fileInput).toHaveClass("sr-only");
+    expect(picker).toHaveTextContent(/add photo/i);
+    expect(picker).toHaveTextContent(/no photo yet/i);
+    expect(picker).toHaveTextContent(/jpg, png, gif, or webp/i);
+    expect(screen.queryByText(/no file selected/i)).toBeNull();
+  });
+
+  it("shows the selected photo filename in the custom picker", async () => {
+    renderDialog();
+    const fileInput = (await screen.findByLabelText(/photo/i)) as HTMLInputElement;
+    await userEvent.upload(fileInput, makeFile("spoon-night.png", "image/png"));
+
+    expect(screen.getByTestId("spoon-photo-picker")).toHaveTextContent("spoon-night.png");
+  });
+
+  it("returns the custom picker to its empty state when file selection is cancelled", async () => {
+    renderDialog();
+    const fileInput = (await screen.findByLabelText(/photo/i)) as HTMLInputElement;
+    const picker = screen.getByTestId("spoon-photo-picker");
+    await userEvent.upload(fileInput, makeFile("cook.png", "image/png"));
+    expect(picker).toHaveTextContent("cook.png");
+
+    Object.defineProperty(fileInput, "files", { value: [], configurable: true });
+    fireEvent.change(fileInput);
+
+    expect(picker).toHaveTextContent(/no photo yet/i);
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("disables submit until at least one of {photo, note, nextTime} is non-empty", async () => {
     renderDialog();
     const submit = await screen.findByRole("button", { name: /save spoon/i });
@@ -63,16 +97,17 @@ describe("SpoonDialog", () => {
     expect(input.value).toBe("2025-06-01T12:00");
   });
 
-  it("clears the photo error when the user removes the selected file", async () => {
+  it("clears the photo error when the user selects a valid file", async () => {
     renderDialog();
     const fileInput = (await screen.findByLabelText(/photo/i)) as HTMLInputElement;
     const user = userEvent.setup({ applyAccept: false });
     await user.upload(fileInput, makeFile("a.svg", "image/svg+xml"));
-    expect(await screen.findByText(/jpg, png, gif, or webp/i)).toBeInTheDocument();
-    await user.upload(fileInput, []);
+    expect(await screen.findByRole("alert")).toHaveTextContent(/jpg, png, gif, or webp/i);
+    await user.upload(fileInput, makeFile("cook.png", "image/png"));
     await waitFor(() => {
-      expect(screen.queryByText(/jpg, png, gif, or webp/i)).toBeNull();
+      expect(screen.queryByRole("alert")).toBeNull();
     });
+    expect(screen.getByTestId("spoon-photo-picker")).toHaveTextContent("cook.png");
   });
 
   it("when isOriginCookCandidate=true shows a photo-required hint and disables submit until photo is provided", async () => {
@@ -93,7 +128,7 @@ describe("SpoonDialog", () => {
     const fileInput = (await screen.findByLabelText(/photo/i)) as HTMLInputElement;
     const user = userEvent.setup({ applyAccept: false });
     await user.upload(fileInput, makeFile("a.svg", "image/svg+xml"));
-    expect(await screen.findByText(/jpg, png, gif, or webp/i)).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent(/jpg, png, gif, or webp/i);
   });
 
   it("rejects files >5MB with an inline error", async () => {
@@ -104,7 +139,7 @@ describe("SpoonDialog", () => {
       fileInput,
       makeFile("big.png", "image/png", 6 * 1024 * 1024),
     );
-    expect(await screen.findByText(/5\s*mb/i)).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent(/5\s*mb/i);
   });
 
   it("submits a multipart form with intent=createSpoon and the entered fields", async () => {

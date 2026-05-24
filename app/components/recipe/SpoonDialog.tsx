@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { Form } from "react-router";
+import { ImagePlus } from "lucide-react";
 import { Dialog, DialogActions, DialogBody, DialogTitle } from "../ui/dialog";
 import { Field, Label } from "../ui/fieldset";
 import { Input } from "../ui/input";
@@ -39,6 +40,9 @@ export function SpoonDialog({
   const noteId = useId();
   const nextTimeId = useId();
   const photoId = useId();
+  const photoHintId = useId();
+  const photoStatusId = useId();
+  const photoErrorId = useId();
   const cookedAtId = useId();
   const formRef = useRef<HTMLFormElement>(null);
   const [note, setNote] = useState("");
@@ -72,6 +76,7 @@ export function SpoonDialog({
     if (validation) {
       setPhotoError(validation);
       setPhotoFile(null);
+      event.currentTarget.value = "";
       return;
     }
     setPhotoError(null);
@@ -102,17 +107,38 @@ export function SpoonDialog({
           ) : null}
           <Field>
             <Label htmlFor={photoId}>Photo</Label>
-            <input
-              id={photoId}
-              name="photo"
-              type="file"
-              accept={RECIPE_IMAGE_TYPES.join(",")}
-              data-max-size={IMAGE_MAX_FILE_SIZE}
-              onChange={handleFileChange}
-              className="block w-full text-sm"
-            />
+            <label
+              data-slot="control"
+              data-testid="spoon-photo-picker"
+              className="group flex min-h-24 cursor-pointer items-center gap-4 rounded-[var(--sj-radius-surface)] border border-[var(--sj-border-strong)] bg-[var(--sj-field)] px-4 py-4 transition hover:border-[var(--sj-ink)] hover:bg-[var(--sj-panel-solid)]"
+            >
+              <input
+                id={photoId}
+                name="photo"
+                type="file"
+                accept={RECIPE_IMAGE_TYPES.join(",")}
+                data-max-size={IMAGE_MAX_FILE_SIZE}
+                aria-describedby={`${photoHintId} ${photoStatusId}${photoError ? ` ${photoErrorId}` : ""}`}
+                onChange={handleFileChange}
+                className="peer sr-only"
+              />
+              <span className="grid size-12 shrink-0 place-items-center rounded-[var(--sj-radius-small)] bg-[var(--sj-ink)] text-[var(--sj-paper)] transition group-hover:bg-[var(--sj-action-deep)] peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-4 peer-focus-visible:outline-[var(--sj-brass)]">
+                <ImagePlus className="size-5" aria-hidden="true" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block font-sj-ui text-base font-semibold leading-6 text-[var(--sj-ink)]">
+                  Add photo
+                </span>
+                <span id={photoStatusId} className="block truncate font-sj-ui text-sm leading-6 text-[var(--sj-ink-soft)]">
+                  {photoFile ? photoFile.name : "No photo yet"}
+                </span>
+                <span id={photoHintId} className="block font-sj-ui text-sm leading-6 text-[var(--sj-ink-soft)]">
+                  JPG, PNG, GIF, or WebP. 5 MB max.
+                </span>
+              </span>
+            </label>
             {photoError ? (
-              <p role="alert" className="mt-1 text-sm text-[var(--sj-tomato)]">
+              <p id={photoErrorId} role="alert" className="mt-1 text-sm text-[var(--sj-tomato)]">
                 {photoError}
               </p>
             ) : null}
