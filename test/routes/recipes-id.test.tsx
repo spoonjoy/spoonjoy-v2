@@ -1326,6 +1326,8 @@ describe("Recipes $id Route", () => {
       expect(screen.queryByRole("link", { name: "Edit" })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Delete Recipe" })).not.toBeInTheDocument();
       expect(screen.queryByRole("link", { name: "Add Steps" })).not.toBeInTheDocument();
+      expect(screen.getByTestId("recipe-header-fork-action")).toHaveAccessibleName("Fork");
+      expect(screen.queryByTestId("recipe-owner-tools")).not.toBeInTheDocument();
     });
 
     it("should render recipe with steps and ingredients", async () => {
@@ -1421,6 +1423,7 @@ describe("Recipes $id Route", () => {
 
       await screen.findByRole("heading", { name: "My Recipe" });
       expect(screen.queryByRole("link", { name: "Edit" })).not.toBeInTheDocument();
+      expect(screen.getByTestId("recipe-owner-tools")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Delete Recipe" })).toBeInTheDocument();
     });
 

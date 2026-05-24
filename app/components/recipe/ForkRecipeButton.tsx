@@ -8,6 +8,9 @@ export interface ForkRecipeButtonProps {
   recipeTitle: string;
   sourceChefUsername: string;
   isOwner: boolean;
+  triggerClassName?: string;
+  triggerTestId?: string;
+  triggerStyle?: "button" | "text";
 }
 
 export function ForkRecipeButton({
@@ -15,6 +18,9 @@ export function ForkRecipeButton({
   recipeTitle,
   sourceChefUsername,
   isOwner,
+  triggerClassName,
+  triggerTestId,
+  triggerStyle = "button",
 }: ForkRecipeButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -31,9 +37,26 @@ export function ForkRecipeButton({
 
   return (
     <>
-      <Button type="button" plain onClick={() => setIsOpen(true)}>
-        {triggerLabel}
-      </Button>
+      {triggerStyle === "text" ? (
+        <button
+          type="button"
+          onClick={() => setIsOpen(true)}
+          className={triggerClassName}
+          data-testid={triggerTestId}
+        >
+          {triggerLabel}
+        </button>
+      ) : (
+        <Button
+          type="button"
+          plain
+          onClick={() => setIsOpen(true)}
+          className={triggerClassName}
+          data-testid={triggerTestId}
+        >
+          {triggerLabel}
+        </Button>
+      )}
       <Dialog open={isOpen} onClose={setIsOpen} size="md">
         <DialogTitle>{dialogTitle}</DialogTitle>
         <DialogBody>{dialogBody}</DialogBody>

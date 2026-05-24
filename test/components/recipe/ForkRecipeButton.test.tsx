@@ -41,6 +41,29 @@ describe("ForkRecipeButton", () => {
     ).toBeInTheDocument();
   });
 
+  it("can render as an unchromed text trigger for recipe masthead actions", async () => {
+    renderButton({
+      triggerClassName: "masthead-action",
+      triggerStyle: "text",
+      triggerTestId: "recipe-header-fork-action",
+    });
+
+    const trigger = await screen.findByTestId("recipe-header-fork-action");
+    expect(trigger).toHaveClass("masthead-action");
+    expect(trigger).toHaveAccessibleName("Fork");
+  });
+
+  it("opens the dialog from the unchromed text trigger", async () => {
+    renderButton({
+      triggerStyle: "text",
+      triggerTestId: "recipe-header-fork-action",
+    });
+
+    await userEvent.click(await screen.findByTestId("recipe-header-fork-action"));
+
+    expect(await screen.findByRole("dialog")).toHaveTextContent("Fork");
+  });
+
   it("opens the dialog with chef username and recipe title in the body when not owner", async () => {
     renderButton({ isOwner: false, recipeTitle: "Pasta", sourceChefUsername: "alice" });
     await userEvent.click(await screen.findByRole("button", { name: /^fork$/i }));

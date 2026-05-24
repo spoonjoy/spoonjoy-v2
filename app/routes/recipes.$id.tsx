@@ -279,6 +279,8 @@ export default function RecipeDetail() {
     />
   ) : null;
 
+  const recipeHeaderActionCount = isOwner ? 3 : 4;
+
   const headerMasthead = (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
       <Link href="/recipes" className={recipeMastheadLinkClass}>
@@ -286,13 +288,13 @@ export default function RecipeDetail() {
         Recipes
       </Link>
       <div
-        className="grid grid-cols-3 border-y border-[var(--sj-border)] sm:flex sm:items-center sm:gap-6 sm:border-y-0"
+        className={`${recipeHeaderActionCount === 4 ? "grid-cols-4" : "grid-cols-3"} grid divide-x divide-[var(--sj-border)] border-y border-[var(--sj-border)] sm:flex sm:items-center sm:gap-6 sm:divide-x-0 sm:border-y-0`}
         data-testid="recipe-header-actions"
       >
         <Link
           href="#steps"
           onClick={handleEnterCookMode}
-          className={`${recipeMastheadActionClass} ${recipeMastheadPrimaryActionClass} border-r border-[var(--sj-border)] sm:border-r-0`}
+          className={`${recipeMastheadActionClass} ${recipeMastheadPrimaryActionClass}`}
           data-testid="recipe-header-cook-action"
         >
           Cook mode
@@ -301,7 +303,7 @@ export default function RecipeDetail() {
           type="button"
           onClick={handleAddToList}
           aria-pressed={isAlreadyInList}
-          className={`${recipeMastheadActionClass} border-r border-[var(--sj-border)] bg-transparent sm:border-r-0`}
+          className={`${recipeMastheadActionClass} bg-transparent`}
           data-testid="recipe-header-list-action"
         >
           {addToListLabel}
@@ -314,6 +316,17 @@ export default function RecipeDetail() {
         >
           Log cook
         </button>
+        {!isOwner && (
+          <ForkRecipeButton
+            recipeId={recipe.id}
+            recipeTitle={recipe.title}
+            sourceChefUsername={recipe.chef.username}
+            isOwner={false}
+            triggerClassName={recipeMastheadActionClass}
+            triggerStyle="text"
+            triggerTestId="recipe-header-fork-action"
+          />
+        )}
       </div>
     </div>
   );
@@ -497,27 +510,29 @@ export default function RecipeDetail() {
         provenance={headerProvenance}
       />
 
-      {/* Secondary recipe actions */}
-      <div className="mx-auto max-w-4xl px-4 pt-4 sm:px-6 lg:px-8">
-        <div className="flex flex-wrap gap-3">
-          <ForkRecipeButton
-            recipeId={recipe.id}
-            recipeTitle={recipe.title}
-            sourceChefUsername={recipe.chef.username}
-            isOwner={isOwner}
-          />
-          {/* istanbul ignore next -- @preserve owner-only UI rendering */}
-          {isOwner && (
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={() => setIsDeleteDialogOpen(true)}
-            >
-              Delete Recipe
-            </Button>
-          )}
+      {/* Owner recipe management */}
+      {isOwner && (
+        <div className="border-b border-[var(--sj-border)]" data-testid="recipe-owner-tools">
+          <div className="mx-auto flex max-w-4xl flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
+            <p className="sj-eyebrow">Recipe tools</p>
+            <div className="flex flex-wrap gap-3">
+              <ForkRecipeButton
+                recipeId={recipe.id}
+                recipeTitle={recipe.title}
+                sourceChefUsername={recipe.chef.username}
+                isOwner={isOwner}
+              />
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={() => setIsDeleteDialogOpen(true)}
+              >
+                Delete Recipe
+              </Button>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
       <SpoonDialog
         isOpen={isSpoonDialogOpen}
