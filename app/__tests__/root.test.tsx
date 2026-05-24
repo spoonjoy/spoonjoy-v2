@@ -247,7 +247,7 @@ describe('Root layout responsive behavior', () => {
 
       // For unauthenticated users, SpoonDock should show:
       // - Home (left side)
-      // - Center logo (SJ)
+      // - Center Spoonjoy mark
       // - Login (right side)
 
       // This test should FAIL initially because MobileNav is only rendered for authenticated users
@@ -255,7 +255,7 @@ describe('Root layout responsive behavior', () => {
       const mobileNav = navigations.find(nav => nav.className.includes('lg:hidden'))
       expect(mobileNav).toBeInTheDocument()
 
-      // Check for dock-center (the SJ logo)
+      // Check for dock-center (the Spoonjoy mark)
       expect(screen.getByTestId('dock-center')).toBeInTheDocument()
     })
 

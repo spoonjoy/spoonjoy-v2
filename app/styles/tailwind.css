@@ -197,17 +197,6 @@ html *:where(input, textarea, select, button) {
   font-weight: 700;
 }
 
-.sj-nav-mark {
-  display: inline-grid;
-  height: 1.25rem;
-  width: 1.65rem;
-  place-items: center;
-  border: 2px solid var(--sj-ink);
-  border-radius: 0.32rem 0.08rem 0.32rem 0.08rem;
-  font-size: 0.62rem;
-  line-height: 1;
-}
-
 .sj-desktop-brand,
 .sj-desktop-nav-link {
   color: var(--sj-ink);
@@ -219,6 +208,18 @@ html *:where(input, textarea, select, button) {
   width: fit-content;
   align-items: center;
   gap: 1rem;
+}
+
+.sj-desktop-brand-logo {
+  display: block;
+  color: var(--sj-ink);
+}
+
+.sj-desktop-brand-word {
+  font-family: var(--font-sj-display);
+  font-size: 1.08rem;
+  font-weight: 800;
+  line-height: 1;
 }
 
 .sj-desktop-nav-link {

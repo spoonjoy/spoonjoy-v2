@@ -9,7 +9,7 @@ interface SpoonjoyLogoProps extends React.SVGProps<SVGSVGElement> {
 }
 
 /**
- * The Spoonjoy logo - an abstract "SJ" mark.
+ * The Spoonjoy logo - the app's abstract signature mark.
  * Uses currentColor by default so it inherits text color from parent.
  * This is a filled logo (not stroke-based like lucide icons), so we use
  * fill! to override the fill-none that might be applied by navbar/sidebar.

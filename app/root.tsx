@@ -70,7 +70,7 @@ function getActiveNav(pathname: string): string | null {
 /**
  * Desktop Navbar component - shown in StackedLayout header
  */
-function AppNavbar({ userId }: { userId: string | null }) {
+export function AppNavbar({ userId }: { userId: string | null }) {
   const location = useLocation();
   const currentNav = getActiveNav(location.pathname);
   const navLinkClass = "sj-desktop-nav-link";
@@ -78,8 +78,13 @@ function AppNavbar({ userId }: { userId: string | null }) {
   return (
     <nav className="sj-desktop-nav" aria-label="Main navigation">
       <RouterLink to="/" className="sj-desktop-brand" data-current={currentNav === "home"}>
-        <span className="sj-nav-mark" aria-hidden="true">SJ</span>
-        <span>Spoonjoy</span>
+        <SpoonjoyLogo
+          width={42}
+          height={26}
+          className="sj-desktop-brand-logo"
+          aria-hidden="true"
+        />
+        <span className="sj-desktop-brand-word">Spoonjoy</span>
       </RouterLink>
       {userId ? (
         <>

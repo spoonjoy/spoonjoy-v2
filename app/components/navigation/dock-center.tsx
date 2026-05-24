@@ -5,7 +5,7 @@ import { Link } from '~/components/ui/link'
 import { SpoonjoyLogo } from '~/components/ui/spoonjoy-logo'
 
 /**
- * DockCenter - SJ Logo center element for the SpoonDock (v3)
+ * DockCenter - Spoonjoy mark center element for the SpoonDock (v3)
  * 
  * The hero of the dock. Larger than side items with intentional breathing
  * gap from the glass container edges. Subtle breathing animation.

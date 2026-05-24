@@ -30,7 +30,7 @@ describe('DockCenter', () => {
   })
 
   describe('rendering', () => {
-    it('renders the SJ logo', () => {
+    it('renders the Spoonjoy mark', () => {
       render(
         <RouterWrapper>
           <DockCenter />

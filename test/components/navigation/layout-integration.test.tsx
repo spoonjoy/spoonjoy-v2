@@ -51,7 +51,7 @@ function AssembledSpoonDock({ currentPath = '/' }: { currentPath?: string }) {
         />
       </div>
 
-      {/* Center logo */}
+      {/* Center Spoonjoy mark */}
       <DockCenter href="/" />
 
       {/* Right slot */}
