@@ -34,6 +34,10 @@ function normalizeTab(value: string | null): KitchenTab {
   return value === "cookbooks" ? "cookbooks" : "recipes";
 }
 
+function isLocalQaRecipe(title: string) {
+  return /^(e2e|mobile dock save)\b/i.test(title.trim()) || /\(variation \d+\)$/i.test(title.trim());
+}
+
 export function meta({}: Route.MetaArgs) {
   return [
     { title: "Spoonjoy - Recipe Kitchens & Cookbooks" },
@@ -228,25 +232,29 @@ export default function Index() {
     );
   }
 
+  const visibleRecipes = recipes.filter((recipe) => !isLocalQaRecipe(recipe.title));
+  const displayRecipes = visibleRecipes.length > 0 ? visibleRecipes : recipes;
   const heading = isOwner ? "My Kitchen" : `${kitchenUser.username}'s Kitchen`;
-  const featuredRecipe = recipes[0] ?? null;
-  const indexedRecipes = featuredRecipe ? recipes.slice(1) : recipes;
+  const featuredRecipe = displayRecipes.find((recipe) => recipe.coverImageUrl) ?? displayRecipes[0] ?? null;
+  const indexedRecipes = featuredRecipe
+    ? displayRecipes.filter((recipe) => recipe.id !== featuredRecipe.id)
+    : displayRecipes;
 
   return (
     <CookbookPage>
       <section>
-        <header className="grid gap-6 border-y border-[var(--sj-border-strong)] py-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
-          <div className="flex items-end gap-4">
+        <header className="grid gap-6 border-y border-[var(--sj-border-strong)] py-7 lg:grid-cols-[4.5rem_minmax(0,1fr)_auto] lg:items-end">
+          <div className="lg:contents">
             <Avatar
               src={resolveChefAvatarUrl(kitchenUser.photoUrl)}
               alt={kitchenUser.username}
-              className="size-16 border border-[var(--sj-border)] shadow-[var(--sj-shadow-soft)] sm:size-20"
+              className="size-18 border border-[var(--sj-border-strong)] shadow-[var(--sj-shadow-soft)]"
             />
             <div>
               <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.22em] text-[var(--sj-brass)]">Kitchen</p>
-              <Heading level={1} className="mt-1 text-5xl/13 tracking-[-0.04em] sm:text-6xl/15">{heading}</Heading>
+              <Heading level={1} className="mt-1 text-5xl/12 sm:text-6xl/14 lg:text-7xl/16">{heading}</Heading>
               <Text className="mt-2 text-sm">
-                {recipes.length} {recipes.length === 1 ? "recipe" : "recipes"} and {cookbooks.length} {cookbooks.length === 1 ? "cookbook" : "cookbooks"}
+                {displayRecipes.length} {displayRecipes.length === 1 ? "recipe" : "recipes"} and {cookbooks.length} {cookbooks.length === 1 ? "cookbook" : "cookbooks"}
               </Text>
             </div>
           </div>
@@ -266,7 +274,7 @@ export default function Index() {
           </div>
         </header>
 
-        <div className="mt-10 grid gap-8 xl:grid-cols-[minmax(0,1.5fr)_minmax(23rem,0.5fr)] xl:items-start">
+        <div className="mt-10 grid gap-8 lg:grid-cols-[minmax(0,1.42fr)_minmax(18.75rem,0.62fr)] lg:items-start">
           <RecipeLead recipe={featuredRecipe} isOwner={isOwner} />
           <RecipeIndex recipes={indexedRecipes} isOwner={isOwner} hasLead={Boolean(featuredRecipe)} />
         </div>
@@ -330,8 +338,8 @@ function RecipeLead({ recipe, isOwner }: { recipe: KitchenRecipe | null; isOwner
   const displayImageUrl = recipe.coverImageUrl && recipe.coverImageUrl.length > 0 ? recipe.coverImageUrl : undefined;
 
   return (
-    <section aria-label="Latest from the kitchen" className="mb-20 border-b border-[var(--sj-border-strong)] pb-8 xl:mb-0">
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.08fr)_minmax(17rem,0.42fr)] lg:items-end">
+    <section aria-label="Latest from the kitchen" className="mb-16 border-b border-[var(--sj-border-strong)] pb-8 lg:mb-0">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.04fr)_minmax(15.625rem,0.46fr)] lg:items-end">
         <Link
           href={`/recipes/${recipe.id}`}
           className="group block overflow-hidden bg-[var(--sj-photo-charcoal)] no-underline"
@@ -351,9 +359,9 @@ function RecipeLead({ recipe, isOwner }: { recipe: KitchenRecipe | null; isOwner
         <div className="border-l border-[var(--sj-border)] pl-5">
           <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.22em] text-[var(--sj-brass)]">Latest from the kitchen</p>
           <Link href={`/recipes/${recipe.id}`} className="block no-underline">
-            <Heading level={2} className="mt-4 text-4xl/11 tracking-[-0.04em] hover:text-[var(--sj-tomato)] sm:text-5xl/13">{recipe.title}</Heading>
+            <Heading level={2} className="mt-3 text-4xl/10 hover:text-[var(--sj-tomato)] sm:mt-5 sm:text-6xl/14">{recipe.title}</Heading>
           </Link>
-          {recipe.description ? <Text className="mt-4 max-w-md text-base/7">{recipe.description}</Text> : null}
+          {recipe.description ? <Text className="mt-4 hidden max-w-md text-base/7 sm:block">{recipe.description}</Text> : null}
           {recipe.servings ? (
             <p className="font-sj-ui mt-5 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">
               Serves {recipe.servings}
@@ -373,12 +381,13 @@ function RecipeLead({ recipe, isOwner }: { recipe: KitchenRecipe | null; isOwner
 
 function RecipeIndex({ recipes, isOwner, hasLead }: { recipes: KitchenRecipe[]; isOwner: boolean; hasLead: boolean }) {
   return (
-    <aside aria-label="Recipe index" className="xl:max-h-[44rem] xl:overflow-y-auto xl:border-l xl:border-[var(--sj-border)] xl:pl-6 xl:pr-1">
+    <aside aria-label="Recipe index" className="lg:max-h-[44rem] lg:overflow-y-auto lg:border-l lg:border-[var(--sj-border)] lg:pl-6 lg:pr-1">
       <div className="flex items-end justify-between gap-4 border-b border-[var(--sj-border-strong)] pb-3">
         <div>
           <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.22em] text-[var(--sj-brass)]">Index</p>
           <Subheading level={2} className="mt-1 text-2xl/8">Recipe index</Subheading>
         </div>
+        {isOwner ? <Link href="/recipes/new" className="font-sj-ui text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)] no-underline hover:text-[var(--sj-ink)]">New +</Link> : null}
       </div>
 
       {recipes.length > 0 ? (
@@ -405,7 +414,7 @@ function RecipeIndexRow({ recipe, ordinal }: { recipe: KitchenRecipe; ordinal: n
         {String(ordinal).padStart(2, "0")}
       </div>
       <div className="min-w-0 self-center">
-        <h3 className="font-sj-display line-clamp-2 text-xl/6 font-semibold tracking-[-0.02em] text-[var(--sj-ink)] group-hover:text-[var(--sj-tomato)]">
+        <h3 className="font-sj-display line-clamp-2 text-2xl/7 font-extrabold text-[var(--sj-ink)] group-hover:text-[var(--sj-tomato)]">
           {recipe.title}
         </h3>
         {recipe.description ? <p className="mt-1 line-clamp-2 text-sm/5 text-[var(--sj-ink-soft)]">{recipe.description}</p> : null}
@@ -429,7 +438,7 @@ function CookbookShelf({ cookbooks, isOwner }: { cookbooks: KitchenCookbook[]; i
       </div>
 
       {cookbooks.length > 0 ? (
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(10rem,13rem))] gap-4">
+        <div className="flex gap-4 overflow-x-auto pb-2">
           {cookbooks.map((cookbook) => (
             <CookbookCover key={cookbook.id} cookbook={cookbook} />
           ))}
@@ -457,7 +466,7 @@ function CookbookCover({ cookbook }: { cookbook: KitchenCookbook }) {
 
   return (
     <Link href={`/cookbooks/${cookbook.id}`} className="group block no-underline">
-      <article className="relative flex aspect-[3/4] overflow-hidden border border-[var(--sj-border-strong)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_86%,var(--sj-flour))] shadow-[var(--sj-shadow-soft)] transition group-hover:-translate-y-0.5 group-hover:border-[var(--sj-brass)]">
+      <article className="relative flex aspect-[3/4] w-52 shrink-0 overflow-hidden border border-[var(--sj-border-strong)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_86%,var(--sj-flour))] shadow-[var(--sj-shadow-soft)] transition group-hover:-translate-y-0.5 group-hover:border-[var(--sj-brass)]">
         <span className="w-2 shrink-0 bg-[color-mix(in_srgb,var(--sj-charcoal)_24%,var(--sj-brass))]" aria-hidden="true" />
         <div className="flex min-w-0 flex-1 flex-col p-3">
           <div className="aspect-[4/3] overflow-hidden rounded-[var(--sj-radius-small)] border border-[var(--sj-border)] bg-[var(--sj-flour)]">

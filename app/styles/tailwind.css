@@ -4,19 +4,19 @@
 
 :root {
   color-scheme: light;
-  --font-sj-display: "Newsreader", Georgia, "Times New Roman", serif;
-  --font-sj-body: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-sj-ui: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-sj-display: "Fraunces", Georgia, "Times New Roman", serif;
+  --font-sj-body: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --font-sj-ui: "IBM Plex Sans Condensed", "Avenir Next Condensed", ui-sans-serif, system-ui, sans-serif;
 
   /* Cookbook palette: clean bone paper and charcoal are the anchors; accents are sparse and role-bound. */
-  --sj-bone: #fbfaf6;
-  --sj-bone-lift: #fffef9;
-  --sj-vellum: #e9e4dc;
-  --sj-charcoal: #282622;
-  --sj-charcoal-soft: #625f58;
-  --sj-brass: #8b6641;
-  --sj-action: #946735;
-  --sj-action-deep: #7c5528;
+  --sj-bone: #fbfaf4;
+  --sj-bone-lift: #fffefa;
+  --sj-vellum: #e8e9df;
+  --sj-charcoal: #28231d;
+  --sj-charcoal-soft: #635d54;
+  --sj-brass: #9b6834;
+  --sj-action: #28231d;
+  --sj-action-deep: #1f1b17;
   --sj-tomato: #a24a38;
   --sj-herb: #596a4f;
   --sj-ink: var(--sj-charcoal);
@@ -27,8 +27,8 @@
   --sj-panel-solid: var(--sj-bone-lift);
   --sj-field: color-mix(in srgb, var(--sj-bone-lift) 94%, var(--sj-vellum));
   --sj-flour: var(--sj-vellum);
-  --sj-border: color-mix(in srgb, var(--sj-charcoal) 16%, transparent);
-  --sj-border-strong: color-mix(in srgb, var(--sj-charcoal) 28%, transparent);
+  --sj-border: color-mix(in srgb, var(--sj-charcoal) 18%, transparent);
+  --sj-border-strong: color-mix(in srgb, var(--sj-charcoal) 32%, transparent);
   --sj-on-photo: var(--sj-bone);
   --sj-on-photo-muted: color-mix(in srgb, var(--sj-bone) 76%, transparent);
   --sj-on-photo-soft: color-mix(in srgb, var(--sj-bone) 62%, transparent);
@@ -131,9 +131,7 @@ html *:where(input, textarea, select, button) {
 }
 
 .sj-app-shell {
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--sj-panel-solid) 76%, transparent), transparent 22rem),
-    var(--sj-page);
+  background: var(--sj-page);
 }
 
 .sj-desktop-surface,
@@ -164,8 +162,8 @@ html *:where(input, textarea, select, button) {
 
 .sj-page-frame {
   margin-inline: auto;
-  width: min(100%, 92rem);
-  padding: 1.5rem 1.25rem 7rem;
+  width: min(100%, 94rem);
+  padding: 1.25rem 1.25rem 7rem;
 }
 
 @media (min-width: 640px) {
@@ -176,8 +174,94 @@ html *:where(input, textarea, select, button) {
 
 @media (min-width: 1024px) {
   .sj-page-frame {
-    padding: 3rem 2.5rem;
+    padding: 2rem 2.5rem 3rem;
   }
+}
+
+.sj-desktop-topbar {
+  border-bottom: 1px solid var(--sj-border-strong);
+  background: color-mix(in srgb, var(--sj-page) 96%, transparent);
+}
+
+.sj-desktop-nav {
+  margin-inline: auto;
+  display: grid;
+  min-height: 4.75rem;
+  width: min(100%, 94rem);
+  grid-template-columns: minmax(12rem, 1fr) auto minmax(12rem, 1fr);
+  align-items: center;
+  gap: 2rem;
+  padding-inline: 2.5rem;
+  font-family: var(--font-sj-ui);
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.sj-nav-mark {
+  display: inline-grid;
+  height: 1.25rem;
+  width: 1.65rem;
+  place-items: center;
+  border: 2px solid var(--sj-ink);
+  border-radius: 0.32rem 0.08rem 0.32rem 0.08rem;
+  font-size: 0.62rem;
+  line-height: 1;
+}
+
+.sj-desktop-brand,
+.sj-desktop-nav-link {
+  color: var(--sj-ink);
+  text-decoration: none;
+}
+
+.sj-desktop-brand {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 1rem;
+}
+
+.sj-desktop-nav-link {
+  position: relative;
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  padding-inline: 0;
+  color: var(--sj-ink-soft);
+  font: inherit;
+  cursor: pointer;
+}
+
+.sj-desktop-nav-link:hover,
+.sj-desktop-nav-link[data-current="true"] {
+  color: var(--sj-ink);
+}
+
+.sj-desktop-nav-link[data-current="true"]::after {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0.15rem;
+  height: 1px;
+  content: "";
+  background: var(--sj-ink);
+}
+
+.sj-desktop-nav-center,
+.sj-desktop-nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 1.65rem;
+}
+
+.sj-desktop-nav-center {
+  justify-content: center;
+}
+
+.sj-desktop-nav-actions {
+  justify-content: flex-end;
 }
 
 .sj-rule-block {

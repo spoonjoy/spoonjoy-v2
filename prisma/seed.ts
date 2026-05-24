@@ -133,6 +133,16 @@ const INGREDIENTS = [
   "mint",
   "scallion",
   "shallot",
+  "fennel",
+  "eggplant",
+  "cabbage",
+  "arugula",
+  "radicchio",
+  "cherry tomato",
+  "butternut squash",
+  "dill",
+  "chives",
+  "sage",
 
   // Proteins
   "chicken breast",
@@ -145,6 +155,11 @@ const INGREDIENTS = [
   "shrimp",
   "tofu",
   "egg",
+  "ground turkey",
+  "sausage",
+  "lentils",
+  "chickpeas",
+  "white beans",
 
   // Dairy
   "butter",
@@ -155,8 +170,11 @@ const INGREDIENTS = [
   "cheddar cheese",
   "parmesan cheese",
   "mozzarella cheese",
+  "fresh mozzarella",
   "feta cheese",
   "yogurt",
+  "ricotta cheese",
+  "goat cheese",
 
   // Pantry
   "olive oil",
@@ -180,9 +198,18 @@ const INGREDIENTS = [
   "baking powder",
   "baking soda",
   "rice",
+  "arborio rice",
+  "udon noodles",
+  "orzo",
   "pasta",
   "bread",
+  "sourdough bread",
   "panko breadcrumbs",
+  "walnuts",
+  "pistachios",
+  "sesame seeds",
+  "miso paste",
+  "curry paste",
   "chicken broth",
   "beef broth",
   "vegetable broth",
@@ -290,12 +317,29 @@ async function seedUsers() {
     });
 
     if (existing) {
+      const updateData: {
+        hashedPassword?: string;
+        salt?: string;
+        photoUrl?: string;
+      } = {};
+
       if (isGeneratedSeedAvatarUrl(existing.photoUrl) && userData.photoUrl) {
+        updateData.photoUrl = userData.photoUrl;
+      }
+
+      if (userData.password) {
+        const salt = await bcrypt.genSalt(SALT_ROUNDS);
+        updateData.hashedPassword = await bcrypt.hash(userData.password, salt);
+        updateData.salt = salt;
+      }
+
+      if (Object.keys(updateData).length > 0) {
         await prisma.user.update({
           where: { id: existing.id },
-          data: { photoUrl: userData.photoUrl },
+          data: updateData,
         });
       }
+
       users.push({ id: existing.id, email: existing.email, username: existing.username });
       continue;
     }
@@ -343,6 +387,24 @@ async function seedUsers() {
   return users;
 }
 
+async function cleanupLocalQaRecipes() {
+  log("🧹", "Hiding local QA recipe artifacts...");
+
+  const result = await prisma.recipe.updateMany({
+    where: {
+      deletedAt: null,
+      OR: [
+        { title: { startsWith: "e2e " } },
+        { title: { startsWith: "Mobile Dock Save" } },
+        { title: { contains: "(variation " } },
+      ],
+    },
+    data: { deletedAt: new Date() },
+  });
+
+  log("✅", `Hid ${result.count} local QA recipes`);
+}
+
 // ============================================================================
 // RECIPES
 // ============================================================================
@@ -351,6 +413,7 @@ interface RecipeData {
   title: string;
   description: string;
   servings: string;
+  chefUsername?: string;
   imageUrl?: string;
   steps: {
     stepTitle?: string;
@@ -766,6 +829,383 @@ const RECIPES: RecipeData[] = [
       },
     ],
   },
+  {
+    title: "Parmesan Crisp Grilled Cheese",
+    description:
+      "A crunchy-edged skillet sandwich with molten cheddar, a parmesan lace crust, and a swipe of tomato paste for depth.",
+    servings: "2 sandwiches",
+    chefUsername: "demo_chef",
+    imageUrl: "https://images.unsplash.com/photo-1528735602780-2552fd46c7af?w=900&q=82",
+    steps: [
+      {
+        stepTitle: "Build the sandwiches",
+        description:
+          "Brush bread with butter, spread a thin layer of tomato paste inside, and stack cheddar between the slices.",
+        ingredients: [
+          { name: "sourdough bread", quantity: 4, unit: "slice" },
+          { name: "butter", quantity: 3, unit: "tablespoon" },
+          { name: "tomato paste", quantity: 1, unit: "tablespoon" },
+          { name: "cheddar cheese", quantity: 160, unit: "gram" },
+        ],
+      },
+      {
+        stepTitle: "Make the crisp",
+        description:
+          "Scatter parmesan in a nonstick skillet, set the sandwiches on top, and cook slowly until the cheese forms a deeply golden crust.",
+        ingredients: [{ name: "parmesan cheese", quantity: 60, unit: "gram" }],
+        usesOutputFrom: [1],
+      },
+      {
+        stepTitle: "Rest and cut",
+        description:
+          "Let the sandwiches sit for one minute before cutting so the cheese sets just enough to pull cleanly.",
+        ingredients: [],
+        usesOutputFrom: [2],
+      },
+    ],
+  },
+  {
+    title: "Lemon Chickpea Dinner Salad",
+    description:
+      "A bright, sturdy salad with chickpeas, cucumber, herbs, and feta that can sit on the counter while everyone drifts in.",
+    servings: "4 servings",
+    chefUsername: "demo_chef",
+    imageUrl: "https://images.unsplash.com/photo-1540420773420-3366772f4999?w=900&q=82",
+    steps: [
+      {
+        stepTitle: "Dress the chickpeas",
+        description:
+          "Whisk lemon juice, olive oil, garlic, salt, and pepper. Toss with chickpeas while the dressing is sharp and glossy.",
+        ingredients: [
+          { name: "chickpeas", quantity: 2, unit: "can" },
+          { name: "lemon", quantity: 2, unit: "whole" },
+          { name: "olive oil", quantity: 4, unit: "tablespoon" },
+          { name: "garlic", quantity: 1, unit: "clove" },
+          { name: "salt", quantity: 1, unit: "teaspoon" },
+          { name: "black pepper", quantity: 0.5, unit: "teaspoon" },
+        ],
+      },
+      {
+        stepTitle: "Add crunch and herbs",
+        description:
+          "Fold in cucumber, radicchio, parsley, mint, and scallions. Taste for salt before adding cheese.",
+        ingredients: [
+          { name: "cucumber", quantity: 1, unit: "whole" },
+          { name: "radicchio", quantity: 1, unit: "whole" },
+          { name: "parsley", quantity: 1, unit: "bunch" },
+          { name: "mint", quantity: 0.5, unit: "bunch" },
+          { name: "scallion", quantity: 4, unit: "whole" },
+        ],
+        usesOutputFrom: [1],
+      },
+      {
+        stepTitle: "Finish",
+        description:
+          "Crumble feta over the top and shower with pistachios right before serving.",
+        ingredients: [
+          { name: "feta cheese", quantity: 120, unit: "gram" },
+          { name: "pistachios", quantity: 0.5, unit: "cup" },
+        ],
+        usesOutputFrom: [2],
+      },
+    ],
+  },
+  {
+    title: "Tomato Brown Butter Beans",
+    description:
+      "Creamy white beans in tomato-brown butter with sage and parmesan, halfway between pantry dinner and restaurant side.",
+    servings: "4 servings",
+    chefUsername: "demo_chef",
+    imageUrl: "https://images.unsplash.com/photo-1547592166-23ac45744acd?w=900&q=82",
+    steps: [
+      {
+        stepTitle: "Brown the butter",
+        description:
+          "Cook butter with sage until nutty and amber. Keep it moving so the milk solids brown without scorching.",
+        ingredients: [
+          { name: "butter", quantity: 4, unit: "tablespoon" },
+          { name: "sage", quantity: 6, unit: "sprig" },
+        ],
+      },
+      {
+        stepTitle: "Cook the tomatoes",
+        description:
+          "Add garlic, tomato paste, and cherry tomatoes. Cook until the tomatoes slump and the paste stains the butter.",
+        ingredients: [
+          { name: "garlic", quantity: 3, unit: "clove" },
+          { name: "tomato paste", quantity: 2, unit: "tablespoon" },
+          { name: "cherry tomato", quantity: 400, unit: "gram" },
+        ],
+        usesOutputFrom: [1],
+      },
+      {
+        stepTitle: "Fold in beans",
+        description:
+          "Add white beans and a splash of broth. Simmer until glossy, then finish with parmesan and black pepper.",
+        ingredients: [
+          { name: "white beans", quantity: 2, unit: "can" },
+          { name: "vegetable broth", quantity: 0.5, unit: "cup" },
+          { name: "parmesan cheese", quantity: 70, unit: "gram" },
+          { name: "black pepper", quantity: 0.5, unit: "teaspoon" },
+        ],
+        usesOutputFrom: [2],
+      },
+    ],
+  },
+  {
+    title: "Charred Broccoli Caesar",
+    description:
+      "Broccoli roasted hard, tossed with lemony parmesan dressing, crisp crumbs, and enough herbs to keep it lively.",
+    servings: "4 servings",
+    chefUsername: "demo_chef",
+    imageUrl: "https://images.unsplash.com/photo-1625944525533-473f1a3d54e7?w=900&q=82",
+    steps: [
+      {
+        stepTitle: "Roast the broccoli",
+        description:
+          "Toss broccoli with olive oil and salt. Roast hot until the tips char and the stems stay juicy.",
+        ingredients: [
+          { name: "broccoli", quantity: 2, unit: "bunch" },
+          { name: "olive oil", quantity: 3, unit: "tablespoon" },
+          { name: "salt", quantity: 1, unit: "teaspoon" },
+        ],
+      },
+      {
+        stepTitle: "Toast crumbs",
+        description:
+          "Brown panko in olive oil until crisp, then season with black pepper and parmesan.",
+        ingredients: [
+          { name: "panko breadcrumbs", quantity: 1, unit: "cup" },
+          { name: "olive oil", quantity: 2, unit: "tablespoon" },
+          { name: "black pepper", quantity: 0.5, unit: "teaspoon" },
+          { name: "parmesan cheese", quantity: 40, unit: "gram" },
+        ],
+      },
+      {
+        stepTitle: "Dress",
+        description:
+          "Whisk lemon, garlic, yogurt, and parmesan. Toss with warm broccoli and finish with crumbs.",
+        ingredients: [
+          { name: "lemon", quantity: 1, unit: "whole" },
+          { name: "garlic", quantity: 1, unit: "clove" },
+          { name: "yogurt", quantity: 0.5, unit: "cup" },
+          { name: "parmesan cheese", quantity: 40, unit: "gram" },
+        ],
+        usesOutputFrom: [1, 2],
+      },
+    ],
+  },
+  {
+    title: "Miso Mushroom Udon",
+    description:
+      "Slippery udon, browned mushrooms, miso butter, and scallions for the fastest bowl that still feels considered.",
+    servings: "2 bowls",
+    chefUsername: "demo_chef",
+    imageUrl: "https://images.unsplash.com/photo-1618841557871-b4664fbf0cb3?w=900&q=82",
+    steps: [
+      {
+        stepTitle: "Brown mushrooms",
+        description:
+          "Cook mushrooms in a wide skillet until they release water, shrink, and brown at the edges.",
+        ingredients: [
+          { name: "mushroom", quantity: 300, unit: "gram" },
+          { name: "vegetable oil", quantity: 1, unit: "tablespoon" },
+        ],
+      },
+      {
+        stepTitle: "Make miso butter",
+        description:
+          "Stir miso paste, butter, soy sauce, garlic, and a splash of hot water into a loose sauce.",
+        ingredients: [
+          { name: "miso paste", quantity: 2, unit: "tablespoon" },
+          { name: "butter", quantity: 2, unit: "tablespoon" },
+          { name: "soy sauce", quantity: 1, unit: "tablespoon" },
+          { name: "garlic", quantity: 1, unit: "clove" },
+        ],
+      },
+      {
+        stepTitle: "Toss noodles",
+        description:
+          "Boil udon just until loose, then toss with mushrooms, miso butter, scallions, and sesame seeds.",
+        ingredients: [
+          { name: "udon noodles", quantity: 400, unit: "gram" },
+          { name: "scallion", quantity: 3, unit: "whole" },
+          { name: "sesame seeds", quantity: 1, unit: "tablespoon" },
+        ],
+        usesOutputFrom: [1, 2],
+      },
+    ],
+  },
+  {
+    title: "Citrus Olive Oil Cake",
+    description:
+      "A plush, not-too-sweet cake with orange zest, olive oil, and yogurt. Better the next morning with coffee.",
+    servings: "1 cake",
+    chefUsername: "demo_chef",
+    imageUrl: "https://images.unsplash.com/photo-1464195244916-405fa0a82545?w=900&q=82",
+    steps: [
+      {
+        stepTitle: "Mix wet ingredients",
+        description:
+          "Whisk olive oil, sugar, eggs, yogurt, orange zest, and vanilla until glossy and thick.",
+        ingredients: [
+          { name: "olive oil", quantity: 0.75, unit: "cup" },
+          { name: "sugar", quantity: 1, unit: "cup" },
+          { name: "egg", quantity: 3, unit: "whole" },
+          { name: "yogurt", quantity: 0.75, unit: "cup" },
+          { name: "orange", quantity: 1, unit: "whole" },
+          { name: "vanilla extract", quantity: 1, unit: "teaspoon" },
+        ],
+      },
+      {
+        stepTitle: "Fold dry ingredients",
+        description:
+          "Whisk flour, baking powder, baking soda, and salt. Fold into the wet mixture until just combined.",
+        ingredients: [
+          { name: "flour", quantity: 1.75, unit: "cup" },
+          { name: "baking powder", quantity: 1.5, unit: "teaspoon" },
+          { name: "baking soda", quantity: 0.5, unit: "teaspoon" },
+          { name: "salt", quantity: 0.5, unit: "teaspoon" },
+        ],
+        usesOutputFrom: [1],
+      },
+      {
+        stepTitle: "Bake",
+        description:
+          "Bake until the center springs back and the edges pull slightly from the pan. Cool fully before slicing.",
+        ingredients: [],
+        usesOutputFrom: [2],
+      },
+    ],
+  },
+  {
+    title: "Herby Turkey Meatballs",
+    description:
+      "Tender turkey meatballs with parsley, dill, and lemon, built for bowls, sandwiches, or a quiet plate with yogurt.",
+    servings: "4 servings",
+    chefUsername: "demo_chef",
+    imageUrl: "https://images.unsplash.com/photo-1529042410759-befb1204b468?w=900&q=82",
+    steps: [
+      {
+        stepTitle: "Mix gently",
+        description:
+          "Combine turkey, panko, egg, herbs, garlic, lemon zest, salt, and pepper with a light hand.",
+        ingredients: [
+          { name: "ground turkey", quantity: 500, unit: "gram" },
+          { name: "panko breadcrumbs", quantity: 0.75, unit: "cup" },
+          { name: "egg", quantity: 1, unit: "whole" },
+          { name: "parsley", quantity: 0.5, unit: "bunch" },
+          { name: "dill", quantity: 0.5, unit: "bunch" },
+          { name: "garlic", quantity: 2, unit: "clove" },
+          { name: "lemon", quantity: 1, unit: "whole" },
+          { name: "salt", quantity: 1, unit: "teaspoon" },
+        ],
+      },
+      {
+        stepTitle: "Brown",
+        description:
+          "Roll into small meatballs and brown in olive oil, turning until they hold their shape.",
+        ingredients: [{ name: "olive oil", quantity: 2, unit: "tablespoon" }],
+        usesOutputFrom: [1],
+      },
+      {
+        stepTitle: "Finish",
+        description:
+          "Splash in chicken broth, cover, and steam until cooked through. Serve with yogurt and herbs.",
+        ingredients: [
+          { name: "chicken broth", quantity: 0.5, unit: "cup" },
+          { name: "yogurt", quantity: 0.5, unit: "cup" },
+        ],
+        usesOutputFrom: [2],
+      },
+    ],
+  },
+  {
+    title: "Red Lentil Coconut Soup",
+    description:
+      "A soft, golden pot of lentils, coconut milk, ginger, and lime that tastes like someone looked after you.",
+    servings: "6 servings",
+    chefUsername: "demo_chef",
+    imageUrl: "https://images.unsplash.com/photo-1547592180-85f173990554?w=900&q=82",
+    steps: [
+      {
+        stepTitle: "Sweat aromatics",
+        description:
+          "Cook onion, garlic, ginger, cumin, and paprika in olive oil until sweet and fragrant.",
+        ingredients: [
+          { name: "onion", quantity: 1, unit: "whole" },
+          { name: "garlic", quantity: 3, unit: "clove" },
+          { name: "ginger", quantity: 1, unit: "tablespoon" },
+          { name: "cumin", quantity: 1, unit: "teaspoon" },
+          { name: "paprika", quantity: 1, unit: "teaspoon" },
+          { name: "olive oil", quantity: 2, unit: "tablespoon" },
+        ],
+      },
+      {
+        stepTitle: "Simmer lentils",
+        description:
+          "Add lentils, vegetable broth, and coconut milk. Simmer until the lentils collapse into a velvety soup.",
+        ingredients: [
+          { name: "lentils", quantity: 1.5, unit: "cup" },
+          { name: "vegetable broth", quantity: 1, unit: "liter" },
+          { name: "coconut milk", quantity: 400, unit: "milliliter" },
+        ],
+        usesOutputFrom: [1],
+      },
+      {
+        stepTitle: "Finish bright",
+        description:
+          "Season with lime juice, salt, and cilantro. Add water if it thickens too much as it sits.",
+        ingredients: [
+          { name: "lime", quantity: 2, unit: "whole" },
+          { name: "salt", quantity: 1, unit: "teaspoon" },
+          { name: "cilantro", quantity: 0.5, unit: "bunch" },
+        ],
+        usesOutputFrom: [2],
+      },
+    ],
+  },
+  {
+    title: "Ricotta Toast with Hot Honey",
+    description:
+      "Thick toast, lemony ricotta, herbs, and honey. Breakfast, snack, appetizer, all depending on the plate.",
+    servings: "4 toasts",
+    chefUsername: "demo_chef",
+    imageUrl: "https://images.unsplash.com/photo-1484723091739-30a097e8f929?w=900&q=82",
+    steps: [
+      {
+        stepTitle: "Toast bread",
+        description:
+          "Brush sourdough with olive oil and toast until the edges are crisp but the middle still gives.",
+        ingredients: [
+          { name: "sourdough bread", quantity: 4, unit: "slice" },
+          { name: "olive oil", quantity: 2, unit: "tablespoon" },
+        ],
+      },
+      {
+        stepTitle: "Season ricotta",
+        description:
+          "Beat ricotta with lemon zest, salt, and black pepper until fluffy.",
+        ingredients: [
+          { name: "ricotta cheese", quantity: 250, unit: "gram" },
+          { name: "lemon", quantity: 1, unit: "whole" },
+          { name: "salt", quantity: 0.5, unit: "teaspoon" },
+          { name: "black pepper", quantity: 0.5, unit: "teaspoon" },
+        ],
+      },
+      {
+        stepTitle: "Finish",
+        description:
+          "Spread ricotta on toast, drizzle with honey, and finish with basil and pistachios.",
+        ingredients: [
+          { name: "honey", quantity: 2, unit: "tablespoon" },
+          { name: "basil", quantity: 0.25, unit: "bunch" },
+          { name: "pistachios", quantity: 0.25, unit: "cup" },
+        ],
+        usesOutputFrom: [1, 2],
+      },
+    ],
+  },
 ];
 
 async function seedRecipes(
@@ -777,6 +1217,7 @@ async function seedRecipes(
 
   const unitMap = new Map(units.map((u) => [u.name, u.id]));
   const ingredientMap = new Map(ingredientRefs.map((i) => [i.name, i.id]));
+  const chefByUsername = new Map(users.map((user) => [user.username, user]));
 
   const createdRecipes: {
     id: string;
@@ -786,7 +1227,9 @@ async function seedRecipes(
 
   for (let i = 0; i < RECIPES.length; i++) {
     const recipeData = RECIPES[i];
-    const chef = users[i % users.length];
+    const chef = recipeData.chefUsername
+      ? chefByUsername.get(recipeData.chefUsername) ?? users[i % users.length]
+      : users[i % users.length];
 
     // Check if recipe exists
     const existing = await prisma.recipe.findFirst({
@@ -798,6 +1241,33 @@ async function seedRecipes(
     });
 
     if (existing) {
+      await prisma.recipe.update({
+        where: { id: existing.id },
+        data: {
+          description: recipeData.description,
+          servings: recipeData.servings,
+        },
+      });
+
+      if (recipeData.imageUrl) {
+        const existingCover = await prisma.recipeCover.findFirst({
+          where: {
+            recipeId: existing.id,
+            imageUrl: recipeData.imageUrl,
+          },
+        });
+
+        if (!existingCover) {
+          await prisma.recipeCover.create({
+            data: {
+              recipeId: existing.id,
+              imageUrl: recipeData.imageUrl,
+              sourceType: "chef-upload",
+            },
+          });
+        }
+      }
+
       createdRecipes.push({ id: existing.id, title: existing.title, chefId: existing.chefId });
       continue;
     }
@@ -892,6 +1362,7 @@ async function seedRecipes(
 
 interface CookbookData {
   title: string;
+  authorUsername?: string;
   recipeIndices: number[]; // indices into RECIPES array
 }
 
@@ -920,6 +1391,16 @@ const COOKBOOKS: CookbookData[] = [
     title: "Sweet Treats",
     recipeIndices: [5], // Chocolate chip cookies
   },
+  {
+    title: "Weeknight Winners",
+    authorUsername: "demo_chef",
+    recipeIndices: [8, 10, 12, 14, 15],
+  },
+  {
+    title: "Market Run Dinners",
+    authorUsername: "demo_chef",
+    recipeIndices: [9, 11, 12, 16],
+  },
 ];
 
 async function seedCookbooks(
@@ -929,38 +1410,45 @@ async function seedCookbooks(
   log("📚", "Seeding cookbooks...");
 
   const createdCookbooks: { id: string; title: string }[] = [];
+  const authorByUsername = new Map(users.map((user) => [user.username, user]));
 
   for (let i = 0; i < COOKBOOKS.length; i++) {
     const cbData = COOKBOOKS[i];
-    const author = users[i % users.length];
+    const author = cbData.authorUsername
+      ? authorByUsername.get(cbData.authorUsername) ?? users[i % users.length]
+      : users[i % users.length];
 
     // Check if cookbook exists
-    const existing = await prisma.cookbook.findFirst({
+    let cookbook = await prisma.cookbook.findFirst({
       where: {
         authorId: author.id,
         title: cbData.title,
       },
     });
 
-    if (existing) {
-      createdCookbooks.push({ id: existing.id, title: existing.title });
-      continue;
+    if (!cookbook) {
+      cookbook = await prisma.cookbook.create({
+        data: {
+          title: cbData.title,
+          authorId: author.id,
+        },
+      });
+      log("  📖", `Created: ${cookbook.title} by ${author.username}`);
     }
-
-    // Create cookbook
-    const cookbook = await prisma.cookbook.create({
-      data: {
-        title: cbData.title,
-        authorId: author.id,
-      },
-    });
 
     // Add recipes to cookbook
     for (const recipeIdx of cbData.recipeIndices) {
       if (recipeIdx < recipes.length) {
         const recipe = recipes[recipeIdx];
-        await prisma.recipeInCookbook.create({
-          data: {
+        await prisma.recipeInCookbook.upsert({
+          where: {
+            cookbookId_recipeId: {
+              cookbookId: cookbook.id,
+              recipeId: recipe.id,
+            },
+          },
+          update: {},
+          create: {
             cookbookId: cookbook.id,
             recipeId: recipe.id,
             addedById: author.id,
@@ -970,7 +1458,6 @@ async function seedCookbooks(
     }
 
     createdCookbooks.push({ id: cookbook.id, title: cookbook.title });
-    log("  📖", `Created: ${cookbook.title} by ${author.username}`);
   }
 
   log("✅", `Seeded ${createdCookbooks.length} cookbooks`);
@@ -995,11 +1482,18 @@ async function seedShoppingLists(
   const shoppingListData: { ingredients: { name: string; quantity: number; unit: string; checked: boolean }[] }[] = [
     {
       ingredients: [
-        { name: "chicken breast", quantity: 500, unit: "gram", checked: false },
-        { name: "broccoli", quantity: 1, unit: "bunch", checked: false },
-        { name: "garlic", quantity: 1, unit: "whole", checked: true },
-        { name: "soy sauce", quantity: 1, unit: "jar", checked: false },
-        { name: "rice", quantity: 2, unit: "pound", checked: false },
+        { name: "basil", quantity: 1, unit: "bunch", checked: false },
+        { name: "cherry tomato", quantity: 400, unit: "gram", checked: false },
+        { name: "lime", quantity: 4, unit: "whole", checked: true },
+        { name: "fresh mozzarella", quantity: 250, unit: "gram", checked: false },
+        { name: "butter", quantity: 1, unit: "package", checked: false },
+        { name: "arborio rice", quantity: 2, unit: "cup", checked: false },
+        { name: "white beans", quantity: 2, unit: "can", checked: false },
+        { name: "pistachios", quantity: 1, unit: "package", checked: false },
+        { name: "miso paste", quantity: 1, unit: "jar", checked: false },
+        { name: "udon noodles", quantity: 400, unit: "gram", checked: false },
+        { name: "dill", quantity: 1, unit: "bunch", checked: false },
+        { name: "sourdough bread", quantity: 1, unit: "whole", checked: false },
       ],
     },
     {
@@ -1041,34 +1535,41 @@ async function seedShoppingLists(
       });
     }
 
-    // Add items (skip if any exist)
-    const existingItems = await prisma.shoppingListItem.findMany({
-      where: { shoppingListId: shoppingList.id },
-    });
+    for (const item of listData.ingredients) {
+      const unitId = unitMap.get(item.unit);
+      const ingredientRefId = ingredientMap.get(item.name);
 
-    if (existingItems.length === 0) {
-      for (const item of listData.ingredients) {
-        const unitId = unitMap.get(item.unit);
-        const ingredientRefId = ingredientMap.get(item.name);
-
-        if (!ingredientRefId) {
-          console.warn(`  ⚠️ Missing ingredient: ${item.name}`);
-          continue;
-        }
-
-        await prisma.shoppingListItem.create({
-          data: {
-            shoppingListId: shoppingList.id,
-            quantity: item.quantity,
-            unitId: unitId || null,
-            ingredientRefId,
-            checked: item.checked,
-          },
-        });
+      if (!ingredientRefId || !unitId) {
+        console.warn(`  ⚠️ Missing unit (${item.unit}) or ingredient (${item.name})`);
+        continue;
       }
-      createdCount++;
-      log("  📋", `Created shopping list for ${user.username}`);
+
+      await prisma.shoppingListItem.upsert({
+        where: {
+          shoppingListId_unitId_ingredientRefId: {
+            shoppingListId: shoppingList.id,
+            unitId,
+            ingredientRefId,
+          },
+        },
+        update: {
+          quantity: item.quantity,
+          checked: item.checked,
+          checkedAt: item.checked ? new Date() : null,
+          deletedAt: null,
+        },
+        create: {
+          shoppingListId: shoppingList.id,
+          quantity: item.quantity,
+          unitId,
+          ingredientRefId,
+          checked: item.checked,
+          checkedAt: item.checked ? new Date() : null,
+        },
+      });
     }
+    createdCount++;
+    log("  📋", `Seeded shopping list for ${user.username}`);
   }
 
   log("✅", `Seeded ${createdCount} shopping lists`);
@@ -1092,6 +1593,7 @@ async function main() {
     const units = await seedUnits();
     const ingredientRefs = await seedIngredientRefs();
     const users = await seedUsers();
+    await cleanupLocalQaRecipes();
     const recipes = await seedRecipes(users, units, ingredientRefs);
     await seedCookbooks(users, recipes);
     await seedShoppingLists(users, units, ingredientRefs);

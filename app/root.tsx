@@ -7,6 +7,7 @@ import {
   ScrollRestoration,
   useLoaderData,
   Form,
+  Link as RouterLink,
   useLocation,
 } from "react-router";
 import { useEffect } from "react";
@@ -20,14 +21,6 @@ import { ToastProvider } from "~/components/ui/toast";
 import { ThemeToggle } from "~/components/ui/theme-toggle";
 import { MobileNav, DockContextProvider } from "~/components/navigation";
 import { StackedLayout } from "~/components/ui/stacked-layout";
-import {
-  Navbar,
-  NavbarSection,
-  NavbarItem,
-  NavbarLabel,
-  NavbarSpacer,
-  NavbarDivider,
-} from "~/components/ui/navbar";
 import {
   Sidebar,
   SidebarBody,
@@ -48,7 +41,7 @@ export function links() {
     { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
     {
       rel: "stylesheet",
-      href: "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,420;6..72,580;6..72,680&display=swap",
+      href: "https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,500..900,60..100,0..1&family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400..800&display=swap",
     },
     { rel: "icon", href: "/logos/sj_black.svg", type: "image/svg+xml" },
     { rel: "apple-touch-icon", href: "/logos/sj_black.svg" },
@@ -80,69 +73,53 @@ function getActiveNav(pathname: string): string | null {
 function AppNavbar({ userId }: { userId: string | null }) {
   const location = useLocation();
   const currentNav = getActiveNav(location.pathname);
+  const navLinkClass = "sj-desktop-nav-link";
 
   return (
-    <Navbar>
-      <NavbarSection>
-        <NavbarItem href="/" current={currentNav === "home"}>
-          <SpoonjoyLogo />
-          <NavbarLabel className="font-semibold">Spoonjoy</NavbarLabel>
-        </NavbarItem>
-      </NavbarSection>
-      <NavbarDivider />
+    <nav className="sj-desktop-nav" aria-label="Main navigation">
+      <RouterLink to="/" className="sj-desktop-brand" data-current={currentNav === "home"}>
+        <span className="sj-nav-mark" aria-hidden="true">SJ</span>
+        <span>Spoonjoy</span>
+      </RouterLink>
       {userId ? (
         <>
-          <NavbarSection>
-            <NavbarItem href="/search" current={currentNav === "search"}>
-              <Search data-slot="icon" />
-              <NavbarLabel>Search</NavbarLabel>
-            </NavbarItem>
-            <NavbarItem href="/recipes" current={currentNav === "recipes"}>
-              <BookOpen data-slot="icon" />
-              <NavbarLabel>Recipes</NavbarLabel>
-            </NavbarItem>
-            <NavbarItem href="/cookbooks" current={currentNav === "cookbooks"}>
-              <Book data-slot="icon" />
-              <NavbarLabel>Cookbooks</NavbarLabel>
-            </NavbarItem>
-            <NavbarItem href="/shopping-list" current={currentNav === "shopping"}>
-              <ShoppingCart data-slot="icon" />
-              <NavbarLabel>Shopping List</NavbarLabel>
-            </NavbarItem>
-          </NavbarSection>
-          <NavbarSpacer />
-          <NavbarSection>
-            <ThemeToggle />
-            <NavbarItem href="/account/settings" current={currentNav === "account"}>
-              <User data-slot="icon" />
-            </NavbarItem>
+          <div className="sj-desktop-nav-center">
+            <RouterLink to="/search" className={navLinkClass} data-current={currentNav === "search"}>Search</RouterLink>
+            <RouterLink to="/recipes" className={navLinkClass} data-current={currentNav === "recipes"}>Recipes</RouterLink>
+            <RouterLink to="/cookbooks" className={navLinkClass} data-current={currentNav === "cookbooks"}>Cookbooks</RouterLink>
+            <RouterLink to="/shopping-list" className={navLinkClass} data-current={currentNav === "shopping"}>List</RouterLink>
+          </div>
+          <div className="sj-desktop-nav-actions">
+            <span className="inline-flex items-center gap-1.5 text-[var(--sj-ink-soft)]">
+              <ThemeToggle />
+              <span>Display</span>
+            </span>
+            <RouterLink to="/account/settings" className={navLinkClass} data-current={currentNav === "account"}>Account</RouterLink>
             <Form method="post" action="/logout" className="m-0">
-              <NavbarItem type="submit" aria-label="Log out">
-                <LogOut data-slot="icon" />
-                <NavbarLabel className="sr-only">Logout</NavbarLabel>
-              </NavbarItem>
+              <button type="submit" className={navLinkClass} aria-label="Log out">
+                Logout
+              </button>
             </Form>
-          </NavbarSection>
+          </div>
         </>
       ) : (
         <>
-          <NavbarSpacer />
-          <NavbarSection>
-            <NavbarItem href="/search" current={currentNav === "search"}>
-              <Search data-slot="icon" />
-              <NavbarLabel>Search</NavbarLabel>
-            </NavbarItem>
-            <ThemeToggle />
-            <NavbarItem href="/login">
-              <NavbarLabel>Login</NavbarLabel>
-            </NavbarItem>
-            <Button href="/signup">
-              Sign Up
-            </Button>
-          </NavbarSection>
+          <div className="sj-desktop-nav-center">
+            <RouterLink to="/search" className={navLinkClass} data-current={currentNav === "search"}>Search</RouterLink>
+            <RouterLink to="/recipes" className={navLinkClass} data-current={currentNav === "recipes"}>Recipes</RouterLink>
+            <RouterLink to="/cookbooks" className={navLinkClass} data-current={currentNav === "cookbooks"}>Cookbooks</RouterLink>
+          </div>
+          <div className="sj-desktop-nav-actions">
+            <span className="inline-flex items-center gap-1.5 text-[var(--sj-ink-soft)]">
+              <ThemeToggle />
+              <span>Display</span>
+            </span>
+            <RouterLink to="/login" className={navLinkClass}>Login</RouterLink>
+            <Button href="/signup">Sign Up</Button>
+          </div>
         </>
       )}
-    </Navbar>
+    </nav>
   );
 }
 

@@ -3,7 +3,6 @@ import { Form, useLoaderData } from "react-router";
 import { BookOpen, ChefHat, Search as SearchIcon, ShoppingCart, Users } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Heading, Subheading } from "~/components/ui/heading";
-import { Input, InputGroup } from "~/components/ui/input";
 import { Link } from "~/components/ui/link";
 import { Text } from "~/components/ui/text";
 import { CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
@@ -130,53 +129,67 @@ export default function Search() {
   const { query, scope, isAuthenticated, results } = useLoaderData<typeof loader>();
   const hasQuery = query.trim().length > 0;
   const showPrivatePrompt = scope === "shopping-list" && !isAuthenticated;
+  const resultCounts = results.reduce<Record<SearchEntityType, number>>(
+    (counts, result) => ({
+      ...counts,
+      [result.type]: counts[result.type] + 1,
+    }),
+    { recipe: 0, cookbook: 0, chef: 0, "shopping-list-item": 0 },
+  );
 
   return (
     <CookbookPage>
       <section>
-        <header className="sj-rule-block grid gap-6 lg:grid-cols-[minmax(0,0.85fr)_minmax(28rem,1.15fr)] lg:items-end">
+        <header className="grid gap-8 border-b border-[var(--sj-border-strong)] py-8 lg:grid-cols-[minmax(0,1fr)_20.625rem]">
           <div className="max-w-3xl">
             <div className="sj-eyebrow">
               <SearchIcon className="size-3.5" aria-hidden="true" />
-              Kitchen search
+              Kitchen index
             </div>
-            <Heading level={1} className="mt-4 text-5xl/13 tracking-[-0.04em] sm:text-7xl/18">
-              Search the kitchen.
+            <Heading level={1} className="mt-3 text-5xl/12 sm:text-7xl/18 lg:text-[84px] lg:leading-[1.05]">
+              Find the thing you meant to cook.
             </Heading>
-            <Text className="mt-4 max-w-2xl text-lg/8">
-              Find the recipe, chef, cookbook, or saved grocery note you half-remember without digging through a drawer of links.
-            </Text>
+            <Form method="get" role="search" className="mt-8 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+              <input type="hidden" name="scope" value={scope} />
+              <label className="sr-only" htmlFor="search-query">Search terms</label>
+              <div className="flex h-[4.5rem] items-center rounded-[var(--sj-radius-surface)] border border-[var(--sj-border-strong)] bg-[var(--sj-field)] px-5">
+                <SearchIcon className="mr-3 size-5 shrink-0 text-[var(--sj-ink-soft)]" aria-hidden="true" />
+                <input
+                  id="search-query"
+                  type="search"
+                  name="q"
+                  defaultValue={query}
+                  placeholder="tomato basil"
+                  className="font-sj-display w-full border-0 bg-transparent text-3xl/9 text-[var(--sj-ink)] outline-none placeholder:text-[var(--sj-ink-soft)]"
+                />
+              </div>
+              <Button type="submit" className="h-11">Search</Button>
+            </Form>
           </div>
 
-          <Form method="get" role="search" className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_14rem_auto] lg:items-end">
-            <label className="block">
-              <span className="font-sj-ui mb-1 block text-sm font-semibold text-[var(--sj-ink)]">Search terms</span>
-              <InputGroup>
-                <SearchIcon data-slot="icon" aria-hidden="true" />
-                <Input type="search" name="q" defaultValue={query} placeholder="tomato, weeknight, beans, Nonna..." />
-              </InputGroup>
-            </label>
-            <label className="block">
-              <span className="font-sj-ui mb-1 block text-sm font-semibold text-[var(--sj-ink)]">Scope</span>
-              <select
-                name="scope"
-                defaultValue={scope}
-                className="font-sj-ui block h-11 w-full rounded-[var(--sj-radius-control)] border border-[var(--sj-border-strong)] bg-[var(--sj-field)] px-4 text-sm text-[var(--sj-ink)] shadow-sm"
-              >
-                {SEARCH_SCOPES.map((searchScope) => (
-                  <option key={searchScope} value={searchScope}>{SCOPE_LABELS[searchScope]}</option>
-                ))}
-              </select>
-            </label>
-            <Button type="submit" className="h-10">Search</Button>
-          </Form>
+          <aside className="sj-receipt p-5">
+            <p className="sj-eyebrow">Quick filters</p>
+            <ul className="mt-4 space-y-0">
+              {[
+                ["Recipes", resultCounts.recipe],
+                ["Cookbooks", resultCounts.cookbook],
+                ["Chefs", resultCounts.chef],
+                ["Lists", resultCounts["shopping-list-item"]],
+              ].map(([label, count]) => (
+                <li key={label} className="flex justify-between gap-4 border-b border-[color-mix(in_srgb,var(--sj-border)_65%,transparent)] py-2.5 text-base">
+                  <span>{label}</span>
+                  <strong className="font-sj-ui">{count}</strong>
+                </li>
+              ))}
+            </ul>
+          </aside>
         </header>
 
-        <div className="grid gap-8 py-7 lg:grid-cols-[17rem_minmax(0,1fr)]">
-          <aside className="border-t border-[var(--sj-border)] pt-4 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0">
+        <div className="grid gap-8 py-8 lg:grid-cols-[13.75rem_minmax(0,1fr)]">
+          <aside className="border-t border-[var(--sj-border)] pt-4 font-sj-ui text-sm font-bold uppercase tracking-[0.14em] lg:border-r lg:border-t-0 lg:pr-6 lg:pt-0">
             <Subheading level={2} className="text-xl/7">{SCOPE_LABELS[scope]}</Subheading>
-            <Text className="mt-2 text-sm/6">{SCOPE_DESCRIPTIONS[scope]}</Text>
-            <div className="mt-5 flex gap-2 overflow-x-auto pb-1 lg:grid lg:overflow-visible lg:pb-0">
+            <Text className="mt-2 font-sj-body text-sm/6 normal-case tracking-normal">{SCOPE_DESCRIPTIONS[scope]}</Text>
+            <div className="mt-5 grid gap-0">
               {SEARCH_SCOPES.map((searchScope) => {
                 const params = new URLSearchParams();
                 params.set("scope", searchScope);
@@ -187,13 +200,13 @@ export default function Search() {
                     key={searchScope}
                     href={`/search?${params.toString()}`}
                     className={[
-                      "font-sj-ui shrink-0 rounded-[var(--sj-radius-control)] border px-3 py-2 text-sm font-semibold no-underline transition",
+                      "flex justify-between border-b border-[var(--sj-border)] py-3 no-underline transition",
                       scope === searchScope
-                        ? "border-[var(--sj-ink)] bg-[var(--sj-ink)] text-[var(--sj-paper)]"
-                        : "border-[var(--sj-border)] bg-[var(--sj-panel-solid)] text-[var(--sj-ink-soft)] hover:bg-[var(--sj-flour)]",
+                        ? "text-[var(--sj-ink)]"
+                        : "text-[var(--sj-ink-soft)] hover:text-[var(--sj-ink)]",
                     ].join(" ")}
                   >
-                    {SCOPE_LABELS[searchScope]}
+                    <span>{SCOPE_LABELS[searchScope]}</span>
                   </Link>
                 );
               })}

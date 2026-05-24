@@ -58,113 +58,101 @@ export function RecipeHeader({
   const resolvedChefHref = chefProfileHref ?? (chefId ? `/users/${chefId}` : undefined)
   const resolvedChefPhotoUrl = resolveChefAvatarUrl(chefPhotoUrl)
 
+  const chefLine = (
+    <div className="mt-5 flex items-center gap-2">
+      <span data-testid="chef-avatar">
+        <Avatar
+          src={resolvedChefPhotoUrl}
+          initials={chefName.charAt(0).toUpperCase()}
+          alt={chefName}
+          className="size-9 border border-[var(--sj-border)]"
+        />
+      </span>
+      <p className="font-sj-ui text-sm font-semibold text-[var(--sj-ink-soft)]">
+        By{' '}
+        {resolvedChefHref ? (
+          <Link href={resolvedChefHref} className="text-[var(--sj-ink)] underline decoration-[var(--sj-border-strong)] underline-offset-4 hover:text-[var(--sj-brass)]">
+            <strong>{chefName}</strong>
+          </Link>
+        ) : (
+          <strong className="text-[var(--sj-ink)]">{chefName}</strong>
+        )}
+      </p>
+    </div>
+  )
+
   return (
-    <header className="w-full">
-      <div className="mx-auto max-w-7xl lg:px-8">
+    <header className="w-full border-b border-[var(--sj-border-strong)]">
+      <div className="mx-auto grid max-w-[94rem] lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
         {displayImageUrl ? (
           <div
             data-testid="recipe-image"
-            className="sj-food-photo mx-auto aspect-[4/5] w-full sm:aspect-[16/9] lg:aspect-[2.18/1]"
+            className="min-h-[70svh] bg-[var(--sj-photo-charcoal)] lg:min-h-[calc(100svh-4.75rem)]"
           >
             <img
               src={displayImageUrl}
               alt={`Photo of ${title}`}
-              className="h-full w-full object-cover"
+              className="h-full min-h-[70svh] w-full object-cover lg:min-h-[calc(100svh-4.75rem)]"
             />
-            <div className="absolute inset-x-0 bottom-0 z-10 p-5 sm:p-8 lg:p-10">
-              <p className="sj-kicker-dark">Recipe</p>
-              <h1 className="font-sj-display sj-on-photo mt-4 max-w-5xl break-words text-5xl/12 font-bold tracking-[-0.04em] sm:text-7xl/18 lg:text-8xl/20">
-                {title}
-              </h1>
-              <div className="mt-4 flex items-center gap-2">
-                <span data-testid="chef-avatar">
-                  <Avatar
-                    src={resolvedChefPhotoUrl}
-                    initials={chefName.charAt(0).toUpperCase()}
-                    alt={chefName}
-                    className="size-9 border border-[var(--sj-photo-line)]"
-                  />
-                </span>
-                <p className="font-sj-ui sj-on-photo-muted text-sm font-semibold">
-                  By{' '}
-                  {resolvedChefHref ? (
-                    <Link href={resolvedChefHref} className="sj-on-photo underline decoration-[var(--sj-photo-line)] underline-offset-4 hover:text-[var(--sj-on-photo-warm)]">
-                      <strong>{chefName}</strong>
-                    </Link>
-                  ) : (
-                    <strong className="sj-on-photo">{chefName}</strong>
-                  )}
-                </p>
-              </div>
-              {description && (
-                <p className="sj-on-photo-muted mt-5 max-w-2xl text-base/7 sm:text-lg/8">{description}</p>
-              )}
-            </div>
           </div>
         ) : (
           <div
             data-testid="recipe-image-placeholder"
-            className="sj-dark-canvas relative mx-auto flex aspect-[4/5] w-full items-center justify-center overflow-hidden border border-[var(--sj-border)] sm:aspect-[16/9] lg:aspect-[2.18/1]"
+            className="flex min-h-[70svh] items-center justify-center bg-[var(--sj-flour)] lg:min-h-[calc(100svh-4.75rem)]"
           >
-            <div className="sj-on-photo relative flex flex-col items-center gap-3">
-              <div className="rounded-[var(--sj-radius-control)] border border-[var(--sj-photo-line)] bg-[var(--sj-photo-glass)] p-5">
+            <div className="flex flex-col items-center gap-3 text-[var(--sj-ink-soft)]">
+              <div className="rounded-[var(--sj-radius-control)] border border-[var(--sj-border-strong)] p-5">
                 <ImageOff className="size-12 sm:size-16" aria-hidden="true" />
               </div>
               <span className="font-sj-ui text-sm font-semibold uppercase tracking-[0.16em]">No image available</span>
             </div>
-            <div className="absolute inset-x-0 bottom-0 z-10 p-5 sm:p-8 lg:p-10">
-              <p className="sj-kicker-dark">Recipe</p>
-              <h1 className="font-sj-display sj-on-photo mt-4 max-w-5xl break-words text-5xl/12 font-bold tracking-[-0.04em] sm:text-7xl/18 lg:text-8xl/20">
-                {title}
-              </h1>
-              <div className="mt-4 flex items-center gap-2">
-                <span data-testid="chef-avatar">
-                  <Avatar
-                    src={resolvedChefPhotoUrl}
-                    initials={chefName.charAt(0).toUpperCase()}
-                    alt={chefName}
-                    className="size-9 border border-[var(--sj-photo-line)]"
-                  />
-                </span>
-                <p className="font-sj-ui sj-on-photo-muted text-sm font-semibold">
-                  By{' '}
-                  {resolvedChefHref ? (
-                    <Link href={resolvedChefHref} className="sj-on-photo underline decoration-[var(--sj-photo-line)] underline-offset-4 hover:text-[var(--sj-on-photo-warm)]">
-                      <strong>{chefName}</strong>
-                    </Link>
-                  ) : (
-                    <strong className="sj-on-photo">{chefName}</strong>
-                  )}
-                </p>
+          </div>
+        )}
+
+        <div className="flex min-h-[70svh] flex-col px-5 py-8 sm:px-8 lg:min-h-[calc(100svh-4.75rem)] lg:px-12 lg:py-10">
+          <div className="flex items-center justify-between border-b border-[var(--sj-border)] pb-4">
+            <div className="inline-flex items-center gap-3 font-sj-ui text-sm font-bold">
+              <span className="sj-nav-mark" aria-hidden="true">SJ</span>
+              <span>Recipe</span>
+            </div>
+            <span className="font-sj-ui text-xs font-bold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)]">Cookbook view</span>
+          </div>
+
+          <div className="mt-10">
+            <p className="sj-eyebrow">Origin recipe</p>
+            <h1 className="font-sj-display mt-8 max-w-4xl break-words text-6xl/14 font-extrabold text-[var(--sj-ink)] sm:text-7xl/16 lg:text-8xl/18">
+              {title}
+            </h1>
+            {chefLine}
+            {description && (
+              <p className="mt-6 max-w-2xl border-l-[3px] border-[var(--sj-brass)] pl-5 text-lg/8 text-[var(--sj-ink-soft)] sm:text-xl/8">
+                {description}
+              </p>
+            )}
+          </div>
+
+          <div className="mt-auto pt-10">
+            <div className="flex flex-col gap-3 border-y border-[var(--sj-border)] py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-2">
+                <span className="font-sj-ui text-sm font-semibold uppercase tracking-[0.12em] text-[var(--sj-ink-soft)]">Servings:</span>
+                <ScaleSelector
+                  value={scaleFactor}
+                  onChange={onScaleChange}
+                  displayValue={scaledServings}
+                />
               </div>
-              {description && (
-                <p className="sj-on-photo-muted mt-5 max-w-2xl text-base/7 sm:text-lg/8">{description}</p>
+              {onClearProgress && (
+                <button
+                  type="button"
+                  onClick={onClearProgress}
+                  className="font-sj-ui text-left text-xs font-semibold uppercase tracking-[0.14em] text-[var(--sj-ink-soft)] hover:text-[var(--sj-tomato)] sm:text-right"
+                  data-testid="clear-progress-button"
+                >
+                  Clear progress
+                </button>
               )}
             </div>
           </div>
-        )}
-      </div>
-
-      <div className="mx-auto max-w-5xl px-3 py-4 sm:px-6 lg:px-8">
-        <div className="flex flex-col gap-3 border-y border-[var(--sj-border)] py-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2">
-            <span className="font-sj-ui text-sm font-semibold uppercase tracking-[0.12em] text-[var(--sj-ink-soft)]">Servings:</span>
-            <ScaleSelector
-              value={scaleFactor}
-              onChange={onScaleChange}
-              displayValue={scaledServings}
-            />
-          </div>
-          {onClearProgress && (
-            <button
-              type="button"
-              onClick={onClearProgress}
-              className="font-sj-ui text-left text-xs font-semibold uppercase tracking-[0.14em] text-[var(--sj-ink-soft)] hover:text-[var(--sj-tomato)] sm:text-right"
-              data-testid="clear-progress-button"
-            >
-              Clear progress
-            </button>
-          )}
         </div>
       </div>
     </header>

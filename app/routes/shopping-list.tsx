@@ -11,7 +11,6 @@ import {
   parseShoppingItemFallback,
   type ShoppingListActionData,
 } from "~/lib/shopping-list-parser";
-import { Heading, Subheading } from "~/components/ui/heading";
 import { Text } from "~/components/ui/text";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -20,7 +19,7 @@ import { Select } from "~/components/ui/select";
 import { Link } from "~/components/ui/link";
 import { ConfirmationDialog } from "~/components/confirmation-dialog";
 import { resolveIngredientAffordance } from "~/lib/ingredient-affordances";
-import { CookbookPage, CookbookHeader, CookbookSectionTitle, RuledEmptyState } from "~/components/cookbook/page";
+import { CookbookPage, CookbookSectionTitle, RuledEmptyState } from "~/components/cookbook/page";
 import { ChecklistRow } from "~/components/shopping/checklist-row";
 
 export { __internal__, parseShoppingItemFallback };
@@ -71,6 +70,7 @@ export default function ShoppingList() {
   const [optimisticCheckedById, setOptimisticCheckedById] = useState<Record<string, boolean>>({});
   const [optimisticRemovedById, setOptimisticRemovedById] = useState<Record<string, boolean>>({});
   const [revealedItemId, setRevealedItemId] = useState<string | null>(null);
+  const [activeCategory, setActiveCategory] = useState("all");
   const submit = useSubmit();
   const toggleFetcher = useFetcher();
   const removeFetcher = useFetcher();
@@ -109,10 +109,23 @@ export default function ShoppingList() {
   const checkedCount = displayItems.filter((item) => item.checked).length;
   const uncheckedCount = displayItems.length - checkedCount;
   const displayOrderKey = displayItems.map((item) => item.id).join("|");
+  const categoryOptions = useMemo(() => {
+    const uniqueLabels = Array.from(new Set(displayItems.map((item) => item.categoryLabel)));
+    return ["all", ...uniqueLabels];
+  }, [displayItems]);
+  const filteredItems = activeCategory === "all"
+    ? displayItems
+    : displayItems.filter((item) => item.categoryLabel === activeCategory);
 
   useEffect(() => {
     setRevealedItemId(null);
   }, [displayOrderKey]);
+
+  useEffect(() => {
+    if (!categoryOptions.includes(activeCategory)) {
+      setActiveCategory("all");
+    }
+  }, [activeCategory, categoryOptions]);
 
   const handleClearAllConfirm = () => {
     setShowClearDialog(false);
@@ -150,12 +163,38 @@ export default function ShoppingList() {
   return (
     <CookbookPage>
       <div className="mx-auto max-w-4xl">
-      <CookbookHeader
-        eyebrow="Market run"
-        title="Shopping list"
-        action={(
-          <>
-            <Link href="/" className="sj-link self-center">Kitchen</Link>
+        <header className="border-b border-[var(--sj-border-strong)] pb-6">
+          <div className="flex items-center justify-between gap-4 border-b border-[var(--sj-border-strong)] pb-4 font-sj-ui text-sm font-bold">
+            <Link href="/" className="text-[var(--sj-ink)] no-underline">Kitchen</Link>
+            <span className="text-[var(--sj-ink-soft)]">
+              {displayItems.length} {displayItems.length === 1 ? "item" : "items"}
+            </span>
+          </div>
+          <h1 className="font-sj-display mt-7 text-5xl/12 font-extrabold text-[var(--sj-ink)]">
+            <span className="sr-only">Shopping list</span>
+            <span aria-hidden="true">Market run.</span>
+          </h1>
+          <Text className="mt-3">
+            {checkedCount > 0 ? `${checkedCount} checked, ${uncheckedCount} remaining` : "Grouped for the aisle, built for one thumb."}
+          </Text>
+          <div className="mt-5 flex gap-2 overflow-x-auto pb-1">
+            {categoryOptions.map((category) => (
+              <button
+                key={category}
+                type="button"
+                onClick={() => setActiveCategory(category)}
+                className={[
+                  "font-sj-ui shrink-0 rounded-[var(--sj-radius-control)] border px-3 py-2 text-sm font-bold capitalize",
+                  activeCategory === category
+                    ? "border-[var(--sj-ink)] bg-[var(--sj-ink)] text-[var(--sj-paper)]"
+                    : "border-[var(--sj-border)] text-[var(--sj-ink)]",
+                ].join(" ")}
+              >
+                {category}
+              </button>
+            ))}
+          </div>
+          <div className="mt-5 flex flex-wrap gap-2">
             {/* istanbul ignore next -- @preserve */ checkedCount > 0 && (
               <Form method="post">
                 <input type="hidden" name="intent" value="clearCompleted" />
@@ -184,16 +223,112 @@ export default function ShoppingList() {
                 />
               </>
             )}
-          </>
-        )}
-      >
-        <Text>
-            {displayItems.length} {displayItems.length === 1 ? "item" : "items"}
-            {/* istanbul ignore next -- @preserve */ checkedCount > 0 && (
-              <span> ({checkedCount} checked, {uncheckedCount} remaining)</span>
-            )}
+          </div>
+        </header>
+
+      {/* Empty State */}
+      {displayItems.length === 0 ? (
+        <RuledEmptyState title="Your shopping list is empty">
+          <Text className="mt-2">
+            Add items manually or add all ingredients from a recipe
           </Text>
-      </CookbookHeader>
+        </RuledEmptyState>
+      ) : (
+        /* Item List */
+        <div className="sj-list-ruled mt-6">
+          <AnimatePresence initial={false}>
+            {filteredItems.map((item, index) => {
+              const affordance = resolveIngredientAffordance(
+                item.ingredientRef.name,
+                item.categoryKey,
+                null
+              );
+              const prev = index > 0 ? resolveIngredientAffordance(
+                filteredItems[index - 1].ingredientRef.name,
+                filteredItems[index - 1].categoryKey,
+                null
+              ) : null;
+              const showCategoryHeader = !prev || prev.categoryLabel !== affordance.categoryLabel;
+
+              return (
+                <div key={item.id} className="space-y-1">
+                  {showCategoryHeader && (
+                    <div className="font-sj-ui pt-5 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-brass)]" data-testid="shopping-list-category">
+                      {affordance.categoryLabel}
+                    </div>
+                  )}
+                  <div className="relative overflow-hidden">
+                    {revealedItemId === item.id && (
+                      <div className="pointer-events-auto absolute inset-y-0 right-0 w-28 bg-[var(--sj-tomato)] text-[var(--sj-paper)]">
+                        <button
+                          type="button"
+                          onClick={() => removeItem(item.id)}
+                          className="font-sj-ui flex h-full w-full items-center justify-center text-xs font-semibold uppercase tracking-wide"
+                          aria-label={`Delete ${item.ingredientRef.name}`}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    )}
+                    <motion.div
+                      layout
+                      drag="x"
+                      animate={{
+                        opacity: 1,
+                        y: 0,
+                        x: revealedItemId === item.id ? -SWIPE_REVEAL_OFFSET : 0,
+                      }}
+                      dragConstraints={{ left: -168, right: 0 }}
+                      dragElastic={0}
+                      dragMomentum={false}
+                      dragDirectionLock
+                      onDragEnd={(_, info) => {
+                        const action = resolveSwipeAction(info.offset.x, revealedItemId === item.id);
+
+                        if (action === "confirmDelete") {
+                          removeItem(item.id);
+                          return;
+                        }
+
+                        if (action === "reveal") {
+                          setRevealedItemId(item.id);
+                          return;
+                        }
+
+                        if (action === "dismiss") {
+                          setRevealedItemId(null);
+                        }
+                      }}
+                      initial={{ opacity: 0, y: -8 }}
+                      exit={{ opacity: 0, y: 8 }}
+                      transition={{ type: "spring", stiffness: 520, damping: 42, mass: 0.5 }}
+                      className="relative z-10 bg-[var(--sj-page)]"
+                    >
+                      <ChecklistRow
+                        checked={item.checked}
+                        name={item.ingredientRef.name}
+                        quantity={amountLabel(item)}
+                        note={item.checked ? "already in basket" : null}
+                        onToggle={() => toggleItem(item)}
+                        action={(
+                          <button
+                            type="button"
+                            onClick={() => removeItem(item.id)}
+                            className="sr-only"
+                            aria-label={`Remove ${item.ingredientRef.name}`}
+                          >
+                            Remove
+                          </button>
+                        )}
+                      />
+                    </motion.div>
+                  </div>
+                </div>
+              );
+            })}
+          </AnimatePresence>
+        </div>
+      )}
 
       {/* Add Item Form */}
       <div id="add-item" className="border-b border-[var(--sj-border)] py-6">
@@ -279,115 +414,6 @@ export default function ShoppingList() {
         </div>
       )}
 
-      {/* Empty State */}
-      {displayItems.length === 0 ? (
-        <RuledEmptyState title="Your shopping list is empty">
-          <Text className="mt-2">
-            Add items manually or add all ingredients from a recipe
-          </Text>
-        </RuledEmptyState>
-      ) : (
-        /* Item List */
-        <div className="sj-list-ruled">
-          <AnimatePresence initial={false}>
-            {displayItems.map((item, index) => {
-              const affordance = resolveIngredientAffordance(
-                item.ingredientRef.name,
-                item.categoryKey,
-                null
-              );
-              const prev = index > 0 ? resolveIngredientAffordance(
-                displayItems[index - 1].ingredientRef.name,
-                displayItems[index - 1].categoryKey,
-                null
-              ) : null;
-              const showCategoryHeader = !prev || prev.categoryLabel !== affordance.categoryLabel;
-
-              return (
-                <div key={item.id} className="space-y-1">
-                  {showCategoryHeader && (
-                    <div className="font-sj-ui pt-5 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)]" data-testid="shopping-list-category">
-                      {affordance.categoryLabel}
-                    </div>
-                  )}
-                  <div className="relative overflow-hidden">
-                    {revealedItemId === item.id && (
-                      <div className="pointer-events-auto absolute inset-y-0 right-0 w-28 bg-[var(--sj-tomato)] text-[var(--sj-paper)]">
-                        <button
-                          type="button"
-                          onClick={() => removeItem(item.id)}
-                          className="font-sj-ui flex h-full w-full items-center justify-center text-xs font-semibold uppercase tracking-wide"
-                          aria-label={`Delete ${item.ingredientRef.name}`}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    )}
-                    <motion.div
-                      layout
-                      drag="x"
-                      animate={{
-                        opacity: 1,
-                        y: 0,
-                        x: revealedItemId === item.id ? -SWIPE_REVEAL_OFFSET : 0,
-                      }}
-                      dragConstraints={{ left: -168, right: 0 }}
-                      dragElastic={0}
-                      dragMomentum={false}
-                      dragDirectionLock
-                      onDragEnd={(_, info) => {
-                        const action = resolveSwipeAction(info.offset.x, revealedItemId === item.id);
-
-                        if (action === "confirmDelete") {
-                          removeItem(item.id);
-                          return;
-                        }
-
-                        if (action === "reveal") {
-                          setRevealedItemId(item.id);
-                          return;
-                        }
-
-                        if (action === "dismiss") {
-                          setRevealedItemId(null);
-                        }
-                      }}
-                      initial={{ opacity: 0, y: -8 }}
-                      exit={{ opacity: 0, y: 8 }}
-                      transition={{ type: "spring", stiffness: 520, damping: 42, mass: 0.5 }}
-                      className="relative z-10 bg-[var(--sj-page)]"
-                    >
-                      <ChecklistRow
-                        checked={item.checked}
-                        name={item.ingredientRef.name}
-                        quantity={amountLabel(item)}
-                        note={item.checked ? "already in basket" : null}
-                        onToggle={() => {
-                          if (revealedItemId === item.id) {
-                            setRevealedItemId(null);
-                            return;
-                          }
-                          toggleItem(item);
-                        }}
-                        action={(
-                          <button
-                            type="button"
-                            onClick={() => removeItem(item.id)}
-                            className="font-sj-ui min-h-11 shrink-0 px-2 text-xs font-semibold uppercase tracking-wide text-[var(--sj-tomato)] hover:bg-[color-mix(in_srgb,var(--sj-tomato)_10%,transparent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-tomato)]"
-                            aria-label={`Remove ${item.ingredientRef.name}`}
-                          >
-                            Delete
-                          </button>
-                        )}
-                      />
-                    </motion.div>
-                  </div>
-                </div>
-              );
-            })}
-          </AnimatePresence>
-        </div>
-      )}
       </div>
     </CookbookPage>
   );

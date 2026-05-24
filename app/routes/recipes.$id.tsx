@@ -398,25 +398,6 @@ export default function RecipeDetail() {
 
   return (
     <div className="sj-page pb-24">
-      <div className="mx-auto max-w-6xl px-4 pt-5 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between gap-4">
-          <Button href="/recipes" plain>
-            <ArrowLeft data-slot="icon" />
-            Back to recipes
-          </Button>
-          {/* istanbul ignore next -- @preserve owner-only UI rendering */}
-          {isOwner && (
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={() => setIsDeleteDialogOpen(true)}
-            >
-              Delete Recipe
-            </Button>
-          )}
-        </div>
-      </div>
-
       {/* Recipe Header with prominent image */}
       <RecipeHeader
         title={recipe.title}
@@ -439,6 +420,10 @@ export default function RecipeDetail() {
           sourceRecipe={recipe.sourceRecipe ?? undefined}
         />
         <div className="flex flex-wrap gap-3">
+          <Button href="/recipes" plain>
+            <ArrowLeft data-slot="icon" />
+            Back to recipes
+          </Button>
           <Button type="button" onClick={() => setIsSpoonDialogOpen(true)}>
             Log a cook
           </Button>
@@ -448,6 +433,16 @@ export default function RecipeDetail() {
             sourceChefUsername={recipe.chef.username}
             isOwner={isOwner}
           />
+          {/* istanbul ignore next -- @preserve owner-only UI rendering */}
+          {isOwner && (
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => setIsDeleteDialogOpen(true)}
+            >
+              Delete Recipe
+            </Button>
+          )}
         </div>
       </div>
 

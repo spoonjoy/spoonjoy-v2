@@ -1,7 +1,50 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import React from "react";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
+
+vi.mock("framer-motion", () => {
+  const MotionDiv = ({
+    children,
+    onDragEnd,
+    animate,
+    layout: _layout,
+    drag: _drag,
+    dragConstraints: _dragConstraints,
+    dragElastic: _dragElastic,
+    dragMomentum: _dragMomentum,
+    dragDirectionLock: _dragDirectionLock,
+    initial: _initial,
+    exit: _exit,
+    transition: _transition,
+    ...props
+  }: {
+    children: React.ReactNode;
+    onDragEnd?: (_event: unknown, info: { offset: { x: number; y: number } }) => void;
+    animate?: { x?: number };
+    [key: string]: unknown;
+  }) => (
+    <div
+      {...props}
+      data-motion-x={String(animate?.x ?? 0)}
+      onPointerUp={(event) => {
+        const offsetX = Number(
+          (event.currentTarget as HTMLDivElement).dataset.dragOffsetX ?? "0"
+        );
+        onDragEnd?.(event, { offset: { x: offsetX, y: 0 } });
+      }}
+    >
+      {children}
+    </div>
+  );
+
+  return {
+    AnimatePresence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+    motion: { div: MotionDiv },
+  };
+});
+
 import ShoppingList, { resolveSwipeAction, shouldDeleteOnSwipe } from "~/routes/shopping-list";
 import { getOrCreateUnit, getOrCreateIngredientRef, createTestUser } from "../utils";
 import { cleanupDatabase } from "../helpers/cleanup";
@@ -527,7 +570,7 @@ describe("Shopping List Routes", () => {
       render(<Stub initialEntries={["/shopping-list"]} />);
 
       expect(await screen.findByText("3 items")).toBeInTheDocument();
-      expect(screen.getByText("(2 checked, 1 remaining)")).toBeInTheDocument();
+      expect(screen.getByText("2 checked, 1 remaining")).toBeInTheDocument();
       // Should show Clear Completed button when there are checked items
       expect(screen.getByRole("button", { name: "Clear checked" })).toBeInTheDocument();
     });
@@ -805,8 +848,63 @@ describe("Shopping List Routes", () => {
       render(<Stub initialEntries={["/shopping-list"]} />);
 
       expect(await screen.findByText("chicken thigh")).toBeInTheDocument();
-      expect(screen.queryByText("Protein")).toBeInTheDocument();
+      expect(screen.getAllByText("Protein").length).toBeGreaterThan(0);
       expect(screen.queryByText("Red meat")).not.toBeInTheDocument();
+    });
+
+    it("should filter by category and reset when the selected category is removed", async () => {
+      const mockData = {
+        shoppingList: {
+          id: "list-1",
+          items: [
+            {
+              id: "item-1",
+              quantity: 1,
+              checked: false,
+              unit: null,
+              ingredientRef: { name: "chicken thigh" },
+              categoryKey: "protein",
+              iconKey: "beef",
+            },
+            {
+              id: "item-2",
+              quantity: 1,
+              checked: false,
+              unit: null,
+              ingredientRef: { name: "milk" },
+              categoryKey: "dairy",
+              iconKey: "milk",
+            },
+          ],
+        },
+        recipes: [],
+      };
+
+      const Stub = createTestRoutesStub([
+        {
+          path: "/shopping-list",
+          Component: ShoppingList,
+          loader: () => mockData,
+          action: async () => ({ success: true }),
+        },
+      ]);
+
+      render(<Stub initialEntries={["/shopping-list"]} />);
+
+      expect(await screen.findByText("chicken thigh")).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Protein" }));
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: "Protein" })).toHaveClass("bg-[var(--sj-ink)]");
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: "Remove chicken thigh" }));
+
+      await waitFor(() => {
+        expect(screen.queryByRole("button", { name: "Protein" })).not.toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "all" })).toHaveClass("bg-[var(--sj-ink)]");
+        expect(screen.getByText("milk")).toBeInTheDocument();
+      });
     });
 
     it("should have Kitchen link", async () => {

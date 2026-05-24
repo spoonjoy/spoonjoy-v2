@@ -57,7 +57,7 @@ export function StackedLayout({
       </MobileSidebar>
 
       {/* Navbar */}
-      <header className="sticky top-0 z-30 flex items-center border-b border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_76%,transparent)] px-4 backdrop-blur-xl">
+      <header className="sj-desktop-topbar sticky top-0 z-30 flex items-center px-4">
         <div className="py-2.5 lg:hidden">
           <NavbarItem onClick={() => setShowSidebar(true)} aria-label="Open navigation">
             <OpenMenuIcon />

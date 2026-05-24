@@ -118,9 +118,8 @@ describe("Search Route", () => {
 
       render(<Stub initialEntries={["/search"]} />);
 
-      expect(await screen.findByRole("heading", { name: /search the kitchen/i })).toBeInTheDocument();
+      expect(await screen.findByRole("heading", { name: /find the thing you meant to cook/i })).toBeInTheDocument();
       expect(screen.getByRole("searchbox")).toHaveAttribute("name", "q");
-      expect(screen.getByRole("combobox")).toHaveValue("all");
       expect(screen.getByRole("button", { name: "Search" })).toBeInTheDocument();
       expect(screen.getByText("Recently searchable")).toBeInTheDocument();
       expect(screen.getByText("0 results")).toBeInTheDocument();
