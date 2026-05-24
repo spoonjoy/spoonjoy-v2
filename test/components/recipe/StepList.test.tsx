@@ -15,6 +15,18 @@ import { createRoutesStub } from 'react-router'
 import { StepList } from '~/components/recipe/StepList'
 import type { StepData } from '~/components/recipe/StepEditorCard'
 
+const dragControlsStartMock = vi.hoisted(() => vi.fn())
+
+vi.mock('framer-motion', () => ({
+  Reorder: {
+    Group: ({ children, className }: { children: React.ReactNode; className?: string }) => (
+      <div className={className}>{children}</div>
+    ),
+    Item: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  },
+  useDragControls: () => ({ start: dragControlsStartMock }),
+}))
+
 // Mock localStorage for IngredientInputToggle used by StepEditorCard
 let localStorageStore: Record<string, string> = {}
 
@@ -518,6 +530,38 @@ describe('StepList', () => {
       const stepCard = screen.getByLabelText(/step 1/i)
       const dragHandle = within(stepCard).getByRole('button', { name: /drag to reorder/i })
       expect(dragHandle).toBeInTheDocument()
+    })
+
+    it('pointer down on the drag handle starts Framer Motion drag controls', () => {
+      const steps = [
+        createTestStep({ id: 'step-1', stepNum: 1, description: 'First step' }),
+        createTestStep({ id: 'step-2', stepNum: 2, description: 'Second step' }),
+      ]
+      const Wrapper = createTestWrapper({ steps })
+      render(<Wrapper initialEntries={['/recipes/recipe-1/edit']} />)
+
+      const firstStepCard = screen.getByLabelText(/step 1/i)
+      const dragHandle = within(firstStepCard).getByRole('button', { name: /drag to reorder/i })
+      fireEvent.pointerDown(dragHandle, { pointerId: 1, buttons: 1, clientX: 10, clientY: 10 })
+
+      expect(dragControlsStartMock).toHaveBeenCalledTimes(1)
+      expect(dragControlsStartMock).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'pointerdown' }),
+        { snapToCursor: true }
+      )
+    })
+
+    it('disables the drag handle when there is only one step', () => {
+      const steps = [
+        createTestStep({ id: 'step-1', stepNum: 1, description: 'Only step' }),
+      ]
+      const Wrapper = createTestWrapper({ steps })
+      render(<Wrapper initialEntries={['/recipes/recipe-1/edit']} />)
+
+      const stepCard = screen.getByLabelText(/step 1/i)
+      const dragHandle = within(stepCard).getByRole('button', { name: /drag to reorder/i })
+
+      expect(dragHandle).toBeDisabled()
     })
 
     it('keyboard: arrow up on focused step with modifier key reorders', async () => {

@@ -10,7 +10,7 @@
  * - Steps array management (controlled component)
  */
 
-import { Reorder } from 'framer-motion'
+import { Reorder, useDragControls } from 'framer-motion'
 import { GripVertical, Plus } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '~/components/ui/button'
@@ -23,6 +23,83 @@ export interface StepListProps {
   recipeId: string
   onChange: (steps: StepData[]) => void
   disabled?: boolean
+}
+
+interface StepReorderItemProps {
+  step: StepData
+  index: number
+  stepCount: number
+  recipeId: string
+  disabled: boolean
+  autoFocusInstructions: boolean
+  onFocused: () => void
+  onSave: (data: Omit<StepData, 'id' | 'stepNum'>) => void
+  onRemove: () => void
+  onMoveUp: () => void
+  onMoveDown: () => void
+  onDragHandleKeyDown: (event: React.KeyboardEvent, index: number) => void
+}
+
+function StepReorderItem({
+  step,
+  index,
+  stepCount,
+  recipeId,
+  disabled,
+  autoFocusInstructions,
+  onFocused,
+  onSave,
+  onRemove,
+  onMoveUp,
+  onMoveDown,
+  onDragHandleKeyDown,
+}: StepReorderItemProps) {
+  const dragControls = useDragControls()
+  const canDrag = !disabled && stepCount > 1
+
+  const handleDragPointerDown = useCallback(
+    (event: React.PointerEvent<HTMLButtonElement>) => {
+      event.preventDefault()
+      dragControls.start(event, { snapToCursor: true })
+    },
+    [dragControls]
+  )
+
+  return (
+    <Reorder.Item
+      value={step}
+      dragListener={false}
+      dragControls={dragControls}
+    >
+      <StepEditorCard
+        stepNumber={step.stepNum}
+        step={step}
+        recipeId={recipeId}
+        onSave={onSave}
+        onRemove={onRemove}
+        onMoveUp={onMoveUp}
+        onMoveDown={onMoveDown}
+        canMoveUp={index > 0}
+        canMoveDown={index < stepCount - 1}
+        disabled={disabled}
+        autoFocusInstructions={autoFocusInstructions}
+        onFocused={onFocused}
+        dragHandle={
+          <button
+            type="button"
+            aria-label="Drag to reorder"
+            title="Drag to reorder. Use Control + Arrow Up or Down from the keyboard."
+            disabled={!canDrag}
+            onPointerDown={canDrag ? handleDragPointerDown : undefined}
+            onKeyDown={(event) => onDragHandleKeyDown(event, index)}
+            className="hidden touch-none cursor-grab rounded-[var(--sj-radius-small)] p-1 text-[var(--sj-ink-soft)] hover:text-[var(--sj-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--sj-brass)] active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-40 sm:inline-flex"
+          >
+            <GripVertical className="h-5 w-5" />
+          </button>
+        }
+      />
+    </Reorder.Item>
+  )
 }
 
 export function StepList({ steps, recipeId, onChange, disabled = false }: StepListProps) {
@@ -165,36 +242,21 @@ export function StepList({ steps, recipeId, onChange, disabled = false }: StepLi
           className="sj-list-ruled mb-4"
         >
           {steps.map((step, index) => (
-            <Reorder.Item
+            <StepReorderItem
               key={step.id}
-              value={step}
-              dragListener={false}
-            >
-              <StepEditorCard
-                stepNumber={step.stepNum}
-                step={step}
-                recipeId={recipeId}
-                onSave={(data) => handleStepSave(step.id, data)}
-                onRemove={() => handleRemoveStep(step.id)}
-                onMoveUp={() => handleMoveUp(index)}
-                onMoveDown={() => handleMoveDown(index)}
-                canMoveUp={index > 0}
-                canMoveDown={index < steps.length - 1}
-                disabled={disabled}
-                autoFocusInstructions={newlyAddedStepId === step.id}
-                onFocused={() => handleFocused(step.id)}
-                dragHandle={
-                  <button
-                    type="button"
-                    aria-label="Drag to reorder"
-                    onKeyDown={(e) => handleKeyDown(e, index)}
-                    className="hidden cursor-grab rounded-[var(--sj-radius-small)] p-1 text-[var(--sj-ink-soft)] hover:text-[var(--sj-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--sj-brass)] active:cursor-grabbing sm:inline-flex"
-                  >
-                    <GripVertical className="h-5 w-5" />
-                  </button>
-                }
-              />
-            </Reorder.Item>
+              step={step}
+              index={index}
+              stepCount={steps.length}
+              recipeId={recipeId}
+              disabled={disabled}
+              autoFocusInstructions={newlyAddedStepId === step.id}
+              onFocused={() => handleFocused(step.id)}
+              onSave={(data) => handleStepSave(step.id, data)}
+              onRemove={() => handleRemoveStep(step.id)}
+              onMoveUp={() => handleMoveUp(index)}
+              onMoveDown={() => handleMoveDown(index)}
+              onDragHandleKeyDown={handleKeyDown}
+            />
           ))}
         </Reorder.Group>
       )}

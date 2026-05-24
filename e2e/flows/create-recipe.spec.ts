@@ -60,4 +60,48 @@ test.describe('Create recipe flow', () => {
     );
     await expect(page.getByRole('heading', { name: uniqueTitle })).toBeVisible({ timeout: 10_000 });
   });
+
+  test('demo user can reorder draft recipe steps by dragging the step handle', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 2400 });
+    await page.goto('/recipes/new');
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10_000 });
+
+    await page.getByRole('textbox', { name: 'Title' }).first().fill(`e2e drag recipe ${Date.now()}`);
+
+    const addStepButton = page.getByRole('button', { name: /add step/i }).first();
+    const stepCopies = ['First drag step', 'Second drag step'];
+
+    for (const [index, copy] of stepCopies.entries()) {
+      await addStepButton.click();
+      const stepCard = page.locator('article[aria-label^="Step"]').nth(index);
+      await stepCard.getByLabel(/instructions/i).fill(copy);
+      await stepCard.getByRole('button', { name: /^save$/i }).click();
+    }
+
+    await expect.poll(async () => {
+      const boxes = await page.locator('article[aria-label^="Step"]').evaluateAll((articles) =>
+        articles.map((article) => {
+          const rect = article.getBoundingClientRect();
+          return { top: rect.top, bottom: rect.bottom };
+        }),
+      );
+      return boxes.length === 2 && boxes[1].top >= boxes[0].bottom;
+    }).toBe(true);
+
+    const dragHandles = page.getByRole('button', { name: /drag to reorder/i });
+    const source = await dragHandles.nth(1).boundingBox();
+    const target = await dragHandles.nth(0).boundingBox();
+    expect(source).not.toBeNull();
+    expect(target).not.toBeNull();
+
+    await page.mouse.move(source!.x + source!.width / 2, source!.y + source!.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(target!.x + target!.width / 2, target!.y + target!.height / 2, { steps: 40 });
+    await page.mouse.up();
+
+    await expect
+      .poll(async () => page.locator('article[aria-label^="Step"]').nth(0).getByLabel(/instructions/i).inputValue())
+      .toBe('Second drag step');
+    await expect(page.locator('article[aria-label^="Step"]').nth(1).getByLabel(/instructions/i)).toHaveValue('First drag step');
+  });
 });
