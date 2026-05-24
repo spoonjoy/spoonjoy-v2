@@ -17,6 +17,7 @@ When registered under the server name `spoonjoy`, the harness exposes these firs
 | `search_shopping_list` | Full-text search the configured owner's private shopping list by ingredient, unit, category, icon, and checked state. |
 | `get_recipe` | Fetch a recipe by id or title with ordered steps and ingredients. |
 | `create_recipe` | Create a recipe for the configured owner, including steps and ingredients. |
+| `update_recipe` | Update an owner-scoped recipe's title, optional metadata, and optionally replace its steps and ingredients. |
 | `add_recipe_to_shopping_list` | Add all recipe ingredients to the owner shopping list, merging duplicates. |
 | `list_cookbooks` | List cookbooks owned by the configured owner, with active recipe counts and cover recipes. |
 | `get_cookbook` | Fetch one owner-scoped cookbook by `cookbookId`, `title`, or `cookbookTitle`. |

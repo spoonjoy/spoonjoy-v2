@@ -304,6 +304,27 @@ describe("spoonjoy MCP tools", () => {
       ingredientCount: 1,
       steps: [{ description: "Simmer" }],
     });
+
+    const cleared = parseJson(await callSpoonjoyMcpTool("update_recipe", {
+      id: created.recipe.id,
+      description: "",
+    }, context));
+    expect(cleared.recipe).toMatchObject({
+      title: "Partial Update Stew",
+      description: null,
+      servings: "4",
+    });
+
+    const stepsOnly = parseJson(await callSpoonjoyMcpTool("update_recipe", {
+      id: created.recipe.id,
+      steps: [{ description: "Finish with herbs", ingredients: [] }],
+    }, context));
+    expect(stepsOnly.recipe).toMatchObject({
+      title: "Partial Update Stew",
+      description: null,
+      ingredientCount: 0,
+      steps: [{ stepNum: 1, description: "Finish with herbs", ingredients: [] }],
+    });
   });
 
   it("rejects invalid or unauthorized recipe updates", async () => {
@@ -325,6 +346,10 @@ describe("spoonjoy MCP tools", () => {
       id: first.recipe.id,
       steps: {},
     }, context)).rejects.toThrow("steps must be an array");
+    await expect(callSpoonjoyMcpTool("update_recipe", {
+      id: first.recipe.id,
+      description: 42,
+    }, context)).rejects.toThrow("description must be a string or null");
     await expect(callSpoonjoyMcpTool("update_recipe", { id: "missing-recipe", title: "Missing" }, context)).rejects.toThrow("Recipe not found");
   });
 

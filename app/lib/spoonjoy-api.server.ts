@@ -127,10 +127,25 @@ function optionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
+function hasArgument(args: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(args, key);
+}
+
 function requiredString(args: Record<string, unknown>, key: string): string {
   const value = optionalString(args[key]);
   if (!value) throw new Error(`${key} is required`);
   return value;
+}
+
+function optionalNullableStringArgument(args: Record<string, unknown>, key: string): string | null | undefined {
+  if (!hasArgument(args, key)) return undefined;
+
+  const value = args[key];
+  if (value === null) return null;
+  if (typeof value !== "string") throw new Error(`${key} must be a string or null`);
+
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
 }
 
 function optionalPositiveNumber(value: unknown): number | undefined {
@@ -514,6 +529,39 @@ async function getCredentialOwner(db: Database, args: Record<string, unknown>, c
   return getOrCreateOwner(db, email);
 }
 
+async function replaceRecipeSteps(db: Database, recipeId: string, steps: ReturnType<typeof parseSteps>) {
+  await db.stepOutputUse.deleteMany({ where: { recipeId } });
+  await db.ingredient.deleteMany({ where: { recipeId } });
+  await db.recipeStep.deleteMany({ where: { recipeId } });
+
+  for (const [index, step] of steps.entries()) {
+    const stepNum = index + 1;
+    await db.recipeStep.create({
+      data: {
+        recipeId,
+        stepNum,
+        stepTitle: step.title ?? null,
+        description: step.description,
+        duration: step.duration ?? null,
+      },
+    });
+
+    for (const ingredient of step.ingredients) {
+      const unit = await getOrCreateUnit(db, ingredient.unit);
+      const ingredientRef = await getOrCreateIngredientRef(db, ingredient.name);
+      await db.ingredient.create({
+        data: {
+          recipeId,
+          stepNum,
+          quantity: ingredient.quantity,
+          unitId: unit.id,
+          ingredientRefId: ingredientRef.id,
+        },
+      });
+    }
+  }
+}
+
 const healthTool: SpoonjoyApiOperation = {
   name: "health",
   description: "Check Spoonjoy API readiness and whether the caller can use owner-scoped write operations.",
@@ -809,35 +857,105 @@ const createRecipeTool: SpoonjoyApiOperation = {
       },
     });
 
-    for (const [index, step] of steps.entries()) {
-      const stepNum = index + 1;
-      await context.db.recipeStep.create({
-        data: {
-          recipeId: created.id,
-          stepNum,
-          stepTitle: step.title ?? null,
-          description: step.description,
-          duration: step.duration ?? null,
-        },
-      });
-
-      for (const ingredient of step.ingredients) {
-        const unit = await getOrCreateUnit(context.db, ingredient.unit);
-        const ingredientRef = await getOrCreateIngredientRef(context.db, ingredient.name);
-        await context.db.ingredient.create({
-          data: {
-            recipeId: created.id,
-            stepNum,
-            quantity: ingredient.quantity,
-            unitId: unit.id,
-            ingredientRefId: ingredientRef.id,
-          },
-        });
-      }
-    }
+    await replaceRecipeSteps(context.db, created.id, steps);
 
     const recipe = await context.db.recipe.findUniqueOrThrow({
       where: { id: created.id },
+      include: {
+        chef: { select: { id: true, email: true, username: true } },
+        covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
+        steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
+      },
+    });
+
+    return json({ recipe: formatRecipe(recipe) });
+  },
+};
+
+const updateRecipeTool: SpoonjoyApiOperation = {
+  name: "update_recipe",
+  description: "Update a recipe owned by the configured owner, optionally replacing its steps and ingredients.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      ownerEmail: { type: "string" },
+      id: { type: "string" },
+      title: { type: "string" },
+      description: { anyOf: [{ type: "string" }, { type: "null" }] },
+      servings: { anyOf: [{ type: "string" }, { type: "null" }] },
+      sourceUrl: { anyOf: [{ type: "string" }, { type: "null" }] },
+      steps: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            title: { type: "string" },
+            description: { type: "string" },
+            duration: { type: "number" },
+            ingredients: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  name: { type: "string" },
+                  quantity: { type: "number" },
+                  unit: { type: "string" },
+                },
+                required: ["name", "quantity", "unit"],
+                additionalProperties: false,
+              },
+            },
+          },
+          required: ["description"],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ["id"],
+    additionalProperties: false,
+  },
+  async handle(args, context) {
+    const email = requireOwnerEmail(args, context);
+    const id = requiredString(args, "id");
+    const title = hasArgument(args, "title") ? requiredString(args, "title") : undefined;
+    const description = optionalNullableStringArgument(args, "description");
+    const servings = optionalNullableStringArgument(args, "servings");
+    const sourceUrl = optionalNullableStringArgument(args, "sourceUrl");
+    const shouldReplaceSteps = hasArgument(args, "steps");
+    const steps = shouldReplaceSteps ? parseSteps(args.steps) : undefined;
+
+    const owner = await getOrCreateOwner(context.db, email);
+    const existing = await context.db.recipe.findFirst({
+      where: { id, chefId: owner.id, deletedAt: null },
+      select: { id: true },
+    });
+    if (!existing) throw new Error("Recipe not found");
+
+    const data: Prisma.RecipeUpdateInput = {};
+    if (title !== undefined) {
+      const titleUniqueness = await validateActiveRecipeTitleUnique(context.db, {
+        chefId: owner.id,
+        title,
+        excludeRecipeId: existing.id,
+      });
+      if (!titleUniqueness.valid) throw new Error(titleUniqueness.error);
+      data.title = title;
+    }
+    if (description !== undefined) data.description = description;
+    if (servings !== undefined) data.servings = servings;
+    if (sourceUrl !== undefined) data.sourceUrl = sourceUrl;
+
+    if (Object.keys(data).length > 0) {
+      await context.db.recipe.update({ where: { id: existing.id }, data });
+    }
+
+    if (steps) {
+      await replaceRecipeSteps(context.db, existing.id, steps);
+      await context.db.recipe.update({ where: { id: existing.id }, data: { updatedAt: new Date() } });
+    }
+
+    const recipe = await context.db.recipe.findUniqueOrThrow({
+      where: { id: existing.id },
       include: {
         chef: { select: { id: true, email: true, username: true } },
         covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
@@ -1713,6 +1831,7 @@ const tools: SpoonjoyApiOperation[] = [
   searchShoppingListTool,
   getRecipeTool,
   createRecipeTool,
+  updateRecipeTool,
   importRecipeFromUrlTool,
   forkRecipeTool,
   addRecipeToShoppingListTool,
