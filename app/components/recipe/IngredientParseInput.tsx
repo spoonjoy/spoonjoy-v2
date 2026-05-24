@@ -1,23 +1,9 @@
-import clsx from 'clsx'
 import { RefreshCw } from 'lucide-react'
 import { useEffect, useId, useRef } from 'react'
+import { Button } from '~/components/ui/button'
 import { Textarea } from '~/components/ui/textarea'
 import { useIngredientParser } from '~/hooks/useIngredientParser'
 import type { ParsedIngredient } from '~/lib/ingredient-parse.server'
-
-// Button styles extracted for native button compatibility
-const buttonBaseStyles = [
-  'font-sj-ui relative isolate inline-flex items-center justify-center gap-x-2 rounded-full border text-sm/6 font-semibold',
-  'px-3 py-1.5',
-  'focus:outline-2 focus:outline-offset-2 focus:outline-[var(--sj-brass)]',
-  'disabled:opacity-50 disabled:cursor-not-allowed',
-]
-
-const buttonOutlineStyles = [
-  'border-[var(--sj-border)]',
-  'text-[var(--sj-ink)]',
-  'hover:bg-[var(--sj-flour)]',
-]
 
 export interface IngredientParseInputProps {
   recipeId: string
@@ -209,28 +195,28 @@ export function IngredientParseInput({
           </p>
           <div className="flex gap-2">
             {errorInfo.isRetryable && parser.text.trim() && (
-              <button
+              <Button
                 type="button"
+                plain
                 onClick={handleTryAgain}
                 disabled={parser.isLoading}
-                className={clsx(buttonBaseStyles, buttonOutlineStyles, 'cursor-default')}
                 data-testid="try-again-button"
                 aria-label="Try parsing ingredients again"
               >
-                <RefreshCw className="size-4" aria-hidden="true" />
+                <RefreshCw data-slot="icon" aria-hidden="true" />
                 Try Again
-              </button>
+              </Button>
             )}
             {onSwitchToManual && (
-              <button
+              <Button
                 type="button"
+                plain
                 onClick={handleSwitchToManual}
-                className={clsx(buttonBaseStyles, buttonOutlineStyles, 'cursor-default')}
                 data-testid="switch-to-manual-button"
                 aria-label="Switch to manual ingredient entry"
               >
                 Add Manually
-              </button>
+              </Button>
             )}
           </div>
         </div>

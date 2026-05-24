@@ -120,7 +120,7 @@ export function SaveToCookbookDropdown({
             onKeyDown={handleKeyDown}
             placeholder="Cookbook name"
             aria-label="New cookbook name"
-            className="font-sj-ui w-full rounded-full border border-[var(--sj-border-strong)] bg-[var(--sj-field)] px-3 py-1.5 text-sm text-[var(--sj-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--sj-brass)]"
+            className="font-sj-ui w-full rounded-[var(--sj-radius-small)] border border-[var(--sj-border-strong)] bg-[var(--sj-field)] px-3 py-1.5 text-sm text-[var(--sj-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--sj-brass)]"
           />
           <div className="flex gap-2 mt-2">
             <Button
