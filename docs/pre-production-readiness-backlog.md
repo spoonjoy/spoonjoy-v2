@@ -16,7 +16,7 @@ Goal: reach the point where the only remaining dependency before switching `spoo
 **Recommended lane**: fix-now
 **Verification**: Route/component tests for configured/unconfigured provider rendering; live smoke `/login` and `/signup`.
 **Status**: fixed
-**Linked work**: local branch commit pending
+**Linked work**: `b8ab11b fix: gate OAuth buttons by configured providers`
 **Notes**: Login/signup loaders now derive configured providers from the Worker environment. Auth pages render OAuth divider/buttons only when at least one provider is configured.
 
 ---
@@ -31,9 +31,9 @@ Goal: reach the point where the only remaining dependency before switching `spoo
 **Blast radius**: auth, import, AI image features
 **Recommended lane**: fix-now for available Google secrets; external-prerequisite for missing Apple/OpenAI values
 **Verification**: `wrangler secret list`; OAuth start smoke should show configured providers only; OpenAI-backed MCP import/image smoke after Ari provides key.
-**Status**: fixed
-**Linked work**: local branch commit pending
-**Notes**: Cook mode now stores recipe-scoped progress in localStorage: active step, scale factor, checked ingredient IDs, and checked step-output IDs. Stored IDs are filtered against the current recipe shape.
+**Status**: in-progress
+**Linked work**: `pnpm exec wrangler secret put GOOGLE_CLIENT_ID`; `pnpm exec wrangler secret put GOOGLE_CLIENT_SECRET`; `pnpm production:readiness`
+**Notes**: Google OAuth secrets were found in local `.env` and uploaded to the Worker. Apple OAuth and OpenAI credentials were not found in local env files or keychain. `pnpm production:readiness` reports those missing feature groups as WARN. This is an external credential dependency, not an unresolved design decision.
 
 ---
 
@@ -48,8 +48,8 @@ Goal: reach the point where the only remaining dependency before switching `spoo
 **Recommended lane**: fix-now
 **Verification**: Route tests around localStorage persistence and storage migration; browser smoke reload in `#cook`.
 **Status**: fixed
-**Linked work**: local branch commit pending
-**Notes**: Focused cook mode now shows a timer when `RecipeStep.duration` is present, with start/pause/reset/restart behavior.
+**Linked work**: `7bb1899 feat: persist cook mode progress and timers`
+**Notes**: Cook mode now stores recipe-scoped progress in localStorage: active step, scale factor, checked ingredient IDs, and checked step-output IDs. Stored IDs are filtered against the current recipe shape.
 
 ---
 
@@ -64,8 +64,8 @@ Goal: reach the point where the only remaining dependency before switching `spoo
 **Recommended lane**: fix-now
 **Verification**: Component/route tests for duration display, start/pause/reset/done states; browser smoke.
 **Status**: fixed
-**Linked work**: local branch commit pending
-**Notes**: Added repo-local `scripts/inventory-ui.mjs` and `scripts/crawl-ui.mjs`, plus `pnpm ui:inventory` and `pnpm ui:crawl`. Updated the UI audit report to use repo-local commands.
+**Linked work**: `7bb1899 feat: persist cook mode progress and timers`
+**Notes**: Focused cook mode now shows a timer when `RecipeStep.duration` is present, with start/pause/reset/restart behavior.
 
 ---
 
@@ -79,9 +79,9 @@ Goal: reach the point where the only remaining dependency before switching `spoo
 **Blast radius**: QA tooling
 **Recommended lane**: fix-now
 **Verification**: Add scripts/tests or smoke commands; rerun inventory and rendered crawl from repo paths.
-**Status**: in-progress
-**Linked work**: `pnpm exec wrangler secret put GOOGLE_CLIENT_ID`; `pnpm exec wrangler secret put GOOGLE_CLIENT_SECRET`
-**Notes**: Google OAuth secrets were found in local `.env` and uploaded to the Worker. Apple OAuth and OpenAI credentials were not found in local env files or keychain. `pnpm production:readiness` now reports those missing feature groups as WARN.
+**Status**: fixed
+**Linked work**: `6a07a7d test: keep UI audit tooling repo-local`
+**Notes**: Added repo-local `scripts/inventory-ui.mjs` and `scripts/crawl-ui.mjs`, plus `pnpm ui:inventory` and `pnpm ui:crawl`. Updated the UI audit report to use repo-local commands.
 
 ---
 
@@ -128,6 +128,8 @@ Goal: reach the point where the only remaining dependency before switching `spoo
 **Recommended lane**: fix-now
 **Verification**: Repo-local crawl across mobile/tablet/desktop with 0 skipped, 0 console/page errors, 0 overflow, 0 clipped text, 0 small touch-target findings; manual review of contact sheets.
 **Status**: open
+**Linked work**: pending fresh crawl
+**Notes**: Must be re-run from repo-local tooling after this branch's final UI/product changes.
 
 ---
 
@@ -142,6 +144,8 @@ Goal: reach the point where the only remaining dependency before switching `spoo
 **Recommended lane**: fix-now
 **Verification**: `pnpm typecheck`, `pnpm test:coverage`, `pnpm build`, `pnpm test:e2e`, live smoke, MCP smoke.
 **Status**: open
+**Linked work**: pending final verification
+**Notes**: Must be repeated after all branch fixes and again after deployment.
 
 ---
 
@@ -155,7 +159,9 @@ Goal: reach the point where the only remaining dependency before switching `spoo
 **Blast radius**: D1 data layer
 **Recommended lane**: fix-now
 **Verification**: Record final remote migration and schema checks in readiness report.
-**Status**: open
+**Status**: in-progress
+**Linked work**: `pnpm exec wrangler d1 migrations list DB --remote`; `pnpm exec wrangler d1 execute DB --remote --command "PRAGMA table_info('User');"`
+**Notes**: Current remote pass is clean: no unapplied migrations and `User.photoUrl` is present. Needs one final check after final HEAD is committed.
 
 ---
 
@@ -169,7 +175,9 @@ Goal: reach the point where the only remaining dependency before switching `spoo
 **Blast radius**: photo uploads/privacy
 **Recommended lane**: fix-now
 **Verification**: Focused tests for JPEG APP1 stripping and non-JPEG passthrough; full coverage.
-**Status**: open
+**Status**: fixed
+**Linked work**: existing `app/lib/image-storage.server.ts`; verified with `pnpm test test/lib/image-storage.server.test.ts -- --run`
+**Notes**: Existing coverage verifies JPEG APP1 metadata is stripped before R2 upload and local data URL fallback, malformed JPEGs are left unchanged, and scan-data APP1-like bytes are not stripped.
 
 ---
 
@@ -184,6 +192,8 @@ Goal: reach the point where the only remaining dependency before switching `spoo
 **Recommended lane**: fix-now
 **Verification**: Slugger can create/search/update/delete recipe, add/list cookbook, add/read/check shopping list, and import dry-run after required secrets are present.
 **Status**: open
+**Linked work**: pending MCP smoke
+**Notes**: Must be checked through Slugger/Ouro and, if needed, raw MCP so schema-cache issues do not hide broken tools.
 
 ---
 
@@ -197,7 +207,9 @@ Goal: reach the point where the only remaining dependency before switching `spoo
 **Blast radius**: MCP/API internals
 **Recommended lane**: defer until after cutover
 **Verification**: Backlog entry retained with rationale; no production blocker.
-**Status**: open
+**Status**: deferred
+**Linked work**: post-cutover architecture backlog
+**Notes**: This remains real maintainability debt, but it is intentionally deferred until after production swap because broad MCP/API module splitting would add risk without improving cutover confidence.
 
 ---
 
@@ -211,4 +223,6 @@ Goal: reach the point where the only remaining dependency before switching `spoo
 **Blast radius**: local agent skill library
 **Recommended lane**: fix-now
 **Verification**: Skill patch applied and, if applicable, validated.
-**Status**: open
+**Status**: fixed
+**Linked work**: `/Users/arimendelow/.codex/skills/ui-systems-audit/SKILL.md`
+**Notes**: Patched the UI audit skill to require repo-local or explicitly documented reproducible audit tooling, and to pair UI audits with operational checks for stable-domain production swaps. `quick_validate.py` passes.
