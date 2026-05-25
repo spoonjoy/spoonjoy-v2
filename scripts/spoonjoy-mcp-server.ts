@@ -3,6 +3,7 @@ import { authenticateApiToken, principalFromUserEmail, type ApiPrincipal } from 
 import { getLocalDb } from "../app/lib/db.server";
 import { createJsonRpcLineSession } from "../app/lib/mcp/json-rpc-stdio.server";
 import type { JsonRpcToolRouter } from "../app/lib/mcp/json-rpc.server";
+import { getSpoonjoyMcpEnv } from "../app/lib/mcp/spoonjoy-mcp-env.server";
 import { callSpoonjoyMcpTool, listSpoonjoyMcpTools } from "../app/lib/mcp/spoonjoy-tools.server";
 
 async function getProtocolSafeDb() {
@@ -17,6 +18,7 @@ async function getProtocolSafeDb() {
 
 const db = await getProtocolSafeDb();
 const defaultOwnerEmail = process.env.SPOONJOY_MCP_USER_EMAIL;
+const env = getSpoonjoyMcpEnv(process.env);
 let principal: ApiPrincipal | null = null;
 
 if (process.env.SPOONJOY_MCP_API_TOKEN) {
@@ -30,7 +32,7 @@ const router: JsonRpcToolRouter = {
     return { tools: listSpoonjoyMcpTools() };
   },
   async callTool(name, args) {
-    const text = await callSpoonjoyMcpTool(name, args, { db, principal, defaultOwnerEmail });
+    const text = await callSpoonjoyMcpTool(name, args, { db, principal, defaultOwnerEmail, env });
     return { content: [{ type: "text", text }] };
   },
 };
