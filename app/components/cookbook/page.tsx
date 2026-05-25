@@ -169,7 +169,7 @@ export function SettingsPanel({
   testId?: string;
 }) {
   return (
-    <section data-testid={testId} className="border-t border-[var(--sj-border)] py-6">
+    <section data-testid={testId} className="border-b border-[var(--sj-border)] py-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <h2 className="font-sj-display text-2xl/7 font-semibold text-[var(--sj-ink)]">{title}</h2>
         {action}

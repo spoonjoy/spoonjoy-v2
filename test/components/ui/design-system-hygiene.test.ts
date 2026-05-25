@@ -73,4 +73,48 @@ describe("Spoonjoy UI design-system hygiene", () => {
 
     expect(offenders).toEqual([]);
   });
+
+  it("keeps page mastheads from stacking a top rule under the desktop nav", () => {
+    const css = readSourceFile("app/styles/tailwind.css");
+    const kitchenRoute = readSourceFile("app/routes/_index.tsx");
+
+    expect(css).not.toContain("border-block:");
+    expect(css).toContain("border-bottom: 1px solid var(--sj-border-strong)");
+    expect(kitchenRoute).not.toContain("border-y border-[var(--sj-border-strong)] py-7");
+  });
+
+  it("keeps form and settings sections from echoing adjacent header rules", () => {
+    const css = readSourceFile("app/styles/tailwind.css");
+    const cookbookPage = readSourceFile("app/components/cookbook/page.tsx");
+    const shoppingList = readSourceFile("app/routes/shopping-list.tsx");
+    const stepNew = readSourceFile("app/routes/recipes.$id.steps.new.tsx");
+
+    expect(css).not.toContain(".sj-form-section {\n  border");
+    expect(cookbookPage).toContain('className="border-b border-[var(--sj-border)] py-6"');
+    expect(cookbookPage).not.toContain('className="border-t border-[var(--sj-border)] py-6"');
+    expect(shoppingList).not.toContain('<header className="border-b border-[var(--sj-border-strong)] pb-6">');
+    expect(stepNew).not.toContain("Step Number:");
+  });
+
+  it("does not duplicate row dividers inside sj-list-ruled containers", () => {
+    const offenders = listTextFiles(["app"]).flatMap((filePath) => {
+      const content = readSourceFile(filePath);
+      const findings: string[] = [];
+      let searchFrom = 0;
+
+      while (true) {
+        const index = content.indexOf("sj-list-ruled", searchFrom);
+        if (index === -1) break;
+        const nearbyMarkup = content.slice(index, index + 900);
+        if (nearbyMarkup.includes("border-b border-[var(--sj-border)]")) {
+          findings.push(filePath);
+        }
+        searchFrom = index + "sj-list-ruled".length;
+      }
+
+      return findings;
+    });
+
+    expect([...new Set(offenders)]).toEqual([]);
+  });
 });

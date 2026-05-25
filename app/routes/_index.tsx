@@ -243,7 +243,7 @@ export default function Index() {
   return (
     <CookbookPage>
       <section>
-        <header className="grid gap-6 border-y border-[var(--sj-border-strong)] py-7 lg:grid-cols-[4.5rem_minmax(0,1fr)_auto] lg:items-end">
+        <header className="grid gap-6 border-b border-[var(--sj-border-strong)] pb-7 lg:grid-cols-[4.5rem_minmax(0,1fr)_auto] lg:items-end">
           <div className="lg:contents">
             <Avatar
               src={resolveChefAvatarUrl(kitchenUser.photoUrl)}

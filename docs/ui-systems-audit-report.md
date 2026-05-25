@@ -22,6 +22,10 @@ Latest deployed screenshot artifact directory:
 
 `/tmp/spoonjoy-ui-crawl-deployed`
 
+Latest border-rule audit screenshot artifact directory:
+
+`/tmp/spoonjoy-border-crawl`
+
 Contact sheets:
 
 - `/tmp/spoonjoy-ui-crawl-local/contact-mobile-top.png`
@@ -43,6 +47,7 @@ pnpm test test/routes/focused-step-editor-flow-e2e.test.tsx -- --run
 pnpm test:coverage
 pnpm typecheck
 pnpm build
+UI_AUDIT_EMAIL=demo@spoonjoy.com UI_AUDIT_PASSWORD=demo1234 /Users/arimendelow/.codex/skills/ui-systems-audit/scripts/crawl-ui.mjs --base-url http://localhost:5173 --routes docs/ui-systems-audit-routes.json --out /tmp/spoonjoy-border-crawl
 ```
 
 Ouroboros harness smoke:
@@ -62,6 +67,7 @@ Rendered crawl:
 - 0 clipped text findings.
 - 0 console errors.
 - 0 page errors.
+- Border-rule re-crawl at `/tmp/spoonjoy-border-crawl` repeated the 54-route matrix with the same zero-error result.
 
 Deployed crawl:
 
@@ -87,7 +93,7 @@ Static inventory:
 Verification:
 
 - 210 test files passed.
-- 4,591 tests passed.
+- 4,594 tests passed.
 - 100% statement, branch, function, and line coverage.
 - Typecheck passed.
 - Production build passed.
@@ -109,6 +115,7 @@ Verification:
 | UIA-008 | Medium | Fixed | Profile/kitchen sample data | Added seed cleanup for local QA cookbooks so visual audits show realistic cookbooks instead of MCP smoke-test artifacts. |
 | UIA-009 | Medium | Fixed | Desktop nav | Restored the real Spoonjoy mark and tightened desktop navigation spacing, current state, and touch targets. |
 | UIA-010 | Low | Accepted | Dock, avatars, radios, switches | `rounded-full` remains intentional only where circular shape carries semantic or physical meaning. |
+| UIA-011 | Medium | Fixed | Page mastheads, forms, shopping list, ruled lists | Collapsed duplicate horizontal rules so headers, form sections, settings panels, and cookbook lists use one purposeful divider instead of stacked border echoes. |
 
 ## Re-Audit Notes
 

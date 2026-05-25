@@ -268,8 +268,8 @@ html *:where(input, textarea, select, button) {
 }
 
 .sj-rule-block {
-  border-block: 1px solid var(--sj-border-strong);
-  padding-block: 1.25rem;
+  border-bottom: 1px solid var(--sj-border-strong);
+  padding-block: 0 1.5rem;
 }
 
 .sj-list-ruled {
@@ -439,7 +439,6 @@ html *:where(input, textarea, select, button) {
 }
 
 .sj-form-section {
-  border-block: 1px solid var(--sj-border);
   padding-block: clamp(1.25rem, 3vw, 2rem);
 }
 

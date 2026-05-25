@@ -163,8 +163,8 @@ export default function ShoppingList() {
   return (
     <CookbookPage>
       <div className="mx-auto max-w-4xl">
-        <header className="border-b border-[var(--sj-border-strong)] pb-6">
-          <div className="flex items-center justify-between gap-4 border-b border-[var(--sj-border-strong)] pb-4 font-sj-ui text-sm font-bold">
+        <header className="pb-6">
+          <div className="flex items-center justify-between gap-4 font-sj-ui text-sm font-bold">
             <Link href="/" className="inline-flex min-h-11 items-center text-[var(--sj-ink)] no-underline">Kitchen</Link>
             <span className="text-[var(--sj-ink-soft)]">
               {displayItems.length} {displayItems.length === 1 ? "item" : "items"}

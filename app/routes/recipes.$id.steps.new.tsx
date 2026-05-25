@@ -358,12 +358,6 @@ export default function NewStep() {
           <ValidationError error={actionData.errors.general} className="mb-4" />
         )}
 
-        <div className="mb-6 border-y border-[var(--sj-border)] py-4">
-          <Text className="m-0">
-            <Strong>Step Number:</Strong> {nextStepNum}
-          </Text>
-        </div>
-
         <Form method="post" className="sj-form-section">
           <Fieldset className="space-y-6">
             <Field>
@@ -491,10 +485,7 @@ export default function NewStep() {
               ) : (
                 <ul className="sj-list-ruled mt-4 list-none p-0">
                   {ingredients.map((ingredient, index) => (
-                    <li
-                      key={`${ingredient.ingredientName}-${index}`}
-                      className="border-b border-[var(--sj-border)]"
-                    >
+                    <li key={`${ingredient.ingredientName}-${index}`}>
                       <ChecklistRow
                         name={ingredient.ingredientName}
                         quantity={`${ingredient.quantity} ${ingredient.unit}`}

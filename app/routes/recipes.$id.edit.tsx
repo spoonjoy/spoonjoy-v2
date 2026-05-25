@@ -453,7 +453,7 @@ export default function EditRecipe() {
                 return (
                   <article
                     key={step.id}
-                    className="grid gap-4 border-b border-[var(--sj-border)] py-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center"
+                    className="grid gap-4 py-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center"
                     aria-label={`Step ${step.stepNum}`}
                   >
                     <div className="min-w-0">

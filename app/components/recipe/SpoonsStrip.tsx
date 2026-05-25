@@ -96,7 +96,7 @@ function CompactSpoonList({ spoons }: { spoons: SpoonsStripItem[] }) {
   return (
     <ul className="sj-list-ruled">
       {spoons.map((spoon) => (
-        <li key={spoon.id} className="border-b border-[var(--sj-border)] py-3">
+        <li key={spoon.id} className="py-3">
           <div className="grid min-h-20 grid-cols-[4rem_minmax(0,1fr)] items-center gap-3 sm:grid-cols-[4rem_minmax(0,1fr)_auto]">
             <CompactCookVisual spoon={spoon} />
             <div className="min-w-0">
@@ -155,7 +155,7 @@ export function SpoonsStrip({ spoons, showRecipe = false }: SpoonsStripProps) {
       {spoons.map((spoon) => (
         <li
           key={spoon.id}
-          className="space-y-3 border-b border-[var(--sj-border)] py-4"
+          className="space-y-3 py-4"
         >
           <div className="flex items-center justify-between text-sm">
             <Link

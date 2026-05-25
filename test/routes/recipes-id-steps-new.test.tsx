@@ -1214,7 +1214,7 @@ describe("Recipes $id Steps New Route", () => {
       expect(screen.getByRole("link", { name: /Cancel/i })).toHaveAttribute("href", "/recipes/recipe-1/edit");
     });
 
-    it("should display step number info", async () => {
+    it("should display the next step number in the page eyebrow", async () => {
       const mockData = {
         recipe: {
           id: "recipe-1",
@@ -1234,8 +1234,8 @@ describe("Recipes $id Steps New Route", () => {
 
       render(<Stub initialEntries={["/recipes/recipe-1/steps/new"]} />);
 
-      expect(await screen.findByText(/Step Number:/)).toBeInTheDocument();
-      expect(screen.getByText("5")).toBeInTheDocument();
+      expect(await screen.findByText("Step 5")).toBeInTheDocument();
+      expect(screen.queryByText(/Step Number:/)).not.toBeInTheDocument();
     });
 
     it("should display general error when present", async () => {

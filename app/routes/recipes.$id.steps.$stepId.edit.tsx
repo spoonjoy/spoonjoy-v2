@@ -590,10 +590,7 @@ export default function EditStep() {
           ) : (
             <div className="sj-list-ruled">
               {step.ingredients.map((ingredient) => (
-                <div
-                  key={ingredient.id}
-                  className="border-b border-[var(--sj-border)]"
-                >
+                <div key={ingredient.id}>
                   <ChecklistRow
                     name={ingredient.ingredientRef.name}
                     quantity={`${ingredient.quantity} ${ingredient.unit.name}`}
