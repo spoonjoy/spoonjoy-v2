@@ -100,6 +100,22 @@ type CookbookWithRecipes = Prisma.CookbookGetPayload<{
   };
 }>;
 
+type CookbookSummaryBase = Prisma.CookbookGetPayload<{
+  include: {
+    author: { select: { id: true; email: true; username: true } };
+  };
+}>;
+
+type CookbookSummaryRecipeRow = Prisma.RecipeInCookbookGetPayload<{
+  include: {
+    recipe: {
+      include: {
+        covers: true;
+      };
+    };
+  };
+}>;
+
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 25;
 
@@ -118,6 +134,18 @@ const cookbookRecipeInclude = {
     },
   },
 } satisfies Prisma.CookbookInclude;
+
+const cookbookSummaryInclude = {
+  author: { select: { id: true, email: true, username: true } },
+} satisfies Prisma.CookbookInclude;
+
+const cookbookSummaryRecipeInclude = {
+  recipe: {
+    include: {
+      covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
+    },
+  },
+} satisfies Prisma.RecipeInCookbookInclude;
 
 function json(value: unknown): unknown {
   return value;
@@ -403,6 +431,21 @@ function activeCookbookRecipes(cookbook: CookbookWithRecipes) {
 function formatCookbookSummary(cookbook: CookbookWithRecipes) {
   const recipes = activeCookbookRecipes(cookbook);
 
+  return {
+    id: cookbook.id,
+    title: cookbook.title,
+    ownerId: cookbook.authorId,
+    author: cookbook.author,
+    recipeCount: recipes.length,
+    recipes: recipes.map((item) => ({
+      id: item.recipe.id,
+      title: item.recipe.title,
+      imageUrl: getRecipeCoverImageUrl(item.recipe, item.recipe.covers),
+    })),
+  };
+}
+
+function formatLeanCookbookSummary(cookbook: CookbookSummaryBase, recipes: CookbookSummaryRecipeRow[]) {
   return {
     id: cookbook.id,
     title: cookbook.title,
@@ -1067,10 +1110,23 @@ const listCookbooksTool: SpoonjoyApiOperation = {
       },
       orderBy: { updatedAt: "desc" },
       take: normalizeLimit(args.limit),
-      include: cookbookRecipeInclude,
+      include: cookbookSummaryInclude,
     });
 
-    return json({ cookbooks: cookbooks.map(formatCookbookSummary) });
+    const summaries = [];
+    for (const cookbook of cookbooks) {
+      const recipes = await context.db.recipeInCookbook.findMany({
+        where: {
+          cookbookId: cookbook.id,
+          recipe: { deletedAt: null },
+        },
+        orderBy: { createdAt: "desc" },
+        include: cookbookSummaryRecipeInclude,
+      });
+      summaries.push(formatLeanCookbookSummary(cookbook, recipes));
+    }
+
+    return json({ cookbooks: summaries });
   },
 };
 
