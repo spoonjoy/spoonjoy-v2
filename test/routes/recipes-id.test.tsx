@@ -963,8 +963,8 @@ describe("Recipes $id Route", () => {
       expect(panel?.className).toContain("mb-24");
       expect(panel?.className).toContain("max-h-[calc(100dvh-7.5rem)]");
       expect(panel?.className).toContain("sm:mb-auto");
-      expect(panel).toHaveClass("rounded-t-[2rem]");
-      expect(panel?.className).toContain("sm:rounded-[2rem]");
+      expect(panel).toHaveClass("rounded-t-[var(--sj-radius-surface)]");
+      expect(panel?.className).toContain("sm:rounded-[var(--sj-radius-surface)]");
 
       const modalBody = screen.getByTestId("save-modal-body");
       const modalFooter = screen.getByTestId("save-modal-footer");

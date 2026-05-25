@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Text } from "~/components/ui/text";
 import { Button } from "~/components/ui/button";
 import { useToast } from "~/components/ui/toast";
@@ -60,7 +60,9 @@ export function NotificationsSection({
   initiallySubscribed,
   initialPreferences,
 }: NotificationsSectionProps) {
-  const support = isPushSupported();
+  const [support, setSupport] = useState<ReturnType<typeof isPushSupported>>({
+    supported: true,
+  });
   const [subscribed, setSubscribed] = useState(initiallySubscribed);
   const [busy, setBusy] = useState(false);
   const [prefs, setPrefs] = useState<NotificationPreferenceFlags>(
@@ -68,6 +70,10 @@ export function NotificationsSection({
   );
   const [iosDialogOpen, setIosDialogOpen] = useState(false);
   const { showToast } = useToast();
+
+  useEffect(() => {
+    setSupport(isPushSupported());
+  }, []);
 
   if (!support.supported) {
     return (

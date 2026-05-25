@@ -264,10 +264,7 @@ describe("Users $identifier Route", () => {
       expect(await screen.findByRole("heading", { name: "chef-rowan" })).toBeInTheDocument();
       expect(screen.getByText("Joined May 2026 • 2 recipes • 1 cookbook")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Open kitchen view" })).toHaveAttribute("href", "/?chef=chef-rowan");
-      expect(screen.getByRole("link", { name: "Canonical profile: /users/chef-rowan" })).toHaveAttribute(
-        "href",
-        "/users/chef-rowan"
-      );
+      expect(screen.queryByText("Canonical profile: /users/chef-rowan")).toBeNull();
       expect(screen.getAllByRole("link", { name: "Miso Soup" })[0]).toHaveAttribute("href", "/recipes/recipe-1");
       expect(screen.getByRole("link", { name: "Plain Rice" })).toHaveAttribute("href", "/recipes/recipe-2");
       expect(screen.getByText("Weeknight Pantry")).toBeInTheDocument();

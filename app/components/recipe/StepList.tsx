@@ -92,7 +92,7 @@ function StepReorderItem({
             disabled={!canDrag}
             onPointerDown={canDrag ? handleDragPointerDown : undefined}
             onKeyDown={(event) => onDragHandleKeyDown(event, index)}
-            className="hidden touch-none cursor-grab rounded-[var(--sj-radius-small)] p-1 text-[var(--sj-ink-soft)] hover:text-[var(--sj-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--sj-brass)] active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-40 sm:inline-flex"
+            className="inline-flex min-h-11 min-w-11 touch-none cursor-grab items-center justify-center rounded-[var(--sj-radius-control)] text-[var(--sj-ink-soft)] transition hover:bg-[var(--sj-flour)] hover:text-[var(--sj-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--sj-brass)] active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-40"
           >
             <GripVertical className="h-5 w-5" />
           </button>
@@ -265,7 +265,7 @@ export function StepList({ steps, recipeId, onChange, disabled = false }: StepLi
       {recipeId && !recipeId.startsWith('new-') ? (
         <Link
           href={`/recipes/${recipeId}/steps/new`}
-          className="sj-link inline-flex items-center gap-2"
+          className="sj-link inline-flex min-h-11 items-center gap-2"
         >
           + Add Step
         </Link>

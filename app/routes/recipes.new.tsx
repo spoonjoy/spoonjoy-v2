@@ -222,7 +222,7 @@ export default function NewRecipe() {
       <CookbookHeader
         eyebrow="New recipe"
         title="Write the version future-you can actually cook."
-        action={<Link href="/recipes" className="sj-link">← Back to recipes</Link>}
+        action={<Link href="/recipes" className="sj-link inline-flex min-h-11 items-center">← Back to recipes</Link>}
       >
         <Text>
           Start with the story and the photo, then shape the method into steps when the dish is ready.

@@ -14,9 +14,9 @@ export const Select = forwardRef(function Select(
         // Basic layout
         'group relative block w-full',
         // Background color + shadow applied to inset pseudo element, so shadow blends with border in light mode
-        'before:absolute before:inset-px before:rounded-[calc(var(--radius-lg)-1px)] before:bg-[var(--sj-field)] before:shadow-sm',
+        'before:absolute before:inset-px before:rounded-[var(--sj-radius-small)] before:bg-[var(--sj-field)] before:shadow-sm',
         // Focus ring
-        'after:pointer-events-none after:absolute after:inset-0 after:rounded-lg after:ring-transparent after:ring-inset has-data-focus:after:ring-2 has-data-focus:after:ring-[var(--sj-brass)]',
+        'after:pointer-events-none after:absolute after:inset-0 after:rounded-[var(--sj-radius-small)] after:ring-transparent after:ring-inset has-data-focus:after:ring-2 has-data-focus:after:ring-[var(--sj-brass)]',
         // Disabled state
         'has-data-disabled:opacity-50 has-data-disabled:before:bg-[color-mix(in_srgb,var(--sj-field)_72%,transparent)] has-data-disabled:before:shadow-none',
       ])}
@@ -27,7 +27,7 @@ export const Select = forwardRef(function Select(
         {...props}
         className={clsx([
           // Basic layout
-          'relative block w-full appearance-none rounded-lg py-[calc(--spacing(2.5)-1px)] sm:py-[calc(--spacing(1.5)-1px)]',
+          'relative block min-h-11 w-full appearance-none rounded-[var(--sj-radius-small)] py-[calc(--spacing(2.5)-1px)] sm:py-[calc(--spacing(1.5)-1px)]',
           // Horizontal padding
           multiple
             ? 'px-[calc(--spacing(3.5)-1px)] sm:px-[calc(--spacing(3)-1px)]'

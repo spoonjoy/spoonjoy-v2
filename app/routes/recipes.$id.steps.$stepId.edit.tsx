@@ -447,7 +447,7 @@ export default function EditStep() {
       <CookbookHeader
         eyebrow={`Step ${step.stepNum}`}
         title="Edit Step"
-        action={<Link href={`/recipes/${recipe.id}/edit`} className="sj-link">← Back to recipe</Link>}
+        action={<Link href={`/recipes/${recipe.id}/edit`} className="sj-link inline-flex min-h-11 items-center">← Back to recipe</Link>}
       >
         <Text>Keep the method for {recipe.title} easy to follow in the kitchen.</Text>
       </CookbookHeader>

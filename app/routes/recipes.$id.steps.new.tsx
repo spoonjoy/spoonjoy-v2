@@ -10,7 +10,7 @@ import { Text, Strong } from "~/components/ui/text";
 import { Link } from "~/components/ui/link";
 import { ValidationError } from "~/components/ui/validation-error";
 import { Listbox, ListboxOption, ListboxLabel } from "~/components/ui/listbox";
-import { CookbookHeader, CookbookPage, RuledEmptyState, SettingsPanel } from "~/components/cookbook/page";
+import { CookbookHeader, CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
 import { ChecklistRow } from "~/components/shopping/checklist-row";
 import {
   validateStepTitle,
@@ -348,7 +348,7 @@ export default function NewStep() {
       <CookbookHeader
         eyebrow={`Step ${nextStepNum}`}
         title="Add Step"
-        action={<Link href={`/recipes/${recipe.id}/edit`} className="sj-link">← Back to recipe</Link>}
+        action={<Link href={`/recipes/${recipe.id}/edit`} className="sj-link inline-flex min-h-11 items-center">← Back to recipe</Link>}
       >
         <Text>Write the next bit of method for {recipe.title}.</Text>
       </CookbookHeader>
@@ -439,9 +439,11 @@ export default function NewStep() {
               )}
             </Field>
 
-            <Field>
-              <Label>Ingredients</Label>
-              <SettingsPanel title="Ingredients">
+            <section className="border-t border-[var(--sj-border)] pt-6">
+              <h2 className="font-sj-display text-3xl/9 font-semibold text-[var(--sj-ink)]">
+                Ingredients
+              </h2>
+              <div className="mt-4">
                 <IngredientInputToggle mode={ingredientInputMode} onChange={handleModeChange} />
 
                 {ingredientInputMode === "manual" ? (
@@ -466,15 +468,21 @@ export default function NewStep() {
                 )}
 
                 {actionData?.errors?.quantity && (
-                  <ErrorMessage>{actionData.errors.quantity}</ErrorMessage>
+                  <p className="text-base/6 text-[var(--sj-tomato)] sm:text-sm/6" role="alert">
+                    {actionData.errors.quantity}
+                  </p>
                 )}
                 {actionData?.errors?.unitName && (
-                  <ErrorMessage>{actionData.errors.unitName}</ErrorMessage>
+                  <p className="text-base/6 text-[var(--sj-tomato)] sm:text-sm/6" role="alert">
+                    {actionData.errors.unitName}
+                  </p>
                 )}
                 {actionData?.errors?.ingredientName && (
-                  <ErrorMessage>{actionData.errors.ingredientName}</ErrorMessage>
+                  <p className="text-base/6 text-[var(--sj-tomato)] sm:text-sm/6" role="alert">
+                    {actionData.errors.ingredientName}
+                  </p>
                 )}
-              </SettingsPanel>
+              </div>
 
               <input type="hidden" name="ingredientsJson" value={JSON.stringify(ingredients)} />
 
@@ -504,10 +512,10 @@ export default function NewStep() {
                   ))}
                 </ul>
               )}
-            </Field>
+            </section>
 
             <div className="flex flex-col-reverse gap-3 border-t border-[var(--sj-border)] pt-4 sm:flex-row sm:justify-end">
-              <Link href={`/recipes/${recipe.id}/edit`} className="sj-link self-center sm:self-auto">
+              <Link href={`/recipes/${recipe.id}/edit`} className="sj-link inline-flex min-h-11 items-center self-center sm:self-auto">
                 Cancel
               </Link>
               <Button type="submit">

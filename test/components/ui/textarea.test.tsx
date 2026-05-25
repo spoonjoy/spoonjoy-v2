@@ -65,7 +65,7 @@ describe('Textarea', () => {
     it('applies basic layout classes to textarea', () => {
       const { container } = render(<Textarea />)
       const textarea = container.querySelector('textarea')
-      expect(textarea?.className).toContain('rounded-lg')
+      expect(textarea?.className).toContain('rounded-[var(--sj-radius-small)]')
       expect(textarea?.className).toContain('w-full')
     })
 

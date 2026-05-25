@@ -20,7 +20,7 @@ export function ThemeToggle() {
     <Headless.Button
       onClick={cycleTheme}
       className={clsx(
-        'relative flex items-center justify-center rounded-full p-2',
+        'relative flex min-h-11 min-w-11 items-center justify-center rounded-full p-2',
         'text-[var(--sj-ink-soft)] hover:text-[var(--sj-tomato)]',
         'hover:bg-[var(--sj-flour)]',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--sj-brass)]',
@@ -54,7 +54,7 @@ export function ThemeDropdown() {
     <Headless.Menu as="div" className="relative">
       <Headless.MenuButton
         className={clsx(
-          'flex items-center justify-center rounded-full p-2',
+          'flex min-h-11 min-w-11 items-center justify-center rounded-full p-2',
           'text-[var(--sj-ink-soft)] hover:text-[var(--sj-tomato)]',
           'hover:bg-[var(--sj-flour)]',
           'focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--sj-brass)]',
@@ -72,7 +72,7 @@ export function ThemeDropdown() {
       <Headless.MenuItems
         className={clsx(
           'absolute right-0 z-50 mt-2 w-36 origin-top-right',
-          'rounded-[1rem] border border-[var(--sj-border)] bg-[var(--sj-panel-solid)]',
+          'rounded-[var(--sj-radius-surface)] border border-[var(--sj-border)] bg-[var(--sj-panel-solid)]',
           'shadow-[var(--sj-shadow-soft)]',
           'focus:outline-none'
         )}
@@ -84,7 +84,7 @@ export function ThemeDropdown() {
                 <button
                   onClick={() => setTheme(value)}
                   className={clsx(
-                    'flex w-full items-center gap-2 rounded-full px-3 py-2 text-sm',
+                    'flex w-full items-center gap-2 rounded-[var(--sj-radius-control)] px-3 py-2 text-sm',
                     focus && 'bg-[var(--sj-flour)]',
                     theme === value
                       ? 'text-[var(--sj-tomato)]'

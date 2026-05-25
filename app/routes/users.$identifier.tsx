@@ -218,18 +218,17 @@ export default function UserProfile() {
               <Text className="mt-1 text-sm">
                 {profile.joinedLabel} • {recipes.length} {recipes.length === 1 ? "recipe" : "recipes"} • {cookbooks.length} {cookbooks.length === 1 ? "cookbook" : "cookbooks"}
               </Text>
-              <Link href={`/?chef=${profile.username}`} className="sj-link mt-2 inline-block text-sm">
+              <Link href={`/?chef=${profile.username}`} className="sj-link mt-2 inline-flex min-h-11 items-center text-sm">
                 Open kitchen view
               </Link>
-              <Text className="mt-2 text-sm">
-                <Link href={`${profileHref}/fellow-chefs`} className="sj-link">
+              <nav className="mt-1 flex flex-wrap gap-x-4 gap-y-1 font-sj-ui text-sm font-bold" aria-label={`${profile.username} kitchen relationships`}>
+                <Link href={`${profileHref}/fellow-chefs`} className="sj-link inline-flex min-h-11 items-center">
                   Fellow chefs · {fellowChefsCount}
                 </Link>
-                {" · "}
-                <Link href={`${profileHref}/kitchen-visitors`} className="sj-link">
+                <Link href={`${profileHref}/kitchen-visitors`} className="sj-link inline-flex min-h-11 items-center">
                   Kitchen visitors · {kitchenVisitorsCount}
                 </Link>
-              </Text>
+              </nav>
             </div>
           </div>
 
@@ -300,11 +299,6 @@ export default function UserProfile() {
           </div>
         </SettingsPanel>
 
-        <div className="mt-8 border-t border-[var(--sj-border)] pt-4 text-sm">
-          <Link href={profileHref} className="sj-link text-[var(--sj-ink-soft)]">
-            Canonical profile: {profileHref}
-          </Link>
-        </div>
       </section>
     </CookbookPage>
   );

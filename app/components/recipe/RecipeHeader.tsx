@@ -65,8 +65,8 @@ export function RecipeHeader({
   const resolvedChefHref = chefProfileHref ?? (chefId ? `/users/${chefId}` : undefined)
   const resolvedChefPhotoUrl = resolveChefAvatarUrl(chefPhotoUrl)
 
-  const chefLine = (
-    <div className="mt-5 flex items-center gap-2">
+  const chefIdentity = (
+    <>
       <span data-testid="chef-avatar">
         <Avatar
           src={resolvedChefPhotoUrl}
@@ -75,16 +75,23 @@ export function RecipeHeader({
           className="size-9 border border-[var(--sj-border)]"
         />
       </span>
-      <p className="font-sj-ui text-sm font-semibold text-[var(--sj-ink-soft)]">
-        By{' '}
-        {resolvedChefHref ? (
-          <Link href={resolvedChefHref} className="text-[var(--sj-ink)] underline decoration-[var(--sj-border-strong)] underline-offset-4 hover:text-[var(--sj-brass)]">
-            <strong>{chefName}</strong>
-          </Link>
-        ) : (
-          <strong className="text-[var(--sj-ink)]">{chefName}</strong>
-        )}
-      </p>
+      <span className="font-sj-ui text-sm font-semibold text-[var(--sj-ink-soft)]">
+        By <strong className="text-[var(--sj-ink)]">{chefName}</strong>
+      </span>
+    </>
+  )
+
+  const chefLine = resolvedChefHref ? (
+    <Link
+      href={resolvedChefHref}
+      aria-label={chefName}
+      className="mt-5 inline-flex min-h-11 items-center gap-2 no-underline hover:[&_strong]:text-[var(--sj-brass)]"
+    >
+      {chefIdentity}
+    </Link>
+  ) : (
+    <div className="mt-5 flex min-h-11 items-center gap-2">
+      {chefIdentity}
     </div>
   )
 
@@ -154,7 +161,7 @@ export function RecipeHeader({
                 <button
                   type="button"
                   onClick={onClearProgress}
-                  className="font-sj-ui text-left text-xs font-semibold uppercase tracking-[0.14em] text-[var(--sj-ink-soft)] hover:text-[var(--sj-tomato)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)] sm:text-right"
+                  className="font-sj-ui inline-flex min-h-11 items-center justify-start text-left text-xs font-semibold uppercase tracking-[0.14em] text-[var(--sj-ink-soft)] hover:text-[var(--sj-tomato)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)] sm:justify-end sm:text-right"
                   data-testid="clear-progress-button"
                 >
                   Clear progress

@@ -249,7 +249,7 @@ export default function CookbookDetail() {
         <div className="mb-6">
           <Link
             href="/cookbooks"
-            className="sj-link"
+            className="sj-link inline-flex min-h-11 items-center"
           >
             ← Back to cookbooks
           </Link>

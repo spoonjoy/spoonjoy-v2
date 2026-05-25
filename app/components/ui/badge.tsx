@@ -38,7 +38,7 @@ export function Badge({ color = 'zinc', className, ...props }: BadgeProps & Reac
       {...props}
       className={clsx(
         className,
-        'inline-flex items-center gap-x-1.5 rounded-md px-1.5 py-0.5 text-sm/5 font-medium sm:text-xs/5 forced-colors:outline',
+        'inline-flex items-center gap-x-1.5 rounded-[var(--sj-radius-small)] px-1.5 py-0.5 text-sm/5 font-medium sm:text-xs/5 forced-colors:outline',
         colors[color]
       )}
     />
@@ -59,7 +59,7 @@ export const BadgeButton = forwardRef(function BadgeButton(
 ) {
   let classes = clsx(
     className,
-    'group relative inline-flex rounded-md focus:not-data-focus:outline-hidden data-focus:outline-2 data-focus:outline-offset-2 data-focus:outline-[var(--sj-brass)]'
+    'group relative inline-flex rounded-[var(--sj-radius-small)] focus:not-data-focus:outline-hidden data-focus:outline-2 data-focus:outline-offset-2 data-focus:outline-[var(--sj-brass)]'
   )
 
   return typeof props.href === 'string' ? (

@@ -39,7 +39,7 @@ export function Dialog({
             data-slot="dialog-panel"
             className={clsx(
               sizes[size],
-              'row-start-2 w-full min-w-0 rounded-t-[2rem] border border-[var(--sj-border)] bg-[var(--sj-panel-solid)] p-(--gutter) shadow-[var(--sj-shadow)] [--gutter:--spacing(8)] sm:mb-auto sm:rounded-[2rem] forced-colors:outline',
+              'row-start-2 w-full min-w-0 rounded-t-[var(--sj-radius-surface)] border border-[var(--sj-border)] bg-[var(--sj-panel-solid)] p-(--gutter) shadow-[var(--sj-shadow)] [--gutter:--spacing(8)] sm:mb-auto sm:rounded-[var(--sj-radius-surface)] forced-colors:outline',
               'transition will-change-transform data-enter:duration-300 data-enter:ease-out data-leave:duration-200 data-leave:ease-in data-closed:translate-y-8 data-closed:opacity-0 data-enter:data-closed:translate-y-8 data-enter:data-closed:opacity-0 sm:data-closed:translate-y-0 sm:data-closed:scale-95 sm:data-enter:data-closed:translate-y-0 sm:data-enter:data-closed:scale-95 motion-reduce:transition-none motion-reduce:data-closed:translate-y-0',
               className
             )}

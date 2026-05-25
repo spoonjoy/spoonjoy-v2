@@ -653,7 +653,7 @@ export default function RecipeDetail() {
         <div className="mb-6 flex flex-col gap-2 border-t border-[var(--sj-border-strong)] pt-6 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="sj-eyebrow">Cook mode</p>
-            <Heading level={2} className="mt-3 text-3xl/9 font-semibold tracking-[-0.03em] sm:text-4xl/11">
+            <Heading level={2} className="mt-3 text-3xl/9 font-semibold tracking-normal sm:text-4xl/11">
               Steps
             </Heading>
           </div>
@@ -693,7 +693,7 @@ export default function RecipeDetail() {
         )}
 
         <div className="mt-10 space-y-4">
-          <Heading level={2} className="text-2xl font-semibold tracking-[-0.02em]">
+          <Heading level={2} className="text-2xl font-semibold tracking-normal">
             Cooks
           </Heading>
           <SpoonsStrip spoons={spoons} />

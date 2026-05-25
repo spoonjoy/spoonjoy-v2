@@ -6,7 +6,7 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
     <main className="sj-page min-h-dvh">
       <div className="grid min-h-dvh lg:grid-cols-[minmax(0,0.92fr)_minmax(24rem,0.58fr)]">
         <section className="flex flex-col justify-between px-5 py-7 sm:px-8 lg:px-12">
-          <a href="/" className="inline-flex items-center gap-2 font-sj-display text-2xl font-semibold text-[var(--sj-ink)] no-underline">
+          <a href="/" className="inline-flex min-h-11 items-center gap-2 font-sj-display text-2xl font-semibold text-[var(--sj-ink)] no-underline">
             <SpoonjoyLogo size={28} />
             Spoonjoy
           </a>

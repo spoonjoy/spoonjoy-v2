@@ -397,7 +397,7 @@ export default function EditRecipe() {
       <CookbookHeader
         eyebrow="Edit recipe"
         title="Edit Recipe"
-        action={<Link href={`/recipes/${recipe.id}`} className="sj-link">← Back to recipe</Link>}
+        action={<Link href={`/recipes/${recipe.id}`} className="sj-link inline-flex min-h-11 items-center">← Back to recipe</Link>}
       />
 
       <div className="mt-8 max-w-5xl">
@@ -439,7 +439,7 @@ export default function EditRecipe() {
         <section aria-label="Recipe Steps" className="mt-10">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <CookbookSectionTitle className="my-0 flex-1">Recipe Steps</CookbookSectionTitle>
-            <Link href={`/recipes/${recipe.id}/steps/new`} className="sj-link">+ Add Step</Link>
+            <Link href={`/recipes/${recipe.id}/steps/new`} className="sj-link inline-flex min-h-11 items-center">+ Add Step</Link>
           </div>
 
           {recipe.steps.length === 0 ? (

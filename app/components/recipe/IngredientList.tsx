@@ -1,3 +1,4 @@
+import { LayoutGroup, motion, useReducedMotion } from 'framer-motion'
 import type { StepReference } from './StepOutputUseCallout'
 import type { IngredientIconKey } from '~/lib/ingredient-affordances'
 import { formatQuantity, scaleQuantity } from '~/lib/quantity'
@@ -37,6 +38,12 @@ export interface IngredientListProps {
   onStepOutputToggle?: (id: string) => void
 }
 
+export function getIngredientLayoutTransition(prefersReducedMotion: boolean | null) {
+  return prefersReducedMotion
+    ? { duration: 0 }
+    : { type: 'spring' as const, stiffness: 420, damping: 38, mass: 0.7 }
+}
+
 /**
  * A checkable ingredient list with scaled quantities.
  *
@@ -57,6 +64,7 @@ export function IngredientList({
   checkedStepOutputIds = new Set(),
   onStepOutputToggle,
 }: IngredientListProps) {
+  const prefersReducedMotion = useReducedMotion()
   const hasStepOutputUses = stepOutputUses.length > 0
   const hasIngredients = ingredients.length > 0
   const orderedIngredients = ingredients
@@ -77,53 +85,60 @@ export function IngredientList({
     return null
   }
 
+  const layoutTransition = getIngredientLayoutTransition(prefersReducedMotion)
+
   return (
-    <ul
-      data-testid="ingredient-list"
-      className="m-0 p-0"
-    >
-      {hasStepOutputUses && (
-        <li data-testid="step-output-uses-section" className="contents">
-          <ul className="contents">
-            {stepOutputUses.map((ref) => {
-              const isChecked = checkedStepOutputIds.has(ref.id)
-              const shouldShowCheckbox = showCheckboxes && onStepOutputToggle
+    <LayoutGroup>
+      <ul
+        data-testid="ingredient-list"
+        className="m-0 p-0"
+      >
+        {hasStepOutputUses && (
+          <li data-testid="step-output-uses-section" className="contents">
+            <ul className="contents">
+              {stepOutputUses.map((ref) => {
+                const isChecked = checkedStepOutputIds.has(ref.id)
+                const shouldShowCheckbox = showCheckboxes && onStepOutputToggle
 
-              return (
-                <li
-                  key={ref.id}
-                  className="border-b border-[var(--sj-border)]"
-                  data-testid={`step-output-item-${ref.id}`}
-                >
-                  <ChecklistRow
-                    checked={isChecked}
-                    name={formatStepReferenceName(ref)}
-                    note={isChecked ? 'used' : 'step output'}
-                    onToggle={shouldShowCheckbox ? () => onStepOutputToggle(ref.id) : undefined}
-                  />
-                </li>
-              )
-            })}
-          </ul>
-        </li>
-      )}
+                return (
+                  <li
+                    key={ref.id}
+                    className="border-b border-[var(--sj-border)]"
+                    data-testid={`step-output-item-${ref.id}`}
+                  >
+                    <ChecklistRow
+                      checked={isChecked}
+                      name={formatStepReferenceName(ref)}
+                      note={isChecked ? 'used' : 'step output'}
+                      onToggle={shouldShowCheckbox ? () => onStepOutputToggle(ref.id) : undefined}
+                    />
+                  </li>
+                )
+              })}
+            </ul>
+          </li>
+        )}
 
-      {orderedIngredients.map(({ ingredient, checked }) => (
-        <li
-          key={ingredient.id}
-          className="border-b border-[var(--sj-border)] last:border-b-0"
-          data-testid={`ingredient-item-${ingredient.id}`}
-        >
-          <IngredientRow
-            ingredient={ingredient}
-            scaleFactor={scaleFactor}
-            isChecked={checked}
-            showCheckboxes={showCheckboxes}
-            onToggle={onToggle}
-          />
-        </li>
-      ))}
-    </ul>
+        {orderedIngredients.map(({ ingredient, checked }) => (
+          <motion.li
+            key={ingredient.id}
+            layout="position"
+            transition={layoutTransition}
+            className="border-b border-[var(--sj-border)] last:border-b-0"
+            data-layout-animation="ingredient-checkoff-reorder"
+            data-testid={`ingredient-item-${ingredient.id}`}
+          >
+            <IngredientRow
+              ingredient={ingredient}
+              scaleFactor={scaleFactor}
+              isChecked={checked}
+              showCheckboxes={showCheckboxes}
+              onToggle={onToggle}
+            />
+          </motion.li>
+        ))}
+      </ul>
+    </LayoutGroup>
   )
 }
 

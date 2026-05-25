@@ -16,7 +16,7 @@ export function TextLink({ className, ...props }: React.ComponentPropsWithoutRef
     <Link
       {...props}
       className={clsx(
-        'font-sj-ui font-semibold text-[var(--sj-tomato)] underline decoration-[color-mix(in_srgb,var(--sj-tomato)_45%,transparent)] data-hover:text-[var(--sj-brass)] data-hover:decoration-[var(--sj-brass)]',
+        'font-sj-ui inline-flex min-h-11 min-w-11 items-center justify-center font-semibold text-[var(--sj-tomato)] underline decoration-[color-mix(in_srgb,var(--sj-tomato)_45%,transparent)] data-hover:text-[var(--sj-brass)] data-hover:decoration-[var(--sj-brass)]',
         className
       )}
     />

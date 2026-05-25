@@ -115,7 +115,7 @@ describe("Focused Step Editor Flow (E2E)", () => {
 
     expect(await screen.findByRole("heading", { name: "Add Step" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create" })).toBeInTheDocument();
-    expect(screen.getAllByText("Ingredients", { selector: "label" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Ingredient text", { selector: "label" }).length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: /Create Step & Add Ingredients/i })).not.toBeInTheDocument();
   });
 

@@ -45,9 +45,9 @@ export function CheckboxField({
 
 const base = [
   // Basic layout
-  'relative isolate flex size-4.5 items-center justify-center rounded-[0.3125rem] sm:size-4',
+  'relative isolate flex size-4.5 items-center justify-center rounded-[var(--sj-radius-small)] sm:size-4',
   // Background color + shadow applied to inset pseudo element, so shadow blends with border in light mode
-  'before:absolute before:inset-0 before:-z-10 before:rounded-[calc(0.3125rem-1px)] before:bg-[var(--sj-field)] before:shadow-sm',
+  'before:absolute before:inset-0 before:-z-10 before:rounded-[var(--sj-radius-small)] before:bg-[var(--sj-field)] before:shadow-sm',
   // Background color when checked
   'group-data-checked:before:bg-(--checkbox-checked-bg)',
   // Background color is moved to control and shadow is removed in dark mode so hide `before` pseudo
@@ -58,8 +58,8 @@ const base = [
   'border border-[var(--sj-border)] group-data-checked:border-transparent group-data-hover:group-data-checked:border-transparent group-data-hover:border-[var(--sj-border-strong)] group-data-checked:bg-(--checkbox-checked-border)',
   'dark:border-[var(--sj-border)] dark:group-data-checked:border-[var(--sj-border)] dark:group-data-hover:group-data-checked:border-[var(--sj-border)] dark:group-data-hover:border-[var(--sj-border-strong)]',
   // Inner highlight shadow
-  'after:absolute after:inset-0 after:rounded-[calc(0.3125rem-1px)] after:shadow-[inset_0_1px_color-mix(in_srgb,var(--sj-bone)_18%,transparent)]',
-  'dark:after:-inset-px dark:after:hidden dark:after:rounded-[0.3125rem] dark:group-data-checked:after:block',
+  'after:absolute after:inset-0 after:rounded-[var(--sj-radius-small)] after:shadow-[inset_0_1px_color-mix(in_srgb,var(--sj-bone)_18%,transparent)]',
+  'dark:after:-inset-px dark:after:hidden dark:after:rounded-[var(--sj-radius-small)] dark:group-data-checked:after:block',
   // Focus ring
   'group-data-focus:outline-2 group-data-focus:outline-offset-2 group-data-focus:outline-[var(--sj-brass)]',
   // Disabled state

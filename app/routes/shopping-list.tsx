@@ -165,7 +165,7 @@ export default function ShoppingList() {
       <div className="mx-auto max-w-4xl">
         <header className="border-b border-[var(--sj-border-strong)] pb-6">
           <div className="flex items-center justify-between gap-4 border-b border-[var(--sj-border-strong)] pb-4 font-sj-ui text-sm font-bold">
-            <Link href="/" className="text-[var(--sj-ink)] no-underline">Kitchen</Link>
+            <Link href="/" className="inline-flex min-h-11 items-center text-[var(--sj-ink)] no-underline">Kitchen</Link>
             <span className="text-[var(--sj-ink-soft)]">
               {displayItems.length} {displayItems.length === 1 ? "item" : "items"}
             </span>
@@ -184,7 +184,7 @@ export default function ShoppingList() {
                 type="button"
                 onClick={() => setActiveCategory(category)}
                 className={[
-                  "font-sj-ui shrink-0 rounded-[var(--sj-radius-control)] border px-3 py-2 text-sm font-bold capitalize",
+                  "font-sj-ui min-h-11 shrink-0 rounded-[var(--sj-radius-control)] border px-4 py-2 text-sm font-bold capitalize",
                   activeCategory === category
                     ? "border-[var(--sj-ink)] bg-[var(--sj-ink)] text-[var(--sj-paper)]"
                     : "border-[var(--sj-border)] text-[var(--sj-ink)]",
@@ -354,7 +354,7 @@ export default function ShoppingList() {
                 required
                 placeholder="e.g., 2 lbs chicken breast or a dozen eggs"
                 defaultValue={actionData?.parseDraft?.originalText || ""}
-                className="[&_input]:rounded-xl"
+                className="[&_input]:rounded-[var(--sj-radius-small)]"
               />
             </Field>
             {actionData?.parseDraft && (
@@ -371,7 +371,7 @@ export default function ShoppingList() {
                       step="0.01"
                       placeholder="2"
                       defaultValue={actionData.parseDraft.quantity}
-                      className="[&_input]:rounded-xl"
+                      className="[&_input]:rounded-[var(--sj-radius-small)]"
                     />
                   </Field>
                   <Field>
@@ -381,7 +381,7 @@ export default function ShoppingList() {
                       name="unitName"
                       placeholder="lb"
                       defaultValue={actionData.parseDraft.unitName}
-                      className="[&_input]:rounded-xl"
+                      className="[&_input]:rounded-[var(--sj-radius-small)]"
                     />
                   </Field>
                   <Field>
@@ -392,7 +392,7 @@ export default function ShoppingList() {
                       required
                       placeholder="chicken breast"
                       defaultValue={actionData.parseDraft.ingredientName}
-                      className="[&_input]:rounded-xl"
+                      className="[&_input]:rounded-[var(--sj-radius-small)]"
                     />
                   </Field>
                 </div>

@@ -189,7 +189,7 @@ export function RecipeBuilder({
       >
         <div>
           <p className="sj-eyebrow">Recipe card</p>
-          <h2 className="font-sj-display mt-3 text-3xl/9 font-semibold tracking-[-0.03em] text-[var(--sj-ink)]">
+          <h2 className="font-sj-display mt-3 text-3xl/9 font-semibold tracking-normal text-[var(--sj-ink)]">
             Give the dish a home.
           </h2>
           <p className="mt-2 max-w-2xl text-sm/6 text-[var(--sj-ink-soft)]">
@@ -264,7 +264,7 @@ export function RecipeBuilder({
         <section aria-label="Recipe Steps" className="space-y-4 border-t border-[var(--sj-border)] pt-6">
           <div>
             <p className="sj-eyebrow">Method</p>
-            <h2 className="font-sj-display mt-3 text-3xl/9 font-semibold tracking-[-0.03em] text-[var(--sj-ink)]">
+            <h2 className="font-sj-display mt-3 text-3xl/9 font-semibold tracking-normal text-[var(--sj-ink)]">
               Build the cooking path.
             </h2>
           </div>
