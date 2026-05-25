@@ -460,6 +460,14 @@ function formatLeanCookbookSummary(cookbook: CookbookSummaryBase, recipes: Cookb
   };
 }
 
+function formatDeletedRecipe(recipe: { id: string; title: string; deletedAt: Date }) {
+  return {
+    id: recipe.id,
+    title: recipe.title,
+    deletedAt: recipe.deletedAt.toISOString(),
+  };
+}
+
 function formatCookbook(cookbook: CookbookWithRecipes) {
   return {
     ...formatCookbookSummary(cookbook),
@@ -1007,6 +1015,46 @@ const updateRecipeTool: SpoonjoyApiOperation = {
     });
 
     return json({ recipe: formatRecipe(recipe) });
+  },
+};
+
+const deleteRecipeTool: SpoonjoyApiOperation = {
+  name: "delete_recipe",
+  description: "Soft-delete a recipe owned by the configured owner.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      ownerEmail: { type: "string" },
+      id: { type: "string" },
+    },
+    required: ["id"],
+    additionalProperties: false,
+  },
+  async handle(args, context) {
+    const email = requireOwnerEmail(args, context);
+    const id = requiredString(args, "id");
+    const owner = await getOrCreateOwner(context.db, email);
+    const existing = await context.db.recipe.findFirst({
+      where: { id, chefId: owner.id },
+      select: { id: true, title: true, deletedAt: true },
+    });
+
+    if (!existing) throw new Error("Recipe not found");
+    if (existing.deletedAt) {
+      return json({
+        deleted: false,
+        recipe: formatDeletedRecipe({ ...existing, deletedAt: existing.deletedAt }),
+      });
+    }
+
+    const deletedAt = new Date();
+    const recipe = await context.db.recipe.update({
+      where: { id: existing.id },
+      data: { deletedAt },
+      select: { id: true, title: true, deletedAt: true },
+    });
+
+    return json({ deleted: true, recipe: formatDeletedRecipe({ ...recipe, deletedAt }) });
   },
 };
 
@@ -1888,6 +1936,7 @@ const tools: SpoonjoyApiOperation[] = [
   getRecipeTool,
   createRecipeTool,
   updateRecipeTool,
+  deleteRecipeTool,
   importRecipeFromUrlTool,
   forkRecipeTool,
   addRecipeToShoppingListTool,

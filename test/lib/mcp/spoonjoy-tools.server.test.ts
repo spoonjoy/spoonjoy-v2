@@ -57,6 +57,7 @@ describe("spoonjoy MCP tools", () => {
       "get_recipe",
       "create_recipe",
       "update_recipe",
+      "delete_recipe",
       "import_recipe_from_url",
       "fork_recipe",
       "add_recipe_to_shopping_list",
@@ -351,6 +352,60 @@ describe("spoonjoy MCP tools", () => {
       description: 42,
     }, context)).rejects.toThrow("description must be a string or null");
     await expect(callSpoonjoyMcpTool("update_recipe", { id: "missing-recipe", title: "Missing" }, context)).rejects.toThrow("Recipe not found");
+  });
+
+  it("soft-deletes owner recipes through MCP for agent cleanup", async () => {
+    const created = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+      title: "Temporary MCP Cleanup Soup",
+      steps: [{ description: "Simmer", ingredients: [{ name: "Carrot", quantity: 2, unit: "Whole" }] }],
+    }, context));
+
+    const deleted = parseJson(await callSpoonjoyMcpTool("delete_recipe", {
+      id: created.recipe.id,
+    }, context));
+    expect(deleted).toMatchObject({
+      deleted: true,
+      recipe: {
+        id: created.recipe.id,
+        title: "Temporary MCP Cleanup Soup",
+        deletedAt: expect.any(String),
+      },
+    });
+
+    expect(parseJson(await callSpoonjoyMcpTool("get_recipe", { id: created.recipe.id }, context))).toEqual({ recipe: null });
+    await expect(callSpoonjoyMcpTool("update_recipe", {
+      id: created.recipe.id,
+      title: "Still Temporary",
+    }, context)).rejects.toThrow("Recipe not found");
+
+    const deletedAgain = parseJson(await callSpoonjoyMcpTool("delete_recipe", {
+      id: created.recipe.id,
+    }, context));
+    expect(deletedAgain).toMatchObject({
+      deleted: false,
+      recipe: {
+        id: created.recipe.id,
+        deletedAt: deleted.recipe.deletedAt,
+      },
+    });
+  });
+
+  it("rejects invalid or unauthorized recipe deletes", async () => {
+    const created = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+      title: "Protected MCP Cleanup Soup",
+    }, context));
+
+    await expect(callSpoonjoyMcpTool("delete_recipe", {}, context)).rejects.toThrow("id is required");
+    await expect(callSpoonjoyMcpTool("delete_recipe", {
+      ownerEmail: uniqueEmail("other-owner"),
+      id: created.recipe.id,
+    }, context)).rejects.toThrow("Recipe not found");
+    await expect(callSpoonjoyMcpTool("delete_recipe", {
+      id: "missing-recipe",
+    }, context)).rejects.toThrow("Recipe not found");
+
+    const recipe = await context.db.recipe.findUniqueOrThrow({ where: { id: created.recipe.id } });
+    expect(recipe.deletedAt).toBeNull();
   });
 
   it("handles unusual owner emails and ingredient-free steps", async () => {
