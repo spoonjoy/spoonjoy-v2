@@ -57,6 +57,14 @@ describe('RecipeGrid', () => {
     expect(screen.getByText('Chef Mario')).toBeInTheDocument()
   })
 
+  it('does not double-prefix already-written servings phrases', () => {
+    const recipe: PantryRecipeCard = { id: 'r-phrase', title: 'Party Pizza', servings: '2 pizzas' }
+    renderWithRouter(<RecipeGrid recipes={[recipe]} />)
+
+    expect(screen.getByText('2 pizzas')).toBeInTheDocument()
+    expect(screen.queryByText('Serves 2 pizzas')).not.toBeInTheDocument()
+  })
+
   it('renders dot separator between servings and chef name', () => {
     renderWithRouter(<RecipeGrid recipes={recipes} />)
 

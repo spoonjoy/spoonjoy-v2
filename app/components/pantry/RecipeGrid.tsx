@@ -4,6 +4,7 @@ import { Link } from '../ui/link'
 import { Text } from '../ui/text'
 import { Button } from '../ui/button'
 import { RuledEmptyState } from '~/components/cookbook/page'
+import { formatServingsLabel } from '~/lib/quantity'
 
 export interface PantryRecipeCard {
   id: string
@@ -61,6 +62,7 @@ export function RecipeGrid({
           const href = recipe.href ?? `/recipes/${recipe.id}`
           const displayImageUrl = recipe.coverImageUrl && recipe.coverImageUrl.length > 0 ? recipe.coverImageUrl : undefined
           const hasQuickActions = Boolean(onShare || onSave)
+          const servingsLabel = formatServingsLabel(recipe.servings)
 
           return (
             <article
@@ -94,10 +96,10 @@ export function RecipeGrid({
                   {recipe.description ? (
                     <span className="mt-1 line-clamp-2 block text-base/6 text-[var(--sj-ink-soft)]">{recipe.description}</span>
                   ) : null}
-                  {(recipe.servings || recipe.chefName) && (
+                  {(servingsLabel || recipe.chefName) && (
                     <span className="font-sj-ui mt-3 block text-xs font-semibold uppercase tracking-[0.14em] text-[var(--sj-ink-soft)]">
-                      {recipe.servings && <span>Serves {recipe.servings}</span>}
-                      {recipe.servings && recipe.chefName && <span className="mx-1">•</span>}
+                      {servingsLabel && <span>{servingsLabel}</span>}
+                      {servingsLabel && recipe.chefName && <span className="mx-1">•</span>}
                       {recipe.chefName && <span>{recipe.chefName}</span>}
                     </span>
                   )}
