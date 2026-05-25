@@ -1,4 +1,15 @@
-import type { PrismaClient } from "@prisma/client";
+import type {
+  Cookbook,
+  Ingredient,
+  IngredientRef,
+  PrismaClient,
+  Recipe,
+  RecipeCover,
+  RecipeInCookbook,
+  RecipeStep,
+  Unit,
+  User,
+} from "@prisma/client";
 import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
 import { getRecipeCoverImageUrl } from "~/lib/recipe-cover.server";
 
@@ -60,9 +71,6 @@ interface SearchRow {
 
 const DEFAULT_SEARCH_LIMIT = 20;
 const MAX_SEARCH_LIMIT = 50;
-// D1 has a lower SQL variable limit than local SQLite. A single migrated v1
-// recipe can have many steps, so keep Prisma's nested relation loads narrow.
-const SEARCH_INDEX_PAGE_SIZE = 1;
 
 const ENTITY_TYPES_BY_SCOPE: Record<SearchScope, readonly SearchEntityType[]> = {
   all: ["recipe", "cookbook", "chef", "shopping-list-item"],
@@ -131,6 +139,22 @@ function compactText(parts: Array<string | null | undefined | false>): string {
 
 function uniqueSorted(values: string[]): string[] {
   return [...new Set(values)].sort((a, b) => a.localeCompare(b));
+}
+
+function groupedBy<T>(items: T[], keyFor: (item: T) => string): Map<string, T[]> {
+  const groups = new Map<string, T[]>();
+
+  for (const item of items) {
+    const key = keyFor(item);
+    const group = groups.get(key);
+    if (group) {
+      group.push(item);
+    } else {
+      groups.set(key, [item]);
+    }
+  }
+
+  return groups;
 }
 
 function entityTypesForSearch(scope: SearchScope, viewerId: string | null | undefined): SearchEntityType[] {
@@ -212,106 +236,124 @@ async function insertSearchDocument(database: PrismaClient, document: SearchDocu
 }
 
 async function recipeDocuments(database: PrismaClient): Promise<SearchDocumentInput[]> {
-  const documents: SearchDocumentInput[] = [];
-  let cursor: string | undefined;
-  let hasMore = true;
+  const users = await database.user.findMany();
+  const recipes = await database.recipe.findMany({
+    where: { deletedAt: null },
+    orderBy: { id: "asc" },
+  });
+  const covers = await database.recipeCover.findMany();
+  const steps = await database.recipeStep.findMany({
+    orderBy: [{ recipeId: "asc" }, { stepNum: "asc" }],
+  });
+  const ingredients = await database.ingredient.findMany({
+    orderBy: [{ recipeId: "asc" }, { stepNum: "asc" }],
+  });
+  const units = await database.unit.findMany();
+  const ingredientRefs = await database.ingredientRef.findMany();
+  const recipeCookbooks = await database.recipeInCookbook.findMany();
+  const cookbooks = await database.cookbook.findMany();
 
-  while (hasMore) {
-    const recipes = await database.recipe.findMany({
-      where: { deletedAt: null },
-      orderBy: { id: "asc" },
-      take: SEARCH_INDEX_PAGE_SIZE,
-      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-      include: {
-        chef: { select: { id: true, username: true } },
-        cookbooks: { include: { cookbook: { select: { title: true } } } },
-        covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
-        steps: {
-          orderBy: { stepNum: "asc" },
-          include: { ingredients: { include: { unit: true, ingredientRef: true } } },
-        },
-      },
+  const userById = new Map(users.map((user: User) => [user.id, user]));
+  const coversByRecipeId = groupedBy(covers, (cover: RecipeCover) => cover.recipeId);
+  const stepsByRecipeId = groupedBy(steps, (step: RecipeStep) => step.recipeId);
+  const ingredientsByStep = groupedBy(
+    ingredients,
+    (ingredient: Ingredient) => `${ingredient.recipeId}:${ingredient.stepNum}`
+  );
+  const unitById = new Map(units.map((unit: Unit) => [unit.id, unit]));
+  const ingredientRefById = new Map(ingredientRefs.map((ingredientRef: IngredientRef) => [ingredientRef.id, ingredientRef]));
+  const cookbookById = new Map(cookbooks.map((cookbook: Cookbook) => [cookbook.id, cookbook]));
+  const cookbookLinksByRecipeId = groupedBy(recipeCookbooks, (link: RecipeInCookbook) => link.recipeId);
+
+  return recipes.map((recipe: Recipe) => {
+    const chef = userById.get(recipe.chefId)!;
+    const recipeSteps = stepsByRecipeId.get(recipe.id) ?? [];
+    const cookbookTitles = uniqueSorted(
+      (cookbookLinksByRecipeId.get(recipe.id) ?? []).map((link) => cookbookById.get(link.cookbookId)!.title)
+    );
+    const stepText = recipeSteps.flatMap((step) => {
+      const stepIngredients = ingredientsByStep.get(`${recipe.id}:${step.stepNum}`) ?? [];
+
+      return [
+        step.stepTitle,
+        step.description,
+        ...stepIngredients.map((ingredient) =>
+          compactText([
+            String(ingredient.quantity),
+            unitById.get(ingredient.unitId)!.name,
+            ingredientRefById.get(ingredient.ingredientRefId)!.name,
+          ])
+        ),
+      ];
     });
-
-    documents.push(
-      ...recipes.map((recipe) => {
-        const ingredientNames = uniqueSorted(
-          recipe.steps.flatMap((step) => step.ingredients.map((ingredient) => ingredient.ingredientRef.name))
-        );
-        const cookbookTitles = uniqueSorted(recipe.cookbooks.map((item) => item.cookbook.title));
-        const stepText = recipe.steps.flatMap((step) => [
-          step.stepTitle,
-          step.description,
-          ...step.ingredients.map((ingredient) =>
-            compactText([String(ingredient.quantity), ingredient.unit.name, ingredient.ingredientRef.name])
-          ),
-        ]);
-
-        return {
-          type: "recipe" as const,
-          id: recipe.id,
-          ownerId: recipe.chefId,
-          ownerUsername: recipe.chef.username,
-          sortAt: recipe.updatedAt.toISOString(),
-          title: recipe.title,
-          subtitle: `Recipe by ${recipe.chef.username}`,
-          body: compactText([
-            recipe.description,
-            recipe.sourceUrl,
-            recipe.chef.username,
-            ...cookbookTitles,
-            ...stepText,
-          ]),
-          href: `/recipes/${recipe.id}`,
-          imageUrl: getRecipeCoverImageUrl(recipe, recipe.covers),
-          metadata: {
-            servings: recipe.servings,
-            chefUsername: recipe.chef.username,
-            ingredientNames,
-            stepCount: recipe.steps.length,
-            cookbookTitles,
-          },
-        };
-      })
+    const ingredientNames = uniqueSorted(
+      recipeSteps.flatMap((step) =>
+        (ingredientsByStep.get(`${recipe.id}:${step.stepNum}`) ?? []).map(
+          (ingredient) => ingredientRefById.get(ingredient.ingredientRefId)!.name
+        )
+      )
     );
 
-    hasMore = recipes.length === SEARCH_INDEX_PAGE_SIZE;
-    cursor = recipes.at(-1)?.id;
-  }
-
-  return documents;
+    return {
+      type: "recipe" as const,
+      id: recipe.id,
+      ownerId: recipe.chefId,
+      ownerUsername: chef.username,
+      sortAt: recipe.updatedAt.toISOString(),
+      title: recipe.title,
+      subtitle: `Recipe by ${chef.username}`,
+      body: compactText([
+        recipe.description,
+        recipe.sourceUrl,
+        chef.username,
+        ...cookbookTitles,
+        ...stepText,
+      ]),
+      href: `/recipes/${recipe.id}`,
+      imageUrl: getRecipeCoverImageUrl(recipe, coversByRecipeId.get(recipe.id) ?? []),
+      metadata: {
+        servings: recipe.servings,
+        chefUsername: chef.username,
+        ingredientNames,
+        stepCount: recipeSteps.length,
+        cookbookTitles,
+      },
+    };
+  });
 }
 
 async function cookbookDocuments(database: PrismaClient): Promise<SearchDocumentInput[]> {
-  const cookbooks = await database.cookbook.findMany({
-    include: {
-      author: { select: { id: true, username: true } },
-      recipes: {
-        include: {
-          recipe: { select: { title: true, deletedAt: true } },
-        },
-      },
-    },
-  });
+  const users = await database.user.findMany();
+  const cookbooks = await database.cookbook.findMany();
+  const recipeCookbooks = await database.recipeInCookbook.findMany();
+  const recipes = await database.recipe.findMany();
 
-  return cookbooks.map((cookbook) => {
+  const userById = new Map(users.map((user: User) => [user.id, user]));
+  const recipeById = new Map(recipes.map((recipe: Recipe) => [recipe.id, recipe]));
+  const cookbookLinksByCookbookId = groupedBy(recipeCookbooks, (link: RecipeInCookbook) => link.cookbookId);
+
+  return cookbooks.map((cookbook: Cookbook) => {
+    const author = userById.get(cookbook.authorId)!;
     const activeRecipeTitles = uniqueSorted(
-      cookbook.recipes.filter((item) => !item.recipe.deletedAt).map((item) => item.recipe.title)
+      (cookbookLinksByCookbookId.get(cookbook.id) ?? [])
+        .map((link) => recipeById.get(link.recipeId)!)
+        .filter((recipe) => !recipe.deletedAt)
+        .map((recipe) => recipe.title)
     );
 
     return {
       type: "cookbook",
       id: cookbook.id,
       ownerId: cookbook.authorId,
-      ownerUsername: cookbook.author.username,
+      ownerUsername: author.username,
       sortAt: cookbook.updatedAt.toISOString(),
       title: cookbook.title,
-      subtitle: `Cookbook by ${cookbook.author.username}`,
-      body: compactText([cookbook.title, cookbook.author.username, ...activeRecipeTitles]),
+      subtitle: `Cookbook by ${author.username}`,
+      body: compactText([cookbook.title, author.username, ...activeRecipeTitles]),
       href: `/cookbooks/${cookbook.id}`,
       imageUrl: null,
       metadata: {
-        authorUsername: cookbook.author.username,
+        authorUsername: author.username,
         recipeCount: activeRecipeTitles.length,
         recipeTitles: activeRecipeTitles,
       },
