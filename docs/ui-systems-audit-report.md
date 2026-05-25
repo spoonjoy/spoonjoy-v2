@@ -18,6 +18,10 @@ Latest local screenshot artifact directory:
 
 `/tmp/spoonjoy-ui-crawl-local`
 
+Latest deployed screenshot artifact directory:
+
+`/tmp/spoonjoy-ui-crawl-deployed`
+
 Contact sheets:
 
 - `/tmp/spoonjoy-ui-crawl-local/contact-mobile-top.png`
@@ -31,6 +35,7 @@ python3 /Users/arimendelow/.codex/skills/.system/skill-creator/scripts/quick_val
 node /Users/arimendelow/.codex/skills/ui-systems-audit/scripts/inventory-ui.mjs /Users/arimendelow/Projects/spoonjoy-v2 --json > /tmp/spoonjoy-ui-inventory.json
 pnpm db:seed
 UI_AUDIT_EMAIL=demo@spoonjoy.com UI_AUDIT_PASSWORD=demo1234 /Users/arimendelow/.codex/skills/ui-systems-audit/scripts/crawl-ui.mjs --base-url http://localhost:5173 --routes docs/ui-systems-audit-routes.json --out /tmp/spoonjoy-ui-crawl-local
+UI_AUDIT_EMAIL=demo@spoonjoy.com UI_AUDIT_PASSWORD=demo1234 /Users/arimendelow/.codex/skills/ui-systems-audit/scripts/crawl-ui.mjs --base-url https://spoonjoy-v2.mendelow-studio.workers.dev --routes docs/ui-systems-audit-routes.json --out /tmp/spoonjoy-ui-crawl-deployed
 pnpm test test/components/recipe/IngredientList.test.tsx test/components/recipe/StepList.test.tsx test/components/ui/button.test.tsx test/components/ui/checkbox.test.tsx test/components/recipe/SpoonsStrip.test.tsx -- --run
 pnpm test test/components/recipe/IngredientList.test.tsx test/components/recipe/SpoonsStrip.test.tsx -- --run
 pnpm test test/components/ui/design-system-hygiene.test.ts test/components/ui/button.test.tsx -- --run
@@ -58,6 +63,18 @@ Rendered crawl:
 - 0 console errors.
 - 0 page errors.
 
+Deployed crawl:
+
+- URL: `https://spoonjoy-v2.mendelow-studio.workers.dev`
+- Worker version: `69109591-db3a-42f1-9cf5-138613e6d2c3`
+- 54 screenshots: 18 routes × mobile, tablet, desktop.
+- 0 skipped routes.
+- 0 horizontal overflow findings.
+- 0 small touch target findings.
+- 0 clipped text findings.
+- 0 console errors.
+- 0 page errors.
+
 Static inventory:
 
 - 117 UI source files inspected.
@@ -74,6 +91,8 @@ Verification:
 - 100% statement, branch, function, and line coverage.
 - Typecheck passed.
 - Production build passed.
+- `pnpm deploy:auto` passed and deployed Worker version `69109591-db3a-42f1-9cf5-138613e6d2c3`.
+- Deployed UI crawl passed.
 - First-class Ouro/Spoonjoy MCP create, update, search, and get smoke passed.
 
 ## Findings
