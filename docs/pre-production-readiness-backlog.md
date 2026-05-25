@@ -127,9 +127,9 @@ Goal: reach the point where the only remaining dependency before switching `spoo
 **Blast radius**: all user-visible routes
 **Recommended lane**: fix-now
 **Verification**: Repo-local crawl across mobile/tablet/desktop with 0 skipped, 0 console/page errors, 0 overflow, 0 clipped text, 0 small touch-target findings; manual review of contact sheets.
-**Status**: open
-**Linked work**: pending fresh crawl
-**Notes**: Must be re-run from repo-local tooling after this branch's final UI/product changes.
+**Status**: fixed
+**Linked work**: `node scripts/crawl-ui.mjs`; `/tmp/spoonjoy-preprod-ui-crawl-local`; `/tmp/spoonjoy-preprod-ui-crawl-live-auth`
+**Notes**: Re-ran the repo-local UI crawl against final branch code locally and against the deployed Worker. Both authenticated crawls covered 54 route/viewport captures with 0 skipped routes, 0 console errors, 0 page errors, 0 overflow findings, 0 clipped-text findings, and 0 small touch-target findings.
 
 ---
 
@@ -143,9 +143,9 @@ Goal: reach the point where the only remaining dependency before switching `spoo
 **Blast radius**: whole app
 **Recommended lane**: fix-now
 **Verification**: `pnpm typecheck`, `pnpm test:coverage`, `pnpm build`, `pnpm test:e2e`, live smoke, MCP smoke.
-**Status**: open
-**Linked work**: pending final verification
-**Notes**: Must be repeated after all branch fixes and again after deployment.
+**Status**: fixed
+**Linked work**: `pnpm typecheck`; `pnpm test:coverage`; `pnpm build`; `pnpm test:e2e`; `pnpm deploy:auto`; live smoke script; Slugger MCP smoke
+**Notes**: Final branch verification passed: typecheck, 4,639 Vitest tests with 100% statement/branch/function/line coverage, production build, and 34 Playwright e2e tests. Deployed to `https://spoonjoy-v2.mendelow-studio.workers.dev` as Worker version `823c2650-096a-43d6-b8bb-6cf77882cf5e`. Live smoke passed for `/`, `/login`, `/signup`, `/search?q=tomato&scope=all`, `/users/demo_chef/fellow-chefs`, `/users/demo_chef/kitchen-visitors`, authenticated demo login, `/recipes`, `/recipes/r_pizza#cook`, `/shopping-list`, `/account/settings`, and `/api/push/public-key`.
 
 ---
 
@@ -159,9 +159,9 @@ Goal: reach the point where the only remaining dependency before switching `spoo
 **Blast radius**: D1 data layer
 **Recommended lane**: fix-now
 **Verification**: Record final remote migration and schema checks in readiness report.
-**Status**: in-progress
+**Status**: fixed
 **Linked work**: `pnpm exec wrangler d1 migrations list DB --remote`; `pnpm exec wrangler d1 execute DB --remote --command "PRAGMA table_info('User');"`
-**Notes**: Current remote pass is clean: no unapplied migrations and `User.photoUrl` is present. Needs one final check after final HEAD is committed.
+**Notes**: Final remote pass is clean: `pnpm deploy:preflight` and `pnpm exec wrangler d1 migrations list DB --remote` both reported no pending migrations, and remote `PRAGMA table_info('User')` confirms `photoUrl` is present.
 
 ---
 
@@ -191,9 +191,9 @@ Goal: reach the point where the only remaining dependency before switching `spoo
 **Blast radius**: agent workflows
 **Recommended lane**: fix-now
 **Verification**: Slugger can create/search/update/delete recipe, add/list cookbook, add/read/check shopping list, and import dry-run after required secrets are present.
-**Status**: open
-**Linked work**: pending MCP smoke
-**Notes**: Must be checked through Slugger/Ouro and, if needed, raw MCP so schema-cache issues do not hide broken tools.
+**Status**: fixed
+**Linked work**: Slugger `send_message` smoke; raw `pnpm --silent mcp:serve` `tools/list`/`health`
+**Notes**: Slugger verified first-class Ouro tools for health, recipe search, recipe create, recipe update, cookbook add, recipe-to-shopping-list add, shopping-list read, recipe delete, and shopping-list cleanup. Initial Slugger schema cache missed delete, then refreshed and exposed `spoonjoy_delete_recipe`; Slugger deleted the temp recipe `cmpljkamm0001mupc99yvwujl` and removed the added shopping-list item. Raw MCP `tools/list` also exposes `delete_recipe`, cookbook, shopping-list, fork, import, and spoon tools; raw `health` returned authenticated/writable for `demo@spoonjoy.com`.
 
 ---
 
