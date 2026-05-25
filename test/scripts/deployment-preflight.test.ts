@@ -18,7 +18,6 @@ function validInputs(): DeploymentPreflightInputs {
       name: "spoonjoy-v2",
       main: "./workers/app.ts",
       compatibility_flags: ["nodejs_compat"],
-      limits: { cpu_ms: 50 },
       assets: { directory: "./build/client" },
       d1_databases: [{ binding: "DB", database_name: "spoonjoy", database_id: "database-id" }],
       r2_buckets: [{ binding: "PHOTOS", bucket_name: "spoonjoy-photos" }],
@@ -102,7 +101,6 @@ describe("deployment preflight", () => {
 
   it("flags missing production-critical bindings and docs", () => {
     const inputs = validInputs();
-    inputs.wrangler.limits = {};
     inputs.wrangler.r2_buckets = [];
     inputs.cloudflareEnvDts = "DB?: D1Database;";
     inputs.readme = "pnpm deploy:preflight";
@@ -111,17 +109,8 @@ describe("deployment preflight", () => {
     const result = validateDeploymentConfig(inputs);
 
     expect(result.errors.map((item) => item.name)).toEqual(
-      expect.arrayContaining(["worker CPU limit", "R2 photos binding", "Cloudflare Env typing", "secret documentation", "deployment commands"])
+      expect.arrayContaining(["R2 photos binding", "Cloudflare Env typing", "secret documentation", "deployment commands"])
     );
-  });
-
-  it("requires a Worker CPU limit that leaves SSR headroom", () => {
-    const inputs = validInputs();
-    inputs.wrangler.limits = { cpu_ms: 10 };
-
-    const result = validateDeploymentConfig(inputs);
-
-    expect(result.errors.map((item) => item.name)).toContain("worker CPU limit");
   });
 
   it("requires deploy:auto in REQUIRED_PACKAGE_SCRIPTS", () => {
