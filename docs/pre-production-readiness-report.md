@@ -10,7 +10,7 @@ Spoonjoy v2 has passed final local verification, final MCP verification, authent
 
 `https://spoonjoy-v2.mendelow-studio.workers.dev`
 
-Deployed Worker version: `823c2650-096a-43d6-b8bb-6cf77882cf5e`
+Deployed Worker version: `d3905334-c03d-49dc-b515-cc611915db08`
 
 The app is ready for Ari's legacy data migration instructions before the stable `spoonjoy.app` cutover. The only unresolved production-posture items are external inputs, not branch work:
 

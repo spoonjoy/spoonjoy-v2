@@ -145,7 +145,7 @@ Goal: reach the point where the only remaining dependency before switching `spoo
 **Verification**: `pnpm typecheck`, `pnpm test:coverage`, `pnpm build`, `pnpm test:e2e`, live smoke, MCP smoke.
 **Status**: fixed
 **Linked work**: `pnpm typecheck`; `pnpm test:coverage`; `pnpm build`; `pnpm test:e2e`; `pnpm deploy:auto`; live smoke script; Slugger MCP smoke
-**Notes**: Final branch verification passed: typecheck, 4,639 Vitest tests with 100% statement/branch/function/line coverage, production build, and 34 Playwright e2e tests. Deployed to `https://spoonjoy-v2.mendelow-studio.workers.dev` as Worker version `823c2650-096a-43d6-b8bb-6cf77882cf5e`. Live smoke passed for `/`, `/login`, `/signup`, `/search?q=tomato&scope=all`, `/users/demo_chef/fellow-chefs`, `/users/demo_chef/kitchen-visitors`, authenticated demo login, `/recipes`, `/recipes/r_pizza#cook`, `/shopping-list`, `/account/settings`, and `/api/push/public-key`.
+**Notes**: Final branch verification passed: typecheck, 4,639 Vitest tests with 100% statement/branch/function/line coverage, production build, and 34 Playwright e2e tests. Deployed merged `main` to `https://spoonjoy-v2.mendelow-studio.workers.dev` as Worker version `d3905334-c03d-49dc-b515-cc611915db08`. Live smoke passed for `/`, `/login`, `/signup`, `/search?q=tomato&scope=all`, `/users/demo_chef/fellow-chefs`, `/users/demo_chef/kitchen-visitors`, authenticated demo login, `/recipes`, `/recipes/r_pizza#cook`, `/shopping-list`, `/account/settings`, and `/api/push/public-key`.
 
 ---
 
