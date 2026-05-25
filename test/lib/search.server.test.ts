@@ -108,15 +108,49 @@ describe("search.server", () => {
   it("indexes recipes, cookbooks, chefs, and active cookbook recipes for full-text search", async () => {
     const chef = await createChef("citruschef");
     const recipe = await createSearchableRecipe(chef.id, "Citrus Robot Pancakes", "meyer lemon");
+    const extraUnit = await getOrCreateUnit(db, `pinch_${faker.string.alphanumeric(5).toLowerCase()}`);
+    const extraIngredientRef = await getOrCreateIngredientRef(db, "zesty orange");
+    await db.ingredient.create({
+      data: {
+        recipeId: recipe.id,
+        stepNum: 1,
+        quantity: 1,
+        unitId: extraUnit.id,
+        ingredientRefId: extraIngredientRef.id,
+      },
+    });
+    await db.recipeCover.create({
+      data: {
+        recipeId: recipe.id,
+        imageUrl: "https://images.example/citrus-robot-pancakes.jpg",
+        sourceType: "chef-upload",
+      },
+    });
     const cookbook = await db.cookbook.create({ data: { title: "Citrus Brunch", authorId: chef.id } });
     await db.recipeInCookbook.create({ data: { cookbookId: cookbook.id, recipeId: recipe.id, addedById: chef.id } });
+    const emptyCookbook = await db.cookbook.create({ data: { title: "Empty Shelf", authorId: chef.id } });
+    const noteOnlyRecipe = await db.recipe.create({
+      data: {
+        title: "Ingredient-Free Tomato Notes",
+        description: "A holding recipe before the pantry is measured",
+        chefId: chef.id,
+      },
+    });
+    await db.recipeStep.create({
+      data: {
+        recipeId: noteOnlyRecipe.id,
+        stepNum: 1,
+        stepTitle: "Warm the pan",
+        description: "No ingredients yet, just listen for the sizzle",
+      },
+    });
 
     const deletedRecipe = await db.recipe.create({
       data: { title: "Deleted Citrus Ghost", chefId: chef.id, deletedAt: new Date() },
     });
     await db.recipeInCookbook.create({ data: { cookbookId: cookbook.id, recipeId: deletedRecipe.id, addedById: chef.id } });
 
-    await expect(rebuildSearchIndex(db)).resolves.toBe(3);
+    await expect(rebuildSearchIndex(db)).resolves.toBe(5);
 
     const citrusResults = await searchSpoonjoy(db, { query: "citrus", scope: "all" });
     expect(citrusResults.map((result) => result.type)).toEqual(expect.arrayContaining(["chef", "cookbook", "recipe"]));
@@ -132,13 +166,29 @@ describe("search.server", () => {
       id: recipe.id,
       title: "Citrus Robot Pancakes",
       href: `/recipes/${recipe.id}`,
+      imageUrl: "https://images.example/citrus-robot-pancakes.jpg",
     });
     expect(ingredientResults[0].metadata).toMatchObject({
       servings: "4",
       chefUsername: chef.username,
-      ingredientNames: ["meyer lemon"],
+      ingredientNames: ["meyer lemon", "zesty orange"],
       stepCount: 1,
       cookbookTitles: ["Citrus Brunch"],
+    });
+
+    const noteOnlyResults = await searchSpoonjoy(db, { query: "sizzle", scope: "recipes" });
+    expect(noteOnlyResults).toHaveLength(1);
+    expect(noteOnlyResults[0]).toMatchObject({
+      id: noteOnlyRecipe.id,
+      title: "Ingredient-Free Tomato Notes",
+      metadata: { ingredientNames: [], stepCount: 1 },
+    });
+
+    const emptyCookbookResults = await searchSpoonjoy(db, { query: "empty shelf", scope: "cookbooks" });
+    expect(emptyCookbookResults).toHaveLength(1);
+    expect(emptyCookbookResults[0]).toMatchObject({
+      id: emptyCookbook.id,
+      metadata: { recipeCount: 0, recipeTitles: [] },
     });
   });
 
