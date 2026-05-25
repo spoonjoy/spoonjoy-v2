@@ -133,15 +133,11 @@ export async function createOAuthUser(
   const normalizedEmail = oauthData.email.toLowerCase();
 
   // Check if email already exists (case-insensitive)
-  const existingUser = await db.user.findFirst({
-    where: {
-      email: {
-        equals: normalizedEmail,
-      },
-    },
-  });
+  const existingUsers = await db.$queryRaw<Array<{ id: string }>>`
+    SELECT id FROM User WHERE LOWER(email) = ${normalizedEmail} LIMIT 1
+  `;
 
-  if (existingUser) {
+  if (existingUsers.length > 0) {
     return {
       success: false,
       error: "account_exists",

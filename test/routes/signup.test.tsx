@@ -521,6 +521,21 @@ describe("Signup Route", () => {
         expect(screen.getByRole("button", { name: /continue with apple/i })).toBeInTheDocument();
       });
 
+      it("should render GitHub sign-up button", async () => {
+        const Stub = createTestRoutesStub([
+          {
+            path: "/signup",
+            Component: Signup,
+            loader: () => ({ oauthProviders: ["github"] }),
+          },
+        ]);
+
+        render(<Stub initialEntries={["/signup"]} />);
+
+        await screen.findByRole("heading", { name: "Sign Up" });
+        expect(screen.getByRole("button", { name: /continue with github/i })).toBeInTheDocument();
+      });
+
       it("should have Google button that links to Google OAuth initiation route", async () => {
         const Stub = createTestRoutesStub([
           {
@@ -556,6 +571,24 @@ describe("Signup Route", () => {
         // The button should be inside a form that posts to the OAuth initiation route
         const form = appleButton.closest("form");
         expect(form).toHaveAttribute("action", "/auth/apple");
+        expect(form).toHaveAttribute("method", "post");
+      });
+
+      it("should have GitHub button that links to GitHub OAuth initiation route", async () => {
+        const Stub = createTestRoutesStub([
+          {
+            path: "/signup",
+            Component: Signup,
+            loader: () => ({ oauthProviders: ["github"] }),
+          },
+        ]);
+
+        render(<Stub initialEntries={["/signup"]} />);
+
+        await screen.findByRole("heading", { name: "Sign Up" });
+        const githubButton = screen.getByRole("button", { name: /continue with github/i });
+        const form = githubButton.closest("form");
+        expect(form).toHaveAttribute("action", "/auth/github");
         expect(form).toHaveAttribute("method", "post");
       });
 

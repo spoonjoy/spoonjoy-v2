@@ -7,6 +7,8 @@ export default [
   route("logout", "routes/logout.tsx"),
   route("auth/google", "routes/auth.google.tsx"),
   route("auth/google/callback", "routes/auth.google.callback.tsx"),
+  route("auth/github", "routes/auth.github.tsx"),
+  route("auth/github/callback", "routes/auth.github.callback.tsx"),
   route("auth/apple", "routes/auth.apple.tsx"),
   route("auth/apple/callback", "routes/auth.apple.callback.tsx"),
   route("search", "routes/search.tsx"),

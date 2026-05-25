@@ -108,6 +108,25 @@ wrangler secret put GOOGLE_CLIENT_SECRET
 6. Add authorized redirect URI: `https://your-domain.com/auth/google/callback`
 7. Copy Client ID and Client Secret
 
+#### GitHub OAuth
+
+| Secret | Description | How to Get |
+|--------|-------------|------------|
+| `GITHUB_CLIENT_ID` | GitHub OAuth app client ID | [GitHub Developer Settings](https://github.com/settings/developers) |
+| `GITHUB_CLIENT_SECRET` | GitHub OAuth app client secret | Same as above |
+
+```bash
+wrangler secret put GITHUB_CLIENT_ID
+wrangler secret put GITHUB_CLIENT_SECRET
+```
+
+**GitHub OAuth Setup:**
+1. Go to GitHub Developer Settings → OAuth Apps
+2. Create or update the Spoonjoy OAuth app
+3. Set Homepage URL to `https://your-domain.com`
+4. Set Authorization callback URL to `https://your-domain.com/auth/github/callback`
+5. Copy Client ID and Client Secret
+
 #### Apple OAuth
 
 | Secret | Description | How to Get |
@@ -247,6 +266,8 @@ The deploy output will show your Worker URL: `https://spoonjoy-v2.<account>.work
 | `SESSION_SECRET` | ✅ Yes | Cookie signing (generate with `openssl rand -hex 32`) |
 | `GOOGLE_CLIENT_ID` | If using Google login | Google OAuth |
 | `GOOGLE_CLIENT_SECRET` | If using Google login | Google OAuth |
+| `GITHUB_CLIENT_ID` | If using GitHub login | GitHub OAuth |
+| `GITHUB_CLIENT_SECRET` | If using GitHub login | GitHub OAuth |
 | `APPLE_CLIENT_ID` | If using Apple login | Apple OAuth |
 | `APPLE_TEAM_ID` | If using Apple login | Apple OAuth |
 | `APPLE_KEY_ID` | If using Apple login | Apple OAuth |

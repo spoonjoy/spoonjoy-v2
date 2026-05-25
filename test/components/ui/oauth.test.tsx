@@ -3,10 +3,11 @@ import { describe, expect, it } from "vitest";
 import { OAuthButtonGroup } from "~/components/ui/oauth";
 
 describe("OAuthButtonGroup", () => {
-  it("renders both providers by default", () => {
+  it("renders all providers by default", () => {
     render(<OAuthButtonGroup />);
 
     expect(screen.getByRole("button", { name: "Continue with Google" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continue with GitHub" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Continue with Apple" })).toBeInTheDocument();
   });
 

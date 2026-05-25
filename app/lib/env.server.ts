@@ -6,6 +6,7 @@
  *
  * Required environment variables:
  * - Google OAuth: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
+ * - GitHub OAuth: GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET
  * - Apple OAuth: APPLE_CLIENT_ID, APPLE_TEAM_ID, APPLE_KEY_ID, APPLE_PRIVATE_KEY
  *
  * Set secrets in production via: wrangler secret put <SECRET_NAME>
@@ -23,16 +24,23 @@ export interface AppleOAuthConfig {
   privateKey: string;
 }
 
+export interface GitHubOAuthConfig {
+  clientId: string;
+  clientSecret: string;
+}
+
 export interface OAuthEnv {
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
+  GITHUB_CLIENT_ID?: string;
+  GITHUB_CLIENT_SECRET?: string;
   APPLE_CLIENT_ID?: string;
   APPLE_TEAM_ID?: string;
   APPLE_KEY_ID?: string;
   APPLE_PRIVATE_KEY?: string;
 }
 
-export type OAuthProvider = "google" | "apple";
+export type OAuthProvider = "google" | "github" | "apple";
 
 export interface VapidConfig {
   publicKey: string;
@@ -67,6 +75,26 @@ export function getGoogleOAuthConfig(env: OAuthEnv): GoogleOAuthConfig {
 }
 
 /**
+ * Validates and returns GitHub OAuth configuration.
+ * Throws an error if any required environment variable is missing or empty.
+ */
+export function getGitHubOAuthConfig(env: OAuthEnv): GitHubOAuthConfig {
+  if (!env.GITHUB_CLIENT_ID) {
+    throw new Error("Missing required environment variable: GITHUB_CLIENT_ID");
+  }
+  if (!env.GITHUB_CLIENT_SECRET) {
+    throw new Error(
+      "Missing required environment variable: GITHUB_CLIENT_SECRET"
+    );
+  }
+
+  return {
+    clientId: env.GITHUB_CLIENT_ID,
+    clientSecret: env.GITHUB_CLIENT_SECRET,
+  };
+}
+
+/**
  * Validates and returns Apple OAuth configuration.
  * Throws an error if any required environment variable is missing or empty.
  */
@@ -95,6 +123,8 @@ export function getAppleOAuthConfig(env: OAuthEnv): AppleOAuthConfig {
 const ALL_OAUTH_ENV_VARS = [
   "GOOGLE_CLIENT_ID",
   "GOOGLE_CLIENT_SECRET",
+  "GITHUB_CLIENT_ID",
+  "GITHUB_CLIENT_SECRET",
   "APPLE_CLIENT_ID",
   "APPLE_TEAM_ID",
   "APPLE_KEY_ID",
@@ -125,6 +155,10 @@ export function getConfiguredOAuthProviders(env: OAuthEnv): OAuthProvider[] {
 
   if (env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) {
     providers.push("google");
+  }
+
+  if (env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET) {
+    providers.push("github");
   }
 
   if (
