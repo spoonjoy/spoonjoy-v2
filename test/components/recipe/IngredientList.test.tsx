@@ -1,7 +1,11 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import { IngredientList, type Ingredient } from '../../../app/components/recipe/IngredientList'
+import {
+  getIngredientLayoutTransition,
+  IngredientList,
+  type Ingredient,
+} from '../../../app/components/recipe/IngredientList'
 
 const sampleIngredients: Ingredient[] = [
   { id: '1', quantity: 2, unit: 'cups', name: 'flour', iconKey: 'wheat' },
@@ -127,6 +131,33 @@ describe('IngredientList', () => {
     expect(orderedNames[0]).toContain('sugar')
     expect(orderedNames[1]).toContain('butter')
     expect(orderedNames[2]).toContain('flour')
+  })
+
+  it('marks ingredient rows for pleasant layout animation when checkoff reorders them', () => {
+    render(<IngredientList ingredients={sampleIngredients} checkedIds={new Set(['1'])} onToggle={vi.fn()} />)
+
+    for (const item of screen.getAllByTestId(/^ingredient-item-/)) {
+      expect(item).toHaveAttribute('data-layout-animation', 'ingredient-checkoff-reorder')
+    }
+  })
+
+  it('uses a spring layout transition unless reduced motion is requested', () => {
+    expect(getIngredientLayoutTransition(false)).toMatchObject({
+      type: 'spring',
+      stiffness: 420,
+      damping: 38,
+      mass: 0.7,
+    })
+    expect(getIngredientLayoutTransition(null)).toMatchObject({
+      type: 'spring',
+      stiffness: 420,
+      damping: 38,
+      mass: 0.7,
+    })
+  })
+
+  it('removes layout animation duration when reduced motion is requested', () => {
+    expect(getIngredientLayoutTransition(true)).toEqual({ duration: 0 })
   })
 
   it('keeps unchecked ingredients before a later checked ingredient', () => {

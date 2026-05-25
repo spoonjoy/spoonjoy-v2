@@ -101,6 +101,45 @@ describe("SpoonsStrip", () => {
     expect(cover).toHaveAttribute("src", "/photos/cover.png");
   });
 
+  it("renders compact cook notes and next-time text when profile rows show recipes", () => {
+    renderWithRouter(
+      <SpoonsStrip
+        showRecipe
+        spoons={[
+          makeSpoon({
+            note: "Loved the charred edges",
+            nextTime: "more lemon",
+            recipe: null,
+            coverImageUrl: null,
+          }),
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("alice")).toBeInTheDocument();
+    expect(screen.getByText("Loved the charred edges")).toBeInTheDocument();
+    expect(screen.getByText(/more lemon/)).toBeInTheDocument();
+    expect(screen.queryByRole("link")).toBeNull();
+  });
+
+  it("uses the cook photo before the recipe cover in compact recipe rows", () => {
+    renderWithRouter(
+      <SpoonsStrip
+        showRecipe
+        spoons={[
+          makeSpoon({
+            photoUrl: "/photos/cook.png",
+            recipe: { id: "r1", title: "Lentil Soup", chefId: "u1" },
+            coverImageUrl: "/photos/cover.png",
+          }),
+        ]}
+      />,
+    );
+
+    const photo = screen.getByRole("img", { name: /cook by alice/i });
+    expect(photo).toHaveAttribute("src", "/photos/cook.png");
+  });
+
   it("renders 'just now' for cookedAt within the last 45 seconds", () => {
     renderWithRouter(
       <SpoonsStrip

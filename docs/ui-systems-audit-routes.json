@@ -1,0 +1,20 @@
+[
+  { "name": "home", "path": "/", "auth": false },
+  { "name": "login", "path": "/login", "auth": false },
+  { "name": "signup", "path": "/signup", "auth": false },
+  { "name": "search-all", "path": "/search?q=tomato&scope=all", "auth": false },
+  { "name": "recipes-index", "path": "/recipes", "auth": true },
+  { "name": "recipe-detail", "path": "/recipes/r_pizza", "auth": true },
+  { "name": "recipe-edit", "path": "/recipes/r_pizza/edit", "auth": true },
+  { "name": "recipe-new", "path": "/recipes/new", "auth": true },
+  { "name": "step-new", "path": "/recipes/r_pizza/steps/new", "auth": true },
+  { "name": "step-edit", "path": "/recipes/r_pizza/steps/s_pizza_1/edit", "auth": true },
+  { "name": "cookbooks-index", "path": "/cookbooks", "auth": true },
+  { "name": "cookbook-detail", "path": "/cookbooks/cb_italian", "auth": true },
+  { "name": "cookbook-new", "path": "/cookbooks/new", "auth": true },
+  { "name": "shopping-list", "path": "/shopping-list", "auth": true },
+  { "name": "account-settings", "path": "/account/settings", "auth": true },
+  { "name": "profile", "path": "/users/demo_chef", "auth": false },
+  { "name": "fellow-chefs", "path": "/users/demo_chef/fellow-chefs", "auth": false },
+  { "name": "kitchen-visitors", "path": "/users/demo_chef/kitchen-visitors", "auth": false }
+]

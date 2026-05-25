@@ -194,6 +194,7 @@ describe("recipe-cover.server", () => {
       expect(url.startsWith("data:image/svg+xml;base64,")).toBe(true);
       const decoded = Buffer.from(url.split(",")[1], "base64").toString("utf8");
       expect(decoded).toContain("Risotto");
+      expect(decoded).not.toContain("<text");
       expect(bytes.length).toBe(Buffer.byteLength(decoded, "utf8"));
     });
 

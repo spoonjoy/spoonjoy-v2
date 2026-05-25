@@ -205,6 +205,7 @@ html *:where(input, textarea, select, button) {
 
 .sj-desktop-brand {
   display: inline-flex;
+  min-height: 2.75rem;
   width: fit-content;
   align-items: center;
   gap: 1rem;
@@ -226,6 +227,7 @@ html *:where(input, textarea, select, button) {
   position: relative;
   display: inline-flex;
   min-height: 2.75rem;
+  min-width: 2.75rem;
   align-items: center;
   justify-content: center;
   border: 0;
@@ -437,11 +439,8 @@ html *:where(input, textarea, select, button) {
 }
 
 .sj-form-section {
-  border: 1px solid var(--sj-border);
-  border-radius: var(--sj-radius-surface);
-  background: color-mix(in srgb, var(--sj-panel) 88%, transparent);
-  padding: clamp(1rem, 2.5vw, 1.5rem);
-  box-shadow: var(--sj-shadow-soft);
+  border-block: 1px solid var(--sj-border);
+  padding-block: clamp(1.25rem, 3vw, 2rem);
 }
 
 .sj-hover-lift {

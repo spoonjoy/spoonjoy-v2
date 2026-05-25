@@ -315,7 +315,7 @@ function RecipeLead({ recipe, isOwner }: { recipe: KitchenRecipe | null; isOwner
           </div>
           <div>
             <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.22em] text-[var(--sj-brass)]">Recipe box</p>
-            <Subheading level={2} className="mt-3 text-3xl/9 tracking-[-0.03em]">Start your recipe box</Subheading>
+            <Subheading level={2} className="mt-3 text-3xl/9 tracking-normal">Start your recipe box</Subheading>
             <Text className="mt-3 max-w-md">
               Capture the dish you make most often, the family classic everyone asks about, or the weeknight save you never want to lose.
             </Text>
@@ -387,7 +387,7 @@ function RecipeIndex({ recipes, isOwner, hasLead }: { recipes: KitchenRecipe[]; 
           <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.22em] text-[var(--sj-brass)]">Index</p>
           <Subheading level={2} className="mt-1 text-2xl/8">Recipe index</Subheading>
         </div>
-        {isOwner ? <Link href="/recipes/new" className="font-sj-ui text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)] no-underline hover:text-[var(--sj-ink)]">New +</Link> : null}
+        {isOwner ? <Link href="/recipes/new" className="font-sj-ui inline-flex min-h-11 items-center text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)] no-underline hover:text-[var(--sj-ink)]">New +</Link> : null}
       </div>
 
       {recipes.length > 0 ? (
@@ -479,7 +479,7 @@ function CookbookCover({ cookbook }: { cookbook: KitchenCookbook }) {
             )}
           </div>
           <div className="mt-auto min-w-0 pt-4">
-            <h3 className="font-sj-display line-clamp-3 text-2xl/7 font-semibold tracking-[-0.02em] text-[var(--sj-ink)] group-hover:text-[var(--sj-tomato)]">
+            <h3 className="font-sj-display line-clamp-3 text-2xl/7 font-semibold tracking-normal text-[var(--sj-ink)] group-hover:text-[var(--sj-tomato)]">
               {cookbook.title}
             </h3>
             <p className="font-sj-ui mt-3 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--sj-ink-soft)]">

@@ -145,10 +145,10 @@ export function ObjectRow({
         {imageUrl ? <img src={imageUrl} alt="" className="h-full w-full object-cover" /> : null}
       </div>
       <div className="min-w-0">
-        <span className="block truncate font-sj-ui text-base font-bold text-[var(--sj-ink)] group-hover:text-[var(--sj-tomato)]">
+        <span className="line-clamp-2 font-sj-ui text-base/5 font-bold text-[var(--sj-ink)] group-hover:text-[var(--sj-tomato)]">
           {title}
         </span>
-        {subtitle ? <span className="mt-0.5 block truncate text-sm text-[var(--sj-ink-soft)]">{subtitle}</span> : null}
+        {subtitle ? <span className="mt-0.5 line-clamp-2 text-sm/5 text-[var(--sj-ink-soft)]">{subtitle}</span> : null}
       </div>
       {stamp ? (
         <span className="font-sj-ui text-xs font-bold uppercase tracking-[0.12em] text-[var(--sj-brass)]">{stamp}</span>

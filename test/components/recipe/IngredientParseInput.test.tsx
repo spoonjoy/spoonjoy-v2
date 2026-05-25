@@ -60,7 +60,7 @@ describe('IngredientParseInput', () => {
       const Wrapper = createTestWrapper(async () => ({ parsedIngredients: [] }))
       render(<Wrapper initialEntries={['/recipes/recipe-1/steps/step-1/edit']} />)
 
-      expect(screen.getByLabelText(/ingredients/i)).toBeInTheDocument()
+      expect(screen.getByLabelText(/ingredient text/i)).toBeInTheDocument()
     })
 
     it('renders helper text explaining the feature', () => {
@@ -757,7 +757,7 @@ describe('IngredientParseInput', () => {
       const Wrapper = createTestWrapper(async () => ({ parsedIngredients: [] }))
       render(<Wrapper initialEntries={['/recipes/recipe-1/steps/step-1/edit']} />)
 
-      expect(screen.getByLabelText(/ingredients/i)).toBeInTheDocument()
+      expect(screen.getByLabelText(/ingredient text/i)).toBeInTheDocument()
     })
 
     it('has accessible description', () => {

@@ -167,8 +167,8 @@ describe("StepDependencySelector", () => {
       );
 
       // Selected dependencies should be visible as chips
-      const step1Chip = screen.getByRole("button", { name: /step 1/i });
-      const step2Chip = screen.getByRole("button", { name: /step 2/i });
+      const step1Chip = screen.getByRole("group", { name: /step 1/i });
+      const step2Chip = screen.getByRole("group", { name: /step 2/i });
 
       expect(step1Chip).toBeInTheDocument();
       expect(step2Chip).toBeInTheDocument();
@@ -187,9 +187,9 @@ describe("StepDependencySelector", () => {
       );
 
       // Find the remove button on step 1 chip
-      const step1Chip = screen.getByRole("button", { name: /step 1/i });
+      const step1Chip = screen.getByRole("group", { name: /step 1/i });
       const removeButton = within(step1Chip).getByRole("button", {
-        name: /remove/i,
+        name: /remove step 1/i,
       });
 
       await userEvent.click(removeButton);
@@ -293,9 +293,9 @@ describe("StepDependencySelector", () => {
       expect(dropdown).toBeDisabled();
 
       // Remove buttons on chips should be disabled
-      const step1Chip = screen.getByRole("button", { name: /step 1/i });
+      const step1Chip = screen.getByRole("group", { name: /step 1/i });
       const removeButton = within(step1Chip).getByRole("button", {
-        name: /remove/i,
+        name: /remove step 1/i,
       });
       expect(removeButton).toBeDisabled();
 
@@ -507,12 +507,12 @@ describe("StepDependencySelector", () => {
 
       // Step 1 should be shown as a chip
       expect(
-        screen.getByRole("button", { name: /step 1/i }),
+        screen.getByRole("group", { name: /step 1/i }),
       ).toBeInTheDocument();
 
       // Step 99 should not be shown (returns null from map)
       expect(
-        screen.queryByRole("button", { name: /step 99/i }),
+        screen.queryByRole("group", { name: /step 99/i }),
       ).not.toBeInTheDocument();
     });
   });
@@ -574,11 +574,11 @@ describe("StepDependencySelector", () => {
         />,
       );
 
-      const chip = screen.getByRole("button", { name: /step 1/i });
+      const chip = screen.getByRole("group", { name: /step 1/i });
       const removeButton = within(chip).getByRole("button", {
-        name: /remove/i,
+        name: /remove step 1/i,
       });
-      expect(removeButton).toHaveAttribute("aria-label", "Remove");
+      expect(removeButton).toHaveAttribute("aria-label", "Remove step 1");
     });
   });
 });

@@ -33,11 +33,11 @@ type Story = StoryObj<typeof meta>
 function Frame({ children, caption }: { children: React.ReactNode; caption: string }) {
   return (
     <DockContextProvider>
-      <div className="relative min-h-screen bg-[radial-gradient(circle_at_top,_#3f3f46,_#18181b_45%,_#09090b)] p-6 pb-32 text-white">
+      <div className="relative min-h-screen bg-[var(--sj-photo-charcoal)] p-6 pb-32 text-[var(--sj-on-photo)]">
         <div className="max-w-sm space-y-3">
-          <p className="text-xs uppercase tracking-[0.3em] text-amber-200/80">Mobile dock</p>
+          <p className="text-xs uppercase tracking-[0.18em] text-[var(--sj-on-photo-muted)]">Mobile dock</p>
           <h1 className="text-2xl font-semibold">{caption}</h1>
-          <p className="text-sm text-zinc-300">Resize to a mobile viewport or use Storybook's viewport toolbar to inspect the fixed bottom dock.</p>
+          <p className="text-sm text-[var(--sj-on-photo-muted)]">Resize to a mobile viewport or use Storybook's viewport toolbar to inspect the fixed bottom dock.</p>
         </div>
         {children}
       </div>
@@ -63,8 +63,8 @@ function ContextualEditActions() {
       icon: Trash2,
       label: 'Delete',
       ariaLabel: 'Delete recipe',
-      iconClassName: 'text-red-400',
-      labelClassName: 'text-red-300',
+      iconClassName: 'text-[var(--sj-tomato)]',
+      labelClassName: 'text-[var(--sj-tomato)]',
       onAction: () => undefined,
       position: 'right',
     },

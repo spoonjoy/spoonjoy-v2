@@ -88,10 +88,21 @@ export function makeFallbackPlaceholderSvg(title: string): {
   bytes: Uint8Array;
 } {
   const safeTitle = xmlEscape(title);
+  const accessibleTitle = safeTitle || "Recipe placeholder";
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" preserveAspectRatio="xMidYMid slice">` +
-    `<rect width="1024" height="1024" fill="#f4eee1"/>` +
-    `<text x="512" y="540" text-anchor="middle" font-family="Georgia, serif" font-size="64" font-style="italic" fill="#9b6834">${safeTitle}</text>` +
+    `<title>${accessibleTitle}</title>` +
+    `<rect width="1024" height="1024" fill="#fbfaf4"/>` +
+    `<circle cx="512" cy="512" r="238" fill="#4b91dc"/>` +
+    `<path d="M342 492c10-91 80-156 170-156s160 65 170 156v67c0 96-77 173-170 173s-170-77-170-173v-67z" fill="#ffd94f"/>` +
+    `<path d="M333 383c-42-6-75-42-75-86 0-48 39-87 87-87 12 0 24 3 35 7 22-56 77-96 141-96 75 0 137 54 149 125 11-5 23-8 36-8 48 0 87 39 87 87s-39 87-87 87H333z" fill="#fffefa"/>` +
+    `<circle cx="426" cy="492" r="34" fill="#28231d"/>` +
+    `<circle cx="598" cy="492" r="34" fill="#28231d"/>` +
+    `<circle cx="416" cy="481" r="9" fill="#fffefa"/>` +
+    `<circle cx="588" cy="481" r="9" fill="#fffefa"/>` +
+    `<path d="M316 642c42 54 103 82 196 82s154-28 196-82c-52 28-112 33-196 33s-144-5-196-33z" fill="#28231d"/>` +
+    `<path d="M392 620c34-72 88-66 120-18 32-48 86-54 120 18-54 24-89 10-120-20-31 30-66 44-120 20z" fill="#28231d"/>` +
+    `<circle cx="512" cy="512" r="248" fill="none" stroke="#28231d" stroke-opacity=".18" stroke-width="12"/>` +
     `</svg>`;
   const bytes = new TextEncoder().encode(svg);
   const base64 = Buffer.from(bytes).toString("base64");

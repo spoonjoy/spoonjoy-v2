@@ -50,27 +50,28 @@ export function CookbookCard({
             </div>
           )}
 
-          {/* Share icon — top-right, same style as recipe quick actions */}
-          <div className="absolute right-2 top-2 opacity-0 transition-opacity group-hover:opacity-100">
-            <button
-              type="button"
-              aria-label={`Share ${title}`}
-              onClick={(e) => {
-                e.preventDefault()
-                onShare?.(id)
-              }}
-              className="rounded-[var(--sj-radius-control)] border border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_82%,transparent)] p-2 text-[var(--sj-ink-soft)] backdrop-blur-sm transition-colors hover:bg-[var(--sj-panel-solid)] hover:text-[var(--sj-tomato)]"
-            >
-              <Share2 className="h-3.5 w-3.5" />
-            </button>
-          </div>
+          {onShare ? (
+            <div className="absolute right-2 top-2">
+              <button
+                type="button"
+                aria-label={`Share ${title}`}
+                onClick={(e) => {
+                  e.preventDefault()
+                  onShare(id)
+                }}
+                className="flex min-h-11 min-w-11 items-center justify-center rounded-[var(--sj-radius-control)] border border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_82%,transparent)] text-[var(--sj-ink-soft)] backdrop-blur-sm transition-colors hover:bg-[var(--sj-panel-solid)] hover:text-[var(--sj-tomato)]"
+              >
+                <Share2 className="h-4 w-4" />
+              </button>
+            </div>
+          ) : null}
         </div>
       </Link>
 
       {/* Editorial title + recipe count */}
       <div className="px-4 py-3">
-        <Link href={link} className="no-underline hover:text-[var(--sj-tomato)]">
-          <Heading level={3} className="text-xl/7 font-semibold tracking-[-0.02em]">
+        <Link href={link} className="inline-flex min-h-11 items-center no-underline hover:text-[var(--sj-tomato)]">
+          <Heading level={3} className="text-xl/7 font-semibold tracking-normal">
             {title}
           </Heading>
         </Link>

@@ -72,7 +72,7 @@ export const Input = forwardRef(function Input(
               '[&::-webkit-datetime-edit-meridiem-field]:p-0',
             ],
           // Basic layout
-          'relative block w-full appearance-none rounded-[var(--sj-radius-small)] px-[calc(--spacing(3.5)-1px)] py-[calc(--spacing(2.75)-1px)] sm:px-[calc(--spacing(3)-1px)] sm:py-[calc(--spacing(1.75)-1px)]',
+          'relative block min-h-11 w-full appearance-none rounded-[var(--sj-radius-small)] px-[calc(--spacing(3.5)-1px)] py-[calc(--spacing(2.75)-1px)] sm:px-[calc(--spacing(3)-1px)] sm:py-[calc(--spacing(1.75)-1px)]',
           // Typography
           'font-sj-ui text-base/6 text-[var(--sj-ink)] placeholder:text-[var(--sj-ink-soft)] sm:text-sm/6',
           // Border

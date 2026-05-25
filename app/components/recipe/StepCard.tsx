@@ -72,7 +72,7 @@ export function StepCard({
         {title && (
           <h3
             id={`step-${stepNumber}-heading`}
-            className="font-sj-display m-0 text-2xl font-semibold tracking-[-0.03em] text-[var(--sj-ink)] sm:text-3xl"
+            className="font-sj-display m-0 text-2xl font-semibold tracking-normal text-[var(--sj-ink)] sm:text-3xl"
           >
             {title}
           </h3>

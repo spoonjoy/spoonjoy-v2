@@ -32,7 +32,7 @@ function DialogDemo({ triggerLabel, triggerIcon: Icon, destructive, ...dialogPro
   const [lastAction, setLastAction] = useState('No action yet')
 
   return (
-    <div className="sj-panel flex min-w-80 flex-col items-center gap-4 rounded-[2rem] p-6">
+    <div className="sj-panel flex min-w-80 flex-col items-center gap-4 rounded-[var(--sj-radius-surface)] p-6">
       <Button variant={destructive ? 'destructive' : 'default'} onClick={() => setOpen(true)}>
         {Icon ? <Icon data-slot="icon" aria-hidden="true" /> : null}
         {triggerLabel}

@@ -405,6 +405,23 @@ async function cleanupLocalQaRecipes() {
   log("✅", `Hid ${result.count} local QA recipes`);
 }
 
+async function cleanupLocalQaCookbooks() {
+  log("🧹", "Removing local QA cookbook artifacts...");
+
+  const result = await prisma.cookbook.deleteMany({
+    where: {
+      OR: [
+        { title: { startsWith: "e2e " } },
+        { title: { startsWith: "Mobile Dock" } },
+        { title: { startsWith: "Shape MCP" } },
+        { title: { startsWith: "Slugger MCP" } },
+      ],
+    },
+  });
+
+  log("✅", `Removed ${result.count} local QA cookbooks`);
+}
+
 // ============================================================================
 // RECIPES
 // ============================================================================
@@ -1594,6 +1611,7 @@ async function main() {
     const ingredientRefs = await seedIngredientRefs();
     const users = await seedUsers();
     await cleanupLocalQaRecipes();
+    await cleanupLocalQaCookbooks();
     const recipes = await seedRecipes(users, units, ingredientRefs);
     await seedCookbooks(users, recipes);
     await seedShoppingLists(users, units, ingredientRefs);

@@ -365,14 +365,14 @@ describe('Select', () => {
       expect(select?.className).toContain('border')
     })
 
-    it('applies rounded-lg class to select', () => {
+    it('applies Spoonjoy radius token to select', () => {
       const { container } = render(
         <Select aria-label="Test select">
           <option value="1">Option 1</option>
         </Select>
       )
       const select = container.querySelector('select')
-      expect(select?.className).toContain('rounded-lg')
+      expect(select?.className).toContain('rounded-[var(--sj-radius-small)]')
     })
 
     it('applies appearance-none to hide native styling', () => {

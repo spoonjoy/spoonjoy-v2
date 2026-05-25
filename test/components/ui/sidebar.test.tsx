@@ -426,7 +426,7 @@ describe('Sidebar components', () => {
         expect(button?.className).toContain('flex')
         expect(button?.className).toContain('w-full')
         expect(button?.className).toContain('items-center')
-        expect(button?.className).toContain('rounded-full')
+        expect(button?.className).toContain('rounded-[var(--sj-radius-control)]')
       })
 
       it('applies gap and padding classes', () => {

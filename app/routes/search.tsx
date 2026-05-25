@@ -160,7 +160,7 @@ export default function Search() {
                   name="q"
                   defaultValue={query}
                   placeholder="tomato basil"
-                  className="font-sj-display w-full border-0 bg-transparent text-3xl/9 text-[var(--sj-ink)] outline-none placeholder:text-[var(--sj-ink-soft)]"
+                  className="font-sj-display h-full w-full border-0 bg-transparent text-3xl/9 text-[var(--sj-ink)] outline-none placeholder:text-[var(--sj-ink-soft)]"
                 />
               </div>
               <Button type="submit" className="h-11">Search</Button>

@@ -10,7 +10,7 @@ export function Heading({ className, level = 1, ...props }: HeadingProps) {
   return (
     <Element
       {...props}
-      className={clsx('font-sj-display text-2xl/8 font-semibold tracking-[-0.02em] text-[var(--sj-ink)]', className)}
+      className={clsx('font-sj-display text-2xl/8 font-semibold tracking-normal text-[var(--sj-ink)]', className)}
     />
   )
 }
@@ -21,7 +21,7 @@ export function Subheading({ className, level = 2, ...props }: HeadingProps) {
   return (
     <Element
       {...props}
-      className={clsx('font-sj-display text-base/7 font-semibold tracking-[-0.01em] text-[var(--sj-ink)]', className)}
+      className={clsx('font-sj-display text-base/7 font-semibold tracking-normal text-[var(--sj-ink)]', className)}
     />
   )
 }

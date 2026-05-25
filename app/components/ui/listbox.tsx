@@ -35,11 +35,11 @@ export function Listbox<T, Multiple extends boolean = false>({
           // Basic layout
           'group relative block w-full',
           // Background color + shadow applied to inset pseudo element, so shadow blends with border in light mode
-          'before:absolute before:inset-px before:rounded-[calc(var(--radius-lg)-1px)] before:bg-[var(--sj-field)] before:shadow-sm',
+          'before:absolute before:inset-px before:rounded-[var(--sj-radius-small)] before:bg-[var(--sj-field)] before:shadow-sm',
           // Hide default focus styles
           'focus:outline-hidden',
           // Focus ring
-          'after:pointer-events-none after:absolute after:inset-0 after:rounded-lg after:ring-transparent after:ring-inset data-focus:after:ring-2 data-focus:after:ring-[var(--sj-brass)]',
+          'after:pointer-events-none after:absolute after:inset-0 after:rounded-[var(--sj-radius-small)] after:ring-transparent after:ring-inset data-focus:after:ring-2 data-focus:after:ring-[var(--sj-brass)]',
           // Disabled state
           'data-disabled:opacity-50 data-disabled:before:bg-[color-mix(in_srgb,var(--sj-field)_72%,transparent)] data-disabled:before:shadow-none',
         ])}
@@ -50,9 +50,9 @@ export function Listbox<T, Multiple extends boolean = false>({
           placeholder={placeholder && <span className="block truncate text-[var(--sj-ink-soft)]">{placeholder}</span>}
           className={clsx([
             // Basic layout
-            'relative block w-full appearance-none rounded-lg py-[calc(--spacing(2.5)-1px)] sm:py-[calc(--spacing(1.5)-1px)]',
+            'relative block w-full appearance-none rounded-[var(--sj-radius-small)] py-[calc(--spacing(2.5)-1px)] sm:py-[calc(--spacing(1.5)-1px)]',
             // Set minimum height for when no value is selected
-            'min-h-11 sm:min-h-9',
+            'min-h-11',
             // Horizontal padding
             'pr-[calc(--spacing(7)-1px)] pl-[calc(--spacing(3.5)-1px)] sm:pl-[calc(--spacing(3)-1px)]',
             // Typography
@@ -86,7 +86,7 @@ export function Listbox<T, Multiple extends boolean = false>({
           // Anchor positioning
           '[--anchor-offset:-1.625rem] [--anchor-padding:--spacing(4)] sm:[--anchor-offset:-1.375rem]',
           // Base styles
-          'isolate w-max min-w-[calc(var(--button-width)+1.75rem)] scroll-py-1 rounded-xl p-1 select-none',
+          'isolate w-max min-w-[calc(var(--button-width)+1.75rem)] scroll-py-1 rounded-[var(--sj-radius-surface)] p-1 select-none',
           // Invisible border that is only visible in `forced-colors` mode for accessibility purposes
           'outline outline-transparent focus:outline-hidden',
           // Handle scrolling when menu won't fit in viewport
@@ -135,7 +135,7 @@ export function ListboxOption<T>({
           <div
             className={clsx(
               // Basic layout
-              'group/option grid cursor-default grid-cols-[--spacing(5)_1fr] items-baseline gap-x-2 rounded-lg py-2.5 pr-3.5 pl-2 sm:grid-cols-[--spacing(4)_1fr] sm:py-1.5 sm:pr-3 sm:pl-1.5',
+              'group/option grid cursor-default grid-cols-[--spacing(5)_1fr] items-baseline gap-x-2 rounded-[var(--sj-radius-small)] py-2.5 pr-3.5 pl-2 sm:grid-cols-[--spacing(4)_1fr] sm:py-1.5 sm:pr-3 sm:pl-1.5',
               // Typography
               'font-sj-ui text-base/6 text-[var(--sj-ink)] sm:text-sm/6 forced-colors:text-[CanvasText]',
               // Focus

@@ -77,7 +77,7 @@ export default function NewCookbook() {
           </Text>
           <Link
             href="/cookbooks"
-            className="sj-link mt-4 inline-flex"
+            className="sj-link mt-4 inline-flex min-h-11 items-center"
           >
             ← Back to cookbooks
           </Link>

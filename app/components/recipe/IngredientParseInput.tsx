@@ -137,7 +137,7 @@ export function IngredientParseInput({
   return (
     <div aria-busy={parser.isLoading}>
       <label id={labelId} htmlFor={id} className="font-sj-ui mb-2 block text-sm font-bold">
-        Ingredients
+        Ingredient text
       </label>
       <Textarea
         id={id}
@@ -188,7 +188,7 @@ export function IngredientParseInput({
         <div
           id={errorId}
           role="alert"
-          className="mt-3 rounded-[1.25rem] border border-[var(--sj-tomato)] bg-[color-mix(in_srgb,var(--sj-tomato)_10%,var(--sj-panel-solid))] p-3"
+          className="mt-3 rounded-[var(--sj-radius-surface)] border border-[var(--sj-tomato)] bg-[color-mix(in_srgb,var(--sj-tomato)_10%,var(--sj-panel-solid))] p-3"
         >
           <p className="mb-2 text-sm text-[var(--sj-tomato)]">
             {errorInfo.message}

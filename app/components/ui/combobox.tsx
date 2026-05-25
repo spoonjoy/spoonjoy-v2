@@ -59,7 +59,7 @@ export function Combobox<T>({
           // Basic layout
           'relative block w-full',
           // Background color + shadow applied to inset pseudo element, so shadow blends with border in light mode
-          'before:absolute before:inset-px before:rounded-[calc(var(--radius-lg)-1px)] before:bg-[var(--sj-field)] before:shadow-sm',
+          'before:absolute before:inset-px before:rounded-[var(--sj-radius-small)] before:bg-[var(--sj-field)] before:shadow-sm',
           // Background color is moved to control and shadow is removed in dark mode so hide `before` pseudo
           'dark:before:hidden',
           // Focus ring
@@ -118,7 +118,7 @@ export function Combobox<T>({
           // Anchor positioning
           '[--anchor-gap:--spacing(2)] [--anchor-padding:--spacing(4)] sm:data-[anchor~=start]:[--anchor-offset:-4px]',
           // Base styles,
-          'isolate min-w-[calc(var(--input-width)+8px)] scroll-py-1 rounded-xl p-1 select-none empty:invisible',
+          'isolate min-w-[calc(var(--input-width)+8px)] scroll-py-1 rounded-[var(--sj-radius-surface)] p-1 select-none empty:invisible',
           // Invisible border that is only visible in `forced-colors` mode for accessibility purposes
           'outline outline-transparent focus:outline-hidden',
           // Handle scrolling when menu won't fit in viewport
@@ -161,7 +161,7 @@ export function ComboboxOption<T>({
       {...props}
       className={clsx(
         // Basic layout
-        'group/option grid w-full cursor-default grid-cols-[1fr_--spacing(5)] items-baseline gap-x-2 rounded-lg py-2.5 pr-2 pl-3.5 sm:grid-cols-[1fr_--spacing(4)] sm:py-1.5 sm:pr-2 sm:pl-3',
+        'group/option grid w-full cursor-default grid-cols-[1fr_--spacing(5)] items-baseline gap-x-2 rounded-[var(--sj-radius-small)] py-2.5 pr-2 pl-3.5 sm:grid-cols-[1fr_--spacing(4)] sm:py-1.5 sm:pr-2 sm:pl-3',
         // Typography
         'text-base/6 text-[var(--sj-ink)] sm:text-sm/6 forced-colors:text-[CanvasText]',
         // Focus

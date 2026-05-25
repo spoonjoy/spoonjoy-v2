@@ -83,7 +83,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             >
               <div
                 className={clsx(
-                  "pointer-events-auto w-full max-w-xl rounded-full border border-[var(--sj-border)] bg-[var(--sj-panel-solid)] px-4 py-2.5 shadow-[var(--sj-shadow-soft)]",
+                  "pointer-events-auto w-full max-w-xl rounded-[var(--sj-radius-surface)] border border-[var(--sj-border)] bg-[var(--sj-panel-solid)] px-4 py-2.5 shadow-[var(--sj-shadow-soft)]",
                   "font-sj-ui text-sm font-semibold tracking-[0.01em] text-[var(--sj-ink)]"
                 )}
                 role="status"
@@ -99,7 +99,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                         toast.action?.onClick();
                         dismissToast();
                       }}
-                      className="rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-[var(--sj-tomato)] hover:text-[var(--sj-brass)]"
+                      className="rounded-[var(--sj-radius-control)] px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-[var(--sj-tomato)] hover:text-[var(--sj-brass)]"
                     >
                       {toast.action.label}
                     </button>

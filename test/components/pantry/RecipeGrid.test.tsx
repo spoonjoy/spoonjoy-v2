@@ -174,14 +174,15 @@ describe('RecipeGrid', () => {
   it('keeps the action rail out of the DOM when no handlers are provided', () => {
     const { container } = renderWithRouter(<RecipeGrid recipes={[recipes[0]]} />)
 
-    expect(container.querySelector('.absolute.right-2.top-2')).toBeNull()
+    expect(screen.queryByTestId('recipe-grid-actions')).toBeNull()
   })
 
-  it('uses the photo-tile Spoonjoy treatment instead of a card shell', () => {
+  it('uses a ruled photo-index treatment instead of a card shell', () => {
     const { container } = renderWithRouter(<RecipeGrid recipes={[recipes[0]]} />)
 
     const tile = container.querySelector('.sj-photo-tile')
     expect(tile?.className).toContain('rounded-[var(--sj-radius-photo)]')
+    expect(container.querySelector('.sj-list-ruled')).not.toBeNull()
     expect(container.querySelector('.sj-card')).toBeNull()
   })
 
@@ -194,10 +195,11 @@ describe('RecipeGrid', () => {
     expect(article?.className).not.toContain('shadow-md')
   })
 
-  it('renders image inside a portrait photo tile for a feed layout', () => {
+  it('renders image inside a landscape-to-square photo tile for a ruled index layout', () => {
     const { container } = renderWithRouter(<RecipeGrid recipes={[recipes[0]]} />)
 
     const tile = container.querySelector('.sj-photo-tile')
-    expect(tile?.className).toContain('aspect-[4/5]')
+    expect(tile?.className).toContain('aspect-[4/3]')
+    expect(tile?.className).toContain('sm:aspect-square')
   })
 })

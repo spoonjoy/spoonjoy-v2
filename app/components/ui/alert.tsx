@@ -38,7 +38,7 @@ export function Alert({
             className={clsx(
               className,
               sizes[size],
-              'row-start-2 w-full rounded-[2rem] border border-[var(--sj-border)] bg-[var(--sj-panel-solid)] p-8 shadow-[var(--sj-shadow)] sm:p-6 forced-colors:outline',
+              'row-start-2 w-full rounded-[var(--sj-radius-surface)] border border-[var(--sj-border)] bg-[var(--sj-panel-solid)] p-8 shadow-[var(--sj-shadow)] sm:p-6 forced-colors:outline',
               'transition duration-100 will-change-transform data-closed:opacity-0 data-enter:ease-out data-closed:data-enter:scale-95 data-leave:ease-in'
             )}
           >

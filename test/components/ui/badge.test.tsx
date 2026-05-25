@@ -40,7 +40,7 @@ describe('Badge', () => {
       const badge = container.querySelector('span')
       expect(badge?.className).toContain('inline-flex')
       expect(badge?.className).toContain('items-center')
-      expect(badge?.className).toContain('rounded-md')
+      expect(badge?.className).toContain('rounded-[var(--sj-radius-small)]')
       expect(badge?.className).toContain('font-medium')
     })
 

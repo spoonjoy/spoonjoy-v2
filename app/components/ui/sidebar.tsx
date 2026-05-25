@@ -83,7 +83,7 @@ export const SidebarItem = forwardRef(function SidebarItem(
 ) {
   let classes = clsx(
     // Base
-    'flex w-full items-center gap-3 rounded-full px-3 py-2.5 text-left text-base/6 font-semibold tracking-[0.01em] text-[var(--sj-ink)] sm:py-2 sm:text-sm/5',
+    'flex w-full items-center gap-3 rounded-[var(--sj-radius-control)] px-3 py-2.5 text-left text-base/6 font-semibold tracking-[0.01em] text-[var(--sj-ink)] sm:py-2 sm:text-sm/5',
     // Leading icon/icon-only - use text color for stroke-based icons (lucide), fill-none to prevent ugly filled icons
     '*:data-[slot=icon]:size-6 *:data-[slot=icon]:shrink-0 *:data-[slot=icon]:text-[var(--sj-ink-soft)] *:data-[slot=icon]:fill-none sm:*:data-[slot=icon]:size-5',
     // Trailing icon (down chevron or similar)

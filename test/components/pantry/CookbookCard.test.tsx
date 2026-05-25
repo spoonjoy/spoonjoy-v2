@@ -89,8 +89,8 @@ describe('CookbookCard', () => {
   })
 
   // #20 — Share affordance
-  it('renders share button with correct aria-label', () => {
-    renderWithRouter(<CookbookCard {...base} />)
+  it('renders share button with correct aria-label when sharing is wired', () => {
+    renderWithRouter(<CookbookCard {...base} onShare={vi.fn()} />)
 
     expect(screen.getByLabelText('Share Italian Classics')).toBeInTheDocument()
   })
@@ -103,10 +103,10 @@ describe('CookbookCard', () => {
     expect(onShare).toHaveBeenCalledWith('cb-1')
   })
 
-  it('does not throw when share clicked without onShare', () => {
+  it('does not render an inert share button without a share callback', () => {
     renderWithRouter(<CookbookCard {...base} />)
 
-    expect(() => fireEvent.click(screen.getByLabelText('Share Italian Classics'))).not.toThrow()
+    expect(screen.queryByLabelText('Share Italian Classics')).toBeNull()
   })
 
   it('prevents link navigation when share is clicked', () => {

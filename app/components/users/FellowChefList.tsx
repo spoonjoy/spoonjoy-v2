@@ -41,32 +41,31 @@ export function FellowChefList({ rows, emptyStateText }: FellowChefListProps) {
         const summary = summarizeInteractions(row.interactionCounts);
         const initials = row.username.charAt(0).toUpperCase();
         return (
-          <li
-            key={row.chefId}
-            className="flex min-h-17 items-center gap-3 py-3"
-          >
-            <Avatar
-              src={resolveChefAvatarUrl(row.photoUrl)}
-              alt={row.username}
-              initials={initials}
-              className="size-10 border border-[var(--sj-border)] bg-[var(--sj-flour)] text-[var(--sj-ink)]"
-            />
-            <div className="flex min-w-0 flex-1 flex-col">
-              <Link
-                href={`/users/${row.username}`}
-                className="sj-link font-sj-ui text-sm font-semibold text-[var(--sj-ink)]"
-              >
-                {row.username}
-              </Link>
+          <li key={row.chefId}>
+            <Link
+              href={`/users/${row.username}`}
+              className="grid min-h-17 grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 py-3 no-underline"
+            >
+              <Avatar
+                src={resolveChefAvatarUrl(row.photoUrl)}
+                alt={row.username}
+                initials={initials}
+                className="size-10 border border-[var(--sj-border)] bg-[var(--sj-flour)] text-[var(--sj-ink)]"
+              />
+              <div className="flex min-w-0 flex-1 flex-col">
+                <span className="sj-link font-sj-ui text-sm font-semibold text-[var(--sj-ink)]">
+                  {row.username}
+                </span>
               {summary ? (
                 <Text className="text-xs text-[var(--sj-ink-soft)]">
                   {summary}
                 </Text>
               ) : null}
-            </div>
-            <Text className="font-sj-ui text-xs uppercase tracking-[0.12em] text-[var(--sj-ink-soft)]">
-              {formatRelativeTime(row.latestInteractionAt)}
-            </Text>
+              </div>
+              <Text className="font-sj-ui text-xs uppercase tracking-[0.12em] text-[var(--sj-ink-soft)]">
+                {formatRelativeTime(row.latestInteractionAt)}
+              </Text>
+            </Link>
           </li>
         );
       })}

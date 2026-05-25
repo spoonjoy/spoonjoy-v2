@@ -159,18 +159,18 @@ function RecipeViewMock({ recipe, initialScale = 1, isOwner = false }: { recipe:
       <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
         <div className="mb-6">
           <p className="sj-eyebrow">Cook mode</p>
-          <Heading level={2} className="mt-3 text-3xl/9 font-semibold tracking-[-0.03em] sm:text-4xl/11">
+          <Heading level={2} className="mt-3 text-3xl/9 font-semibold tracking-normal sm:text-4xl/11">
             Steps
           </Heading>
         </div>
 
         {recipe.steps.length === 0 ? (
-          <div className="sj-card rounded-[2rem] p-8 text-center">
+          <div className="sj-card rounded-[var(--sj-radius-surface)] p-8 text-center">
             <Text className="mb-4">No steps added yet</Text>
             {isOwner ? <Button href={`/recipes/${recipe.id}/edit`}>Add Steps</Button> : null}
           </div>
         ) : (
-          <div className="overflow-hidden rounded-[2rem] border border-[var(--sj-border)] bg-[var(--sj-panel)] shadow-[var(--sj-shadow-soft)] backdrop-blur-xl">
+          <div className="overflow-hidden rounded-[var(--sj-radius-surface)] border border-[var(--sj-border)] bg-[var(--sj-panel)] shadow-[var(--sj-shadow-soft)] backdrop-blur-xl">
             {recipe.steps.map((step) => (
               <div key={step.id} id={`step-${step.stepNum}`} className="border-b border-[var(--sj-border)] last:border-b-0">
                 <StepCard
