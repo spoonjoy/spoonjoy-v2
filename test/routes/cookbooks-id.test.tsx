@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
 import { loader, action } from "~/routes/cookbooks.$id";
@@ -800,6 +800,10 @@ describe("Cookbooks $id Route", () => {
   });
 
   describe("component", () => {
+    async function openOwnerTools() {
+      fireEvent.click(await screen.findByText("Owner tools"));
+    }
+
     it("should render cookbook with no recipes (empty state) as owner", async () => {
       const mockData = {
         cookbook: {
@@ -827,7 +831,7 @@ describe("Cookbooks $id Route", () => {
       expect(screen.getByText("testchef")).toBeInTheDocument();
       expect(screen.getByText("0 recipes")).toBeInTheDocument();
       expect(screen.getByText("No recipes yet")).toBeInTheDocument();
-      expect(screen.getByText("Add recipes to your cookbook using the form above")).toBeInTheDocument();
+      expect(screen.getByText("Add recipes to your cookbook using the owner tools below.")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "← Back to cookbooks" })).toHaveAttribute("href", "/cookbooks");
     });
 
@@ -854,7 +858,7 @@ describe("Cookbooks $id Route", () => {
       render(<Stub initialEntries={["/cookbooks/cookbook-1"]} />);
 
       expect(await screen.findByText("Someone Elses Cookbook")).toBeInTheDocument();
-      expect(screen.getByText("This cookbook is empty")).toBeInTheDocument();
+      expect(screen.getByText("This cookbook is empty.")).toBeInTheDocument();
       // Non-owner should not see edit/delete buttons
       expect(screen.queryByText("Edit title")).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Delete cookbook" })).not.toBeInTheDocument();
@@ -873,6 +877,7 @@ describe("Cookbooks $id Route", () => {
                 id: "recipe-1",
                 title: "Spaghetti",
                 description: "Classic pasta",
+                servings: "2",
                 coverImageUrl: "https://example.com/spaghetti.jpg",
                 chef: { username: "testchef" },
               },
@@ -883,6 +888,7 @@ describe("Cookbooks $id Route", () => {
                 id: "recipe-2",
                 title: "Salad",
                 description: null,
+                servings: "4 servings",
                 coverImageUrl: null,
                 chef: { username: "testchef" },
               },
@@ -905,11 +911,21 @@ describe("Cookbooks $id Route", () => {
 
       expect(await screen.findByText("Recipe Collection")).toBeInTheDocument();
       expect(screen.getByText("2 recipes")).toBeInTheDocument();
-      expect(screen.getByText("Spaghetti")).toBeInTheDocument();
+      const recipesSection = screen.getByRole("region", { name: "Recipes" });
+      expect(within(recipesSection).getByRole("link", { name: "Spaghetti" })).toHaveAttribute(
+        "href",
+        "/recipes/recipe-1"
+      );
       expect(screen.getByText("Classic pasta")).toBeInTheDocument();
-      expect(screen.getByText("Salad")).toBeInTheDocument();
-      // Links to recipe pages
-      expect(screen.getByRole("link", { name: /Spaghetti/ })).toHaveAttribute("href", "/recipes/recipe-1");
+      expect(screen.getByText("Serves 2")).toBeInTheDocument();
+      expect(within(recipesSection).getByRole("link", { name: "Salad" })).toHaveAttribute(
+        "href",
+        "/recipes/recipe-2"
+      );
+      expect(screen.getByText("4 servings")).toBeInTheDocument();
+      expect(screen.queryByText("Serves 4 servings")).not.toBeInTheDocument();
+      expect(within(recipesSection).queryByText("COOK")).not.toBeInTheDocument();
+      expect(within(recipesSection).queryByRole("button", { name: "Remove from cookbook" })).not.toBeInTheDocument();
     });
 
     it("should render singular recipe count", async () => {
@@ -973,6 +989,8 @@ describe("Cookbooks $id Route", () => {
 
       render(<Stub initialEntries={["/cookbooks/cookbook-1"]} />);
 
+      await openOwnerTools();
+
       expect(await screen.findByText("Add recipe to cookbook")).toBeInTheDocument();
       expect(screen.getByRole("combobox")).toBeInTheDocument();
       expect(screen.getByText("Select a recipe...")).toBeInTheDocument();
@@ -1014,6 +1032,13 @@ describe("Cookbooks $id Route", () => {
 
       render(<Stub initialEntries={["/cookbooks/cookbook-1"]} />);
 
+      expect(await screen.findByText("Owner tools")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Edit title" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Delete cookbook" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Remove from cookbook" })).not.toBeInTheDocument();
+
+      await openOwnerTools();
+
       expect(await screen.findByRole("button", { name: "Edit title" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Delete cookbook" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Remove from cookbook" })).toBeInTheDocument();
@@ -1040,6 +1065,8 @@ describe("Cookbooks $id Route", () => {
       ]);
 
       render(<Stub initialEntries={["/cookbooks/cookbook-1"]} />);
+
+      await openOwnerTools();
 
       const editButton = await screen.findByRole("button", { name: "Edit title" });
       fireEvent.click(editButton);
@@ -1071,6 +1098,8 @@ describe("Cookbooks $id Route", () => {
       ]);
 
       render(<Stub initialEntries={["/cookbooks/cookbook-1"]} />);
+
+      await openOwnerTools();
 
       // Enter edit mode
       const editButton = await screen.findByRole("button", { name: "Edit title" });
@@ -1109,8 +1138,7 @@ describe("Cookbooks $id Route", () => {
 
       // Should show title as heading, not in input
       expect(await screen.findByRole("heading", { name: "My Cookbook" })).toBeInTheDocument();
-      // But Edit Title button should be visible
-      expect(screen.getByRole("button", { name: "Edit title" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Edit title" })).not.toBeInTheDocument();
     });
 
     it("should open delete cookbook dialog and allow confirmation", async () => {
@@ -1139,6 +1167,8 @@ describe("Cookbooks $id Route", () => {
       ]);
 
       render(<Stub initialEntries={["/cookbooks/cookbook-1"]} />);
+
+      await openOwnerTools();
 
       // Click delete button
       const deleteButton = await screen.findByRole("button", { name: "Delete cookbook" });
@@ -1179,6 +1209,8 @@ describe("Cookbooks $id Route", () => {
       ]);
 
       render(<Stub initialEntries={["/cookbooks/cookbook-1"]} />);
+
+      await openOwnerTools();
 
       // Click delete button
       const deleteButton = await screen.findByRole("button", { name: "Delete cookbook" });
@@ -1227,6 +1259,8 @@ describe("Cookbooks $id Route", () => {
       ]);
 
       render(<Stub initialEntries={["/cookbooks/cookbook-1"]} />);
+
+      await openOwnerTools();
 
       // Click remove button
       const removeButton = await screen.findByRole("button", { name: "Remove from cookbook" });
@@ -1277,6 +1311,8 @@ describe("Cookbooks $id Route", () => {
       ]);
 
       render(<Stub initialEntries={["/cookbooks/cookbook-1"]} />);
+
+      await openOwnerTools();
 
       // Click remove button
       const removeButton = await screen.findByRole("button", { name: "Remove from cookbook" });

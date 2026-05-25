@@ -11,6 +11,7 @@ import { Avatar } from "~/components/ui/avatar";
 import { CookbookPage } from "~/components/cookbook/page";
 import { getRecipeCoverImageUrl } from "~/lib/recipe-cover.server";
 import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
+import { formatServingsLabel } from "~/lib/quantity";
 
 const LANDING_FOOD_PHOTOS = [
   {
@@ -336,6 +337,7 @@ function RecipeLead({ recipe, isOwner }: { recipe: KitchenRecipe | null; isOwner
   }
 
   const displayImageUrl = recipe.coverImageUrl && recipe.coverImageUrl.length > 0 ? recipe.coverImageUrl : undefined;
+  const servingsLabel = formatServingsLabel(recipe.servings);
 
   return (
     <section aria-label="Latest from the kitchen" className="mb-16 border-b border-[var(--sj-border-strong)] pb-8 lg:mb-0">
@@ -362,9 +364,9 @@ function RecipeLead({ recipe, isOwner }: { recipe: KitchenRecipe | null; isOwner
             <Heading level={2} className="mt-3 text-4xl/10 hover:text-[var(--sj-tomato)] sm:mt-5 sm:text-6xl/14">{recipe.title}</Heading>
           </Link>
           {recipe.description ? <Text className="mt-4 hidden max-w-md text-base/7 sm:block">{recipe.description}</Text> : null}
-          {recipe.servings ? (
+          {servingsLabel ? (
             <p className="font-sj-ui mt-5 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">
-              Serves {recipe.servings}
+              {servingsLabel}
             </p>
           ) : null}
           <div className="mt-7 hidden flex-wrap gap-2 sm:flex">
@@ -408,6 +410,8 @@ function RecipeIndex({ recipes, isOwner, hasLead }: { recipes: KitchenRecipe[]; 
 }
 
 function RecipeIndexRow({ recipe, ordinal }: { recipe: KitchenRecipe; ordinal: number }) {
+  const servingsLabel = formatServingsLabel(recipe.servings);
+
   return (
     <Link href={`/recipes/${recipe.id}`} className="group grid grid-cols-[2.5rem_minmax(0,1fr)] gap-4 py-4 no-underline">
       <div className="font-sj-ui pt-1 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-brass)]">
@@ -418,8 +422,8 @@ function RecipeIndexRow({ recipe, ordinal }: { recipe: KitchenRecipe; ordinal: n
           {recipe.title}
         </h3>
         {recipe.description ? <p className="mt-1 line-clamp-2 text-sm/5 text-[var(--sj-ink-soft)]">{recipe.description}</p> : null}
-        {recipe.servings ? (
-          <p className="font-sj-ui mt-2 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--sj-ink-soft)]">Serves {recipe.servings}</p>
+        {servingsLabel ? (
+          <p className="font-sj-ui mt-2 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--sj-ink-soft)]">{servingsLabel}</p>
         ) : null}
       </div>
     </Link>

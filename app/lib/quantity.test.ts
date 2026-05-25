@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  formatServingsLabel,
   formatQuantity,
   scaleQuantity,
   scaleServingsText,
@@ -425,6 +426,31 @@ describe('quantity utilities', () => {
       it('handles "Makes about 20"', () => {
         expect(scaleServingsText('Makes about 20', 1.5)).toBe('Makes about 30')
       })
+    })
+  })
+
+  describe('formatServingsLabel', () => {
+    it('adds "Serves" to plain numeric values', () => {
+      expect(formatServingsLabel('4')).toBe('Serves 4')
+    })
+
+    it('adds "Serves" to plain numeric ranges', () => {
+      expect(formatServingsLabel('4-6')).toBe('Serves 4-6')
+      expect(formatServingsLabel('4 – 6')).toBe('Serves 4 – 6')
+    })
+
+    it('keeps already-written servings phrases unchanged', () => {
+      expect(formatServingsLabel('4 servings')).toBe('4 servings')
+      expect(formatServingsLabel('Serves 4')).toBe('Serves 4')
+      expect(formatServingsLabel('Makes 2 pizzas')).toBe('Makes 2 pizzas')
+      expect(formatServingsLabel('for a small table')).toBe('for a small table')
+    })
+
+    it('handles empty and absent values', () => {
+      expect(formatServingsLabel('')).toBe('')
+      expect(formatServingsLabel('   ')).toBe('')
+      expect(formatServingsLabel(null)).toBe('')
+      expect(formatServingsLabel(undefined)).toBe('')
     })
   })
 })

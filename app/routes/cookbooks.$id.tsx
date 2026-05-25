@@ -5,6 +5,7 @@ import { getRecipeCoverImageUrl } from "~/lib/recipe-cover.server";
 import { requireUserId } from "~/lib/session.server";
 import { notifyCookbookSaveOfMine } from "~/lib/notification-triggers.server";
 import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
+import { formatServingsLabel } from "~/lib/quantity";
 import { useState, useRef } from "react";
 
 interface CloudflareContextLike {
@@ -35,7 +36,7 @@ import { Text, Strong } from "~/components/ui/text";
 import { Link } from "~/components/ui/link";
 import { Input } from "~/components/ui/input";
 import { Select } from "~/components/ui/select";
-import { CookbookPage, CookbookHeader, CookbookSectionTitle, ObjectRow, RuledEmptyState, SettingsPanel } from "~/components/cookbook/page";
+import { CookbookPage, CookbookHeader, RuledEmptyState } from "~/components/cookbook/page";
 
 export async function loader({ request, params, context }: Route.LoaderArgs) {
   const userId = await requireUserId(request);
@@ -238,6 +239,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 export default function CookbookDetail() {
   const { cookbook, isOwner, availableRecipes } = useLoaderData<typeof loader>();
   const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [showOwnerTools, setShowOwnerTools] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [recipeToRemove, setRecipeToRemove] = useState<string | null>(null);
   const submit = useSubmit();
@@ -245,8 +247,8 @@ export default function CookbookDetail() {
 
   return (
     <CookbookPage>
-      <div className="mx-auto max-w-6xl">
-        <div className="mb-6">
+      <div className="mx-auto max-w-5xl">
+        <div className="mb-6 print:hidden">
           <Link
             href="/cookbooks"
             className="sj-link inline-flex min-h-11 items-center"
@@ -258,28 +260,6 @@ export default function CookbookDetail() {
         <CookbookHeader
           eyebrow="Cookbook"
           title={cookbook.title}
-          action={isOwner ? (
-            <>
-              <Button
-                onClick={() => setIsEditingTitle(true)}
-                plain
-                className="text-sm"
-              >
-                Edit title
-              </Button>
-              <Form method="post" ref={deleteFormRef}>
-                <input type="hidden" name="intent" value="delete" />
-                <Button
-                  type="button"
-                  variant="destructive"
-                  aria-label="Delete cookbook"
-                  onClick={() => setShowDeleteDialog(true)}
-                >
-                  Delete
-                </Button>
-              </Form>
-            </>
-          ) : null}
         >
           <Text className="m-0">
             By <Strong>{cookbook.author.username}</Strong> ·{" "}
@@ -289,108 +269,195 @@ export default function CookbookDetail() {
           </Text>
         </CookbookHeader>
 
-        {isEditingTitle && isOwner ? (
-          <SettingsPanel title="Rename cookbook">
-            <Form method="post" className="mb-2 flex flex-col gap-3 sm:flex-row sm:items-center">
-              <input type="hidden" name="intent" value="updateTitle" />
-              <Input
-                type="text"
-                name="title"
-                defaultValue={cookbook.title}
-                required
-                autoFocus
-                className="[&_input]:text-2xl [&_input]:font-bold"
-              />
-              <Button type="submit">
-                Save
-              </Button>
-              <Button
-                type="button"
-                plain
-                onClick={() => setIsEditingTitle(false)}
-              >
-                Cancel
-              </Button>
-            </Form>
-          </SettingsPanel>
-        ) : null}
-
         {isOwner && (
           <ConfirmationDialog
-                open={showDeleteDialog}
-                onClose={() => setShowDeleteDialog(false)}
-                onConfirm={() => {
-                  setShowDeleteDialog(false);
-                  deleteFormRef.current?.submit();
-                }}
-                title="Delete this cookbook?"
-                description="This will permanently delete the cookbook and remove all recipe associations. The recipes themselves will not be deleted."
-                confirmLabel="Delete it"
-                cancelLabel="Keep it"
-                destructive
+            open={showDeleteDialog}
+            onClose={() => setShowDeleteDialog(false)}
+            onConfirm={() => {
+              setShowDeleteDialog(false);
+              deleteFormRef.current?.submit();
+            }}
+            title="Delete this cookbook?"
+            description="This will permanently delete the cookbook and remove all recipe associations. The recipes themselves will not be deleted."
+            confirmLabel="Delete it"
+            cancelLabel="Keep it"
+            destructive
           />
-        )}
-
-        {isOwner && availableRecipes.length > 0 && (
-          <SettingsPanel title="Add recipe to cookbook">
-            <Form method="post" className="flex flex-col gap-4 sm:flex-row">
-              <input type="hidden" name="intent" value="addRecipe" />
-              <Select
-                name="recipeId"
-                required
-                className="flex-1"
-              >
-                <option value="">Select a recipe...</option>
-                {availableRecipes.map((recipe) => (
-                  <option key={recipe.id} value={recipe.id}>
-                    {recipe.title}
-                  </option>
-                ))}
-              </Select>
-              <Button type="submit">
-                Add recipe
-              </Button>
-            </Form>
-          </SettingsPanel>
         )}
 
         {cookbook.recipes.length === 0 ? (
           <RuledEmptyState title="No recipes yet">
             <Text className="mb-6">
-              {isOwner ? "Add recipes to your cookbook using the form above" : "This cookbook is empty"}
+              {isOwner ? "Add recipes to your cookbook using the owner tools below." : "This cookbook is empty."}
             </Text>
           </RuledEmptyState>
         ) : (
-          <div>
-            <CookbookSectionTitle>Recipes</CookbookSectionTitle>
-            <div className="sj-list-ruled">
-            {cookbook.recipes.map((item) => (
-              <div key={item.id} className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-                <ObjectRow
-                  href={`/recipes/${item.recipe.id}`}
-                  imageUrl={item.recipe.coverImageUrl}
-                  title={item.recipe.title}
-                  subtitle={item.recipe.description ?? `By ${item.recipe.chef.username}`}
-                  stamp="cook"
-                />
-                {isOwner && (
-                  <div className="pb-3 sm:pb-0">
+          <section aria-labelledby="cookbook-recipes-heading" className="mt-10">
+            <div className="max-w-3xl">
+              <p className="sj-eyebrow">Contents</p>
+              <h2 id="cookbook-recipes-heading" className="font-sj-display mt-2 text-4xl/10 font-semibold text-[var(--sj-ink)]">
+                Recipes
+              </h2>
+            </div>
+
+            <ol className="mt-6 border-y border-[var(--sj-border-strong)]">
+              {cookbook.recipes.map((item, index) => {
+                const servingsLabel = formatServingsLabel(item.recipe.servings);
+
+                return (
+                  <li key={item.id} className="border-b border-[var(--sj-border)] last:border-b-0">
+                    <Link
+                      href={`/recipes/${item.recipe.id}`}
+                      className="group grid min-h-24 grid-cols-[2.25rem_4.75rem_minmax(0,1fr)] gap-4 py-5 no-underline sm:grid-cols-[3rem_6rem_minmax(0,1fr)_auto] sm:items-center sm:gap-5"
+                      aria-label={item.recipe.title}
+                    >
+                      <span className="font-sj-ui pt-1 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-brass)] sm:pt-0">
+                        {String(index + 1).padStart(2, "0")}
+                      </span>
+                      <span className="block aspect-[4/3] overflow-hidden bg-[color-mix(in_srgb,var(--sj-flour)_70%,var(--sj-panel-solid))]">
+                        {item.recipe.coverImageUrl ? (
+                          <img src={item.recipe.coverImageUrl} alt="" className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.025]" />
+                        ) : (
+                          <span className="block h-full w-full bg-[linear-gradient(135deg,color-mix(in_srgb,var(--sj-flour)_82%,var(--sj-panel-solid)),var(--sj-panel-solid))]" />
+                        )}
+                      </span>
+                      <span className="min-w-0 self-center">
+                        <span className="font-sj-display block text-2xl/7 font-semibold text-[var(--sj-ink)] sm:text-3xl/8">
+                          {item.recipe.title}
+                        </span>
+                        <span className="mt-1 block max-w-2xl text-base/6 text-[var(--sj-ink-soft)]">
+                          {item.recipe.description ?? `By ${item.recipe.chef.username}`}
+                        </span>
+                      </span>
+                      {servingsLabel ? (
+                        <span className="font-sj-ui col-start-3 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--sj-ink-soft)] sm:col-start-auto sm:justify-self-end">
+                          {servingsLabel}
+                        </span>
+                      ) : null}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ol>
+          </section>
+        )}
+
+        {isOwner ? (
+          <div className="mt-12 print:hidden">
+            <button
+              type="button"
+              className="inline-flex min-h-11 cursor-pointer items-center border-0 bg-transparent p-0 font-sj-ui text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)] hover:text-[var(--sj-ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)]"
+              aria-expanded={showOwnerTools}
+              aria-controls="cookbook-owner-tools"
+              onClick={() => setShowOwnerTools((visible) => !visible)}
+            >
+              Owner tools
+            </button>
+
+            {showOwnerTools ? (
+              <div id="cookbook-owner-tools" className="mt-3 border-y border-[var(--sj-border)] py-6">
+                <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+                  <div>
+                    <h3 className="font-sj-display text-2xl/7 font-semibold text-[var(--sj-ink)]">Cookbook details</h3>
+                    <p className="mt-1 max-w-2xl text-sm/6 text-[var(--sj-ink-soft)]">
+                      Private controls for maintaining this collection. They stay out of the cookbook contents above.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2 sm:justify-end">
+                    <Button
+                      onClick={() => setIsEditingTitle(true)}
+                      plain
+                      className="text-sm"
+                    >
+                      Edit title
+                    </Button>
+                    <Form method="post" ref={deleteFormRef}>
+                      <input type="hidden" name="intent" value="delete" />
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        aria-label="Delete cookbook"
+                        onClick={() => setShowDeleteDialog(true)}
+                      >
+                        Delete
+                      </Button>
+                    </Form>
+                  </div>
+                </div>
+
+                {isEditingTitle ? (
+                  <Form method="post" className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <input type="hidden" name="intent" value="updateTitle" />
+                    <Input
+                      type="text"
+                      name="title"
+                      defaultValue={cookbook.title}
+                      required
+                      autoFocus
+                      className="[&_input]:text-2xl [&_input]:font-bold"
+                    />
+                    <Button type="submit">
+                      Save
+                    </Button>
                     <Button
                       type="button"
-                      variant="destructive"
-                      className="w-full text-sm"
-                      aria-label="Remove from cookbook"
-                      onClick={() => setRecipeToRemove(item.id)}
+                      plain
+                      onClick={() => setIsEditingTitle(false)}
                     >
-                      Remove
+                      Cancel
                     </Button>
+                  </Form>
+                ) : null}
+
+                {availableRecipes.length > 0 ? (
+                  <div className="mt-6 border-t border-[var(--sj-border)] pt-6">
+                    <h3 className="font-sj-display text-2xl/7 font-semibold text-[var(--sj-ink)]">Add recipe to cookbook</h3>
+                    <Form method="post" className="mt-3 flex flex-col gap-4 sm:flex-row">
+                      <input type="hidden" name="intent" value="addRecipe" />
+                      <Select
+                        name="recipeId"
+                        required
+                        className="flex-1"
+                      >
+                        <option value="">Select a recipe...</option>
+                        {availableRecipes.map((recipe) => (
+                          <option key={recipe.id} value={recipe.id}>
+                            {recipe.title}
+                          </option>
+                        ))}
+                      </Select>
+                      <Button type="submit">
+                        Add recipe
+                      </Button>
+                    </Form>
                   </div>
-                )}
+                ) : null}
+
+                {cookbook.recipes.length > 0 ? (
+                  <div className="mt-6 border-t border-[var(--sj-border)] pt-6">
+                    <h3 className="font-sj-display text-2xl/7 font-semibold text-[var(--sj-ink)]">Remove recipes</h3>
+                    <div className="mt-3 divide-y divide-[var(--sj-border)] border-y border-[var(--sj-border)]">
+                      {cookbook.recipes.map((item) => (
+                        <div key={item.id} className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                          <span className="font-sj-ui text-sm/5 font-semibold text-[var(--sj-ink)]">{item.recipe.title}</span>
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            className="w-full text-sm sm:w-auto"
+                            aria-label="Remove from cookbook"
+                            onClick={() => setRecipeToRemove(item.id)}
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </div>
-            ))}
-            </div>
+            ) : null}
           </div>
-        )}
+        ) : null}
       </div>
 
       {/* Remove recipe confirmation dialog */}

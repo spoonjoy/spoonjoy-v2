@@ -173,3 +173,30 @@ export function scaleServingsText(text: string, scaleFactor: number): string {
     return formatQuantity(scaled)
   })
 }
+
+/**
+ * Formats a stored recipe servings value for static labels.
+ *
+ * The schema stores freeform text, so avoid producing awkward doubles like
+ * "Serves 4 servings" when the author already wrote a full phrase.
+ */
+export function formatServingsLabel(text: string | null | undefined): string {
+  if (text == null) {
+    return ''
+  }
+
+  const trimmed = text.trim()
+  if (trimmed === '') {
+    return ''
+  }
+
+  if (/^(serves?|servings?|makes?|yields?|feeds?|for)\b/i.test(trimmed)) {
+    return trimmed
+  }
+
+  if (/^\d+(?:\.\d+)?(?:\s*[-–]\s*\d+(?:\.\d+)?)?$/.test(trimmed)) {
+    return `Serves ${trimmed}`
+  }
+
+  return trimmed
+}

@@ -26,6 +26,10 @@ Latest border-rule audit screenshot artifact directory:
 
 `/tmp/spoonjoy-border-crawl`
 
+Latest cookbook-language audit screenshot artifact directory:
+
+`/tmp/spoonjoy-cookbook-language-crawl`
+
 Contact sheets:
 
 - `/tmp/spoonjoy-ui-crawl-local/contact-mobile-top.png`
@@ -37,6 +41,7 @@ Contact sheets:
 ```bash
 python3 /Users/arimendelow/.codex/skills/.system/skill-creator/scripts/quick_validate.py /Users/arimendelow/.codex/skills/ui-systems-audit
 node /Users/arimendelow/.codex/skills/ui-systems-audit/scripts/inventory-ui.mjs /Users/arimendelow/Projects/spoonjoy-v2 --json > /tmp/spoonjoy-ui-inventory.json
+node /Users/arimendelow/.codex/skills/ui-systems-audit/scripts/inventory-ui.mjs /Users/arimendelow/Projects/spoonjoy-v2 --json > /tmp/spoonjoy-cookbook-language-inventory.json
 pnpm db:seed
 UI_AUDIT_EMAIL=demo@spoonjoy.com UI_AUDIT_PASSWORD=demo1234 /Users/arimendelow/.codex/skills/ui-systems-audit/scripts/crawl-ui.mjs --base-url http://localhost:5173 --routes docs/ui-systems-audit-routes.json --out /tmp/spoonjoy-ui-crawl-local
 UI_AUDIT_EMAIL=demo@spoonjoy.com UI_AUDIT_PASSWORD=demo1234 /Users/arimendelow/.codex/skills/ui-systems-audit/scripts/crawl-ui.mjs --base-url https://spoonjoy-v2.mendelow-studio.workers.dev --routes docs/ui-systems-audit-routes.json --out /tmp/spoonjoy-ui-crawl-deployed
@@ -48,6 +53,7 @@ pnpm test:coverage
 pnpm typecheck
 pnpm build
 UI_AUDIT_EMAIL=demo@spoonjoy.com UI_AUDIT_PASSWORD=demo1234 /Users/arimendelow/.codex/skills/ui-systems-audit/scripts/crawl-ui.mjs --base-url http://localhost:5173 --routes docs/ui-systems-audit-routes.json --out /tmp/spoonjoy-border-crawl
+UI_AUDIT_EMAIL=demo@spoonjoy.com UI_AUDIT_PASSWORD=demo1234 /Users/arimendelow/.codex/skills/ui-systems-audit/scripts/crawl-ui.mjs --base-url http://localhost:5173 --routes docs/ui-systems-audit-routes.json --out /tmp/spoonjoy-cookbook-language-crawl
 ```
 
 Ouroboros harness smoke:
@@ -68,6 +74,7 @@ Rendered crawl:
 - 0 console errors.
 - 0 page errors.
 - Border-rule re-crawl at `/tmp/spoonjoy-border-crawl` repeated the 54-route matrix with the same zero-error result.
+- Cookbook-language re-crawl at `/tmp/spoonjoy-cookbook-language-crawl` repeated the 54-route matrix with the same zero-error result.
 
 Deployed crawl:
 
@@ -84,7 +91,7 @@ Deployed crawl:
 Static inventory:
 
 - 117 UI source files inspected.
-- 16,989 UI source lines inspected.
+- 17,049 UI source lines inspected.
 - 0 legacy Tailwind color classes.
 - 0 copied Catalyst button shells.
 - 0 negative tracking classes.
@@ -116,6 +123,7 @@ Verification:
 | UIA-009 | Medium | Fixed | Desktop nav | Restored the real Spoonjoy mark and tightened desktop navigation spacing, current state, and touch targets. |
 | UIA-010 | Low | Accepted | Dock, avatars, radios, switches | `rounded-full` remains intentional only where circular shape carries semantic or physical meaning. |
 | UIA-011 | Medium | Fixed | Page mastheads, forms, shopping list, ruled lists | Collapsed duplicate horizontal rules so headers, form sections, settings panels, and cookbook lists use one purposeful divider instead of stacked border echoes. |
+| UIA-012 | High | Fixed | Cookbook detail | Replaced the admin/table-like recipe membership list with a cookbook table-of-contents treatment; owner add/remove/edit/delete tools now live in a collapsed maintenance area outside the printable contents. |
 
 ## Re-Audit Notes
 

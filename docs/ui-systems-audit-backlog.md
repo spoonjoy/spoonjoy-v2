@@ -16,6 +16,7 @@ There are no open UI audit findings after the current pass.
 - UIA-008: Local QA cookbook data polluting visual audit screens: fixed.
 - UIA-009: Desktop nav/logo inconsistency: fixed.
 - UIA-011: Duplicate and ornamental horizontal rules across mastheads, forms, shopping list, and ruled lists: fixed.
+- UIA-012: Cookbook detail mixed printed contents with inline admin/table controls: fixed.
 
 ## Accepted Exceptions
 
