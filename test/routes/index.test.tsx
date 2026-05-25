@@ -337,6 +337,7 @@ describe("Kitchen Index Route", () => {
       expect(screen.getByText("Cheese Night")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Open Recipe" })).toHaveAttribute("href", "/recipes/recipe-1");
       expect(screen.getByText("Fondue")).toBeInTheDocument();
+      expect(screen.getAllByRole("link", { name: "Fondue" }).some((link) => link.classList.contains("min-h-11"))).toBe(true);
       expect(screen.getByRole("link", { name: /Rosti/ })).toHaveAttribute("href", "/recipes/recipe-2");
       expect(screen.getByText("Crisp potatoes")).toBeInTheDocument();
       expect(screen.getByText("Serves 2")).toBeInTheDocument();

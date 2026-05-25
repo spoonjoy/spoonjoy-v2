@@ -358,7 +358,7 @@ function RecipeLead({ recipe, isOwner }: { recipe: KitchenRecipe | null; isOwner
 
         <div className="border-l border-[var(--sj-border)] pl-5">
           <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.22em] text-[var(--sj-brass)]">Latest from the kitchen</p>
-          <Link href={`/recipes/${recipe.id}`} className="block no-underline">
+          <Link href={`/recipes/${recipe.id}`} className="block min-h-11 no-underline">
             <Heading level={2} className="mt-3 text-4xl/10 hover:text-[var(--sj-tomato)] sm:mt-5 sm:text-6xl/14">{recipe.title}</Heading>
           </Link>
           {recipe.description ? <Text className="mt-4 hidden max-w-md text-base/7 sm:block">{recipe.description}</Text> : null}
