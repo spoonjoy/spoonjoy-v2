@@ -60,7 +60,9 @@ interface SearchRow {
 
 const DEFAULT_SEARCH_LIMIT = 20;
 const MAX_SEARCH_LIMIT = 50;
-const SEARCH_INDEX_PAGE_SIZE = 10;
+// D1 has a lower SQL variable limit than local SQLite. A single migrated v1
+// recipe can have many steps, so keep Prisma's nested relation loads narrow.
+const SEARCH_INDEX_PAGE_SIZE = 1;
 
 const ENTITY_TYPES_BY_SCOPE: Record<SearchScope, readonly SearchEntityType[]> = {
   all: ["recipe", "cookbook", "chef", "shopping-list-item"],
