@@ -4,6 +4,8 @@ import { getRequestDb } from "~/lib/route-platform.server";
 import { authenticateUser } from "~/lib/auth.server";
 import { createUserSession, getUserId } from "~/lib/session.server";
 import { OAuthButtonGroup, OAuthDivider, OAuthError } from "~/components/ui/oauth";
+import { getConfiguredOAuthProviders } from "~/lib/env.server";
+import { getOAuthEnv } from "~/lib/oauth-route.server";
 import { AuthLayout } from "~/components/ui/auth-layout";
 import { Heading } from "~/components/ui/heading";
 import { Field, Label, ErrorMessage } from "~/components/ui/fieldset";
@@ -22,6 +24,7 @@ interface ActionData {
 
 interface LoaderData {
   oauthError?: string;
+  oauthProviders: Array<"google" | "apple">;
 }
 
 // Loader - redirect if already logged in, handle OAuth errors
@@ -34,12 +37,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   // Check for OAuth error in URL search params
   const url = new URL(request.url);
   const oauthError = url.searchParams.get("oauthError");
+  const oauthProviders = getConfiguredOAuthProviders(getOAuthEnv(context));
 
   if (oauthError) {
-    return { oauthError } as LoaderData;
+    return { oauthError, oauthProviders } as LoaderData;
   }
 
-  return null;
+  return { oauthProviders } as LoaderData;
 }
 
 // Action - handle login form submission
@@ -86,6 +90,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 export default function Login() {
   const actionData = useActionData<ActionData>();
   const loaderData = useLoaderData<LoaderData | null>();
+  const oauthProviders = loaderData?.oauthProviders ?? [];
 
   return (
     <AuthLayout>
@@ -133,11 +138,12 @@ export default function Login() {
           </Button>
         </Form>
 
-        {/* OAuth separator */}
-        <OAuthDivider className="my-6" />
-
-        {/* OAuth buttons */}
-        <OAuthButtonGroup />
+        {oauthProviders.length > 0 && (
+          <>
+            <OAuthDivider className="my-6" />
+            <OAuthButtonGroup providers={oauthProviders} />
+          </>
+        )}
 
         <Text className="mt-6 text-center">
           Don't have an account?{" "}

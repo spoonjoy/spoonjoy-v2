@@ -32,6 +32,8 @@ export interface OAuthEnv {
   APPLE_PRIVATE_KEY?: string;
 }
 
+export type OAuthProvider = "google" | "apple";
+
 export interface VapidConfig {
   publicKey: string;
   privateKey: string;
@@ -116,6 +118,25 @@ export function validateOAuthEnv(env: OAuthEnv): true {
   }
 
   return true;
+}
+
+export function getConfiguredOAuthProviders(env: OAuthEnv): OAuthProvider[] {
+  const providers: OAuthProvider[] = [];
+
+  if (env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) {
+    providers.push("google");
+  }
+
+  if (
+    env.APPLE_CLIENT_ID &&
+    env.APPLE_TEAM_ID &&
+    env.APPLE_KEY_ID &&
+    env.APPLE_PRIVATE_KEY
+  ) {
+    providers.push("apple");
+  }
+
+  return providers;
 }
 
 /**

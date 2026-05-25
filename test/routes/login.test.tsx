@@ -33,16 +33,23 @@ describe("Login Route", () => {
   });
 
   describe("loader", () => {
-    it("should return null when user is not logged in", async () => {
+    it("should return configured OAuth providers when user is not logged in", async () => {
       const request = new UndiciRequest("http://localhost:3000/login");
 
       const result = await loader({
         request,
-        context: { cloudflare: { env: null } },
+        context: {
+          cloudflare: {
+            env: {
+              GOOGLE_CLIENT_ID: "google-client",
+              GOOGLE_CLIENT_SECRET: "google-secret",
+            },
+          },
+        },
         params: {},
       } as any);
 
-      expect(result).toBeNull();
+      expect(result).toEqual({ oauthProviders: ["google"] });
     });
 
     it("should redirect when user is already logged in", async () => {
@@ -79,7 +86,7 @@ describe("Login Route", () => {
         params: {},
       } as any);
 
-      expect(result).toEqual({ oauthError: "account_exists" });
+      expect(result).toEqual({ oauthError: "account_exists", oauthProviders: [] });
     });
   });
 
@@ -256,7 +263,7 @@ describe("Login Route", () => {
         {
           path: "/login",
           Component: Login,
-          loader: () => null,
+          loader: () => ({ oauthProviders: [] }),
         },
       ]);
 
@@ -275,7 +282,7 @@ describe("Login Route", () => {
         {
           path: "/login",
           Component: Login,
-          loader: () => null,
+          loader: () => ({ oauthProviders: [] }),
         },
       ]);
 
@@ -292,7 +299,7 @@ describe("Login Route", () => {
         {
           path: "/login",
           Component: Login,
-          loader: () => null,
+          loader: () => ({ oauthProviders: [] }),
         },
       ]);
 
@@ -309,7 +316,7 @@ describe("Login Route", () => {
         {
           path: "/login",
           Component: Login,
-          loader: () => null,
+          loader: () => ({ oauthProviders: [] }),
         },
       ]);
 
@@ -325,7 +332,7 @@ describe("Login Route", () => {
           {
             path: "/login",
             Component: Login,
-            loader: () => null,
+            loader: () => ({ oauthProviders: ["google"] }),
           },
         ]);
 
@@ -340,7 +347,7 @@ describe("Login Route", () => {
           {
             path: "/login",
             Component: Login,
-            loader: () => null,
+            loader: () => ({ oauthProviders: ["apple"] }),
           },
         ]);
 
@@ -355,7 +362,7 @@ describe("Login Route", () => {
           {
             path: "/login",
             Component: Login,
-            loader: () => null,
+            loader: () => ({ oauthProviders: ["google"] }),
           },
         ]);
 
@@ -374,7 +381,7 @@ describe("Login Route", () => {
           {
             path: "/login",
             Component: Login,
-            loader: () => null,
+            loader: () => ({ oauthProviders: ["apple"] }),
           },
         ]);
 
@@ -393,7 +400,7 @@ describe("Login Route", () => {
           {
             path: "/login",
             Component: Login,
-            loader: () => null,
+            loader: () => ({ oauthProviders: ["google", "apple"] }),
           },
         ]);
 
@@ -402,6 +409,23 @@ describe("Login Route", () => {
         await screen.findByRole("heading", { name: "Log In" });
         // Look for a separator element or text that says "or" as a standalone element
         expect(screen.getByTestId("oauth-separator")).toBeInTheDocument();
+      });
+
+      it("should hide OAuth separator and buttons when no providers are configured", async () => {
+        const Stub = createTestRoutesStub([
+          {
+            path: "/login",
+            Component: Login,
+            loader: () => ({ oauthProviders: [] }),
+          },
+        ]);
+
+        render(<Stub initialEntries={["/login"]} />);
+
+        await screen.findByRole("heading", { name: "Log In" });
+        expect(screen.queryByTestId("oauth-separator")).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: /continue with google/i })).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: /continue with apple/i })).not.toBeInTheDocument();
       });
     });
 
@@ -444,7 +468,7 @@ describe("Login Route", () => {
           {
             path: "/login",
             Component: Login,
-            loader: () => null,
+            loader: () => ({ oauthProviders: [] }),
           },
         ]);
 
@@ -460,7 +484,7 @@ describe("Login Route", () => {
           {
             path: "/login",
             Component: Login,
-            loader: () => null,
+            loader: () => ({ oauthProviders: [] }),
           },
         ]);
 
@@ -480,7 +504,7 @@ describe("Login Route", () => {
           {
             path: "/login",
             Component: Login,
-            loader: () => null,
+            loader: () => ({ oauthProviders: [] }),
           },
         ]);
 
@@ -500,7 +524,7 @@ describe("Login Route", () => {
           {
             path: "/login",
             Component: Login,
-            loader: () => null,
+            loader: () => ({ oauthProviders: [] }),
           },
         ]);
 
@@ -519,7 +543,7 @@ describe("Login Route", () => {
           {
             path: "/login",
             Component: Login,
-            loader: () => null,
+            loader: () => ({ oauthProviders: [] }),
           },
         ]);
 

@@ -1,7 +1,7 @@
 import clsx from 'clsx'
 import { Button } from './button'
 
-type OAuthProvider = 'google' | 'apple'
+export type OAuthProvider = 'google' | 'apple'
 
 const providerStyles: Record<OAuthProvider, { label: string }> = {
   google: {
@@ -47,14 +47,18 @@ export function OAuthDivider({ className }: OAuthDividerProps) {
 }
 
 interface OAuthButtonGroupProps {
+  providers?: OAuthProvider[]
   className?: string
 }
 
-export function OAuthButtonGroup({ className }: OAuthButtonGroupProps) {
+export function OAuthButtonGroup({ providers = ['google', 'apple'], className }: OAuthButtonGroupProps) {
+  if (providers.length === 0) return null
+
   return (
     <div className={clsx('flex flex-col gap-3', className)}>
-      <OAuthButton provider="google" />
-      <OAuthButton provider="apple" />
+      {providers.map((provider) => (
+        <OAuthButton key={provider} provider={provider} />
+      ))}
     </div>
   )
 }

@@ -33,16 +33,25 @@ describe("Signup Route", () => {
   });
 
   describe("loader", () => {
-    it("should return null when user is not logged in", async () => {
+    it("should return configured OAuth providers when user is not logged in", async () => {
       const request = new UndiciRequest("http://localhost:3000/signup");
 
       const result = await loader({
         request,
-        context: { cloudflare: { env: null } },
+        context: {
+          cloudflare: {
+            env: {
+              APPLE_CLIENT_ID: "apple-client",
+              APPLE_TEAM_ID: "team",
+              APPLE_KEY_ID: "key",
+              APPLE_PRIVATE_KEY: "private-key",
+            },
+          },
+        },
         params: {},
       } as any);
 
-      expect(result).toBeNull();
+      expect(result).toEqual({ oauthProviders: ["apple"] });
     });
 
     it("should redirect when user is already logged in", async () => {
@@ -79,7 +88,7 @@ describe("Signup Route", () => {
         params: {},
       } as any);
 
-      expect(result).toEqual({ oauthError: "account_exists" });
+      expect(result).toEqual({ oauthError: "account_exists", oauthProviders: [] });
     });
   });
 
@@ -417,7 +426,7 @@ describe("Signup Route", () => {
         {
           path: "/signup",
           Component: Signup,
-          loader: () => null,
+          loader: () => ({ oauthProviders: [] }),
         },
       ]);
 
@@ -436,7 +445,7 @@ describe("Signup Route", () => {
         {
           path: "/signup",
           Component: Signup,
-          loader: () => null,
+          loader: () => ({ oauthProviders: [] }),
         },
       ]);
 
@@ -470,7 +479,7 @@ describe("Signup Route", () => {
         {
           path: "/signup",
           Component: Signup,
-          loader: () => null,
+          loader: () => ({ oauthProviders: [] }),
         },
       ]);
 
@@ -487,7 +496,7 @@ describe("Signup Route", () => {
           {
             path: "/signup",
             Component: Signup,
-            loader: () => null,
+            loader: () => ({ oauthProviders: ["google"] }),
           },
         ]);
 
@@ -502,7 +511,7 @@ describe("Signup Route", () => {
           {
             path: "/signup",
             Component: Signup,
-            loader: () => null,
+            loader: () => ({ oauthProviders: ["apple"] }),
           },
         ]);
 
@@ -517,7 +526,7 @@ describe("Signup Route", () => {
           {
             path: "/signup",
             Component: Signup,
-            loader: () => null,
+            loader: () => ({ oauthProviders: ["google"] }),
           },
         ]);
 
@@ -536,7 +545,7 @@ describe("Signup Route", () => {
           {
             path: "/signup",
             Component: Signup,
-            loader: () => null,
+            loader: () => ({ oauthProviders: ["apple"] }),
           },
         ]);
 
@@ -555,7 +564,7 @@ describe("Signup Route", () => {
           {
             path: "/signup",
             Component: Signup,
-            loader: () => null,
+            loader: () => ({ oauthProviders: ["google", "apple"] }),
           },
         ]);
 
@@ -564,6 +573,23 @@ describe("Signup Route", () => {
         await screen.findByRole("heading", { name: "Sign Up" });
         // Look for a separator element that says "or" as a standalone element
         expect(screen.getByTestId("oauth-separator")).toBeInTheDocument();
+      });
+
+      it("should hide OAuth separator and buttons when no providers are configured", async () => {
+        const Stub = createTestRoutesStub([
+          {
+            path: "/signup",
+            Component: Signup,
+            loader: () => ({ oauthProviders: [] }),
+          },
+        ]);
+
+        render(<Stub initialEntries={["/signup"]} />);
+
+        await screen.findByRole("heading", { name: "Sign Up" });
+        expect(screen.queryByTestId("oauth-separator")).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: /continue with google/i })).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: /continue with apple/i })).not.toBeInTheDocument();
       });
     });
 
@@ -606,7 +632,7 @@ describe("Signup Route", () => {
           {
             path: "/signup",
             Component: Signup,
-            loader: () => null,
+            loader: () => ({ oauthProviders: [] }),
           },
         ]);
 
@@ -622,7 +648,7 @@ describe("Signup Route", () => {
           {
             path: "/signup",
             Component: Signup,
-            loader: () => null,
+            loader: () => ({ oauthProviders: [] }),
           },
         ]);
 
@@ -642,7 +668,7 @@ describe("Signup Route", () => {
           {
             path: "/signup",
             Component: Signup,
-            loader: () => null,
+            loader: () => ({ oauthProviders: [] }),
           },
         ]);
 
@@ -662,7 +688,7 @@ describe("Signup Route", () => {
           {
             path: "/signup",
             Component: Signup,
-            loader: () => null,
+            loader: () => ({ oauthProviders: [] }),
           },
         ]);
 
