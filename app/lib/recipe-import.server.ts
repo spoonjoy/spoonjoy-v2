@@ -25,8 +25,10 @@ import {
   type JsonLdRecipeDraft,
 } from "~/lib/recipe-import-jsonld.server";
 import {
+  createOpenAIRecipeLlmRunner,
   htmlToPlainText,
   RecipeLlmError,
+  type RecipeLlmEnv,
   type RecipeLlmRunner,
 } from "~/lib/recipe-import-llm.server";
 import {
@@ -95,11 +97,12 @@ export interface ImportRecipeOptions {
 
 export interface ImportRecipeDeps {
   db: PrismaClient;
-  env?: { OPENAI_API_KEY?: string } | null;
+  env?: RecipeLlmEnv | null;
   bucket?: R2Bucket;
   waitUntil?: (promise: Promise<unknown>) => void;
   fetchImpl?: typeof fetch;
   llmRunner?: RecipeLlmRunner;
+  createLlmRunner?: (env: RecipeLlmEnv) => RecipeLlmRunner;
   imageGenRunner?: ImageGenRunner;
   ingredientParser?: (
     text: string,
@@ -174,6 +177,14 @@ function mapSafeFetchError(err: SafeFetchError): ImportRecipeError {
 
 function mapOEmbedError(err: OEmbedError): ImportRecipeError {
   return new ImportRecipeError(err.code, err.status, err.message);
+}
+
+function getLlmRunner(deps: ImportRecipeDeps): RecipeLlmRunner | null {
+  if (deps.llmRunner) return deps.llmRunner;
+  const env = deps.env ?? {};
+  if (!env.OPENAI_API_KEY?.trim()) return null;
+  const createLlmRunner = deps.createLlmRunner ?? createOpenAIRecipeLlmRunner;
+  return createLlmRunner(env);
 }
 
 interface ExtractionOutput {
@@ -257,7 +268,8 @@ async function runLlm(
   ingredients: string[];
   steps: string[];
 }> {
-  if (!deps.llmRunner) {
+  const llmRunner = getLlmRunner(deps);
+  if (!llmRunner) {
     throw new ImportRecipeError(
       "llm-failed",
       502,
@@ -266,7 +278,7 @@ async function runLlm(
   }
   const text = htmlToPlainText(html);
   try {
-    return await deps.llmRunner.extract(text);
+    return await llmRunner.extract(text);
   } catch (err) {
     if (err instanceof RecipeLlmError) {
       throw new ImportRecipeError("llm-failed", 502, err.message);
@@ -280,7 +292,8 @@ async function runVideoExtraction(
   sourceKind: "youtube" | "tiktok",
   deps: ImportRecipeDeps,
 ): Promise<ExtractionOutput> {
-  if (!deps.llmRunner) {
+  const llmRunner = getLlmRunner(deps);
+  if (!llmRunner) {
     throw new ImportRecipeError(
       "llm-failed",
       502,
@@ -300,7 +313,7 @@ async function runVideoExtraction(
   let extracted;
   try {
     extracted = await extractVideoRecipe(metadata, {
-      llmRunner: deps.llmRunner,
+      llmRunner,
     });
   } catch (err) {
     if (err instanceof RecipeLlmError) {
