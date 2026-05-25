@@ -465,6 +465,57 @@ describe("spoonjoy MCP tools", () => {
     expect(byTitle.cookbook.id).toBe(first.cookbook.id);
   });
 
+  it("lists cookbook summaries without loading deep recipe step payloads", async () => {
+    const ownerEmail = context.defaultOwnerEmail!;
+    const owner = await context.db.user.create({
+      data: {
+        email: ownerEmail,
+        username: `summary-${faker.string.alphanumeric(8).toLowerCase()}`,
+      },
+    });
+    await context.db.cookbook.create({
+      data: {
+        title: "Lean Cookbook Summary",
+        authorId: owner.id,
+      },
+    });
+
+    const cookbookFindManyArgs: unknown[] = [];
+    const db = new Proxy(context.db, {
+      get(target, property, receiver) {
+        if (property !== "cookbook") {
+          return Reflect.get(target, property, receiver);
+        }
+
+        const cookbookDelegate = Reflect.get(target, property, receiver);
+        return new Proxy(cookbookDelegate, {
+          get(delegateTarget, delegateProperty, delegateReceiver) {
+            if (delegateProperty !== "findMany") {
+              return Reflect.get(delegateTarget, delegateProperty, delegateReceiver);
+            }
+
+            const findMany = Reflect.get(delegateTarget, delegateProperty, delegateReceiver) as (args: unknown) => unknown;
+            return (args: unknown) => {
+              cookbookFindManyArgs.push(args);
+              return findMany.call(delegateTarget, args);
+            };
+          },
+        });
+      },
+    }) as SpoonjoyMcpContext["db"];
+
+    const list = parseJson(await callSpoonjoyMcpTool("list_cookbooks", {}, { ...context, db }));
+
+    expect(list.cookbooks).toHaveLength(1);
+    expect(list.cookbooks[0]).toMatchObject({
+      title: "Lean Cookbook Summary",
+      recipeCount: 0,
+      recipes: [],
+    });
+    expect(JSON.stringify(cookbookFindManyArgs)).not.toContain("steps");
+    expect(JSON.stringify(cookbookFindManyArgs)).not.toContain("ingredients");
+  });
+
   it("adds and removes recipes from owner-scoped cookbooks idempotently", async () => {
     const cookbook = parseJson(await callSpoonjoyMcpTool("create_cookbook", {
       title: "Harness Menus",
