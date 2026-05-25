@@ -142,7 +142,7 @@ export function parseCookProgressSnapshot(
   }
 }
 
-function readCookProgress(recipeId: string, bounds: CookProgressBounds): CookProgressState | null {
+export function readCookProgress(recipeId: string, bounds: CookProgressBounds): CookProgressState | null {
   if (typeof window === "undefined") {
     return null;
   }
@@ -157,7 +157,7 @@ function readCookProgress(recipeId: string, bounds: CookProgressBounds): CookPro
   }
 }
 
-function writeCookProgress(
+export function writeCookProgress(
   recipeId: string,
   {
     activeStepIndex,

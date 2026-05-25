@@ -23,7 +23,9 @@ import {
   findRecipeStepsScrollTarget,
   getCookProgressStorageKey,
   parseCookProgressSnapshot,
+  readCookProgress,
   formatTimerSeconds,
+  writeCookProgress,
 } from "~/routes/recipes.$id";
 import RecipeDetail from "~/routes/recipes.$id";
 import { createUser } from "~/lib/auth.server";
@@ -144,6 +146,67 @@ describe("Recipes $id Route", () => {
       expect(parsed?.scaleFactor).toBe(50);
       expect(Array.from(parsed?.checkedIngredientIds ?? [])).toEqual(["ing-1"]);
       expect(Array.from(parsed?.checkedStepOutputIds ?? [])).toEqual(["use-1"]);
+    });
+
+    it("defaults malformed cook progress values", () => {
+      const parsed = parseCookProgressSnapshot(
+        JSON.stringify({
+          version: 1,
+          activeStepIndex: -3,
+          scaleFactor: "not-a-number",
+          checkedIngredientIds: "ing-1",
+          checkedStepOutputIds: "use-1",
+        }),
+        bounds
+      );
+
+      expect(parsed?.activeStepIndex).toBe(0);
+      expect(parsed?.scaleFactor).toBe(1);
+      expect(parsed?.checkedIngredientIds.size).toBe(0);
+      expect(parsed?.checkedStepOutputIds.size).toBe(0);
+    });
+
+    it("treats unavailable cook progress storage as empty", () => {
+      const originalWindow = window;
+      vi.stubGlobal("window", {
+        localStorage: {
+          getItem() {
+            throw new Error("storage unavailable");
+          },
+          setItem() {
+            throw new Error("storage unavailable");
+          },
+        },
+      });
+
+      try {
+        expect(readCookProgress("recipe-1", bounds)).toBeNull();
+        expect(() => writeCookProgress("recipe-1", {
+          activeStepIndex: 0,
+          scaleFactor: 1,
+          checkedIngredientIds: new Set(),
+          checkedStepOutputIds: new Set(),
+        })).not.toThrow();
+      } finally {
+        vi.stubGlobal("window", originalWindow);
+      }
+    });
+
+    it("treats missing window storage as empty", () => {
+      const originalWindow = window;
+      vi.stubGlobal("window", undefined);
+
+      try {
+        expect(readCookProgress("recipe-1", bounds)).toBeNull();
+        expect(() => writeCookProgress("recipe-1", {
+          activeStepIndex: 0,
+          scaleFactor: 1,
+          checkedIngredientIds: new Set(),
+          checkedStepOutputIds: new Set(),
+        })).not.toThrow();
+      } finally {
+        vi.stubGlobal("window", originalWindow);
+      }
     });
 
     it("ignores invalid stored cook progress payloads", () => {
