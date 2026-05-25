@@ -11,6 +11,7 @@ export interface UseRecipeDetailActionsOptions {
   onSave?: () => void;
   onAddToList?: () => void;
   onShare?: () => void;
+  onCook?: () => void;
 }
 
 function AddedListIcon({ className }: { className?: string }) {
@@ -29,6 +30,7 @@ export function useRecipeDetailActions({
   onSave,
   onAddToList,
   onShare,
+  onCook,
 }: UseRecipeDetailActionsOptions): void {
   const config = useMemo<DockConfig>(() => {
     const listAction = {
@@ -66,11 +68,11 @@ export function useRecipeDetailActions({
         id: "cook",
         icon: Check,
         label: "Cook",
-        onAction: "#steps",
+        onAction: onCook || (() => {}),
       },
       tools: isOwner ? [listAction, editAction] : [listAction, saveAction],
     };
-  }, [recipeId, isOwner, isInShoppingList, onSave, onAddToList, onShare]);
+  }, [recipeId, isOwner, isInShoppingList, onSave, onAddToList, onShare, onCook]);
 
   useDockConfig(config);
 }

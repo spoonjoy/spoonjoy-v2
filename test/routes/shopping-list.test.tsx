@@ -635,7 +635,7 @@ describe("Shopping List Routes", () => {
       expect(screen.getByText("Select a recipe...")).toBeInTheDocument();
       expect(screen.getByText("Spaghetti Bolognese")).toBeInTheDocument();
       expect(screen.getByText("Caesar Salad")).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Add Ingredients" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Add ingredients" })).toBeInTheDocument();
     });
 
     it("should not show add from recipe form when no recipes", async () => {

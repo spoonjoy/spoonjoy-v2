@@ -34,6 +34,11 @@ Latest ingredient-width audit screenshot artifact directory:
 
 `/tmp/spoonjoy-ingredient-width-local`
 
+Latest shopping-list/cook-mode focused local artifact directories:
+
+- `/tmp/spoonjoy-cook-shopping-local`
+- `/tmp/spoonjoy-cook-mode-local`
+
 Contact sheets:
 
 - `/tmp/spoonjoy-ui-crawl-local/contact-mobile-top.png`
@@ -59,6 +64,9 @@ pnpm build
 UI_AUDIT_EMAIL=demo@spoonjoy.com UI_AUDIT_PASSWORD=demo1234 /Users/arimendelow/.codex/skills/ui-systems-audit/scripts/crawl-ui.mjs --base-url http://localhost:5173 --routes docs/ui-systems-audit-routes.json --out /tmp/spoonjoy-border-crawl
 UI_AUDIT_EMAIL=demo@spoonjoy.com UI_AUDIT_PASSWORD=demo1234 /Users/arimendelow/.codex/skills/ui-systems-audit/scripts/crawl-ui.mjs --base-url http://localhost:5173 --routes docs/ui-systems-audit-routes.json --out /tmp/spoonjoy-cookbook-language-crawl
 UI_AUDIT_EMAIL=demo@spoonjoy.com UI_AUDIT_PASSWORD=demo1234 /Users/arimendelow/.codex/skills/ui-systems-audit/scripts/crawl-ui.mjs --base-url http://localhost:5173 --routes /tmp/spoonjoy-recipe-detail-route.json --out /tmp/spoonjoy-ingredient-width-local
+UI_AUDIT_EMAIL=demo@spoonjoy.com UI_AUDIT_PASSWORD=demo1234 node /Users/arimendelow/.codex/skills/ui-systems-audit/scripts/crawl-ui.mjs --base-url http://localhost:5173 --routes /tmp/spoonjoy-cook-shopping-routes.json --out /tmp/spoonjoy-cook-shopping-local
+# Focused Playwright cook-mode screenshot script wrote /tmp/spoonjoy-cook-mode-local.
+pnpm test test/routes/shopping-list-ux.test.tsx test/routes/recipes-id.test.tsx test/components/navigation/recipe-dock-actions.test.tsx test/routes/recipe-dock-integration.test.tsx -- --run
 ```
 
 Ouroboros harness smoke:
@@ -81,6 +89,8 @@ Rendered crawl:
 - Border-rule re-crawl at `/tmp/spoonjoy-border-crawl` repeated the 54-route matrix with the same zero-error result.
 - Cookbook-language re-crawl at `/tmp/spoonjoy-cookbook-language-crawl` repeated the 54-route matrix with the same zero-error result.
 - Ingredient-width focused crawl at `/tmp/spoonjoy-ingredient-width-local` covered recipe detail across mobile, tablet, and desktop with the same zero-error result.
+- Shopping-list/cook-mode focused crawl at `/tmp/spoonjoy-cook-shopping-local` covered shopping list and recipe detail across mobile, tablet, and desktop with the same zero-error result.
+- Focused cook-mode screenshots at `/tmp/spoonjoy-cook-mode-local` covered mobile and desktop after entering cook mode, with 0 console errors, 0 page errors, 0 horizontal overflow, and 0 small touch targets.
 
 Deployed crawl:
 
@@ -105,8 +115,8 @@ Static inventory:
 
 Verification:
 
-- 210 test files passed.
-- 4,594 tests passed.
+- 211 test files passed.
+- 4,613 tests passed.
 - 100% statement, branch, function, and line coverage.
 - Typecheck passed.
 - Production build passed.
@@ -131,6 +141,8 @@ Verification:
 | UIA-011 | Medium | Fixed | Page mastheads, forms, shopping list, ruled lists | Collapsed duplicate horizontal rules so headers, form sections, settings panels, and cookbook lists use one purposeful divider instead of stacked border echoes. |
 | UIA-012 | High | Fixed | Cookbook detail | Replaced the admin/table-like recipe membership list with a cookbook table-of-contents treatment; owner add/remove/edit/delete tools now live in a collapsed maintenance area outside the printable contents. |
 | UIA-013 | Medium | Fixed | Recipe detail ingredients | Constrained only the per-step ingredient checklist on desktop so quantity labels stay visually connected, while leaving step prose at the wider cookbook reading measure. |
+| UIA-014 | Medium | Fixed | Shopping list | Kept the editorial header wider while constraining the market checklist, added Need/Basket/All modes, aisle grouping, a single In basket section for checked rows, and recipe scale when adding ingredients. |
+| UIA-015 | High | Fixed | Recipe detail, dock actions | Replaced the old jump link with a focused cook-mode panel, step-by-step controls, shared ingredient checklist grammar, `#cook` deep-link/back behavior, and dock/header entry points. |
 
 ## Re-Audit Notes
 

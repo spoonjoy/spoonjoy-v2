@@ -38,6 +38,50 @@ const SWIPE_CONFIRM_THRESHOLD = 56;
 const SWIPE_DISMISS_THRESHOLD = 28;
 
 export type SwipeAction = "reveal" | "confirmDelete" | "dismiss" | "none";
+export type ShoppingListViewMode = "all" | "need" | "basket";
+
+const SHOPPING_CATEGORY_SORT_RANK: Record<string, number> = {
+  Produce: 1,
+  Protein: 2,
+  Dairy: 3,
+  Bakery: 4,
+  Pantry: 5,
+  Spices: 6,
+  Frozen: 7,
+  Other: 8,
+};
+
+export function orderShoppingItemsForMarket<T extends { checked: boolean; categoryLabel: string }>(
+  items: T[]
+) {
+  return items
+    .map((item, index) => ({
+      item,
+      index,
+      categoryRank: SHOPPING_CATEGORY_SORT_RANK[item.categoryLabel] ?? 99,
+    }))
+    .sort((a, b) =>
+      Number(a.item.checked) - Number(b.item.checked) ||
+      a.categoryRank - b.categoryRank ||
+      a.index - b.index
+    )
+    .map(({ item }) => item);
+}
+
+export function getShoppingSectionLabel(
+  item: { checked: boolean; categoryLabel: string },
+  previousItem: { checked: boolean; categoryLabel: string } | null,
+  viewMode: ShoppingListViewMode
+) {
+  const label = viewMode === "all" && item.checked ? "In basket" : item.categoryLabel;
+  const previousLabel = previousItem
+    ? viewMode === "all" && previousItem.checked
+      ? "In basket"
+      : previousItem.categoryLabel
+    : null;
+
+  return previousLabel === label ? null : label;
+}
 
 export function resolveSwipeAction(offsetX: number, isRevealed: boolean): SwipeAction {
   if (isRevealed && offsetX <= -SWIPE_CONFIRM_THRESHOLD) {
@@ -71,6 +115,7 @@ export default function ShoppingList() {
   const [optimisticRemovedById, setOptimisticRemovedById] = useState<Record<string, boolean>>({});
   const [revealedItemId, setRevealedItemId] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState("all");
+  const [viewMode, setViewMode] = useState<ShoppingListViewMode>("all");
   const submit = useSubmit();
   const toggleFetcher = useFetcher();
   const removeFetcher = useFetcher();
@@ -101,21 +146,35 @@ export default function ShoppingList() {
         };
       });
 
-    const unchecked = withOptimistic.filter((item) => !item.checked);
-    const checked = withOptimistic.filter((item) => item.checked);
-    return [...unchecked, ...checked];
+    return orderShoppingItemsForMarket(withOptimistic);
   }, [shoppingList.items, optimisticCheckedById, optimisticRemovedById]);
 
   const checkedCount = displayItems.filter((item) => item.checked).length;
   const uncheckedCount = displayItems.length - checkedCount;
   const displayOrderKey = displayItems.map((item) => item.id).join("|");
+  const visibleItems = useMemo(() => {
+    if (viewMode === "need") {
+      return displayItems.filter((item) => !item.checked);
+    }
+
+    if (viewMode === "basket") {
+      return displayItems.filter((item) => item.checked);
+    }
+
+    return displayItems;
+  }, [displayItems, viewMode]);
+  const viewOptions: Array<{ mode: ShoppingListViewMode; label: string }> = [
+    { mode: "need", label: `Need ${uncheckedCount}` },
+    { mode: "basket", label: `Basket ${checkedCount}` },
+    { mode: "all", label: `All ${displayItems.length}` },
+  ];
   const categoryOptions = useMemo(() => {
-    const uniqueLabels = Array.from(new Set(displayItems.map((item) => item.categoryLabel)));
+    const uniqueLabels = Array.from(new Set(visibleItems.map((item) => item.categoryLabel)));
     return ["all", ...uniqueLabels];
-  }, [displayItems]);
+  }, [visibleItems]);
   const filteredItems = activeCategory === "all"
-    ? displayItems
-    : displayItems.filter((item) => item.categoryLabel === activeCategory);
+    ? visibleItems
+    : visibleItems.filter((item) => item.categoryLabel === activeCategory);
 
   useEffect(() => {
     setRevealedItemId(null);
@@ -163,7 +222,7 @@ export default function ShoppingList() {
   return (
     <CookbookPage>
       <div className="mx-auto max-w-4xl">
-        <header className="pb-6">
+        <header className="pb-6" data-testid="shopping-list-page-header">
           <div className="flex items-center justify-between gap-4 font-sj-ui text-sm font-bold">
             <Link href="/" className="inline-flex min-h-11 items-center text-[var(--sj-ink)] no-underline">Kitchen</Link>
             <span className="text-[var(--sj-ink-soft)]">
@@ -177,168 +236,186 @@ export default function ShoppingList() {
           <Text className="mt-3">
             {checkedCount > 0 ? `${checkedCount} checked, ${uncheckedCount} remaining` : "Grouped for the aisle, built for one thumb."}
           </Text>
-          <div className="mt-5 flex gap-2 overflow-x-auto pb-1">
-            {categoryOptions.map((category) => (
-              <button
-                key={category}
-                type="button"
-                onClick={() => setActiveCategory(category)}
-                className={[
-                  "font-sj-ui min-h-11 shrink-0 rounded-[var(--sj-radius-control)] border px-4 py-2 text-sm font-bold capitalize",
-                  activeCategory === category
-                    ? "border-[var(--sj-ink)] bg-[var(--sj-ink)] text-[var(--sj-paper)]"
-                    : "border-[var(--sj-border)] text-[var(--sj-ink)]",
-                ].join(" ")}
-              >
-                {category}
-              </button>
-            ))}
-          </div>
-          <div className="mt-5 flex flex-wrap gap-2">
-            {/* istanbul ignore next -- @preserve */ checkedCount > 0 && (
-              <Form method="post">
-                <input type="hidden" name="intent" value="clearCompleted" />
-                <Button type="submit" plain>
-                  Clear checked
-                </Button>
-              </Form>
-            )}
-            {/* istanbul ignore next -- @preserve */ displayItems.length > 0 && (
-              <>
-                <Button
-                  variant="destructive"
-                  onClick={() => setShowClearDialog(true)}
-                >
-                  Clear all
-                </Button>
-                <ConfirmationDialog
-                  open={showClearDialog}
-                  onClose={() => setShowClearDialog(false)}
-                  onConfirm={handleClearAllConfirm}
-                  title="Start fresh?"
-                  description="All items will be cleared from your shopping list."
-                  confirmLabel="Clear all"
-                  cancelLabel="Keep list"
-                  destructive
-                />
-              </>
-            )}
-          </div>
         </header>
+      </div>
 
-      {/* Empty State */}
-      {displayItems.length === 0 ? (
-        <RuledEmptyState title="Your shopping list is empty">
-          <Text className="mt-2">
-            Add items manually or add all ingredients from a recipe
-          </Text>
-        </RuledEmptyState>
-      ) : (
-        /* Item List */
-        <LayoutGroup id="shopping-list-items">
-          <div className="sj-list-ruled mt-6">
-            <AnimatePresence initial={false}>
-              {filteredItems.map((item, index) => {
-                const affordance = resolveIngredientAffordance(
-                  item.ingredientRef.name,
-                  item.categoryKey,
-                  null
-                );
-                const prev = index > 0 ? resolveIngredientAffordance(
-                  filteredItems[index - 1].ingredientRef.name,
-                  filteredItems[index - 1].categoryKey,
-                  null
-                ) : null;
-                const showCategoryHeader = !prev || prev.categoryLabel !== affordance.categoryLabel;
+      <div className="mx-auto lg:max-w-[40rem]" data-testid="shopping-list-checklist-board">
+        <div className="grid grid-cols-3 border-y border-[var(--sj-border)] font-sj-ui text-xs font-bold uppercase tracking-[0.14em] text-[var(--sj-ink-soft)]">
+          {viewOptions.map((option) => (
+            <button
+              key={option.mode}
+              type="button"
+              onClick={() => setViewMode(option.mode)}
+              className={[
+                "min-h-11 px-3 transition first:text-left last:text-right",
+                viewMode === option.mode
+                  ? "bg-[var(--sj-ink)] text-[var(--sj-paper)]"
+                  : "bg-transparent hover:text-[var(--sj-ink)]",
+              ].join(" ")}
+              aria-pressed={viewMode === option.mode}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        <div className="mt-5 flex gap-2 overflow-x-auto pb-1">
+          {categoryOptions.map((category) => (
+            <button
+              key={category}
+              type="button"
+              onClick={() => setActiveCategory(category)}
+              className={[
+                "font-sj-ui min-h-11 shrink-0 rounded-[var(--sj-radius-control)] border px-4 py-2 text-sm font-bold capitalize",
+                activeCategory === category
+                  ? "border-[var(--sj-ink)] bg-[var(--sj-ink)] text-[var(--sj-paper)]"
+                  : "border-[var(--sj-border)] text-[var(--sj-ink)]",
+              ].join(" ")}
+            >
+              {category}
+            </button>
+          ))}
+        </div>
+        <div className="mt-5 flex flex-wrap gap-2">
+          {/* istanbul ignore next -- @preserve */ checkedCount > 0 && (
+            <Form method="post">
+              <input type="hidden" name="intent" value="clearCompleted" />
+              <Button type="submit" plain>
+                Clear checked
+              </Button>
+            </Form>
+          )}
+          {/* istanbul ignore next -- @preserve */ displayItems.length > 0 && (
+            <>
+              <Button
+                variant="destructive"
+                onClick={() => setShowClearDialog(true)}
+              >
+                Clear all
+              </Button>
+              <ConfirmationDialog
+                open={showClearDialog}
+                onClose={() => setShowClearDialog(false)}
+                onConfirm={handleClearAllConfirm}
+                title="Start fresh?"
+                description="All items will be cleared from your shopping list."
+                confirmLabel="Clear all"
+                cancelLabel="Keep list"
+                destructive
+              />
+            </>
+          )}
+        </div>
 
-                return (
-                  <motion.div
-                    key={item.id}
-                    layout="position"
-                    initial={{ opacity: 0, y: -6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 6 }}
-                    transition={{
-                      layout: { type: "spring", stiffness: 360, damping: 34, mass: 0.75 },
-                      opacity: { duration: 0.16 },
-                      y: { type: "spring", stiffness: 460, damping: 38, mass: 0.55 },
-                    }}
-                    className="space-y-1"
-                    data-testid="shopping-list-motion-item"
-                  >
-                    {showCategoryHeader && (
-                      <div className="font-sj-ui pt-5 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-brass)]" data-testid="shopping-list-category">
-                        {affordance.categoryLabel}
-                      </div>
-                    )}
-                    <div className="relative overflow-hidden">
-                      {revealedItemId === item.id && (
-                        <div className="pointer-events-auto absolute inset-y-0 right-0 w-28 bg-[var(--sj-tomato)] text-[var(--sj-paper)]">
-                          <button
-                            type="button"
-                            onClick={() => removeItem(item.id)}
-                            className="font-sj-ui flex h-full w-full items-center justify-center text-xs font-semibold uppercase tracking-wide"
-                            aria-label={`Delete ${item.ingredientRef.name}`}
-                          >
-                            Delete
-                          </button>
+        {/* Empty State */}
+        {displayItems.length === 0 ? (
+          <RuledEmptyState title="Your shopping list is empty">
+            <Text className="mt-2">
+              Add items manually or add all ingredients from a recipe
+            </Text>
+          </RuledEmptyState>
+        ) : filteredItems.length === 0 ? (
+          <RuledEmptyState title={viewMode === "basket" ? "Nothing in the basket yet" : "Nothing left in this view"}>
+            <Text className="mt-2">
+              Switch views or categories to see the rest of the market run.
+            </Text>
+          </RuledEmptyState>
+        ) : (
+          /* Item List */
+          <LayoutGroup id="shopping-list-items">
+            <div className="sj-list-ruled mt-6">
+              <AnimatePresence initial={false}>
+                {filteredItems.map((item, index) => {
+                  const previousItem = index > 0 ? filteredItems[index - 1] : null;
+                  const sectionLabel = getShoppingSectionLabel(item, previousItem, viewMode);
+
+                  return (
+                    <motion.div
+                      key={item.id}
+                      layout="position"
+                      initial={{ opacity: 0, y: -6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 6 }}
+                      transition={{
+                        layout: { type: "spring", stiffness: 360, damping: 34, mass: 0.75 },
+                        opacity: { duration: 0.16 },
+                        y: { type: "spring", stiffness: 460, damping: 38, mass: 0.55 },
+                      }}
+                      className="space-y-1"
+                      data-testid="shopping-list-motion-item"
+                    >
+                      {sectionLabel && (
+                        <div className="font-sj-ui pt-5 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-brass)]" data-testid="shopping-list-category">
+                          {sectionLabel}
                         </div>
                       )}
-                      <motion.div
-                        drag="x"
-                        animate={{
-                          x: revealedItemId === item.id ? -SWIPE_REVEAL_OFFSET : 0,
-                        }}
-                        dragConstraints={{ left: -168, right: 0 }}
-                        dragElastic={0}
-                        dragMomentum={false}
-                        dragDirectionLock
-                        onDragEnd={(_, info) => {
-                          const action = resolveSwipeAction(info.offset.x, revealedItemId === item.id);
-
-                          if (action === "confirmDelete") {
-                            removeItem(item.id);
-                            return;
-                          }
-
-                          if (action === "reveal") {
-                            setRevealedItemId(item.id);
-                            return;
-                          }
-
-                          if (action === "dismiss") {
-                            setRevealedItemId(null);
-                          }
-                        }}
-                        transition={{ type: "spring", stiffness: 520, damping: 42, mass: 0.5 }}
-                        className="relative z-10 bg-[var(--sj-page)]"
-                      >
-                        <ChecklistRow
-                          checked={item.checked}
-                          name={item.ingredientRef.name}
-                          quantity={amountLabel(item)}
-                          note={item.checked ? "already in basket" : null}
-                          onToggle={() => toggleItem(item)}
-                          action={(
+                      <div className="relative overflow-hidden">
+                        {revealedItemId === item.id && (
+                          <div className="pointer-events-auto absolute inset-y-0 right-0 w-28 bg-[var(--sj-tomato)] text-[var(--sj-paper)]">
                             <button
                               type="button"
                               onClick={() => removeItem(item.id)}
-                              className="sr-only"
-                              aria-label={`Remove ${item.ingredientRef.name}`}
+                              className="font-sj-ui flex h-full w-full items-center justify-center text-xs font-semibold uppercase tracking-wide"
+                              aria-label={`Delete ${item.ingredientRef.name}`}
                             >
-                              Remove
+                              Delete
                             </button>
-                          )}
-                        />
-                      </motion.div>
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </AnimatePresence>
-          </div>
-        </LayoutGroup>
-      )}
+                          </div>
+                        )}
+                        <motion.div
+                          drag="x"
+                          animate={{
+                            x: revealedItemId === item.id ? -SWIPE_REVEAL_OFFSET : 0,
+                          }}
+                          dragConstraints={{ left: -168, right: 0 }}
+                          dragElastic={0}
+                          dragMomentum={false}
+                          dragDirectionLock
+                          onDragEnd={(_, info) => {
+                            const action = resolveSwipeAction(info.offset.x, revealedItemId === item.id);
+
+                            if (action === "confirmDelete") {
+                              removeItem(item.id);
+                              return;
+                            }
+
+                            if (action === "reveal") {
+                              setRevealedItemId(item.id);
+                              return;
+                            }
+
+                            if (action === "dismiss") {
+                              setRevealedItemId(null);
+                            }
+                          }}
+                          transition={{ type: "spring", stiffness: 520, damping: 42, mass: 0.5 }}
+                          className="relative z-10 bg-[var(--sj-page)]"
+                        >
+                          <ChecklistRow
+                            checked={item.checked}
+                            name={item.ingredientRef.name}
+                            quantity={amountLabel(item)}
+                            note={item.checked ? "already in basket" : null}
+                            onToggle={() => toggleItem(item)}
+                            action={(
+                              <button
+                                type="button"
+                                onClick={() => removeItem(item.id)}
+                                className="sr-only"
+                                aria-label={`Remove ${item.ingredientRef.name}`}
+                              >
+                                Remove
+                              </button>
+                            )}
+                          />
+                        </motion.div>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </AnimatePresence>
+            </div>
+          </LayoutGroup>
+        )}
 
       {/* Add Item Form */}
       <div id="add-item" className="border-b border-[var(--sj-border)] py-6">
@@ -407,18 +484,33 @@ export default function ShoppingList() {
       {/* istanbul ignore next -- @preserve */ recipes.length > 0 && (
         <div className="border-b border-[var(--sj-border)] py-6">
           <CookbookSectionTitle>Add from recipe</CookbookSectionTitle>
-          <Form method="post" className="mt-4 flex flex-col sm:flex-row gap-4">
+          <Form method="post" className="mt-4 grid gap-4 sm:grid-cols-[minmax(0,1fr)_7rem_auto] sm:items-end">
             <input type="hidden" name="intent" value="addFromRecipe" />
-            <Select name="recipeId" required className="flex-1">
-              <option value="">Select a recipe...</option>
-              {recipes.map((recipe) => (
-                <option key={recipe.id} value={recipe.id}>
-                  {recipe.title}
-                </option>
-              ))}
-            </Select>
+            <Field>
+              <Label htmlFor="shopping-recipe-id">Recipe</Label>
+              <Select id="shopping-recipe-id" name="recipeId" required>
+                <option value="">Select a recipe...</option>
+                {recipes.map((recipe) => (
+                  <option key={recipe.id} value={recipe.id}>
+                    {recipe.title}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field>
+              <Label htmlFor="shopping-recipe-scale">Scale</Label>
+              <Input
+                id="shopping-recipe-scale"
+                type="number"
+                name="scaleFactor"
+                min="0.25"
+                step="0.25"
+                defaultValue="1"
+                inputMode="decimal"
+              />
+            </Field>
             <Button type="submit">
-              Add Ingredients
+              Add ingredients
             </Button>
           </Form>
         </div>

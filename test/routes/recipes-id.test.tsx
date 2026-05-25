@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
@@ -1232,6 +1232,178 @@ describe("Recipes $id Route", () => {
       expect(submittedScaleFactor).toBe("1.25");
     });
 
+    it("enters a focused cook mode with one active step and shared checklist progress", async () => {
+      const mockData = {
+        recipe: {
+          id: "recipe-1",
+          title: "Cookable Recipe",
+          description: null,
+          servings: "2 servings",
+          coverImageUrl: null,
+          chef: { id: "user-1", username: "testchef" },
+          steps: [
+            {
+              id: "step-1",
+              stepNum: 1,
+              stepTitle: "Prep",
+              description: "Chop everything before the pan is hot.",
+              ingredients: [
+                {
+                  id: "ing-1",
+                  quantity: 1,
+                  unit: { name: "cup" },
+                  ingredientRef: { name: "tomatoes" },
+                },
+              ],
+              usingSteps: [],
+            },
+            {
+              id: "step-2",
+              stepNum: 2,
+              stepTitle: "Cook",
+              description: "Simmer until glossy.",
+              ingredients: [
+                {
+                  id: "ing-2",
+                  quantity: 2,
+                  unit: { name: "tbsp" },
+                  ingredientRef: { name: "olive oil" },
+                },
+              ],
+              usingSteps: [],
+            },
+          ],
+        },
+        isOwner: true,
+        cookbooks: [],
+        savedInCookbookIds: [],
+      };
+
+      const Stub = createTestRoutesStub([
+        {
+          path: "/recipes/:id",
+          Component: RecipeDetail,
+          loader: () => mockData,
+        },
+      ]);
+
+      const user = userEvent.setup();
+      render(<Stub initialEntries={["/recipes/recipe-1"]} />);
+      await screen.findByRole("heading", { name: "Cookable Recipe" });
+
+      expect(screen.queryByTestId("cook-mode-panel")).not.toBeInTheDocument();
+      await user.click(screen.getByTestId("recipe-header-cook-action"));
+
+      const cookMode = await screen.findByTestId("cook-mode-panel");
+      expect(window.location.hash).toBe("#cook");
+      expect(within(cookMode).getByText("Step 1 of 2")).toBeInTheDocument();
+      expect(within(cookMode).getByRole("heading", { name: "Prep" })).toBeInTheDocument();
+      expect(within(cookMode).getByText("Chop everything before the pan is hot.")).toBeInTheDocument();
+
+      await user.click(within(cookMode).getByRole("checkbox", { name: "tomatoes" }));
+      expect(within(cookMode).getByText("1 of 2 checked")).toBeInTheDocument();
+
+      await user.click(within(cookMode).getByRole("button", { name: "Next step" }));
+      expect(within(cookMode).getByText("Step 2 of 2")).toBeInTheDocument();
+      expect(within(cookMode).getByRole("heading", { name: "Cook" })).toBeInTheDocument();
+
+      await user.click(within(cookMode).getByRole("button", { name: "Previous step" }));
+      expect(within(cookMode).getByRole("heading", { name: "Prep" })).toBeInTheDocument();
+
+      await user.click(within(cookMode).getByRole("button", { name: "Exit cook mode" }));
+      expect(screen.queryByTestId("cook-mode-panel")).not.toBeInTheDocument();
+      expect(window.location.hash).toBe("");
+    });
+
+    it("opens focused cook mode from a cook hash and leaves it on browser back", async () => {
+      const mockData = {
+        recipe: {
+          id: "recipe-1",
+          title: "Deep Link Cook Recipe",
+          description: null,
+          servings: null,
+          coverImageUrl: null,
+          chef: { id: "user-1", username: "testchef" },
+          steps: [
+            {
+              id: "step-1",
+              stepNum: 1,
+              stepTitle: "Warm the pan",
+              description: "Start over medium heat.",
+              ingredients: [],
+              usingSteps: [],
+            },
+          ],
+        },
+        isOwner: true,
+        cookbooks: [],
+        savedInCookbookIds: [],
+      };
+
+      const Stub = createTestRoutesStub([
+        {
+          path: "/recipes/:id",
+          Component: RecipeDetail,
+          loader: () => mockData,
+        },
+      ]);
+
+      window.history.replaceState(null, "", "/recipes/recipe-1#cook");
+      render(<Stub initialEntries={["/recipes/recipe-1#cook"]} />);
+
+      expect(await screen.findByTestId("cook-mode-panel")).toBeInTheDocument();
+      expect(window.location.hash).toBe("#cook");
+
+      window.history.replaceState(null, "", "/recipes/recipe-1");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+
+      await waitFor(() => {
+        expect(screen.queryByTestId("cook-mode-panel")).not.toBeInTheDocument();
+      });
+    });
+
+    it("lets the registered dock cook action enter focused cook mode", async () => {
+      const mockData = {
+        recipe: {
+          id: "recipe-1",
+          title: "Dock Cook Recipe",
+          description: null,
+          servings: null,
+          coverImageUrl: null,
+          chef: { id: "user-1", username: "testchef" },
+          steps: [
+            {
+              id: "step-1",
+              stepNum: 1,
+              stepTitle: null,
+              description: "Begin cooking.",
+              ingredients: [],
+            },
+          ],
+        },
+        isOwner: true,
+        cookbooks: [],
+        savedInCookbookIds: [],
+      };
+
+      const Stub = createTestRoutesStub([
+        {
+          path: "/recipes/:id",
+          Component: RecipeDetail,
+          loader: () => mockData,
+        },
+      ]);
+
+      render(<Stub initialEntries={["/recipes/recipe-1"]} />);
+      await screen.findByRole("heading", { name: "Dock Cook Recipe" });
+
+      const dockActionRegistration = vi.mocked(useRecipeDetailActions).mock.calls.at(-1)?.[0];
+      dockActionRegistration?.onCook?.();
+
+      expect(await screen.findByTestId("cook-mode-panel")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Step 1" })).toBeInTheDocument();
+    });
+
     it("should render recipe with no steps (empty state) as owner", async () => {
       const mockData = {
         recipe: {
@@ -1268,7 +1440,7 @@ describe("Recipes $id Route", () => {
       expect(screen.getByTestId("recipe-masthead")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Recipes" })).toHaveAttribute("href", "/recipes");
       expect(screen.getByTestId("recipe-header-actions")).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: "Cook mode" })).toHaveAttribute("href", "/recipes/recipe-1#steps");
+      expect(screen.getByRole("link", { name: "Cook mode" })).toHaveAttribute("href", "/recipes/recipe-1#cook");
       expect(screen.getByRole("button", { name: "Add to list" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Log cook" })).toBeInTheDocument();
 
@@ -1281,7 +1453,7 @@ describe("Recipes $id Route", () => {
       try {
         await userEvent.click(screen.getByRole("link", { name: "Cook mode" }));
 
-        expect(window.location.hash).toBe("#steps");
+        expect(window.location.hash).toBe("#cook");
         expect(scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
       } finally {
         if (originalScrollIntoView) {

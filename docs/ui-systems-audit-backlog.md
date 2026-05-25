@@ -2,7 +2,10 @@
 
 Date: 2026-05-24
 
-There are no open UI audit findings after the current pass.
+Current pass focus:
+
+- Shopping list should behave like a narrow, one-thumb market checklist on desktop and mobile. Header/prose may keep a wider editorial measure; list rows, category filters, and list tools should stay visually connected.
+- Cook mode should become a real focused cooking surface, not just a jump link to all steps.
 
 ## Closed In This Pass
 
@@ -18,6 +21,16 @@ There are no open UI audit findings after the current pass.
 - UIA-011: Duplicate and ornamental horizontal rules across mastheads, forms, shopping list, and ruled lists: fixed.
 - UIA-012: Cookbook detail mixed printed contents with inline admin/table controls: fixed.
 - UIA-013: Recipe detail ingredient checklists were too wide on desktop while prose needed to remain wider: fixed.
+- UIA-014: Shopping-list checklist measure and usefulness: fixed.
+- UIA-015: Recipe cook mode first-class focused flow: fixed.
+
+## Product Backlog Seeded
+
+- CM-002: Persist cook-mode progress across reloads, screen locks, and PWA relaunches: queued.
+- CM-003: Add step timers/rest cues where recipe data supports them: queued.
+- CM-004: Consider a larger hands-free cook-mode text setting after real kitchen use: queued.
+- SL-002: Add recipe/source grouping for shopping-list items once users have multiple active meal plans: queued.
+- SL-003: Add smarter duplicate review for near-matches such as cherry tomato/tomato before merging quantities: queued.
 
 ## Accepted Exceptions
 

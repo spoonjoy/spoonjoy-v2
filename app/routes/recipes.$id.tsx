@@ -22,7 +22,7 @@ import { ForkRecipeButton } from "~/components/recipe/ForkRecipeButton";
 import { SpoonDialog } from "~/components/recipe/SpoonDialog";
 import { SpoonsStrip } from "~/components/recipe/SpoonsStrip";
 import { StepCard } from "~/components/recipe/StepCard";
-import type { Ingredient } from "~/components/recipe/IngredientList";
+import { IngredientList, type Ingredient } from "~/components/recipe/IngredientList";
 import type { StepReference } from "~/components/recipe/StepOutputUseCallout";
 import { shareContent, useRecipeDetailActions } from "~/components/navigation";
 import { resolveIngredientAffordance } from "~/lib/ingredient-affordances";
@@ -66,6 +66,10 @@ export function findRecipeStepsScrollTarget(doc: Document): HTMLElement | null {
   }) ?? candidates[0] ?? null;
 }
 
+export function findCookModeScrollTarget(doc: Document): HTMLElement | null {
+  return doc.getElementById("cook-mode") ?? findRecipeStepsScrollTarget(doc);
+}
+
 export function applyCreatedCookbookState(
   currentCookbooks: CookbookListItem[],
   currentSavedCookbookIds: Set<string>,
@@ -106,6 +110,8 @@ export default function RecipeDetail() {
 
   // Track which step outputs have been checked off
   const [checkedStepOutputs, setCheckedStepOutputs] = useState<Set<string>>(new Set());
+  const [isCookMode, setIsCookMode] = useState(false);
+  const [activeCookStepIndex, setActiveCookStepIndex] = useState(0);
 
   const [availableCookbooks, setAvailableCookbooks] = useState(() => cookbooks);
 
@@ -120,7 +126,11 @@ export default function RecipeDetail() {
   const lastHandledCreatedCookbookId = useRef<string | null>(null);
   const addToListSubmissionCount = useRef(0);
   const lastHandledAddToListSubmissionCount = useRef(0);
+  const pendingCookModeScroll = useRef(false);
   const ingredientCount = recipe.steps.reduce((count, step) => count + step.ingredients.length, 0);
+  const stepOutputUseCount = recipe.steps.reduce((count, step) => count + (step.usingSteps?.length ?? 0), 0);
+  const cookProgressTotal = ingredientCount + stepOutputUseCount;
+  const cookProgressChecked = checkedIngredients.size + checkedStepOutputs.size;
 
   // PostHog: Track recipe view on mount
   useEffect(() => {
@@ -209,6 +219,52 @@ export default function RecipeDetail() {
     setCheckedStepOutputs(new Set());
   };
 
+  useEffect(() => {
+    setActiveCookStepIndex((current) => {
+      if (recipe.steps.length === 0) {
+        return 0;
+      }
+
+      return Math.min(current, recipe.steps.length - 1);
+    });
+  }, [recipe.steps.length]);
+
+  const scrollCookModeIntoView = useCallback(() => {
+    window.setTimeout(() => {
+      const target = findCookModeScrollTarget(document);
+      target?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+    }, 0);
+  }, []);
+
+  useEffect(() => {
+    const syncCookModeHash = () => {
+      const shouldShowCookMode = window.location.hash === "#cook" && recipe.steps.length > 0;
+      setIsCookMode(shouldShowCookMode);
+
+      if (shouldShowCookMode) {
+        pendingCookModeScroll.current = true;
+      }
+    };
+
+    syncCookModeHash();
+    window.addEventListener("hashchange", syncCookModeHash);
+    window.addEventListener("popstate", syncCookModeHash);
+
+    return () => {
+      window.removeEventListener("hashchange", syncCookModeHash);
+      window.removeEventListener("popstate", syncCookModeHash);
+    };
+  }, [recipe.steps.length]);
+
+  useEffect(() => {
+    if (!isCookMode || !pendingCookModeScroll.current) {
+      return;
+    }
+
+    pendingCookModeScroll.current = false;
+    scrollCookModeIntoView();
+  }, [isCookMode, scrollCookModeIntoView]);
+
   const handleShare = useCallback(async () => {
     /* istanbul ignore next -- @preserve browser share API */
     const result = await shareContent({
@@ -255,15 +311,22 @@ export default function RecipeDetail() {
     }
   }, [addToListFetcher, recipe.id, scaleFactor, posthog]);
 
+  const enterCookMode = useCallback(() => {
+    pendingCookModeScroll.current = true;
+    setIsCookMode(true);
+    const nextUrl = `${window.location.pathname}${window.location.search}#cook`;
+    window.history.pushState(null, "", nextUrl);
+  }, []);
+
   const handleEnterCookMode = useCallback((event: MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault();
-    const stepsTarget = findRecipeStepsScrollTarget(document);
-    window.history.replaceState(
-      null,
-      "",
-      `${window.location.pathname}${window.location.search}#steps`
-    );
-    stepsTarget?.scrollIntoView({ behavior: "smooth", block: "start" });
+    enterCookMode();
+  }, [enterCookMode]);
+
+  const handleExitCookMode = useCallback(() => {
+    pendingCookModeScroll.current = false;
+    setIsCookMode(false);
+    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
   }, []);
 
   const addToListLabel = addToListFetcher.state !== "idle"
@@ -292,7 +355,7 @@ export default function RecipeDetail() {
         data-testid="recipe-header-actions"
       >
         <Link
-          href="#steps"
+          href="#cook"
           onClick={handleEnterCookMode}
           className={`${recipeMastheadActionClass} ${recipeMastheadPrimaryActionClass}`}
           data-testid="recipe-header-cook-action"
@@ -367,6 +430,7 @@ export default function RecipeDetail() {
     onSave: handleOpenSaveModal,
     onAddToList: handleAddToList,
     onShare: handleShare,
+    onCook: enterCookMode,
   });
 
   useEffect(() => {
@@ -541,6 +605,26 @@ export default function RecipeDetail() {
         isOriginCookCandidate={isOriginCookCandidate}
       />
 
+      {isCookMode && recipe.steps.length > 0 && (
+        <CookModePanel
+          step={recipe.steps[activeCookStepIndex]}
+          stepCount={recipe.steps.length}
+          activeStepIndex={activeCookStepIndex}
+          progressChecked={cookProgressChecked}
+          progressTotal={cookProgressTotal}
+          ingredients={transformIngredients(recipe.steps[activeCookStepIndex].ingredients)}
+          stepOutputUses={transformStepOutputUses(recipe.steps[activeCookStepIndex].usingSteps ?? [])}
+          scaleFactor={scaleFactor}
+          checkedIngredientIds={checkedIngredients}
+          checkedStepOutputIds={checkedStepOutputs}
+          onIngredientToggle={handleIngredientToggle}
+          onStepOutputToggle={handleStepOutputToggle}
+          onPrevious={() => setActiveCookStepIndex((current) => Math.max(0, current - 1))}
+          onNext={() => setActiveCookStepIndex((current) => Math.min(recipe.steps.length - 1, current + 1))}
+          onExit={handleExitCookMode}
+        />
+      )}
+
       {/* Save to Cookbook Modal (Bottom Sheet) */}
       <Dialog
         open={isSaveModalOpen}
@@ -700,5 +784,129 @@ export default function RecipeDetail() {
         </div>
       </div>
     </div>
+  );
+}
+
+type CookModeStep = {
+  stepNum: number;
+  stepTitle: string | null;
+  description: string;
+};
+
+function CookModePanel({
+  step,
+  stepCount,
+  activeStepIndex,
+  progressChecked,
+  progressTotal,
+  ingredients,
+  stepOutputUses,
+  scaleFactor,
+  checkedIngredientIds,
+  checkedStepOutputIds,
+  onIngredientToggle,
+  onStepOutputToggle,
+  onPrevious,
+  onNext,
+  onExit,
+}: {
+  step: CookModeStep;
+  stepCount: number;
+  activeStepIndex: number;
+  progressChecked: number;
+  progressTotal: number;
+  ingredients: Ingredient[];
+  stepOutputUses: StepReference[];
+  scaleFactor: number;
+  checkedIngredientIds: Set<string>;
+  checkedStepOutputIds: Set<string>;
+  onIngredientToggle: (id: string) => void;
+  onStepOutputToggle: (id: string) => void;
+  onPrevious: () => void;
+  onNext: () => void;
+  onExit: () => void;
+}) {
+  const stepTitle = step.stepTitle ?? `Step ${step.stepNum}`;
+  const progressLabel = progressTotal > 0
+    ? `${progressChecked} of ${progressTotal} checked`
+    : "No checklist items";
+
+  return (
+    <section
+      id="cook-mode"
+      data-testid="cook-mode-panel"
+      className="scroll-mt-16 border-b border-[var(--sj-border-strong)] bg-[color-mix(in_srgb,var(--sj-flour)_58%,var(--sj-page))]"
+      aria-labelledby="cook-mode-heading"
+    >
+      <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--sj-border)] pb-5">
+          <div>
+            <p className="sj-eyebrow">Now cooking</p>
+            <p className="font-sj-ui mt-2 text-sm font-semibold text-[var(--sj-ink-soft)]">
+              Step {activeStepIndex + 1} of {stepCount}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onExit}
+            className={recipeMastheadActionClass}
+          >
+            Exit cook mode
+          </button>
+        </div>
+
+        <div className="pt-8">
+          <Heading
+            id="cook-mode-heading"
+            level={2}
+            className="font-sj-display text-4xl/10 font-semibold tracking-normal text-[var(--sj-ink)] sm:text-5xl/12"
+          >
+            {stepTitle}
+          </Heading>
+          <Text className="mt-3 font-sj-ui text-xs uppercase tracking-[0.18em]">
+            {progressLabel}
+          </Text>
+
+          {(ingredients.length > 0 || stepOutputUses.length > 0) && (
+            <div className="mt-8 lg:max-w-[40rem]">
+              <div className="font-sj-ui mb-4 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)]">
+                On this step
+              </div>
+              <IngredientList
+                ingredients={ingredients}
+                stepOutputUses={stepOutputUses}
+                scaleFactor={scaleFactor}
+                checkedIds={checkedIngredientIds}
+                checkedStepOutputIds={checkedStepOutputIds}
+                onToggle={onIngredientToggle}
+                onStepOutputToggle={onStepOutputToggle}
+              />
+            </div>
+          )}
+
+          <Text className="mt-8 max-w-3xl whitespace-pre-wrap text-lg leading-loose text-[var(--sj-ink)]">
+            {step.description}
+          </Text>
+
+          <div className="mt-8 grid grid-cols-2 gap-3 border-t border-[var(--sj-border)] pt-5 sm:flex sm:items-center sm:justify-between">
+            <Button
+              type="button"
+              plain
+              disabled={activeStepIndex === 0}
+              onClick={onPrevious}
+            >
+              Previous step
+            </Button>
+            <Button
+              type="button"
+              disabled={activeStepIndex >= stepCount - 1}
+              onClick={onNext}
+            >
+              Next step
+            </Button>
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }

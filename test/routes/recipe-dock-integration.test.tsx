@@ -19,8 +19,9 @@ describe('Recipe Page Dock Integration', () => {
     const onAddToList = vi.fn()
     const onSave = vi.fn()
     const onShare = vi.fn()
+    const onCook = vi.fn()
 
-    function P() { useRecipeDetailActions({ recipeId: 'recipe-1', chefId: 'chef-1', isOwner: true, onSave, onAddToList, onShare }); return null }
+    function P() { useRecipeDetailActions({ recipeId: 'recipe-1', chefId: 'chef-1', isOwner: true, onSave, onAddToList, onShare, onCook }); return null }
     render(<MemoryRouter><DockContextProvider><ContextDisplay /><P /></DockContextProvider></MemoryRouter>)
 
     expect(screen.getByTestId('action-ids')).toHaveTextContent('recipe-back,cook,add-to-list,edit')
@@ -28,12 +29,15 @@ describe('Recipe Page Dock Integration', () => {
     expect(capturedActions?.find(a => a.id === 'edit')?.onAction).toBe('/recipes/recipe-1/edit')
 
     const addToListAction = capturedActions?.find(a => a.id === 'add-to-list')?.onAction
+    const cookAction = capturedActions?.find(a => a.id === 'cook')?.onAction
 
     if (typeof addToListAction === 'function') addToListAction()
+    if (typeof cookAction === 'function') cookAction()
 
     expect(onSave).not.toHaveBeenCalled()
     expect(onAddToList).toHaveBeenCalled()
     expect(onShare).not.toHaveBeenCalled()
+    expect(onCook).toHaveBeenCalled()
   })
 
   it('detail actions for non-owner: back/cook/list/save', () => {

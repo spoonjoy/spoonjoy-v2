@@ -49,6 +49,8 @@ vi.mock("framer-motion", () => {
 });
 
 import ShoppingList, {
+  getShoppingSectionLabel,
+  orderShoppingItemsForMarket,
   resolveSwipeAction,
   shouldDeleteOnSwipe,
 } from "~/routes/shopping-list";
@@ -77,6 +79,50 @@ describe("shopping list UX updates", () => {
     recipes: [],
   };
 
+  it("orders the market list by aisle while keeping checked items at the bottom", () => {
+    const ordered = orderShoppingItemsForMarket([
+      { id: "checked-produce", checked: true, categoryLabel: "Produce" },
+      { id: "pantry", checked: false, categoryLabel: "Pantry" },
+      { id: "mystery", checked: false, categoryLabel: "Mystery" },
+      { id: "produce", checked: false, categoryLabel: "Produce" },
+    ]);
+
+    expect(ordered.map((item) => item.id)).toEqual([
+      "produce",
+      "pantry",
+      "mystery",
+      "checked-produce",
+    ]);
+  });
+
+  it("labels checked items as one basket section in all view", () => {
+    expect(getShoppingSectionLabel(
+      { checked: false, categoryLabel: "Produce" },
+      null,
+      "need"
+    )).toBe("Produce");
+    expect(getShoppingSectionLabel(
+      { checked: false, categoryLabel: "Produce" },
+      { checked: false, categoryLabel: "Produce" },
+      "need"
+    )).toBeNull();
+    expect(getShoppingSectionLabel(
+      { checked: true, categoryLabel: "Produce" },
+      { checked: false, categoryLabel: "Other" },
+      "all"
+    )).toBe("In basket");
+    expect(getShoppingSectionLabel(
+      { checked: true, categoryLabel: "Dairy" },
+      { checked: true, categoryLabel: "Produce" },
+      "all"
+    )).toBeNull();
+    expect(getShoppingSectionLabel(
+      { checked: true, categoryLabel: "Produce" },
+      null,
+      "basket"
+    )).toBe("Produce");
+  });
+
   it("removes inline remove buttons and per-item category chips", async () => {
     const Stub = createTestRoutesStub([
       {
@@ -92,6 +138,223 @@ describe("shopping list UX updates", () => {
     expect(await screen.findByText("chicken thigh")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Remove" })).not.toBeInTheDocument();
     expect(screen.getAllByTestId("shopping-list-category")).toHaveLength(1);
+  });
+
+  it("keeps the market checklist narrower than the shopping-list header on desktop", async () => {
+    const Stub = createTestRoutesStub([
+      {
+        path: "/shopping-list",
+        Component: ShoppingList,
+        loader: () => singleItemData,
+        action: async () => ({ success: true }),
+      },
+    ]);
+
+    render(<Stub initialEntries={["/shopping-list"]} />);
+
+    expect(await screen.findByText("chicken thigh")).toBeInTheDocument();
+    expect(screen.getByTestId("shopping-list-page-header")).not.toHaveClass("lg:max-w-[40rem]");
+    expect(screen.getByTestId("shopping-list-checklist-board")).toHaveClass("lg:max-w-[40rem]");
+  });
+
+  it("filters the list by needed, basket, and all item views", async () => {
+    const Stub = createTestRoutesStub([
+      {
+        path: "/shopping-list",
+        Component: ShoppingList,
+        loader: () => ({
+          shoppingList: {
+            id: "list-filter",
+            items: [
+              {
+                id: "item-need",
+                quantity: 1,
+                checked: false,
+                unit: null,
+                ingredientRef: { name: "lemons" },
+                categoryKey: "produce",
+                iconKey: "lemon",
+              },
+              {
+                id: "item-basket",
+                quantity: 2,
+                checked: true,
+                checkedAt: "2026-05-24T18:00:00.000Z",
+                unit: null,
+                ingredientRef: { name: "limes" },
+                categoryKey: "produce",
+                iconKey: "lime",
+              },
+            ],
+          },
+          recipes: [],
+        }),
+        action: async () => ({ success: true }),
+      },
+    ]);
+
+    render(<Stub initialEntries={["/shopping-list"]} />);
+
+    expect(await screen.findByText("lemons")).toBeInTheDocument();
+    expect(screen.getByText("limes")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Need 1/i }));
+    expect(screen.getByText("lemons")).toBeInTheDocument();
+    expect(screen.queryByText("limes")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Basket 1/i }));
+    expect(screen.queryByText("lemons")).not.toBeInTheDocument();
+    expect(screen.getByText("limes")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /All 2/i }));
+    expect(screen.getByText("lemons")).toBeInTheDocument();
+    expect(screen.getByText("limes")).toBeInTheDocument();
+  });
+
+  it("shows checked items under one in-basket section in all view", async () => {
+    const Stub = createTestRoutesStub([
+      {
+        path: "/shopping-list",
+        Component: ShoppingList,
+        loader: () => ({
+          shoppingList: {
+            id: "list-all-basket",
+            items: [
+              {
+                id: "item-need",
+                quantity: 1,
+                checked: false,
+                unit: null,
+                ingredientRef: { name: "tomatoes" },
+                categoryKey: "produce",
+                iconKey: "carrot",
+              },
+              {
+                id: "item-basket-a",
+                quantity: 1,
+                checked: true,
+                checkedAt: "2026-05-24T18:00:00.000Z",
+                unit: null,
+                ingredientRef: { name: "limes" },
+                categoryKey: "produce",
+                iconKey: "citrus",
+              },
+              {
+                id: "item-basket-b",
+                quantity: 1,
+                checked: true,
+                checkedAt: "2026-05-24T18:01:00.000Z",
+                unit: null,
+                ingredientRef: { name: "butter" },
+                categoryKey: "dairy",
+                iconKey: "milk",
+              },
+            ],
+          },
+          recipes: [],
+        }),
+        action: async () => ({ success: true }),
+      },
+    ]);
+
+    render(<Stub initialEntries={["/shopping-list"]} />);
+
+    expect(await screen.findByText("tomatoes")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /All 3/i }));
+
+    expect(screen.getAllByTestId("shopping-list-category").map((category) => category.textContent)).toEqual([
+      "Produce",
+      "In basket",
+    ]);
+    expect(screen.getByText("limes")).toBeInTheDocument();
+    expect(screen.getByText("butter")).toBeInTheDocument();
+  });
+
+  it("uses a specific empty state for an empty basket view", async () => {
+    const Stub = createTestRoutesStub([
+      {
+        path: "/shopping-list",
+        Component: ShoppingList,
+        loader: () => ({
+          shoppingList: {
+            id: "list-empty-basket",
+            items: [
+              {
+                id: "item-need",
+                quantity: 1,
+                checked: false,
+                unit: null,
+                ingredientRef: { name: "tomatoes" },
+                categoryKey: "produce",
+                iconKey: "carrot",
+              },
+            ],
+          },
+          recipes: [],
+        }),
+        action: async () => ({ success: true }),
+      },
+    ]);
+
+    render(<Stub initialEntries={["/shopping-list"]} />);
+
+    expect(await screen.findByText("tomatoes")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Basket 0/i }));
+
+    expect(screen.getByRole("heading", { name: "Nothing in the basket yet" })).toBeInTheDocument();
+  });
+
+  it("groups repeated category headings into one aisle section", async () => {
+    const Stub = createTestRoutesStub([
+      {
+        path: "/shopping-list",
+        Component: ShoppingList,
+        loader: () => ({
+          shoppingList: {
+            id: "list-grouped",
+            items: [
+              {
+                id: "item-pantry",
+                quantity: 1,
+                checked: false,
+                unit: null,
+                ingredientRef: { name: "flour" },
+                categoryKey: "pantry",
+                iconKey: "wheat",
+              },
+              {
+                id: "item-produce-a",
+                quantity: 1,
+                checked: false,
+                unit: null,
+                ingredientRef: { name: "tomatoes" },
+                categoryKey: "produce",
+                iconKey: "carrot",
+              },
+              {
+                id: "item-produce-b",
+                quantity: 1,
+                checked: false,
+                unit: null,
+                ingredientRef: { name: "basil" },
+                categoryKey: "produce",
+                iconKey: "leaf",
+              },
+            ],
+          },
+          recipes: [],
+        }),
+        action: async () => ({ success: true }),
+      },
+    ]);
+
+    render(<Stub initialEntries={["/shopping-list"]} />);
+
+    expect(await screen.findByText("tomatoes")).toBeInTheDocument();
+    expect(screen.getAllByTestId("shopping-list-category").map((category) => category.textContent)).toEqual([
+      "Produce",
+      "Pantry",
+    ]);
   });
 
   it("resolves swipe actions for reveal, confirm, dismiss, and no-op states", () => {
@@ -264,6 +527,43 @@ describe("shopping list UX updates", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Clear all" }));
 
     await waitFor(() => expect(submittedIntents).toContain("clearAll"));
+  });
+
+  it("submits a recipe scale when adding ingredients from a recipe", async () => {
+    const submitted: Array<{ intent: string | null; recipeId: string | null; scaleFactor: string | null }> = [];
+    const Stub = createTestRoutesStub([
+      {
+        path: "/shopping-list",
+        Component: ShoppingList,
+        loader: () => ({
+          shoppingList: { id: "list-empty", items: [] },
+          recipes: [{ id: "recipe-1", title: "Sunday Sauce" }],
+        }),
+        action: async ({ request }) => {
+          const formData = await request.formData();
+          submitted.push({
+            intent: formData.get("intent")?.toString() ?? null,
+            recipeId: formData.get("recipeId")?.toString() ?? null,
+            scaleFactor: formData.get("scaleFactor")?.toString() ?? null,
+          });
+          return { success: true };
+        },
+      },
+    ]);
+
+    render(<Stub initialEntries={["/shopping-list"]} />);
+
+    fireEvent.change(await screen.findByLabelText("Recipe"), { target: { value: "recipe-1" } });
+    fireEvent.change(screen.getByLabelText("Scale"), { target: { value: "1.5" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add ingredients" }));
+
+    await waitFor(() => {
+      expect(submitted).toContainEqual({
+        intent: "addFromRecipe",
+        recipeId: "recipe-1",
+        scaleFactor: "1.5",
+      });
+    });
   });
 
   it("uses ruled receipt rows and closes all reveals when check-off reorders rows", async () => {

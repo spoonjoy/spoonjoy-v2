@@ -30,7 +30,7 @@ describe('Recipe Dock Actions', () => {
   })
 
   describe('useRecipeDetailActions', () => {
-    function RecipeDetailPage({ recipeId, chefId, chefProfileHref, isOwner, isInShoppingList, onSave, onAddToList, onShare }: {
+    function RecipeDetailPage({ recipeId, chefId, chefProfileHref, isOwner, isInShoppingList, onSave, onAddToList, onShare, onCook }: {
       recipeId: string
       chefId: string
       chefProfileHref?: string
@@ -39,8 +39,9 @@ describe('Recipe Dock Actions', () => {
       onSave?: () => void
       onAddToList?: () => void
       onShare?: () => void
+      onCook?: () => void
     }) {
-      useRecipeDetailActions({ recipeId, chefId, chefProfileHref, isOwner, isInShoppingList, onSave, onAddToList, onShare })
+      useRecipeDetailActions({ recipeId, chefId, chefProfileHref, isOwner, isInShoppingList, onSave, onAddToList, onShare, onCook })
       return <div data-testid="recipe-detail">Recipe Detail</div>
     }
 
@@ -88,6 +89,15 @@ describe('Recipe Dock Actions', () => {
       expect(capturedActions?.find(a => a.id === 'add-to-list')?.ariaLabel).toBe('Add ingredients to shopping list')
     })
 
+    it('uses the real cook-mode handler when one is provided', () => {
+      const onCook = vi.fn()
+      render(<MemoryRouter><DockContextProvider><ContextDisplay /><RecipeDetailPage recipeId="123" chefId="chef-1" isOwner={true} onCook={onCook} /></DockContextProvider></MemoryRouter>)
+
+      capturedActions?.find(a => a.id === 'cook')?.onAction?.()
+
+      expect(onCook).toHaveBeenCalledOnce()
+    })
+
     it('renders the added-to-list icon badge component', () => {
       render(<MemoryRouter><DockContextProvider><ContextDisplay /><RecipeDetailPage recipeId="123" chefId="chef-1" isOwner={true} isInShoppingList={true} /></DockContextProvider></MemoryRouter>)
       const AddedIcon = capturedActions?.find(a => a.id === 'add-to-list')?.icon
@@ -118,6 +128,7 @@ describe('Recipe Dock Actions', () => {
       render(<MemoryRouter><DockContextProvider><ContextDisplay /><RecipeDetailPage recipeId="123" chefId="chef-1" isOwner={false} /></DockContextProvider></MemoryRouter>)
       expect(() => capturedActions?.find(a => a.id === 'save')?.onAction?.()).not.toThrow()
       expect(() => capturedActions?.find(a => a.id === 'add-to-list')?.onAction?.()).not.toThrow()
+      expect(() => capturedActions?.find(a => a.id === 'cook')?.onAction?.()).not.toThrow()
     })
   })
 
