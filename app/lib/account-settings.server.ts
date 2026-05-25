@@ -80,7 +80,7 @@ interface AccountSettingsRouteArgs {
   context: AppLoadContext;
 }
 
-const VALID_PROVIDERS = ["google", "apple"] as const;
+const VALID_PROVIDERS = ["google", "github", "apple"] as const;
 type ValidProvider = typeof VALID_PROVIDERS[number];
 
 function isValidProvider(provider: string): provider is ValidProvider {

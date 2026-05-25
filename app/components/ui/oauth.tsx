@@ -1,11 +1,14 @@
 import clsx from 'clsx'
 import { Button } from './button'
 
-export type OAuthProvider = 'google' | 'apple'
+export type OAuthProvider = 'google' | 'github' | 'apple'
 
 const providerStyles: Record<OAuthProvider, { label: string }> = {
   google: {
     label: 'Continue with Google',
+  },
+  github: {
+    label: 'Continue with GitHub',
   },
   apple: {
     label: 'Continue with Apple',
@@ -51,7 +54,7 @@ interface OAuthButtonGroupProps {
   className?: string
 }
 
-export function OAuthButtonGroup({ providers = ['google', 'apple'], className }: OAuthButtonGroupProps) {
+export function OAuthButtonGroup({ providers = ['google', 'github', 'apple'], className }: OAuthButtonGroupProps) {
   if (providers.length === 0) return null
 
   return (

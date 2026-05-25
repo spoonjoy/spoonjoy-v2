@@ -40,6 +40,7 @@ describe("oauth-route.server", () => {
   it("builds provider callback URLs from request origin", () => {
     const request = new Request("https://spoonjoy.app/auth/google");
     expect(buildOAuthCallbackUrl(request, "google")).toBe("https://spoonjoy.app/auth/google/callback");
+    expect(buildOAuthCallbackUrl(request, "github")).toBe("https://spoonjoy.app/auth/github/callback");
     expect(buildOAuthCallbackUrl(request, "apple")).toBe("https://spoonjoy.app/auth/apple/callback");
   });
 

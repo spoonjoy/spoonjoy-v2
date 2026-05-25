@@ -25,7 +25,7 @@ export async function action({ request, context }: Route.ActionArgs): Promise<Ac
   return handleAccountSettingsAction({ request, context });
 }
 
-const OAUTH_PROVIDERS = ["google", "apple"] as const;
+const OAUTH_PROVIDERS = ["google", "github", "apple"] as const;
 
 function capitalizeProvider(provider: string): string {
   return provider.charAt(0).toUpperCase() + provider.slice(1);

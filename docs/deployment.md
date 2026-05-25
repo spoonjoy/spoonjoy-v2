@@ -29,6 +29,8 @@ Set production secrets with `wrangler secret put`:
 wrangler secret put SESSION_SECRET
 wrangler secret put GOOGLE_CLIENT_ID
 wrangler secret put GOOGLE_CLIENT_SECRET
+wrangler secret put GITHUB_CLIENT_ID
+wrangler secret put GITHUB_CLIENT_SECRET
 wrangler secret put APPLE_CLIENT_ID
 wrangler secret put APPLE_TEAM_ID
 wrangler secret put APPLE_KEY_ID
@@ -39,7 +41,7 @@ wrangler secret put OPENAI_API_KEY
 Notes:
 
 - `SESSION_SECRET` protects auth sessions and must be high entropy in production.
-- Google and Apple OAuth secrets are required for OAuth login/account linking.
+- Google, GitHub, and Apple OAuth secrets are required for the corresponding OAuth login/account-linking provider.
 - `OPENAI_API_KEY` enables ingredient parsing. Missing local keys fall back to deterministic parsing paths where supported, but production should set the secret before enabling AI-assisted flows.
 - Optional ingredient parsing runtime knobs are `INGREDIENT_PARSE_PROVIDER`, `INGREDIENT_PARSE_MODEL`, `INGREDIENT_PARSE_TIMEOUT_MS`, and `INGREDIENT_PARSE_MAX_RETRIES`. The safe default is OpenAI with `gpt-4o-mini`, an 8000ms timeout, and 1 retry.
 
@@ -51,6 +53,8 @@ For local OAuth or AI testing, mirror the same names in `.dev.vars`:
 SESSION_SECRET=local-dev-secret-change-me
 GOOGLE_CLIENT_ID=your-google-client-id
 GOOGLE_CLIENT_SECRET=your-google-client-secret
+GITHUB_CLIENT_ID=your-github-client-id
+GITHUB_CLIENT_SECRET=your-github-client-secret
 APPLE_CLIENT_ID=your-apple-client-id
 APPLE_TEAM_ID=your-apple-team-id
 APPLE_KEY_ID=your-apple-key-id

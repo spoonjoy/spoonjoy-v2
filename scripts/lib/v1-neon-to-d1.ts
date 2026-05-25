@@ -305,7 +305,7 @@ function buildAuthSummary(source: V1Export): AuthSummary {
     oauthByUser.set(account.userId, providers);
   }
 
-  const supportedOAuthProviders = new Set(["apple", "google"]);
+  const supportedOAuthProviders = new Set(["apple", "github", "google"]);
   let passwordUsers = 0;
   let passkeyUsers = 0;
   let supportedOAuthUsers = 0;

@@ -55,11 +55,13 @@ All configuration lives in `wrangler.json`:
 **Local development uses sensible defaults** — no configuration required to get started.
 When the `PHOTOS` R2 binding is unavailable locally, uploaded images are stored as data URLs so recipe/profile image flows still work.
 
-For OAuth (Google/Apple login), provide credentials through Cloudflare secrets in production or `.dev.vars` locally:
+For OAuth (Google/GitHub/Apple login), provide credentials through Cloudflare secrets in production or `.dev.vars` locally:
 
 ```bash
 GOOGLE_CLIENT_ID=your-google-client-id
 GOOGLE_CLIENT_SECRET=your-google-client-secret
+GITHUB_CLIENT_ID=your-github-client-id
+GITHUB_CLIENT_SECRET=your-github-client-secret
 APPLE_CLIENT_ID=your-apple-client-id
 APPLE_TEAM_ID=your-apple-team-id
 APPLE_KEY_ID=your-apple-key-id
@@ -168,6 +170,8 @@ pnpm exec prisma migrate diff --from-empty --to-schema-datamodel=./prisma/schema
    wrangler secret put SESSION_SECRET
    wrangler secret put GOOGLE_CLIENT_ID
    wrangler secret put GOOGLE_CLIENT_SECRET
+   wrangler secret put GITHUB_CLIENT_ID
+   wrangler secret put GITHUB_CLIENT_SECRET
    wrangler secret put APPLE_CLIENT_ID
    wrangler secret put APPLE_TEAM_ID
    wrangler secret put APPLE_KEY_ID
@@ -209,7 +213,7 @@ migrations/
 
 ## Features
 
-- **Authentication**: Email/password plus Google/Apple OAuth initiation, callback, login, signup, and account-linking routes
+- **Authentication**: Email/password plus Google/GitHub/Apple OAuth initiation, callback, login, signup, and account-linking routes
 - **Recipes**: Full CRUD with steps, ingredients, and step dependencies
 - **Step Dependencies**: Steps can reference outputs from previous steps
 - **Cookbooks**: Organize recipes into collections

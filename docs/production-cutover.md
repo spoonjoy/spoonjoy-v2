@@ -21,7 +21,7 @@ Record these before touching DNS:
 - Current v2 D1 database ID.
 - Current R2 bucket name for uploaded images.
 - Current Cloudflare account and zone used for `spoonjoy.app`.
-- Current OAuth redirect URLs configured in Google and Apple.
+- Current OAuth redirect URLs configured in Google, GitHub, and Apple.
 
 ## Secrets
 
@@ -35,6 +35,7 @@ Required runtime secrets:
 Feature secrets:
 
 - Google OAuth: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
+- GitHub OAuth: `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`
 - Apple OAuth: `APPLE_CLIENT_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY`
 - AI features: `OPENAI_API_KEY`
 
@@ -76,7 +77,7 @@ Current verified source report:
 - Creates 286 `RecipeCover` rows from v1 non-default `Recipe.imageUrl` values with `sourceType='chef-upload'`.
 - Skips 85 stale `RecipeInCookbook` rows whose cookbook no longer exists in v1.
 - v1 has no shopping-list rows to migrate.
-- Auth caveat: 2 users currently have no v2-supported login path unless GitHub OAuth is added or an intentional account-recovery path is provided.
+- Auth continuity: GitHub OAuth support preserves the two GitHub-only v1 users after `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` are set in Cloudflare.
 
 Local isolated D1 rehearsal:
 
@@ -119,6 +120,7 @@ Rollback:
 Before DNS switch, update provider dashboards:
 
 - Google authorized redirect URI: `https://spoonjoy.app/auth/google/callback`
+- GitHub authorization callback URL: `https://spoonjoy.app/auth/github/callback`
 - Apple redirect URI: `https://spoonjoy.app/auth/apple/callback`
 
 After DNS switch, test OAuth start routes. If a provider is not configured, it should not appear on `/login` or `/signup`.

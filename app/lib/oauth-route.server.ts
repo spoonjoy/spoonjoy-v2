@@ -5,7 +5,7 @@ import type { OAuthEnv } from "~/lib/env.server";
 import { getCloudflareEnv } from "~/lib/route-platform.server";
 import { getSession, getUserId, sessionStorage } from "~/lib/session.server";
 
-export type OAuthProvider = "google" | "apple";
+export type OAuthProvider = "google" | "github" | "apple";
 
 export interface OAuthStartSessionData {
   state: string;

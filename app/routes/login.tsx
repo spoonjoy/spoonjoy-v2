@@ -4,7 +4,7 @@ import { getRequestDb } from "~/lib/route-platform.server";
 import { authenticateUser } from "~/lib/auth.server";
 import { createUserSession, getUserId } from "~/lib/session.server";
 import { OAuthButtonGroup, OAuthDivider, OAuthError } from "~/components/ui/oauth";
-import { getConfiguredOAuthProviders } from "~/lib/env.server";
+import { getConfiguredOAuthProviders, type OAuthProvider } from "~/lib/env.server";
 import { getOAuthEnv } from "~/lib/oauth-route.server";
 import { AuthLayout } from "~/components/ui/auth-layout";
 import { Heading } from "~/components/ui/heading";
@@ -24,7 +24,7 @@ interface ActionData {
 
 interface LoaderData {
   oauthError?: string;
-  oauthProviders: Array<"google" | "apple">;
+  oauthProviders: OAuthProvider[];
 }
 
 // Loader - redirect if already logged in, handle OAuth errors

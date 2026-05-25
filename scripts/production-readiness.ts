@@ -14,6 +14,10 @@ export const OPTIONAL_FEATURE_SECRET_GROUPS = [
     secrets: ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"],
   },
   {
+    name: "GitHub OAuth",
+    secrets: ["GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET"],
+  },
+  {
     name: "Apple OAuth",
     secrets: ["APPLE_CLIENT_ID", "APPLE_TEAM_ID", "APPLE_KEY_ID", "APPLE_PRIVATE_KEY"],
   },

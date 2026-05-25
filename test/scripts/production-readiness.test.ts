@@ -14,10 +14,12 @@ describe("production readiness helpers", () => {
       ...REQUIRED_RUNTIME_SECRETS,
       "GOOGLE_CLIENT_ID",
       "GOOGLE_CLIENT_SECRET",
+      "GITHUB_CLIENT_ID",
+      "GITHUB_CLIENT_SECRET",
     ]);
 
     expect(result.requiredMissing).toEqual([]);
-    expect(result.configuredFeatureGroups).toEqual(["Google OAuth"]);
+    expect(result.configuredFeatureGroups).toEqual(["Google OAuth", "GitHub OAuth"]);
     expect(result.missingFeatureGroups).toEqual(["Apple OAuth", "OpenAI AI features"]);
   });
 
@@ -36,6 +38,10 @@ describe("production readiness helpers", () => {
       {
         name: "Google OAuth",
         secrets: ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"],
+      },
+      {
+        name: "GitHub OAuth",
+        secrets: ["GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET"],
       },
       {
         name: "Apple OAuth",

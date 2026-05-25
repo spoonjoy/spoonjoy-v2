@@ -257,8 +257,8 @@ describe("v1 Neon to D1 migration planner", () => {
       users: 2,
       passwordUsers: 1,
       passkeyUsers: 1,
-      supportedOAuthUsers: 1,
-      unsupportedLoginUsers: 1,
+      supportedOAuthUsers: 2,
+      unsupportedLoginUsers: 0,
       oauthProviders: {
         apple: 1,
         github: 1,

@@ -414,8 +414,9 @@ describe("Account Settings Route", () => {
       render(<Stub initialEntries={["/account/settings"]} />);
 
       await screen.findByRole("heading", { name: /account settings/i });
-      // Should show buttons to link Google and Apple
+      // Should show buttons to link every supported OAuth provider
       expect(screen.getByRole("button", { name: /link google/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /link github/i })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /link apple/i })).toBeInTheDocument();
     });
 
@@ -523,7 +524,8 @@ describe("Account Settings Route", () => {
       await screen.findByRole("heading", { name: /account settings/i });
       // Google is linked - should show Unlink
       expect(screen.getByRole("button", { name: /unlink google/i })).toBeInTheDocument();
-      // Apple is not linked - should show Link
+      // GitHub and Apple are not linked - should show Link
+      expect(screen.getByRole("button", { name: /link github/i })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /link apple/i })).toBeInTheDocument();
     });
 
@@ -2433,6 +2435,40 @@ describe("Account Settings Route", () => {
           expect(error).toBeInstanceOf(Response);
           expect(error.status).toBe(302);
           expect(error.headers.get("Location")).toContain("/auth/apple");
+          return true;
+        });
+      });
+
+      it("should redirect to GitHub OAuth for GitHub provider", async () => {
+        const session = await sessionStorage.getSession();
+        session.set("userId", testUserId);
+        const setCookieHeader = await sessionStorage.commitSession(session);
+        const cookieValue = setCookieHeader.split(";")[0];
+
+        const formData = new FormData();
+        formData.append("intent", "linkOAuth");
+        formData.append("provider", "github");
+
+        const headers = new Headers();
+        headers.set("Cookie", cookieValue);
+        headers.set("Content-Type", "application/x-www-form-urlencoded");
+
+        const request = new UndiciRequest("http://localhost:3000/account/settings", {
+          method: "POST",
+          headers,
+          body: new URLSearchParams(formData as any).toString(),
+        });
+
+        await expect(
+          action({
+            request,
+            context: { cloudflare: { env: null } },
+            params: {},
+          } as any)
+        ).rejects.toSatisfy((error: any) => {
+          expect(error).toBeInstanceOf(Response);
+          expect(error.status).toBe(302);
+          expect(error.headers.get("Location")).toContain("/auth/github");
           return true;
         });
       });
