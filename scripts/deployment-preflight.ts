@@ -93,6 +93,12 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
       "wrangler.json must keep nodejs_compat enabled for Prisma, OAuth, and MCP runtime compatibility."
     ),
     check(
+      "worker CPU limit",
+      typeof (inputs.wrangler.limits as Record<string, unknown> | undefined)?.cpu_ms === "number" &&
+        ((inputs.wrangler.limits as Record<string, unknown>).cpu_ms as number) >= 50,
+      "wrangler.json must set limits.cpu_ms to at least 50 so React Router SSR, Prisma, and D1 do not intermittently hit the 10ms Worker CPU ceiling."
+    ),
+    check(
       "D1 binding",
       hasBinding(inputs.wrangler.d1_databases, "DB", ["database_name", "database_id"]),
       "wrangler.json must bind Cloudflare D1 as DB with database_name and database_id."

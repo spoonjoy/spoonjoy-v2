@@ -74,7 +74,7 @@ pnpm deploy:preflight
 
 The preflight verifies:
 
-- `wrangler.json` has the Worker entry, `nodejs_compat`, D1 `DB`, and R2 `PHOTOS` bindings.
+- `wrangler.json` has the Worker entry, `nodejs_compat`, D1 `DB`, R2 `PHOTOS`, and a production SSR CPU limit.
 - `package.json` exposes the expected build, test, e2e, deploy, `deploy:auto`, and preflight scripts.
 - `app/cloudflare-env.d.ts` types the Cloudflare bindings and documented secrets.
 - README/deployment docs mention required bindings, secrets, and deploy commands.
@@ -148,4 +148,5 @@ pnpm deploy
 | Ingredient parsing returns fallback/manual review | Missing or invalid `OPENAI_API_KEY` | Set the secret or keep deterministic fallback behavior |
 | Production schema is stale | D1 migrations not applied remotely | Run `wrangler d1 migrations apply DB --remote` before deploy, or use `pnpm deploy:auto` to apply + deploy in one step |
 | `pnpm deploy:preflight` fails with "Remote D1 has N pending migration(s)" | Local code references a schema change that has not been applied to remote D1 | Run `pnpm exec wrangler d1 migrations apply DB --remote` or `pnpm deploy:auto` (which applies pending migrations before deploying) |
+| Intermittent 1102 / "Worker exceeded CPU time limit" on SSR routes | Worker CPU limit is too close to React Router SSR + Prisma/D1 render cost | Keep `wrangler.json` `limits.cpu_ms` at 50 or higher, then redeploy with `pnpm deploy:auto` |
 | Sessions reset across deploys | Missing/rotating `SESSION_SECRET` | Set a stable high-entropy production secret |
