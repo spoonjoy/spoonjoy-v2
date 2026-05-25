@@ -571,9 +571,47 @@ describe("importRecipeFromUrl — extraction paths", () => {
       await expect(
         importRecipeFromUrl(
           { url: "https://example.com/r", chefId: chef.id },
-          baseDeps({ fetchImpl: makeFetchImpl(fixture), llmRunner: undefined }),
+          baseDeps({
+            env: null,
+            fetchImpl: makeFetchImpl(fixture),
+            llmRunner: undefined,
+          }),
         ),
       ).rejects.toMatchObject({ code: "llm-failed" });
+    });
+
+    it("creates a default LLM runner from env when one is not injected", async () => {
+      const fixture = await loadFixture("no-jsonld-rich-html.html");
+      const chef = await makeChef();
+      const llmRunner = makeLlmRunner({
+        title: "Runner Factory Soup",
+        description: "A production wiring check.",
+        servings: "2",
+        ingredients: ["1 cup broth"],
+        steps: ["Warm the broth."],
+      });
+      const createLlmRunner = vi.fn(() => llmRunner);
+      const result = await importRecipeFromUrl(
+        { url: "https://example.com/r", chefId: chef.id, dryRun: true },
+        baseDeps({
+          fetchImpl: makeFetchImpl(fixture),
+          llmRunner: undefined,
+          createLlmRunner,
+        }),
+      );
+
+      expect(createLlmRunner).toHaveBeenCalledWith({ OPENAI_API_KEY: "test-key" });
+      expect(llmRunner.extract).toHaveBeenCalled();
+      expect(result).toMatchObject({
+        recipeId: null,
+        confidence: "low",
+        source: "llm",
+        recipe: {
+          title: "Runner Factory Soup",
+          ingredients: ["1 cup broth"],
+          steps: ["Warm the broth."],
+        },
+      });
     });
 
     it("re-throws non-RecipeLlmError from llmRunner.extract", async () => {

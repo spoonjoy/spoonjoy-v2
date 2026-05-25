@@ -433,9 +433,40 @@ describe("importRecipeFromUrl — I2 video dispatcher", () => {
       await expect(
         importRecipeFromUrl(
           { url: "https://www.youtube.com/watch?v=abc", chefId: chef.id },
-          baseDeps({ fetchImpl, llmRunner: undefined }),
+          baseDeps({ env: null, fetchImpl, llmRunner: undefined }),
         ),
       ).rejects.toMatchObject({ code: "llm-failed", status: 502 });
+    });
+
+    it("video path creates a default LLM runner from env when one is not injected", async () => {
+      const fixture = loadVideoFixture("youtube-pasta.json");
+      const chef = await makeChef();
+      const { fetchImpl } = videoFetchSequence(jsonStreamingResponse(fixture));
+      const llmRunner = makeLlmRunner({
+        title: "Factory Video Pasta",
+        description: "A video import wiring check.",
+        servings: "4",
+        ingredients: ["1 cup tomatoes"],
+        steps: ["Simmer the sauce."],
+      });
+      const createLlmRunner = vi.fn(() => llmRunner);
+      const result = await importRecipeFromUrl(
+        { url: "https://www.youtube.com/watch?v=abc", chefId: chef.id, dryRun: true },
+        baseDeps({ fetchImpl, llmRunner: undefined, createLlmRunner }),
+      );
+
+      expect(createLlmRunner).toHaveBeenCalledWith({ OPENAI_API_KEY: "test-key" });
+      expect(llmRunner.extract).toHaveBeenCalled();
+      expect(result).toMatchObject({
+        recipeId: null,
+        confidence: "low",
+        source: "video-oembed-llm",
+        recipe: {
+          title: "Factory Video Pasta",
+          ingredients: ["1 cup tomatoes"],
+          steps: ["Simmer the sauce."],
+        },
+      });
     });
 
     it("video path wraps a generic fetch failure as oembed-failed", async () => {
@@ -446,7 +477,7 @@ describe("importRecipeFromUrl — I2 video dispatcher", () => {
       await expect(
         importRecipeFromUrl(
           { url: "https://www.youtube.com/watch?v=abc", chefId: chef.id },
-          baseDeps({ fetchImpl }),
+          baseDeps({ fetchImpl, llmRunner: undefined }),
         ),
       ).rejects.toMatchObject({ code: "oembed-failed", status: 502 });
     });
