@@ -67,7 +67,7 @@ export function findRecipeStepsScrollTarget(doc: Document): HTMLElement | null {
 }
 
 export function findCookModeScrollTarget(doc: Document): HTMLElement | null {
-  return doc.getElementById("cook-mode") ?? findRecipeStepsScrollTarget(doc);
+  return doc.getElementById("cook") ?? findRecipeStepsScrollTarget(doc);
 }
 
 export function applyCreatedCookbookState(
@@ -833,7 +833,7 @@ function CookModePanel({
 
   return (
     <section
-      id="cook-mode"
+      id="cook"
       data-testid="cook-mode-panel"
       className="scroll-mt-16 border-b border-[var(--sj-border-strong)] bg-[color-mix(in_srgb,var(--sj-flour)_58%,var(--sj-page))]"
       aria-labelledby="cook-mode-heading"

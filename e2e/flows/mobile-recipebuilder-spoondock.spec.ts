@@ -122,9 +122,10 @@ test.describe('Mobile RecipeBuilder and SpoonDock audit', () => {
     }
 
     await cookModeAction.click();
-    await expect(page).toHaveURL(/#steps$/);
+    await expect(page).toHaveURL(/#cook$/);
+    await expect(page.getByRole('region', { name: /.+/ }).filter({ hasText: /Now cooking/i })).toBeVisible();
     await page.waitForFunction(() => {
-      const target = [...document.querySelectorAll<HTMLElement>('#steps')].find((element) => {
+      const target = [...document.querySelectorAll<HTMLElement>('#cook')].find((element) => {
         const rect = element.getBoundingClientRect();
         return rect.width > 0 && rect.height > 0;
       });
