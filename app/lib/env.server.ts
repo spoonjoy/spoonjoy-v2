@@ -54,23 +54,48 @@ export interface VapidEnv {
   VAPID_SUBJECT?: string;
 }
 
+const PLACEHOLDER_ENV_VALUES = new Set([
+  "not configured",
+  "not enabled",
+  "not yet enabled",
+  "todo",
+  "tbd",
+]);
+
+function normalizeEnvValue(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  const unquoted = trimmed.replace(/^['"]+|['"]+$/g, "").trim();
+  if (!unquoted || PLACEHOLDER_ENV_VALUES.has(unquoted.toLowerCase())) {
+    return undefined;
+  }
+
+  return trimmed;
+}
+
+function requireEnvValue<K extends string>(
+  env: Partial<Record<K, string | undefined>>,
+  key: K
+): string {
+  const value = normalizeEnvValue(env[key]);
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${key}`);
+  }
+
+  return value;
+}
+
 /**
  * Validates and returns Google OAuth configuration.
  * Throws an error if any required environment variable is missing or empty.
  */
 export function getGoogleOAuthConfig(env: OAuthEnv): GoogleOAuthConfig {
-  if (!env.GOOGLE_CLIENT_ID) {
-    throw new Error("Missing required environment variable: GOOGLE_CLIENT_ID");
-  }
-  if (!env.GOOGLE_CLIENT_SECRET) {
-    throw new Error(
-      "Missing required environment variable: GOOGLE_CLIENT_SECRET"
-    );
-  }
-
   return {
-    clientId: env.GOOGLE_CLIENT_ID,
-    clientSecret: env.GOOGLE_CLIENT_SECRET,
+    clientId: requireEnvValue(env, "GOOGLE_CLIENT_ID"),
+    clientSecret: requireEnvValue(env, "GOOGLE_CLIENT_SECRET"),
   };
 }
 
@@ -79,18 +104,9 @@ export function getGoogleOAuthConfig(env: OAuthEnv): GoogleOAuthConfig {
  * Throws an error if any required environment variable is missing or empty.
  */
 export function getGitHubOAuthConfig(env: OAuthEnv): GitHubOAuthConfig {
-  if (!env.GITHUB_CLIENT_ID) {
-    throw new Error("Missing required environment variable: GITHUB_CLIENT_ID");
-  }
-  if (!env.GITHUB_CLIENT_SECRET) {
-    throw new Error(
-      "Missing required environment variable: GITHUB_CLIENT_SECRET"
-    );
-  }
-
   return {
-    clientId: env.GITHUB_CLIENT_ID,
-    clientSecret: env.GITHUB_CLIENT_SECRET,
+    clientId: requireEnvValue(env, "GITHUB_CLIENT_ID"),
+    clientSecret: requireEnvValue(env, "GITHUB_CLIENT_SECRET"),
   };
 }
 
@@ -99,24 +115,11 @@ export function getGitHubOAuthConfig(env: OAuthEnv): GitHubOAuthConfig {
  * Throws an error if any required environment variable is missing or empty.
  */
 export function getAppleOAuthConfig(env: OAuthEnv): AppleOAuthConfig {
-  if (!env.APPLE_CLIENT_ID) {
-    throw new Error("Missing required environment variable: APPLE_CLIENT_ID");
-  }
-  if (!env.APPLE_TEAM_ID) {
-    throw new Error("Missing required environment variable: APPLE_TEAM_ID");
-  }
-  if (!env.APPLE_KEY_ID) {
-    throw new Error("Missing required environment variable: APPLE_KEY_ID");
-  }
-  if (!env.APPLE_PRIVATE_KEY) {
-    throw new Error("Missing required environment variable: APPLE_PRIVATE_KEY");
-  }
-
   return {
-    clientId: env.APPLE_CLIENT_ID,
-    teamId: env.APPLE_TEAM_ID,
-    keyId: env.APPLE_KEY_ID,
-    privateKey: env.APPLE_PRIVATE_KEY,
+    clientId: requireEnvValue(env, "APPLE_CLIENT_ID"),
+    teamId: requireEnvValue(env, "APPLE_TEAM_ID"),
+    keyId: requireEnvValue(env, "APPLE_KEY_ID"),
+    privateKey: requireEnvValue(env, "APPLE_PRIVATE_KEY"),
   };
 }
 
@@ -138,7 +141,7 @@ const ALL_OAUTH_ENV_VARS = [
  */
 export function validateOAuthEnv(env: OAuthEnv): true {
   const missing = ALL_OAUTH_ENV_VARS.filter(
-    (key) => !env[key as keyof OAuthEnv]
+    (key) => !normalizeEnvValue(env[key])
   );
 
   if (missing.length > 0) {
@@ -153,19 +156,25 @@ export function validateOAuthEnv(env: OAuthEnv): true {
 export function getConfiguredOAuthProviders(env: OAuthEnv): OAuthProvider[] {
   const providers: OAuthProvider[] = [];
 
-  if (env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) {
+  if (
+    normalizeEnvValue(env.GOOGLE_CLIENT_ID) &&
+    normalizeEnvValue(env.GOOGLE_CLIENT_SECRET)
+  ) {
     providers.push("google");
   }
 
-  if (env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET) {
+  if (
+    normalizeEnvValue(env.GITHUB_CLIENT_ID) &&
+    normalizeEnvValue(env.GITHUB_CLIENT_SECRET)
+  ) {
     providers.push("github");
   }
 
   if (
-    env.APPLE_CLIENT_ID &&
-    env.APPLE_TEAM_ID &&
-    env.APPLE_KEY_ID &&
-    env.APPLE_PRIVATE_KEY
+    normalizeEnvValue(env.APPLE_CLIENT_ID) &&
+    normalizeEnvValue(env.APPLE_TEAM_ID) &&
+    normalizeEnvValue(env.APPLE_KEY_ID) &&
+    normalizeEnvValue(env.APPLE_PRIVATE_KEY)
   ) {
     providers.push("apple");
   }
@@ -180,19 +189,9 @@ export function getConfiguredOAuthProviders(env: OAuthEnv): OAuthProvider[] {
  * as the OAuth helpers above.
  */
 export function getVapidConfig(env: VapidEnv): VapidConfig {
-  if (!env.VAPID_PUBLIC_KEY) {
-    throw new Error("Missing required environment variable: VAPID_PUBLIC_KEY");
-  }
-  if (!env.VAPID_PRIVATE_KEY) {
-    throw new Error("Missing required environment variable: VAPID_PRIVATE_KEY");
-  }
-  if (!env.VAPID_SUBJECT) {
-    throw new Error("Missing required environment variable: VAPID_SUBJECT");
-  }
-
   return {
-    publicKey: env.VAPID_PUBLIC_KEY,
-    privateKey: env.VAPID_PRIVATE_KEY,
-    subject: env.VAPID_SUBJECT,
+    publicKey: requireEnvValue(env, "VAPID_PUBLIC_KEY"),
+    privateKey: requireEnvValue(env, "VAPID_PRIVATE_KEY"),
+    subject: requireEnvValue(env, "VAPID_SUBJECT"),
   };
 }
