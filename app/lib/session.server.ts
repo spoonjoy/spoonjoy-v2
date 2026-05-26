@@ -1,53 +1,114 @@
 import { createCookie, createCookieSessionStorage } from "react-router";
 
 // Session cookie configuration
-/* istanbul ignore next -- @preserve fallback evaluated at module load time */
-const SESSION_SECRET = process.env.SESSION_SECRET || "default-dev-secret-please-change-in-production";
+const DEFAULT_DEV_SESSION_SECRET = "default-dev-secret-please-change-in-production";
 
-// Create a cookie for session management
-const sessionCookie = createCookie("__session", {
-  secrets: [SESSION_SECRET],
-  sameSite: "lax",
-  path: "/",
-  httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
-  maxAge: 60 * 60 * 24 * 30, // 30 days
-});
+export interface SessionEnv {
+  SESSION_SECRET?: string;
+}
 
-const oauthSessionCookie = createCookie("__oauth", {
-  secrets: [SESSION_SECRET],
-  sameSite: "none",
-  path: "/",
-  httpOnly: true,
-  secure: true,
-  maxAge: 60 * 10,
-});
+const storageCache = new Map<string, ReturnType<typeof createSessionStorageForSecret>>();
+const oauthStorageCache = new Map<string, ReturnType<typeof createOAuthSessionStorageForSecret>>();
 
-// Create cookie session storage
-export const sessionStorage = createCookieSessionStorage({
-  cookie: sessionCookie,
-});
+function resolveSessionSecret(env?: SessionEnv | null): string {
+  if (env?.SESSION_SECRET) {
+    return env.SESSION_SECRET;
+  }
 
-export const oauthSessionStorage = createCookieSessionStorage({
-  cookie: oauthSessionCookie,
-});
+  if (process.env.SESSION_SECRET) {
+    return process.env.SESSION_SECRET;
+  }
+
+  return DEFAULT_DEV_SESSION_SECRET;
+}
+
+export function sanitizeSessionRedirect(
+  redirectTo: string | null | undefined,
+  fallback: string = "/"
+): string {
+  if (
+    !redirectTo ||
+    !redirectTo.startsWith("/") ||
+    redirectTo.startsWith("//") ||
+    /[\u0000-\u001F\u007F\\]/.test(redirectTo)
+  ) {
+    return fallback;
+  }
+
+  return redirectTo;
+}
+
+function createSessionStorageForSecret(secret: string) {
+  return createCookieSessionStorage({
+    cookie: createCookie("__session", {
+      secrets: [secret],
+      sameSite: "lax",
+      path: "/",
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 60 * 60 * 24 * 30, // 30 days
+    }),
+  });
+}
+
+function createOAuthSessionStorageForSecret(secret: string) {
+  return createCookieSessionStorage({
+    cookie: createCookie("__oauth", {
+      secrets: [secret],
+      sameSite: "none",
+      path: "/",
+      httpOnly: true,
+      secure: true,
+      maxAge: 60 * 10,
+    }),
+  });
+}
+
+function sessionStorageForEnv(env?: SessionEnv | null) {
+  const secret = resolveSessionSecret(env);
+  const cached = storageCache.get(secret);
+  if (cached) return cached;
+
+  const storage = createSessionStorageForSecret(secret);
+  storageCache.set(secret, storage);
+  return storage;
+}
+
+function oauthSessionStorageForEnv(env?: SessionEnv | null) {
+  const secret = resolveSessionSecret(env);
+  const cached = oauthStorageCache.get(secret);
+  if (cached) return cached;
+
+  const storage = createOAuthSessionStorageForSecret(secret);
+  oauthStorageCache.set(secret, storage);
+  return storage;
+}
+
+// Default storage exports remain for tests and local helpers. Runtime routes
+// should pass Cloudflare env into the helper functions below.
+export const sessionStorage = sessionStorageForEnv();
+export const oauthSessionStorage = oauthSessionStorageForEnv();
 
 // Helper to get session from request
-export async function getSession(request: Request) {
+export async function getSession(request: Request, env?: SessionEnv | null) {
   const cookie = request.headers.get("Cookie");
-  return sessionStorage.getSession(cookie);
+  return sessionStorageForEnv(env).getSession(cookie);
 }
 
 // Helper to get user ID from session
-export async function getUserId(request: Request): Promise<string | null> {
-  const session = await getSession(request);
+export async function getUserId(request: Request, env?: SessionEnv | null): Promise<string | null> {
+  const session = await getSession(request, env);
   const userId = session.get("userId");
   return userId || null;
 }
 
 // Helper to require user ID (throws if not authenticated)
-export async function requireUserId(request: Request, redirectTo: string = "/login"): Promise<string> {
-  const userId = await getUserId(request);
+export async function requireUserId(
+  request: Request,
+  redirectTo: string = "/login",
+  env?: SessionEnv | null
+): Promise<string> {
+  const userId = await getUserId(request, env);
   if (!userId) {
     const url = new URL(request.url);
     const searchParams = new URLSearchParams([["redirectTo", url.pathname]]);
@@ -62,29 +123,43 @@ export async function requireUserId(request: Request, redirectTo: string = "/log
 }
 
 // Helper to create user session
-export async function createUserSession(userId: string, redirectTo: string) {
-  const session = await sessionStorage.getSession();
+export async function createUserSession(
+  userId: string,
+  redirectTo: string,
+  env?: SessionEnv | null
+) {
+  const storage = sessionStorageForEnv(env);
+  const session = await storage.getSession();
   session.set("userId", userId);
 
   return new Response(null, {
     status: 302,
     headers: {
-      "Set-Cookie": await sessionStorage.commitSession(session),
-      Location: redirectTo,
+      "Set-Cookie": await storage.commitSession(session),
+      Location: sanitizeSessionRedirect(redirectTo),
     },
   });
 }
 
 // Helper to destroy user session
 /* istanbul ignore next -- @preserve default parameter branch */
-export async function destroyUserSession(request: Request, redirectTo: string = "/") {
-  const session = await getSession(request);
+export async function destroyUserSession(
+  request: Request,
+  redirectTo: string = "/",
+  env?: SessionEnv | null
+) {
+  const storage = sessionStorageForEnv(env);
+  const session = await getSession(request, env);
 
   return new Response(null, {
     status: 302,
     headers: {
-      "Set-Cookie": await sessionStorage.destroySession(session),
-      Location: redirectTo,
+      "Set-Cookie": await storage.destroySession(session),
+      Location: sanitizeSessionRedirect(redirectTo),
     },
   });
+}
+
+export function getOAuthSessionStorage(env?: SessionEnv | null) {
+  return oauthSessionStorageForEnv(env);
 }

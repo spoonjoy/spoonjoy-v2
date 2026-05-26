@@ -17,7 +17,8 @@ async function initiateGoogleOAuth({ request, context }: Route.LoaderArgs | Rout
   const state = generateOAuthState();
   const codeVerifier = generateCodeVerifier();
   const sessionData = resolveOAuthStartSessionData(request, state, { codeVerifier });
-  const linkingRedirect = await assertCanStartOAuthLinking(request, sessionData);
+  const env = context.cloudflare?.env;
+  const linkingRedirect = await assertCanStartOAuthLinking(request, sessionData, env);
   if (linkingRedirect) return linkingRedirect;
 
   let config;
@@ -30,7 +31,7 @@ async function initiateGoogleOAuth({ request, context }: Route.LoaderArgs | Rout
   const redirectUri = buildOAuthCallbackUrl(request, "google");
   sessionData.redirectUri = redirectUri;
   const authorizationUrl = createGoogleAuthorizationURL(config, redirectUri, state, codeVerifier);
-  const cookie = await commitOAuthStartSession(request, "google", sessionData);
+  const cookie = await commitOAuthStartSession(request, "google", sessionData, env);
 
   return redirectTo(authorizationUrl.toString(), { "Set-Cookie": cookie });
 }

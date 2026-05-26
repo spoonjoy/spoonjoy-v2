@@ -66,7 +66,7 @@ interface RecipeDetailRouteArgs {
 }
 
 export async function loadRecipeDetail({ request, params, context }: RecipeDetailRouteArgs) {
-  const userId = await requireUserId(request);
+  const userId = await requireUserId(request, "/login", context.cloudflare?.env);
   const { id } = params;
 
   const database = await getRequestDb(context);
@@ -336,7 +336,7 @@ async function handleDeleteSpoon(
 }
 
 export async function handleRecipeDetailAction({ request, params, context }: RecipeDetailRouteArgs) {
-  const userId = await requireUserId(request);
+  const userId = await requireUserId(request, "/login", context.cloudflare?.env);
   const { id } = params;
   const formData = await request.formData();
   const intent = formData.get("intent");
@@ -352,6 +352,8 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
   }
 
   if (intent === "createCookbookAndSave") {
+    await assertActiveRecipe(database, id);
+
     const title = formData.get("title")?.toString()?.trim();
     if (!title) {
       throw new Response("Title is required", { status: 400 });
@@ -389,6 +391,8 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
         });
         return { success: true };
       }
+
+      await assertActiveRecipe(database, id);
 
       try {
         await database.recipeInCookbook.create({
@@ -428,4 +432,17 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
   }
 
   return null;
+}
+
+async function assertActiveRecipe(
+  database: Awaited<ReturnType<typeof getRequestDb>>,
+  recipeId: string,
+) {
+  const recipe = await database.recipe.findFirst({
+    where: { id: recipeId, deletedAt: null },
+    select: { id: true },
+  });
+  if (!recipe) {
+    throw new Response("Recipe not found", { status: 404 });
+  }
 }

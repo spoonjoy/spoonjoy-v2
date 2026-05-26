@@ -16,7 +16,8 @@ import {
 async function initiateAppleOAuth({ request, context }: Route.LoaderArgs | Route.ActionArgs) {
   const state = generateOAuthState();
   const sessionData = resolveOAuthStartSessionData(request, state);
-  const linkingRedirect = await assertCanStartOAuthLinking(request, sessionData);
+  const env = context.cloudflare?.env;
+  const linkingRedirect = await assertCanStartOAuthLinking(request, sessionData, env);
   if (linkingRedirect) return linkingRedirect;
 
   let config;
@@ -29,7 +30,7 @@ async function initiateAppleOAuth({ request, context }: Route.LoaderArgs | Route
   const redirectUri = buildOAuthCallbackUrl(request, "apple");
   sessionData.redirectUri = redirectUri;
   const authorizationUrl = createAppleAuthorizationURL(config, redirectUri, state);
-  const cookie = await commitOAuthStartSession(request, "apple", sessionData);
+  const cookie = await commitOAuthStartSession(request, "apple", sessionData, env);
 
   return redirectTo(authorizationUrl.toString(), { "Set-Cookie": cookie });
 }

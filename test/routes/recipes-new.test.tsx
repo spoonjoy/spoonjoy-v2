@@ -518,7 +518,7 @@ describe("Recipes New Route", () => {
       expect(covers).toHaveLength(1);
       expect(covers[0].sourceType).toBe("chef-upload");
       expect(covers[0].imageUrl).toMatch(
-        new RegExp(`^/photos/recipes/${testUserId}/${recipe.id}/\\d+\\.jpg$`),
+        new RegExp(`^/photos/recipes/${testUserId}/${recipe.id}/\\d+-[a-f0-9-]+\\.jpg$`),
       );
       expect(mockR2Bucket.put).toHaveBeenCalledWith(
         covers[0].imageUrl.replace("/photos/", ""),

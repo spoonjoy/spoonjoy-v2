@@ -1,7 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import type { AppLoadContext } from "react-router";
 import { data } from "react-router";
-import { getIngredientParserEnv, getRequestDb } from "~/lib/route-platform.server";
+import { getCloudflareEnv, getIngredientParserEnv, getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
 import { IngredientParseError, parseIngredients } from "~/lib/ingredient-parse.server";
 import { resolveIngredientAffordance } from "~/lib/ingredient-affordances";
@@ -56,7 +56,7 @@ async function normalizeShoppingListOrdering(
 }
 
 export async function loadShoppingList({ request, context }: ShoppingListRouteArgs) {
-  const userId = await requireUserId(request);
+  const userId = await requireUserId(request, "/login", getCloudflareEnv(context));
 
   const database = await getRequestDb(context);
 
@@ -118,7 +118,7 @@ export async function loadShoppingList({ request, context }: ShoppingListRouteAr
 }
 
 export async function handleShoppingListAction({ request, context }: ShoppingListRouteArgs) {
-  const userId = await requireUserId(request);
+  const userId = await requireUserId(request, "/login", getCloudflareEnv(context));
   const formData = await request.formData();
   const intent = formData.get("intent")?.toString();
 
@@ -308,8 +308,8 @@ export async function handleShoppingListAction({ request, context }: ShoppingLis
     const scaleFactor = Number.isFinite(parsedScaleFactor) && parsedScaleFactor > 0 ? parsedScaleFactor : 1;
 
     if (recipeId) {
-      const recipe = await database.recipe.findUnique({
-        where: { id: recipeId },
+      const recipe = await database.recipe.findFirst({
+        where: { id: recipeId, deletedAt: null },
         include: {
           steps: {
             include: {
@@ -324,62 +324,63 @@ export async function handleShoppingListAction({ request, context }: ShoppingLis
         },
       });
 
-      /* istanbul ignore else -- @preserve recipe should exist if selected */
-      if (recipe) {
-        for (const step of recipe.steps) {
-          for (const ingredient of step.ingredients) {
-            // Check if item already exists
-            const existingItem = await database.shoppingListItem.findUnique({
-              where: {
-                shoppingListId_unitId_ingredientRefId: {
-                  shoppingListId: shoppingList.id,
-                  unitId: ingredient.unitId,
-                  ingredientRefId: ingredient.ingredientRefId,
-                },
+      if (!recipe) {
+        throw new Response("Recipe not found", { status: 404 });
+      }
+
+      for (const step of recipe.steps) {
+        for (const ingredient of step.ingredients) {
+          // Check if item already exists
+          const existingItem = await database.shoppingListItem.findUnique({
+            where: {
+              shoppingListId_unitId_ingredientRefId: {
+                shoppingListId: shoppingList.id,
+                unitId: ingredient.unitId,
+                ingredientRefId: ingredient.ingredientRefId,
+              },
+            },
+          });
+
+          const affordance = resolveIngredientAffordance(
+            ingredient.ingredientRef.name,
+            null,
+            null
+          );
+
+          if (existingItem) {
+            /* istanbul ignore next -- @preserve ternary branches for quantity addition */
+            const scaledQuantity = ingredient.quantity ? ingredient.quantity * scaleFactor : null;
+            const newQuantity = scaledQuantity
+              ? (existingItem.quantity || 0) + scaledQuantity
+              : existingItem.quantity;
+            const shouldMoveToEnd = Boolean(existingItem.deletedAt || existingItem.checkedAt || existingItem.checked);
+
+            await database.shoppingListItem.update({
+              where: { id: existingItem.id },
+              data: {
+                quantity: newQuantity,
+                checked: false,
+                checkedAt: null,
+                deletedAt: null,
+                sortIndex: shouldMoveToEnd ? await nextSortIndex(database, shoppingList.id) : existingItem.sortIndex,
+                categoryKey: existingItem.categoryKey ?? affordance.categoryKey,
+                iconKey: affordance.iconKey,
               },
             });
+          } else {
+            const sortIndex = await nextSortIndex(database, shoppingList.id);
 
-            const affordance = resolveIngredientAffordance(
-              ingredient.ingredientRef.name,
-              null,
-              null
-            );
-
-            if (existingItem) {
-              /* istanbul ignore next -- @preserve ternary branches for quantity addition */
-              const scaledQuantity = ingredient.quantity ? ingredient.quantity * scaleFactor : null;
-              const newQuantity = scaledQuantity
-                ? (existingItem.quantity || 0) + scaledQuantity
-                : existingItem.quantity;
-              const shouldMoveToEnd = Boolean(existingItem.deletedAt || existingItem.checkedAt || existingItem.checked);
-
-              await database.shoppingListItem.update({
-                where: { id: existingItem.id },
-                data: {
-                  quantity: newQuantity,
-                  checked: false,
-                  checkedAt: null,
-                  deletedAt: null,
-                  sortIndex: shouldMoveToEnd ? await nextSortIndex(database, shoppingList.id) : existingItem.sortIndex,
-                  categoryKey: existingItem.categoryKey ?? affordance.categoryKey,
-                  iconKey: affordance.iconKey,
-                },
-              });
-            } else {
-              const sortIndex = await nextSortIndex(database, shoppingList.id);
-
-              await database.shoppingListItem.create({
-                data: {
-                  shoppingListId: shoppingList.id,
-                  quantity: ingredient.quantity ? ingredient.quantity * scaleFactor : null,
-                  unitId: ingredient.unitId,
-                  ingredientRefId: ingredient.ingredientRefId,
-                  sortIndex,
-                  categoryKey: affordance.categoryKey,
-                  iconKey: affordance.iconKey,
-                },
-              });
-            }
+            await database.shoppingListItem.create({
+              data: {
+                shoppingListId: shoppingList.id,
+                quantity: ingredient.quantity ? ingredient.quantity * scaleFactor : null,
+                unitId: ingredient.unitId,
+                ingredientRefId: ingredient.ingredientRefId,
+                sortIndex,
+                categoryKey: affordance.categoryKey,
+                iconKey: affordance.iconKey,
+              },
+            });
           }
         }
       }

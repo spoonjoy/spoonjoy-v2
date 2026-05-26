@@ -49,8 +49,8 @@ export function links() {
   ];
 }
 
-export async function loader({ request }: Route.LoaderArgs) {
-  const userId = await getUserId(request);
+export async function loader({ request, context }: Route.LoaderArgs) {
+  const userId = await getUserId(request, context.cloudflare?.env);
   return { userId };
 }
 

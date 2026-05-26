@@ -39,7 +39,7 @@ import { Select } from "~/components/ui/select";
 import { CookbookPage, CookbookHeader, RuledEmptyState } from "~/components/cookbook/page";
 
 export async function loader({ request, params, context }: Route.LoaderArgs) {
-  const userId = await requireUserId(request);
+  const userId = await requireUserId(request, "/login", context.cloudflare?.env);
   const { id } = params;
 
   const database = await getRequestDb(context);
@@ -54,6 +54,11 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
         },
       },
       recipes: {
+        where: {
+          recipe: {
+            deletedAt: null,
+          },
+        },
         include: {
           recipe: {
             select: {
@@ -132,7 +137,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
 }
 
 export async function action({ request, params, context }: Route.ActionArgs) {
-  const userId = await requireUserId(request);
+  const userId = await requireUserId(request, "/login", context.cloudflare?.env);
   const { id } = params;
   const formData = await request.formData();
   const intent = formData.get("intent");
@@ -182,6 +187,14 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   if (intent === "addRecipe") {
     const recipeId = formData.get("recipeId")?.toString();
     if (recipeId) {
+      const recipe = await database.recipe.findFirst({
+        where: { id: recipeId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!recipe) {
+        throw new Response("Recipe not found", { status: 404 });
+      }
+
       try {
         await database.recipeInCookbook.create({
           data: {

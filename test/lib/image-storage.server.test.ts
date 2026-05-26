@@ -112,11 +112,12 @@ describe("image storage helpers", () => {
         file,
         namespace: "recipes/user-1/recipe-1",
         now: () => 12345,
+        randomId: () => "upload-1",
       });
 
-      expect(imageUrl).toBe("/photos/recipes/user-1/recipe-1/12345.webp");
+      expect(imageUrl).toBe("/photos/recipes/user-1/recipe-1/12345-upload-1.webp");
       expect(bucket.put).toHaveBeenCalledWith(
-        "recipes/user-1/recipe-1/12345.webp",
+        "recipes/user-1/recipe-1/12345-upload-1.webp",
         file,
         { httpMetadata: { contentType: "image/webp" } }
       );
@@ -137,9 +138,10 @@ describe("image storage helpers", () => {
         file,
         namespace: "spoons/user-1/recipe-1",
         now: () => 24680,
+        randomId: () => "upload-2",
       });
 
-      expect(imageUrl).toBe("/photos/spoons/user-1/recipe-1/24680.jpg");
+      expect(imageUrl).toBe("/photos/spoons/user-1/recipe-1/24680-upload-2.jpg");
       const uploadedFile = bucket.put.mock.calls[0][1] as File;
       expect(uploadedFile).not.toBe(file);
       expect(uploadedFile.type).toBe("image/jpeg");
@@ -232,6 +234,36 @@ describe("image storage helpers", () => {
       });
 
       expect(imageUrl).toBe("data:image/jpeg;base64,YWJj");
+    });
+
+    it("uses random ids so same-millisecond uploads do not overwrite each other", async () => {
+      const bucket = {
+        put: vi.fn().mockResolvedValue(undefined),
+      };
+      const file = new File(["image"], "dish.png", { type: "image/png" });
+      const ids = ["first", "second"];
+
+      const first = await storeImage({
+        bucket: bucket as unknown as R2Bucket,
+        file,
+        namespace: "recipes/user-1/recipe-1",
+        now: () => 12345,
+        randomId: () => ids.shift() ?? "fallback",
+      });
+      const second = await storeImage({
+        bucket: bucket as unknown as R2Bucket,
+        file,
+        namespace: "recipes/user-1/recipe-1",
+        now: () => 12345,
+        randomId: () => ids.shift() ?? "fallback",
+      });
+
+      expect(first).toBe("/photos/recipes/user-1/recipe-1/12345-first.png");
+      expect(second).toBe("/photos/recipes/user-1/recipe-1/12345-second.png");
+      expect(bucket.put.mock.calls.map((call) => call[0])).toEqual([
+        "recipes/user-1/recipe-1/12345-first.png",
+        "recipes/user-1/recipe-1/12345-second.png",
+      ]);
     });
   });
 

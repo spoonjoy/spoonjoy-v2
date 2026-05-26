@@ -93,6 +93,43 @@ describe("Cookbooks $id Route", () => {
       expect(result.isOwner).toBe(true);
     });
 
+    it("should not return soft-deleted recipes saved in the cookbook", async () => {
+      const activeRecipe = await db.recipe.create({
+        data: {
+          title: "Active Recipe " + faker.string.alphanumeric(6),
+          chefId: testUserId,
+        },
+      });
+      const deletedRecipe = await db.recipe.create({
+        data: {
+          title: "Deleted Recipe " + faker.string.alphanumeric(6),
+          chefId: testUserId,
+          deletedAt: new Date(),
+        },
+      });
+      await db.recipeInCookbook.createMany({
+        data: [
+          { cookbookId, recipeId: activeRecipe.id, addedById: testUserId },
+          { cookbookId, recipeId: deletedRecipe.id, addedById: testUserId },
+        ],
+      });
+
+      const session = await sessionStorage.getSession();
+      session.set("userId", testUserId);
+      const cookieValue = (await sessionStorage.commitSession(session)).split(";")[0];
+      const request = new UndiciRequest(`http://localhost:3000/cookbooks/${cookbookId}`, {
+        headers: { Cookie: cookieValue },
+      });
+
+      const result = await loader({
+        request,
+        context: { cloudflare: { env: null } },
+        params: { id: cookbookId },
+      } as any);
+
+      expect(result.cookbook.recipes.map((item: { recipe: { id: string } }) => item.recipe.id)).toEqual([activeRecipe.id]);
+    });
+
     it("should return isOwner false when logged in as non-owner", async () => {
       const session = await sessionStorage.getSession();
       session.set("userId", otherUserId);
@@ -310,6 +347,34 @@ describe("Cookbooks $id Route", () => {
         where: { cookbookId, recipeId: recipe.id },
       });
       expect(recipeInCookbook).not.toBeNull();
+    });
+
+    it("should reject direct attempts to add a soft-deleted recipe", async () => {
+      const recipe = await db.recipe.create({
+        data: {
+          title: "Deleted Add Recipe " + faker.string.alphanumeric(6),
+          chefId: testUserId,
+          deletedAt: new Date(),
+        },
+      });
+
+      const request = await createFormRequest(
+        { intent: "addRecipe", recipeId: recipe.id },
+        testUserId
+      );
+
+      await expect(
+        action({
+          request,
+          context: { cloudflare: { env: null } },
+          params: { id: cookbookId },
+        } as any)
+      ).rejects.toSatisfy((error: any) => {
+        expect(error).toBeInstanceOf(Response);
+        expect(error.status).toBe(404);
+        return true;
+      });
+      await expect(db.recipeInCookbook.count({ where: { cookbookId, recipeId: recipe.id } })).resolves.toBe(0);
     });
 
     it("should remove recipe from cookbook", async () => {

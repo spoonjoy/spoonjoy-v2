@@ -30,7 +30,7 @@ async function parseJson(request: Request): Promise<Record<string, unknown> | nu
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
-  const userId = await getUserId(request);
+  const userId = await getUserId(request, context.cloudflare?.env);
   if (!userId) return jsonError(401, "Authentication required");
 
   if (request.method !== "PATCH") {

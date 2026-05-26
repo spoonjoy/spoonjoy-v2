@@ -66,7 +66,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const query = url.searchParams.get("q") ?? "";
   const scope = normalizeSearchScope(url.searchParams.get("scope"));
-  const userId = await getUserId(request);
+  const userId = await getUserId(request, context.cloudflare?.env);
   const database = await getRequestDb(context);
 
   const results = await searchSpoonjoy(database, {

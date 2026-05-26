@@ -97,6 +97,8 @@ describe("oauth-route.server", () => {
     expect(sanitizeInternalRedirect("/recipes", "/fallback")).toBe("/recipes");
     expect(sanitizeInternalRedirect("//evil.example", "/fallback")).toBe("/fallback");
     expect(sanitizeInternalRedirect("https://evil.example", "/fallback")).toBe("/fallback");
+    expect(sanitizeInternalRedirect("/\\evil.example", "/fallback")).toBe("/fallback");
+    expect(sanitizeInternalRedirect("/\u0000evil", "/fallback")).toBe("/fallback");
     expect(sanitizeInternalRedirect(null, "/fallback")).toBe("/fallback");
   });
 
@@ -210,6 +212,28 @@ describe("oauth-route.server", () => {
     });
   });
 
+  it("scopes OAuth start cookies to the runtime session secret", async () => {
+    const request = new Request("https://spoonjoy.app/auth/google");
+    const env = { SESSION_SECRET: "runtime-oauth-secret" };
+    const cookie = await commitOAuthStartSession(request, "google", {
+      state: "state",
+      codeVerifier: "verifier",
+      redirectTo: "/cookbooks",
+      failureRedirect: "/signup",
+      linking: false,
+    }, env);
+
+    const readRequest = new Request("https://spoonjoy.app/auth/google/callback", {
+      headers: { Cookie: cookieHeader(cookie) },
+    });
+
+    await expect(readOAuthStartSession(readRequest, "google")).resolves.toBeNull();
+    await expect(readOAuthStartSession(readRequest, "google", env)).resolves.toMatchObject({
+      state: "state",
+      codeVerifier: "verifier",
+    });
+  });
+
   it("commits and reads OAuth session data without a code verifier", async () => {
     const request = new Request("https://spoonjoy.app/auth/apple");
     const cookie = await commitOAuthStartSession(request, "apple", {
@@ -297,25 +321,26 @@ describe("oauth-route.server", () => {
 
   it("redirects with OAuth error and clears stored state", async () => {
     const start = new Request("https://spoonjoy.app/auth/google");
+    const env = { SESSION_SECRET: "runtime-oauth-secret" };
     const cookie = await commitOAuthStartSession(start, "google", {
       state: "state",
       codeVerifier: "verifier",
       redirectTo: "/recipes",
       failureRedirect: "/login",
       linking: false,
-    });
+    }, env);
     const request = new Request("https://spoonjoy.app/auth/google/callback", {
       headers: { Cookie: cookieHeader(cookie) },
     });
 
-    const response = await redirectWithOAuthError(request, "google", "/login", "invalid_state");
+    const response = await redirectWithOAuthError(request, "google", "/login", "invalid_state", env);
     expect(response.status).toBe(302);
     expect(response.headers.get("Location")).toBe("/login?oauthError=invalid_state");
 
     const nextRequest = new Request("https://spoonjoy.app/auth/google/callback", {
       headers: { Cookie: cookieHeader(response.headers.get("Set-Cookie") ?? "") },
     });
-    await expect(readOAuthStartSession(nextRequest, "google")).resolves.toBeNull();
+    await expect(readOAuthStartSession(nextRequest, "google", env)).resolves.toBeNull();
   });
 
   it("validates OAuth state", () => {

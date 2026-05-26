@@ -29,7 +29,7 @@ interface LoaderData {
 
 // Loader - redirect if already logged in, handle OAuth errors
 export async function loader({ request, context }: Route.LoaderArgs) {
-  const userId = await getUserId(request);
+  const userId = await getUserId(request, context.cloudflare?.env);
   if (userId) {
     throw redirect("/");
   }
@@ -99,7 +99,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   const user = await createUser(database, email, username, password);
 
   // Create session and redirect
-  return createUserSession(user.id, "/recipes");
+  return createUserSession(user.id, "/recipes", context.cloudflare?.env);
 }
 
 export default function Signup() {

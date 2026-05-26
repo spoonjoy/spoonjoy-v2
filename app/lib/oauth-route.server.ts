@@ -3,7 +3,7 @@ import { redirect } from "react-router";
 import { generateState } from "arctic";
 import type { OAuthEnv } from "~/lib/env.server";
 import { getCloudflareEnv } from "~/lib/route-platform.server";
-import { getUserId, oauthSessionStorage } from "~/lib/session.server";
+import { getOAuthSessionStorage, getUserId, sanitizeSessionRedirect, type SessionEnv } from "~/lib/session.server";
 
 export type OAuthProvider = "google" | "github" | "apple";
 
@@ -64,11 +64,7 @@ export function redirectTo(location: string, headers?: HeadersInit) {
 }
 
 export function sanitizeInternalRedirect(value: string | null | undefined, fallback: string): string {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) {
-    return fallback;
-  }
-
-  return value;
+  return sanitizeSessionRedirect(value, fallback);
 }
 
 function sameOriginReferer(request: Request): URL | null {
@@ -111,10 +107,14 @@ export function resolveOAuthStartSessionData(
   };
 }
 
-export async function assertCanStartOAuthLinking(request: Request, data: OAuthStartSessionData) {
+export async function assertCanStartOAuthLinking(
+  request: Request,
+  data: OAuthStartSessionData,
+  env?: SessionEnv | null
+) {
   if (!data.linking) return null;
 
-  const userId = await getUserId(request);
+  const userId = await getUserId(request, env);
   if (userId) {
     data.linkingUserId = userId;
     return null;
@@ -126,9 +126,11 @@ export async function assertCanStartOAuthLinking(request: Request, data: OAuthSt
 export async function commitOAuthStartSession(
   request: Request,
   provider: OAuthProvider,
-  data: OAuthStartSessionData
+  data: OAuthStartSessionData,
+  env?: SessionEnv | null
 ): Promise<string> {
-  const session = await oauthSessionStorage.getSession(request.headers.get("Cookie"));
+  const storage = getOAuthSessionStorage(env);
+  const session = await storage.getSession(request.headers.get("Cookie"));
 
   session.set(oauthSessionKey(provider, "state"), data.state);
   session.set(oauthSessionKey(provider, "redirectTo"), data.redirectTo);
@@ -153,14 +155,15 @@ export async function commitOAuthStartSession(
     session.unset(oauthSessionKey(provider, "linkingUserId"));
   }
 
-  return oauthSessionStorage.commitSession(session);
+  return storage.commitSession(session);
 }
 
 export async function readOAuthStartSession(
   request: Request,
-  provider: OAuthProvider
+  provider: OAuthProvider,
+  env?: SessionEnv | null
 ): Promise<OAuthStartSessionData | null> {
-  const session = await oauthSessionStorage.getSession(request.headers.get("Cookie"));
+  const session = await getOAuthSessionStorage(env).getSession(request.headers.get("Cookie"));
   const state = session.get(oauthSessionKey(provider, "state"));
 
   if (typeof state !== "string" || !state) {
@@ -201,16 +204,21 @@ export async function redirectWithOAuthError(
   request: Request,
   provider: OAuthProvider,
   failureRedirect: string,
-  error: string | undefined
+  error: string | undefined,
+  env?: SessionEnv | null
 ) {
   return redirectTo(appendOAuthError(failureRedirect, error), {
-    "Set-Cookie": await destroyOAuthStartSession(request),
+    "Set-Cookie": await destroyOAuthStartSession(request, env),
   });
 }
 
-export async function destroyOAuthStartSession(request: Request): Promise<string> {
-  const session = await oauthSessionStorage.getSession(request.headers.get("Cookie"));
-  return oauthSessionStorage.destroySession(session);
+export async function destroyOAuthStartSession(
+  request: Request,
+  env?: SessionEnv | null
+): Promise<string> {
+  const storage = getOAuthSessionStorage(env);
+  const session = await storage.getSession(request.headers.get("Cookie"));
+  return storage.destroySession(session);
 }
 
 export function isValidOAuthState(storedState: string | undefined, callbackState: string | null) {

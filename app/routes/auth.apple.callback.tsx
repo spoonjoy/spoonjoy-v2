@@ -6,9 +6,10 @@ export async function action({ request, context }: Route.ActionArgs) {
   return handleAppleCallback(request, context);
 }
 
-export async function loader({ request }: Route.LoaderArgs) {
-  const stored = await readOAuthStartSession(request, "apple");
-  return redirectWithOAuthError(request, "apple", stored?.failureRedirect ?? "/login", "invalid_request");
+export async function loader({ request, context }: Route.LoaderArgs) {
+  const env = context.cloudflare?.env;
+  const stored = await readOAuthStartSession(request, "apple", env);
+  return redirectWithOAuthError(request, "apple", stored?.failureRedirect ?? "/login", "invalid_request", env);
 }
 
 export default function AppleOAuthCallbackRoute() {

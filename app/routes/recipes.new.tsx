@@ -36,12 +36,12 @@ interface ActionData {
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {
-  await requireUserId(request);
+  await requireUserId(request, "/login", context.cloudflare?.env);
   return null;
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
-  const userId = await requireUserId(request);
+  const userId = await requireUserId(request, "/login", context.cloudflare?.env);
   const formData = await request.formData();
 
   const title = formData.get("title")?.toString() || "";

@@ -1076,6 +1076,12 @@ const addRecipeToShoppingListTool: SpoonjoyApiOperation = {
 
     const owner = await getOrCreateOwner(context.db, email);
     const shoppingList = await getOrCreateShoppingList(context.db, owner.id);
+    const recipe = await context.db.recipe.findFirst({
+      where: { id: recipeId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!recipe) throw new Error("Recipe not found");
+
     const ingredients = await context.db.ingredient.findMany({
       where: { recipeId },
       include: { unit: true, ingredientRef: true },

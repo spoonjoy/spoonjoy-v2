@@ -3014,6 +3014,31 @@ describe("Recipes $id Route", () => {
       expect(result).toEqual({ success: true });
     });
 
+    it("should reject direct addToCookbook submissions for a soft-deleted recipe", async () => {
+      await db.recipe.update({
+        where: { id: recipeId },
+        data: { deletedAt: new Date() },
+      });
+
+      const request = await createFormRequest(
+        { intent: "addToCookbook", cookbookId: testCookbookId },
+        testUserId
+      );
+
+      await expect(
+        action({
+          request,
+          context: { cloudflare: { env: null } },
+          params: { id: recipeId },
+        } as any)
+      ).rejects.toSatisfy((error: any) => {
+        expect(error).toBeInstanceOf(Response);
+        expect(error.status).toBe(404);
+        return true;
+      });
+      await expect(db.recipeInCookbook.count({ where: { cookbookId: testCookbookId, recipeId } })).resolves.toBe(0);
+    });
+
     it("should throw 403 when trying to add to someone elses cookbook", async () => {
       // Create cookbook for other user
       const otherCookbook = await db.cookbook.create({

@@ -47,7 +47,7 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {
-  const currentUserId = await getUserId(request);
+  const currentUserId = await getUserId(request, context.cloudflare?.env);
   const url = new URL(request.url);
   const tab = normalizeTab(url.searchParams.get("tab"));
   const requestedChefId = url.searchParams.get("chefId");

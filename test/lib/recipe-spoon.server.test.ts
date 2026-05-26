@@ -85,8 +85,8 @@ describe("recipe-spoon.server", () => {
       );
       expect(fakeBucket.put).toHaveBeenCalledTimes(1);
       const [keyArg] = (fakeBucket.put as ReturnType<typeof vi.fn>).mock.calls[0];
-      expect(keyArg).toBe(`spoons/${chef.id}/${recipe.id}/1234567.png`);
-      expect(result.spoon.photoUrl).toBe(`/photos/spoons/${chef.id}/${recipe.id}/1234567.png`);
+      expect(keyArg).toMatch(new RegExp(`^spoons/${chef.id}/${recipe.id}/1234567-[a-f0-9-]+\\.png$`));
+      expect(result.spoon.photoUrl).toBe(`/photos/${keyArg}`);
     });
 
     it("falls back to data URL when no bucket provided", async () => {

@@ -51,7 +51,7 @@ interface ActionData {
 const STEP_CONTENT_REQUIREMENT_ERROR = "Add at least 1 ingredient or 1 step output use before saving this step.";
 
 export async function loader({ request, params, context }: Route.LoaderArgs) {
-  const userId = await requireUserId(request);
+  const userId = await requireUserId(request, "/login", context.cloudflare?.env);
   const { id } = params;
 
   const database = await getRequestDb(context);
@@ -99,7 +99,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
 }
 
 export async function action({ request, params, context }: Route.ActionArgs) {
-  const userId = await requireUserId(request);
+  const userId = await requireUserId(request, "/login", context.cloudflare?.env);
   const { id } = params;
   const formData = await request.formData();
   const intent = formData.get("intent")?.toString();

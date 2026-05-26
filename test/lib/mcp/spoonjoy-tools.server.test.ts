@@ -461,6 +461,21 @@ describe("spoonjoy MCP tools", () => {
     expect(second.shoppingList.items[0]).toMatchObject({ name: "sugar", quantity: 2, checked: false });
   });
 
+  it("rejects adding a soft-deleted recipe to a shopping list", async () => {
+    const recipe = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+      title: "Deleted Shopping Cake",
+      steps: [{ description: "Mix", ingredients: [{ name: "Sugar", quantity: 1, unit: "Cup" }] }],
+    }, context));
+    await context.db.recipe.update({
+      where: { id: recipe.recipe.id },
+      data: { deletedAt: new Date() },
+    });
+
+    await expect(
+      callSpoonjoyMcpTool("add_recipe_to_shopping_list", { recipeId: recipe.recipe.id }, context)
+    ).rejects.toThrow("Recipe not found");
+  });
+
   it("creates, lists, and fetches cookbooks idempotently for the configured owner", async () => {
     const first = parseJson(await callSpoonjoyMcpTool("create_cookbook", {
       title: "Agent Dinner Plans",

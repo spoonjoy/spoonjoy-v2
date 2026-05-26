@@ -18,29 +18,30 @@ import {
 } from "~/lib/oauth-route.server";
 
 export async function handleAppleCallback(request: Request, context: AppLoadContext) {
+  const env = context.cloudflare?.env;
   const formData = await request.formData();
-  const stored = await readOAuthStartSession(request, "apple");
+  const stored = await readOAuthStartSession(request, "apple", env);
   const failureRedirect = stored?.failureRedirect ?? "/login";
   const providerError = formData.get("error")?.toString();
 
   if (providerError) {
-    return redirectWithOAuthError(request, "apple", failureRedirect, providerError);
+    return redirectWithOAuthError(request, "apple", failureRedirect, providerError, env);
   }
 
   const callbackState = formData.get("state")?.toString();
   if (!stored) {
-    return redirectWithOAuthError(request, "apple", failureRedirect, "invalid_state");
+    return redirectWithOAuthError(request, "apple", failureRedirect, "invalid_state", env);
   }
 
   if (!callbackState || !isValidOAuthState(stored.state, callbackState)) {
-    return redirectWithOAuthError(request, "apple", failureRedirect, "invalid_state");
+    return redirectWithOAuthError(request, "apple", failureRedirect, "invalid_state", env);
   }
 
   let config;
   try {
     config = getAppleOAuthConfig(getOAuthEnv(context));
   } catch {
-    return redirectWithOAuthError(request, "apple", failureRedirect, "oauth_unconfigured");
+    return redirectWithOAuthError(request, "apple", failureRedirect, "oauth_unconfigured", env);
   }
 
   const redirectUri = stored.redirectUri ?? buildOAuthCallbackUrl(request, "apple");
@@ -51,14 +52,14 @@ export async function handleAppleCallback(request: Request, context: AppLoadCont
   });
 
   if (!verifyResult.success || !verifyResult.appleUser) {
-    return redirectWithOAuthError(request, "apple", failureRedirect, verifyResult.error);
+    return redirectWithOAuthError(request, "apple", failureRedirect, verifyResult.error, env);
   }
 
   const currentUserId = stored.linking
-    ? (await getUserId(request)) ?? stored.linkingUserId ?? null
+    ? (await getUserId(request, env)) ?? stored.linkingUserId ?? null
     : null;
   if (stored.linking && !currentUserId) {
-    return redirectWithOAuthError(request, "apple", failureRedirect, "login_required");
+    return redirectWithOAuthError(request, "apple", failureRedirect, "login_required", env);
   }
 
   const database = await getRequestDb(context);
@@ -70,38 +71,39 @@ export async function handleAppleCallback(request: Request, context: AppLoadCont
   });
 
   if (!callbackResult.success || !callbackResult.userId) {
-    return redirectWithOAuthError(request, "apple", failureRedirect, callbackResult.error);
+    return redirectWithOAuthError(request, "apple", failureRedirect, callbackResult.error, env);
   }
 
-  const response = await createUserSession(callbackResult.userId, callbackResult.redirectTo);
-  response.headers.append("Set-Cookie", await destroyOAuthStartSession(request));
+  const response = await createUserSession(callbackResult.userId, callbackResult.redirectTo, env);
+  response.headers.append("Set-Cookie", await destroyOAuthStartSession(request, env));
   return response;
 }
 
 export async function handleGitHubCallback(request: Request, context: AppLoadContext) {
+  const env = context.cloudflare?.env;
   const url = new URL(request.url);
-  const stored = await readOAuthStartSession(request, "github");
+  const stored = await readOAuthStartSession(request, "github", env);
   const failureRedirect = stored?.failureRedirect ?? "/login";
   const providerError = url.searchParams.get("error");
   const callbackState = url.searchParams.get("state");
 
   if (providerError) {
-    return redirectWithOAuthError(request, "github", failureRedirect, providerError);
+    return redirectWithOAuthError(request, "github", failureRedirect, providerError, env);
   }
 
   if (!stored) {
-    return redirectWithOAuthError(request, "github", failureRedirect, "invalid_state");
+    return redirectWithOAuthError(request, "github", failureRedirect, "invalid_state", env);
   }
 
   if (!callbackState || !isValidOAuthState(stored.state, callbackState)) {
-    return redirectWithOAuthError(request, "github", failureRedirect, "invalid_state");
+    return redirectWithOAuthError(request, "github", failureRedirect, "invalid_state", env);
   }
 
   let config;
   try {
     config = getGitHubOAuthConfig(getOAuthEnv(context));
   } catch {
-    return redirectWithOAuthError(request, "github", failureRedirect, "oauth_unconfigured");
+    return redirectWithOAuthError(request, "github", failureRedirect, "oauth_unconfigured", env);
   }
 
   const redirectUri = stored.redirectUri ?? buildOAuthCallbackUrl(request, "github");
@@ -111,14 +113,14 @@ export async function handleGitHubCallback(request: Request, context: AppLoadCon
   });
 
   if (!verifyResult.success || !verifyResult.githubUser) {
-    return redirectWithOAuthError(request, "github", failureRedirect, verifyResult.error);
+    return redirectWithOAuthError(request, "github", failureRedirect, verifyResult.error, env);
   }
 
   const currentUserId = stored.linking
-    ? (await getUserId(request)) ?? stored.linkingUserId ?? null
+    ? (await getUserId(request, env)) ?? stored.linkingUserId ?? null
     : null;
   if (stored.linking && !currentUserId) {
-    return redirectWithOAuthError(request, "github", failureRedirect, "login_required");
+    return redirectWithOAuthError(request, "github", failureRedirect, "login_required", env);
   }
 
   const database = await getRequestDb(context);
@@ -130,42 +132,43 @@ export async function handleGitHubCallback(request: Request, context: AppLoadCon
   });
 
   if (!callbackResult.success || !callbackResult.userId) {
-    return redirectWithOAuthError(request, "github", failureRedirect, callbackResult.error);
+    return redirectWithOAuthError(request, "github", failureRedirect, callbackResult.error, env);
   }
 
-  const response = await createUserSession(callbackResult.userId, callbackResult.redirectTo);
-  response.headers.append("Set-Cookie", await destroyOAuthStartSession(request));
+  const response = await createUserSession(callbackResult.userId, callbackResult.redirectTo, env);
+  response.headers.append("Set-Cookie", await destroyOAuthStartSession(request, env));
   return response;
 }
 
 export async function handleGoogleCallback(request: Request, context: AppLoadContext) {
+  const env = context.cloudflare?.env;
   const url = new URL(request.url);
-  const stored = await readOAuthStartSession(request, "google");
+  const stored = await readOAuthStartSession(request, "google", env);
   const failureRedirect = stored?.failureRedirect ?? "/login";
   const providerError = url.searchParams.get("error");
   const callbackState = url.searchParams.get("state");
 
   if (providerError) {
-    return redirectWithOAuthError(request, "google", failureRedirect, providerError);
+    return redirectWithOAuthError(request, "google", failureRedirect, providerError, env);
   }
 
   if (!stored) {
-    return redirectWithOAuthError(request, "google", failureRedirect, "invalid_state");
+    return redirectWithOAuthError(request, "google", failureRedirect, "invalid_state", env);
   }
 
   if (!callbackState || !isValidOAuthState(stored.state, callbackState)) {
-    return redirectWithOAuthError(request, "google", failureRedirect, "invalid_state");
+    return redirectWithOAuthError(request, "google", failureRedirect, "invalid_state", env);
   }
 
   if (!stored.codeVerifier) {
-    return redirectWithOAuthError(request, "google", failureRedirect, "invalid_code_verifier");
+    return redirectWithOAuthError(request, "google", failureRedirect, "invalid_code_verifier", env);
   }
 
   let config;
   try {
     config = getGoogleOAuthConfig(getOAuthEnv(context));
   } catch {
-    return redirectWithOAuthError(request, "google", failureRedirect, "oauth_unconfigured");
+    return redirectWithOAuthError(request, "google", failureRedirect, "oauth_unconfigured", env);
   }
 
   const redirectUri = stored.redirectUri ?? buildOAuthCallbackUrl(request, "google");
@@ -176,14 +179,14 @@ export async function handleGoogleCallback(request: Request, context: AppLoadCon
   });
 
   if (!verifyResult.success || !verifyResult.googleUser) {
-    return redirectWithOAuthError(request, "google", failureRedirect, verifyResult.error);
+    return redirectWithOAuthError(request, "google", failureRedirect, verifyResult.error, env);
   }
 
   const currentUserId = stored.linking
-    ? (await getUserId(request)) ?? stored.linkingUserId ?? null
+    ? (await getUserId(request, env)) ?? stored.linkingUserId ?? null
     : null;
   if (stored.linking && !currentUserId) {
-    return redirectWithOAuthError(request, "google", failureRedirect, "login_required");
+    return redirectWithOAuthError(request, "google", failureRedirect, "login_required", env);
   }
 
   const database = await getRequestDb(context);
@@ -195,10 +198,10 @@ export async function handleGoogleCallback(request: Request, context: AppLoadCon
   });
 
   if (!callbackResult.success || !callbackResult.userId) {
-    return redirectWithOAuthError(request, "google", failureRedirect, callbackResult.error);
+    return redirectWithOAuthError(request, "google", failureRedirect, callbackResult.error, env);
   }
 
-  const response = await createUserSession(callbackResult.userId, callbackResult.redirectTo);
-  response.headers.append("Set-Cookie", await destroyOAuthStartSession(request));
+  const response = await createUserSession(callbackResult.userId, callbackResult.redirectTo, env);
+  response.headers.append("Set-Cookie", await destroyOAuthStartSession(request, env));
   return response;
 }

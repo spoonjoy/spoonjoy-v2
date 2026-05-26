@@ -33,7 +33,7 @@ function getCloudflareCtx(context: AppLoadContext): {
 }
 
 export async function action({ request, params, context }: ActionFunctionArgs) {
-  const viewerId = await requireUserId(request);
+  const viewerId = await requireUserId(request, "/login", context.cloudflare?.env);
   const sourceRecipeId = params.id;
   if (!sourceRecipeId) {
     throw new Response("Not Found", { status: 404 });

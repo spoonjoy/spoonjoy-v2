@@ -236,6 +236,36 @@ describe("Login Route", () => {
       expect(response.headers.get("Location")).toBe("/cookbooks");
     });
 
+    it.each(["https://evil.example/phish", "//evil.example/phish"])(
+      "should ignore unsafe redirectTo URL %s",
+      async (redirectTo) => {
+        const email = faker.internet.email();
+        const username = faker.internet.username() + "_" + faker.string.alphanumeric(8);
+        const password = "testPassword123";
+
+        await createUser(db, email, username, password);
+
+        const formData = new FormData();
+        formData.set("email", email);
+        formData.set("password", password);
+
+        const request = new Request(`http://localhost:3000/login?redirectTo=${encodeURIComponent(redirectTo)}`, {
+          method: "POST",
+          body: formData,
+        });
+
+        const response = await action({
+          request,
+          context: { cloudflare: { env: null } },
+          params: {},
+        } as any);
+
+        expect(response).toBeInstanceOf(Response);
+        expect(response.status).toBe(302);
+        expect(response.headers.get("Location")).toBe("/recipes");
+      }
+    );
+
     it("should handle missing email and password", async () => {
       const formData = new FormData();
 

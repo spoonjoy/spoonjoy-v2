@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import React from "react";
+import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
 
@@ -48,8 +49,9 @@ vi.mock("framer-motion", () => {
   };
 });
 
-import ShoppingList, { resolveSwipeAction, shouldDeleteOnSwipe } from "~/routes/shopping-list";
+import ShoppingList, { action, resolveSwipeAction, shouldDeleteOnSwipe } from "~/routes/shopping-list";
 import { getOrCreateUnit, getOrCreateIngredientRef, createTestUser } from "../utils";
+import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 
 describe("Shopping List Routes", () => {
@@ -279,6 +281,60 @@ describe("Shopping List Routes", () => {
 
       expect(items).toHaveLength(1);
       expect(items[0].quantity).toBe(2);
+    });
+
+    it("should reject direct submissions for soft-deleted recipes", async () => {
+      const recipe = await db.recipe.create({
+        data: {
+          title: "Deleted Shopping Recipe",
+          chefId: testUserId,
+          deletedAt: new Date(),
+        },
+      });
+      const unit = await getOrCreateUnit(db, "cup");
+      const ingredientRef = await getOrCreateIngredientRef(db, "flour");
+      await db.recipeStep.create({
+        data: {
+          recipeId: recipe.id,
+          stepNum: 1,
+          description: "Mix",
+        },
+      });
+      await db.ingredient.create({
+        data: {
+          recipeId: recipe.id,
+          stepNum: 1,
+          quantity: 2,
+          unitId: unit.id,
+          ingredientRefId: ingredientRef.id,
+        },
+      });
+
+      const session = await sessionStorage.getSession();
+      session.set("userId", testUserId);
+      const cookieValue = (await sessionStorage.commitSession(session)).split(";")[0];
+      const formData = new UndiciFormData();
+      formData.append("intent", "addFromRecipe");
+      formData.append("recipeId", recipe.id);
+      const request = new UndiciRequest("http://localhost:3000/shopping-list", {
+        method: "POST",
+        headers: { Cookie: cookieValue },
+        body: formData,
+        duplex: "half",
+      });
+
+      await expect(
+        action({
+          request,
+          context: { cloudflare: { env: null } },
+          params: {},
+        } as any)
+      ).rejects.toSatisfy((error: any) => {
+        expect(error).toBeInstanceOf(Response);
+        expect(error.status).toBe(404);
+        return true;
+      });
+      await expect(db.shoppingListItem.count()).resolves.toBe(0);
     });
   });
 

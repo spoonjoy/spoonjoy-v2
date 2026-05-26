@@ -7,6 +7,7 @@ import { hashPassword, verifyPassword } from "~/lib/auth.server";
 import {
   deleteStoredImage,
   hasUploadedImageFile,
+  RECIPE_IMAGE_TYPES,
   storeImage,
   validateImageFile,
 } from "~/lib/image-storage.server";
@@ -96,7 +97,7 @@ export async function loadAccountSettings({
   request,
   context,
 }: AccountSettingsRouteArgs): Promise<AccountSettingsLoaderData> {
-  const userId = await requireUserId(request);
+  const userId = await requireUserId(request, "/login", getCloudflareEnv(context));
   const url = new URL(request.url);
   const oauthError = url.searchParams.get("oauthError") ?? undefined;
 
@@ -158,7 +159,7 @@ export async function handleAccountSettingsAction({
   request,
   context,
 }: AccountSettingsRouteArgs): Promise<AccountSettingsActionResult> {
-  const userId = await requireUserId(request);
+  const userId = await requireUserId(request, "/login", getCloudflareEnv(context));
 
   const database = await getRequestDb(context);
 
@@ -265,6 +266,7 @@ export async function handleAccountSettingsAction({
 
     // Check file type
     const imageError = validateImageFile(photo, {
+      allowedTypes: RECIPE_IMAGE_TYPES,
       messages: {
         invalidType: "Please upload an image file",
         fileTooLarge: "Photo must be less than 5MB",

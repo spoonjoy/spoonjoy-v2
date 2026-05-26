@@ -133,7 +133,7 @@ async function handleApiRequest({ request, context, params }: Route.LoaderArgs |
 
   try {
     const db = await getRequestDb(context);
-    const principal = await authenticateApiRequest(db, request);
+    const principal = await authenticateApiRequest(db, request, context.cloudflare?.env);
     const url = new URL(request.url);
     const splat = params["*"] ?? "";
     const segments = splat.split("/").filter(Boolean).map(decodeURIComponent);

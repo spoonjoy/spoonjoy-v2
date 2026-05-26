@@ -3,7 +3,7 @@ import { getCloudflareEnv } from "~/lib/route-platform.server";
 
 /**
  * Resource route to serve photos from Cloudflare R2 storage.
- * Matches URLs like /photos/profiles/userId/timestamp.jpg
+ * Matches URLs like /photos/profiles/userId/timestamp-randomId.jpg
  */
 export async function loader({ params, context }: Route.LoaderArgs) {
   const key = params["*"];

@@ -2,7 +2,7 @@ import type { Route } from "./+types/login";
 import { Form, redirect, data, useActionData, useLoaderData } from "react-router";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { authenticateUser } from "~/lib/auth.server";
-import { createUserSession, getUserId } from "~/lib/session.server";
+import { createUserSession, getUserId, sanitizeSessionRedirect } from "~/lib/session.server";
 import { OAuthButtonGroup, OAuthDivider, OAuthError } from "~/components/ui/oauth";
 import { getConfiguredOAuthProviders, type OAuthProvider } from "~/lib/env.server";
 import { getOAuthEnv } from "~/lib/oauth-route.server";
@@ -29,7 +29,7 @@ interface LoaderData {
 
 // Loader - redirect if already logged in, handle OAuth errors
 export async function loader({ request, context }: Route.LoaderArgs) {
-  const userId = await getUserId(request);
+  const userId = await getUserId(request, context.cloudflare?.env);
   if (userId) {
     throw redirect("/");
   }
@@ -53,7 +53,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   const password = formData.get("password")?.toString() || "";
 
   const url = new URL(request.url);
-  const redirectTo = url.searchParams.get("redirectTo") || "/recipes";
+  const redirectTo = sanitizeSessionRedirect(url.searchParams.get("redirectTo"), "/recipes");
 
   const errors: ActionData["errors"] = {};
 
@@ -84,7 +84,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   // Create session and redirect
-  return createUserSession(user.id, redirectTo);
+  return createUserSession(user.id, redirectTo, context.cloudflare?.env);
 }
 
 export default function Login() {

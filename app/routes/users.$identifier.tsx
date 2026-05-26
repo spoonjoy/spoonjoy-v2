@@ -55,7 +55,7 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
   }
 
   const database = await getRequestDb(context);
-  const currentUserId = await getUserId(request);
+  const currentUserId = await getUserId(request, context.cloudflare?.env);
 
   const userByUsername = await database.user.findUnique({
     where: { username: identifier },

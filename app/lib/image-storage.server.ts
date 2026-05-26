@@ -21,6 +21,7 @@ interface StoreImageOptions {
   file: File;
   namespace: string;
   now?: () => number;
+  randomId?: () => string;
 }
 
 interface DeleteStoredImageOptions {
@@ -146,12 +147,18 @@ async function fileToDataUrl(file: File): Promise<string> {
   return `data:${storedFile.type};base64,${btoa(binary)}`;
 }
 
-export async function storeImage({ bucket, file, namespace, now = Date.now }: StoreImageOptions): Promise<string> {
+export async function storeImage({
+  bucket,
+  file,
+  namespace,
+  now = Date.now,
+  randomId = () => crypto.randomUUID(),
+}: StoreImageOptions): Promise<string> {
   if (!bucket) {
     return fileToDataUrl(file);
   }
 
-  const key = `${namespace}/${now()}.${getImageExtension(file.name)}`;
+  const key = `${namespace}/${now()}-${randomId()}.${getImageExtension(file.name)}`;
   const storedFile = await stripUploadMetadata(file);
 
   await bucket.put(key, storedFile, {

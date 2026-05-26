@@ -1213,7 +1213,7 @@ describe("Shopping List Route", () => {
       expect(result).toEqual({ data: { success: true }, init: null, type: "DataWithResponseInit" });
     });
 
-    it("should do nothing when recipe does not exist", async () => {
+    it("should throw 404 when recipe does not exist", async () => {
       await db.shoppingList.create({
         data: { authorId: testUserId },
       });
@@ -1226,14 +1226,17 @@ describe("Shopping List Route", () => {
         testUserId
       );
 
-      const result = await action({
-        request,
-        context: { cloudflare: { env: null } },
-        params: {},
-      } as any);
-
-      // Returns success even when no action taken (recipe not found)
-      expect(result).toEqual({ data: { success: true }, init: null, type: "DataWithResponseInit" });
+      await expect(
+        action({
+          request,
+          context: { cloudflare: { env: null } },
+          params: {},
+        } as any)
+      ).rejects.toSatisfy((error: any) => {
+        expect(error).toBeInstanceOf(Response);
+        expect(error.status).toBe(404);
+        return true;
+      });
     });
   });
 

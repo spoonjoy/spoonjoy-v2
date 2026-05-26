@@ -1,5 +1,5 @@
 import type { ApiCredential, PrismaClient as PrismaClientType, User } from "@prisma/client";
-import { getUserId } from "~/lib/session.server";
+import { getUserId, type SessionEnv } from "~/lib/session.server";
 
 export type ApiPrincipalSource = "session" | "bearer" | "environment";
 
@@ -134,13 +134,17 @@ export async function authenticateApiToken(db: PrismaClientType, token: string):
   return toPrincipal(credential.user, "bearer", credential.id);
 }
 
-export async function authenticateApiRequest(db: PrismaClientType, request: Request): Promise<ApiPrincipal | null> {
+export async function authenticateApiRequest(
+  db: PrismaClientType,
+  request: Request,
+  env?: SessionEnv | null
+): Promise<ApiPrincipal | null> {
   const bearerToken = extractBearerToken(request);
   if (bearerToken) {
     return authenticateApiToken(db, bearerToken);
   }
 
-  const sessionUserId = await getUserId(request);
+  const sessionUserId = await getUserId(request, env);
   return sessionUserId ? principalFromUserId(db, sessionUserId, "session") : null;
 }
 

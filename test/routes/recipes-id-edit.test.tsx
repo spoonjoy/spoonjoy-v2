@@ -1084,7 +1084,7 @@ describe("Recipes $id Edit Route", () => {
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       });
       expect(latest?.imageUrl).toMatch(
-        new RegExp(`^/photos/recipes/${testUserId}/${recipeId}/\\d+\\.png$`),
+        new RegExp(`^/photos/recipes/${testUserId}/${recipeId}/\\d+-[a-f0-9-]+\\.png$`),
       );
       expect(mockR2Bucket.put).toHaveBeenCalledWith(
         latest!.imageUrl.replace("/photos/", ""),
@@ -1126,7 +1126,7 @@ describe("Recipes $id Edit Route", () => {
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       });
       expect(latest?.imageUrl).toMatch(
-        new RegExp(`^/photos/recipes/${testUserId}/${recipeId}/\\d+\\.webp$`),
+        new RegExp(`^/photos/recipes/${testUserId}/${recipeId}/\\d+-[a-f0-9-]+\\.webp$`),
       );
       expect(mockR2Bucket.delete).toHaveBeenCalledWith("recipes/user-old/recipe-old/111.jpg");
     });

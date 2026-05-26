@@ -1689,6 +1689,40 @@ describe("Account Settings Route", () => {
         expect(result.message).toContain("image");
       });
 
+      it("should reject SVG profile photos even though they are image files", async () => {
+        const session = await sessionStorage.getSession();
+        session.set("userId", testUserId);
+        const setCookieHeader = await sessionStorage.commitSession(session);
+        const cookieValue = setCookieHeader.split(";")[0];
+
+        const formData = new UndiciFormData();
+        formData.append("intent", "uploadPhoto");
+        formData.append(
+          "photo",
+          new File(["<svg><script>alert(1)</script></svg>"], "avatar.svg", { type: "image/svg+xml" })
+        );
+
+        const headers = new Headers();
+        headers.set("Cookie", cookieValue);
+
+        const request = new UndiciRequest("http://localhost:3000/account/settings", {
+          method: "POST",
+          headers,
+          body: formData,
+          duplex: "half",
+        });
+
+        const result = await action({
+          request,
+          context: { cloudflare: { env: null } },
+          params: {},
+        } as any);
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBe("invalid_file_type");
+        expect(result.message).toContain("image");
+      });
+
       it("should return error when file is too large", async () => {
         const session = await sessionStorage.getSession();
         session.set("userId", testUserId);
@@ -1909,7 +1943,7 @@ describe("Account Settings Route", () => {
 
         // Verify R2 put was called with correct params
         const putCallArgs = mockR2Bucket.put.mock.calls[0];
-        expect(putCallArgs[0]).toMatch(/^profiles\/[^/]+\/\d+\.jpg$/);
+        expect(putCallArgs[0]).toMatch(/^profiles\/[^/]+\/\d+-[a-f0-9-]+\.jpg$/);
         expect(putCallArgs[2]).toEqual({ httpMetadata: { contentType: "image/jpeg" } });
       });
 
