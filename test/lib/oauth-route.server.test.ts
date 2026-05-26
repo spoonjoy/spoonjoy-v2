@@ -46,6 +46,15 @@ describe("oauth-route.server", () => {
     );
   });
 
+  it("canonicalizes www callback URLs to the apex Spoonjoy host", () => {
+    const request = new Request("https://www.spoonjoy.app/auth/apple");
+
+    expect(buildOAuthCallbackUrl(request, "google")).toBe("https://spoonjoy.app/auth/google/callback");
+    expect(buildOAuthCallbackUrl(request, "apple")).toBe(
+      "https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithApple"
+    );
+  });
+
   it("builds provider callback URLs from forwarded public origin", () => {
     const request = new Request("https://spoonjoy-v2.mendelow-studio.workers.dev/auth/github", {
       headers: {
@@ -72,6 +81,19 @@ describe("oauth-route.server", () => {
     const request = new Request("https://spoonjoy-v2.mendelow-studio.workers.dev/auth/apple", {
       headers: {
         "X-Forwarded-Host": "spoonjoy.app",
+      },
+    });
+
+    expect(buildOAuthCallbackUrl(request, "apple")).toBe(
+      "https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithApple"
+    );
+  });
+
+  it("canonicalizes forwarded www callback URLs to the apex Spoonjoy host", () => {
+    const request = new Request("https://spoonjoy-v2.mendelow-studio.workers.dev/auth/apple", {
+      headers: {
+        "X-Forwarded-Host": "www.spoonjoy.app",
+        "X-Forwarded-Proto": "https",
       },
     });
 
