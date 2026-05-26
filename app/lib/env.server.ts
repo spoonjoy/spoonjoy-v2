@@ -73,7 +73,7 @@ function normalizeEnvValue(value: string | undefined): string | undefined {
     return undefined;
   }
 
-  return trimmed;
+  return unquoted;
 }
 
 function requireEnvValue<K extends string>(

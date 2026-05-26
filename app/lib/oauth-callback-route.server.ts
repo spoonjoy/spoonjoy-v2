@@ -17,18 +17,47 @@ import {
   redirectWithOAuthError,
 } from "~/lib/oauth-route.server";
 
+async function readFormPostParams(request: Request): Promise<URLSearchParams> {
+  const contentType = request.headers.get("content-type")?.toLowerCase() ?? "";
+
+  if (contentType.includes("application/x-www-form-urlencoded")) {
+    return new URLSearchParams(await request.text());
+  }
+
+  if (contentType.includes("multipart/form-data")) {
+    const fallbackRequest = request.clone();
+
+    try {
+      const formData = await request.formData();
+      const params = new URLSearchParams();
+
+      for (const [key, value] of formData) {
+        if (typeof value === "string") {
+          params.append(key, value);
+        }
+      }
+
+      return params;
+    } catch {
+      return new URLSearchParams(await fallbackRequest.text());
+    }
+  }
+
+  return new URLSearchParams(await request.text());
+}
+
 export async function handleAppleCallback(request: Request, context: AppLoadContext) {
   const env = context.cloudflare?.env;
-  const formData = await request.formData();
+  const formData = await readFormPostParams(request);
   const stored = await readOAuthStartSession(request, "apple", env);
   const failureRedirect = stored?.failureRedirect ?? "/login";
-  const providerError = formData.get("error")?.toString();
+  const providerError = formData.get("error") ?? undefined;
 
   if (providerError) {
     return redirectWithOAuthError(request, "apple", failureRedirect, providerError, env);
   }
 
-  const callbackState = formData.get("state")?.toString();
+  const callbackState = formData.get("state");
   if (!stored) {
     return redirectWithOAuthError(request, "apple", failureRedirect, "invalid_state", env);
   }
@@ -46,9 +75,9 @@ export async function handleAppleCallback(request: Request, context: AppLoadCont
 
   const redirectUri = stored.redirectUri ?? buildOAuthCallbackUrl(request, "apple");
   const verifyResult = await verifyAppleCallback(config, redirectUri, {
-    code: formData.get("code")?.toString() ?? "",
+    code: formData.get("code") ?? "",
     state: callbackState,
-    user: formData.get("user")?.toString(),
+    user: formData.get("user") ?? undefined,
   });
 
   if (!verifyResult.success || !verifyResult.appleUser) {

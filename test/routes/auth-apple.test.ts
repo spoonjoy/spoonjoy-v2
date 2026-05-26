@@ -28,6 +28,7 @@ import { action, loader } from "~/routes/auth.apple";
 import AppleOAuthRoute from "~/routes/auth.apple";
 import { action as callbackAction, loader as callbackLoader } from "~/routes/auth.apple.callback";
 import AppleOAuthCallbackRoute from "~/routes/auth.apple.callback";
+import { action as legacyCallbackAction } from "~/routes/redwood-functions-auth-oauth";
 
 const appleEnv = {
   APPLE_CLIENT_ID: "apple-client",
@@ -84,6 +85,24 @@ describe("Apple OAuth routes", () => {
     expect(response.headers.get("Location")).toBe("/signup?oauthError=oauth_unconfigured");
   });
 
+  it("redirects to OAuth error when the Apple private key PEM is malformed", async () => {
+    const request = new Request("https://spoonjoy.app/auth/apple", {
+      headers: { Referer: "https://spoonjoy.app/signup" },
+    });
+    mocks.createAppleAuthorizationURL.mockImplementationOnce(() => {
+      throw new Error("bad private key");
+    });
+
+    const response = await loader({
+      request,
+      context: { cloudflare: { env: appleEnv } },
+      params: {},
+    } as any);
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("Location")).toBe("/signup?oauthError=oauth_unconfigured");
+  });
+
   it("requires login before starting a linking flow", async () => {
     const request = new Request("https://spoonjoy.app/auth/apple?linking=true");
     const response = await loader({ request, context: { cloudflare: { env: appleEnv } }, params: {} } as any);
@@ -105,9 +124,136 @@ describe("Apple OAuth routes", () => {
     expect(response.headers.get("Location")).toBe("/login?oauthError=invalid_request");
   });
 
+  it("accepts legacy Apple form_post callbacks with urlencoded bodies", async () => {
+    const appleUser = { id: "a1", email: "a@example.com", emailVerified: true, isPrivateEmail: false, firstName: "A", lastName: "User", fullName: "A User" };
+    mocks.verifyAppleCallback.mockResolvedValueOnce({ success: true, appleUser });
+    mocks.handleAppleOAuthCallback.mockResolvedValueOnce({ success: true, userId: "user-1", action: "user_logged_in", redirectTo: "/recipes" });
+    const cookie = await commitOAuthStartSession(new Request("https://spoonjoy.app/auth/apple"), "apple", {
+      state: "state",
+      redirectTo: "/recipes",
+      failureRedirect: "/login",
+      linking: false,
+      redirectUri: appleRedirectUri,
+    });
+    const body = new URLSearchParams({
+      state: "state",
+      code: "code",
+      user: "{\"name\":{\"firstName\":\"A\",\"lastName\":\"User\"}}",
+    });
+    const request = new Request(appleRedirectUri, {
+      method: "POST",
+      body,
+      headers: { Cookie: cookieHeader(cookie) },
+    });
+
+    const response = await legacyCallbackAction({ request, context: { cloudflare: { env: appleEnv } }, params: {} } as any);
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("Location")).toBe("/recipes");
+    expect(mocks.verifyAppleCallback).toHaveBeenCalledWith(
+      {
+        clientId: "apple-client",
+        teamId: "apple-team",
+        keyId: "apple-key",
+        privateKey: "apple-private-key",
+      },
+      appleRedirectUri,
+      {
+        code: "code",
+        state: "state",
+        user: "{\"name\":{\"firstName\":\"A\",\"lastName\":\"User\"}}",
+      }
+    );
+  });
+
+  it("accepts legacy Apple form_post callbacks with missing or generic content type", async () => {
+    mocks.verifyAppleCallback.mockResolvedValueOnce({ success: false, error: "invalid_code" });
+    const userPayload = "{\"name\":{\"firstName\":\"A\"}}";
+    const cookie = await commitOAuthStartSession(new Request("https://spoonjoy.app/auth/apple"), "apple", {
+      state: "state",
+      redirectTo: "/recipes",
+      failureRedirect: "/login",
+      linking: false,
+      redirectUri: appleRedirectUri,
+    });
+    const request = new Request(appleRedirectUri, {
+      method: "POST",
+      body: `state=state&code=bad&user=${encodeURIComponent(userPayload)}`,
+      headers: {
+        Cookie: cookieHeader(cookie),
+        "Content-Type": "text/plain",
+      },
+    });
+
+    const response = await legacyCallbackAction({ request, context: { cloudflare: { env: appleEnv } }, params: {} } as any);
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("Location")).toBe("/login?oauthError=invalid_code");
+    expect(mocks.verifyAppleCallback).toHaveBeenCalledWith(
+      {
+        clientId: "apple-client",
+        teamId: "apple-team",
+        keyId: "apple-key",
+        privateKey: "apple-private-key",
+      },
+      appleRedirectUri,
+      {
+        code: "bad",
+        state: "state",
+        user: userPayload,
+      }
+    );
+  });
+
+  it("falls back to raw body parsing when multipart Apple callback parsing fails", async () => {
+    mocks.verifyAppleCallback.mockResolvedValueOnce({ success: false, error: "invalid_code" });
+    const cookie = await commitOAuthStartSession(new Request("https://spoonjoy.app/auth/apple"), "apple", {
+      state: "state",
+      redirectTo: "/recipes",
+      failureRedirect: "/login",
+      linking: false,
+      redirectUri: appleRedirectUri,
+    });
+    const request = new Request(appleRedirectUri, {
+      method: "POST",
+      body: "state=state&code=bad",
+      headers: {
+        Cookie: cookieHeader(cookie),
+        "Content-Type": "multipart/form-data",
+      },
+    });
+
+    const response = await legacyCallbackAction({ request, context: { cloudflare: { env: appleEnv } }, params: {} } as any);
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("Location")).toBe("/login?oauthError=invalid_code");
+  });
+
+  it("accepts legacy Apple form_post callbacks with no content type", async () => {
+    mocks.verifyAppleCallback.mockResolvedValueOnce({ success: false, error: "invalid_code" });
+    const cookie = await commitOAuthStartSession(new Request("https://spoonjoy.app/auth/apple"), "apple", {
+      state: "state",
+      redirectTo: "/recipes",
+      failureRedirect: "/login",
+      linking: false,
+      redirectUri: appleRedirectUri,
+    });
+    const request = new Request(appleRedirectUri, {
+      method: "POST",
+      body: new TextEncoder().encode("state=state&code=bad"),
+      headers: { Cookie: cookieHeader(cookie) },
+    });
+
+    const response = await legacyCallbackAction({ request, context: { cloudflare: { env: appleEnv } }, params: {} } as any);
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("Location")).toBe("/login?oauthError=invalid_code");
+  });
+
   it("handles provider error callbacks", async () => {
     const formData = new FormData();
     formData.set("error", "access_denied");
+    formData.set("ignored-file", new Blob(["not an oauth field"]), "ignored.txt");
     const request = new Request("https://spoonjoy.app/auth/apple/callback", { method: "POST", body: formData });
     const response = await callbackAction({ request, context: { cloudflare: { env: appleEnv } }, params: {} } as any);
 

@@ -65,8 +65,25 @@ export function generateOAuthState(): string {
   return arcticGenerateState();
 }
 
+export class InvalidApplePrivateKeyError extends Error {
+  constructor() {
+    super("Apple private key must be a valid PKCS8 PEM private key");
+    this.name = "InvalidApplePrivateKeyError";
+  }
+}
+
+function normalizeApplePrivateKey(privateKey: string): string {
+  return privateKey
+    .trim()
+    .replace(/^['"]+|['"]+$/g, "")
+    .replace(/\\n/g, "\n")
+    .trim();
+}
+
 function encodeApplePrivateKey(privateKey: string): Uint8Array {
-  const base64 = privateKey
+  const normalizedPrivateKey = normalizeApplePrivateKey(privateKey);
+  const hasPemEnvelope = /-----BEGIN PRIVATE KEY-----/.test(normalizedPrivateKey);
+  const base64 = normalizedPrivateKey
     .replace(/-----BEGIN PRIVATE KEY-----/g, "")
     .replace(/-----END PRIVATE KEY-----/g, "")
     .replace(/\s/g, "");
@@ -75,8 +92,12 @@ function encodeApplePrivateKey(privateKey: string): Uint8Array {
     const binary = atob(base64);
     return Uint8Array.from(binary, (char) => char.charCodeAt(0));
   } catch {
+    if (hasPemEnvelope) {
+      throw new InvalidApplePrivateKeyError();
+    }
+
     // Keep fake/test keys usable for URL generation; Apple token exchange will still fail for invalid real keys.
-    return new TextEncoder().encode(privateKey);
+    return new TextEncoder().encode(normalizedPrivateKey);
   }
 }
 
@@ -233,6 +254,14 @@ export async function verifyAppleCallback(
       appleUser,
     };
   } catch (error) {
+    if (error instanceof InvalidApplePrivateKeyError) {
+      return {
+        success: false,
+        error: "oauth_unconfigured",
+        message: "Apple private key is not a valid PKCS8 PEM private key",
+      };
+    }
+
     // Handle OAuth2RequestError from Arctic (check name for mock compatibility)
     if (
       error instanceof OAuth2RequestError ||

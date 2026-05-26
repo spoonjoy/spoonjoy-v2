@@ -29,7 +29,13 @@ async function initiateAppleOAuth({ request, context }: Route.LoaderArgs | Route
 
   const redirectUri = buildOAuthCallbackUrl(request, "apple");
   sessionData.redirectUri = redirectUri;
-  const authorizationUrl = createAppleAuthorizationURL(config, redirectUri, state);
+  let authorizationUrl;
+  try {
+    authorizationUrl = createAppleAuthorizationURL(config, redirectUri, state);
+  } catch {
+    return redirect(appendOAuthError(sessionData.failureRedirect, "oauth_unconfigured"));
+  }
+
   const cookie = await commitOAuthStartSession(request, "apple", sessionData, env);
 
   return redirectTo(authorizationUrl.toString(), { "Set-Cookie": cookie });

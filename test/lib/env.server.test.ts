@@ -166,6 +166,24 @@ describe('Environment Config Validation', () => {
       })
     })
 
+    it('strips accidental surrounding quotes from Apple OAuth env vars', () => {
+      const env = {
+        APPLE_CLIENT_ID: '"test-apple-client-id"',
+        APPLE_TEAM_ID: "'test-apple-team-id'",
+        APPLE_KEY_ID: '"test-apple-key-id"',
+        APPLE_PRIVATE_KEY: "'-----BEGIN PRIVATE KEY-----\\nabc\\n-----END PRIVATE KEY-----'",
+      }
+
+      const config = getAppleOAuthConfig(env)
+
+      expect(config).toEqual({
+        clientId: 'test-apple-client-id',
+        teamId: 'test-apple-team-id',
+        keyId: 'test-apple-key-id',
+        privateKey: '-----BEGIN PRIVATE KEY-----\\nabc\\n-----END PRIVATE KEY-----',
+      })
+    })
+
     it('throws error when APPLE_CLIENT_ID is missing', () => {
       const env = {
         APPLE_TEAM_ID: 'test-apple-team-id',
