@@ -27,6 +27,7 @@ async function initiateAppleOAuth({ request, context }: Route.LoaderArgs | Route
   }
 
   const redirectUri = buildOAuthCallbackUrl(request, "apple");
+  sessionData.redirectUri = redirectUri;
   const authorizationUrl = createAppleAuthorizationURL(config, redirectUri, state);
   const cookie = await commitOAuthStartSession(request, "apple", sessionData);
 

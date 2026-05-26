@@ -286,9 +286,9 @@ describe("Google OAuth routes", () => {
   it("passes current user ID for successful linking callbacks", async () => {
     const loginSession = await sessionStorage.getSession();
     loginSession.set("userId", "user-1");
-    let cookie = await sessionStorage.commitSession(loginSession);
-    cookie = await commitOAuthStartSession(
-      new Request("https://spoonjoy.app/auth/google", { headers: { Cookie: cookieHeader(cookie) } }),
+    const loginCookie = await sessionStorage.commitSession(loginSession);
+    const oauthCookie = await commitOAuthStartSession(
+      new Request("https://spoonjoy.app/auth/google", { headers: { Cookie: cookieHeader(loginCookie) } }),
       "google",
       {
         state: "state",
@@ -303,7 +303,7 @@ describe("Google OAuth routes", () => {
     mocks.handleGoogleOAuthCallback.mockResolvedValueOnce({ success: true, userId: "user-1", action: "account_linked", redirectTo: "/account/settings" });
 
     const request = new Request("https://spoonjoy.app/auth/google/callback?state=state&code=code", {
-      headers: { Cookie: cookieHeader(cookie) },
+      headers: { Cookie: `${cookieHeader(loginCookie)}; ${cookieHeader(oauthCookie)}` },
     });
     await callbackLoader({ request, context: { cloudflare: { env: googleEnv } }, params: {} } as any);
 

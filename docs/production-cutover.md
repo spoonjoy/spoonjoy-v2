@@ -122,7 +122,7 @@ Before DNS switch, update provider dashboards:
 
 - Google authorized redirect URI: `https://spoonjoy.app/auth/google/callback`
 - GitHub authorization callback URL: `https://spoonjoy.app/auth/github/callback`
-- Apple redirect URI: `https://spoonjoy.app/auth/apple/callback`
+- Apple redirect URI: `https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithApple`
 
 After DNS switch, test OAuth start routes. If a provider is not configured, it should not appear on `/login` or `/signup`.
 

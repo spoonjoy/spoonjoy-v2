@@ -14,9 +14,22 @@ const sessionCookie = createCookie("__session", {
   maxAge: 60 * 60 * 24 * 30, // 30 days
 });
 
+const oauthSessionCookie = createCookie("__oauth", {
+  secrets: [SESSION_SECRET],
+  sameSite: "none",
+  path: "/",
+  httpOnly: true,
+  secure: true,
+  maxAge: 60 * 10,
+});
+
 // Create cookie session storage
 export const sessionStorage = createCookieSessionStorage({
   cookie: sessionCookie,
+});
+
+export const oauthSessionStorage = createCookieSessionStorage({
+  cookie: oauthSessionCookie,
 });
 
 // Helper to get session from request

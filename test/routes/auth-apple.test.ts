@@ -35,6 +35,7 @@ const appleEnv = {
   APPLE_KEY_ID: "apple-key",
   APPLE_PRIVATE_KEY: "apple-private-key",
 };
+const appleRedirectUri = "https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithApple";
 
 function cookieHeader(setCookie: string) {
   return setCookie.split(";")[0];
@@ -51,7 +52,8 @@ describe("Apple OAuth routes", () => {
 
     expect(response.status).toBe(302);
     expect(response.headers.get("Location")).toContain("appleid.apple.com");
-    expect(response.headers.get("Set-Cookie")).toBeTruthy();
+    expect(response.headers.get("Set-Cookie")).toContain("__oauth=");
+    expect(response.headers.get("Set-Cookie")).toContain("SameSite=None");
     expect(mocks.createAppleAuthorizationURL).toHaveBeenCalledWith(
       {
         clientId: "apple-client",
@@ -59,7 +61,7 @@ describe("Apple OAuth routes", () => {
         keyId: "apple-key",
         privateKey: "apple-private-key",
       },
-      "https://spoonjoy.app/auth/apple/callback",
+      appleRedirectUri,
       expect.any(String)
     );
   });
@@ -227,7 +229,7 @@ describe("Apple OAuth routes", () => {
         keyId: "apple-key",
         privateKey: "apple-private-key",
       },
-      "https://spoonjoy.app/auth/apple/callback",
+      appleRedirectUri,
       { code: "", state: "state", user: undefined }
     );
   });
@@ -305,7 +307,8 @@ describe("Apple OAuth routes", () => {
     const response = await callbackAction({ request, context: { cloudflare: { env: appleEnv } }, params: {} } as any);
     expect(response.status).toBe(302);
     expect(response.headers.get("Location")).toBe("/cookbooks");
-    expect(response.headers.get("Set-Cookie")).toBeTruthy();
+    expect(response.headers.get("Set-Cookie")).toContain("__session=");
+    expect(response.headers.get("Set-Cookie")).toContain("__oauth=");
     expect(mocks.handleAppleOAuthCallback).toHaveBeenCalledWith({
       db: { source: "db" },
       appleUser,
@@ -326,6 +329,7 @@ describe("Apple OAuth routes", () => {
         redirectTo: "/account/settings",
         failureRedirect: "/account/settings",
         linking: true,
+        linkingUserId: "user-1",
       }
     );
     const appleUser = { id: "a1", email: "a@example.com", emailVerified: true, isPrivateEmail: false, firstName: null, lastName: null, fullName: null };

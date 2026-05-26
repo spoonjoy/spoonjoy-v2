@@ -3,20 +3,23 @@ import { redirect } from "react-router";
 import { generateState } from "arctic";
 import type { OAuthEnv } from "~/lib/env.server";
 import { getCloudflareEnv } from "~/lib/route-platform.server";
-import { getSession, getUserId, sessionStorage } from "~/lib/session.server";
+import { getUserId, oauthSessionStorage } from "~/lib/session.server";
 
 export type OAuthProvider = "google" | "github" | "apple";
 
 export interface OAuthStartSessionData {
   state: string;
   codeVerifier?: string;
+  redirectUri?: string;
   redirectTo: string;
   failureRedirect: string;
   linking: boolean;
+  linkingUserId?: string;
 }
 
 const OAUTH_SESSION_PREFIX = "oauth";
 const HOST_PATTERN = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?::\d{1,5})?$/i;
+const LEGACY_APPLE_CALLBACK_PATH = "/.redwood/functions/auth/oauth?method=loginWithApple";
 
 function oauthSessionKey(provider: OAuthProvider, key: keyof OAuthStartSessionData) {
   return `${OAUTH_SESSION_PREFIX}:${provider}:${key}`;
@@ -41,7 +44,13 @@ function forwardedOrigin(request: Request): string | null {
 
 export function buildOAuthCallbackUrl(request: Request, provider: OAuthProvider): string {
   const url = new URL(request.url);
-  return `${forwardedOrigin(request) ?? url.origin}/auth/${provider}/callback`;
+  const origin = forwardedOrigin(request) ?? url.origin;
+
+  if (provider === "apple") {
+    return `${origin}${LEGACY_APPLE_CALLBACK_PATH}`;
+  }
+
+  return `${origin}/auth/${provider}/callback`;
 }
 
 export function redirectTo(location: string, headers?: HeadersInit) {
@@ -106,7 +115,10 @@ export async function assertCanStartOAuthLinking(request: Request, data: OAuthSt
   if (!data.linking) return null;
 
   const userId = await getUserId(request);
-  if (userId) return null;
+  if (userId) {
+    data.linkingUserId = userId;
+    return null;
+  }
 
   return redirect("/login?redirectTo=/account/settings&oauthError=login_required");
 }
@@ -116,7 +128,7 @@ export async function commitOAuthStartSession(
   provider: OAuthProvider,
   data: OAuthStartSessionData
 ): Promise<string> {
-  const session = await getSession(request);
+  const session = await oauthSessionStorage.getSession(request.headers.get("Cookie"));
 
   session.set(oauthSessionKey(provider, "state"), data.state);
   session.set(oauthSessionKey(provider, "redirectTo"), data.redirectTo);
@@ -129,14 +141,26 @@ export async function commitOAuthStartSession(
     session.unset(oauthSessionKey(provider, "codeVerifier"));
   }
 
-  return sessionStorage.commitSession(session);
+  if (data.redirectUri) {
+    session.set(oauthSessionKey(provider, "redirectUri"), data.redirectUri);
+  } else {
+    session.unset(oauthSessionKey(provider, "redirectUri"));
+  }
+
+  if (data.linkingUserId) {
+    session.set(oauthSessionKey(provider, "linkingUserId"), data.linkingUserId);
+  } else {
+    session.unset(oauthSessionKey(provider, "linkingUserId"));
+  }
+
+  return oauthSessionStorage.commitSession(session);
 }
 
 export async function readOAuthStartSession(
   request: Request,
   provider: OAuthProvider
 ): Promise<OAuthStartSessionData | null> {
-  const session = await getSession(request);
+  const session = await oauthSessionStorage.getSession(request.headers.get("Cookie"));
   const state = session.get(oauthSessionKey(provider, "state"));
 
   if (typeof state !== "string" || !state) {
@@ -145,12 +169,15 @@ export async function readOAuthStartSession(
 
   const codeVerifier = session.get(oauthSessionKey(provider, "codeVerifier"));
   const redirectTo = session.get(oauthSessionKey(provider, "redirectTo"));
+  const redirectUri = session.get(oauthSessionKey(provider, "redirectUri"));
   const failureRedirect = session.get(oauthSessionKey(provider, "failureRedirect"));
   const linking = session.get(oauthSessionKey(provider, "linking"));
+  const linkingUserId = session.get(oauthSessionKey(provider, "linkingUserId"));
 
   return {
     state,
     codeVerifier: typeof codeVerifier === "string" ? codeVerifier : undefined,
+    redirectUri: typeof redirectUri === "string" ? redirectUri : undefined,
     redirectTo: sanitizeInternalRedirect(
       typeof redirectTo === "string" ? redirectTo : null,
       "/recipes"
@@ -160,6 +187,7 @@ export async function readOAuthStartSession(
       "/login"
     ),
     linking: linking === "true",
+    linkingUserId: typeof linkingUserId === "string" ? linkingUserId : undefined,
   };
 }
 
@@ -175,23 +203,14 @@ export async function redirectWithOAuthError(
   failureRedirect: string,
   error: string | undefined
 ) {
-  const session = await getSession(request);
-  clearOAuthStartSession(session, provider);
-
   return redirectTo(appendOAuthError(failureRedirect, error), {
-    "Set-Cookie": await sessionStorage.commitSession(session),
+    "Set-Cookie": await destroyOAuthStartSession(request),
   });
 }
 
-export function clearOAuthStartSession(
-  session: Awaited<ReturnType<typeof sessionStorage.getSession>>,
-  provider: OAuthProvider
-) {
-  session.unset(oauthSessionKey(provider, "state"));
-  session.unset(oauthSessionKey(provider, "codeVerifier"));
-  session.unset(oauthSessionKey(provider, "redirectTo"));
-  session.unset(oauthSessionKey(provider, "failureRedirect"));
-  session.unset(oauthSessionKey(provider, "linking"));
+export async function destroyOAuthStartSession(request: Request): Promise<string> {
+  const session = await oauthSessionStorage.getSession(request.headers.get("Cookie"));
+  return oauthSessionStorage.destroySession(session);
 }
 
 export function isValidOAuthState(storedState: string | undefined, callbackState: string | null) {

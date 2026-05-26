@@ -27,6 +27,7 @@ async function initiateGitHubOAuth({ request, context }: Route.LoaderArgs | Rout
   }
 
   const redirectUri = buildOAuthCallbackUrl(request, "github");
+  sessionData.redirectUri = redirectUri;
   const authorizationUrl = createGitHubAuthorizationURL(config, redirectUri, state);
   const cookie = await commitOAuthStartSession(request, "github", sessionData);
 

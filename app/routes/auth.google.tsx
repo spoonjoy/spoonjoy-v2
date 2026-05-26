@@ -28,6 +28,7 @@ async function initiateGoogleOAuth({ request, context }: Route.LoaderArgs | Rout
   }
 
   const redirectUri = buildOAuthCallbackUrl(request, "google");
+  sessionData.redirectUri = redirectUri;
   const authorizationUrl = createGoogleAuthorizationURL(config, redirectUri, state, codeVerifier);
   const cookie = await commitOAuthStartSession(request, "google", sessionData);
 

@@ -147,7 +147,12 @@ wrangler secret put APPLE_PRIVATE_KEY
 **Apple OAuth Setup:**
 1. Go to [Apple Developer Portal](https://developer.apple.com/)
 2. Identifiers → Create App ID with "Sign in with Apple" capability
-3. Identifiers → Create Services ID, configure domains and redirect URLs
+3. Identifiers → Create Services ID, configure domains and redirect URLs.
+   The Services ID must include the v1-compatible return URL currently used by
+   production: `https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithApple`.
+   `/auth/apple/callback` is still handled by the app, but Apple will reject
+   authorization starts unless the exact return URL in the authorization request
+   is allowed.
 4. Keys → Create key with "Sign in with Apple", download .p8 file
 5. Note your Team ID (top right of portal)
 

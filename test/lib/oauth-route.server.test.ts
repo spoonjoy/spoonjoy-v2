@@ -13,7 +13,7 @@ import {
   resolveOAuthStartSessionData,
   sanitizeInternalRedirect,
 } from "~/lib/oauth-route.server";
-import { sessionStorage } from "~/lib/session.server";
+import { oauthSessionStorage, sessionStorage } from "~/lib/session.server";
 
 function cookieHeader(setCookie: string) {
   return setCookie.split(";")[0];
@@ -41,7 +41,9 @@ describe("oauth-route.server", () => {
     const request = new Request("https://spoonjoy.app/auth/google");
     expect(buildOAuthCallbackUrl(request, "google")).toBe("https://spoonjoy.app/auth/google/callback");
     expect(buildOAuthCallbackUrl(request, "github")).toBe("https://spoonjoy.app/auth/github/callback");
-    expect(buildOAuthCallbackUrl(request, "apple")).toBe("https://spoonjoy.app/auth/apple/callback");
+    expect(buildOAuthCallbackUrl(request, "apple")).toBe(
+      "https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithApple"
+    );
   });
 
   it("builds provider callback URLs from forwarded public origin", () => {
@@ -73,7 +75,9 @@ describe("oauth-route.server", () => {
       },
     });
 
-    expect(buildOAuthCallbackUrl(request, "apple")).toBe("https://spoonjoy.app/auth/apple/callback");
+    expect(buildOAuthCallbackUrl(request, "apple")).toBe(
+      "https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithApple"
+    );
   });
 
   it("ignores malformed forwarded hosts for provider callback URLs", () => {
@@ -85,7 +89,7 @@ describe("oauth-route.server", () => {
     });
 
     expect(buildOAuthCallbackUrl(request, "apple")).toBe(
-      "https://spoonjoy-v2.mendelow-studio.workers.dev/auth/apple/callback"
+      "https://spoonjoy-v2.mendelow-studio.workers.dev/.redwood/functions/auth/oauth?method=loginWithApple"
     );
   });
 
@@ -198,9 +202,11 @@ describe("oauth-route.server", () => {
     await expect(readOAuthStartSession(readRequest, "google")).resolves.toEqual({
       state: "state",
       codeVerifier: "verifier",
+      redirectUri: undefined,
       redirectTo: "/cookbooks",
       failureRedirect: "/signup",
       linking: false,
+      linkingUserId: undefined,
     });
   });
 
@@ -217,19 +223,53 @@ describe("oauth-route.server", () => {
       headers: { Cookie: cookieHeader(cookie) },
     });
 
+    expect(cookie).toContain("__oauth=");
+    expect(cookie).toContain("Max-Age=600");
+    expect(cookie).toContain("Path=/");
+    expect(cookie).toContain("HttpOnly");
+    expect(cookie).toContain("Secure");
+    expect(cookie).toContain("SameSite=None");
     await expect(readOAuthStartSession(readRequest, "apple")).resolves.toEqual({
       state: "state",
       codeVerifier: undefined,
+      redirectUri: undefined,
       redirectTo: "/recipes",
       failureRedirect: "/login",
       linking: true,
+      linkingUserId: undefined,
+    });
+  });
+
+  it("commits and reads OAuth callback URI and linking user fallback", async () => {
+    const request = new Request("https://spoonjoy.app/auth/apple");
+    const cookie = await commitOAuthStartSession(request, "apple", {
+      state: "state",
+      redirectUri: "https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithApple",
+      redirectTo: "/account/settings",
+      failureRedirect: "/account/settings",
+      linking: true,
+      linkingUserId: "user-1",
+    });
+
+    const readRequest = new Request("https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithApple", {
+      headers: { Cookie: cookieHeader(cookie) },
+    });
+
+    await expect(readOAuthStartSession(readRequest, "apple")).resolves.toEqual({
+      state: "state",
+      codeVerifier: undefined,
+      redirectUri: "https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithApple",
+      redirectTo: "/account/settings",
+      failureRedirect: "/account/settings",
+      linking: true,
+      linkingUserId: "user-1",
     });
   });
 
   it("falls back to safe redirects when stored OAuth redirect values are missing", async () => {
-    const session = await sessionStorage.getSession();
+    const session = await oauthSessionStorage.getSession();
     session.set("oauth:google:state", "state");
-    const cookie = await sessionStorage.commitSession(session);
+    const cookie = await oauthSessionStorage.commitSession(session);
     const request = new Request("https://spoonjoy.app/auth/google/callback", {
       headers: { Cookie: cookieHeader(cookie) },
     });
@@ -237,9 +277,11 @@ describe("oauth-route.server", () => {
     await expect(readOAuthStartSession(request, "google")).resolves.toEqual({
       state: "state",
       codeVerifier: undefined,
+      redirectUri: undefined,
       redirectTo: "/recipes",
       failureRedirect: "/login",
       linking: false,
+      linkingUserId: undefined,
     });
   });
 

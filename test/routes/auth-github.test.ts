@@ -259,9 +259,9 @@ describe("GitHub OAuth routes", () => {
   it("passes current user ID for successful linking callbacks", async () => {
     const loginSession = await sessionStorage.getSession();
     loginSession.set("userId", "user-1");
-    let cookie = await sessionStorage.commitSession(loginSession);
-    cookie = await commitOAuthStartSession(
-      new Request("https://spoonjoy.app/auth/github", { headers: { Cookie: cookieHeader(cookie) } }),
+    const loginCookie = await sessionStorage.commitSession(loginSession);
+    const oauthCookie = await commitOAuthStartSession(
+      new Request("https://spoonjoy.app/auth/github", { headers: { Cookie: cookieHeader(loginCookie) } }),
       "github",
       {
         state: "state",
@@ -275,7 +275,7 @@ describe("GitHub OAuth routes", () => {
     mocks.handleGitHubOAuthCallback.mockResolvedValueOnce({ success: true, userId: "user-1", action: "account_linked", redirectTo: "/account/settings" });
 
     const request = new Request("https://spoonjoy.app/auth/github/callback?state=state&code=code", {
-      headers: { Cookie: cookieHeader(cookie) },
+      headers: { Cookie: `${cookieHeader(loginCookie)}; ${cookieHeader(oauthCookie)}` },
     });
     await callbackLoader({ request, context: { cloudflare: { env: githubEnv } }, params: {} } as any);
 
