@@ -85,6 +85,18 @@ describe('Environment Config Validation', () => {
         'Missing required environment variable: GOOGLE_CLIENT_SECRET'
       )
     })
+
+    it('throws error when Google OAuth env vars are placeholders', () => {
+      expect(() => getGoogleOAuthConfig({
+        GOOGLE_CLIENT_ID: '""',
+        GOOGLE_CLIENT_SECRET: 'test-google-client-secret',
+      })).toThrow('Missing required environment variable: GOOGLE_CLIENT_ID')
+
+      expect(() => getGoogleOAuthConfig({
+        GOOGLE_CLIENT_ID: 'not yet enabled',
+        GOOGLE_CLIENT_SECRET: 'test-google-client-secret',
+      })).toThrow('Missing required environment variable: GOOGLE_CLIENT_ID')
+    })
   })
 
   describe('getGitHubOAuthConfig', () => {
@@ -315,6 +327,23 @@ describe('Environment Config Validation', () => {
         /Missing required environment variables:.*GOOGLE_CLIENT_SECRET.*GITHUB_CLIENT_ID.*APPLE_KEY_ID/
       )
     })
+
+    it('treats placeholder values as missing', () => {
+      const env = {
+        GOOGLE_CLIENT_ID: 'not yet enabled',
+        GOOGLE_CLIENT_SECRET: 'test-google-client-secret',
+        GITHUB_CLIENT_ID: '""',
+        GITHUB_CLIENT_SECRET: 'test-github-client-secret',
+        APPLE_CLIENT_ID: 'test-apple-client-id',
+        APPLE_TEAM_ID: 'test-apple-team-id',
+        APPLE_KEY_ID: 'not configured',
+        APPLE_PRIVATE_KEY: 'test-apple-private-key',
+      }
+
+      expect(() => validateOAuthEnv(env)).toThrow(
+        /Missing required environment variables:.*GOOGLE_CLIENT_ID.*GITHUB_CLIENT_ID.*APPLE_KEY_ID/
+      )
+    })
   })
 
   describe('getConfiguredOAuthProviders', () => {
@@ -338,6 +367,19 @@ describe('Environment Config Validation', () => {
         APPLE_CLIENT_ID: 'apple-client',
         APPLE_TEAM_ID: 'team',
         APPLE_KEY_ID: 'key',
+      })).toEqual([])
+    })
+
+    it('omits providers configured only with placeholders', () => {
+      expect(getConfiguredOAuthProviders({
+        GOOGLE_CLIENT_ID: 'not yet enabled',
+        GOOGLE_CLIENT_SECRET: 'google-secret',
+        GITHUB_CLIENT_ID: 'github-client',
+        GITHUB_CLIENT_SECRET: '""',
+        APPLE_CLIENT_ID: 'apple-client',
+        APPLE_TEAM_ID: 'team',
+        APPLE_KEY_ID: 'key',
+        APPLE_PRIVATE_KEY: 'not configured',
       })).toEqual([])
     })
   })
