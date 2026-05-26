@@ -8,6 +8,7 @@ export default {
   routeDiscovery: {
     mode: "initial",
   },
+  allowedActionOrigins: ["appleid.apple.com"],
   future: {
     v8_viteEnvironmentApi: true,
   },
