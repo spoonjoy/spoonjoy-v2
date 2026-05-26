@@ -118,11 +118,16 @@ Rollback:
 
 ## OAuth
 
-Before DNS switch, update provider dashboards:
+Before deploying code that generates new OAuth callback URLs, update provider
+dashboards.
 
-- Google authorized redirect URI: `https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithGoogle`
-- GitHub authorization callback URL: `https://spoonjoy.app/.redwood/functions`
-- Apple redirect URI: `https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithApple`
+The legacy `.redwood/functions/auth/oauth` route remains a compatibility
+handler for in-flight OAuth sessions and old provider settings, but new
+authorization starts should use the clean callback URLs:
+
+- Google authorized redirect URI: `https://spoonjoy.app/auth/google/callback`
+- GitHub authorization callback URL: `https://spoonjoy.app/auth/github/callback`
+- Apple redirect URI: `https://spoonjoy.app/auth/apple/callback`
 
 After DNS switch, test OAuth start routes. If a provider is not configured, it should not appear on `/login` or `/signup`.
 

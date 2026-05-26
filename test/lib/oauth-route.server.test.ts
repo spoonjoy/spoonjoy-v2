@@ -40,13 +40,13 @@ describe("oauth-route.server", () => {
   it("builds provider callback URLs from request origin", () => {
     const request = new Request("https://spoonjoy.app/auth/google");
     expect(buildOAuthCallbackUrl(request, "google")).toBe(
-      "https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithGoogle"
+      "https://spoonjoy.app/auth/google/callback"
     );
     expect(buildOAuthCallbackUrl(request, "github")).toBe(
-      "https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithGitHub"
+      "https://spoonjoy.app/auth/github/callback"
     );
     expect(buildOAuthCallbackUrl(request, "apple")).toBe(
-      "https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithApple"
+      "https://spoonjoy.app/auth/apple/callback"
     );
   });
 
@@ -54,10 +54,10 @@ describe("oauth-route.server", () => {
     const request = new Request("https://www.spoonjoy.app/auth/apple");
 
     expect(buildOAuthCallbackUrl(request, "google")).toBe(
-      "https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithGoogle"
+      "https://spoonjoy.app/auth/google/callback"
     );
     expect(buildOAuthCallbackUrl(request, "apple")).toBe(
-      "https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithApple"
+      "https://spoonjoy.app/auth/apple/callback"
     );
   });
 
@@ -70,7 +70,7 @@ describe("oauth-route.server", () => {
     });
 
     expect(buildOAuthCallbackUrl(request, "github")).toBe(
-      "https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithGitHub"
+      "https://spoonjoy.app/auth/github/callback"
     );
   });
 
@@ -83,7 +83,7 @@ describe("oauth-route.server", () => {
     });
 
     expect(buildOAuthCallbackUrl(request, "google")).toBe(
-      "http://local.spoonjoy.app:8787/.redwood/functions/auth/oauth?method=loginWithGoogle"
+      "http://local.spoonjoy.app:8787/auth/google/callback"
     );
   });
 
@@ -95,7 +95,7 @@ describe("oauth-route.server", () => {
     });
 
     expect(buildOAuthCallbackUrl(request, "apple")).toBe(
-      "https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithApple"
+      "https://spoonjoy.app/auth/apple/callback"
     );
   });
 
@@ -108,7 +108,7 @@ describe("oauth-route.server", () => {
     });
 
     expect(buildOAuthCallbackUrl(request, "apple")).toBe(
-      "https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithApple"
+      "https://spoonjoy.app/auth/apple/callback"
     );
   });
 
@@ -121,7 +121,7 @@ describe("oauth-route.server", () => {
     });
 
     expect(buildOAuthCallbackUrl(request, "apple")).toBe(
-      "https://spoonjoy-v2.mendelow-studio.workers.dev/.redwood/functions/auth/oauth?method=loginWithApple"
+      "https://spoonjoy-v2.mendelow-studio.workers.dev/auth/apple/callback"
     );
   });
 
@@ -300,21 +300,21 @@ describe("oauth-route.server", () => {
     const request = new Request("https://spoonjoy.app/auth/apple");
     const cookie = await commitOAuthStartSession(request, "apple", {
       state: "state",
-      redirectUri: "https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithApple",
+      redirectUri: "https://spoonjoy.app/auth/apple/callback",
       redirectTo: "/account/settings",
       failureRedirect: "/account/settings",
       linking: true,
       linkingUserId: "user-1",
     });
 
-    const readRequest = new Request("https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithApple", {
+    const readRequest = new Request("https://spoonjoy.app/auth/apple/callback", {
       headers: { Cookie: cookieHeader(cookie) },
     });
 
     await expect(readOAuthStartSession(readRequest, "apple")).resolves.toEqual({
       state: "state",
       codeVerifier: undefined,
-      redirectUri: "https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithApple",
+      redirectUri: "https://spoonjoy.app/auth/apple/callback",
       redirectTo: "/account/settings",
       failureRedirect: "/account/settings",
       linking: true,

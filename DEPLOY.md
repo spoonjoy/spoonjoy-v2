@@ -105,7 +105,7 @@ wrangler secret put GOOGLE_CLIENT_SECRET
 3. Enable "Google+ API" or "Google Identity"
 4. Go to Credentials → Create Credentials → OAuth 2.0 Client ID
 5. Application type: Web application
-6. Add authorized redirect URI: `https://your-domain.com/.redwood/functions/auth/oauth?method=loginWithGoogle`
+6. Add authorized redirect URI: `https://your-domain.com/auth/google/callback`
 7. Copy Client ID and Client Secret
 
 #### GitHub OAuth
@@ -124,7 +124,7 @@ wrangler secret put GITHUB_CLIENT_SECRET
 1. Go to GitHub Developer Settings → OAuth Apps
 2. Create or update the Spoonjoy OAuth app
 3. Set Homepage URL to `https://your-domain.com`
-4. Set Authorization callback URL to `https://your-domain.com/.redwood/functions`
+4. Set Authorization callback URL to `https://your-domain.com/auth/github/callback`
 5. Copy Client ID and Client Secret
 
 #### Apple OAuth
@@ -148,11 +148,9 @@ wrangler secret put APPLE_PRIVATE_KEY
 1. Go to [Apple Developer Portal](https://developer.apple.com/)
 2. Identifiers → Create App ID with "Sign in with Apple" capability
 3. Identifiers → Create Services ID, configure domains and redirect URLs.
-   The Services ID must include the v1-compatible return URL currently used by
-   production: `https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithApple`.
-   `/auth/apple/callback` is still handled by the app, but Apple will reject
-   authorization starts unless the exact return URL in the authorization request
-   is allowed.
+   The Services ID must include `https://your-domain.com/auth/apple/callback`.
+   Apple uses `response_mode=form_post`, so this callback is a cross-site POST
+   from `appleid.apple.com`; keep that origin in `react-router.config.ts`.
 4. Keys → Create key with "Sign in with Apple", download .p8 file
 5. Note your Team ID (top right of portal)
 

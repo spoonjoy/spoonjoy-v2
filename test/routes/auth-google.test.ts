@@ -55,7 +55,7 @@ describe("Google OAuth routes", () => {
     expect(mocks.generateCodeVerifier).toHaveBeenCalledOnce();
     expect(mocks.createGoogleAuthorizationURL).toHaveBeenCalledWith(
       { clientId: "google-client", clientSecret: "google-secret" },
-      "https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithGoogle",
+      "https://spoonjoy.app/auth/google/callback",
       expect.any(String),
       "mock-code-verifier"
     );
@@ -204,7 +204,7 @@ describe("Google OAuth routes", () => {
     await callbackLoader({ request, context: { cloudflare: { env: googleEnv } }, params: {} } as any);
     expect(mocks.verifyGoogleCallback).toHaveBeenCalledWith(
       { clientId: "google-client", clientSecret: "google-secret" },
-      "https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithGoogle",
+      "https://spoonjoy.app/auth/google/callback",
       { code: "", state: "state", codeVerifier: "verifier" }
     );
   });

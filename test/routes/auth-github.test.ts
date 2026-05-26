@@ -52,7 +52,7 @@ describe("GitHub OAuth routes", () => {
     expect(response.headers.get("Set-Cookie")).toBeTruthy();
     expect(mocks.createGitHubAuthorizationURL).toHaveBeenCalledWith(
       { clientId: "github-client", clientSecret: "github-secret" },
-      "https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithGitHub",
+      "https://spoonjoy.app/auth/github/callback",
       expect.any(String)
     );
   });
@@ -180,7 +180,7 @@ describe("GitHub OAuth routes", () => {
     await callbackLoader({ request, context: { cloudflare: { env: githubEnv } }, params: {} } as any);
     expect(mocks.verifyGitHubCallback).toHaveBeenCalledWith(
       { clientId: "github-client", clientSecret: "github-secret" },
-      "https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithGitHub",
+      "https://spoonjoy.app/auth/github/callback",
       { code: "", state: "state" }
     );
   });
