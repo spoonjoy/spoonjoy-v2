@@ -5,6 +5,7 @@
   { "name": "search-all", "path": "/search?q=tomato&scope=all", "auth": false },
   { "name": "recipes-index", "path": "/recipes", "auth": true },
   { "name": "recipe-detail", "path": "/recipes/r_pizza", "auth": true },
+  { "name": "recipe-cook-mode", "path": "/recipes/r_pizza#cook", "auth": true, "waitMs": 500 },
   { "name": "recipe-edit", "path": "/recipes/r_pizza/edit", "auth": true },
   { "name": "recipe-new", "path": "/recipes/new", "auth": true },
   { "name": "step-new", "path": "/recipes/r_pizza/steps/new", "auth": true },

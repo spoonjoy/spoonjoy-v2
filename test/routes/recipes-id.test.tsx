@@ -51,6 +51,7 @@ describe("Recipes $id Route", () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    window.history.replaceState(null, "", "/");
     window.localStorage.clear();
     await cleanupDatabase();
     const email = faker.internet.email();
@@ -77,6 +78,7 @@ describe("Recipes $id Route", () => {
   });
 
   afterEach(async () => {
+    window.history.replaceState(null, "", "/");
     await cleanupDatabase();
   });
 
@@ -1385,7 +1387,13 @@ describe("Recipes $id Route", () => {
                   ingredientRef: { name: "olive oil" },
                 },
               ],
-              usingSteps: [],
+              usingSteps: [
+                {
+                  id: "use-1",
+                  outputStepNum: 1,
+                  outputOfStep: { stepNum: 1, stepTitle: "Prep" },
+                },
+              ],
             },
           ],
         },
@@ -1411,22 +1419,32 @@ describe("Recipes $id Route", () => {
 
       const cookMode = await screen.findByTestId("cook-mode-panel");
       expect(window.location.hash).toBe("#cook");
+      expect(screen.queryByTestId("recipe-masthead")).not.toBeInTheDocument();
+      expect(within(cookMode).getByTestId("cook-mode-pager")).toBeInTheDocument();
       expect(within(cookMode).getByText("Step 1 of 2")).toBeInTheDocument();
       expect(within(cookMode).getByRole("heading", { name: "Prep" })).toBeInTheDocument();
       expect(within(cookMode).getByText("Chop everything before the pan is hot.")).toBeInTheDocument();
 
       await user.click(within(cookMode).getByRole("checkbox", { name: "tomatoes" }));
-      expect(within(cookMode).getByText("1 of 2 checked")).toBeInTheDocument();
+      expect(within(cookMode).getByText("1 of 3 checked")).toBeInTheDocument();
 
       await user.click(within(cookMode).getByRole("button", { name: "Next step" }));
       expect(within(cookMode).getByText("Step 2 of 2")).toBeInTheDocument();
       expect(within(cookMode).getByRole("heading", { name: "Cook" })).toBeInTheDocument();
+      expect(within(cookMode).getByRole("checkbox", { name: "Step 1: Prep" })).toBeInTheDocument();
+      expect(within(cookMode).getByText("0 of 2 checked")).toBeInTheDocument();
+      await user.click(within(cookMode).getByRole("checkbox", { name: "Step 1: Prep" }));
+      expect(within(cookMode).getByText("2 of 3 checked")).toBeInTheDocument();
 
       await user.click(within(cookMode).getByRole("button", { name: "Previous step" }));
       expect(within(cookMode).getByRole("heading", { name: "Prep" })).toBeInTheDocument();
 
+      await user.click(within(cookMode).getByRole("button", { name: "Step 2" }));
+      expect(within(cookMode).getByRole("heading", { name: "Cook" })).toBeInTheDocument();
+
       await user.click(within(cookMode).getByRole("button", { name: "Exit cook mode" }));
       expect(screen.queryByTestId("cook-mode-panel")).not.toBeInTheDocument();
+      expect(await screen.findByTestId("recipe-masthead")).toBeInTheDocument();
       expect(window.location.hash).toBe("");
     });
 

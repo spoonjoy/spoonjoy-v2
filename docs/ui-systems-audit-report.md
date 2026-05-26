@@ -124,6 +124,14 @@ Verification:
 - Deployed UI crawl passed.
 - First-class Ouro/Spoonjoy MCP create, update, search, and get smoke passed.
 
+2026-05-26 design-translation follow-up:
+
+- Re-read `docs/design-language.md`, `docs/design-prototypes/kitchen-table.html`, and the audit backlog against the rendered app.
+- Added `/recipes/r_pizza#cook` to the durable crawl matrix so the paged cooking surface is audited directly instead of inferred from recipe detail.
+- Local crawl at `/tmp/spoonjoy-design-translation-crawl-4`: 57 screenshots, 19 routes across mobile/tablet/desktop, 0 skipped routes, 0 horizontal overflow findings, 0 small touch target findings, 0 clipped text findings, 0 console errors, and 0 page errors.
+- Fixed the remaining design-translation drift found in that pass: cook mode now renders as a true viewport pager, and cookbook owner tools no longer read like a dead printed heading when collapsed.
+- Verification after the follow-up: 220 test files passed, 4,748 tests passed, 100% statement/branch/function/line coverage, typecheck passed, production build passed, and Chromium e2e passed 27/27.
+
 ## Findings
 
 | ID | Severity | Status | Surfaces | Result |
@@ -143,6 +151,7 @@ Verification:
 | UIA-013 | Medium | Fixed | Recipe detail ingredients | Constrained only the per-step ingredient checklist on desktop so quantity labels stay visually connected, while leaving step prose at the wider cookbook reading measure. |
 | UIA-014 | Medium | Fixed | Shopping list | Kept the editorial header wider while constraining the market checklist, added Need/Basket/All modes, aisle grouping, a single In basket section for checked rows, and recipe scale when adding ingredients. |
 | UIA-015 | High | Fixed | Recipe detail, dock actions | Replaced the old jump link with a focused cook-mode panel, step-by-step controls, shared ingredient checklist grammar, `#cook` deep-link/back behavior, and dock/header entry points. |
+| UIA-016 | Medium | Fixed | Cookbook detail | Changed the collapsed owner-tools affordance from a lone dead-looking label into a full-width expandable maintenance row with explicit open/close state. |
 
 ## Re-Audit Notes
 

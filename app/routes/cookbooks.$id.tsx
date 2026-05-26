@@ -359,16 +359,17 @@ export default function CookbookDetail() {
           <div className="mt-12 print:hidden">
             <button
               type="button"
-              className="inline-flex min-h-11 cursor-pointer items-center border-0 bg-transparent p-0 font-sj-ui text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)] hover:text-[var(--sj-ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)]"
+              className="flex min-h-14 w-full cursor-pointer items-center justify-between gap-4 border-y border-[var(--sj-border)] bg-transparent py-3 text-left font-sj-ui text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)] hover:text-[var(--sj-ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)]"
               aria-expanded={showOwnerTools}
               aria-controls="cookbook-owner-tools"
               onClick={() => setShowOwnerTools((visible) => !visible)}
             >
-              Owner tools
+              <span>Owner tools</span>
+              <span className="text-[var(--sj-ink)]">{showOwnerTools ? "Close" : "Open +"}</span>
             </button>
 
             {showOwnerTools ? (
-              <div id="cookbook-owner-tools" className="mt-3 border-y border-[var(--sj-border)] py-6">
+              <div id="cookbook-owner-tools" className="border-b border-[var(--sj-border)] py-6">
                 <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
                   <div>
                     <h3 className="font-sj-display text-2xl/7 font-semibold text-[var(--sj-ink)]">Cookbook details</h3>

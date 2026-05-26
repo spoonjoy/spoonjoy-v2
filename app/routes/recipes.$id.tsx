@@ -3,7 +3,7 @@ import { useFetcher, useLoaderData, useSubmit } from "react-router";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import type { MouseEvent } from "react";
 import { usePostHog } from "@posthog/react";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   handleRecipeDetailAction,
   loadRecipeDetail,
@@ -726,6 +726,31 @@ export default function RecipeDetail() {
     }));
   };
 
+  if (isCookMode && recipe.steps.length > 0) {
+    return (
+      <CookModePanel
+        recipeTitle={recipe.title}
+        step={recipe.steps[activeCookStepIndex]}
+        stepCount={recipe.steps.length}
+        activeStepIndex={activeCookStepIndex}
+        progressChecked={cookProgressChecked}
+        progressTotal={cookProgressTotal}
+        ingredients={transformIngredients(recipe.steps[activeCookStepIndex].ingredients)}
+        stepOutputUses={transformStepOutputUses(recipe.steps[activeCookStepIndex].usingSteps ?? [])}
+        scaleFactor={scaleFactor}
+        checkedIngredientIds={checkedIngredients}
+        checkedStepOutputIds={checkedStepOutputs}
+        onIngredientToggle={handleIngredientToggle}
+        onStepOutputToggle={handleStepOutputToggle}
+        onScaleChange={handleScaleChange}
+        onPrevious={() => setActiveCookStepIndex((current) => Math.max(0, current - 1))}
+        onNext={() => setActiveCookStepIndex((current) => Math.min(recipe.steps.length - 1, current + 1))}
+        onStepSelect={(index) => setActiveCookStepIndex(index)}
+        onExit={handleExitCookMode}
+      />
+    );
+  }
+
   return (
     <div className="sj-page pb-24">
       {/* Recipe Header with prominent image */}
@@ -775,27 +800,6 @@ export default function RecipeDetail() {
         actionUrl={`/recipes/${recipe.id}`}
         isOriginCookCandidate={isOriginCookCandidate}
       />
-
-      {isCookMode && recipe.steps.length > 0 && (
-        <CookModePanel
-          step={recipe.steps[activeCookStepIndex]}
-          stepCount={recipe.steps.length}
-          activeStepIndex={activeCookStepIndex}
-          progressChecked={cookProgressChecked}
-          progressTotal={cookProgressTotal}
-          ingredients={transformIngredients(recipe.steps[activeCookStepIndex].ingredients)}
-          stepOutputUses={transformStepOutputUses(recipe.steps[activeCookStepIndex].usingSteps ?? [])}
-          scaleFactor={scaleFactor}
-          checkedIngredientIds={checkedIngredients}
-          checkedStepOutputIds={checkedStepOutputs}
-          onIngredientToggle={handleIngredientToggle}
-          onStepOutputToggle={handleStepOutputToggle}
-          onScaleChange={handleScaleChange}
-          onPrevious={() => setActiveCookStepIndex((current) => Math.max(0, current - 1))}
-          onNext={() => setActiveCookStepIndex((current) => Math.min(recipe.steps.length - 1, current + 1))}
-          onExit={handleExitCookMode}
-        />
-      )}
 
       {/* Save to Cookbook Modal (Bottom Sheet) */}
       <Dialog
@@ -967,6 +971,7 @@ type CookModeStep = {
 };
 
 function CookModePanel({
+  recipeTitle,
   step,
   stepCount,
   activeStepIndex,
@@ -982,8 +987,10 @@ function CookModePanel({
   onScaleChange,
   onPrevious,
   onNext,
+  onStepSelect,
   onExit,
 }: {
+  recipeTitle: string;
   step: CookModeStep;
   stepCount: number;
   activeStepIndex: number;
@@ -999,26 +1006,40 @@ function CookModePanel({
   onScaleChange: (value: number) => void;
   onPrevious: () => void;
   onNext: () => void;
+  onStepSelect: (index: number) => void;
   onExit: () => void;
 }) {
   const stepTitle = step.stepTitle ?? `Step ${step.stepNum}`;
-  const progressLabel = progressTotal > 0
+  const recipeProgressLabel = progressTotal > 0
     ? `${progressChecked} of ${progressTotal} checked`
     : "No checklist items";
+  const pageProgressTotal = ingredients.length + stepOutputUses.length;
+  const pageProgressChecked =
+    ingredients.filter((ingredient) => checkedIngredientIds.has(ingredient.id)).length +
+    stepOutputUses.filter((reference) => checkedStepOutputIds.has(reference.id)).length;
+  const pageProgressLabel = pageProgressTotal > 0
+    ? `${pageProgressChecked} of ${pageProgressTotal} checked`
+    : "No checklist items";
+  const isFirstStep = activeStepIndex === 0;
+  const isLastStep = activeStepIndex >= stepCount - 1;
+  const pageLabel = `Step ${activeStepIndex + 1} of ${stepCount}`;
 
   return (
     <section
       id="cook"
       data-testid="cook-mode-panel"
-      className="scroll-mt-16 border-b border-[var(--sj-border-strong)] bg-[color-mix(in_srgb,var(--sj-flour)_58%,var(--sj-page))]"
+      className="h-[100svh] overflow-hidden bg-[var(--sj-page)] text-[var(--sj-ink)]"
       aria-labelledby="cook-mode-heading"
     >
-      <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--sj-border)] pb-5">
-          <div>
+      <div className="mx-auto flex h-[100svh] w-full max-w-7xl flex-col px-4 sm:px-6 lg:px-8">
+        <header className="flex min-h-20 shrink-0 items-center justify-between gap-4 border-b border-[var(--sj-border)] py-4">
+          <div className="min-w-0">
             <p className="sj-eyebrow">Now cooking</p>
-            <p className="font-sj-ui mt-2 text-sm font-semibold text-[var(--sj-ink-soft)]">
-              Step {activeStepIndex + 1} of {stepCount}
+            <p className="font-sj-ui mt-1 truncate text-sm font-semibold text-[var(--sj-ink-soft)]">
+              {recipeTitle}
+            </p>
+            <p className="font-sj-ui mt-1 text-xs uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">
+              {recipeProgressLabel}
             </p>
           </div>
           <button
@@ -1028,65 +1049,124 @@ function CookModePanel({
           >
             Exit cook mode
           </button>
+        </header>
+
+        <div
+          data-testid="cook-mode-pager"
+          className="flex min-h-0 flex-1 flex-col gap-8 overflow-y-auto py-6 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(20rem,26rem)] lg:items-stretch lg:gap-12 lg:py-10"
+        >
+          <article
+            key={step.stepNum}
+            className="flex shrink-0 flex-col border-y border-[var(--sj-border-strong)] py-8 sm:py-10 lg:min-h-0 lg:shrink lg:justify-center lg:py-12"
+          >
+            <p className="font-sj-ui m-0 text-xs font-semibold uppercase tracking-[0.22em] text-[var(--sj-brass)]">
+              {pageLabel}
+            </p>
+            <Heading
+              id="cook-mode-heading"
+              level={2}
+              className="font-sj-display mt-5 max-w-4xl text-4xl/10 font-semibold tracking-normal text-[var(--sj-ink)] sm:text-6xl/15 lg:text-7xl/18"
+            >
+              {stepTitle}
+            </Heading>
+            <Text className="mt-7 max-w-3xl whitespace-pre-wrap text-xl/9 text-[var(--sj-ink)] sm:text-2xl/10">
+              {step.description}
+            </Text>
+            {step.duration ? <CookModeTimer durationMinutes={step.duration} /> : null}
+          </article>
+
+          <aside className="flex shrink-0 flex-col justify-between gap-8 border-y border-[var(--sj-border)] py-6 lg:min-h-0 lg:shrink lg:py-8">
+            <div>
+              <div className="flex items-end justify-between gap-4">
+                <div>
+                  <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)]">
+                    On this page
+                  </p>
+                  <p className="font-sj-ui mt-2 text-xs uppercase tracking-[0.18em] text-[var(--sj-ink-soft)]">
+                    {pageProgressLabel}
+                  </p>
+                </div>
+                <p className="font-sj-display text-3xl/8 font-semibold tabular-nums text-[var(--sj-ink)]">
+                  {activeStepIndex + 1}/{stepCount}
+                </p>
+              </div>
+
+              {(ingredients.length > 0 || stepOutputUses.length > 0) ? (
+                <div className="mt-6">
+                  <IngredientList
+                    ingredients={ingredients}
+                    stepOutputUses={stepOutputUses}
+                    scaleFactor={scaleFactor}
+                    checkedIds={checkedIngredientIds}
+                    checkedStepOutputIds={checkedStepOutputIds}
+                    onToggle={onIngredientToggle}
+                    onStepOutputToggle={onStepOutputToggle}
+                  />
+                </div>
+              ) : (
+                <p className="font-sj-body mt-6 text-base text-[var(--sj-ink-soft)]">
+                  No ingredients to check on this step.
+                </p>
+              )}
+            </div>
+
+            <div className="max-w-[26rem]">
+              <ScaleSelector value={scaleFactor} onChange={onScaleChange} />
+            </div>
+          </aside>
         </div>
 
-        <div className="pt-8">
-          <Heading
-            id="cook-mode-heading"
-            level={2}
-            className="font-sj-display text-4xl/10 font-semibold tracking-normal text-[var(--sj-ink)] sm:text-5xl/12"
-          >
-            {stepTitle}
-          </Heading>
-          <Text className="mt-3 font-sj-ui text-xs uppercase tracking-[0.18em]">
-            {progressLabel}
-          </Text>
-
-          <div className="mt-6 max-w-[26rem]">
-            <ScaleSelector value={scaleFactor} onChange={onScaleChange} />
-          </div>
-
-          {step.duration ? <CookModeTimer durationMinutes={step.duration} /> : null}
-
-          {(ingredients.length > 0 || stepOutputUses.length > 0) && (
-            <div className="mt-8 lg:max-w-[40rem]">
-              <div className="font-sj-ui mb-4 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)]">
-                On this step
-              </div>
-              <IngredientList
-                ingredients={ingredients}
-                stepOutputUses={stepOutputUses}
-                scaleFactor={scaleFactor}
-                checkedIds={checkedIngredientIds}
-                checkedStepOutputIds={checkedStepOutputIds}
-                onToggle={onIngredientToggle}
-                onStepOutputToggle={onStepOutputToggle}
-              />
-            </div>
-          )}
-
-          <Text className="mt-8 max-w-3xl whitespace-pre-wrap text-lg leading-loose text-[var(--sj-ink)]">
-            {step.description}
-          </Text>
-
-          <div className="mt-8 grid grid-cols-2 gap-3 border-t border-[var(--sj-border)] pt-5 sm:flex sm:items-center sm:justify-between">
+        <footer className="z-10 shrink-0 border-t border-[var(--sj-border)] bg-[var(--sj-page)] py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
             <Button
               type="button"
               plain
-              disabled={activeStepIndex === 0}
+              aria-label="Previous step"
+              disabled={isFirstStep}
               onClick={onPrevious}
+              className="justify-self-start"
             >
-              Previous step
+              <ChevronLeft data-slot="icon" aria-hidden="true" />
+              <span className="hidden sm:inline">Previous step</span>
+              <span className="sm:hidden">Prev</span>
             </Button>
+            <nav
+              aria-label="Cook steps"
+              className="hidden items-center gap-2 sm:flex"
+            >
+              {Array.from({ length: stepCount }, (_, index) => (
+                <button
+                  key={index}
+                  type="button"
+                  onClick={() => onStepSelect(index)}
+                  aria-label={`Step ${index + 1}${index === activeStepIndex ? " current" : ""}`}
+                  aria-current={index === activeStepIndex ? "step" : undefined}
+                  className="group grid size-11 place-items-center rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)]"
+                >
+                  <span
+                    aria-hidden="true"
+                    className={`size-2.5 rounded-full transition ${
+                      index === activeStepIndex
+                        ? "bg-[var(--sj-ink)]"
+                        : "bg-[var(--sj-border-strong)] group-hover:bg-[var(--sj-ink-soft)]"
+                    }`}
+                  />
+                </button>
+              ))}
+            </nav>
             <Button
               type="button"
-              disabled={activeStepIndex >= stepCount - 1}
+              aria-label="Next step"
+              disabled={isLastStep}
               onClick={onNext}
+              className="justify-self-end"
             >
-              Next step
+              <span className="hidden sm:inline">Next step</span>
+              <span className="sm:hidden">Next</span>
+              <ChevronRight data-slot="icon" aria-hidden="true" />
             </Button>
           </div>
-        </div>
+        </footer>
       </div>
     </section>
   );

@@ -1097,13 +1097,16 @@ describe("Cookbooks $id Route", () => {
 
       render(<Stub initialEntries={["/cookbooks/cookbook-1"]} />);
 
-      expect(await screen.findByText("Owner tools")).toBeInTheDocument();
+      const ownerToolsToggle = await screen.findByRole("button", { name: "Owner tools Open +" });
+      expect(ownerToolsToggle).toBeInTheDocument();
+      expect(ownerToolsToggle).toHaveAttribute("aria-expanded", "false");
       expect(screen.queryByRole("button", { name: "Edit title" })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Delete cookbook" })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Remove from cookbook" })).not.toBeInTheDocument();
 
       await openOwnerTools();
 
+      expect(screen.getByRole("button", { name: "Owner tools Close" })).toHaveAttribute("aria-expanded", "true");
       expect(await screen.findByRole("button", { name: "Edit title" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Delete cookbook" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Remove from cookbook" })).toBeInTheDocument();

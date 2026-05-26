@@ -6,6 +6,7 @@ Current pass focus:
 
 - Shopping list should behave like a narrow, one-thumb market checklist on desktop and mobile. Header/prose may keep a wider editorial measure; list rows, category filters, and list tools should stay visually connected.
 - Cook mode should become a real focused cooking surface, not just a jump link to all steps.
+- Keep the rendered crawl aligned with the prototype states that can regress visually, including the `#cook` paged cooking surface.
 
 ## Closed In This Pass
 
@@ -23,6 +24,7 @@ Current pass focus:
 - UIA-013: Recipe detail ingredient checklists were too wide on desktop while prose needed to remain wider: fixed.
 - UIA-014: Shopping-list checklist measure and usefulness: fixed.
 - UIA-015: Recipe cook mode first-class focused flow: fixed.
+- UIA-016: Cookbook detail collapsed owner tools read like a dead printed heading: fixed.
 
 ## Product Backlog Seeded
 
