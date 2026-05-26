@@ -1,6 +1,7 @@
 import type { AppLoadContext } from "react-router";
 import { redirect } from "react-router";
 import { generateState } from "arctic";
+import { canonicalizeOrigin } from "~/lib/canonical-host.server";
 import type { OAuthEnv } from "~/lib/env.server";
 import { getCloudflareEnv } from "~/lib/route-platform.server";
 import { getOAuthSessionStorage, getUserId, sanitizeSessionRedirect, type SessionEnv } from "~/lib/session.server";
@@ -44,7 +45,7 @@ function forwardedOrigin(request: Request): string | null {
 
 export function buildOAuthCallbackUrl(request: Request, provider: OAuthProvider): string {
   const url = new URL(request.url);
-  const origin = forwardedOrigin(request) ?? url.origin;
+  const origin = canonicalizeOrigin(forwardedOrigin(request) ?? url.origin);
 
   if (provider === "apple") {
     return `${origin}${LEGACY_APPLE_CALLBACK_PATH}`;
