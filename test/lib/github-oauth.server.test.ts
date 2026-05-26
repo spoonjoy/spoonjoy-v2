@@ -188,7 +188,7 @@ describe("github-oauth.server", () => {
     });
   });
 
-  it("normalizes OAuth and network errors", async () => {
+  it("normalizes OAuth provider and network errors", async () => {
     const oauthError = new Error("bad verifier");
     oauthError.name = "OAuth2RequestError";
     githubMock.validateAuthorizationCode.mockRejectedValueOnce(oauthError);
@@ -197,6 +197,26 @@ describe("github-oauth.server", () => {
       success: false,
       error: "oauth_error",
       message: "bad verifier",
+    });
+
+    const unexpectedResponseError = new Error("Unexpected error response");
+    unexpectedResponseError.name = "UnexpectedResponseError";
+    githubMock.validateAuthorizationCode.mockRejectedValueOnce(unexpectedResponseError);
+
+    await expect(verifyGitHubCallback(config, redirectUri, callbackData())).resolves.toMatchObject({
+      success: false,
+      error: "oauth_error",
+      message: "Unexpected error response",
+    });
+
+    const unexpectedBodyError = new Error("Unexpected error response body");
+    unexpectedBodyError.name = "UnexpectedErrorResponseBodyError";
+    githubMock.validateAuthorizationCode.mockRejectedValueOnce(unexpectedBodyError);
+
+    await expect(verifyGitHubCallback(config, redirectUri, callbackData())).resolves.toMatchObject({
+      success: false,
+      error: "oauth_error",
+      message: "Unexpected error response body",
     });
 
     githubMock.validateAuthorizationCode.mockRejectedValueOnce(new TypeError("fetch failed"));

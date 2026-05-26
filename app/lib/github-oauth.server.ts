@@ -57,6 +57,13 @@ function isOAuthRequestError(error: unknown): boolean {
   return error instanceof Error && error.name === "OAuth2RequestError";
 }
 
+function isUnexpectedOAuthResponseError(error: unknown): boolean {
+  return error instanceof Error && (
+    error.name === "UnexpectedResponseError" ||
+    error.name === "UnexpectedErrorResponseBodyError"
+  );
+}
+
 function isNetworkError(error: unknown): boolean {
   return error instanceof Error && (
     error.message.includes("fetch") ||
@@ -149,7 +156,7 @@ export async function verifyGitHubCallback(
       },
     };
   } catch (error) {
-    if (isOAuthRequestError(error)) {
+    if (isOAuthRequestError(error) || isUnexpectedOAuthResponseError(error)) {
       return {
         success: false,
         error: "oauth_error",
