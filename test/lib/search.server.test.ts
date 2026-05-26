@@ -4,6 +4,7 @@ import { db } from "~/lib/db.server";
 import {
   normalizeSearchLimit,
   normalizeSearchScope,
+  ensureSearchIndexFresh,
   rebuildSearchIndex,
   searchSpoonjoy,
   tokenizeSearchQuery,
@@ -234,6 +235,34 @@ describe("search.server", () => {
     const results = await searchSpoonjoy(db, { query: "batchable", scope: "recipes", limit: 20 });
     expect(results).toHaveLength(12);
     expect(results.every((result) => result.type === "recipe")).toBe(true);
+  });
+
+  it("reuses a fresh search index and rebuilds after source data changes", async () => {
+    const chef = await createChef("freshchef");
+    const recipe = await createSearchableRecipe(chef.id, "Quiet Pear Toast", "pear");
+
+    await expect(ensureSearchIndexFresh(db)).resolves.toBe(2);
+    await db.$executeRawUnsafe(
+      `UPDATE "SearchDocument" SET "title" = ? WHERE "entityType" = 'recipe' AND "entityId" = ?`,
+      "Cached Marker Toast",
+      recipe.id
+    );
+
+    const cachedResults = await searchSpoonjoy(db, { query: "cached marker", scope: "recipes" });
+    expect(cachedResults).toHaveLength(1);
+    expect(cachedResults[0]).toMatchObject({ id: recipe.id, title: "Cached Marker Toast" });
+
+    await db.recipe.update({
+      where: { id: recipe.id },
+      data: { title: "Bright Plum Toast", description: "Plum notes for a fresh index" },
+    });
+
+    const freshResults = await searchSpoonjoy(db, { query: "plum", scope: "recipes" });
+    expect(freshResults).toHaveLength(1);
+    expect(freshResults[0]).toMatchObject({ id: recipe.id, title: "Bright Plum Toast" });
+
+    const staleMarkerResults = await searchSpoonjoy(db, { query: "cached marker", scope: "recipes" });
+    expect(staleMarkerResults).toEqual([]);
   });
 
   it("keeps shopping-list search private to the signed-in owner", async () => {

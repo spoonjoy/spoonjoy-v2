@@ -11,6 +11,7 @@ import type {
   User,
 } from "@prisma/client";
 import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
+import { toDate, toNumber } from "~/lib/d1-coerce.server";
 import { getRecipeCoverImageUrl } from "~/lib/recipe-cover.server";
 
 export const SEARCH_SCOPES = ["all", "recipes", "cookbooks", "chefs", "shopping-list"] as const;
@@ -69,10 +70,26 @@ interface SearchRow {
   snippet: string;
 }
 
+interface SearchSourceAggregateRow {
+  tableName: string;
+  rowCount: number | bigint;
+  latestAt: Date | string | number | bigint | null;
+}
+
+interface SearchIndexMetadataRow {
+  sourceFingerprint: string;
+  documentCount: number | bigint;
+}
+
+interface SearchIndexCountRow {
+  documentCount: number | bigint;
+}
+
 const DEFAULT_SEARCH_LIMIT = 20;
 const MAX_SEARCH_LIMIT = 50;
 const SEARCH_INSERT_COLUMN_COUNT = 11;
 const SEARCH_INSERT_BATCH_SIZE = 8;
+const SEARCH_METADATA_ID = "current";
 
 const ENTITY_TYPES_BY_SCOPE: Record<SearchScope, readonly SearchEntityType[]> = {
   all: ["recipe", "cookbook", "chef", "shopping-list-item"],
@@ -97,6 +114,26 @@ const SEARCH_SCHEMA_SQL = `CREATE VIRTUAL TABLE IF NOT EXISTS "SearchDocument" U
   tokenize = 'unicode61 remove_diacritics 2',
   prefix = '2 3 4'
 )`;
+
+const SEARCH_METADATA_SCHEMA_SQL = `CREATE TABLE IF NOT EXISTS "SearchIndexMetadata" (
+  "id" TEXT NOT NULL PRIMARY KEY,
+  "sourceFingerprint" TEXT NOT NULL,
+  "documentCount" INTEGER NOT NULL DEFAULT 0,
+  "rebuiltAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+)`;
+
+const SEARCH_SOURCE_FINGERPRINT_SQL = `
+  SELECT 'User' AS tableName, COUNT(*) AS rowCount, MAX("updatedAt") AS latestAt FROM "User"
+  UNION ALL SELECT 'Recipe', COUNT(*), MAX("updatedAt") FROM "Recipe"
+  UNION ALL SELECT 'RecipeCover', COUNT(*), MAX("createdAt") FROM "RecipeCover"
+  UNION ALL SELECT 'RecipeStep', COUNT(*), MAX("updatedAt") FROM "RecipeStep"
+  UNION ALL SELECT 'Ingredient', COUNT(*), MAX("updatedAt") FROM "Ingredient"
+  UNION ALL SELECT 'IngredientRef', COUNT(*), MAX("updatedAt") FROM "IngredientRef"
+  UNION ALL SELECT 'Unit', COUNT(*), MAX("updatedAt") FROM "Unit"
+  UNION ALL SELECT 'Cookbook', COUNT(*), MAX("updatedAt") FROM "Cookbook"
+  UNION ALL SELECT 'RecipeInCookbook', COUNT(*), MAX("updatedAt") FROM "RecipeInCookbook"
+  UNION ALL SELECT 'ShoppingListItem', COUNT(*), MAX("updatedAt") FROM "ShoppingListItem"
+`;
 
 export function normalizeSearchScope(value: string | null | undefined): SearchScope {
   if (value === "recipes" || value === "cookbooks" || value === "chefs" || value === "shopping-list") {
@@ -206,6 +243,57 @@ function parseRow(row: SearchRow): SearchResult {
 
 async function ensureSearchIndex(database: PrismaClient) {
   await database.$executeRawUnsafe(SEARCH_SCHEMA_SQL);
+  await database.$executeRawUnsafe(SEARCH_METADATA_SCHEMA_SQL);
+}
+
+function aggregateDateString(value: Date | string | number | bigint | null): string | null {
+  if (value === null) {
+    return null;
+  }
+
+  return toDate(value).toISOString();
+}
+
+async function searchSourceFingerprint(database: PrismaClient): Promise<string> {
+  const rows = await database.$queryRawUnsafe<SearchSourceAggregateRow[]>(SEARCH_SOURCE_FINGERPRINT_SQL);
+  const normalizedRows = rows.map((row) => ({
+    tableName: row.tableName,
+    rowCount: toNumber(row.rowCount),
+    latestAt: aggregateDateString(row.latestAt),
+  }));
+
+  return JSON.stringify(normalizedRows);
+}
+
+async function searchDocumentCount(database: PrismaClient): Promise<number> {
+  const rows = await database.$queryRawUnsafe<SearchIndexCountRow[]>(
+    `SELECT COUNT(*) AS documentCount FROM "SearchDocument"`
+  );
+
+  return toNumber(rows[0]!.documentCount);
+}
+
+async function currentSearchIndexMetadata(database: PrismaClient): Promise<SearchIndexMetadataRow | null> {
+  const rows = await database.$queryRawUnsafe<SearchIndexMetadataRow[]>(
+    `SELECT "sourceFingerprint", "documentCount" FROM "SearchIndexMetadata" WHERE "id" = ? LIMIT 1`,
+    SEARCH_METADATA_ID
+  );
+
+  return rows[0] ?? null;
+}
+
+async function writeSearchIndexMetadata(database: PrismaClient, sourceFingerprint: string, documentCount: number) {
+  await database.$executeRawUnsafe(
+    `INSERT INTO "SearchIndexMetadata" ("id", "sourceFingerprint", "documentCount", "rebuiltAt")
+      VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT("id") DO UPDATE SET
+        "sourceFingerprint" = excluded."sourceFingerprint",
+        "documentCount" = excluded."documentCount",
+        "rebuiltAt" = excluded."rebuiltAt"`,
+    SEARCH_METADATA_ID,
+    sourceFingerprint,
+    documentCount
+  );
 }
 
 function searchDocumentSqlValues(document: SearchDocumentInput): Array<string | null> {
@@ -451,6 +539,7 @@ async function shoppingListDocuments(database: PrismaClient): Promise<SearchDocu
 export async function rebuildSearchIndex(database: PrismaClient): Promise<number> {
   await ensureSearchIndex(database);
 
+  const sourceFingerprint = await searchSourceFingerprint(database);
   const documents = [
     ...(await recipeDocuments(database)),
     ...(await cookbookDocuments(database)),
@@ -461,8 +550,29 @@ export async function rebuildSearchIndex(database: PrismaClient): Promise<number
   await database.$executeRawUnsafe(`DELETE FROM "SearchDocument"`);
 
   await insertSearchDocuments(database, documents);
+  await writeSearchIndexMetadata(database, sourceFingerprint, documents.length);
 
   return documents.length;
+}
+
+export async function ensureSearchIndexFresh(database: PrismaClient): Promise<number> {
+  await ensureSearchIndex(database);
+
+  const sourceFingerprint = await searchSourceFingerprint(database);
+  const [metadata, documentCount] = await Promise.all([
+    currentSearchIndexMetadata(database),
+    searchDocumentCount(database),
+  ]);
+
+  if (
+    metadata &&
+    metadata.sourceFingerprint === sourceFingerprint &&
+    toNumber(metadata.documentCount) === documentCount
+  ) {
+    return documentCount;
+  }
+
+  return rebuildSearchIndex(database);
 }
 
 export async function searchSpoonjoy(database: PrismaClient, options: SearchOptions = {}): Promise<SearchResult[]> {
@@ -480,7 +590,7 @@ export async function searchSpoonjoy(database: PrismaClient, options: SearchOpti
     return [];
   }
 
-  await rebuildSearchIndex(database);
+  await ensureSearchIndexFresh(database);
 
   const where = buildWhereClause(entityTypes, options.ownerId, options.viewerId);
 

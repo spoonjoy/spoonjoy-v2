@@ -12,6 +12,29 @@ export async function cleanupDatabase() {
 
   // Delete data in order from most dependent to least dependent
   // Things that reference other things must be deleted first
+  await db.$executeRawUnsafe(`CREATE VIRTUAL TABLE IF NOT EXISTS "SearchDocument" USING fts5(
+    entityType UNINDEXED,
+    entityId UNINDEXED,
+    ownerId UNINDEXED,
+    ownerUsername UNINDEXED,
+    sortAt UNINDEXED,
+    title,
+    subtitle,
+    body,
+    href UNINDEXED,
+    imageUrl UNINDEXED,
+    metadata UNINDEXED,
+    tokenize = 'unicode61 remove_diacritics 2',
+    prefix = '2 3 4'
+  );`);
+  await db.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "SearchIndexMetadata" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "sourceFingerprint" TEXT NOT NULL,
+    "documentCount" INTEGER NOT NULL DEFAULT 0,
+    "rebuiltAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );`);
+  await db.$executeRawUnsafe('DELETE FROM "SearchDocument";');
+  await db.$executeRawUnsafe('DELETE FROM "SearchIndexMetadata";');
 
   await db.shoppingListItem.deleteMany({});
   await db.shoppingList.deleteMany({});

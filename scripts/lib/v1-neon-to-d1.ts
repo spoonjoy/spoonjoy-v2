@@ -217,6 +217,7 @@ const EMPTY_SKIP_SUMMARY: SkipSummary = {
 
 const TARGET_DELETE_ORDER = [
   "SearchDocument",
+  "SearchIndexMetadata",
   "NotificationPreference",
   "NotificationEvent",
   "PushSubscription",

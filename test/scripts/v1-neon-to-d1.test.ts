@@ -274,6 +274,7 @@ describe("v1 Neon to D1 migration planner", () => {
 
     expect(sql).toContain("-- Spoonjoy v1 Neon -> v2 D1 import generated at 2026-05-25T00:00:00.000Z");
     expect(sql).toContain('DELETE FROM "SearchDocument";');
+    expect(sql).toContain('DELETE FROM "SearchIndexMetadata";');
     expect(sql).toContain("hash''value");
     expect(sql).toContain("X'000fff'");
     expect(sql).toContain(
