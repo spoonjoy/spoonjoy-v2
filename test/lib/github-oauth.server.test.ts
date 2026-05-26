@@ -199,6 +199,14 @@ describe("github-oauth.server", () => {
       message: "bad verifier",
     });
 
+    githubMock.validateAuthorizationCode.mockRejectedValueOnce(new Error("OAuth request error: bad_verification_code"));
+
+    await expect(verifyGitHubCallback(config, redirectUri, callbackData())).resolves.toMatchObject({
+      success: false,
+      error: "oauth_error",
+      message: "OAuth request error: bad_verification_code",
+    });
+
     const unexpectedResponseError = new Error("Unexpected error response");
     unexpectedResponseError.name = "UnexpectedResponseError";
     githubMock.validateAuthorizationCode.mockRejectedValueOnce(unexpectedResponseError);
