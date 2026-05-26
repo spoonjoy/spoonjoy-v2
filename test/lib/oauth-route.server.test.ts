@@ -44,6 +44,51 @@ describe("oauth-route.server", () => {
     expect(buildOAuthCallbackUrl(request, "apple")).toBe("https://spoonjoy.app/auth/apple/callback");
   });
 
+  it("builds provider callback URLs from forwarded public origin", () => {
+    const request = new Request("https://spoonjoy-v2.mendelow-studio.workers.dev/auth/github", {
+      headers: {
+        "X-Forwarded-Host": "spoonjoy.app",
+        "X-Forwarded-Proto": "https",
+      },
+    });
+
+    expect(buildOAuthCallbackUrl(request, "github")).toBe("https://spoonjoy.app/auth/github/callback");
+  });
+
+  it("allows forwarded http origins for local proxy callback URLs", () => {
+    const request = new Request("https://spoonjoy-v2.mendelow-studio.workers.dev/auth/google", {
+      headers: {
+        "X-Forwarded-Host": "local.spoonjoy.app:8787",
+        "X-Forwarded-Proto": "http",
+      },
+    });
+
+    expect(buildOAuthCallbackUrl(request, "google")).toBe("http://local.spoonjoy.app:8787/auth/google/callback");
+  });
+
+  it("defaults forwarded callback URLs to https when the forwarded proto is missing", () => {
+    const request = new Request("https://spoonjoy-v2.mendelow-studio.workers.dev/auth/apple", {
+      headers: {
+        "X-Forwarded-Host": "spoonjoy.app",
+      },
+    });
+
+    expect(buildOAuthCallbackUrl(request, "apple")).toBe("https://spoonjoy.app/auth/apple/callback");
+  });
+
+  it("ignores malformed forwarded hosts for provider callback URLs", () => {
+    const request = new Request("https://spoonjoy-v2.mendelow-studio.workers.dev/auth/apple", {
+      headers: {
+        "X-Forwarded-Host": "spoonjoy.app/evil",
+        "X-Forwarded-Proto": "https",
+      },
+    });
+
+    expect(buildOAuthCallbackUrl(request, "apple")).toBe(
+      "https://spoonjoy-v2.mendelow-studio.workers.dev/auth/apple/callback"
+    );
+  });
+
   it("sanitizes redirects to internal paths only", () => {
     expect(sanitizeInternalRedirect("/recipes", "/fallback")).toBe("/recipes");
     expect(sanitizeInternalRedirect("//evil.example", "/fallback")).toBe("/fallback");

@@ -16,6 +16,7 @@ export interface OAuthStartSessionData {
 }
 
 const OAUTH_SESSION_PREFIX = "oauth";
+const HOST_PATTERN = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?::\d{1,5})?$/i;
 
 function oauthSessionKey(provider: OAuthProvider, key: keyof OAuthStartSessionData) {
   return `${OAUTH_SESSION_PREFIX}:${provider}:${key}`;
@@ -29,9 +30,18 @@ export function getOAuthEnv(context: AppLoadContext): OAuthEnv {
   return (getCloudflareEnv(context) ?? process.env) as OAuthEnv;
 }
 
+function forwardedOrigin(request: Request): string | null {
+  const forwardedHost = request.headers.get("X-Forwarded-Host")?.split(",")[0]?.trim();
+  if (!forwardedHost || !HOST_PATTERN.test(forwardedHost)) return null;
+
+  const forwardedProto = request.headers.get("X-Forwarded-Proto")?.split(",")[0]?.trim().toLowerCase();
+  const protocol = forwardedProto === "http" || forwardedProto === "https" ? forwardedProto : "https";
+  return `${protocol}://${forwardedHost}`;
+}
+
 export function buildOAuthCallbackUrl(request: Request, provider: OAuthProvider): string {
   const url = new URL(request.url);
-  return `${url.origin}/auth/${provider}/callback`;
+  return `${forwardedOrigin(request) ?? url.origin}/auth/${provider}/callback`;
 }
 
 export function redirectTo(location: string, headers?: HeadersInit) {
