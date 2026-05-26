@@ -24,16 +24,16 @@ Goal: reach the point where the only remaining dependency before switching `spoo
 ## PPR-002 — Set available production secrets and document missing ones
 
 **Source**: pre-production audit
-**What**: Remote Worker is missing documented OAuth/OpenAI secrets. Local `.env` has Google OAuth credentials, but no Apple or OpenAI credentials were found locally.
-**Why it matters**: Google OAuth, Apple OAuth, import LLM fallback, AI placeholder covers, and spoon cover stylization depend on these.
-**Evidence**: `pnpm exec wrangler secret list`; `.env` redacted key scan; keychain checks for `OPENAI_API_KEY` and `APPLE_PRIVATE_KEY` were missing.
+**What**: Remote Worker feature secrets must match the v1 cutover reality rather than stale local placeholders.
+**Why it matters**: GitHub/Apple OAuth, import LLM fallback, AI placeholder covers, and spoon cover stylization depend on real secrets. Placeholder Google secrets should not make the app advertise a broken provider.
+**Evidence**: Render v1 environment group has Google marked `not yet enabled`; migrated v1 OAuth rows are Apple/GitHub only; `pnpm exec wrangler secret list`; live OAuth start smoke.
 **Severity**: high
 **Blast radius**: auth, import, AI image features
-**Recommended lane**: fix-now for available Google secrets; external-prerequisite for missing Apple/OpenAI values
-**Verification**: `wrangler secret list`; OAuth start smoke should show configured providers only; OpenAI-backed MCP import/image smoke after Ari provides key.
-**Status**: in-progress
-**Linked work**: `pnpm exec wrangler secret put GOOGLE_CLIENT_ID`; `pnpm exec wrangler secret put GOOGLE_CLIENT_SECRET`; `pnpm production:readiness`
-**Notes**: Google OAuth secrets were found in local `.env` and uploaded to the Worker. Apple OAuth and OpenAI credentials were not found in local env files or keychain. `pnpm production:readiness` reports those missing feature groups as WARN. This is an external credential dependency, not an unresolved design decision.
+**Recommended lane**: fix-now
+**Verification**: `wrangler secret list`; OAuth start smoke should show configured providers only; OpenAI-backed MCP import smoke; `pnpm production:readiness`.
+**Status**: fixed
+**Linked work**: `c4b1fd3 Harden OAuth environment validation (#89)`; `pnpm production:readiness`
+**Notes**: Removed stale Google Worker secrets and hardened OAuth env parsing so quoted blanks/placeholders are treated as missing. Current Worker secrets include GitHub, Apple, OpenAI, Session, and VAPID groups. Login/signup show GitHub and Apple only; direct Google start redirects to `oauth_unconfigured`. Slugger MCP import smoke confirms OpenAI-backed import is available.
 
 ---
 
@@ -145,7 +145,7 @@ Goal: reach the point where the only remaining dependency before switching `spoo
 **Verification**: `pnpm typecheck`, `pnpm test:coverage`, `pnpm build`, `pnpm test:e2e`, live smoke, MCP smoke.
 **Status**: fixed
 **Linked work**: `pnpm typecheck`; `pnpm test:coverage`; `pnpm build`; `pnpm test:e2e`; `pnpm deploy:auto`; live smoke script; Slugger MCP smoke
-**Notes**: Final branch verification passed: typecheck, 4,639 Vitest tests with 100% statement/branch/function/line coverage, production build, and 34 Playwright e2e tests. Deployed merged `main` to `https://spoonjoy-v2.mendelow-studio.workers.dev` as Worker version `d3905334-c03d-49dc-b515-cc611915db08`. Live smoke passed for `/`, `/login`, `/signup`, `/search?q=tomato&scope=all`, `/users/demo_chef/fellow-chefs`, `/users/demo_chef/kitchen-visitors`, authenticated demo login, `/recipes`, `/recipes/r_pizza#cook`, `/shopping-list`, `/account/settings`, and `/api/push/public-key`.
+**Notes**: Latest final branch verification passed: typecheck, 4,699 Vitest tests with 100% statement/branch/function/line coverage, production build, and CI e2e. Deployed merged `main` to `https://spoonjoy-v2.mendelow-studio.workers.dev` as Worker version `c173285b-a3be-4d7a-b69e-c4e465d150a7`. Live smoke passed for `/`, `/login`, `/signup`, `/search?q=tomato&scope=all`, `/users/ari/fellow-chefs`, `/users/ari/kitchen-visitors`, `/api/push/public-key`, GitHub OAuth start, Apple OAuth start, and intentional Google OAuth disabled behavior.
 
 ---
 

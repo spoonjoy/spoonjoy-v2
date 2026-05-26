@@ -21,7 +21,7 @@ Record these before touching DNS:
 - Current v2 D1 database ID.
 - Current R2 bucket name for uploaded images.
 - Current Cloudflare account and zone used for `spoonjoy.app`.
-- Current OAuth redirect URLs configured in Google, GitHub, and Apple.
+- Current OAuth redirect URLs configured in GitHub and Apple.
 
 ## Secrets
 
@@ -34,12 +34,13 @@ Required runtime secrets:
 
 Feature secrets:
 
-- Google OAuth: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
 - GitHub OAuth: `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`
 - Apple OAuth: `APPLE_CLIENT_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY`
 - AI features: `OPENAI_API_KEY`
 
 If a feature secret group is missing, either set it before cutover or confirm the UI does not advertise that feature. OAuth buttons are environment-aware in v2 and should only show configured providers.
+
+Google OAuth is intentionally disabled for the v1-to-v2 cutover: the Render v1 environment marks it `not yet enabled`, and the migrated v1 OAuth rows contain only Apple and GitHub accounts. Re-enable it only after creating real Google OAuth credentials and adding `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
 
 ## Data Migration
 

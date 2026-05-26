@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   REQUIRED_RUNTIME_SECRETS,
   OPTIONAL_FEATURE_SECRET_GROUPS,
+  INTENTIONALLY_DISABLED_FEATURE_GROUPS,
   evaluateSecretReadiness,
   hasUserPhotoUrlColumn,
   validatePwaAssetSet,
@@ -21,6 +22,29 @@ describe("production readiness helpers", () => {
     expect(result.requiredMissing).toEqual([]);
     expect(result.configuredFeatureGroups).toEqual(["Google OAuth", "GitHub OAuth"]);
     expect(result.missingFeatureGroups).toEqual(["Apple OAuth", "OpenAI AI features"]);
+    expect(result.intentionallyDisabledFeatureGroups).toEqual([]);
+  });
+
+  it("passes intentionally disabled optional feature groups", () => {
+    const result = evaluateSecretReadiness([
+      ...REQUIRED_RUNTIME_SECRETS,
+      "GITHUB_CLIENT_ID",
+      "GITHUB_CLIENT_SECRET",
+      "APPLE_CLIENT_ID",
+      "APPLE_TEAM_ID",
+      "APPLE_KEY_ID",
+      "APPLE_PRIVATE_KEY",
+      "OPENAI_API_KEY",
+    ]);
+
+    expect(result.requiredMissing).toEqual([]);
+    expect(result.configuredFeatureGroups).toEqual([
+      "GitHub OAuth",
+      "Apple OAuth",
+      "OpenAI AI features",
+    ]);
+    expect(result.missingFeatureGroups).toEqual([]);
+    expect(result.intentionallyDisabledFeatureGroups).toEqual(["Google OAuth"]);
   });
 
   it("reports missing required runtime secrets", () => {
@@ -52,6 +76,7 @@ describe("production readiness helpers", () => {
         secrets: ["OPENAI_API_KEY"],
       },
     ]);
+    expect(INTENTIONALLY_DISABLED_FEATURE_GROUPS).toEqual(["Google OAuth"]);
   });
 
   it("detects the remote User.photoUrl column from pragma rows", () => {

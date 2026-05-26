@@ -27,6 +27,8 @@ export const OPTIONAL_FEATURE_SECRET_GROUPS = [
   },
 ] as const;
 
+export const INTENTIONALLY_DISABLED_FEATURE_GROUPS = ["Google OAuth"] as const;
+
 export const REQUIRED_PWA_ASSETS = [
   "public/manifest.webmanifest",
   "public/sw.js",
@@ -46,6 +48,7 @@ interface SecretReadiness {
   requiredMissing: string[];
   configuredFeatureGroups: string[];
   missingFeatureGroups: string[];
+  intentionallyDisabledFeatureGroups: string[];
 }
 
 interface CheckResult {
@@ -56,20 +59,29 @@ interface CheckResult {
 
 export function evaluateSecretReadiness(secretNames: Iterable<string>): SecretReadiness {
   const names = new Set(secretNames);
+  const intentionallyDisabled = new Set<string>(INTENTIONALLY_DISABLED_FEATURE_GROUPS);
   const requiredMissing = REQUIRED_RUNTIME_SECRETS.filter((secret) => !names.has(secret));
   const configuredFeatureGroups: string[] = [];
   const missingFeatureGroups: string[] = [];
+  const intentionallyDisabledFeatureGroups: string[] = [];
 
   for (const group of OPTIONAL_FEATURE_SECRET_GROUPS) {
     const isConfigured = group.secrets.every((secret) => names.has(secret));
     if (isConfigured) {
       configuredFeatureGroups.push(group.name);
+    } else if (intentionallyDisabled.has(group.name)) {
+      intentionallyDisabledFeatureGroups.push(group.name);
     } else {
       missingFeatureGroups.push(group.name);
     }
   }
 
-  return { requiredMissing, configuredFeatureGroups, missingFeatureGroups };
+  return {
+    requiredMissing,
+    configuredFeatureGroups,
+    missingFeatureGroups,
+    intentionallyDisabledFeatureGroups,
+  };
 }
 
 export function hasUserPhotoUrlColumn(rows: Array<{ name?: unknown }>): boolean {
@@ -150,7 +162,12 @@ function runProductionReadiness() {
     name: "optional feature secrets",
     status: secretReadiness.missingFeatureGroups.length === 0 ? "PASS" : "WARN",
     message: secretReadiness.missingFeatureGroups.length === 0
-      ? `configured ${secretReadiness.configuredFeatureGroups.join(", ")}`
+      ? [
+          `configured ${secretReadiness.configuredFeatureGroups.join(", ")}`,
+          secretReadiness.intentionallyDisabledFeatureGroups.length > 0
+            ? `intentionally disabled ${secretReadiness.intentionallyDisabledFeatureGroups.join(", ")}`
+            : "",
+        ].filter(Boolean).join("; ")
       : `missing ${secretReadiness.missingFeatureGroups.join(", ")}`,
   });
 

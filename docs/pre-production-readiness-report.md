@@ -10,31 +10,31 @@ Spoonjoy v2 has passed final local verification, final MCP verification, authent
 
 `https://spoonjoy-v2.mendelow-studio.workers.dev`
 
-Deployed Worker version: `d3905334-c03d-49dc-b515-cc611915db08`
+Deployed Worker version: `c173285b-a3be-4d7a-b69e-c4e465d150a7`
 
-The app is ready for Ari's legacy data migration instructions before the stable `spoonjoy.app` cutover. The only unresolved production-posture items are external inputs, not branch work:
+The app is ready for the final write-freeze/data-migration/DNS cutover decision before switching the stable `spoonjoy.app` surface. The only unresolved production-posture items are timing/ops choices, not branch work:
 
-- Ari-provided legacy data migration plan/data.
-- Apple OAuth credentials, if Apple login should be enabled at cutover.
-- OpenAI API key, if AI import fallback, placeholder cover generation, and spoon-cover stylization should be enabled at cutover.
+- Final v1 write freeze and rerun of the verified Neon-to-D1 import if v1 has accepted writes since the last snapshot.
+- DNS/custom-domain switch for `spoonjoy.app`.
+- Provider callback-domain confirmation for GitHub and Apple on the stable domain.
+- Render shutdown after the stable-domain smoke passes.
 
 ## Initial Findings
 
 - Remote D1 migrations report no pending migrations.
 - Remote `User` table includes `photoUrl`; the earlier missing-column concern is not present on the current remote database.
-- Remote Worker has `SESSION_SECRET`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `GOOGLE_CLIENT_ID`, and `GOOGLE_CLIENT_SECRET`.
-- Remote Worker does not currently list Apple OAuth or OpenAI secrets.
-- Keychain checks did not find `OPENAI_API_KEY` or `APPLE_PRIVATE_KEY`.
+- Remote Worker has `SESSION_SECRET`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, GitHub OAuth, Apple OAuth, and `OPENAI_API_KEY`.
+- Google OAuth is intentionally disabled for cutover: Render v1 marks it `not yet enabled`, the migrated v1 OAuth rows are Apple/GitHub only, and direct Google start now fails closed with `oauth_unconfigured`.
 - UI static inventory reports no legacy Tailwind color classes, no copied Catalyst button shells, and no negative tracking classes.
 - Remaining UI inventory flags are review-only cases: circular controls/avatars/dock affordances, token hex values, and raw button controls used for accessible row/toggle interactions.
 
 ## Final Verification
 
 - `pnpm typecheck` passed.
-- `pnpm test:coverage` passed: 213 files, 4,639 tests, 100% statement/branch/function/line coverage.
+- `pnpm test:coverage` passed: 218 files, 4,699 tests, 100% statement/branch/function/line coverage.
 - `pnpm build` passed.
 - `pnpm test:e2e` passed: 34 Playwright tests.
-- `pnpm production:readiness` passed hard gates; it warns only for missing Apple OAuth and OpenAI feature secrets.
+- `pnpm production:readiness` passed all gates: required secrets, configured GitHub/Apple/OpenAI, intentionally disabled Google, PWA assets, runbook coverage, and remote `User.photoUrl`.
 - `pnpm deploy:auto` passed preflight, build, remote migration apply, and Worker deploy.
 - Authenticated local UI crawl: 54 route/viewport captures, 0 skips, 0 console/page errors, 0 overflow, 0 clipped text, 0 small touch-target findings.
 - Authenticated live UI crawl: 54 route/viewport captures, 0 skips, 0 console/page errors, 0 overflow, 0 clipped text, 0 small touch-target findings.
