@@ -10,6 +10,7 @@ const { mockArcticState } = vi.hoisted(() => {
       email: "default@example.com",
       emailVerified: "true" as string | boolean,
       isPrivateEmail: false,
+      lastPrivateKey: null as Uint8Array | null,
     },
   };
 });
@@ -24,9 +25,10 @@ vi.mock("arctic", () => {
       clientId: string,
       _teamId: string,
       _keyId: string,
-      _privateKey: string
+      privateKey: Uint8Array
     ) {
       this.clientId = clientId;
+      mockArcticState.lastPrivateKey = privateKey;
     }
 
     createAuthorizationURL(state: string, scopes: string[]): URL {
@@ -108,10 +110,7 @@ describe("apple-oauth.server", () => {
     teamId: "TEAM123456",
     keyId: "KEY123456",
     privateKey: `-----BEGIN PRIVATE KEY-----
-MIGTAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBHkwdwIBAQQgtest1234567890
-test1234567890test1234567890test1234567890oAoGCCqGSM49AwEH
-oUQDQgAEtest1234567890test1234567890test1234567890test1234
-567890test1234567890test1234567890==
+dGVzdA==
 -----END PRIVATE KEY-----`,
   };
   const mockRedirectUri = "https://spoonjoy.app/auth/apple/callback";
@@ -183,6 +182,46 @@ dGVzdA==
       const url = createAppleAuthorizationURL(configWithDecodableKey, mockRedirectUri, state);
 
       expect(url.searchParams.get("client_id")).toBe(mockConfig.clientId);
+    });
+
+    it("should accept quoted PEM private keys with escaped newlines", () => {
+      const state = "test-state-123";
+      const configWithEscapedKey: AppleOAuthConfig = {
+        ...mockConfig,
+        privateKey: `"-----BEGIN PRIVATE KEY-----\\ndGVzdA==\\n-----END PRIVATE KEY-----"`,
+      };
+
+      const url = createAppleAuthorizationURL(configWithEscapedKey, mockRedirectUri, state);
+
+      expect(url.searchParams.get("client_id")).toBe(mockConfig.clientId);
+      expect(new TextDecoder().decode(mockArcticState.lastPrivateKey ?? new Uint8Array())).toBe("test");
+    });
+
+    it("should keep fake non-PEM keys usable for tests", () => {
+      const state = "test-state-123";
+      const configWithFakeKey: AppleOAuthConfig = {
+        ...mockConfig,
+        privateKey: " fake-private-key ",
+      };
+
+      const url = createAppleAuthorizationURL(configWithFakeKey, mockRedirectUri, state);
+
+      expect(url.searchParams.get("client_id")).toBe(mockConfig.clientId);
+      expect(new TextDecoder().decode(mockArcticState.lastPrivateKey ?? new Uint8Array())).toBe("fake-private-key");
+    });
+
+    it("should reject malformed PEM private keys", () => {
+      const state = "test-state-123";
+      const configWithMalformedKey: AppleOAuthConfig = {
+        ...mockConfig,
+        privateKey: `-----BEGIN PRIVATE KEY-----
+not-base64-@@@
+-----END PRIVATE KEY-----`,
+      };
+
+      expect(() => createAppleAuthorizationURL(configWithMalformedKey, mockRedirectUri, state)).toThrow(
+        "Apple private key must be a valid PKCS8 PEM private key"
+      );
     });
 
     it("should include state parameter for CSRF protection", () => {
@@ -264,10 +303,7 @@ dGVzdA==
       teamId: "TEAM123456",
       keyId: "KEY123456",
       privateKey: `-----BEGIN PRIVATE KEY-----
-MIGTAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBHkwdwIBAQQgtest1234567890
-test1234567890test1234567890test1234567890oAoGCCqGSM49AwEH
-oUQDQgAEtest1234567890test1234567890test1234567890test1234
-567890test1234567890test1234567890==
+dGVzdA==
 -----END PRIVATE KEY-----`,
     };
     const mockRedirectUri = "https://spoonjoy.app/auth/apple/callback";
@@ -425,6 +461,27 @@ oUQDQgAEtest1234567890test1234567890test1234567890test1234
 
         expect(result.success).toBe(false);
         expect(result.error).toBe("network_error");
+      });
+
+      it("should report malformed PEM keys as OAuth configuration errors", async () => {
+        const callbackData: AppleCallbackData = {
+          code: "valid-auth-code",
+          state: "valid-state",
+        };
+
+        const result = await verifyAppleCallback(
+          {
+            ...mockConfig,
+            privateKey: `-----BEGIN PRIVATE KEY-----
+not-base64-@@@
+-----END PRIVATE KEY-----`,
+          },
+          mockRedirectUri,
+          callbackData
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBe("oauth_unconfigured");
       });
     });
 
