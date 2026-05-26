@@ -105,7 +105,7 @@ wrangler secret put GOOGLE_CLIENT_SECRET
 3. Enable "Google+ API" or "Google Identity"
 4. Go to Credentials → Create Credentials → OAuth 2.0 Client ID
 5. Application type: Web application
-6. Add authorized redirect URI: `https://your-domain.com/auth/google/callback`
+6. Add authorized redirect URI: `https://your-domain.com/.redwood/functions/auth/oauth?method=loginWithGoogle`
 7. Copy Client ID and Client Secret
 
 #### GitHub OAuth
@@ -124,7 +124,7 @@ wrangler secret put GITHUB_CLIENT_SECRET
 1. Go to GitHub Developer Settings → OAuth Apps
 2. Create or update the Spoonjoy OAuth app
 3. Set Homepage URL to `https://your-domain.com`
-4. Set Authorization callback URL to `https://your-domain.com/auth/github/callback`
+4. Set Authorization callback URL to `https://your-domain.com/.redwood/functions`
 5. Copy Client ID and Client Secret
 
 #### Apple OAuth
