@@ -20,7 +20,11 @@ export interface OAuthStartSessionData {
 
 const OAUTH_SESSION_PREFIX = "oauth";
 const HOST_PATTERN = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?::\d{1,5})?$/i;
-const LEGACY_APPLE_CALLBACK_PATH = "/.redwood/functions/auth/oauth?method=loginWithApple";
+const LEGACY_CALLBACK_PATHS: Record<OAuthProvider, string> = {
+  apple: "/.redwood/functions/auth/oauth?method=loginWithApple",
+  github: "/.redwood/functions/auth/oauth?method=loginWithGitHub",
+  google: "/.redwood/functions/auth/oauth?method=loginWithGoogle",
+};
 
 function oauthSessionKey(provider: OAuthProvider, key: keyof OAuthStartSessionData) {
   return `${OAUTH_SESSION_PREFIX}:${provider}:${key}`;
@@ -47,11 +51,7 @@ export function buildOAuthCallbackUrl(request: Request, provider: OAuthProvider)
   const url = new URL(request.url);
   const origin = canonicalizeOrigin(forwardedOrigin(request) ?? url.origin);
 
-  if (provider === "apple") {
-    return `${origin}${LEGACY_APPLE_CALLBACK_PATH}`;
-  }
-
-  return `${origin}/auth/${provider}/callback`;
+  return `${origin}${LEGACY_CALLBACK_PATHS[provider]}`;
 }
 
 export function redirectTo(location: string, headers?: HeadersInit) {

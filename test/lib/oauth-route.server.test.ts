@@ -39,8 +39,12 @@ describe("oauth-route.server", () => {
 
   it("builds provider callback URLs from request origin", () => {
     const request = new Request("https://spoonjoy.app/auth/google");
-    expect(buildOAuthCallbackUrl(request, "google")).toBe("https://spoonjoy.app/auth/google/callback");
-    expect(buildOAuthCallbackUrl(request, "github")).toBe("https://spoonjoy.app/auth/github/callback");
+    expect(buildOAuthCallbackUrl(request, "google")).toBe(
+      "https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithGoogle"
+    );
+    expect(buildOAuthCallbackUrl(request, "github")).toBe(
+      "https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithGitHub"
+    );
     expect(buildOAuthCallbackUrl(request, "apple")).toBe(
       "https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithApple"
     );
@@ -49,7 +53,9 @@ describe("oauth-route.server", () => {
   it("canonicalizes www callback URLs to the apex Spoonjoy host", () => {
     const request = new Request("https://www.spoonjoy.app/auth/apple");
 
-    expect(buildOAuthCallbackUrl(request, "google")).toBe("https://spoonjoy.app/auth/google/callback");
+    expect(buildOAuthCallbackUrl(request, "google")).toBe(
+      "https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithGoogle"
+    );
     expect(buildOAuthCallbackUrl(request, "apple")).toBe(
       "https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithApple"
     );
@@ -63,7 +69,9 @@ describe("oauth-route.server", () => {
       },
     });
 
-    expect(buildOAuthCallbackUrl(request, "github")).toBe("https://spoonjoy.app/auth/github/callback");
+    expect(buildOAuthCallbackUrl(request, "github")).toBe(
+      "https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithGitHub"
+    );
   });
 
   it("allows forwarded http origins for local proxy callback URLs", () => {
@@ -74,7 +82,9 @@ describe("oauth-route.server", () => {
       },
     });
 
-    expect(buildOAuthCallbackUrl(request, "google")).toBe("http://local.spoonjoy.app:8787/auth/google/callback");
+    expect(buildOAuthCallbackUrl(request, "google")).toBe(
+      "http://local.spoonjoy.app:8787/.redwood/functions/auth/oauth?method=loginWithGoogle"
+    );
   });
 
   it("defaults forwarded callback URLs to https when the forwarded proto is missing", () => {
