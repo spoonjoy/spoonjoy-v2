@@ -54,7 +54,10 @@ export function createGitHubAuthorizationURL(
 }
 
 function isOAuthRequestError(error: unknown): boolean {
-  return error instanceof Error && error.name === "OAuth2RequestError";
+  return error instanceof Error && (
+    error.name === "OAuth2RequestError" ||
+    error.message.startsWith("OAuth request error:")
+  );
 }
 
 function isUnexpectedOAuthResponseError(error: unknown): boolean {
