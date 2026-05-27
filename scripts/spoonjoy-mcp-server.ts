@@ -3,6 +3,7 @@ import { authenticateApiToken, principalFromUserEmail, type ApiPrincipal } from 
 import { getLocalDb } from "../app/lib/db.server";
 import { createJsonRpcLineSession } from "../app/lib/mcp/json-rpc-stdio.server";
 import type { JsonRpcToolRouter } from "../app/lib/mcp/json-rpc.server";
+import { spoonjoyRemoteAuthorizationHeader } from "../app/lib/mcp/spoonjoy-remote-auth.server";
 import { getSpoonjoyMcpEnv } from "../app/lib/mcp/spoonjoy-mcp-env.server";
 import { callSpoonjoyMcpTool, listSpoonjoyMcpTools } from "../app/lib/mcp/spoonjoy-tools.server";
 
@@ -11,13 +12,6 @@ type RemoteOperation = {
   description: string;
   inputSchema: Record<string, unknown>;
 };
-
-const PUBLIC_BOOTSTRAP_OPERATIONS = new Set([
-  "health",
-  "auth_status",
-  "start_agent_connection",
-  "poll_agent_connection",
-]);
 
 async function getProtocolSafeDb() {
   const originalWrite = process.stdout.write.bind(process.stdout);
@@ -41,8 +35,9 @@ function remoteUrl(baseUrl: string, path: string): string {
 
 async function remoteJson(baseUrl: string, path: string, init?: RequestInit & { operation?: string }): Promise<unknown> {
   const headers = new Headers(init?.headers);
-  if (process.env.SPOONJOY_MCP_API_TOKEN && !PUBLIC_BOOTSTRAP_OPERATIONS.has(init?.operation ?? "")) {
-    headers.set("Authorization", `Bearer ${process.env.SPOONJOY_MCP_API_TOKEN}`);
+  const authorization = spoonjoyRemoteAuthorizationHeader(init?.operation, process.env.SPOONJOY_MCP_API_TOKEN);
+  if (authorization) {
+    headers.set("Authorization", authorization);
   }
   const response = await fetch(remoteUrl(baseUrl, path), { ...init, headers });
   const payload = await response.json() as {

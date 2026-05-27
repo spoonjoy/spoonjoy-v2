@@ -46,7 +46,7 @@ Spoonjoy supports three MCP auth modes:
 - Preferred portable mode: set `SPOONJOY_MCP_API_TOKEN` to a Spoonjoy API token. This works for any MCP client that can pass environment variables to the stdio server. Tokens are owner-scoped, stored hashed, and can be revoked.
 - Trusted local/Ouro bootstrap mode: set `SPOONJOY_MCP_USER_EMAIL`. This is useful for the Ouroboros harness and local development, especially when the value comes from Ouro vault. It is not a remote auth boundary by itself; it is a trusted local stdio identity assertion.
 
-When a token is present, Spoonjoy derives ownership from the authenticated principal. Tool calls that try to override `ownerEmail` to another user are rejected with `403`. Without a token, owner-scoped tools require either `SPOONJOY_MCP_USER_EMAIL` or an explicit `ownerEmail`.
+When a token is present, Spoonjoy derives ownership from the authenticated principal. Agents should omit `ownerEmail` after delegated auth; the token is the owner selector. Tool calls that try to override `ownerEmail` to another user are rejected with `403`. Without a token, owner-scoped tools require either `SPOONJOY_MCP_USER_EMAIL` or an explicit `ownerEmail`.
 
 API token lifecycle is available through MCP itself (`create_api_token`, `list_api_tokens`, `revoke_api_token`) and through the HTTP API at `/api/tokens`. The raw token is returned once; save it in the MCP client's secret store or in Ouro vault.
 
@@ -70,7 +70,7 @@ Add this to an agent bundle's `agent.json`:
 }
 ```
 
-`vault?:` is Ouro's optional vault reference: the MCP server still starts before the first token exists, so it can generate the browser approval link. After approval, store the returned token in `spoonjoy.app` as the password field.
+`vault?:` is Ouro's optional vault reference: the MCP server still starts before the first token exists, so it can generate the browser approval link. After approval, store the returned token in `spoonjoy.app` as the password field with username `api-token`.
 
 For local development without vault injection, use a literal `SPOONJOY_MCP_API_TOKEN` or a local test `SPOONJOY_MCP_USER_EMAIL`. If both are missing, public read tools still work and owner-scoped tools return an authentication/configuration error unless `ownerEmail` is provided in the tool call.
 
