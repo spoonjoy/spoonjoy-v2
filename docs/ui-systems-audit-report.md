@@ -39,6 +39,14 @@ Latest shopping-list/cook-mode focused local artifact directories:
 - `/tmp/spoonjoy-cook-shopping-local`
 - `/tmp/spoonjoy-cook-mode-local`
 
+Latest strict local crawl artifact directory:
+
+- `/tmp/spoonjoy-strict-local-crawl`
+
+Latest disposable live-smoke artifact directory:
+
+- `/tmp/spoonjoy-live-smoke-local`
+
 Contact sheets:
 
 - `/tmp/spoonjoy-ui-crawl-local/contact-mobile-top.png`
@@ -67,6 +75,8 @@ UI_AUDIT_EMAIL=demo@spoonjoy.com UI_AUDIT_PASSWORD=demo1234 node scripts/crawl-u
 UI_AUDIT_EMAIL=demo@spoonjoy.com UI_AUDIT_PASSWORD=demo1234 node scripts/crawl-ui.mjs --base-url http://localhost:5173 --routes /tmp/spoonjoy-cook-shopping-routes.json --out /tmp/spoonjoy-cook-shopping-local
 # Focused Playwright cook-mode screenshot script wrote /tmp/spoonjoy-cook-mode-local.
 pnpm test test/routes/shopping-list-ux.test.tsx test/routes/recipes-id.test.tsx test/components/navigation/recipe-dock-actions.test.tsx test/routes/recipe-dock-integration.test.tsx -- --run
+UI_AUDIT_EMAIL=demo@spoonjoy.com UI_AUDIT_PASSWORD=demo1234 node scripts/crawl-ui.mjs --base-url http://localhost:5173 --routes docs/ui-systems-audit-routes.json --out /tmp/spoonjoy-strict-local-crawl
+pnpm smoke:live -- --base-url http://localhost:5173 --out /tmp/spoonjoy-live-smoke-local
 ```
 
 Ouroboros harness smoke:
@@ -132,6 +142,14 @@ Verification:
 - Fixed the remaining design-translation drift found in that pass: cook mode now renders as a true viewport pager, and cookbook owner tools no longer read like a dead printed heading when collapsed.
 - Verification after the follow-up: 220 test files passed, 4,748 tests passed, 100% statement/branch/function/line coverage, typecheck passed, production build passed, and Chromium e2e passed 27/27.
 
+2026-05-26 final-polish follow-up:
+
+- Hardened `scripts/crawl-ui.mjs` so UI crawls now fail on auth skips, HTTP 4xx/5xx responses, console/page errors, horizontal overflow, undersized targets, and clipped text.
+- Added `pnpm smoke:live`, a disposable-account browser smoke for live Workers that signs up, creates a recipe, enters cook mode, adds ingredients to the shopping list, checks settings, checks the push public-key endpoint, captures screenshots, and can remote-clean the smoke user.
+- Fixed the root shell so route content mounts once instead of once for desktop and once for mobile. The old shell duplicated forms, IDs, effects, and cook-mode panels behind responsive wrappers.
+- Strict local crawl at `/tmp/spoonjoy-strict-local-crawl`: 57 route/viewport captures, 0 skipped routes, 0 HTTP failures, 0 console/page errors, 0 overflow findings, 0 clipped-text findings, and 0 small touch-target findings.
+- Local disposable smoke at `/tmp/spoonjoy-live-smoke-local`: signup, recipe creation, paged cook mode, recipe-to-shopping-list add, shopping list, and account settings passed with 0 console/page errors. Local `/api/push/public-key` returned 500 because local dev does not have VAPID configured; live Workers must return 200.
+
 ## Findings
 
 | ID | Severity | Status | Surfaces | Result |
@@ -152,6 +170,8 @@ Verification:
 | UIA-014 | Medium | Fixed | Shopping list | Kept the editorial header wider while constraining the market checklist, added Need/Basket/All modes, aisle grouping, a single In basket section for checked rows, and recipe scale when adding ingredients. |
 | UIA-015 | High | Fixed | Recipe detail, dock actions | Replaced the old jump link with a focused cook-mode panel, step-by-step controls, shared ingredient checklist grammar, `#cook` deep-link/back behavior, and dock/header entry points. |
 | UIA-016 | Medium | Fixed | Cookbook detail | Changed the collapsed owner-tools affordance from a lone dead-looking label into a full-width expandable maintenance row with explicit open/close state. |
+| UIA-017 | High | Fixed | Root shell, every route | Removed the duplicate desktop/mobile `<Outlet />` mounting so forms, IDs, route effects, and cook-mode panels exist once. |
+| UIA-018 | High | Fixed | UI audit harness | Strict crawl now fails instead of silently accepting skipped auth routes, HTTP failures, console/page errors, overflow, clipped text, or undersized targets. |
 
 ## Re-Audit Notes
 
