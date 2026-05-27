@@ -12,6 +12,13 @@ type RemoteOperation = {
   inputSchema: Record<string, unknown>;
 };
 
+const PUBLIC_BOOTSTRAP_OPERATIONS = new Set([
+  "health",
+  "auth_status",
+  "start_agent_connection",
+  "poll_agent_connection",
+]);
+
 async function getProtocolSafeDb() {
   const originalWrite = process.stdout.write.bind(process.stdout);
   process.stdout.write = (() => true) as typeof process.stdout.write;
@@ -32,9 +39,9 @@ function remoteUrl(baseUrl: string, path: string): string {
   return new URL(path, baseUrl).toString();
 }
 
-async function remoteJson(baseUrl: string, path: string, init?: RequestInit): Promise<unknown> {
+async function remoteJson(baseUrl: string, path: string, init?: RequestInit & { operation?: string }): Promise<unknown> {
   const headers = new Headers(init?.headers);
-  if (process.env.SPOONJOY_MCP_API_TOKEN) {
+  if (process.env.SPOONJOY_MCP_API_TOKEN && !PUBLIC_BOOTSTRAP_OPERATIONS.has(init?.operation ?? "")) {
     headers.set("Authorization", `Bearer ${process.env.SPOONJOY_MCP_API_TOKEN}`);
   }
   const response = await fetch(remoteUrl(baseUrl, path), { ...init, headers });
@@ -80,6 +87,7 @@ const router: JsonRpcToolRouter = {
     if (baseUrl) {
       const data = await remoteJson(baseUrl, `/api/tools/${encodeURIComponent(name)}`, {
         method: "POST",
+        operation: name,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(args),
       });

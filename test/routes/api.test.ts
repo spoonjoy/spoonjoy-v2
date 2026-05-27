@@ -132,6 +132,18 @@ describe("Spoonjoy REST API route", () => {
       },
     });
 
+    const staleVaultTokenResponse = await action(routeArgs(new UndiciRequest("http://localhost/api/tools/start_agent_connection", {
+      method: "POST",
+      headers: { Authorization: "Bearer stale-vault-token", "Content-Type": "application/json" },
+      body: JSON.stringify({ agentName: "slugger", baseUrl: "https://spoonjoy.app" }),
+    }), "tools/start_agent_connection"));
+    await expect(readJson(staleVaultTokenResponse)).resolves.toMatchObject({
+      ok: true,
+      data: {
+        authorizationUrl: expect.stringContaining("https://spoonjoy.app/agent/connect/"),
+      },
+    });
+
     const blocked = await action(routeArgs(new UndiciRequest("http://localhost/api/tools/create_recipe", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

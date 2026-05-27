@@ -12,6 +12,12 @@ const API_HEADERS = {
 
 const NUMERIC_QUERY_KEYS = new Set(["duration", "limit", "quantity"]);
 const BOOLEAN_QUERY_KEYS = new Set(["checked"]);
+const PUBLIC_BOOTSTRAP_OPERATIONS = new Set([
+  "health",
+  "auth_status",
+  "start_agent_connection",
+  "poll_agent_connection",
+]);
 
 type ApiDispatch = {
   operation: string;
@@ -154,14 +160,24 @@ async function handleApiRequest({ request, context, params }: Route.LoaderArgs |
       return apiJson({ ok: true, data: { operations: listSpoonjoyApiOperations() } });
     }
 
-    const db = await getRequestDb(context);
-    const principal = await authenticateApiRequest(db, request, context.cloudflare?.env);
-
     const dispatch = request.method === "GET"
       ? dispatchGet(path, segments, url)
       : await dispatchMutation(request.method, path, segments, request);
 
     if (!dispatch) notFound(path);
+
+    const db = await getRequestDb(context);
+    const principal = await authenticateApiRequest(db, request, context.cloudflare?.env)
+      .catch((error: unknown) => {
+        if (
+          error instanceof ApiAuthError &&
+          error.status === 401 &&
+          PUBLIC_BOOTSTRAP_OPERATIONS.has(dispatch.operation)
+        ) {
+          return null;
+        }
+        throw error;
+      });
 
     const cloudflare = context.cloudflare;
     const ctx = cloudflare?.ctx;
