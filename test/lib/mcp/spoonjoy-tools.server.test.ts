@@ -180,6 +180,15 @@ describe("spoonjoy MCP tools", () => {
     }));
     expect(envFallback.authorizationUrl).toContain("https://spoonjoy.app/agent/connect/");
 
+    const canonicalEnv = parseJson(await callSpoonjoyMcpTool("start_agent_connection", {
+      agentName: "slugger",
+      baseUrl: "https://spoonjoy.com",
+    }, {
+      ...context,
+      env: { SPOONJOY_BASE_URL: "https://spoonjoy.app" },
+    }));
+    expect(canonicalEnv.authorizationUrl).toContain("https://spoonjoy.app/agent/connect/");
+
     const pending = parseJson(await callSpoonjoyMcpTool("poll_agent_connection", {
       deviceCode: started.deviceCode,
       baseUrl: "https://spoonjoy.app",

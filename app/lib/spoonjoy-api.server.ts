@@ -696,7 +696,7 @@ const startAgentConnectionTool: SpoonjoyApiOperation = {
   async handle(args, context) {
     const started = await startAgentConnection(context.db, {
       agentName: optionalString(args.agentName),
-      baseUrl: optionalString(args.baseUrl) ?? context.env?.SPOONJOY_BASE_URL,
+      baseUrl: context.env?.SPOONJOY_BASE_URL ?? optionalString(args.baseUrl),
     });
 
     return json({
@@ -731,7 +731,7 @@ const pollAgentConnectionTool: SpoonjoyApiOperation = {
     return json(await pollAgentConnection(context.db, {
       deviceCode: requiredString(args, "deviceCode"),
       tokenName: optionalString(args.tokenName),
-      baseUrl: optionalString(args.baseUrl) ?? context.env?.SPOONJOY_BASE_URL,
+      baseUrl: context.env?.SPOONJOY_BASE_URL ?? optionalString(args.baseUrl),
     }));
   },
 };
