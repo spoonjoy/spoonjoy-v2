@@ -69,7 +69,7 @@ describe('ThemeToggle', () => {
     })
   })
 
-  it('cycles through themes on click: system -> light -> dark -> system', async () => {
+  it('toggles between light and dark while defaulting from system preference', async () => {
     render(
       <ThemeProvider>
         <ThemeToggle />
@@ -82,25 +82,19 @@ describe('ThemeToggle', () => {
 
     const button = screen.getByRole('button')
 
-    // Initial state should be system
-    expect(button.getAttribute('aria-label')).toContain('system')
+    // Initial state resolves from system preference.
+    expect(button).toHaveAttribute('aria-label', 'Switch theme to dark mode')
 
-    // Click 1: system -> light
+    // Click 1: light -> dark
     fireEvent.click(button)
     await waitFor(() => {
       expect(button.getAttribute('aria-label')).toContain('light')
     })
 
-    // Click 2: light -> dark
+    // Click 2: dark -> light
     fireEvent.click(button)
     await waitFor(() => {
       expect(button.getAttribute('aria-label')).toContain('dark')
-    })
-
-    // Click 3: dark -> system
-    fireEvent.click(button)
-    await waitFor(() => {
-      expect(button.getAttribute('aria-label')).toContain('system')
     })
   })
 
@@ -117,10 +111,10 @@ describe('ThemeToggle', () => {
 
     const button = screen.getByRole('button')
 
-    // Click to set light
+    // Click to set dark from system-resolved light.
     fireEvent.click(button)
     await waitFor(() => {
-      expect(localStorageMock.setItem).toHaveBeenCalledWith('spoonjoy-theme', 'light')
+      expect(localStorageMock.setItem).toHaveBeenCalledWith('spoonjoy-theme', 'dark')
     })
   })
 })
@@ -159,10 +153,10 @@ describe('ThemeDropdown', () => {
     fireEvent.click(button)
 
     await waitFor(() => {
-      expect(screen.getByText('System')).toBeInTheDocument()
       expect(screen.getByText('Light')).toBeInTheDocument()
       expect(screen.getByText('Dark')).toBeInTheDocument()
     })
+    expect(screen.queryByText('System')).not.toBeInTheDocument()
   })
 
   it('allows selecting a specific theme from dropdown', async () => {
@@ -247,7 +241,7 @@ describe('ThemeDropdown', () => {
     expect(darkButton).toBeInTheDocument()
   })
 
-  it('shows system resolved theme indicator in dropdown', async () => {
+  it('keeps system out of the manual dropdown choices', async () => {
     render(
       <ThemeProvider>
         <ThemeDropdown />
@@ -262,13 +256,9 @@ describe('ThemeDropdown', () => {
     fireEvent.click(button)
 
     await waitFor(() => {
-      // System option should show resolved theme as an icon indicator
-      // The component renders a Sun or Moon icon (aria-hidden) instead of text
-      const systemButton = screen.getByRole('menuitem', { name: /System/i })
-      expect(systemButton).toBeInTheDocument()
-      // The button text should just be "System" - the resolved theme is shown as an icon
-      expect(systemButton.textContent).toMatch(/System/)
+      expect(screen.getByRole('menuitem', { name: /Light/i })).toBeInTheDocument()
     })
+    expect(screen.queryByRole('menuitem', { name: /System/i })).not.toBeInTheDocument()
   })
 
   it('applies focus styling when keyboard navigating menu items (branch coverage)', async () => {

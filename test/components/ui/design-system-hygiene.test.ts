@@ -53,6 +53,7 @@ describe("Spoonjoy UI design-system hygiene", () => {
     const content = readSourceFile("app/components/ui/button.tsx");
 
     expect(content).not.toContain("0_10px_24px");
+    expect(content).not.toContain("linear-gradient");
     expect(content).toContain("shadow-none");
   });
 

@@ -32,6 +32,36 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   return loadRecipeDetail({ request, params, context });
 }
 
+export function meta({ data }: Route.MetaArgs) {
+  if (!data) {
+    return [
+      { title: "Recipe - Spoonjoy" },
+      { name: "description", content: "Open this Spoonjoy recipe." },
+    ];
+  }
+
+  const description = data.recipe.description?.trim()
+    || `A Spoonjoy recipe by ${data.recipe.chef.username}.`;
+
+  return [
+    { title: `${data.recipe.title} - Spoonjoy` },
+    { name: "description", content: description },
+    { property: "og:site_name", content: "Spoonjoy" },
+    { property: "og:type", content: "article" },
+    { property: "og:title", content: data.recipe.title },
+    { property: "og:description", content: description },
+    { property: "og:url", content: data.canonicalUrl },
+    { property: "og:image", content: data.ogImageUrl },
+    { property: "og:image:width", content: "1200" },
+    { property: "og:image:height", content: "630" },
+    { property: "og:image:type", content: "image/png" },
+    { name: "twitter:card", content: "summary_large_image" },
+    { name: "twitter:title", content: data.recipe.title },
+    { name: "twitter:description", content: description },
+    { name: "twitter:image", content: data.ogImageUrl },
+  ];
+}
+
 export async function action({ request, params, context }: Route.ActionArgs) {
   return handleRecipeDetailAction({ request, params, context });
 }
@@ -220,6 +250,7 @@ export function applyCreatedCookbookState(
 export default function RecipeDetail() {
   const loaderData = useLoaderData<typeof loader>();
   const { recipe, coverImageUrl, isOwner, hasIngredientsInShoppingList = false } = loaderData;
+  const isAuthenticated = loaderData.isAuthenticated ?? true;
   const cookbooks = loaderData.cookbooks ?? EMPTY_COOKBOOKS;
   const savedInCookbookIds = loaderData.savedInCookbookIds ?? EMPTY_SAVED_COOKBOOK_IDS;
   const spoons = loaderData.spoons ?? EMPTY_SPOONS;
@@ -249,6 +280,7 @@ export default function RecipeDetail() {
     () => new Set(savedInCookbookIds)
   );
   const [isAlreadyInList, setIsAlreadyInList] = useState(() => hasIngredientsInShoppingList);
+  const loginRedirect = `/login?redirectTo=${encodeURIComponent(`/recipes/${recipe.id}`)}`;
 
   // Track view start time for engagement metrics
   const viewStartTime = useRef<number>(Date.now());
@@ -462,6 +494,11 @@ export default function RecipeDetail() {
   const saveModalTitleRef = useRef<HTMLHeadingElement>(null);
 
   const handleAddToList = useCallback(() => {
+    if (!isAuthenticated) {
+      window.location.assign(loginRedirect);
+      return;
+    }
+
     addToListSubmissionCount.current += 1;
     addToListFetcher.submit(
       {
@@ -480,7 +517,7 @@ export default function RecipeDetail() {
         scale_factor: scaleFactor,
       });
     }
-  }, [addToListFetcher, recipe.id, scaleFactor, posthog]);
+  }, [addToListFetcher, recipe.id, scaleFactor, posthog, isAuthenticated, loginRedirect]);
 
   const enterCookMode = useCallback(() => {
     pendingCookModeScroll.current = true;
@@ -542,24 +579,44 @@ export default function RecipeDetail() {
         >
           {addToListLabel}
         </button>
-        <button
-          type="button"
-          onClick={() => setIsSpoonDialogOpen(true)}
-          className={`${recipeMastheadActionClass} bg-transparent`}
-          data-testid="recipe-header-log-cook-action"
-        >
-          Log cook
-        </button>
+        {isAuthenticated ? (
+          <button
+            type="button"
+            onClick={() => setIsSpoonDialogOpen(true)}
+            className={`${recipeMastheadActionClass} bg-transparent`}
+            data-testid="recipe-header-log-cook-action"
+          >
+            Log cook
+          </button>
+        ) : (
+          <Link
+            href={loginRedirect}
+            className={recipeMastheadActionClass}
+            data-testid="recipe-header-log-cook-action"
+          >
+            Log cook
+          </Link>
+        )}
         {!isOwner && (
-          <ForkRecipeButton
-            recipeId={recipe.id}
-            recipeTitle={recipe.title}
-            sourceChefUsername={recipe.chef.username}
-            isOwner={false}
-            triggerClassName={recipeMastheadActionClass}
-            triggerStyle="text"
-            triggerTestId="recipe-header-fork-action"
-          />
+          isAuthenticated ? (
+            <ForkRecipeButton
+              recipeId={recipe.id}
+              recipeTitle={recipe.title}
+              sourceChefUsername={recipe.chef.username}
+              isOwner={false}
+              triggerClassName={recipeMastheadActionClass}
+              triggerStyle="text"
+              triggerTestId="recipe-header-fork-action"
+            />
+          ) : (
+            <Link
+              href={loginRedirect}
+              className={recipeMastheadActionClass}
+              data-testid="recipe-header-fork-action"
+            >
+              Fork
+            </Link>
+          )
         )}
       </div>
     </div>
@@ -589,8 +646,13 @@ export default function RecipeDetail() {
 
   // Register dock actions for this recipe detail page
   const handleOpenSaveModal = useCallback(() => {
+    if (!isAuthenticated) {
+      window.location.assign(loginRedirect);
+      return;
+    }
+
     setIsSaveModalOpen(true);
-  }, []);
+  }, [isAuthenticated, loginRedirect]);
 
   useRecipeDetailActions({
     recipeId: recipe.id,

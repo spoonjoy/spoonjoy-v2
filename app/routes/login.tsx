@@ -104,7 +104,14 @@ export default function Login() {
           <ValidationError error={actionData.errors.general} className="mt-4" />
         )}
 
-        <Form method="post" className="mt-8 space-y-6">
+        {oauthProviders.length > 0 && (
+          <>
+            <OAuthButtonGroup providers={oauthProviders} className="mt-8" />
+            <OAuthDivider className="my-6" />
+          </>
+        )}
+
+        <Form method="post" className={oauthProviders.length > 0 ? "space-y-6" : "mt-8 space-y-6"}>
           <Field>
             <Label htmlFor="email">Email</Label>
             <Input
@@ -137,13 +144,6 @@ export default function Login() {
             Log In
           </Button>
         </Form>
-
-        {oauthProviders.length > 0 && (
-          <>
-            <OAuthDivider className="my-6" />
-            <OAuthButtonGroup providers={oauthProviders} />
-          </>
-        )}
 
         <Text className="mt-6 text-center">
           Don't have an account?{" "}

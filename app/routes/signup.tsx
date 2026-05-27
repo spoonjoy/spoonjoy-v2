@@ -115,7 +115,14 @@ export default function Signup() {
         {/* OAuth error messages */}
         <OAuthError error={loaderData?.oauthError} className="mt-4" />
 
-        <Form method="post" className="mt-8 space-y-6">
+        {oauthProviders.length > 0 && (
+          <>
+            <OAuthButtonGroup providers={oauthProviders} className="mt-8" />
+            <OAuthDivider className="my-6" />
+          </>
+        )}
+
+        <Form method="post" className={oauthProviders.length > 0 ? "space-y-6" : "mt-8 space-y-6"}>
           <Field>
             <Label htmlFor="email">Email</Label>
             <Input
@@ -179,13 +186,6 @@ export default function Signup() {
             Sign Up
           </Button>
         </Form>
-
-        {oauthProviders.length > 0 && (
-          <>
-            <OAuthDivider className="my-6" />
-            <OAuthButtonGroup providers={oauthProviders} />
-          </>
-        )}
 
         <Text className="mt-6 text-center">
           Already have an account?{" "}

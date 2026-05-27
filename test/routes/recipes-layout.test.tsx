@@ -13,12 +13,11 @@ import { faker } from "@faker-js/faker";
 /**
  * Tests for the Recipes Layout Route (recipes.tsx)
  *
- * This is a layout route that:
- * - Ensures user is authenticated (redirects to login if not)
+ * This is a public layout route that:
  * - Returns null from loader (no data needed by layout)
  * - Renders an Outlet for child routes
  *
- * Recipe list functionality is in recipes._index.tsx (tested in recipes-index.test.tsx)
+ * Child routes enforce authentication only when they mutate data.
  */
 describe("Recipes Layout Route", () => {
   let testUserId: string;
@@ -38,21 +37,16 @@ describe("Recipes Layout Route", () => {
   });
 
   describe("loader", () => {
-    it("should redirect when not logged in", async () => {
+    it("should allow public recipe reads when not logged in", async () => {
       const request = new UndiciRequest("http://localhost:3000/recipes");
 
-      await expect(
-        loader({
-          request,
-          context: { cloudflare: { env: null } },
-          params: {},
-        } as any)
-      ).rejects.toSatisfy((error: any) => {
-        expect(error).toBeInstanceOf(Response);
-        expect(error.status).toBe(302);
-        expect(error.headers.get("Location")).toContain("/login");
-        return true;
-      });
+      const result = await loader({
+        request,
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+
+      expect(result).toBeNull();
     });
 
     it("should return null when logged in (layout route)", async () => {
@@ -72,7 +66,7 @@ describe("Recipes Layout Route", () => {
         params: {},
       } as any);
 
-      // Layout route returns null - it just enforces authentication
+      // Layout route returns null - child routes own their data loading.
       expect(result).toBeNull();
     });
   });

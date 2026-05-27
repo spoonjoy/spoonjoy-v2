@@ -629,6 +629,49 @@ const healthTool: SpoonjoyApiOperation = {
   },
 };
 
+function formatPrincipal(principal: ApiPrincipal | null | undefined) {
+  if (!principal) return null;
+
+  return {
+    id: principal.id,
+    email: principal.email,
+    username: principal.username,
+    authSource: principal.source,
+    credentialId: principal.credentialId ?? null,
+  };
+}
+
+const authStatusTool: SpoonjoyApiOperation = {
+  name: "auth_status",
+  description:
+    "Report the current Spoonjoy MCP authentication state and how an agent should obtain delegated access without asking for raw user credentials.",
+  inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  async handle(_args, context) {
+    const defaultOwnerEmail = context.defaultOwnerEmail?.toLowerCase() ?? null;
+    const defaultOwner = defaultOwnerEmail
+      ? await context.db.user.findUnique({
+          where: { email: defaultOwnerEmail },
+          select: { id: true, email: true, username: true },
+        })
+      : null;
+    const writable = Boolean(context.principal ?? defaultOwnerEmail);
+
+    return json({
+      authenticated: Boolean(context.principal),
+      principal: formatPrincipal(context.principal),
+      defaultOwnerEmail,
+      defaultOwner: defaultOwner
+        ? { id: defaultOwner.id, email: defaultOwner.email, username: defaultOwner.username }
+        : null,
+      writable,
+      standards: ["OAuth 2.0 Device Authorization Grant (RFC 8628)", "MCP OAuth authorization"],
+      guidance: writable
+        ? "Use the authenticated principal or configured owner. Never ask for raw Spoonjoy credentials."
+        : "Public reads are available. For writes, ask the user to approve a delegated Spoonjoy authorization link or provide a scoped API token; never ask for their password.",
+    });
+  },
+};
+
 const createApiTokenTool: SpoonjoyApiOperation = {
   name: "create_api_token",
   description: "Create an owner-scoped Spoonjoy API token. The token is returned once and is stored hashed.",
@@ -1933,6 +1976,7 @@ const forkRecipeTool: SpoonjoyApiOperation = {
 
 const tools: SpoonjoyApiOperation[] = [
   healthTool,
+  authStatusTool,
   createApiTokenTool,
   listApiTokensTool,
   revokeApiTokenTool,

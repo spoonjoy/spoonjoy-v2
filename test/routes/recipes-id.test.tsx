@@ -19,6 +19,7 @@ import { shareContent, useRecipeDetailActions } from "~/components/navigation";
 import {
   loader,
   action,
+  meta,
   applyCreatedCookbookState,
   findRecipeStepsScrollTarget,
   getCookProgressStorageKey,
@@ -224,22 +225,79 @@ describe("Recipes $id Route", () => {
     });
   });
 
+  describe("meta", () => {
+    it("returns recipe share metadata with on-demand OG image", () => {
+      expect(
+        meta({
+          data: {
+            recipe: {
+              title: "Charred Tomato Toast",
+              description: "A fast lunch with real crunch.",
+              chef: { username: "ari" },
+            },
+            canonicalUrl: "https://spoonjoy.app/recipes/recipe-1",
+            ogImageUrl: "https://spoonjoy.app/og/recipes/recipe-1.png",
+          },
+        } as any),
+      ).toEqual([
+        { title: "Charred Tomato Toast - Spoonjoy" },
+        { name: "description", content: "A fast lunch with real crunch." },
+        { property: "og:site_name", content: "Spoonjoy" },
+        { property: "og:type", content: "article" },
+        { property: "og:title", content: "Charred Tomato Toast" },
+        { property: "og:description", content: "A fast lunch with real crunch." },
+        { property: "og:url", content: "https://spoonjoy.app/recipes/recipe-1" },
+        { property: "og:image", content: "https://spoonjoy.app/og/recipes/recipe-1.png" },
+        { property: "og:image:width", content: "1200" },
+        { property: "og:image:height", content: "630" },
+        { property: "og:image:type", content: "image/png" },
+        { name: "twitter:card", content: "summary_large_image" },
+        { name: "twitter:title", content: "Charred Tomato Toast" },
+        { name: "twitter:description", content: "A fast lunch with real crunch." },
+        { name: "twitter:image", content: "https://spoonjoy.app/og/recipes/recipe-1.png" },
+      ]);
+    });
+
+    it("falls back to chef attribution and placeholder metadata", () => {
+      expect(
+        meta({
+          data: {
+            recipe: {
+              title: "Plain Rice",
+              description: "   ",
+              chef: { username: "rowan" },
+            },
+            canonicalUrl: "https://spoonjoy.app/recipes/recipe-2",
+            ogImageUrl: "https://spoonjoy.app/og/recipes/recipe-2.png",
+          },
+        } as any),
+      ).toContainEqual({ name: "description", content: "A Spoonjoy recipe by rowan." });
+
+      expect(meta({ data: undefined } as any)).toEqual([
+        { title: "Recipe - Spoonjoy" },
+        { name: "description", content: "Open this Spoonjoy recipe." },
+      ]);
+    });
+  });
+
   describe("loader", () => {
-    it("should redirect when not logged in", async () => {
+    it("should return public recipe data when not logged in", async () => {
       const request = new UndiciRequest(`http://localhost:3000/recipes/${recipeId}`);
 
-      await expect(
-        loader({
-          request,
-          context: { cloudflare: { env: null } },
-          params: { id: recipeId },
-        } as any)
-      ).rejects.toSatisfy((error: any) => {
-        expect(error).toBeInstanceOf(Response);
-        expect(error.status).toBe(302);
-        expect(error.headers.get("Location")).toContain("/login");
-        return true;
-      });
+      const result = await loader({
+        request,
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any);
+
+      expect(result.recipe.id).toBe(recipeId);
+      expect(result.isOwner).toBe(false);
+      expect(result.isAuthenticated).toBe(false);
+      expect(result.cookbooks).toEqual([]);
+      expect(result.savedInCookbookIds).toEqual([]);
+      expect(result.hasIngredientsInShoppingList).toBe(false);
+      expect(result.canonicalUrl).toBe(`http://localhost:3000/recipes/${recipeId}`);
+      expect(result.ogImageUrl).toBe(`http://localhost:3000/og/recipes/${recipeId}.png`);
     });
 
     it("should return recipe data when logged in as owner", async () => {
@@ -1347,6 +1405,57 @@ describe("Recipes $id Route", () => {
 
       expect(await screen.findByText("2 items added at 1.25x")).toBeInTheDocument();
       expect(submittedScaleFactor).toBe("1.25");
+    });
+
+    it("redirects guest recipe mutations to login from header and dock actions", async () => {
+      const assign = vi.fn();
+      const originalAssign = window.location.assign;
+      Object.defineProperty(window.location, "assign", {
+        configurable: true,
+        value: assign,
+      });
+
+      try {
+        const mockData = {
+          recipe: {
+            id: "recipe-1",
+            title: "Guest Recipe",
+            description: null,
+            servings: null,
+            coverImageUrl: null,
+            chef: { id: "user-1", username: "testchef" },
+            steps: [],
+          },
+          isOwner: false,
+          isAuthenticated: false,
+          cookbooks: [],
+          savedInCookbookIds: [],
+        };
+
+        const Stub = createTestRoutesStub([
+          {
+            path: "/recipes/:id",
+            Component: RecipeDetail,
+            loader: () => mockData,
+          },
+        ]);
+
+        const user = userEvent.setup();
+        render(<Stub initialEntries={["/recipes/recipe-1"]} />);
+        await screen.findByRole("heading", { name: "Guest Recipe" });
+
+        await user.click(screen.getByTestId("recipe-header-list-action"));
+        const dockActionRegistration = vi.mocked(useRecipeDetailActions).mock.calls.at(-1)?.[0];
+        dockActionRegistration?.onSave?.();
+
+        expect(assign).toHaveBeenCalledTimes(2);
+        expect(assign).toHaveBeenCalledWith("/login?redirectTo=%2Frecipes%2Frecipe-1");
+      } finally {
+        Object.defineProperty(window.location, "assign", {
+          configurable: true,
+          value: originalAssign,
+        });
+      }
     });
 
     it("enters a focused cook mode with one active step and shared checklist progress", async () => {

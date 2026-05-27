@@ -63,6 +63,7 @@
     "@react-router/node": "^7.13.0",
     "arctic": "^3.7.0",
     "bcryptjs": "^3.0.3",
+    "cf-workers-og": "3.0.1",
     "clsx": "^2.1.1",
     "fraction.js": "^5.3.4",
     "framer-motion": "^12.29.2",

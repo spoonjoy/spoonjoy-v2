@@ -48,6 +48,7 @@ describe("spoonjoy MCP tools", () => {
   it("lists stable MCP tool metadata", () => {
     expect(listSpoonjoyMcpTools().map((tool) => tool.name)).toEqual([
       "health",
+      "auth_status",
       "create_api_token",
       "list_api_tokens",
       "revoke_api_token",
@@ -91,6 +92,63 @@ describe("spoonjoy MCP tools", () => {
       authenticated: false,
       defaultOwnerEmail: null,
       writable: false,
+    });
+  });
+
+  it("reports agent auth status without asking for user credentials", async () => {
+    expect(parseJson(await callSpoonjoyMcpTool("auth_status", {}, { db: context.db }))).toMatchObject({
+      authenticated: false,
+      principal: null,
+      defaultOwnerEmail: null,
+      defaultOwner: null,
+      writable: false,
+      standards: [
+        "OAuth 2.0 Device Authorization Grant (RFC 8628)",
+        "MCP OAuth authorization",
+      ],
+      guidance: expect.stringContaining("never ask for their password"),
+    });
+
+    const uncreatedOwner = parseJson(await callSpoonjoyMcpTool("auth_status", {}, context));
+    expect(uncreatedOwner).toMatchObject({
+      authenticated: false,
+      principal: null,
+      defaultOwnerEmail: context.defaultOwnerEmail,
+      defaultOwner: null,
+      writable: true,
+      guidance: expect.stringContaining("Never ask for raw Spoonjoy credentials"),
+    });
+
+    const created = parseJson(await callSpoonjoyMcpTool("create_api_token", {
+      name: "Status token",
+    }, context));
+    const ownerStatus = parseJson(await callSpoonjoyMcpTool("auth_status", {}, context));
+    expect(ownerStatus.defaultOwner).toMatchObject({
+      email: context.defaultOwnerEmail,
+      username: context.defaultOwnerEmail?.split("@")[0],
+    });
+
+    const principal = await authenticateApiToken(context.db, created.token as string);
+    const authed = parseJson(await callSpoonjoyMcpTool("auth_status", {}, { db: context.db, principal }));
+
+    expect(authed).toMatchObject({
+      authenticated: true,
+      principal: {
+        email: context.defaultOwnerEmail,
+        username: context.defaultOwnerEmail?.split("@")[0],
+        authSource: "bearer",
+        credentialId: created.credential.id,
+      },
+      writable: true,
+    });
+
+    const sessionAuthed = parseJson(await callSpoonjoyMcpTool("auth_status", {}, {
+      db: context.db,
+      principal: { ...principal, credentialId: undefined, source: "session" },
+    }));
+    expect(sessionAuthed.principal).toMatchObject({
+      authSource: "session",
+      credentialId: null,
     });
   });
 

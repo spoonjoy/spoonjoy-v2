@@ -12,10 +12,11 @@ import {
   SpoonValidationError,
 } from "~/lib/recipe-spoon.server";
 import { scheduleSpoonCoverStylization } from "~/lib/spoon-cover-stylization.server";
-import { requireUserId } from "~/lib/session.server";
+import { getUserId, requireUserId } from "~/lib/session.server";
 import { notifySpoonOnMyRecipe } from "~/lib/notification-triggers.server";
 import { fanoutFellowChefOriginCook } from "~/lib/notification-fanout.server";
 import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
+import { absoluteUrlFromRequest, recipeOgPath } from "~/lib/og-image.server";
 
 interface CloudflareContextLike {
   cloudflare?: {
@@ -66,7 +67,7 @@ interface RecipeDetailRouteArgs {
 }
 
 export async function loadRecipeDetail({ request, params, context }: RecipeDetailRouteArgs) {
-  const userId = await requireUserId(request, "/login", context.cloudflare?.env);
+  const userId = await getUserId(request, context.cloudflare?.env);
   const { id } = params;
 
   const database = await getRequestDb(context);
@@ -125,21 +126,25 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
     throw new Response("Recipe not found", { status: 404 });
   }
 
-  const isOwner = recipe.chefId === userId;
+  const isOwner = userId !== null && recipe.chefId === userId;
   const coverImageUrl = getRecipeCoverImageUrl(recipe, recipe.covers);
+  const canonicalUrl = absoluteUrlFromRequest(request.url, `/recipes/${id}`);
+  const ogImageUrl = absoluteUrlFromRequest(request.url, recipeOgPath(id));
 
-  const userCookbooks = await database.cookbook.findMany({
-    where: { authorId: userId },
-    select: {
-      id: true,
-      title: true,
-      recipes: {
-        where: { recipeId: id },
-        select: { id: true },
-      },
-    },
-    orderBy: { title: "asc" },
-  });
+  const userCookbooks = userId
+    ? await database.cookbook.findMany({
+        where: { authorId: userId },
+        select: {
+          id: true,
+          title: true,
+          recipes: {
+            where: { recipeId: id },
+            select: { id: true },
+          },
+        },
+        orderBy: { title: "asc" },
+      })
+    : [];
 
   const cookbooks = userCookbooks.map((cookbook) => ({
     id: cookbook.id,
@@ -159,7 +164,7 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
   );
 
   let hasIngredientsInShoppingList = false;
-  if (recipeIngredientKeys.size > 0 && recipeIngredientRefIds.length > 0) {
+  if (userId && recipeIngredientKeys.size > 0 && recipeIngredientRefIds.length > 0) {
     const shoppingList = await database.shoppingList.findUnique({
       where: { authorId: userId },
       select: {
@@ -188,7 +193,7 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
 
   const [spoonsRaw, originCookCandidate] = await Promise.all([
     listSpoonsForRecipe(database, id, { limit: 10 }),
-    isOriginCookCandidate(database, userId, id),
+    userId ? isOriginCookCandidate(database, userId, id) : Promise.resolve(false),
   ]);
   const spoons = spoonsRaw.map((spoon) => ({
     id: spoon.id,
@@ -202,12 +207,15 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
   return {
     recipe,
     coverImageUrl,
+    canonicalUrl,
+    ogImageUrl,
     isOwner,
     cookbooks,
     savedInCookbookIds,
     hasIngredientsInShoppingList,
     spoons,
     isOriginCookCandidate: originCookCandidate,
+    isAuthenticated: Boolean(userId),
   };
 }
 

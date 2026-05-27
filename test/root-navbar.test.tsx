@@ -34,7 +34,7 @@ describe("AppNavbar", () => {
     expect(brandLink).toHaveAttribute("data-current", "true");
 
     const brandScope = within(brandLink);
-    expect(brandScope.getByText("Spoonjoy")).toHaveClass("sj-desktop-brand-word");
+    expect(brandScope.getByText("SPOONJOY")).toHaveClass("sj-desktop-brand-word");
 
     const mark = brandLink.querySelector("svg.sj-desktop-brand-logo");
     expect(mark).toBeInTheDocument();
@@ -50,5 +50,13 @@ describe("AppNavbar", () => {
     expect(screen.getByRole("link", { name: /spoonjoy/i })).toHaveAttribute("href", "/");
     expect(container.querySelector("svg.sj-desktop-brand-logo")).toBeInTheDocument();
     expect(container.querySelector(".sj-nav-mark")).not.toBeInTheDocument();
+  });
+
+  it("offers login as a desktop menu instead of a page-only nav link", async () => {
+    renderNavbar();
+
+    const loginButton = screen.getByRole("button", { name: "Login" });
+    expect(loginButton).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Login" })).not.toBeInTheDocument();
   });
 });

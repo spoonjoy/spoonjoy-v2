@@ -334,7 +334,7 @@ describe("Kitchen Index Route", () => {
       expect(screen.getByRole("complementary", { name: "Recipe index" })).toBeInTheDocument();
       expect(screen.getByRole("region", { name: "Cookbook shelf" })).toBeInTheDocument();
       expect(screen.getByText("3 recipes and 1 cookbook")).toBeInTheDocument();
-      expect(screen.getByText("Cheese Night")).toBeInTheDocument();
+      expect(screen.getAllByText("Cheese Night").length).toBeGreaterThan(0);
       expect(screen.getByRole("link", { name: "Open Recipe" })).toHaveAttribute("href", "/recipes/recipe-1");
       expect(screen.getByText("Fondue")).toBeInTheDocument();
       expect(screen.getAllByRole("link", { name: "Fondue" }).some((link) => link.classList.contains("min-h-11"))).toBe(true);
@@ -481,9 +481,9 @@ describe("Kitchen Index Route", () => {
 
       expect(await screen.findByText("Visible Recipe")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "New Cookbook" })).toHaveAttribute("href", "/cookbooks/new");
-      expect(screen.getByText("Swiss Weeknight")).toBeInTheDocument();
-      expect(screen.getByText("No Photo Book")).toBeInTheDocument();
-      expect(screen.getByText("2 recipes")).toBeInTheDocument();
+      expect(screen.getAllByText("Swiss Weeknight").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("No Photo Book").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("2 recipes").length).toBeGreaterThan(0);
       expect(screen.queryByRole("tabpanel")).not.toBeInTheDocument();
     });
 

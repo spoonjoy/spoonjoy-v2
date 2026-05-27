@@ -12,7 +12,10 @@ import {
 } from "react-router";
 import { useEffect } from "react";
 import { usePostHog } from "@posthog/react";
+import * as Headless from "@headlessui/react";
 import { getUserId } from "~/lib/session.server";
+import { getConfiguredOAuthProviders, type OAuthProvider } from "~/lib/env.server";
+import { getOAuthEnv } from "~/lib/oauth-route.server";
 import { toAnalyticsPageUrl } from "~/lib/analytics";
 import { applyStorageSchemaMigration } from "~/lib/client-storage-schema";
 import { registerServiceWorker } from "~/lib/push-client";
@@ -21,6 +24,7 @@ import { ToastProvider } from "~/components/ui/toast";
 import { ThemeToggle } from "~/components/ui/theme-toggle";
 import { MobileNav, DockContextProvider } from "~/components/navigation";
 import { Button } from "~/components/ui/button";
+import { OAuthButtonGroup } from "~/components/ui/oauth";
 import { SpoonjoyLogo } from "~/components/ui/spoonjoy-logo";
 import "./styles/tailwind.css";
 
@@ -40,7 +44,8 @@ export function links() {
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const userId = await getUserId(request, context.cloudflare?.env);
-  return { userId };
+  const oauthProviders = getConfiguredOAuthProviders(getOAuthEnv(context));
+  return { userId, oauthProviders };
 }
 
 /**
@@ -59,7 +64,42 @@ function getActiveNav(pathname: string): string | null {
 /**
  * Desktop Navbar component - shown in StackedLayout header
  */
-export function AppNavbar({ userId }: { userId: string | null }) {
+function LoginMenu({ oauthProviders }: { oauthProviders: OAuthProvider[] }) {
+  return (
+    <Headless.Menu as="div" className="relative">
+      <Headless.MenuButton className="sj-desktop-nav-link">
+        Login
+      </Headless.MenuButton>
+      <Headless.MenuItems
+        anchor="bottom end"
+        className="z-50 mt-3 w-80 border border-[var(--sj-border-strong)] bg-[var(--sj-panel-solid)] p-4 shadow-[var(--sj-shadow-soft)] focus:outline-none"
+      >
+        <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)]">
+          Sign in to SPOONJOY
+        </p>
+        {oauthProviders.length > 0 ? (
+          <OAuthButtonGroup providers={oauthProviders} className="mt-4" />
+        ) : (
+          <p className="mt-4 text-sm/6 text-[var(--sj-ink-soft)]">
+            OAuth is not configured here, but email and password sign-in is available.
+          </p>
+        )}
+        <div className="mt-4 grid gap-2 border-t border-[var(--sj-border)] pt-4">
+          <Button href="/login" plain>Use Password</Button>
+          <Button href="/signup">Create Account</Button>
+        </div>
+      </Headless.MenuItems>
+    </Headless.Menu>
+  );
+}
+
+export function AppNavbar({
+  userId,
+  oauthProviders = [],
+}: {
+  userId: string | null;
+  oauthProviders?: OAuthProvider[];
+}) {
   const location = useLocation();
   const currentNav = getActiveNav(location.pathname);
   const navLinkClass = "sj-desktop-nav-link";
@@ -73,7 +113,7 @@ export function AppNavbar({ userId }: { userId: string | null }) {
           className="sj-desktop-brand-logo"
           aria-hidden="true"
         />
-        <span className="sj-desktop-brand-word">Spoonjoy</span>
+        <span className="sj-desktop-brand-word">SPOONJOY</span>
       </RouterLink>
       {userId ? (
         <>
@@ -84,10 +124,7 @@ export function AppNavbar({ userId }: { userId: string | null }) {
             <RouterLink to="/shopping-list" className={navLinkClass} data-current={currentNav === "shopping"}>List</RouterLink>
           </div>
           <div className="sj-desktop-nav-actions">
-            <span className="inline-flex items-center gap-1.5 text-[var(--sj-ink-soft)]">
-              <ThemeToggle />
-              <span>Display</span>
-            </span>
+            <ThemeToggle />
             <RouterLink to="/account/settings" className={navLinkClass} data-current={currentNav === "account"}>Account</RouterLink>
             <Form method="post" action="/logout" className="m-0">
               <button type="submit" className={navLinkClass} aria-label="Log out">
@@ -104,11 +141,8 @@ export function AppNavbar({ userId }: { userId: string | null }) {
             <RouterLink to="/cookbooks" className={navLinkClass} data-current={currentNav === "cookbooks"}>Cookbooks</RouterLink>
           </div>
           <div className="sj-desktop-nav-actions">
-            <span className="inline-flex items-center gap-1.5 text-[var(--sj-ink-soft)]">
-              <ThemeToggle />
-              <span>Display</span>
-            </span>
-            <RouterLink to="/login" className={navLinkClass}>Login</RouterLink>
+            <ThemeToggle />
+            <LoginMenu oauthProviders={oauthProviders} />
             <Button href="/signup">Sign Up</Button>
           </div>
         </>
@@ -118,7 +152,7 @@ export function AppNavbar({ userId }: { userId: string | null }) {
 }
 
 export default function App() {
-  const { userId } = useLoaderData<typeof loader>();
+  const { userId, oauthProviders } = useLoaderData<typeof loader>();
   const location = useLocation();
   const posthog = usePostHog();
 
@@ -175,7 +209,7 @@ export default function App() {
             <ToastProvider>
               <div className="sj-app-shell relative isolate flex min-h-svh w-full flex-col">
                 <header className="sj-desktop-topbar sticky top-0 z-30 hidden items-center px-4 lg:flex">
-                  <AppNavbar userId={userId} />
+                  <AppNavbar userId={userId} oauthProviders={oauthProviders} />
                 </header>
                 <main className="sj-desktop-surface sj-mobile-surface grow pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-0">
                   <Outlet />

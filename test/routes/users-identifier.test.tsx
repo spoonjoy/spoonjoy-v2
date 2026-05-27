@@ -267,7 +267,7 @@ describe("Users $identifier Route", () => {
       expect(screen.queryByText("Canonical profile: /users/chef-rowan")).toBeNull();
       expect(screen.getAllByRole("link", { name: "Miso Soup" })[0]).toHaveAttribute("href", "/recipes/recipe-1");
       expect(screen.getByRole("link", { name: "Plain Rice" })).toHaveAttribute("href", "/recipes/recipe-2");
-      expect(screen.getByText("Weeknight Pantry")).toBeInTheDocument();
+      expect(screen.getAllByText("Weeknight Pantry").length).toBeGreaterThan(0);
       expect(screen.queryByRole("link", { name: "Open settings" })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Logout" })).not.toBeInTheDocument();
     });

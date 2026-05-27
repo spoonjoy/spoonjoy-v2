@@ -9,21 +9,22 @@ import { Heading, Subheading } from "~/components/ui/heading";
 import { Text } from "~/components/ui/text";
 import { Avatar } from "~/components/ui/avatar";
 import { CookbookPage } from "~/components/cookbook/page";
+import { CookbookCoverArt } from "~/components/cookbook/CookbookCoverArt";
 import { getRecipeCoverImageUrl } from "~/lib/recipe-cover.server";
 import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
 import { formatServingsLabel } from "~/lib/quantity";
 
 const LANDING_FOOD_PHOTOS = [
   {
-    src: "https://images.unsplash.com/photo-1574071318508-1cdbab80d002?auto=format&fit=crop&w=1200&q=85",
+    src: "https://images.unsplash.com/photo-1574071318508-1cdbab80d002?auto=format&fit=crop&w=2400&q=90",
     alt: "Margherita pizza with basil",
   },
   {
-    src: "https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?auto=format&fit=crop&w=1200&q=85",
+    src: "https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?auto=format&fit=crop&w=2400&q=90",
     alt: "Cooked pasta with tomato sauce",
   },
   {
-    src: "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=1200&q=85",
+    src: "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=2400&q=90",
     alt: "Dinner table with shared dishes",
   },
 ];
@@ -466,32 +467,19 @@ function CookbookShelf({ cookbooks, isOwner }: { cookbooks: KitchenCookbook[]; i
 }
 
 function CookbookCover({ cookbook }: { cookbook: KitchenCookbook }) {
-  const cover = cookbook.recipes.find((item) => item.recipe.coverImageUrl)?.recipe;
+  const recipeImages = cookbook.recipes.map((item) => ({
+    coverImageUrl: item.recipe.coverImageUrl,
+    title: item.recipe.title,
+  }));
 
   return (
     <Link href={`/cookbooks/${cookbook.id}`} className="group block no-underline">
-      <article className="relative flex aspect-[3/4] w-52 shrink-0 overflow-hidden border border-[var(--sj-border-strong)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_86%,var(--sj-flour))] shadow-[var(--sj-shadow-soft)] transition group-hover:-translate-y-0.5 group-hover:border-[var(--sj-brass)]">
-        <span className="w-2 shrink-0 bg-[color-mix(in_srgb,var(--sj-charcoal)_24%,var(--sj-brass))]" aria-hidden="true" />
-        <div className="flex min-w-0 flex-1 flex-col p-3">
-          <div className="aspect-[4/3] overflow-hidden rounded-[var(--sj-radius-small)] border border-[var(--sj-border)] bg-[var(--sj-flour)]">
-            {cover?.coverImageUrl ? (
-              <img src={cover.coverImageUrl} alt="" className="h-full w-full object-cover text-[0px] text-transparent transition duration-300 group-hover:scale-[1.025]" />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center">
-                <BookOpen className="size-6 text-[var(--sj-action)]" aria-hidden="true" />
-              </div>
-            )}
-          </div>
-          <div className="mt-auto min-w-0 pt-4">
-            <h3 className="font-sj-display line-clamp-3 text-2xl/7 font-semibold tracking-normal text-[var(--sj-ink)] group-hover:text-[var(--sj-tomato)]">
-              {cookbook.title}
-            </h3>
-            <p className="font-sj-ui mt-3 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--sj-ink-soft)]">
-              {cookbook._count.recipes} {cookbook._count.recipes === 1 ? "recipe" : "recipes"}
-            </p>
-          </div>
-        </div>
-      </article>
+      <CookbookCoverArt
+        title={cookbook.title}
+        recipeCount={cookbook._count.recipes}
+        recipeImages={recipeImages}
+        className="w-52 shrink-0 transition group-hover:-translate-y-0.5 group-hover:border-[var(--sj-brass)]"
+      />
     </Link>
   );
 }

@@ -2,11 +2,12 @@ import type { Route } from "./+types/cookbooks.$id";
 import { redirect, useLoaderData, Form, data, useSubmit, type AppLoadContext } from "react-router";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { getRecipeCoverImageUrl } from "~/lib/recipe-cover.server";
-import { requireUserId } from "~/lib/session.server";
+import { getUserId, requireUserId } from "~/lib/session.server";
 import { notifyCookbookSaveOfMine } from "~/lib/notification-triggers.server";
 import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
 import { formatServingsLabel } from "~/lib/quantity";
 import { useState, useRef } from "react";
+import { absoluteUrlFromRequest, cookbookOgPath } from "~/lib/og-image.server";
 
 interface CloudflareContextLike {
   cloudflare?: {
@@ -37,9 +38,40 @@ import { Link } from "~/components/ui/link";
 import { Input } from "~/components/ui/input";
 import { Select } from "~/components/ui/select";
 import { CookbookPage, CookbookHeader, RuledEmptyState } from "~/components/cookbook/page";
+import { CookbookCoverArt } from "~/components/cookbook/CookbookCoverArt";
+
+export function meta({ data }: Route.MetaArgs) {
+  if (!data) {
+    return [
+      { title: "Cookbook - Spoonjoy" },
+      { name: "description", content: "Open this Spoonjoy cookbook." },
+    ];
+  }
+
+  const recipeLabel = `${data.cookbook.recipes.length} ${data.cookbook.recipes.length === 1 ? "recipe" : "recipes"}`;
+  const description = `${data.cookbook.title}, a Spoonjoy cookbook by ${data.cookbook.author.username} with ${recipeLabel}.`;
+
+  return [
+    { title: `${data.cookbook.title} - Spoonjoy` },
+    { name: "description", content: description },
+    { property: "og:site_name", content: "Spoonjoy" },
+    { property: "og:type", content: "article" },
+    { property: "og:title", content: data.cookbook.title },
+    { property: "og:description", content: description },
+    { property: "og:url", content: data.canonicalUrl },
+    { property: "og:image", content: data.ogImageUrl },
+    { property: "og:image:width", content: "1200" },
+    { property: "og:image:height", content: "630" },
+    { property: "og:image:type", content: "image/png" },
+    { name: "twitter:card", content: "summary_large_image" },
+    { name: "twitter:title", content: data.cookbook.title },
+    { name: "twitter:description", content: description },
+    { name: "twitter:image", content: data.ogImageUrl },
+  ];
+}
 
 export async function loader({ request, params, context }: Route.LoaderArgs) {
-  const userId = await requireUserId(request, "/login", context.cloudflare?.env);
+  const userId = await getUserId(request, context.cloudflare?.env);
   const { id } = params;
 
   const database = await getRequestDb(context);
@@ -89,7 +121,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   }
 
   // Check if user owns this cookbook
-  const isOwner = cookbook.authorId === userId;
+  const isOwner = userId !== null && cookbook.authorId === userId;
 
   // Get user's recipes that aren't in this cookbook
   const availableRecipes = isOwner
@@ -133,7 +165,14 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     })),
   };
 
-  return { cookbook: cookbookWithCovers, isOwner, availableRecipes };
+  return {
+    cookbook: cookbookWithCovers,
+    coverImageUrls: cookbookWithCovers.recipes.map((item) => item.recipe.coverImageUrl),
+    canonicalUrl: absoluteUrlFromRequest(request.url, `/cookbooks/${id}`),
+    ogImageUrl: absoluteUrlFromRequest(request.url, cookbookOgPath(id)),
+    isOwner,
+    availableRecipes,
+  };
 }
 
 export async function action({ request, params, context }: Route.ActionArgs) {
@@ -251,6 +290,10 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 
 export default function CookbookDetail() {
   const { cookbook, isOwner, availableRecipes } = useLoaderData<typeof loader>();
+  const recipeImages = cookbook.recipes.map((item) => ({
+    coverImageUrl: item.recipe.coverImageUrl,
+    title: item.recipe.title,
+  }));
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [showOwnerTools, setShowOwnerTools] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -270,17 +313,26 @@ export default function CookbookDetail() {
           </Link>
         </div>
 
-        <CookbookHeader
-          eyebrow="Cookbook"
-          title={cookbook.title}
-        >
-          <Text className="m-0">
-            By <Strong>{cookbook.author.username}</Strong> ·{" "}
-            <span>
-              {cookbook.recipes.length} {cookbook.recipes.length === 1 ? "recipe" : "recipes"}
-            </span>
-          </Text>
-        </CookbookHeader>
+        <div className="grid gap-8 border-b border-[var(--sj-border-strong)] pb-8 lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-end">
+          <CookbookHeader
+            eyebrow="Cookbook"
+            title={cookbook.title}
+            ruled={false}
+          >
+            <Text className="m-0">
+              By <Strong>{cookbook.author.username}</Strong> ·{" "}
+              <span>
+                {cookbook.recipes.length} {cookbook.recipes.length === 1 ? "recipe" : "recipes"}
+              </span>
+            </Text>
+          </CookbookHeader>
+          <CookbookCoverArt
+            title={cookbook.title}
+            recipeCount={cookbook.recipes.length}
+            recipeImages={recipeImages}
+            className="mx-auto w-full max-w-56 lg:max-w-none"
+          />
+        </div>
 
         {isOwner && (
           <ConfirmationDialog

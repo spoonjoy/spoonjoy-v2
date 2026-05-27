@@ -13,6 +13,8 @@ export default [
   route("auth/apple/callback", "routes/auth.apple.callback.tsx"),
   route(".redwood/functions/auth/oauth", "routes/redwood-functions-auth-oauth.tsx"),
   route("search", "routes/search.tsx"),
+  route("og/recipes/:id.png", "routes/og.recipes.$id.png.tsx"),
+  route("og/cookbooks/:id.png", "routes/og.cookbooks.$id.png.tsx"),
   route("recipes", "routes/recipes.tsx", [
     index("routes/recipes._index.tsx"),
     route("new", "routes/recipes.new.tsx"),

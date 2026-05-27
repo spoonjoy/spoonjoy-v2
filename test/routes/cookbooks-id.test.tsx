@@ -3,7 +3,7 @@ import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
-import { loader, action } from "~/routes/cookbooks.$id";
+import { loader, action, meta } from "~/routes/cookbooks.$id";
 import CookbookDetail from "~/routes/cookbooks.$id";
 import { createUser } from "~/lib/auth.server";
 import { sessionStorage } from "~/lib/session.server";
@@ -54,21 +54,20 @@ describe("Cookbooks $id Route", () => {
   });
 
   describe("loader", () => {
-    it("should redirect when not logged in", async () => {
+    it("should return public cookbook data when not logged in", async () => {
       const request = new UndiciRequest(`http://localhost:3000/cookbooks/${cookbookId}`);
 
-      await expect(
-        loader({
-          request,
-          context: { cloudflare: { env: null } },
-          params: { id: cookbookId },
-        } as any)
-      ).rejects.toSatisfy((error: any) => {
-        expect(error).toBeInstanceOf(Response);
-        expect(error.status).toBe(302);
-        expect(error.headers.get("Location")).toContain("/login");
-        return true;
-      });
+      const result = await loader({
+        request,
+        context: { cloudflare: { env: null } },
+        params: { id: cookbookId },
+      } as any);
+
+      expect(result.cookbook).toBeDefined();
+      expect(result.cookbook.id).toBe(cookbookId);
+      expect(result.isOwner).toBe(false);
+      expect(result.availableRecipes).toEqual([]);
+      expect(result.ogImageUrl).toBe(`http://localhost:3000/og/cookbooks/${cookbookId}.png`);
     });
 
     it("should return cookbook data when logged in as owner", async () => {
@@ -862,6 +861,101 @@ describe("Cookbooks $id Route", () => {
       expect(result.cookbook.recipes[0].recipe.id).toBe(recipe.id);
       expect(result.cookbook.recipes[0].recipe.title).toBe(recipe.title);
     });
+
+    it("should include cover image urls for cookbook art and OG metadata", async () => {
+      const recipe = await db.recipe.create({
+        data: {
+          title: "Covered Recipe " + faker.string.alphanumeric(6),
+          chefId: testUserId,
+        },
+      });
+      await db.recipeCover.create({
+        data: {
+          recipeId: recipe.id,
+          imageUrl: "/photos/covered.jpg",
+          sourceType: "chef-upload",
+        },
+      });
+      await db.recipeInCookbook.create({
+        data: {
+          cookbookId,
+          recipeId: recipe.id,
+          addedById: testUserId,
+        },
+      });
+
+      const request = new UndiciRequest(`http://localhost:3000/cookbooks/${cookbookId}`);
+
+      const result = await loader({
+        request,
+        context: { cloudflare: { env: null } },
+        params: { id: cookbookId },
+      } as any);
+
+      expect(result.coverImageUrls).toEqual(["/photos/covered.jpg"]);
+      expect(result.canonicalUrl).toBe(`http://localhost:3000/cookbooks/${cookbookId}`);
+      expect(result.ogImageUrl).toBe(`http://localhost:3000/og/cookbooks/${cookbookId}.png`);
+    });
+  });
+
+  describe("meta", () => {
+    it("returns cookbook share metadata with on-demand OG image", () => {
+      expect(
+        meta({
+          data: {
+            cookbook: {
+              title: "Weeknight Book",
+              author: { username: "ari" },
+              recipes: [{ id: "join-1" }],
+            },
+            canonicalUrl: "https://spoonjoy.app/cookbooks/cb-1",
+            ogImageUrl: "https://spoonjoy.app/og/cookbooks/cb-1.png",
+          },
+        } as any),
+      ).toEqual([
+        { title: "Weeknight Book - Spoonjoy" },
+        { name: "description", content: "Weeknight Book, a Spoonjoy cookbook by ari with 1 recipe." },
+        { property: "og:site_name", content: "Spoonjoy" },
+        { property: "og:type", content: "article" },
+        { property: "og:title", content: "Weeknight Book" },
+        { property: "og:description", content: "Weeknight Book, a Spoonjoy cookbook by ari with 1 recipe." },
+        { property: "og:url", content: "https://spoonjoy.app/cookbooks/cb-1" },
+        { property: "og:image", content: "https://spoonjoy.app/og/cookbooks/cb-1.png" },
+        { property: "og:image:width", content: "1200" },
+        { property: "og:image:height", content: "630" },
+        { property: "og:image:type", content: "image/png" },
+        { name: "twitter:card", content: "summary_large_image" },
+        { name: "twitter:title", content: "Weeknight Book" },
+        { name: "twitter:description", content: "Weeknight Book, a Spoonjoy cookbook by ari with 1 recipe." },
+        { name: "twitter:image", content: "https://spoonjoy.app/og/cookbooks/cb-1.png" },
+      ]);
+    });
+
+    it("uses plural recipe copy in cookbook share metadata", () => {
+      expect(
+        meta({
+          data: {
+            cookbook: {
+              title: "Dinner Book",
+              author: { username: "ari" },
+              recipes: [{ id: "join-1" }, { id: "join-2" }],
+            },
+            canonicalUrl: "https://spoonjoy.app/cookbooks/cb-2",
+            ogImageUrl: "https://spoonjoy.app/og/cookbooks/cb-2.png",
+          },
+        } as any),
+      ).toContainEqual({
+        name: "description",
+        content: "Dinner Book, a Spoonjoy cookbook by ari with 2 recipes.",
+      });
+    });
+
+    it("returns fallback metadata before loader data is available", () => {
+      expect(meta({ data: undefined } as any)).toEqual([
+        { title: "Cookbook - Spoonjoy" },
+        { name: "description", content: "Open this Spoonjoy cookbook." },
+      ]);
+    });
   });
 
   describe("component", () => {
@@ -891,10 +985,10 @@ describe("Cookbooks $id Route", () => {
 
       render(<Stub initialEntries={["/cookbooks/cookbook-1"]} />);
 
-      expect(await screen.findByText("My Test Cookbook")).toBeInTheDocument();
+      expect(await screen.findByRole("heading", { name: "My Test Cookbook", level: 1 })).toBeInTheDocument();
       expect(screen.getByText(/By/)).toBeInTheDocument();
       expect(screen.getByText("testchef")).toBeInTheDocument();
-      expect(screen.getByText("0 recipes")).toBeInTheDocument();
+      expect(screen.getAllByText("0 recipes").length).toBeGreaterThan(0);
       expect(screen.getByText("No recipes yet")).toBeInTheDocument();
       expect(screen.getByText("Add recipes to your cookbook using the owner tools below.")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "← Back to cookbooks" })).toHaveAttribute("href", "/cookbooks");
@@ -922,7 +1016,7 @@ describe("Cookbooks $id Route", () => {
 
       render(<Stub initialEntries={["/cookbooks/cookbook-1"]} />);
 
-      expect(await screen.findByText("Someone Elses Cookbook")).toBeInTheDocument();
+      expect(await screen.findByRole("heading", { name: "Someone Elses Cookbook", level: 1 })).toBeInTheDocument();
       expect(screen.getByText("This cookbook is empty.")).toBeInTheDocument();
       // Non-owner should not see edit/delete buttons
       expect(screen.queryByText("Edit title")).not.toBeInTheDocument();
@@ -974,8 +1068,8 @@ describe("Cookbooks $id Route", () => {
 
       render(<Stub initialEntries={["/cookbooks/cookbook-1"]} />);
 
-      expect(await screen.findByText("Recipe Collection")).toBeInTheDocument();
-      expect(screen.getByText("2 recipes")).toBeInTheDocument();
+      expect(await screen.findByRole("heading", { name: "Recipe Collection", level: 1 })).toBeInTheDocument();
+      expect(screen.getAllByText("2 recipes").length).toBeGreaterThan(0);
       const recipesSection = screen.getByRole("region", { name: "Recipes" });
       expect(within(recipesSection).getByRole("link", { name: "Spaghetti" })).toHaveAttribute(
         "href",
@@ -1026,7 +1120,7 @@ describe("Cookbooks $id Route", () => {
 
       render(<Stub initialEntries={["/cookbooks/cookbook-1"]} />);
 
-      expect(await screen.findByText("1 recipe")).toBeInTheDocument();
+      expect((await screen.findAllByText("1 recipe")).length).toBeGreaterThan(0);
     });
 
     it("should show add recipe form when owner has available recipes", async () => {
@@ -1205,7 +1299,7 @@ describe("Cookbooks $id Route", () => {
       render(<Stub initialEntries={["/cookbooks/cookbook-1"]} />);
 
       // Should show title as heading, not in input
-      expect(await screen.findByRole("heading", { name: "My Cookbook" })).toBeInTheDocument();
+      expect(await screen.findByRole("heading", { name: "My Cookbook", level: 1 })).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Edit title" })).not.toBeInTheDocument();
     });
 

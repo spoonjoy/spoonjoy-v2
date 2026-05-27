@@ -42,9 +42,10 @@ describe('Button', () => {
       const button = container.querySelector('button')
       expect(button).toHaveClass('cursor-default')
       expect(button).toHaveClass('rounded-[var(--sj-radius-control)]')
-      expect(button).toHaveClass('border-[var(--sj-action-deep)]')
-      expect(button).toHaveClass('bg-[linear-gradient(180deg,var(--sj-action),var(--sj-action-deep))]')
+      expect(button).toHaveClass('border-[var(--sj-action)]')
+      expect(button).toHaveClass('bg-[var(--sj-action)]')
       expect(button).toHaveClass('text-[var(--sj-on-photo)]')
+      expect(button?.className).not.toContain('linear-gradient')
     })
 
     it('applies destructive styles when destructive variant is used', () => {

@@ -1,13 +1,10 @@
 import type { Route } from "./+types/recipes";
 import { Outlet } from "react-router";
-import { requireUserId } from "~/lib/session.server";
 
-// This is a layout route - it just renders child routes
-// The actual recipe list is in recipes._index.tsx
+// This is a public layout route. Child routes that mutate recipes enforce
+// authentication in their own loaders/actions.
 
 export async function loader({ request, context }: Route.LoaderArgs) {
-  // Ensure user is authenticated for all recipe routes
-  await requireUserId(request, "/login", context.cloudflare?.env);
   return null;
 }
 

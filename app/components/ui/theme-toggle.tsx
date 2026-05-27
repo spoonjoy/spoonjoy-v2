@@ -1,40 +1,34 @@
-import { Sun, Moon, Monitor } from 'lucide-react'
+import { Sun, Moon } from 'lucide-react'
 import { useTheme } from './theme-provider'
 import * as Headless from '@headlessui/react'
 import clsx from 'clsx'
 
 export function ThemeToggle() {
-  const { theme, setTheme, resolvedTheme } = useTheme()
+  const { setTheme, resolvedTheme } = useTheme()
 
-  const cycleTheme = () => {
-    if (theme === 'system') {
-      setTheme('light')
-    } else if (theme === 'light') {
-      setTheme('dark')
-    } else {
-      setTheme('system')
-    }
+  const toggleTheme = () => {
+    setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')
   }
+
+  const nextTheme = resolvedTheme === 'dark' ? 'light' : 'dark'
 
   return (
     <Headless.Button
-      onClick={cycleTheme}
+      onClick={toggleTheme}
       className={clsx(
-        'relative flex min-h-11 min-w-11 items-center justify-center rounded-full p-2',
+        'relative flex min-h-11 min-w-11 items-center justify-center rounded-[var(--sj-radius-control)] p-2',
         'text-[var(--sj-ink-soft)] hover:text-[var(--sj-tomato)]',
         'hover:bg-[var(--sj-flour)]',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--sj-brass)]',
         'transition-colors duration-200'
       )}
-      aria-label={`Current theme: ${theme}. Click to cycle themes.`}
-      title={`Theme: ${theme === 'system' ? `System (${resolvedTheme})` : theme}`}
+      aria-label={`Switch theme to ${nextTheme} mode`}
+      title={`Switch theme to ${nextTheme} mode`}
     >
-      {theme === 'system' ? (
-        <Monitor className="h-5 w-5" />
-      ) : theme === 'light' ? (
-        <Sun className="h-5 w-5" />
-      ) : (
+      {resolvedTheme === 'dark' ? (
         <Moon className="h-5 w-5" />
+      ) : (
+        <Sun className="h-5 w-5" />
       )}
     </Headless.Button>
   )
@@ -45,7 +39,6 @@ export function ThemeDropdown() {
   const { theme, setTheme, resolvedTheme } = useTheme()
 
   const themes = [
-    { value: 'system' as const, label: 'System', icon: Monitor },
     { value: 'light' as const, label: 'Light', icon: Sun },
     { value: 'dark' as const, label: 'Dark', icon: Moon },
   ]
@@ -54,7 +47,7 @@ export function ThemeDropdown() {
     <Headless.Menu as="div" className="relative">
       <Headless.MenuButton
         className={clsx(
-          'flex min-h-11 min-w-11 items-center justify-center rounded-full p-2',
+          'flex min-h-11 min-w-11 items-center justify-center rounded-[var(--sj-radius-control)] p-2',
           'text-[var(--sj-ink-soft)] hover:text-[var(--sj-tomato)]',
           'hover:bg-[var(--sj-flour)]',
           'focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--sj-brass)]',
@@ -93,15 +86,6 @@ export function ThemeDropdown() {
                 >
                   <Icon className="h-4 w-4" />
                   {label}
-                  {value === 'system' && resolvedTheme && (
-                    <span className="ml-auto text-[var(--sj-ink-soft)]" aria-hidden="true">
-                      {resolvedTheme === 'dark' ? (
-                        <Moon className="h-3 w-3" />
-                      ) : (
-                        <Sun className="h-3 w-3" />
-                      )}
-                    </span>
-                  )}
                 </button>
               )}
             </Headless.MenuItem>

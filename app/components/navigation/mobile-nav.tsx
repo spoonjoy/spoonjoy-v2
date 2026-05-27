@@ -43,7 +43,7 @@ function rootConfig(pathname: string, isAuthenticated: boolean): DockConfig {
       left: {
         id: "public-home",
         icon: Home,
-        label: "Spoonjoy",
+        label: "SPOONJOY",
         sublabel: "public",
         onAction: "/",
         active: pathname === "/",

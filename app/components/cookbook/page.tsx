@@ -22,14 +22,21 @@ export function CookbookHeader({
   title,
   children,
   action,
+  ruled = true,
 }: {
   eyebrow: string;
   title: string;
   children?: ReactNode;
   action?: ReactNode;
+  ruled?: boolean;
 }) {
   return (
-    <header className="sj-rule-block grid gap-5 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+    <header
+      className={clsx(
+        ruled ? "sj-rule-block" : null,
+        "grid gap-5 md:grid-cols-[minmax(0,1fr)_auto] md:items-end",
+      )}
+    >
       <div>
         <p className="sj-eyebrow">{eyebrow}</p>
         <h1 className="font-sj-display mt-2 max-w-5xl text-4xl/10 font-semibold tracking-normal text-[var(--sj-ink)] sm:text-5xl/12 lg:text-6xl/14">
