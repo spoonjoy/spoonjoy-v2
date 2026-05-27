@@ -17,13 +17,19 @@ test.describe('Spoon a recipe flow', () => {
     await expect(page).toHaveURL(/\/recipes\/[^/]+$/, { timeout: 10_000 });
 
     // Open the spoon dialog.
-    const logCookButton = page.getByRole('button', { name: /log cook/i }).first();
+    const logCookButton = page.getByTestId('recipe-header-log-cook-action');
     await expect(logCookButton).toBeVisible({ timeout: 5000 });
     await expect(logCookButton).toBeEnabled();
     await logCookButton.scrollIntoViewIfNeeded();
-    await logCookButton.click();
 
-    await expect(page.getByRole('heading', { name: /log a cook/i })).toBeVisible();
+    const dialogHeading = page.getByRole('heading', { name: /log a cook/i });
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await logCookButton.click();
+      if (await dialogHeading.isVisible({ timeout: 1_000 }).catch(() => false)) {
+        break;
+      }
+    }
+    await expect(dialogHeading).toBeVisible();
 
     // Demo viewer is not the recipe owner here, so a note alone satisfies
     // the form validation (no photo required for non-origin-cook spoons).

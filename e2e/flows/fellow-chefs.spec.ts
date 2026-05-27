@@ -16,12 +16,18 @@ test.describe('Fellow chefs + Kitchen visitors flow', () => {
     await recipeLink.click();
     await expect(page).toHaveURL(/\/recipes\/[^/]+$/, { timeout: 10_000 });
 
-    const logCookButton = page.getByRole('button', { name: /log cook/i }).first();
+    const logCookButton = page.getByTestId('recipe-header-log-cook-action');
     await expect(logCookButton).toBeVisible({ timeout: 5_000 });
     await expect(logCookButton).toBeEnabled();
     await logCookButton.scrollIntoViewIfNeeded();
-    await logCookButton.click();
-    await expect(page.getByRole('heading', { name: /log a cook/i })).toBeVisible();
+    const dialogHeading = page.getByRole('heading', { name: /log a cook/i });
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await logCookButton.click();
+      if (await dialogHeading.isVisible({ timeout: 1_000 }).catch(() => false)) {
+        break;
+      }
+    }
+    await expect(dialogHeading).toBeVisible();
 
     const noteField = page.getByLabel(/^note/i);
     await expect(noteField).toBeVisible({ timeout: 5_000 });

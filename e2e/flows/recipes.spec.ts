@@ -4,9 +4,8 @@ test.describe('Recipe Flow', () => {
   test('recipes page shows recipe cards', async ({ page }) => {
     await page.goto('/recipes');
 
-    // /recipes redirects into the owner's cookbook-style kitchen index.
-    await expect(page.getByRole('heading', { name: /my kitchen/i })).toBeVisible();
-    await expect(page.getByRole('heading', { name: /recipe index/i })).toBeVisible();
+    // /recipes is public browsing; mutating actions ask users to sign in later.
+    await expect(page.getByRole('heading', { name: /recipes worth opening before you sign in/i })).toBeVisible();
 
     // Should show recipe rows/cards (links to recipe detail pages, excluding /recipes/new)
     const recipeLinks = page.locator('a[href^="/recipes/"]').filter({ hasNot: page.locator('button') });

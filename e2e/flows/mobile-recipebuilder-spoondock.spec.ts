@@ -32,6 +32,24 @@ async function getFirstRecipeHref(page: Page) {
   return href!;
 }
 
+async function getFirstOwnedRecipeHref(page: Page) {
+  await page.goto('/');
+  await page.waitForLoadState('domcontentloaded');
+
+  const href = await page.locator('a[href^="/recipes/"]').evaluateAll((links) => {
+    return links
+      .map((link) => link.getAttribute('href'))
+      .find((candidate) => (
+        !!candidate &&
+        candidate !== '/recipes/new' &&
+        /^\/recipes\/[^/]+$/.test(candidate)
+      ));
+  });
+
+  expect(href, 'expected at least one owned seeded recipe link').toBeTruthy();
+  return href!;
+}
+
 async function expectTouchTarget(locator: Locator, label: string) {
   await expect(locator, `${label} should be visible`).toBeVisible();
 
@@ -85,7 +103,7 @@ test.describe('Mobile RecipeBuilder and SpoonDock audit', () => {
   });
 
   test('edit flow keeps save controls usable without the fixed dock', async ({ page }) => {
-    const recipeHref = await getFirstRecipeHref(page);
+    const recipeHref = await getFirstOwnedRecipeHref(page);
     await page.goto(`${recipeHref}/edit`);
 
     await expect(page.getByRole('heading', { name: 'Edit Recipe' })).toBeVisible();
@@ -102,23 +120,25 @@ test.describe('Mobile RecipeBuilder and SpoonDock audit', () => {
     await expect(page.getByRole('heading', { name: updatedTitle })).toBeVisible();
   });
 
-  test('recipe detail masthead actions fit without the fixed dock', async ({ page }) => {
+  test('recipe detail masthead actions fit with the fixed dock', async ({ page }) => {
     const recipeHref = await getFirstRecipeHref(page);
     await page.goto(recipeHref);
 
     await expect(page.getByRole('heading').first()).toBeVisible();
-    await expect(page.getByRole('navigation', { name: 'Spoonjoy navigation' })).toHaveCount(0);
+    const dock = await getDock(page);
 
-    const cookModeAction = page.getByRole('link', { name: 'Cook mode' });
+    const masthead = page.getByTestId('recipe-masthead');
+    const cookModeAction = page.getByTestId('recipe-header-cook-action');
     const actions = [
-      page.getByRole('link', { name: 'Recipes' }),
+      masthead.getByRole('link', { name: 'Recipes' }),
       cookModeAction,
-      page.getByRole('button', { name: /add to list|in list/i }),
-      page.getByRole('button', { name: 'Log cook' }),
+      page.getByTestId('recipe-header-list-action'),
+      page.getByTestId('recipe-header-log-cook-action'),
     ];
 
     for (const [index, action] of actions.entries()) {
       await expectTouchTarget(action, `recipe detail masthead action ${index + 1}`);
+      await expectAboveDock(action, dock, `recipe detail masthead action ${index + 1}`);
     }
 
     await cookModeAction.click();

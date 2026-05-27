@@ -14,7 +14,7 @@ test.describe('Auth Flow', () => {
     await expect(signupLink).toBeVisible();
   });
 
-  test('login with valid credentials redirects to recipes', async ({ page }) => {
+  test('login with valid credentials redirects to public recipe index', async ({ page }) => {
     await page.goto('/login');
     
     // Fill in valid credentials
@@ -22,9 +22,9 @@ test.describe('Auth Flow', () => {
     await page.getByLabel('Password').first().fill('demo1234');
     await page.getByRole('button', { name: /log in/i }).first().click();
     
-    // Should redirect to kitchen with recipes tab
-    await expect(page).toHaveURL('/?tab=recipes');
-    await expect(page.getByRole('heading', { name: /my kitchen/i }).first()).toBeVisible();
+    // Should redirect to the public recipe index.
+    await expect(page).toHaveURL('/recipes');
+    await expect(page.getByRole('heading', { name: /public recipe box|recipes worth opening/i }).first()).toBeVisible();
   });
 
   test('login with invalid credentials shows error', async ({ page }) => {
@@ -47,7 +47,7 @@ test.describe('Auth Flow', () => {
     await page.getByLabel('Email').first().fill('demo@spoonjoy.com');
     await page.getByLabel('Password').first().fill('demo1234');
     await page.getByRole('button', { name: /log in/i }).first().click();
-    await expect(page).toHaveURL('/?tab=recipes');
+    await expect(page).toHaveURL('/recipes');
     
     // Click logout
     const logoutButton = page.getByRole('button', { name: /log\s*out/i }).first();
@@ -58,12 +58,11 @@ test.describe('Auth Flow', () => {
     await expect(page).toHaveURL(/^\/$|\/login/);
   });
 
-  test('unauthenticated access to protected route redirects to login', async ({ page }) => {
-    // Try to access recipes without being logged in
+  test('unauthenticated recipes access stays public', async ({ page }) => {
     await page.goto('/recipes');
     
-    // Should redirect to login
-    await expect(page).toHaveURL(/\/login/);
+    await expect(page).toHaveURL('/recipes');
+    await expect(page.getByRole('heading', { name: /public recipe box|recipes worth opening/i }).first()).toBeVisible();
   });
 
   test('signup page loads', async ({ page }) => {
