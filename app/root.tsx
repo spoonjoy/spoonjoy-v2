@@ -20,19 +20,8 @@ import { ThemeProvider } from "~/components/ui/theme-provider";
 import { ToastProvider } from "~/components/ui/toast";
 import { ThemeToggle } from "~/components/ui/theme-toggle";
 import { MobileNav, DockContextProvider } from "~/components/navigation";
-import { StackedLayout } from "~/components/ui/stacked-layout";
-import {
-  Sidebar,
-  SidebarBody,
-  SidebarHeader,
-  SidebarSection,
-  SidebarItem,
-  SidebarLabel,
-  SidebarFooter,
-} from "~/components/ui/sidebar";
 import { Button } from "~/components/ui/button";
 import { SpoonjoyLogo } from "~/components/ui/spoonjoy-logo";
-import { BookOpen, Book, ShoppingCart, User, Home, Settings, LogOut, Search } from "lucide-react";
 import "./styles/tailwind.css";
 
 export function links() {
@@ -128,87 +117,6 @@ export function AppNavbar({ userId }: { userId: string | null }) {
   );
 }
 
-/**
- * Mobile Sidebar component - shown when hamburger menu is clicked
- */
-function AppSidebar({ userId }: { userId: string | null }) {
-  const location = useLocation();
-  const currentNav = getActiveNav(location.pathname);
-
-  return (
-    <Sidebar>
-      <SidebarHeader>
-        <SidebarItem href="/">
-          <SpoonjoyLogo />
-          <SidebarLabel>Spoonjoy</SidebarLabel>
-        </SidebarItem>
-      </SidebarHeader>
-      <SidebarBody>
-        {userId ? (
-          <SidebarSection>
-            <SidebarItem href="/" current={currentNav === "home"}>
-              <Home data-slot="icon" />
-              <SidebarLabel>Home</SidebarLabel>
-            </SidebarItem>
-            <SidebarItem href="/search" current={currentNav === "search"}>
-              <Search data-slot="icon" />
-              <SidebarLabel>Search</SidebarLabel>
-            </SidebarItem>
-            <SidebarItem href="/recipes" current={currentNav === "recipes"}>
-              <BookOpen data-slot="icon" />
-              <SidebarLabel>Recipes</SidebarLabel>
-            </SidebarItem>
-            <SidebarItem href="/cookbooks" current={currentNav === "cookbooks"}>
-              <Book data-slot="icon" />
-              <SidebarLabel>Cookbooks</SidebarLabel>
-            </SidebarItem>
-            <SidebarItem href="/shopping-list" current={currentNav === "shopping"}>
-              <ShoppingCart data-slot="icon" />
-              <SidebarLabel>Shopping List</SidebarLabel>
-            </SidebarItem>
-          </SidebarSection>
-        ) : (
-          <SidebarSection>
-            <SidebarItem href="/" current={currentNav === "home"}>
-              <Home data-slot="icon" />
-              <SidebarLabel>Home</SidebarLabel>
-            </SidebarItem>
-            <SidebarItem href="/search" current={currentNav === "search"}>
-              <Search data-slot="icon" />
-              <SidebarLabel>Search</SidebarLabel>
-            </SidebarItem>
-            <SidebarItem href="/login">
-              <User data-slot="icon" />
-              <SidebarLabel>Login</SidebarLabel>
-            </SidebarItem>
-          </SidebarSection>
-        )}
-      </SidebarBody>
-      <SidebarFooter>
-        {userId ? (
-          <>
-            <SidebarItem href="/account/settings" current={currentNav === "account"}>
-              <Settings data-slot="icon" />
-              <SidebarLabel>Settings</SidebarLabel>
-            </SidebarItem>
-            <Form method="post" action="/logout" className="w-full">
-              <Button type="submit" variant="destructive" className="w-full justify-start">
-                <LogOut data-slot="icon" />
-                Logout
-              </Button>
-            </Form>
-          </>
-        ) : (
-          <SidebarItem href="/signup">
-            <User data-slot="icon" />
-            <SidebarLabel>Sign Up</SidebarLabel>
-          </SidebarItem>
-        )}
-      </SidebarFooter>
-    </Sidebar>
-  );
-}
-
 export default function App() {
   const { userId } = useLoaderData<typeof loader>();
   const location = useLocation();
@@ -265,24 +173,14 @@ export default function App() {
         <ThemeProvider>
           <DockContextProvider>
             <ToastProvider>
-              {/* Desktop: StackedLayout */}
-              <div className="hidden lg:block">
-                <StackedLayout
-                  navbar={<AppNavbar userId={userId} />}
-                  sidebar={<AppSidebar userId={userId} />}
-                >
-                  <Outlet />
-                </StackedLayout>
-              </div>
-
-              {/* Mobile: Content only */}
-              <div className="lg:hidden">
-                <main className="sj-mobile-surface pb-[calc(5rem+env(safe-area-inset-bottom))]">
+              <div className="sj-app-shell relative isolate flex min-h-svh w-full flex-col">
+                <header className="sj-desktop-topbar sticky top-0 z-30 hidden items-center px-4 lg:flex">
+                  <AppNavbar userId={userId} />
+                </header>
+                <main className="sj-desktop-surface sj-mobile-surface grow pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-0">
                   <Outlet />
                 </main>
               </div>
-
-              {/* SpoonDock - mobile only (MobileNav has lg:hidden) */}
               <MobileNav isAuthenticated={!!userId} />
             </ToastProvider>
           </DockContextProvider>

@@ -25,6 +25,8 @@ Current pass focus:
 - UIA-014: Shopping-list checklist measure and usefulness: fixed.
 - UIA-015: Recipe cook mode first-class focused flow: fixed.
 - UIA-016: Cookbook detail collapsed owner tools read like a dead printed heading: fixed.
+- UIA-017: Root layout mounted route content twice behind desktop/mobile wrappers, duplicating forms, IDs, effects, and cook-mode panels: fixed.
+- UIA-018: UI crawl could silently pass with skipped authenticated routes, 404s, console errors, clipped text, overflow, or small targets: fixed.
 
 ## Product Backlog Seeded
 
@@ -43,3 +45,5 @@ Current pass focus:
 ## Next Audit Trigger
 
 Re-run `ui-systems-audit` when a PR changes shared UI primitives, navigation, recipe detail, recipe forms, shopping list, profile/kitchen surfaces, or cookbook/search layouts.
+
+For deployed/staging checks, do not rely on local seed IDs. Use `pnpm smoke:live -- --base-url <worker-url> --remote-cleanup` to create disposable data, prove the live workflow, and clean up the smoke account.

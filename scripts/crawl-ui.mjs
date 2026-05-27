@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { createRequire } from 'node:module'
 
 function arg(name, fallback) {
@@ -8,27 +9,54 @@ function arg(name, fallback) {
   return index === -1 ? fallback : process.argv[index + 1]
 }
 
-const baseUrl = arg('--base-url')
-const outDir = arg('--out', 'ui-audit-artifacts')
-const routesFile = arg('--routes')
-
-if (!baseUrl || !routesFile) {
-  console.error('Usage: crawl-ui.mjs --base-url <url> --routes <routes.json> [--out <dir>]')
-  process.exit(1)
-}
-
 const requireFromCwd = createRequire(join(process.cwd(), 'package.json'))
-const { chromium } = requireFromCwd('@playwright/test')
-const routes = JSON.parse(readFileSync(routesFile, 'utf8'))
 const viewports = [
   { name: 'mobile', width: 390, height: 844, isMobile: true },
   { name: 'tablet', width: 768, height: 1024, isMobile: true },
   { name: 'desktop', width: 1440, height: 1000, isMobile: false },
 ]
 
-mkdirSync(outDir, { recursive: true })
+export function summarizeCrawlFailures(results, options = {}) {
+  const allowAuthSkips = options.allowAuthSkips === true
+  const failures = []
 
-async function login(page) {
+  for (const result of results) {
+    const label = `${result.viewport}:${result.route?.name ?? result.route?.path ?? 'unknown'}`
+
+    if (result.skipped && !(allowAuthSkips && result.skipped === 'auth-not-available')) {
+      failures.push(`${label} skipped (${result.skipped})`)
+      continue
+    }
+
+    if (typeof result.httpStatus === 'number' && result.httpStatus >= 400) {
+      failures.push(`${label} returned HTTP ${result.httpStatus}`)
+    }
+
+    if (result.consoleErrors?.length) {
+      failures.push(`${label} logged ${result.consoleErrors.length} console error(s)`)
+    }
+
+    if (result.pageErrors?.length) {
+      failures.push(`${label} raised ${result.pageErrors.length} page error(s)`)
+    }
+
+    if (result.audit?.horizontalOverflow) {
+      failures.push(`${label} has horizontal overflow (${result.audit.scrollWidth}px > ${result.audit.viewportWidth}px)`)
+    }
+
+    if (result.audit?.smallTargets?.length) {
+      failures.push(`${label} has ${result.audit.smallTargets.length} undersized target(s)`)
+    }
+
+    if (result.audit?.clippedText?.length) {
+      failures.push(`${label} has ${result.audit.clippedText.length} clipped text node(s)`)
+    }
+  }
+
+  return failures
+}
+
+async function login(page, baseUrl) {
   const email = process.env.UI_AUDIT_EMAIL
   const password = process.env.UI_AUDIT_PASSWORD
   if (!email || !password) return false
@@ -122,59 +150,90 @@ async function pageAudit(page) {
   })
 }
 
-const browser = await chromium.launch({ headless: true })
-const results = []
+async function main() {
+  const baseUrl = arg('--base-url')
+  const outDir = arg('--out', 'ui-audit-artifacts')
+  const routesFile = arg('--routes')
+  const allowAuthSkips = process.argv.includes('--allow-auth-skips')
 
-for (const viewport of viewports) {
-  const context = await browser.newContext({
-    viewport: { width: viewport.width, height: viewport.height },
-    deviceScaleFactor: viewport.name === 'desktop' ? 1 : 2,
-    isMobile: viewport.isMobile,
-  })
-  const page = await context.newPage()
-  const consoleErrors = []
-  const pageErrors = []
-  page.on('console', (message) => {
-    if (message.type() === 'error') consoleErrors.push(message.text())
-  })
-  page.on('pageerror', (error) => pageErrors.push(error.message))
+  if (!baseUrl || !routesFile) {
+    console.error('Usage: crawl-ui.mjs --base-url <url> --routes <routes.json> [--out <dir>] [--allow-auth-skips]')
+    process.exit(1)
+  }
 
-  async function crawlRoute(route) {
-    const url = new URL(route.path, baseUrl).toString()
-    await page.goto(url, { waitUntil: 'domcontentloaded' })
-    await page.waitForTimeout(route.waitMs ?? 250)
-    const safeName = `${viewport.name}-${route.name}`.replace(/[^a-z0-9._-]+/gi, '-').toLowerCase()
-    const screenshot = join(outDir, `${safeName}.png`)
-    await page.screenshot({ path: screenshot, fullPage: true })
-    results.push({
-      route,
-      viewport: viewport.name,
-      url: page.url(),
-      screenshot,
-      consoleErrors: [...consoleErrors],
-      pageErrors: [...pageErrors],
-      audit: await pageAudit(page),
+  const routes = JSON.parse(readFileSync(routesFile, 'utf8'))
+  mkdirSync(outDir, { recursive: true })
+
+  const { chromium } = requireFromCwd('@playwright/test')
+  const browser = await chromium.launch({ headless: true })
+  const results = []
+
+  for (const viewport of viewports) {
+    const context = await browser.newContext({
+      viewport: { width: viewport.width, height: viewport.height },
+      deviceScaleFactor: viewport.name === 'desktop' ? 1 : 2,
+      isMobile: viewport.isMobile,
     })
-    consoleErrors.length = 0
-    pageErrors.length = 0
-  }
+    const page = await context.newPage()
+    const consoleErrors = []
+    const pageErrors = []
+    page.on('console', (message) => {
+      if (message.type() === 'error') consoleErrors.push(message.text())
+    })
+    page.on('pageerror', (error) => pageErrors.push(error.message))
 
-  for (const route of routes.filter((route) => !route.auth)) {
-    await crawlRoute(route)
-  }
-
-  const authed = routes.some((route) => route.auth) ? await login(page) : false
-  for (const route of routes.filter((route) => route.auth)) {
-    if (!authed) {
-      results.push({ route, viewport: viewport.name, skipped: 'auth-not-available' })
-      continue
+    async function crawlRoute(route) {
+      const url = new URL(route.path, baseUrl).toString()
+      const response = await page.goto(url, { waitUntil: 'domcontentloaded' })
+      await page.waitForTimeout(route.waitMs ?? 250)
+      const safeName = `${viewport.name}-${route.name}`.replace(/[^a-z0-9._-]+/gi, '-').toLowerCase()
+      const screenshot = join(outDir, `${safeName}.png`)
+      await page.screenshot({ path: screenshot, fullPage: true })
+      results.push({
+        route,
+        viewport: viewport.name,
+        url: page.url(),
+        httpStatus: response?.status() ?? null,
+        screenshot,
+        consoleErrors: [...consoleErrors],
+        pageErrors: [...pageErrors],
+        audit: await pageAudit(page),
+      })
+      consoleErrors.length = 0
+      pageErrors.length = 0
     }
-    await crawlRoute(route)
+
+    for (const route of routes.filter((route) => !route.auth)) {
+      await crawlRoute(route)
+    }
+
+    const authed = routes.some((route) => route.auth) ? await login(page, baseUrl) : false
+    for (const route of routes.filter((route) => route.auth)) {
+      if (!authed) {
+        results.push({ route, viewport: viewport.name, skipped: 'auth-not-available' })
+        continue
+      }
+      await crawlRoute(route)
+    }
+
+    await context.close()
   }
 
-  await context.close()
+  await browser.close()
+  const resultsPath = join(outDir, 'crawl-results.json')
+  writeFileSync(resultsPath, JSON.stringify({ baseUrl, generatedAt: new Date().toISOString(), results }, null, 2))
+  console.log(resultsPath)
+
+  const failures = summarizeCrawlFailures(results, { allowAuthSkips })
+  if (failures.length > 0) {
+    console.error(`UI crawl failed with ${failures.length} finding(s):`)
+    for (const failure of failures) {
+      console.error(`- ${failure}`)
+    }
+    process.exitCode = 1
+  }
 }
 
-await browser.close()
-writeFileSync(join(outDir, 'crawl-results.json'), JSON.stringify({ baseUrl, generatedAt: new Date().toISOString(), results }, null, 2))
-console.log(join(outDir, 'crawl-results.json'))
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await main()
+}
