@@ -1,4 +1,8 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
+
+function recipeDetailLinks(page: Page) {
+  return page.locator('a[href^="/recipes/"]:not([href="/recipes/new"])');
+}
 
 test.describe('Recipe Flow', () => {
   test('recipes page shows recipe cards', async ({ page }) => {
@@ -8,7 +12,7 @@ test.describe('Recipe Flow', () => {
     await expect(page.getByRole('heading', { name: /recipes worth opening before you sign in/i })).toBeVisible();
 
     // Should show recipe rows/cards (links to recipe detail pages, excluding /recipes/new)
-    const recipeLinks = page.locator('a[href^="/recipes/"]').filter({ hasNot: page.locator('button') });
+    const recipeLinks = recipeDetailLinks(page);
     await expect(recipeLinks.first()).toBeVisible();
   });
 
@@ -17,9 +21,7 @@ test.describe('Recipe Flow', () => {
     
     // Find a recipe card - should be a clickable link
     // Exclude /recipes/new (create button) - match any recipe UUID links
-    const recipeLinks = page.locator('a[href^="/recipes/"]').filter({ 
-      hasNot: page.locator('[href="/recipes/new"]')
-    });
+    const recipeLinks = recipeDetailLinks(page);
     const firstRecipeCard = recipeLinks.first();
     
     // CRITICAL: This will FAIL if recipe cards are not clickable
@@ -29,7 +31,7 @@ test.describe('Recipe Flow', () => {
     await firstRecipeCard.click();
     
     // Should navigate to recipe detail page
-    await expect(page).toHaveURL(/\/recipes\/[^/]+$/);
+    await expect(page).toHaveURL(/\/recipes\/(?!new$)[^/]+$/);
     
     // Recipe detail should show title
     const recipeTitle = page.getByRole('heading', { level: 1 }).or(
@@ -43,9 +45,7 @@ test.describe('Recipe Flow', () => {
     await page.goto('/recipes');
     
     // Get the first recipe card link
-    const recipeLink = page.locator('a[href^="/recipes/"]').filter({
-      hasNot: page.locator('[href="/recipes/new"]')
-    }).first();
+    const recipeLink = recipeDetailLinks(page).first();
     
     // Get the href attribute to extract the recipe ID
     const href = await recipeLink.getAttribute('href');
@@ -60,7 +60,7 @@ test.describe('Recipe Flow', () => {
     await page.waitForLoadState('domcontentloaded');
     
     // Should be on recipe detail page
-    await expect(page).toHaveURL(/\/recipes\/[^/]+$/);
+    await expect(page).toHaveURL(/\/recipes\/(?!new$)[^/]+$/);
     
     // Should show recipe title (any heading on the page indicates we've loaded)
     const title = page.getByRole('heading').first();
