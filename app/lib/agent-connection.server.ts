@@ -269,7 +269,7 @@ export async function pollAgentConnection(
         passwordField: "password",
         env: "SPOONJOY_MCP_API_TOKEN=vault:spoonjoy.app/password",
       },
-      message: "Connection approved. Store the token in Slugger's vault item spoonjoy.app password field, then use it for Spoonjoy MCP calls.",
+      message: "Connection approved. The Spoonjoy MCP bridge should cache this token locally and use it for future Spoonjoy MCP calls.",
     };
   }
 

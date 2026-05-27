@@ -101,8 +101,10 @@ export function IngredientList({
                 const shouldShowCheckbox = showCheckboxes && onStepOutputToggle
 
                 return (
-                  <li
+                  <motion.li
                     key={ref.id}
+                    layout="position"
+                    transition={layoutTransition}
                     className="border-b border-[var(--sj-border)]"
                     data-testid={`step-output-item-${ref.id}`}
                   >
@@ -112,7 +114,7 @@ export function IngredientList({
                       note={isChecked ? 'used' : 'step output'}
                       onToggle={shouldShowCheckbox ? () => onStepOutputToggle(ref.id) : undefined}
                     />
-                  </li>
+                  </motion.li>
                 )
               })}
             </ul>

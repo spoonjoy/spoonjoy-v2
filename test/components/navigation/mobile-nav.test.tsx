@@ -57,6 +57,7 @@ describe("MobileNav", () => {
       );
       expect(screen.getByRole("link", { name: /search/i })).toHaveAttribute("href", "/search");
       expect(screen.getByRole("link", { name: /shopping list/i })).toHaveAttribute("href", "/shopping-list");
+      expect(screen.getByRole("link", { name: /settings/i })).toHaveAttribute("href", "/account/settings");
     });
 
     it("does not render the old dashboard navigation labels", () => {
@@ -92,7 +93,7 @@ describe("MobileNav", () => {
   });
 
   describe("route-aware docks", () => {
-    it("stays out of write-heavy recipe and cookbook forms", () => {
+    it("stays out of write-heavy recipe and cookbook forms while allowing recipe detail navigation", () => {
       const { rerender } = render(
         <MemoryRouter initialEntries={["/recipes/new"]}>
           <MobileNav />
@@ -102,7 +103,7 @@ describe("MobileNav", () => {
       expect(screen.queryByRole("navigation", { name: "Spoonjoy navigation" })).not.toBeInTheDocument();
 
       rerender(
-        <MemoryRouter initialEntries={["/cookbooks/new"]}>
+        <MemoryRouter initialEntries={["/cookbooks/new"]} key="cookbook-new">
           <MobileNav />
         </MemoryRouter>,
       );
@@ -110,7 +111,15 @@ describe("MobileNav", () => {
       expect(screen.queryByRole("navigation", { name: "Spoonjoy navigation" })).not.toBeInTheDocument();
 
       rerender(
-        <MemoryRouter initialEntries={["/recipes/recipe-1"]}>
+        <MemoryRouter initialEntries={["/recipes/recipe-1"]} key="recipe-detail">
+          <MobileNav />
+        </MemoryRouter>,
+      );
+
+      expect(screen.getByRole("navigation", { name: "Spoonjoy navigation" })).toBeInTheDocument();
+
+      rerender(
+        <MemoryRouter initialEntries={["/recipes/recipe-1/edit"]} key="recipe-edit">
           <MobileNav />
         </MemoryRouter>,
       );
@@ -118,15 +127,7 @@ describe("MobileNav", () => {
       expect(screen.queryByRole("navigation", { name: "Spoonjoy navigation" })).not.toBeInTheDocument();
 
       rerender(
-        <MemoryRouter initialEntries={["/recipes/recipe-1/edit"]}>
-          <MobileNav />
-        </MemoryRouter>,
-      );
-
-      expect(screen.queryByRole("navigation", { name: "Spoonjoy navigation" })).not.toBeInTheDocument();
-
-      rerender(
-        <MemoryRouter initialEntries={["/cookbooks/cookbook-1"]}>
+        <MemoryRouter initialEntries={["/cookbooks/cookbook-1"]} key="cookbook-detail">
           <MobileNav />
         </MemoryRouter>,
       );

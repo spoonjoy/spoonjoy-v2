@@ -16,7 +16,7 @@
 import { render, screen, waitFor, act, fireEvent } from '@testing-library/react'
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { createRoutesStub } from 'react-router'
-import { useIngredientParser } from '~/hooks/useIngredientParser'
+import { getIngredientParserAction, useIngredientParser } from '~/hooks/useIngredientParser'
 
 // Configurable debounce delay for testing - allows shorter delay in real timer tests
 const TEST_DEBOUNCE_DELAY = 50 // ms - short delay for real timer tests
@@ -81,6 +81,16 @@ function createTestWrapper(actionHandler: (formData: FormData) => Promise<unknow
 }
 
 describe('useIngredientParser', () => {
+  describe('getIngredientParserAction', () => {
+    it('posts unsaved new-recipe builder parsing to the new recipe route', () => {
+      expect(getIngredientParserAction('new-recipe', 'new-step-1')).toBe('/recipes/new')
+    })
+
+    it('posts saved step parsing to the step edit route', () => {
+      expect(getIngredientParserAction('recipe-1', 'step-1')).toBe('/recipes/recipe-1/steps/step-1/edit')
+    })
+  })
+
   describe('initialization', () => {
     it('initializes with empty text', () => {
       const Wrapper = createTestWrapper(async () => ({ parsedIngredients: [] }))

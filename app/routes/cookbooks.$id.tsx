@@ -39,6 +39,7 @@ import { Input } from "~/components/ui/input";
 import { Select } from "~/components/ui/select";
 import { CookbookPage, CookbookHeader, RuledEmptyState } from "~/components/cookbook/page";
 import { CookbookCoverArt } from "~/components/cookbook/CookbookCoverArt";
+import { shareContent } from "~/components/navigation";
 
 export function meta({ data }: Route.MetaArgs) {
   if (!data) {
@@ -289,7 +290,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 }
 
 export default function CookbookDetail() {
-  const { cookbook, isOwner, availableRecipes } = useLoaderData<typeof loader>();
+  const { cookbook, isOwner, availableRecipes, canonicalUrl } = useLoaderData<typeof loader>();
   const recipeImages = cookbook.recipes.map((item) => ({
     coverImageUrl: item.recipe.coverImageUrl,
     title: item.recipe.title,
@@ -300,17 +301,27 @@ export default function CookbookDetail() {
   const [recipeToRemove, setRecipeToRemove] = useState<string | null>(null);
   const submit = useSubmit();
   const deleteFormRef = useRef<HTMLFormElement>(null);
+  const handleShare = async () => {
+    await shareContent({
+      title: cookbook.title,
+      text: `Open this Spoonjoy cookbook by ${cookbook.author.username}.`,
+      url: canonicalUrl,
+    });
+  };
 
   return (
     <CookbookPage>
       <div className="mx-auto max-w-5xl">
-        <div className="mb-6 print:hidden">
+        <div className="mb-6 flex items-center justify-between gap-4 print:hidden">
           <Link
             href="/cookbooks"
             className="sj-link inline-flex min-h-11 items-center"
           >
             ← Back to cookbooks
           </Link>
+          <Button type="button" plain onClick={handleShare}>
+            Share
+          </Button>
         </div>
 
         <div className="grid gap-8 border-b border-[var(--sj-border-strong)] pb-8 lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-end">

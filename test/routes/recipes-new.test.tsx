@@ -11,6 +11,8 @@ import NewRecipe from "~/routes/recipes.new";
 import { createUser } from "~/lib/auth.server";
 import { sessionStorage } from "~/lib/session.server";
 import { ACTIVE_RECIPE_TITLE_CONFLICT_ERROR } from "~/lib/recipe-title-uniqueness.server";
+import * as ingredientParseModule from "~/lib/ingredient-parse.server";
+import { IngredientParseError } from "~/lib/ingredient-parse.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { faker } from "@faker-js/faker";
 
@@ -172,6 +174,73 @@ describe("Recipes New Route", () => {
       expect(covers).toHaveLength(1);
       expect(covers[0].sourceType).toBe("ai-placeholder");
       expect(covers[0].imageUrl.startsWith("data:image/svg+xml;base64,")).toBe(true);
+    });
+
+    it("should parse ingredients for the unsaved new recipe builder", async () => {
+      const parsedIngredients = [
+        { quantity: 2, unit: "cup", ingredientName: "flour" },
+      ];
+      const parseSpy = vi
+        .spyOn(ingredientParseModule, "parseIngredients")
+        .mockResolvedValueOnce(parsedIngredients);
+      const request = await createFormRequest(
+        { intent: "parseIngredients", ingredientText: "2 cups flour" },
+        testUserId
+      );
+
+      const response = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+
+      const { data, status } = extractResponseData(response);
+      expect(status).toBe(200);
+      expect(data.parsedIngredients).toEqual(parsedIngredients);
+      expect(parseSpy).toHaveBeenCalledWith(
+        "2 cups flour",
+        expect.objectContaining({ OPENAI_API_KEY: undefined })
+      );
+    });
+
+    it("should return parser errors for the unsaved new recipe builder", async () => {
+      vi
+        .spyOn(ingredientParseModule, "parseIngredients")
+        .mockRejectedValueOnce(new IngredientParseError("Ingredient text is required"));
+      const request = await createFormRequest(
+        { intent: "parseIngredients", ingredientText: "" },
+        testUserId
+      );
+
+      const response = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+
+      const { data, status } = extractResponseData(response);
+      expect(status).toBe(400);
+      expect(data.errors.parse).toBe("Ingredient text is required");
+    });
+
+    it("should return a generic parse error for unexpected parser failures", async () => {
+      vi
+        .spyOn(ingredientParseModule, "parseIngredients")
+        .mockRejectedValueOnce(new Error("network down"));
+      const request = await createFormRequest(
+        { intent: "parseIngredients", ingredientText: "2 cups flour" },
+        testUserId
+      );
+
+      const response = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+
+      const { data, status } = extractResponseData(response);
+      expect(status).toBe(500);
+      expect(data.errors.parse).toBe("An unexpected error occurred while parsing ingredients");
     });
 
     it("should redirect when not logged in", async () => {

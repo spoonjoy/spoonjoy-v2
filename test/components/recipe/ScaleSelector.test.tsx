@@ -35,6 +35,15 @@ describe('ScaleSelector', () => {
       expect(screen.getByTestId('scale-display')).toHaveTextContent('4')
     })
 
+    it('allows long servings labels to wrap instead of truncating into the controls', () => {
+      render(<ScaleSelector value={1} displayValue="Makes 24 very generous dinner-party servings" onChange={vi.fn()} />)
+
+      const display = screen.getByTestId('scale-display')
+      expect(display).toHaveTextContent('Makes 24 very generous dinner-party servings')
+      expect(display).toHaveClass('break-words')
+      expect(display).not.toHaveClass('truncate')
+    })
+
     it('renders as an editorial yield rule instead of circular controls', () => {
       render(<ScaleSelector value={1} displayValue="Serves 4" onChange={vi.fn()} />)
 

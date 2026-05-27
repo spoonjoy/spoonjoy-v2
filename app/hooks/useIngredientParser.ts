@@ -16,6 +16,14 @@ interface ActionData {
   }
 }
 
+export function getIngredientParserAction(recipeId: string, stepId: string) {
+  if (recipeId === 'new-recipe') {
+    return '/recipes/new'
+  }
+
+  return `/recipes/${recipeId}/steps/${stepId}/edit`
+}
+
 export function useIngredientParser({ recipeId, stepId }: UseIngredientParserProps) {
   const [text, setTextInternal] = useState('')
   const [localError, setLocalError] = useState<string | null>(null)
@@ -49,7 +57,7 @@ export function useIngredientParser({ recipeId, stepId }: UseIngredientParserPro
 
       fetcher.submit(formData, {
         method: 'post',
-        action: `/recipes/${recipeId}/steps/${stepId}/edit`,
+        action: getIngredientParserAction(recipeId, stepId),
       })
     },
     [fetcher, recipeId, stepId]

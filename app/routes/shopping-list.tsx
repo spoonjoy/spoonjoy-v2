@@ -61,7 +61,6 @@ export function orderShoppingItemsForMarket<T extends { checked: boolean; catego
       categoryRank: SHOPPING_CATEGORY_SORT_RANK[item.categoryLabel] ?? 99,
     }))
     .sort((a, b) =>
-      Number(a.item.checked) - Number(b.item.checked) ||
       a.categoryRank - b.categoryRank ||
       a.index - b.index
     )
@@ -71,14 +70,10 @@ export function orderShoppingItemsForMarket<T extends { checked: boolean; catego
 export function getShoppingSectionLabel(
   item: { checked: boolean; categoryLabel: string },
   previousItem: { checked: boolean; categoryLabel: string } | null,
-  viewMode: ShoppingListViewMode
+  _viewMode: ShoppingListViewMode
 ) {
-  const label = viewMode === "all" && item.checked ? "In basket" : item.categoryLabel;
-  const previousLabel = previousItem
-    ? viewMode === "all" && previousItem.checked
-      ? "In basket"
-      : previousItem.categoryLabel
-    : null;
+  const label = item.categoryLabel;
+  const previousLabel = previousItem ? previousItem.categoryLabel : null;
 
   return previousLabel === label ? null : label;
 }

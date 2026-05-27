@@ -189,7 +189,7 @@ describe('RecipeGrid', () => {
     const { container } = renderWithRouter(<RecipeGrid recipes={[recipes[0]]} />)
 
     const tile = container.querySelector('.sj-photo-tile')
-    expect(tile?.className).toContain('rounded-[var(--sj-radius-photo)]')
+    expect(tile?.className).not.toContain('rounded')
     expect(container.querySelector('.sj-list-ruled')).not.toBeNull()
     expect(container.querySelector('.sj-card')).toBeNull()
   })

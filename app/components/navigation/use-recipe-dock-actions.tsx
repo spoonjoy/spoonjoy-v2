@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { ArrowLeft, Bookmark, Check, Edit, Save, Search, ShoppingBag, X } from "lucide-react";
+import { ArrowLeft, Bookmark, Check, Edit, Save, Search, Share2, ShoppingBag, X } from "lucide-react";
 import { useDockConfig, type DockConfig } from "./dock-context";
 
 export interface UseRecipeDetailActionsOptions {
@@ -55,6 +55,13 @@ export function useRecipeDetailActions({
       onAction: `/recipes/${recipeId}/edit`,
     };
 
+    const shareAction = {
+      id: "share",
+      icon: Share2,
+      label: "Share",
+      onAction: onShare || (() => {}),
+    };
+
     return {
       variant: "context",
       left: {
@@ -70,7 +77,7 @@ export function useRecipeDetailActions({
         label: "Cook",
         onAction: onCook || (() => {}),
       },
-      tools: isOwner ? [listAction, editAction] : [listAction, saveAction],
+      tools: isOwner ? [listAction, shareAction, editAction] : [listAction, saveAction, shareAction],
     };
   }, [recipeId, isOwner, isInShoppingList, onSave, onAddToList, onShare, onCook]);
 

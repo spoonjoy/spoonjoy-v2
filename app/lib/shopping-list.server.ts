@@ -38,15 +38,11 @@ async function normalizeShoppingListOrdering(
   const activeItems: ShoppingListItemState[] = await database.shoppingListItem.findMany({
     where: { shoppingListId, deletedAt: null },
     select: { id: true, checkedAt: true, sortIndex: true },
-    orderBy: [{ checkedAt: "asc" }, { sortIndex: "asc" }, { updatedAt: "asc" }, { id: "asc" }],
+    orderBy: [{ sortIndex: "asc" }, { updatedAt: "asc" }, { id: "asc" }],
   });
 
-  const unchecked = activeItems.filter((item) => !item.checkedAt);
-  const checked = activeItems.filter((item) => item.checkedAt);
-  const ordered = [...unchecked, ...checked];
-
   await Promise.all(
-    ordered.map((item, index) =>
+    activeItems.map((item, index) =>
       database.shoppingListItem.update({
         where: { id: item.id },
         data: { sortIndex: index, checked: Boolean(item.checkedAt) },
@@ -71,7 +67,6 @@ export async function loadShoppingList({ request, context }: ShoppingListRouteAr
           ingredientRef: true,
         },
         orderBy: [
-          { checkedAt: "asc" },
           { sortIndex: "asc" },
           {
             ingredientRef: {

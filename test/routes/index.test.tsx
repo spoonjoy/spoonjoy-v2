@@ -1,17 +1,23 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest } from "undici";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
-import { loader, meta } from "~/routes/_index";
+import { absoluteKitchenUrl, loader, meta } from "~/routes/_index";
 import Index from "~/routes/_index";
 import { createUser } from "~/lib/auth.server";
 import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { faker } from "@faker-js/faker";
+import { shareContent } from "~/components/navigation";
+
+vi.mock("~/components/navigation", () => ({
+  shareContent: vi.fn(async () => ({ success: true, method: "native" })),
+}));
 
 describe("Kitchen Index Route", () => {
   beforeEach(async () => {
+    vi.mocked(shareContent).mockClear();
     await cleanupDatabase();
   });
 
@@ -239,6 +245,19 @@ describe("Kitchen Index Route", () => {
     });
   });
 
+  describe("absoluteKitchenUrl", () => {
+    it("returns the relative path when no browser origin exists", () => {
+      const originalWindow = window;
+      vi.stubGlobal("window", undefined);
+
+      try {
+        expect(absoluteKitchenUrl("/recipes/recipe-1")).toBe("/recipes/recipe-1");
+      } finally {
+        vi.stubGlobal("window", originalWindow);
+      }
+    });
+  });
+
   describe("component", () => {
     it("renders guest landing page with product framing and auth actions", async () => {
       const Stub = createTestRoutesStub([
@@ -293,14 +312,14 @@ describe("Kitchen Index Route", () => {
                 title: "Fondue",
                 description: "Cheese and wine",
                 servings: "4",
-                coverImageUrl: null,
+                coverImageUrl: "https://example.com/fondue.jpg",
               },
               {
                 id: "recipe-2",
                 title: "Rosti",
                 description: "Crisp potatoes",
                 servings: "2",
-                coverImageUrl: null,
+                coverImageUrl: "https://example.com/rosti.jpg",
               },
               {
                 id: "recipe-3",
@@ -338,10 +357,34 @@ describe("Kitchen Index Route", () => {
       expect(screen.getByRole("link", { name: "Open Recipe" })).toHaveAttribute("href", "/recipes/recipe-1");
       expect(screen.getByText("Fondue")).toBeInTheDocument();
       expect(screen.getAllByRole("link", { name: "Fondue" }).some((link) => link.classList.contains("min-h-11"))).toBe(true);
+      fireEvent.click(screen.getByRole("button", { name: "Share" }));
+      await waitFor(() => {
+        expect(vi.mocked(shareContent)).toHaveBeenCalledWith(expect.objectContaining({
+          title: "Fondue",
+          url: expect.stringContaining("/recipes/recipe-1"),
+        }));
+      });
       expect(screen.getByRole("link", { name: /Rosti/ })).toHaveAttribute("href", "/recipes/recipe-2");
+      expect(container.querySelector('img[src="https://example.com/rosti.jpg"]')).not.toBeNull();
+      expect(screen.getByRole("button", { name: "Share Rosti" })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Share Rosti" }));
+      await waitFor(() => {
+        expect(vi.mocked(shareContent)).toHaveBeenCalledWith(expect.objectContaining({
+          title: "Rosti",
+          url: expect.stringContaining("/recipes/recipe-2"),
+        }));
+      });
       expect(screen.getByText("Crisp potatoes")).toBeInTheDocument();
       expect(screen.getByText("Serves 2")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: /Broth/ })).toHaveAttribute("href", "/recipes/recipe-3");
+      fireEvent.click(screen.getByRole("button", { name: "Share Broth" }));
+      await waitFor(() => {
+        expect(vi.mocked(shareContent)).toHaveBeenCalledWith(expect.objectContaining({
+          text: "Open this Spoonjoy recipe: Broth",
+          title: "Broth",
+          url: expect.stringContaining("/recipes/recipe-3"),
+        }));
+      });
 
       const styles = container.querySelectorAll("[style]");
       expect(styles.length).toBe(0);
@@ -483,6 +526,21 @@ describe("Kitchen Index Route", () => {
       expect(screen.getByRole("link", { name: "New Cookbook" })).toHaveAttribute("href", "/cookbooks/new");
       expect(screen.getAllByText("Swiss Weeknight").length).toBeGreaterThan(0);
       expect(screen.getAllByText("No Photo Book").length).toBeGreaterThan(0);
+      fireEvent.click(screen.getByRole("button", { name: "Share Swiss Weeknight" }));
+      await waitFor(() => {
+        expect(vi.mocked(shareContent)).toHaveBeenCalledWith(expect.objectContaining({
+          title: "Swiss Weeknight",
+          url: expect.stringContaining("/cookbooks/cookbook-1"),
+        }));
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Share No Photo Book" }));
+      await waitFor(() => {
+        expect(vi.mocked(shareContent)).toHaveBeenCalledWith(expect.objectContaining({
+          text: "Open this Spoonjoy cookbook with 2 recipes.",
+          title: "No Photo Book",
+          url: expect.stringContaining("/cookbooks/cookbook-2"),
+        }));
+      });
       expect(screen.getAllByText("2 recipes").length).toBeGreaterThan(0);
       expect(screen.queryByRole("tabpanel")).not.toBeInTheDocument();
     });

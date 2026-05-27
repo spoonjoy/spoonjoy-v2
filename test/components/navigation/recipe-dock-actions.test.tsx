@@ -45,23 +45,23 @@ describe('Recipe Dock Actions', () => {
       return <div data-testid="recipe-detail">Recipe Detail</div>
     }
 
-    it('owner layout is Back/Cook with List/Edit tools', () => {
+    it('owner layout is Back/Cook with List/Share/Edit tools', () => {
       render(<MemoryRouter><DockContextProvider><ContextDisplay /><RecipeDetailPage recipeId="123" chefId="chef-1" isOwner={true} /></DockContextProvider></MemoryRouter>)
-      expect(screen.getByTestId('action-count')).toHaveTextContent('4')
-      expect(screen.getByTestId('action-ids')).toHaveTextContent('recipe-back,cook,add-to-list,edit')
-      expect(screen.getByTestId('action-labels')).toHaveTextContent('Back,Cook,List,Edit')
+      expect(screen.getByTestId('action-count')).toHaveTextContent('5')
+      expect(screen.getByTestId('action-ids')).toHaveTextContent('recipe-back,cook,add-to-list,share,edit')
+      expect(screen.getByTestId('action-labels')).toHaveTextContent('Back,Cook,List,Share,Edit')
 
       const left = capturedActions?.filter(a => a.position === 'left').map(a => a.id)
       const right = capturedActions?.filter(a => a.position === 'right').map(a => a.id)
       expect(left).toEqual(['recipe-back'])
-      expect(right).toEqual(['cook', 'add-to-list', 'edit'])
+      expect(right).toEqual(['cook', 'add-to-list', 'share', 'edit'])
     })
 
-    it('non-owner layout is Back/Cook with List/Save tools', () => {
+    it('non-owner layout is Back/Cook with List/Save/Share tools', () => {
       render(<MemoryRouter><DockContextProvider><ContextDisplay /><RecipeDetailPage recipeId="123" chefId="chef-1" isOwner={false} /></DockContextProvider></MemoryRouter>)
-      expect(screen.getByTestId('action-count')).toHaveTextContent('4')
-      expect(screen.getByTestId('action-ids')).toHaveTextContent('recipe-back,cook,add-to-list,save')
-      expect(screen.getByTestId('action-labels')).toHaveTextContent('Back,Cook,List,Save')
+      expect(screen.getByTestId('action-count')).toHaveTextContent('5')
+      expect(screen.getByTestId('action-ids')).toHaveTextContent('recipe-back,cook,add-to-list,save,share')
+      expect(screen.getByTestId('action-labels')).toHaveTextContent('Back,Cook,List,Save,Share')
       expect(capturedActions?.find(a => a.id === 'edit')).toBeUndefined()
       expect(capturedActions?.find(a => a.id === 'recipe-back')?.onAction).toBe('/recipes')
     })
@@ -127,6 +127,7 @@ describe('Recipe Dock Actions', () => {
     it('uses no-op fallbacks', () => {
       render(<MemoryRouter><DockContextProvider><ContextDisplay /><RecipeDetailPage recipeId="123" chefId="chef-1" isOwner={false} /></DockContextProvider></MemoryRouter>)
       expect(() => capturedActions?.find(a => a.id === 'save')?.onAction?.()).not.toThrow()
+      expect(() => capturedActions?.find(a => a.id === 'share')?.onAction?.()).not.toThrow()
       expect(() => capturedActions?.find(a => a.id === 'add-to-list')?.onAction?.()).not.toThrow()
       expect(() => capturedActions?.find(a => a.id === 'cook')?.onAction?.()).not.toThrow()
     })

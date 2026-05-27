@@ -1,6 +1,6 @@
 import type { Route } from "./+types/_index";
 import { useLoaderData } from "react-router";
-import { ArrowRight, BookOpen, ChefHat, Plus, Search as SearchIcon } from "lucide-react";
+import { ArrowRight, BookOpen, ChefHat, Plus, Search as SearchIcon, Share2 } from "lucide-react";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { getUserId } from "~/lib/session.server";
 import { Button } from "~/components/ui/button";
@@ -13,6 +13,7 @@ import { CookbookCoverArt } from "~/components/cookbook/CookbookCoverArt";
 import { getRecipeCoverImageUrl } from "~/lib/recipe-cover.server";
 import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
 import { formatServingsLabel } from "~/lib/quantity";
+import { shareContent } from "~/components/navigation";
 
 const LANDING_FOOD_PHOTOS = [
   {
@@ -38,6 +39,14 @@ function normalizeTab(value: string | null): KitchenTab {
 
 function isLocalQaRecipe(title: string) {
   return /^(e2e|mobile dock save)\b/i.test(title.trim()) || /\(variation \d+\)$/i.test(title.trim());
+}
+
+export function absoluteKitchenUrl(path: string) {
+  if (typeof window === "undefined") {
+    return path;
+  }
+
+  return `${window.location.origin}${path}`;
 }
 
 export function meta({}: Route.MetaArgs) {
@@ -241,6 +250,20 @@ export default function Index() {
   const indexedRecipes = featuredRecipe
     ? displayRecipes.filter((recipe) => recipe.id !== featuredRecipe.id)
     : displayRecipes;
+  const handleShareRecipe = async (recipe: KitchenRecipe) => {
+    await shareContent({
+      title: recipe.title,
+      text: recipe.description ?? `Open this Spoonjoy recipe: ${recipe.title}`,
+      url: absoluteKitchenUrl(`/recipes/${recipe.id}`),
+    });
+  };
+  const handleShareCookbook = async (cookbook: KitchenCookbook) => {
+    await shareContent({
+      title: cookbook.title,
+      text: `Open this Spoonjoy cookbook with ${cookbook._count.recipes} ${cookbook._count.recipes === 1 ? "recipe" : "recipes"}.`,
+      url: absoluteKitchenUrl(`/cookbooks/${cookbook.id}`),
+    });
+  };
 
   return (
     <CookbookPage>
@@ -277,11 +300,11 @@ export default function Index() {
         </header>
 
         <div className="mt-10 grid gap-8 lg:grid-cols-[minmax(0,1.42fr)_minmax(18.75rem,0.62fr)] lg:items-start">
-          <RecipeLead recipe={featuredRecipe} isOwner={isOwner} />
-          <RecipeIndex recipes={indexedRecipes} isOwner={isOwner} hasLead={Boolean(featuredRecipe)} />
+          <RecipeLead recipe={featuredRecipe} isOwner={isOwner} onShare={handleShareRecipe} />
+          <RecipeIndex recipes={indexedRecipes} isOwner={isOwner} hasLead={Boolean(featuredRecipe)} onShare={handleShareRecipe} />
         </div>
 
-        <CookbookShelf cookbooks={cookbooks} isOwner={isOwner} />
+        <CookbookShelf cookbooks={cookbooks} isOwner={isOwner} onShare={handleShareCookbook} />
       </section>
     </CookbookPage>
   );
@@ -307,7 +330,15 @@ type KitchenCookbook = {
   }>;
 };
 
-function RecipeLead({ recipe, isOwner }: { recipe: KitchenRecipe | null; isOwner: boolean }) {
+function RecipeLead({
+  recipe,
+  isOwner,
+  onShare,
+}: {
+  recipe: KitchenRecipe | null;
+  isOwner: boolean;
+  onShare: (recipe: KitchenRecipe) => void;
+}) {
   if (!recipe) {
     return (
       <section className="border-y border-dashed border-[var(--sj-border-strong)] py-10">
@@ -345,7 +376,7 @@ function RecipeLead({ recipe, isOwner }: { recipe: KitchenRecipe | null; isOwner
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.04fr)_minmax(15.625rem,0.46fr)] lg:items-end">
         <Link
           href={`/recipes/${recipe.id}`}
-          className="group block overflow-hidden bg-[var(--sj-photo-charcoal)] no-underline"
+          className="sj-photo-tile group block overflow-hidden bg-[var(--sj-photo-charcoal)] no-underline"
           aria-label={recipe.title}
         >
           <div className="relative aspect-[16/10]">
@@ -370,10 +401,14 @@ function RecipeLead({ recipe, isOwner }: { recipe: KitchenRecipe | null; isOwner
               {servingsLabel}
             </p>
           ) : null}
-          <div className="mt-7 hidden flex-wrap gap-2 sm:flex">
+          <div className="mt-7 flex flex-wrap gap-2">
             <Button href={`/recipes/${recipe.id}`}>
               Open Recipe
               <ArrowRight data-slot="icon" className="size-4" />
+            </Button>
+            <Button type="button" plain onClick={() => onShare(recipe)}>
+              <Share2 data-slot="icon" className="size-4" aria-hidden="true" />
+              Share
             </Button>
           </div>
         </div>
@@ -382,7 +417,17 @@ function RecipeLead({ recipe, isOwner }: { recipe: KitchenRecipe | null; isOwner
   );
 }
 
-function RecipeIndex({ recipes, isOwner, hasLead }: { recipes: KitchenRecipe[]; isOwner: boolean; hasLead: boolean }) {
+function RecipeIndex({
+  recipes,
+  isOwner,
+  hasLead,
+  onShare,
+}: {
+  recipes: KitchenRecipe[];
+  isOwner: boolean;
+  hasLead: boolean;
+  onShare: (recipe: KitchenRecipe) => void;
+}) {
   return (
     <aside aria-label="Recipe index" className="lg:max-h-[44rem] lg:overflow-y-auto lg:border-l lg:border-[var(--sj-border)] lg:pl-6 lg:pr-1">
       <div className="flex items-end justify-between gap-4 border-b border-[var(--sj-border-strong)] pb-3">
@@ -396,7 +441,7 @@ function RecipeIndex({ recipes, isOwner, hasLead }: { recipes: KitchenRecipe[]; 
       {recipes.length > 0 ? (
         <div className="divide-y divide-[var(--sj-border)]">
           {recipes.map((recipe, index) => (
-            <RecipeIndexRow key={recipe.id} recipe={recipe} ordinal={index + 1} />
+            <RecipeIndexRow key={recipe.id} recipe={recipe} ordinal={index + 1} onShare={onShare} />
           ))}
         </div>
       ) : (
@@ -410,28 +455,64 @@ function RecipeIndex({ recipes, isOwner, hasLead }: { recipes: KitchenRecipe[]; 
   );
 }
 
-function RecipeIndexRow({ recipe, ordinal }: { recipe: KitchenRecipe; ordinal: number }) {
+function RecipeIndexRow({
+  recipe,
+  ordinal,
+  onShare,
+}: {
+  recipe: KitchenRecipe;
+  ordinal: number;
+  onShare: (recipe: KitchenRecipe) => void;
+}) {
   const servingsLabel = formatServingsLabel(recipe.servings);
+  const displayImageUrl = recipe.coverImageUrl && recipe.coverImageUrl.length > 0 ? recipe.coverImageUrl : undefined;
 
   return (
-    <Link href={`/recipes/${recipe.id}`} className="group grid grid-cols-[2.5rem_minmax(0,1fr)] gap-4 py-4 no-underline">
-      <div className="font-sj-ui pt-1 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-brass)]">
-        {String(ordinal).padStart(2, "0")}
-      </div>
-      <div className="min-w-0 self-center">
-        <h3 className="font-sj-display line-clamp-2 text-2xl/7 font-extrabold text-[var(--sj-ink)] group-hover:text-[var(--sj-tomato)]">
-          {recipe.title}
-        </h3>
-        {recipe.description ? <p className="mt-1 line-clamp-2 text-sm/5 text-[var(--sj-ink-soft)]">{recipe.description}</p> : null}
-        {servingsLabel ? (
-          <p className="font-sj-ui mt-2 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--sj-ink-soft)]">{servingsLabel}</p>
-        ) : null}
-      </div>
-    </Link>
+    <article className="relative">
+      <Link href={`/recipes/${recipe.id}`} className="group grid grid-cols-[2.25rem_4.75rem_minmax(0,1fr)] gap-3 py-4 pr-12 no-underline sm:grid-cols-[2.5rem_5.5rem_minmax(0,1fr)] sm:gap-4">
+        <div className="font-sj-ui pt-1 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-brass)]">
+          {String(ordinal).padStart(2, "0")}
+        </div>
+        <span className="sj-photo-tile block aspect-[4/3] overflow-hidden bg-[color-mix(in_srgb,var(--sj-flour)_70%,var(--sj-panel-solid))] sm:aspect-square">
+          {displayImageUrl ? (
+            <img src={displayImageUrl} alt="" className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.025]" />
+          ) : (
+            <span className="flex h-full w-full items-center justify-center bg-[var(--sj-photo-charcoal)] text-[var(--sj-on-photo-muted)]">
+              <ChefHat className="size-5" aria-hidden="true" />
+            </span>
+          )}
+        </span>
+        <div className="min-w-0 self-center">
+          <h3 className="font-sj-display line-clamp-2 text-2xl/7 font-extrabold text-[var(--sj-ink)] group-hover:text-[var(--sj-tomato)]">
+            {recipe.title}
+          </h3>
+          {recipe.description ? <p className="mt-1 line-clamp-2 text-sm/5 text-[var(--sj-ink-soft)]">{recipe.description}</p> : null}
+          {servingsLabel ? (
+            <p className="font-sj-ui mt-2 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--sj-ink-soft)]">{servingsLabel}</p>
+          ) : null}
+        </div>
+      </Link>
+      <button
+        type="button"
+        aria-label={`Share ${recipe.title}`}
+        onClick={() => onShare(recipe)}
+        className="absolute right-0 top-1/2 grid size-11 -translate-y-1/2 place-items-center text-[var(--sj-ink-soft)] transition hover:text-[var(--sj-tomato)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)]"
+      >
+        <Share2 className="size-4" aria-hidden="true" />
+      </button>
+    </article>
   );
 }
 
-function CookbookShelf({ cookbooks, isOwner }: { cookbooks: KitchenCookbook[]; isOwner: boolean }) {
+function CookbookShelf({
+  cookbooks,
+  isOwner,
+  onShare,
+}: {
+  cookbooks: KitchenCookbook[];
+  isOwner: boolean;
+  onShare: (cookbook: KitchenCookbook) => void;
+}) {
   return (
     <section aria-label="Cookbook shelf" className="mt-12 border-t border-[var(--sj-border-strong)] pt-7">
       <div className="mb-5 flex items-end justify-between gap-4">
@@ -445,7 +526,7 @@ function CookbookShelf({ cookbooks, isOwner }: { cookbooks: KitchenCookbook[]; i
       {cookbooks.length > 0 ? (
         <div className="flex gap-4 overflow-x-auto pb-2">
           {cookbooks.map((cookbook) => (
-            <CookbookCover key={cookbook.id} cookbook={cookbook} />
+            <CookbookCover key={cookbook.id} cookbook={cookbook} onShare={onShare} />
           ))}
         </div>
       ) : (
@@ -466,20 +547,36 @@ function CookbookShelf({ cookbooks, isOwner }: { cookbooks: KitchenCookbook[]; i
   );
 }
 
-function CookbookCover({ cookbook }: { cookbook: KitchenCookbook }) {
+function CookbookCover({
+  cookbook,
+  onShare,
+}: {
+  cookbook: KitchenCookbook;
+  onShare: (cookbook: KitchenCookbook) => void;
+}) {
   const recipeImages = cookbook.recipes.map((item) => ({
     coverImageUrl: item.recipe.coverImageUrl,
     title: item.recipe.title,
   }));
 
   return (
-    <Link href={`/cookbooks/${cookbook.id}`} className="group block no-underline">
-      <CookbookCoverArt
-        title={cookbook.title}
-        recipeCount={cookbook._count.recipes}
-        recipeImages={recipeImages}
-        className="w-52 shrink-0 transition group-hover:-translate-y-0.5 group-hover:border-[var(--sj-brass)]"
-      />
-    </Link>
+    <article className="relative w-52 shrink-0">
+      <Link href={`/cookbooks/${cookbook.id}`} className="group block no-underline">
+        <CookbookCoverArt
+          title={cookbook.title}
+          recipeCount={cookbook._count.recipes}
+          recipeImages={recipeImages}
+          className="w-full transition group-hover:-translate-y-0.5 group-hover:border-[var(--sj-brass)]"
+        />
+      </Link>
+      <button
+        type="button"
+        aria-label={`Share ${cookbook.title}`}
+        onClick={() => onShare(cookbook)}
+        className="absolute right-2 top-2 z-10 grid size-11 place-items-center bg-[color-mix(in_srgb,var(--sj-charcoal)_72%,transparent)] text-[var(--sj-paper)] transition hover:bg-[var(--sj-charcoal)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)]"
+      >
+        <Share2 className="size-4" aria-hidden="true" />
+      </button>
+    </article>
   );
 }

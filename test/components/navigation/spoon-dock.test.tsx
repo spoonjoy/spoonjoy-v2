@@ -59,14 +59,14 @@ describe('SpoonDock', () => {
       render(<SpoonDock />)
       const nav = screen.getByRole('navigation')
       expect(nav).toHaveClass('grid')
-      expect(nav).toHaveClass('grid-cols-[minmax(0,1fr)_minmax(5.5rem,auto)_minmax(0,1fr)]')
+      expect(nav).toHaveClass('grid-cols-[minmax(0,0.9fr)_minmax(4.75rem,auto)_auto]')
     })
 
     it('uses one consistent layout for root and contextual docks', () => {
       render(<SpoonDock />)
       const nav = screen.getByRole('navigation')
       expect(nav).toHaveClass('grid')
-      expect(nav).toHaveClass('grid-cols-[minmax(0,1fr)_minmax(5.5rem,auto)_minmax(0,1fr)]')
+      expect(nav).toHaveClass('grid-cols-[minmax(0,0.9fr)_minmax(4.75rem,auto)_auto]')
       expect(nav).not.toHaveClass('grid-cols-[72px_1fr_72px]')
     })
 

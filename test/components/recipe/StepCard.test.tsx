@@ -75,9 +75,10 @@ describe('StepCard', () => {
       />
     )
 
-    expect(screen.getByTestId('step-ingredients-block')).toHaveClass('lg:max-w-[40rem]')
+    expect(screen.getByTestId('step-ingredients-block')).toHaveClass('mx-auto')
+    expect(screen.getByTestId('step-ingredients-block')).toHaveClass('max-w-[38rem]')
     expect(screen.getByText('This prose can keep a comfortable cookbook reading measure.')).not.toHaveClass(
-      'lg:max-w-[40rem]'
+      'max-w-[38rem]'
     )
   })
 })

@@ -9,6 +9,11 @@ import { createUser } from "~/lib/auth.server";
 import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { faker } from "@faker-js/faker";
+import { shareContent } from "~/components/navigation";
+
+vi.mock("~/components/navigation", () => ({
+  shareContent: vi.fn(async () => ({ success: true, method: "native" })),
+}));
 
 // Helper to extract data from React Router's data() response
 function extractResponseData(response: any): { data: any; status: number } {
@@ -27,6 +32,7 @@ describe("Cookbooks $id Route", () => {
   let cookbookId: string;
 
   beforeEach(async () => {
+    vi.mocked(shareContent).mockClear();
     await cleanupDatabase();
     const email = faker.internet.email();
     const username = faker.internet.username() + "_" + faker.string.alphanumeric(8);
@@ -971,6 +977,8 @@ describe("Cookbooks $id Route", () => {
           author: { id: "user-1", username: "testchef" },
           recipes: [],
         },
+        canonicalUrl: "https://spoonjoy.app/cookbooks/cookbook-1",
+        ogImageUrl: "https://spoonjoy.app/og/cookbooks/cookbook-1.png",
         isOwner: true,
         availableRecipes: [],
       };
@@ -992,6 +1000,14 @@ describe("Cookbooks $id Route", () => {
       expect(screen.getByText("No recipes yet")).toBeInTheDocument();
       expect(screen.getByText("Add recipes to your cookbook using the owner tools below.")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "← Back to cookbooks" })).toHaveAttribute("href", "/cookbooks");
+      fireEvent.click(screen.getByRole("button", { name: "Share" }));
+      await waitFor(() => {
+        expect(vi.mocked(shareContent)).toHaveBeenCalledWith({
+          title: "My Test Cookbook",
+          text: "Open this Spoonjoy cookbook by testchef.",
+          url: "https://spoonjoy.app/cookbooks/cookbook-1",
+        });
+      });
     });
 
     it("should render cookbook with no recipes (empty state) as non-owner", async () => {

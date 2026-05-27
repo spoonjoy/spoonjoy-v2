@@ -1923,8 +1923,13 @@ describe("Recipes $id Route", () => {
       expect(screen.getByRole("link", { name: "Recipes" })).toHaveAttribute("href", "/recipes");
       expect(screen.getByTestId("recipe-header-actions")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Cook mode" })).toHaveAttribute("href", "/recipes/recipe-1#cook");
+      expect(screen.getByTestId("recipe-header-save-action")).toHaveAccessibleName("Save");
+      expect(screen.getByTestId("recipe-header-share-action")).toHaveAccessibleName("Share");
       expect(screen.getByRole("button", { name: "Add to list" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Log cook" })).toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: "Log the first cook" }));
+      expect(await screen.findByRole("dialog", { name: "Log a cook" })).toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
       const scrollIntoView = vi.fn();
       const originalScrollIntoView = Element.prototype.scrollIntoView;
@@ -1978,7 +1983,7 @@ describe("Recipes $id Route", () => {
       expect(screen.getByText("No steps added yet")).toBeInTheDocument();
       // Non-owner should not see edit/delete buttons
       expect(screen.queryByRole("link", { name: "Edit" })).not.toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: "Delete Recipe" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
       expect(screen.queryByRole("link", { name: "Add Steps" })).not.toBeInTheDocument();
       expect(screen.getByTestId("recipe-header-fork-action")).toHaveAccessibleName("Fork");
       expect(screen.queryByTestId("recipe-owner-tools")).not.toBeInTheDocument();
@@ -2078,7 +2083,9 @@ describe("Recipes $id Route", () => {
       await screen.findByRole("heading", { name: "My Recipe" });
       expect(screen.queryByRole("link", { name: "Edit" })).not.toBeInTheDocument();
       expect(screen.getByTestId("recipe-owner-tools")).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Delete Recipe" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Recipe maintenance Open +" }));
+      expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
     });
 
     it("should not render description when null", async () => {
@@ -2423,9 +2430,9 @@ describe("Recipes $id Route", () => {
       expect(screen.getByText("Step 1")).toBeInTheDocument();
       expect(screen.getByRole("heading", { name: "The Only Step" })).toBeInTheDocument();
 
-      // Owner edit button stays out of the recipe page, delete remains visible.
+      // Owner edit/delete maintenance stays collapsed until explicitly opened.
       expect(screen.queryByRole("link", { name: "Edit" })).not.toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Delete Recipe" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
 
       // Step output uses section should NOT appear (single step has no dependencies)
       expect(screen.queryByTestId("step-output-uses-section")).not.toBeInTheDocument();
@@ -2545,11 +2552,12 @@ describe("Recipes $id Route", () => {
       render(<Stub initialEntries={["/recipes/recipe-1"]} />);
 
       await screen.findByRole("heading", { name: "Recipe to Delete" });
-      expect(screen.queryByRole("alertdialog", { name: "Delete Recipe" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("alertdialog", { name: "Delete this recipe?" })).not.toBeInTheDocument();
 
-      await user.click(screen.getByRole("button", { name: "Delete Recipe" }));
+      await user.click(screen.getByRole("button", { name: "Recipe maintenance Open +" }));
+      await user.click(screen.getByRole("button", { name: "Delete" }));
 
-      expect(await screen.findByRole("alertdialog", { name: "Delete Recipe" })).toBeInTheDocument();
+      expect(await screen.findByRole("alertdialog", { name: "Delete this recipe?" })).toBeInTheDocument();
       expect(screen.getByText("Delete this recipe? This cannot be undone.")).toBeInTheDocument();
     });
 
@@ -2587,7 +2595,8 @@ describe("Recipes $id Route", () => {
       render(<Stub initialEntries={["/recipes/recipe-1"]} />);
       await screen.findByRole("heading", { name: "Recipe Delete Actions" });
 
-      await user.click(screen.getByRole("button", { name: "Delete Recipe" }));
+      await user.click(screen.getByRole("button", { name: "Recipe maintenance Open +" }));
+      await user.click(screen.getByRole("button", { name: "Delete" }));
       await user.click(await screen.findByRole("button", { name: "Cancel" }));
       expect(submittedIntents).toEqual([]);
     });
@@ -2625,15 +2634,16 @@ describe("Recipes $id Route", () => {
 
       render(<Stub initialEntries={["/recipes/recipe-1"]} />);
       await screen.findByRole("heading", { name: "Recipe Delete Confirm" });
-      await user.click(screen.getByRole("button", { name: "Delete Recipe" }));
-      await user.click(await screen.findByRole("button", { name: "Delete Recipe" }));
+      await user.click(screen.getByRole("button", { name: "Recipe maintenance Open +" }));
+      await user.click(screen.getByRole("button", { name: "Delete" }));
+      await user.click(await screen.findByRole("button", { name: "Delete" }));
 
       await waitFor(() => {
         expect(submittedIntents).toEqual(["delete"]);
       });
     });
 
-    it("should not render a visible share button on the recipe page", async () => {
+    it("should render a visible share button on the recipe page", async () => {
       const mockData = {
         recipe: {
           id: "recipe-1",
@@ -2660,11 +2670,10 @@ describe("Recipes $id Route", () => {
       render(<Stub initialEntries={["/recipes/recipe-1"]} />);
 
       await screen.findByRole("heading", { name: "Owner Recipe" });
-      expect(screen.queryByRole("button", { name: "Share recipe" })).not.toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: /share/i })).not.toBeInTheDocument();
+      expect(screen.getByTestId("recipe-header-share-action")).toHaveAccessibleName("Share");
     });
 
-    it("should not render owner-only or save/share controls for non-owner", async () => {
+    it("should not render owner-only controls for non-owner while keeping save/share available", async () => {
       const mockData = {
         recipe: {
           id: "recipe-1",
@@ -2691,13 +2700,13 @@ describe("Recipes $id Route", () => {
       render(<Stub initialEntries={["/recipes/recipe-1"]} />);
 
       await screen.findByRole("heading", { name: "Someone Elses Recipe" });
-      expect(screen.queryByRole("button", { name: /share/i })).not.toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: /save/i })).not.toBeInTheDocument();
+      expect(screen.getByTestId("recipe-header-share-action")).toHaveAccessibleName("Share");
+      expect(screen.getByTestId("recipe-header-save-action")).toHaveAccessibleName("Save");
       expect(screen.queryByRole("link", { name: "Edit" })).not.toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: "Delete Recipe" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
     });
 
-    it("should not render a visible save button on the recipe page", async () => {
+    it("should render a visible save button on the recipe page", async () => {
       const mockData = {
         recipe: {
           id: "recipe-1",
@@ -2727,8 +2736,7 @@ describe("Recipes $id Route", () => {
       render(<Stub initialEntries={["/recipes/recipe-1"]} />);
 
       await screen.findByRole("heading", { name: "Recipe to Save" });
-      expect(screen.queryByRole("button", { name: "Save to cookbook" })).not.toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: /save/i })).not.toBeInTheDocument();
+      expect(screen.getByTestId("recipe-header-save-action")).toHaveAccessibleName("Save");
     });
 
     it("should toggle step output checkbox when clicked", async () => {
@@ -3043,8 +3051,7 @@ describe("Recipes $id Route", () => {
 
       // Save functionality is tested through the registered recipe actions.
       await screen.findByRole("heading", { name: "Recipe to Save to Cookbook" });
-      expect(screen.queryByRole("button", { name: "Save to cookbook" })).not.toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: /save/i })).not.toBeInTheDocument();
+      expect(screen.getByTestId("recipe-header-save-action")).toHaveAccessibleName("Save");
     });
   });
 

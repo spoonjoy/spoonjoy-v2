@@ -476,9 +476,9 @@ describe("Recipe View Scaling Integration", () => {
 
       await screen.findByRole("heading", { name: "My Recipe" });
 
-      // Edit is handled by contextual dock actions; delete remains page-level for owners.
+      // Edit and delete stay behind the collapsed maintenance affordance.
       expect(screen.queryByRole("link", { name: /edit/i })).not.toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Delete Recipe" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
     });
 
     it("should not show owner controls when isOwner is false", async () => {

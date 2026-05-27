@@ -74,7 +74,7 @@ export function RecipeGrid({
                 aria-label={recipe.title}
                 className="grid gap-4 py-5 no-underline sm:grid-cols-[7rem_minmax(0,1fr)] sm:pr-24"
               >
-                <span className="sj-photo-tile block aspect-[4/3] overflow-hidden rounded-[var(--sj-radius-photo)] sm:aspect-square">
+                <span className="sj-photo-tile block aspect-[4/3] overflow-hidden sm:aspect-square">
                   {displayImageUrl ? (
                     <img
                       src={displayImageUrl}

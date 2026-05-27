@@ -171,7 +171,7 @@ describe('SpoonDock v3 Layout Integration', () => {
 
       const nav = screen.getByRole('navigation')
       expect(nav).toHaveClass('grid')
-      expect(nav).toHaveClass('grid-cols-[minmax(0,1fr)_minmax(5.5rem,auto)_minmax(0,1fr)]')
+      expect(nav).toHaveClass('grid-cols-[minmax(0,0.9fr)_minmax(4.75rem,auto)_auto]')
     })
   })
 

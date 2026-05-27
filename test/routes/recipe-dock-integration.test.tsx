@@ -15,7 +15,7 @@ describe('Recipe Page Dock Integration', () => {
     capturedActions = null
   })
 
-  it('detail actions for owner: back/cook/list/edit', async () => {
+  it('detail actions for owner: back/cook/list/share/edit', async () => {
     const onAddToList = vi.fn()
     const onSave = vi.fn()
     const onShare = vi.fn()
@@ -24,7 +24,7 @@ describe('Recipe Page Dock Integration', () => {
     function P() { useRecipeDetailActions({ recipeId: 'recipe-1', chefId: 'chef-1', isOwner: true, onSave, onAddToList, onShare, onCook }); return null }
     render(<MemoryRouter><DockContextProvider><ContextDisplay /><P /></DockContextProvider></MemoryRouter>)
 
-    expect(screen.getByTestId('action-ids')).toHaveTextContent('recipe-back,cook,add-to-list,edit')
+    expect(screen.getByTestId('action-ids')).toHaveTextContent('recipe-back,cook,add-to-list,share,edit')
 
     expect(capturedActions?.find(a => a.id === 'edit')?.onAction).toBe('/recipes/recipe-1/edit')
 
@@ -40,11 +40,11 @@ describe('Recipe Page Dock Integration', () => {
     expect(onCook).toHaveBeenCalled()
   })
 
-  it('detail actions for non-owner: back/cook/list/save', () => {
+  it('detail actions for non-owner: back/cook/list/save/share', () => {
     function P() { useRecipeDetailActions({ recipeId: 'recipe-1', chefId: 'chef-1', isOwner: false }); return null }
     render(<MemoryRouter><DockContextProvider><ContextDisplay /><P /></DockContextProvider></MemoryRouter>)
 
-    expect(screen.getByTestId('action-ids')).toHaveTextContent('recipe-back,cook,add-to-list,save')
+    expect(screen.getByTestId('action-ids')).toHaveTextContent('recipe-back,cook,add-to-list,save,share')
     expect(capturedActions?.find(a => a.id === 'edit')).toBeUndefined()
     expect(capturedActions?.find(a => a.id === 'recipe-back')?.onAction).toBe('/recipes')
   })
@@ -81,7 +81,7 @@ describe('Recipe Page Dock Integration', () => {
     )
 
     expect(screen.getByTestId('is-contextual')).toHaveTextContent('yes')
-    expect(screen.getByTestId('action-ids')).toHaveTextContent('recipe-back,cook,add-to-list,edit')
+    expect(screen.getByTestId('action-ids')).toHaveTextContent('recipe-back,cook,add-to-list,share,edit')
   })
 
   it('detail actions use no-op fallbacks', () => {
@@ -90,6 +90,10 @@ describe('Recipe Page Dock Integration', () => {
 
     expect(() => {
       const action = capturedActions?.find(a => a.id === 'save')?.onAction
+      if (typeof action === 'function') action()
+    }).not.toThrow()
+    expect(() => {
+      const action = capturedActions?.find(a => a.id === 'share')?.onAction
       if (typeof action === 'function') action()
     }).not.toThrow()
     expect(() => {

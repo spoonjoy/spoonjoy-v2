@@ -82,7 +82,7 @@ export function StepCard({
 
       <div className="mt-8 space-y-8">
         {(ingredients.length > 0 || stepOutputUses.length > 0) && (
-          <div data-testid="step-ingredients-block" className="lg:max-w-[40rem]">
+          <div data-testid="step-ingredients-block" className="mx-auto w-full max-w-[38rem]">
             <div className="font-sj-ui mb-4 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)]">
               Ingredients
             </div>

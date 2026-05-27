@@ -69,7 +69,7 @@ export function ScaleSelector({
   return (
     <div
       data-testid="scale-selector"
-      className="grid w-full grid-cols-[3rem_minmax(0,1fr)_3rem] items-stretch border-y border-[var(--sj-border-strong)] text-[var(--sj-ink)] sm:max-w-[26rem]"
+      className="grid w-full grid-cols-[3rem_minmax(0,1fr)_3rem] items-stretch border-y border-[var(--sj-border-strong)] text-[var(--sj-ink)] sm:max-w-[28rem]"
     >
       <button
         type="button"
@@ -82,14 +82,14 @@ export function ScaleSelector({
         <Minus className="size-5" aria-hidden="true" />
       </button>
 
-      <span className="grid min-h-16 min-w-0 place-items-center px-4 py-2 text-center">
+      <span className="grid min-h-16 min-w-0 place-items-center px-3 py-2 text-center sm:px-4">
         <span className="font-sj-ui text-[0.62rem]/4 font-bold uppercase tracking-[0.22em] text-[var(--sj-ink-soft)]">
           {caption}
         </span>
         <span
           data-testid="scale-display"
           aria-live="polite"
-          className="font-sj-display truncate text-2xl/8 font-semibold text-[var(--sj-ink)] sm:text-3xl/9"
+          className="font-sj-display max-w-full break-words text-balance text-xl/7 font-semibold text-[var(--sj-ink)] sm:text-2xl/8"
         >
           {visibleValue}
         </span>

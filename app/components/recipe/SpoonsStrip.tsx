@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { ChefHat } from "lucide-react";
 
@@ -22,6 +23,7 @@ export interface SpoonsStripItem {
 export interface SpoonsStripProps {
   spoons: SpoonsStripItem[];
   showRecipe?: boolean;
+  emptyAction?: ReactNode;
 }
 
 const NOTE_TRUNCATE_AT = 180;
@@ -137,12 +139,15 @@ function CompactSpoonList({ spoons }: { spoons: SpoonsStripItem[] }) {
   );
 }
 
-export function SpoonsStrip({ spoons, showRecipe = false }: SpoonsStripProps) {
+export function SpoonsStrip({ spoons, showRecipe = false, emptyAction }: SpoonsStripProps) {
   if (spoons.length === 0) {
     return (
-      <p className="text-sm text-[var(--sj-ink-soft)]">
-        No cooks yet — be the first.
-      </p>
+      <div className="border-y border-dashed border-[var(--sj-border-strong)] py-5">
+        <p className="text-sm text-[var(--sj-ink-soft)]">
+          No cooks yet.
+        </p>
+        {emptyAction ? <div className="mt-3">{emptyAction}</div> : null}
+      </div>
     );
   }
 

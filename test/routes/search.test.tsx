@@ -1,6 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Request as UndiciRequest } from "undici";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { faker } from "@faker-js/faker";
 import { db } from "~/lib/db.server";
 import Search, { loader, meta } from "~/routes/search";
@@ -127,6 +127,48 @@ describe("Search Route", () => {
       expect(screen.getByText(/Try searching by ingredient/i)).toBeInTheDocument();
       expect(screen.getByText("No matches yet")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Recipes" })).toHaveAttribute("href", "/search?scope=recipes");
+    });
+
+    it("submits the search form when Enter is pressed in the search field", async () => {
+      const requestSubmit = vi
+        .spyOn(HTMLFormElement.prototype, "requestSubmit")
+        .mockImplementation(() => {});
+      const Stub = createTestRoutesStub([
+        {
+          path: "/search",
+          Component: Search,
+          loader: () => ({ query: "", scope: "all", isAuthenticated: false, results: [] }),
+        },
+      ]);
+
+      try {
+        render(<Stub initialEntries={["/search"]} />);
+        fireEvent.keyDown(await screen.findByRole("searchbox"), { key: "Enter" });
+        expect(requestSubmit).toHaveBeenCalledTimes(1);
+      } finally {
+        requestSubmit.mockRestore();
+      }
+    });
+
+    it("does not submit the search form for ordinary typing keys", async () => {
+      const requestSubmit = vi
+        .spyOn(HTMLFormElement.prototype, "requestSubmit")
+        .mockImplementation(() => {});
+      const Stub = createTestRoutesStub([
+        {
+          path: "/search",
+          Component: Search,
+          loader: () => ({ query: "", scope: "all", isAuthenticated: false, results: [] }),
+        },
+      ]);
+
+      try {
+        render(<Stub initialEntries={["/search"]} />);
+        fireEvent.keyDown(await screen.findByRole("searchbox"), { key: "t" });
+        expect(requestSubmit).not.toHaveBeenCalled();
+      } finally {
+        requestSubmit.mockRestore();
+      }
     });
 
     it("renders recipe, cookbook, chef, and private shopping-list result cards", async () => {

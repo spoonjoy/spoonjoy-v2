@@ -84,7 +84,7 @@ const recipeMastheadLinkClass =
   "inline-flex min-h-11 items-center gap-2 font-sj-ui text-xs font-bold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)] no-underline transition hover:text-[var(--sj-ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)]";
 
 const recipeMastheadActionClass =
-  "inline-flex min-h-12 items-center justify-center px-2 font-sj-ui text-xs font-bold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)] transition hover:text-[var(--sj-ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)] sm:min-h-11 sm:px-0";
+  "inline-flex min-h-12 min-w-11 items-center justify-center px-2 font-sj-ui text-xs font-bold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)] transition hover:text-[var(--sj-ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)] sm:min-h-11 sm:px-2";
 
 const recipeMastheadPrimaryActionClass =
   "text-[var(--sj-action)] hover:text-[var(--sj-tomato)]";
@@ -490,8 +490,18 @@ export default function RecipeDetail() {
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isSpoonDialogOpen, setIsSpoonDialogOpen] = useState(false);
+  const [showOwnerTools, setShowOwnerTools] = useState(false);
   const [newCookbookTitle, setNewCookbookTitle] = useState("");
   const saveModalTitleRef = useRef<HTMLHeadingElement>(null);
+
+  const handleOpenSaveModal = useCallback(() => {
+    if (!isAuthenticated) {
+      window.location.assign(loginRedirect);
+      return;
+    }
+
+    setIsSaveModalOpen(true);
+  }, [isAuthenticated, loginRedirect]);
 
   const handleAddToList = useCallback(() => {
     if (!isAuthenticated) {
@@ -550,8 +560,6 @@ export default function RecipeDetail() {
     />
   ) : null;
 
-  const recipeHeaderActionCount = isOwner ? 3 : 4;
-
   const headerMasthead = (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
       <Link href="/recipes" className={recipeMastheadLinkClass}>
@@ -559,7 +567,7 @@ export default function RecipeDetail() {
         Recipes
       </Link>
       <div
-        className={`${recipeHeaderActionCount === 4 ? "grid-cols-4" : "grid-cols-3"} grid divide-x divide-[var(--sj-border)] border-y border-[var(--sj-border)] sm:flex sm:items-center sm:gap-6 sm:divide-x-0 sm:border-y-0`}
+        className="flex flex-wrap items-center gap-x-5 gap-y-1 border-y border-[var(--sj-border)] py-1 sm:border-y-0 sm:py-0"
         data-testid="recipe-header-actions"
       >
         <Link
@@ -572,12 +580,28 @@ export default function RecipeDetail() {
         </Link>
         <button
           type="button"
+          onClick={handleOpenSaveModal}
+          className={`${recipeMastheadActionClass} bg-transparent`}
+          data-testid="recipe-header-save-action"
+        >
+          Save
+        </button>
+        <button
+          type="button"
           onClick={handleAddToList}
           aria-pressed={isAlreadyInList}
           className={`${recipeMastheadActionClass} bg-transparent`}
           data-testid="recipe-header-list-action"
         >
           {addToListLabel}
+        </button>
+        <button
+          type="button"
+          onClick={handleShare}
+          className={`${recipeMastheadActionClass} bg-transparent`}
+          data-testid="recipe-header-share-action"
+        >
+          Share
         </button>
         {isAuthenticated ? (
           <button
@@ -645,15 +669,6 @@ export default function RecipeDetail() {
   }, [addToListFetcher.state, addToListFetcher.data, ingredientCount, scaleFactor, showToast]);
 
   // Register dock actions for this recipe detail page
-  const handleOpenSaveModal = useCallback(() => {
-    if (!isAuthenticated) {
-      window.location.assign(loginRedirect);
-      return;
-    }
-
-    setIsSaveModalOpen(true);
-  }, [isAuthenticated, loginRedirect]);
-
   useRecipeDetailActions({
     recipeId: recipe.id,
     chefId: recipe.chef.id,
@@ -834,24 +849,42 @@ export default function RecipeDetail() {
 
       {/* Owner recipe management */}
       {isOwner && (
-        <div className="border-b border-[var(--sj-border)]" data-testid="recipe-owner-tools">
-          <div className="mx-auto flex max-w-4xl flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
-            <p className="sj-eyebrow">Recipe tools</p>
-            <div className="flex flex-wrap gap-3">
-              <ForkRecipeButton
-                recipeId={recipe.id}
-                recipeTitle={recipe.title}
-                sourceChefUsername={recipe.chef.username}
-                isOwner={isOwner}
-              />
-              <Button
-                type="button"
-                variant="destructive"
-                onClick={() => setIsDeleteDialogOpen(true)}
-              >
-                Delete Recipe
-              </Button>
-            </div>
+        <div className="print:hidden" data-testid="recipe-owner-tools">
+          <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
+            <button
+              type="button"
+              className="flex min-h-14 w-full cursor-pointer items-center justify-between gap-4 border-b border-[var(--sj-border)] bg-transparent py-3 text-left font-sj-ui text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)] hover:text-[var(--sj-ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)]"
+              aria-expanded={showOwnerTools}
+              aria-controls="recipe-owner-maintenance"
+              onClick={() => setShowOwnerTools((visible) => !visible)}
+            >
+              <span>Recipe maintenance</span>
+              <span className="text-[var(--sj-ink)]">{showOwnerTools ? "Close" : "Open +"}</span>
+            </button>
+
+            {showOwnerTools ? (
+              <div id="recipe-owner-maintenance" className="border-b border-[var(--sj-border)] py-5">
+                <div className="flex flex-wrap gap-3">
+                  <Button href={`/recipes/${recipe.id}/edit`} plain>
+                    Edit recipe
+                  </Button>
+                  <ForkRecipeButton
+                    recipeId={recipe.id}
+                    recipeTitle={recipe.title}
+                    sourceChefUsername={recipe.chef.username}
+                    isOwner={isOwner}
+                  />
+                  <Button
+                    type="button"
+                    plain
+                    className="text-[var(--sj-tomato)] hover:text-[var(--sj-tomato)]"
+                    onClick={() => setIsDeleteDialogOpen(true)}
+                  >
+                    Delete
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
       )}
@@ -956,7 +989,7 @@ export default function RecipeDetail() {
         size="sm"
         role="alertdialog"
       >
-        <DialogTitle>Delete Recipe</DialogTitle>
+        <DialogTitle>Delete this recipe?</DialogTitle>
         <DialogDescription>
           Delete this recipe? This cannot be undone.
         </DialogDescription>
@@ -965,7 +998,7 @@ export default function RecipeDetail() {
             Cancel
           </Button>
           <Button variant="destructive" onClick={handleConfirmDelete}>
-            Delete Recipe
+            Delete
           </Button>
         </DialogActions>
       </Dialog>
@@ -1018,7 +1051,20 @@ export default function RecipeDetail() {
           <Heading level={2} className="text-2xl font-semibold tracking-normal">
             Cooks
           </Heading>
-          <SpoonsStrip spoons={spoons} />
+          <SpoonsStrip
+            spoons={spoons}
+            emptyAction={
+              isAuthenticated ? (
+                <Button type="button" plain onClick={() => setIsSpoonDialogOpen(true)}>
+                  Log the first cook
+                </Button>
+              ) : (
+                <Button href={loginRedirect} plain>
+                  Log the first cook
+                </Button>
+              )
+            }
+          />
         </div>
       </div>
     </div>
@@ -1115,7 +1161,7 @@ function CookModePanel({
 
         <div
           data-testid="cook-mode-pager"
-          className="flex min-h-0 flex-1 flex-col gap-8 overflow-y-auto py-6 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(20rem,26rem)] lg:items-stretch lg:gap-12 lg:py-10"
+          className="flex min-h-0 flex-1 flex-col gap-8 overflow-y-auto py-6 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)] lg:items-stretch lg:gap-12 lg:py-10"
         >
           <article
             key={step.stepNum}
@@ -1137,7 +1183,7 @@ function CookModePanel({
             {step.duration ? <CookModeTimer durationMinutes={step.duration} /> : null}
           </article>
 
-          <aside className="flex shrink-0 flex-col justify-between gap-8 border-y border-[var(--sj-border)] py-6 lg:min-h-0 lg:shrink lg:py-8">
+          <aside className="mx-auto flex w-full max-w-[38rem] shrink-0 flex-col justify-between gap-8 border-y border-[var(--sj-border)] py-6 lg:min-h-0 lg:shrink lg:py-8">
             <div>
               <div className="flex items-end justify-between gap-4">
                 <div>
@@ -1172,7 +1218,7 @@ function CookModePanel({
               )}
             </div>
 
-            <div className="max-w-[26rem]">
+            <div className="mx-auto w-full max-w-[24rem]">
               <ScaleSelector value={scaleFactor} onChange={onScaleChange} />
             </div>
           </aside>

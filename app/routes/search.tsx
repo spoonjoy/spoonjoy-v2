@@ -97,7 +97,7 @@ function ResultCard({ result }: { result: SearchResult }) {
       href={result.href}
       className="group grid gap-4 border-t border-[var(--sj-border)] py-5 no-underline transition hover:border-[var(--sj-border-strong)] sm:grid-cols-[7rem_minmax(0,1fr)]"
     >
-      <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-[var(--sj-radius-small)] border border-[var(--sj-border)] bg-[var(--sj-flour)] sm:aspect-square">
+      <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden bg-[var(--sj-flour)] sm:aspect-square">
         {displayImageUrl ? (
           <img src={displayImageUrl} alt="" className="h-full w-full object-cover transition group-hover:scale-105" />
         ) : (
@@ -160,6 +160,12 @@ export default function Search() {
                   name="q"
                   defaultValue={query}
                   placeholder="tomato basil"
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      event.currentTarget.form?.requestSubmit();
+                    }
+                  }}
                   className="font-sj-display h-full w-full border-0 bg-transparent text-3xl/9 text-[var(--sj-ink)] outline-none placeholder:text-[var(--sj-ink-soft)]"
                 />
               </div>

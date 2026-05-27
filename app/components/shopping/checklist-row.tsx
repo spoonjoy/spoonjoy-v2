@@ -27,7 +27,7 @@ export function ChecklistRow({
     <span
       aria-hidden="true"
       data-testid="checklist-row-strike"
-      className="pointer-events-none absolute left-0 right-0 top-[0.78rem] h-px bg-[color-mix(in_srgb,var(--sj-ink-soft)_72%,transparent)]"
+      className="sj-checklist-strike pointer-events-none absolute left-0 right-0 top-[0.78rem] h-[2px] bg-[color-mix(in_srgb,var(--sj-ink-soft)_82%,transparent)]"
     />
   ) : null;
 
@@ -63,7 +63,7 @@ export function ChecklistRow({
     <span
       data-testid={quantityTestId}
       className={clsx(
-        "whitespace-nowrap text-right font-sj-ui text-sm tabular-nums text-[var(--sj-ink)]",
+        "max-w-[8.5rem] break-words text-right font-sj-ui text-sm tabular-nums text-[var(--sj-ink)]",
         checked && "text-[var(--sj-ink-soft)]",
       )}
     >
@@ -72,7 +72,7 @@ export function ChecklistRow({
   );
 
   const contentGroup = (includeAction: boolean) => (
-    <span className="relative grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
+    <span className="relative grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(3.75rem,auto)] items-start gap-3">
       {labelContent}
       <span className="flex items-start gap-2">
         {quantityContent}
@@ -90,7 +90,7 @@ export function ChecklistRow({
   );
 
   const rowBaseClassName = clsx(
-    "grid min-h-11 min-h-14 items-center gap-3 py-2",
+    "grid min-h-14 items-center gap-3 py-2",
     checked && "opacity-72",
   );
   const rowClassName = clsx(rowBaseClassName, "grid-cols-[2rem_minmax(0,1fr)]");

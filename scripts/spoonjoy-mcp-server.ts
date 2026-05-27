@@ -5,6 +5,7 @@ import { createJsonRpcLineSession } from "../app/lib/mcp/json-rpc-stdio.server";
 import type { JsonRpcToolRouter } from "../app/lib/mcp/json-rpc.server";
 import { spoonjoyRemoteAuthorizationHeader } from "../app/lib/mcp/spoonjoy-remote-auth.server";
 import { getSpoonjoyMcpEnv } from "../app/lib/mcp/spoonjoy-mcp-env.server";
+import { readSpoonjoyMcpCachedToken, writeSpoonjoyMcpCachedToken } from "../app/lib/mcp/spoonjoy-token-cache.server";
 import { callSpoonjoyMcpTool, listSpoonjoyMcpTools } from "../app/lib/mcp/spoonjoy-tools.server";
 
 type RemoteOperation = {
@@ -56,6 +57,24 @@ async function remoteTools(baseUrl: string): Promise<RemoteOperation[]> {
   return data.operations ?? [];
 }
 
+function redactTokenFromPollResult(data: unknown, cached: Awaited<ReturnType<typeof writeSpoonjoyMcpCachedToken>>): unknown {
+  if (!data || typeof data !== "object" || !("token" in data)) return data;
+  const safeData = { ...data } as Record<string, unknown>;
+  delete safeData.token;
+  safeData.storage = {
+    localMcpCache: cached.stored,
+    message: cached.stored
+      ? "Token stored by the Spoonjoy MCP bridge for future sessions. Do not call credential_store and do not ask for Spoonjoy credentials."
+      : "Token active in this Spoonjoy MCP process. Do not call credential_store and do not ask for Spoonjoy credentials.",
+  };
+  safeData.message = cached.stored
+    ? "Connection approved. Spoonjoy MCP is authenticated now and cached locally for future sessions."
+    : "Connection approved. Spoonjoy MCP is authenticated for this process.";
+  return safeData;
+}
+
+process.env.SPOONJOY_MCP_API_TOKEN ||= await readSpoonjoyMcpCachedToken() ?? "";
+
 const baseUrl = remoteBaseUrl();
 let db: Awaited<ReturnType<typeof getProtocolSafeDb>> | null = null;
 let defaultOwnerEmail: string | undefined;
@@ -87,7 +106,10 @@ const router: JsonRpcToolRouter = {
         body: JSON.stringify(args),
       });
       if (name === "poll_agent_connection" && data && typeof data === "object" && "token" in data) {
-        process.env.SPOONJOY_MCP_API_TOKEN = String((data as { token: unknown }).token);
+        const token = String((data as { token: unknown }).token);
+        process.env.SPOONJOY_MCP_API_TOKEN = token;
+        const cached = await writeSpoonjoyMcpCachedToken(token);
+        return { content: [{ type: "text", text: JSON.stringify(redactTokenFromPollResult(data, cached), null, 2) }] };
       }
       return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
     }
@@ -98,6 +120,8 @@ const router: JsonRpcToolRouter = {
       const parsed = JSON.parse(text) as { token?: string };
       if (parsed.token) {
         principal = await authenticateApiToken(db, parsed.token);
+        const cached = await writeSpoonjoyMcpCachedToken(parsed.token);
+        return { content: [{ type: "text", text: JSON.stringify(redactTokenFromPollResult(parsed, cached), null, 2) }] };
       }
     }
     return { content: [{ type: "text", text }] };

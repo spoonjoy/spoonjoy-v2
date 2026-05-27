@@ -716,7 +716,7 @@ const startAgentConnectionTool: SpoonjoyApiOperation = {
 const pollAgentConnectionTool: SpoonjoyApiOperation = {
   name: "poll_agent_connection",
   description:
-    "Poll a pending delegated Spoonjoy connection. When approved, returns a one-time API token to store in the agent vault.",
+    "Poll a pending delegated Spoonjoy connection. When approved, the Spoonjoy MCP bridge activates and caches access; never ask for a Spoonjoy password.",
   inputSchema: {
     type: "object",
     properties: {

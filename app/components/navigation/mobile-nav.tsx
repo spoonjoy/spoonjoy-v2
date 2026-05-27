@@ -24,6 +24,16 @@ function isPath(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+function settingsTool(pathname: string): DockButton {
+  return {
+    id: "settings",
+    icon: Settings,
+    label: "Settings",
+    onAction: "/account/settings",
+    active: isPath(pathname, "/account/settings"),
+  };
+}
+
 function shouldHideDock(pathname: string, isAuthenticated: boolean) {
   if (!isAuthenticated) {
     return pathname === "/login" || pathname === "/signup";
@@ -33,7 +43,10 @@ function shouldHideDock(pathname: string, isAuthenticated: boolean) {
     return true;
   }
 
-  return pathname.startsWith("/recipes/");
+  return pathname.startsWith("/recipes/") && (
+    pathname.includes("/edit") ||
+    pathname.includes("/steps/")
+  );
 }
 
 function rootConfig(pathname: string, isAuthenticated: boolean): DockConfig {
@@ -56,6 +69,7 @@ function rootConfig(pathname: string, isAuthenticated: boolean): DockConfig {
       },
       tools: [
         { id: "search", icon: Search, label: "Search", onAction: "/search", active: isPath(pathname, "/search") },
+        settingsTool(pathname),
       ],
     };
   }
@@ -75,6 +89,7 @@ function rootConfig(pathname: string, isAuthenticated: boolean): DockConfig {
       tools: [
         { id: "kitchen", icon: Home, label: "Kitchen", onAction: "/" },
         { id: "shopping", icon: ShoppingBag, label: "Shopping list", onAction: "/shopping-list" },
+        settingsTool(pathname),
       ],
     };
   }
@@ -94,6 +109,7 @@ function rootConfig(pathname: string, isAuthenticated: boolean): DockConfig {
       tools: [
         { id: "search", icon: Search, label: "Search", onAction: "/search" },
         { id: "kitchen", icon: Home, label: "Kitchen", onAction: "/" },
+        settingsTool(pathname),
       ],
     };
   }
@@ -113,6 +129,7 @@ function rootConfig(pathname: string, isAuthenticated: boolean): DockConfig {
       tools: [
         { id: "kitchen", icon: Home, label: "Kitchen", onAction: "/" },
         { id: "search", icon: Search, label: "Search", onAction: "/search" },
+        { id: "shopping", icon: ShoppingBag, label: "Shopping list", onAction: "/shopping-list" },
       ],
     };
   }
@@ -132,6 +149,7 @@ function rootConfig(pathname: string, isAuthenticated: boolean): DockConfig {
       tools: [
         { id: "search", icon: Search, label: "Search", onAction: "/search" },
         { id: "shopping", icon: ShoppingBag, label: "Shopping list", onAction: "/shopping-list" },
+        settingsTool(pathname),
       ],
     };
   }
@@ -150,6 +168,7 @@ function rootConfig(pathname: string, isAuthenticated: boolean): DockConfig {
       tools: [
         { id: "search", icon: Search, label: "Search", onAction: "/search" },
         { id: "shopping", icon: ShoppingBag, label: "Shopping list", onAction: "/shopping-list" },
+        settingsTool(pathname),
       ],
     };
   }
@@ -168,6 +187,7 @@ function rootConfig(pathname: string, isAuthenticated: boolean): DockConfig {
     tools: [
       { id: "search", icon: Search, label: "Search", onAction: "/search" },
       { id: "shopping", icon: ShoppingBag, label: "Shopping list", onAction: "/shopping-list" },
+      settingsTool(pathname),
     ],
   };
 }
@@ -185,7 +205,7 @@ export function MobileNav({ isAuthenticated = true }: MobileNavProps) {
   }
 
   const activeConfig = config ?? configFromActions(actions) ?? rootConfig(location.pathname, isAuthenticated);
-  const tools = activeConfig.tools.slice(0, 2);
+  const tools = activeConfig.tools.slice(0, 3);
 
   return (
     <SpoonDock aria-label={activeConfig.ariaLabel ?? "Spoonjoy navigation"}>

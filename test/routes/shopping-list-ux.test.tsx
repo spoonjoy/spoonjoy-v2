@@ -79,7 +79,7 @@ describe("shopping list UX updates", () => {
     recipes: [],
   };
 
-  it("orders the market list by aisle while keeping checked items at the bottom", () => {
+  it("orders the market list by aisle without jumping checked items out of their category", () => {
     const ordered = orderShoppingItemsForMarket([
       { id: "checked-produce", checked: true, categoryLabel: "Produce" },
       { id: "pantry", checked: false, categoryLabel: "Pantry" },
@@ -88,14 +88,14 @@ describe("shopping list UX updates", () => {
     ]);
 
     expect(ordered.map((item) => item.id)).toEqual([
+      "checked-produce",
       "produce",
       "pantry",
       "mystery",
-      "checked-produce",
     ]);
   });
 
-  it("labels checked items as one basket section in all view", () => {
+  it("labels sections by aisle even when items are checked", () => {
     expect(getShoppingSectionLabel(
       { checked: false, categoryLabel: "Produce" },
       null,
@@ -110,12 +110,12 @@ describe("shopping list UX updates", () => {
       { checked: true, categoryLabel: "Produce" },
       { checked: false, categoryLabel: "Other" },
       "all"
-    )).toBe("In basket");
+    )).toBe("Produce");
     expect(getShoppingSectionLabel(
       { checked: true, categoryLabel: "Dairy" },
       { checked: true, categoryLabel: "Produce" },
       "all"
-    )).toBeNull();
+    )).toBe("Dairy");
     expect(getShoppingSectionLabel(
       { checked: true, categoryLabel: "Produce" },
       null,
@@ -264,7 +264,7 @@ describe("shopping list UX updates", () => {
 
     expect(screen.getAllByTestId("shopping-list-category").map((category) => category.textContent)).toEqual([
       "Produce",
-      "In basket",
+      "Dairy",
     ]);
     expect(screen.getByText("limes")).toBeInTheDocument();
     expect(screen.getByText("butter")).toBeInTheDocument();
@@ -566,7 +566,7 @@ describe("shopping list UX updates", () => {
     });
   });
 
-  it("uses ruled receipt rows and closes all reveals when check-off reorders rows", async () => {
+  it("uses ruled receipt rows and closes all reveals without jumping checked rows", async () => {
     const Stub = createTestRoutesStub([
       {
         path: "/shopping-list",
@@ -626,8 +626,8 @@ describe("shopping list UX updates", () => {
 
     await waitFor(() => {
       expect(screen.getAllByRole("checkbox").map((checkbox) => checkbox.getAttribute("aria-label"))).toEqual([
-        "bananas",
         "apples",
+        "bananas",
       ]);
     });
     await waitFor(() => expect(bananasRow).toHaveAttribute("data-motion-x", "0"));

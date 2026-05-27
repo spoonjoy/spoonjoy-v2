@@ -150,6 +150,14 @@ Verification:
 - Strict local crawl at `/tmp/spoonjoy-strict-local-crawl`: 57 route/viewport captures, 0 skipped routes, 0 HTTP failures, 0 console/page errors, 0 overflow findings, 0 clipped-text findings, and 0 small touch-target findings.
 - Local disposable smoke at `/tmp/spoonjoy-live-smoke-local`: signup, recipe creation, paged cook mode, recipe-to-shopping-list add, shopping list, and account settings passed with 0 console/page errors. Local `/api/push/public-key` returned 500 because local dev does not have VAPID configured; live Workers must return 200.
 
+2026-05-27 reported-regression follow-up:
+
+- Closed UIA-019 through UIA-030 from the user-reported regression list: long serving labels, missing homepage photos, bordered/rounded recipe imagery, new-recipe parser 404, save-to-cookbook discoverability, delete prominence, shopping-list reorder, empty-cooks CTA, share buttons, mobile settings access, search Enter submit, and unified narrow cook-mode checklists.
+- Strict local crawl at `/tmp/spoonjoy-ui-audit-2026-05-27`: 54 route/viewport captures, 0 skipped routes, 0 HTTP failures, 0 console/page errors, 0 overflow findings, 0 clipped-text findings, and 0 small touch-target findings.
+- Custom browser acceptance at `/tmp/spoonjoy-custom-acceptance-2026-05-27`: verified homepage recipe photos, edge-to-edge unbordered photo tiles, `/recipes/new` parser no-404 behavior, recipe save/share/delete-maintenance actions, no-cooks CTA, narrow cook-mode checklist width, 2px left-to-right strike animation, stable shopping-list order after checkoff, cookbook share, and mobile settings dock access.
+- Local disposable smoke at `/tmp/spoonjoy-local-smoke-2026-05-27`: signup, recipe creation, cook mode, shopping-list add/check, account settings, and push public-key behavior passed.
+- Verification after the follow-up: 228 test files passed, 4,817 tests passed, 100% statement/branch/function/line coverage, typecheck passed, production build passed, strict UI crawl passed, custom acceptance passed, and local smoke passed.
+
 ## Findings
 
 | ID | Severity | Status | Surfaces | Result |
@@ -172,6 +180,18 @@ Verification:
 | UIA-016 | Medium | Fixed | Cookbook detail | Changed the collapsed owner-tools affordance from a lone dead-looking label into a full-width expandable maintenance row with explicit open/close state. |
 | UIA-017 | High | Fixed | Root shell, every route | Removed the duplicate desktop/mobile `<Outlet />` mounting so forms, IDs, route effects, and cook-mode panels exist once. |
 | UIA-018 | High | Fixed | UI audit harness | Strict crawl now fails instead of silently accepting skipped auth routes, HTTP failures, console/page errors, overflow, clipped text, or undersized targets. |
+| UIA-019 | High | Fixed | Recipe detail scaling | Long serving/yield strings now wrap inside the scale selector without overlapping the controls. |
+| UIA-020 | High | Fixed | Kitchen homepage | Recipe index rows restored food thumbnails instead of text-only rows. |
+| UIA-021 | Medium | Fixed | Kitchen, pantry, cookbook, search imagery | Recipe photo tiles are edge-to-edge, unbordered, and unrounded. |
+| UIA-022 | High | Fixed | New recipe form | Ingredient parser submits to the `/recipes/new` action instead of a missing step-edit route. |
+| UIA-023 | High | Fixed | Recipe detail, mobile dock | Save-to-cookbook is visible from recipe detail and opens the saved-state modal. |
+| UIA-024 | Medium | Fixed | Recipe detail | Delete moved behind a collapsed maintenance area. |
+| UIA-025 | High | Fixed | Shopping list | Checking an item keeps it in place in the default market view while preserving checkoff animation. |
+| UIA-026 | Medium | Fixed | Recipe cooks strip | Empty cook history now includes a real log-first-cook CTA. |
+| UIA-027 | Medium | Fixed | Recipes, cookbooks, kitchen cards | Recipe and cookbook detail/cards expose share actions via native share or clipboard fallback. |
+| UIA-028 | Medium | Fixed | Mobile dock | Mobile users can reach settings/display controls from the dock. |
+| UIA-029 | Medium | Fixed | Search | Enter in the search field submits the form. |
+| UIA-030 | High | Fixed | Cook mode | Ingredients and step-output uses share one narrow checklist grammar with a thicker left-to-right strikethrough. |
 
 ## Re-Audit Notes
 

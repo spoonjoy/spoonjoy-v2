@@ -133,8 +133,13 @@ async function main() {
     report.screenshots.push(await screenshot(page, outDir, '03-cook-mode'))
 
     await gotoApp(page, new URL(`/recipes/${recipeId}`, baseUrl).toString())
+    const addToListResponse = page.waitForResponse((response) => {
+      const request = response.request()
+      return request.method() === 'POST' && new URL(response.url()).pathname.startsWith('/shopping-list')
+    }, { timeout: 15_000 })
     await page.getByTestId('recipe-header-list-action').click()
-    await expect(page.getByTestId('recipe-header-list-action')).toContainText(/in list|adding/i, { timeout: 10_000 })
+    expect((await addToListResponse).ok()).toBe(true)
+    await expect(page.getByTestId('recipe-header-list-action')).toContainText(/in list/i, { timeout: 10_000 })
 
     await gotoApp(page, new URL('/shopping-list', baseUrl).toString())
     await expect(page.getByTestId('shopping-list-checklist-board')).toBeVisible({ timeout: 10_000 })

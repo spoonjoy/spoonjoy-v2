@@ -24,6 +24,7 @@
   ],
   
   "vars": {
-    "NODE_ENV": "production"
+    "NODE_ENV": "production",
+    "SPOONJOY_BASE_URL": "https://spoonjoy.app"
   }
 }

@@ -1,6 +1,6 @@
 import type { Route } from "./+types/recipes.new";
 import { redirect, data, useActionData, useNavigate, useNavigation, Form } from "react-router";
-import { getCloudflareEnv, getRequestDb } from "~/lib/route-platform.server";
+import { getCloudflareEnv, getIngredientParserEnv, getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
 import { Link } from "~/components/ui/link";
 import { Text } from "~/components/ui/text";
@@ -22,9 +22,15 @@ import {
 import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
 import { createCover, makeFallbackPlaceholderSvg } from "~/lib/recipe-cover.server";
 import { scheduleAiPlaceholderCover } from "~/lib/ai-placeholder-cover.server";
+import {
+  IngredientParseError,
+  parseIngredients,
+  type ParsedIngredient,
+} from "~/lib/ingredient-parse.server";
 import { useRef } from "react";
 
 interface ActionData {
+  parsedIngredients?: ParsedIngredient[];
   errors?: {
     title?: string;
     description?: string;
@@ -32,6 +38,7 @@ interface ActionData {
     image?: string;
     steps?: string;
     general?: string;
+    parse?: string;
   };
 }
 
@@ -43,6 +50,27 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 export async function action({ request, context }: Route.ActionArgs) {
   const userId = await requireUserId(request, "/login", context.cloudflare?.env);
   const formData = await request.formData();
+  const intent = formData.get("intent")?.toString();
+
+  if (intent === "parseIngredients") {
+    const ingredientText = formData.get("ingredientText")?.toString() || "";
+    try {
+      const parsedIngredients = await parseIngredients(
+        ingredientText,
+        getIngredientParserEnv(context)
+      );
+      return data({ parsedIngredients });
+    } catch (error) {
+      if (error instanceof IngredientParseError) {
+        return data({ errors: { parse: error.message } }, { status: 400 });
+      }
+
+      return data(
+        { errors: { parse: "An unexpected error occurred while parsing ingredients" } },
+        { status: 500 }
+      );
+    }
+  }
 
   const title = formData.get("title")?.toString() || "";
   const description = formData.get("description")?.toString() || "";

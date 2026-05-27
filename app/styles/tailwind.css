@@ -346,9 +346,7 @@ body:has(#cook) .sj-mobile-surface {
 .sj-photo-tile {
   position: relative;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--sj-border) 82%, transparent);
   background: var(--sj-photo-charcoal);
-  box-shadow: var(--sj-shadow-soft);
 }
 
 .sj-photo-tile img {
@@ -368,6 +366,27 @@ body:has(#cook) .sj-mobile-surface {
   inset: 0;
   pointer-events: none;
   background: linear-gradient(180deg, transparent 34%, var(--sj-photo-shade));
+}
+
+@keyframes sj-checklist-strike-draw {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.sj-checklist-strike {
+  transform-origin: left center;
+  animation: sj-checklist-strike-draw 220ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sj-checklist-strike {
+    animation: none;
+    transform: scaleX(1);
+  }
 }
 
 .sj-on-photo {

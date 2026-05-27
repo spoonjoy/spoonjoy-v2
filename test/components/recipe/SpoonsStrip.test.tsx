@@ -31,6 +31,17 @@ describe("SpoonsStrip", () => {
     expect(screen.getByText(/no cooks yet/i)).toBeInTheDocument();
   });
 
+  it("renders an optional empty-state CTA", () => {
+    renderWithRouter(
+      <SpoonsStrip
+        spoons={[]}
+        emptyAction={<a href="/recipes/r1#cook">Log the first cook</a>}
+      />,
+    );
+
+    expect(screen.getByRole("link", { name: "Log the first cook" })).toHaveAttribute("href", "/recipes/r1#cook");
+  });
+
   it("renders chef username, photo, note, and nextTime when present", () => {
     renderWithRouter(
       <SpoonsStrip

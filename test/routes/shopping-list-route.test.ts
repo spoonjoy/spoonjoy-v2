@@ -440,7 +440,7 @@ describe("Shopping List Route", () => {
       expect(updatedItem?.checkedAt).not.toBeNull();
     });
 
-    it("should move checked item to the bottom by persisted sortIndex", async () => {
+    it("should keep a checked item in its persisted position", async () => {
       const shoppingList = await db.shoppingList.create({
         data: { authorId: testUserId },
       });
@@ -473,8 +473,8 @@ describe("Shopping List Route", () => {
         orderBy: { sortIndex: "asc" },
       });
 
-      expect(ordered.map((item) => item.id)).toEqual([itemA.id, itemC.id, itemB.id]);
-      expect(ordered[2].checkedAt).not.toBeNull();
+      expect(ordered.map((item) => item.id)).toEqual([itemA.id, itemB.id, itemC.id]);
+      expect(ordered[1].checkedAt).not.toBeNull();
     });
   });
 
