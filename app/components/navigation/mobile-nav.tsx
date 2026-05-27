@@ -23,6 +23,11 @@ function isPath(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+function hasExplicitChefSearch(search: string) {
+  const params = new URLSearchParams(search);
+  return params.has("chef") || params.has("chefId");
+}
+
 function shouldHideDock(pathname: string, isAuthenticated: boolean) {
   if (!isAuthenticated) {
     return pathname === "/login" || pathname === "/signup";
@@ -38,7 +43,7 @@ function shouldHideDock(pathname: string, isAuthenticated: boolean) {
   );
 }
 
-function rootConfig(pathname: string, isAuthenticated: boolean): DockConfig {
+function rootConfig(pathname: string, search: string, isAuthenticated: boolean): DockConfig {
   if (!isAuthenticated) {
     return {
       variant: "root",
@@ -164,7 +169,7 @@ function rootConfig(pathname: string, isAuthenticated: boolean): DockConfig {
       label: "My Kitchen",
       ariaLabel: "My Kitchen",
       onAction: "/",
-      active: pathname === "/",
+      active: pathname === "/" && !hasExplicitChefSearch(search),
     },
     primary: { id: "new-recipe", icon: Plus, label: "+", ariaLabel: "Create recipe", onAction: "/recipes/new" },
     tools: [
@@ -186,7 +191,7 @@ export function MobileNav({ isAuthenticated = true }: MobileNavProps) {
     return null;
   }
 
-  const activeConfig = config ?? configFromActions(actions) ?? rootConfig(location.pathname, isAuthenticated);
+  const activeConfig = config ?? configFromActions(actions) ?? rootConfig(location.pathname, location.search, isAuthenticated);
   const tools = activeConfig.tools.slice(0, 3);
 
   return (

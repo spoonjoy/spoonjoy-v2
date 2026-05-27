@@ -82,6 +82,15 @@ describe("MobileNav", () => {
       expect(screen.getByRole("link", { name: /my kitchen/i })).toHaveAttribute("aria-current", "page");
       unmount();
 
+      const visitor = render(
+        <MemoryRouter initialEntries={["/?chef=guest_chef"]}>
+          <MobileNav />
+        </MemoryRouter>,
+      );
+
+      expect(screen.getByRole("link", { name: /my kitchen/i })).not.toHaveAttribute("aria-current");
+      visitor.unmount();
+
       render(
         <MemoryRouter initialEntries={["/shopping-list"]}>
           <MobileNav />
