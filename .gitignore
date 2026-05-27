@@ -47,3 +47,6 @@ playwright-report/
 test-results/
 .playwright/
 e2e/.auth/
+
+# Live smoke artifacts (scripts/smoke-live.mjs default outDir)
+live-smoke-artifacts/
