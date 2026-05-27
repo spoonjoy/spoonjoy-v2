@@ -4,7 +4,6 @@ import {
   Home,
   Plus,
   Search,
-  Settings,
   ShoppingBag,
   User,
 } from "lucide-react";
@@ -24,14 +23,9 @@ function isPath(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function settingsTool(pathname: string): DockButton {
-  return {
-    id: "settings",
-    icon: Settings,
-    label: "Settings",
-    onAction: "/account/settings",
-    active: isPath(pathname, "/account/settings"),
-  };
+function hasExplicitChefSearch(search: string) {
+  const params = new URLSearchParams(search);
+  return params.has("chef") || params.has("chefId");
 }
 
 function shouldHideDock(pathname: string, isAuthenticated: boolean) {
@@ -49,7 +43,7 @@ function shouldHideDock(pathname: string, isAuthenticated: boolean) {
   );
 }
 
-function rootConfig(pathname: string, isAuthenticated: boolean): DockConfig {
+function rootConfig(pathname: string, search: string, isAuthenticated: boolean): DockConfig {
   if (!isAuthenticated) {
     return {
       variant: "root",
@@ -69,7 +63,6 @@ function rootConfig(pathname: string, isAuthenticated: boolean): DockConfig {
       },
       tools: [
         { id: "search", icon: Search, label: "Search", onAction: "/search", active: isPath(pathname, "/search") },
-        settingsTool(pathname),
       ],
     };
   }
@@ -89,7 +82,6 @@ function rootConfig(pathname: string, isAuthenticated: boolean): DockConfig {
       tools: [
         { id: "kitchen", icon: Home, label: "Kitchen", onAction: "/" },
         { id: "shopping", icon: ShoppingBag, label: "Shopping list", onAction: "/shopping-list" },
-        settingsTool(pathname),
       ],
     };
   }
@@ -109,7 +101,6 @@ function rootConfig(pathname: string, isAuthenticated: boolean): DockConfig {
       tools: [
         { id: "search", icon: Search, label: "Search", onAction: "/search" },
         { id: "kitchen", icon: Home, label: "Kitchen", onAction: "/" },
-        settingsTool(pathname),
       ],
     };
   }
@@ -119,7 +110,7 @@ function rootConfig(pathname: string, isAuthenticated: boolean): DockConfig {
       variant: "root",
       left: {
         id: "account-place",
-        icon: Settings,
+        icon: User,
         label: "Account",
         sublabel: "settings",
         onAction: "/account/settings",
@@ -129,7 +120,6 @@ function rootConfig(pathname: string, isAuthenticated: boolean): DockConfig {
       tools: [
         { id: "kitchen", icon: Home, label: "Kitchen", onAction: "/" },
         { id: "search", icon: Search, label: "Search", onAction: "/search" },
-        { id: "shopping", icon: ShoppingBag, label: "Shopping list", onAction: "/shopping-list" },
       ],
     };
   }
@@ -147,9 +137,8 @@ function rootConfig(pathname: string, isAuthenticated: boolean): DockConfig {
       },
       primary: { id: "new-cookbook", icon: Plus, label: "+", ariaLabel: "Create cookbook", onAction: "/cookbooks/new" },
       tools: [
+        { id: "kitchen", icon: Home, label: "Kitchen", ariaLabel: "My Kitchen", onAction: "/" },
         { id: "search", icon: Search, label: "Search", onAction: "/search" },
-        { id: "shopping", icon: ShoppingBag, label: "Shopping list", onAction: "/shopping-list" },
-        settingsTool(pathname),
       ],
     };
   }
@@ -168,7 +157,6 @@ function rootConfig(pathname: string, isAuthenticated: boolean): DockConfig {
       tools: [
         { id: "search", icon: Search, label: "Search", onAction: "/search" },
         { id: "shopping", icon: ShoppingBag, label: "Shopping list", onAction: "/shopping-list" },
-        settingsTool(pathname),
       ],
     };
   }
@@ -178,16 +166,15 @@ function rootConfig(pathname: string, isAuthenticated: boolean): DockConfig {
     left: {
       id: "kitchen-place",
       icon: Home,
-      label: "Kitchen",
-      sublabel: "home",
+      label: "My Kitchen",
+      ariaLabel: "My Kitchen",
       onAction: "/",
-      active: pathname === "/",
+      active: pathname === "/" && !hasExplicitChefSearch(search),
     },
     primary: { id: "new-recipe", icon: Plus, label: "+", ariaLabel: "Create recipe", onAction: "/recipes/new" },
     tools: [
       { id: "search", icon: Search, label: "Search", onAction: "/search" },
       { id: "shopping", icon: ShoppingBag, label: "Shopping list", onAction: "/shopping-list" },
-      settingsTool(pathname),
     ],
   };
 }
@@ -204,7 +191,7 @@ export function MobileNav({ isAuthenticated = true }: MobileNavProps) {
     return null;
   }
 
-  const activeConfig = config ?? configFromActions(actions) ?? rootConfig(location.pathname, isAuthenticated);
+  const activeConfig = config ?? configFromActions(actions) ?? rootConfig(location.pathname, location.search, isAuthenticated);
   const tools = activeConfig.tools.slice(0, 3);
 
   return (

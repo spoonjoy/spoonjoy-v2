@@ -1,6 +1,6 @@
 import type { Route } from "./+types/_index";
 import { useLoaderData } from "react-router";
-import { ArrowRight, BookOpen, ChefHat, Plus, Search as SearchIcon, Share2 } from "lucide-react";
+import { ArrowRight, BookOpen, ChefHat, Plus, Search as SearchIcon, Settings, Share2 } from "lucide-react";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { getUserId } from "~/lib/session.server";
 import { Button } from "~/components/ui/button";
@@ -286,10 +286,20 @@ export default function Index() {
 
           <div className="flex flex-wrap items-center gap-2 lg:justify-end">
             {isOwner ? (
-              <Button href="/recipes/new">
-                <Plus data-slot="icon" className="size-4" />
-                Create Recipe
-              </Button>
+              <>
+                <Link
+                  href="/account/settings"
+                  aria-label="Kitchen settings"
+                  className="font-sj-ui inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-[var(--sj-ink-soft)] no-underline hover:text-[var(--sj-ink)]"
+                >
+                  <Settings className="size-4" aria-hidden="true" />
+                  Settings
+                </Link>
+                <Button href="/recipes/new">
+                  <Plus data-slot="icon" className="size-4" />
+                  Create Recipe
+                </Button>
+              </>
             ) : (
               <Button href="/search" plain>
                 <SearchIcon data-slot="icon" className="size-4" />

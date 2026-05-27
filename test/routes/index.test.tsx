@@ -345,7 +345,7 @@ describe("Kitchen Index Route", () => {
 
       expect(await screen.findByText("My Kitchen")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Create Recipe" })).toHaveAttribute("href", "/recipes/new");
-      expect(screen.queryByRole("link", { name: "Open settings" })).not.toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Kitchen settings" })).toHaveAttribute("href", "/account/settings");
       expect(screen.queryByRole("button", { name: "Logout" })).not.toBeInTheDocument();
       expect(screen.queryByRole("link", { name: "New Recipe" })).not.toBeInTheDocument();
       expect(screen.queryByRole("tablist")).not.toBeInTheDocument();

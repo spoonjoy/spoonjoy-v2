@@ -77,7 +77,7 @@ describe('Root layout responsive behavior', () => {
         </MemoryRouter>
       )
 
-      expect(screen.getByRole('link', { name: /kitchen home/i })).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: /my kitchen/i })).toBeInTheDocument()
       expect(screen.getByRole('link', { name: /create recipe/i })).toBeInTheDocument()
       expect(screen.getByRole('link', { name: /shopping list/i })).toBeInTheDocument()
     })
