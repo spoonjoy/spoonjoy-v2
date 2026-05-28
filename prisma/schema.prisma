@@ -31,6 +31,7 @@ model User {
   addedToCookbooks    RecipeInCookbook[]
   apiCredentials      ApiCredential[]
   agentConnections    AgentConnectionRequest[]
+  oauthAuthCodes      OAuthAuthCode[]
   spoons              RecipeSpoon[]
   imageGenLedger      ImageGenLedger[]
 
@@ -117,6 +118,38 @@ model OAuth {
 
   @@unique([provider, providerUserId])
   @@unique([userId, provider])
+  @@index([userId])
+}
+
+// Spoonjoy acting as an OAuth 2.1 authorization server for remote MCP
+// connectors (e.g. the claude.ai one-click connector). Distinct from the
+// `OAuth` model above, which records Spoonjoy logging in *as a client* to
+// Google/Apple. Clients self-register via Dynamic Client Registration.
+model OAuthClient {
+  id           String   @id @default(cuid())
+  clientName   String?
+  // Space-separated list of allowed redirect URIs (validated at authorize/token).
+  redirectUris String
+  createdAt    DateTime @default(now())
+}
+
+// Short-lived, single-use authorization codes for the PKCE auth-code grant.
+model OAuthAuthCode {
+  id            String    @id @default(cuid())
+  codeHash      String    @unique
+  clientId      String
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  redirectUri   String
+  // PKCE S256 code_challenge; verified against the code_verifier at token time.
+  codeChallenge String
+  scope         String
+  // RFC 8707 resource indicator (the MCP endpoint the token is bound to).
+  resource      String?
+  expiresAt     DateTime
+  consumedAt    DateTime?
+  createdAt     DateTime  @default(now())
+
   @@index([userId])
 }
 
