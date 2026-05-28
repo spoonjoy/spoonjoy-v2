@@ -3,9 +3,15 @@ import type { AuthenticationResponseJSON } from "@simplewebauthn/server";
 import { createUserSessionCookie, sanitizeSessionRedirect } from "~/lib/session.server";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { configFromRequest, finishAuthentication, WebAuthnError } from "~/lib/webauthn-route.server";
+import { enforceAuthRateLimit, rateLimitedResponse } from "~/lib/rate-limit.server";
 
 export async function action({ request, context }: Route.ActionArgs) {
   const env = context.cloudflare?.env;
+
+  const rateLimit = await enforceAuthRateLimit(request, env?.AUTH_IP_RATE_LIMITER);
+  if (!rateLimit.allowed) {
+    return rateLimitedResponse(rateLimit.retryAfterSeconds);
+  }
 
   let body: { email?: string; response?: AuthenticationResponseJSON; redirectTo?: string };
   try {

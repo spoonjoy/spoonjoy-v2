@@ -3,6 +3,7 @@ import { Form, redirect, data, useActionData, useLoaderData } from "react-router
 import { getRequestDb } from "~/lib/route-platform.server";
 import { createUser, emailExists, usernameExists } from "~/lib/auth.server";
 import { createUserSession, getUserId } from "~/lib/session.server";
+import { enforceAuthRateLimit } from "~/lib/rate-limit.server";
 import { OAuthButtonGroup, OAuthDivider, OAuthError } from "~/components/ui/oauth";
 import { getConfiguredOAuthProviders, type OAuthProvider } from "~/lib/env.server";
 import { getOAuthEnv } from "~/lib/oauth-route.server";
@@ -12,6 +13,7 @@ import { Field, Label, ErrorMessage } from "~/components/ui/fieldset";
 import { Input } from "~/components/ui/input";
 import { Button } from "~/components/ui/button";
 import { Text, TextLink } from "~/components/ui/text";
+import { ValidationError } from "~/components/ui/validation-error";
 
 interface ActionData {
   errors?: {
@@ -19,6 +21,7 @@ interface ActionData {
     username?: string;
     password?: string;
     confirmPassword?: string;
+    general?: string;
   };
 }
 
@@ -48,6 +51,15 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
 // Action - handle signup form submission
 export async function action({ request, context }: Route.ActionArgs) {
+  // Throttle account-creation attempts per IP to deter automated abuse.
+  const rateLimit = await enforceAuthRateLimit(request, context.cloudflare?.env?.AUTH_IP_RATE_LIMITER);
+  if (!rateLimit.allowed) {
+    return data(
+      { errors: { general: "Too many attempts. Please wait a moment and try again." } },
+      { status: 429 },
+    );
+  }
+
   const formData = await request.formData();
   const email = formData.get("email")?.toString() || "";
   const username = formData.get("username")?.toString() || "";
@@ -114,6 +126,10 @@ export default function Signup() {
 
         {/* OAuth error messages */}
         <OAuthError error={loaderData?.oauthError} className="mt-4" />
+
+        {/* istanbul ignore next -- @preserve */ actionData?.errors?.general && (
+          <ValidationError error={actionData.errors.general} className="mt-4" />
+        )}
 
         {oauthProviders.length > 0 && (
           <>

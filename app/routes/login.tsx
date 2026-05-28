@@ -4,6 +4,7 @@ import { Form, redirect, data, useActionData, useLoaderData, useSearchParams } f
 import { getRequestDb } from "~/lib/route-platform.server";
 import { authenticateUser } from "~/lib/auth.server";
 import { createUserSession, getUserId, sanitizeSessionRedirect } from "~/lib/session.server";
+import { enforceAuthRateLimit } from "~/lib/rate-limit.server";
 import { OAuthButtonGroup, OAuthDivider, OAuthError } from "~/components/ui/oauth";
 import { getConfiguredOAuthProviders, type OAuthProvider } from "~/lib/env.server";
 import { getOAuthEnv } from "~/lib/oauth-route.server";
@@ -50,6 +51,15 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
 // Action - handle login form submission
 export async function action({ request, context }: Route.ActionArgs) {
+  // Throttle before any password work so brute-force can't burn bcrypt cycles.
+  const rateLimit = await enforceAuthRateLimit(request, context.cloudflare?.env?.AUTH_IP_RATE_LIMITER);
+  if (!rateLimit.allowed) {
+    return data(
+      { errors: { general: "Too many attempts. Please wait a moment and try again." } },
+      { status: 429 },
+    );
+  }
+
   const formData = await request.formData();
   const email = formData.get("email")?.toString() || "";
   const password = formData.get("password")?.toString() || "";

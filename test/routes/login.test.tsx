@@ -92,6 +92,32 @@ describe("Login Route", () => {
   });
 
   describe("action", () => {
+    it("returns 429 when the auth rate limiter is exhausted", async () => {
+      const formData = new FormData();
+      formData.set("email", "test@example.com");
+      formData.set("password", "password123");
+
+      const request = new Request("http://localhost:3000/login", {
+        method: "POST",
+        body: formData,
+        headers: { "CF-Connecting-IP": "203.0.113.7" },
+      });
+
+      const response = await action({
+        request,
+        context: {
+          cloudflare: {
+            env: { AUTH_IP_RATE_LIMITER: { limit: async () => ({ success: false }) } },
+          },
+        },
+        params: {},
+      } as any);
+
+      const { data, status } = extractResponseData(response);
+      expect(status).toBe(429);
+      expect(data.errors.general).toMatch(/too many attempts/i);
+    });
+
     it("should return validation errors for invalid email", async () => {
       const formData = new FormData();
       formData.set("email", "invalid-email");

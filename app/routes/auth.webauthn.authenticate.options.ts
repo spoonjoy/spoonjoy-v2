@@ -1,8 +1,14 @@
 import type { Route } from "./+types/auth.webauthn.authenticate.options";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { configFromRequest, startAuthentication, WebAuthnError } from "~/lib/webauthn-route.server";
+import { enforceAuthRateLimit, rateLimitedResponse } from "~/lib/rate-limit.server";
 
 export async function action({ request, context }: Route.ActionArgs) {
+  const rateLimit = await enforceAuthRateLimit(request, context.cloudflare?.env?.AUTH_IP_RATE_LIMITER);
+  if (!rateLimit.allowed) {
+    return rateLimitedResponse(rateLimit.retryAfterSeconds);
+  }
+
   let body: { email?: string };
   try {
     body = (await request.json()) as { email?: string };
