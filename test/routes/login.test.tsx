@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Request as UndiciRequest } from "undici";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
 import { loader, action } from "~/routes/login";
@@ -322,6 +323,23 @@ describe("Login Route", () => {
       expect(emailInput).toHaveAttribute("type", "email");
       expect(emailInput).toHaveAttribute("name", "email");
       expect(emailInput).toHaveAttribute("required");
+    });
+
+    it("updates the controlled email value as the user types", async () => {
+      const Stub = createTestRoutesStub([
+        {
+          path: "/login",
+          Component: Login,
+          loader: () => ({ oauthProviders: [] }),
+        },
+      ]);
+
+      render(<Stub initialEntries={["/login"]} />);
+
+      const emailInput = await screen.findByLabelText("Email");
+      const user = userEvent.setup();
+      await user.type(emailInput, "chef@example.com");
+      expect(emailInput).toHaveValue("chef@example.com");
     });
 
     it("should have password input with correct attributes", async () => {
