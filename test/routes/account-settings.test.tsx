@@ -11,6 +11,7 @@ import { faker } from "@faker-js/faker";
 
 // Import loader and component from the route
 import AccountSettings, { loader, action } from "~/routes/account.settings";
+import type { AccountSettingsLoaderData } from "~/lib/account-settings.server";
 
 describe("Account Settings Route", () => {
   let testUserId: string;
@@ -234,6 +235,7 @@ describe("Account Settings Route", () => {
           username: testUsername,
           hasPassword: true,
           oauthAccounts: [],
+          passkeys: [],
         },
         notifications: { pushSubscribed: false },
       };
@@ -259,6 +261,7 @@ describe("Account Settings Route", () => {
           username: testUsername,
           hasPassword: true,
           oauthAccounts: [],
+          passkeys: [],
         },
         notifications: { pushSubscribed: false },
       };
@@ -288,6 +291,7 @@ describe("Account Settings Route", () => {
           username: testUsername,
           hasPassword: true,
           oauthAccounts: [],
+          passkeys: [],
         },
         notifications: { pushSubscribed: false },
       };
@@ -314,6 +318,7 @@ describe("Account Settings Route", () => {
           username: testUsername,
           hasPassword: true,
           oauthAccounts: [],
+          passkeys: [],
         },
         notifications: { pushSubscribed: false },
       };
@@ -340,6 +345,7 @@ describe("Account Settings Route", () => {
           username: testUsername,
           hasPassword: true,
           oauthAccounts: [],
+          passkeys: [],
         },
         notifications: { pushSubscribed: false },
       };
@@ -369,6 +375,7 @@ describe("Account Settings Route", () => {
             { provider: "google", providerUsername: "testuser@gmail.com" },
             { provider: "apple", providerUsername: "Apple User" },
           ],
+          passkeys: [],
         },
         notifications: { pushSubscribed: false },
       };
@@ -399,6 +406,7 @@ describe("Account Settings Route", () => {
           username: testUsername,
           hasPassword: true,
           oauthAccounts: [],
+          passkeys: [],
         },
         notifications: { pushSubscribed: false },
       };
@@ -428,6 +436,7 @@ describe("Account Settings Route", () => {
           username: testUsername,
           hasPassword: true,
           oauthAccounts: [{ provider: "google", providerUsername: "testuser@gmail.com" }],
+          passkeys: [],
         },
         notifications: { pushSubscribed: false },
       };
@@ -455,6 +464,7 @@ describe("Account Settings Route", () => {
           username: testUsername,
           hasPassword: true,
           oauthAccounts: [],
+          passkeys: [],
         },
         notifications: { pushSubscribed: false },
       };
@@ -481,6 +491,7 @@ describe("Account Settings Route", () => {
           username: testUsername,
           hasPassword: false,
           oauthAccounts: [{ provider: "google", providerUsername: "testuser@gmail.com" }],
+          passkeys: [],
         },
         notifications: { pushSubscribed: false },
       };
@@ -507,6 +518,7 @@ describe("Account Settings Route", () => {
           username: testUsername,
           hasPassword: true,
           oauthAccounts: [{ provider: "google", providerUsername: "testuser@gmail.com" }],
+          passkeys: [],
         },
         notifications: { pushSubscribed: false },
       };
@@ -537,6 +549,7 @@ describe("Account Settings Route", () => {
           username: testUsername,
           hasPassword: true,
           oauthAccounts: [{ provider: "google", providerUsername: "testuser@gmail.com" }],
+          passkeys: [],
         },
         notifications: { pushSubscribed: false },
       };
@@ -569,6 +582,7 @@ describe("Account Settings Route", () => {
           username: testUsername,
           hasPassword: true,
           oauthAccounts: [],
+          passkeys: [],
         },
         notifications: { pushSubscribed: false },
       };
@@ -599,6 +613,7 @@ describe("Account Settings Route", () => {
           username: testUsername,
           hasPassword: true,
           oauthAccounts: [],
+          passkeys: [],
         },
         notifications: { pushSubscribed: false },
       };
@@ -626,6 +641,7 @@ describe("Account Settings Route", () => {
           username: testUsername,
           hasPassword: true,
           oauthAccounts: [],
+          passkeys: [],
         },
         notifications: { pushSubscribed: false },
       };
@@ -660,6 +676,7 @@ describe("Account Settings Route", () => {
           username: testUsername,
           hasPassword: true,
           oauthAccounts: [],
+          passkeys: [],
         },
         notifications: { pushSubscribed: false },
       };
@@ -694,6 +711,7 @@ describe("Account Settings Route", () => {
           username: testUsername,
           hasPassword: true,
           oauthAccounts: [],
+          passkeys: [],
         },
         notifications: { pushSubscribed: false },
       };
@@ -1223,6 +1241,7 @@ describe("Account Settings Route", () => {
             hasPassword: true,
             oauthAccounts: [],
             photoUrl: null,
+            passkeys: [],
           },
           notifications: { pushSubscribed: false },
       };
@@ -1257,6 +1276,7 @@ describe("Account Settings Route", () => {
             hasPassword: true,
             oauthAccounts: [],
             photoUrl: customPhotoUrl,
+            passkeys: [],
           },
           notifications: { pushSubscribed: false },
       };
@@ -1289,6 +1309,7 @@ describe("Account Settings Route", () => {
             hasPassword: true,
             oauthAccounts: [],
             photoUrl: null,
+            passkeys: [],
           },
           notifications: { pushSubscribed: false },
       };
@@ -1322,6 +1343,7 @@ describe("Account Settings Route", () => {
             hasPassword: true,
             oauthAccounts: [],
             photoUrl: null,
+            passkeys: [],
           },
           notifications: { pushSubscribed: false },
       };
@@ -1349,6 +1371,7 @@ describe("Account Settings Route", () => {
             hasPassword: true,
             oauthAccounts: [],
             photoUrl: "https://example.com/existing-photo.jpg",
+            passkeys: [],
           },
           notifications: { pushSubscribed: false },
       };
@@ -1376,6 +1399,7 @@ describe("Account Settings Route", () => {
             hasPassword: true,
             oauthAccounts: [],
             photoUrl: "https://example.com/existing-photo.jpg",
+            passkeys: [],
           },
           notifications: { pushSubscribed: false },
       };
@@ -1403,6 +1427,7 @@ describe("Account Settings Route", () => {
             hasPassword: true,
             oauthAccounts: [],
             photoUrl: null,
+            passkeys: [],
           },
           notifications: { pushSubscribed: false },
       };
@@ -1430,6 +1455,7 @@ describe("Account Settings Route", () => {
             hasPassword: true,
             oauthAccounts: [],
             photoUrl: null,
+            passkeys: [],
           },
           notifications: { pushSubscribed: false },
       };
@@ -1463,6 +1489,7 @@ describe("Account Settings Route", () => {
             hasPassword: true,
             oauthAccounts: [],
             photoUrl: null,
+            passkeys: [],
           },
           notifications: { pushSubscribed: false },
       };
@@ -1504,6 +1531,7 @@ describe("Account Settings Route", () => {
             hasPassword: true,
             oauthAccounts: [],
             photoUrl: null,
+            passkeys: [],
           },
           notifications: { pushSubscribed: false },
       };
@@ -1550,6 +1578,7 @@ describe("Account Settings Route", () => {
             hasPassword: true,
             oauthAccounts: [],
             photoUrl: null,
+            passkeys: [],
           },
           notifications: { pushSubscribed: false },
       };
@@ -2589,6 +2618,7 @@ describe("Account Settings Route", () => {
             hasPassword: true,
             oauthAccounts: [{ provider: "google", providerUsername: "testuser@gmail.com" }],
             photoUrl: null,
+            passkeys: [],
           },
           notifications: { pushSubscribed: false },
       };
@@ -2623,6 +2653,7 @@ describe("Account Settings Route", () => {
             hasPassword: true,
             oauthAccounts: [{ provider: "google", providerUsername: "testuser@gmail.com" }],
             photoUrl: null,
+            passkeys: [],
           },
           notifications: { pushSubscribed: false },
       };
@@ -2661,6 +2692,7 @@ describe("Account Settings Route", () => {
             hasPassword: false, // No password
             oauthAccounts: [{ provider: "google", providerUsername: "testuser@gmail.com" }], // Only one OAuth
             photoUrl: null,
+            passkeys: [],
           },
           notifications: { pushSubscribed: false },
       };
@@ -2691,6 +2723,7 @@ describe("Account Settings Route", () => {
             hasPassword: false, // No password
             oauthAccounts: [{ provider: "google", providerUsername: "testuser@gmail.com" }], // Only one OAuth
             photoUrl: null,
+            passkeys: [],
           },
           notifications: { pushSubscribed: false },
       };
@@ -2722,6 +2755,7 @@ describe("Account Settings Route", () => {
             hasPassword: true,
             oauthAccounts: [{ provider: "google", providerUsername: "testuser@gmail.com" }],
             photoUrl: null,
+            passkeys: [],
           },
           notifications: { pushSubscribed: false },
       };
@@ -2768,6 +2802,7 @@ describe("Account Settings Route", () => {
             hasPassword: true,
             oauthAccounts: [], // After unlink, no OAuth accounts
             photoUrl: null,
+            passkeys: [],
           },
           notifications: { pushSubscribed: false },
       };
@@ -3655,6 +3690,7 @@ describe("Account Settings Route", () => {
             hasPassword: true,
             oauthAccounts: [],
             photoUrl: null,
+            passkeys: [],
           },
           notifications: { pushSubscribed: false },
       };
@@ -3691,6 +3727,7 @@ describe("Account Settings Route", () => {
             hasPassword: false,
             oauthAccounts: [{ provider: "google", providerUsername: "testuser@gmail.com" }],
             photoUrl: null,
+            passkeys: [],
           },
           notifications: { pushSubscribed: false },
       };
@@ -3726,6 +3763,7 @@ describe("Account Settings Route", () => {
             hasPassword: true,
             oauthAccounts: [{ provider: "google", providerUsername: "testuser@gmail.com" }],
             photoUrl: null,
+            passkeys: [],
           },
           notifications: { pushSubscribed: false },
       };
@@ -3753,6 +3791,7 @@ describe("Account Settings Route", () => {
             hasPassword: true,
             oauthAccounts: [],
             photoUrl: null,
+            passkeys: [],
           },
           notifications: { pushSubscribed: false },
       };
@@ -3780,6 +3819,7 @@ describe("Account Settings Route", () => {
             hasPassword: true,
             oauthAccounts: [],
             photoUrl: null,
+            passkeys: [],
           },
           notifications: { pushSubscribed: false },
       };
@@ -3829,6 +3869,7 @@ describe("Account Settings Route", () => {
             hasPassword: true,
             oauthAccounts: [],
             photoUrl: null,
+            passkeys: [],
           },
           notifications: { pushSubscribed: false },
       };
@@ -3874,6 +3915,7 @@ describe("Account Settings Route", () => {
             hasPassword: true,
             oauthAccounts: [],
             photoUrl: null,
+            passkeys: [],
           },
           notifications: { pushSubscribed: false },
       };
@@ -3916,6 +3958,7 @@ describe("Account Settings Route", () => {
             hasPassword: true,
             oauthAccounts: [{ provider: "google", providerUsername: "testuser@gmail.com" }],
             photoUrl: null,
+            passkeys: [],
           },
           notifications: { pushSubscribed: false },
       };
@@ -3952,6 +3995,7 @@ describe("Account Settings Route", () => {
             hasPassword: true,
             oauthAccounts: [{ provider: "google", providerUsername: "testuser@gmail.com" }],
             photoUrl: null,
+            passkeys: [],
           },
           notifications: { pushSubscribed: false },
       };
@@ -3994,6 +4038,7 @@ describe("Account Settings Route", () => {
             hasPassword: false,
             oauthAccounts: [{ provider: "google", providerUsername: "testuser@gmail.com" }],
             photoUrl: null,
+            passkeys: [],
           },
           notifications: { pushSubscribed: false },
       };
@@ -4036,6 +4081,7 @@ describe("Account Settings Route", () => {
             hasPassword: true,
             oauthAccounts: [],
             photoUrl: null,
+            passkeys: [],
           },
           notifications: { pushSubscribed: false },
       };
@@ -4150,6 +4196,7 @@ describe("Account Settings Route", () => {
             hasPassword: true,
             oauthAccounts: [],
             photoUrl: null,
+            passkeys: [],
           },
           notifications: { pushSubscribed: false },
       };
@@ -4182,6 +4229,7 @@ describe("Account Settings Route", () => {
             hasPassword: true,
             oauthAccounts: [],
             photoUrl: null,
+            passkeys: [],
           },
           notifications: { pushSubscribed: false },
       };
@@ -4231,6 +4279,7 @@ describe("Account Settings Route", () => {
             hasPassword: true,
             oauthAccounts: [],
             photoUrl: null,
+            passkeys: [],
           },
           notifications: { pushSubscribed: false },
       };
@@ -4279,6 +4328,7 @@ describe("Account Settings Route", () => {
             hasPassword: true,
             oauthAccounts: [],
             photoUrl: null,
+            passkeys: [],
           },
           notifications: { pushSubscribed: false },
       };
@@ -4334,6 +4384,7 @@ describe("Account Settings Route", () => {
             hasPassword: false,
             oauthAccounts: [{ provider: "google", providerUsername: "testuser@gmail.com" }],
             photoUrl: null,
+            passkeys: [],
           },
           notifications: { pushSubscribed: false },
       };
@@ -4390,6 +4441,7 @@ describe("Account Settings Route", () => {
             hasPassword: true,
             oauthAccounts: [],
             photoUrl: null,
+            passkeys: [],
           },
           notifications: { pushSubscribed: false },
       };
@@ -4430,6 +4482,236 @@ describe("Account Settings Route", () => {
         // Verify the error appears in the profile photo section specifically
         const photoSection = screen.getByTestId("profile-photo-section");
         expect(photoSection).toHaveTextContent(/file size exceeds 5mb limit/i);
+      });
+    });
+  });
+
+  describe("Passkey management", () => {
+    async function authedCookie() {
+      const session = await sessionStorage.getSession();
+      session.set("userId", testUserId);
+      const setCookieHeader = await sessionStorage.commitSession(session);
+      return setCookieHeader.split(";")[0];
+    }
+
+    function loaderRequest(cookie: string) {
+      const headers = new Headers();
+      headers.set("Cookie", cookie);
+      return new UndiciRequest("http://localhost:3000/account/settings", { headers });
+    }
+
+    async function runAction(cookie: string, fields: Record<string, string>) {
+      const headers = new Headers();
+      headers.set("Cookie", cookie);
+      headers.set("Content-Type", "application/x-www-form-urlencoded");
+      const request = new UndiciRequest("http://localhost:3000/account/settings", {
+        method: "POST",
+        headers,
+        body: new URLSearchParams(fields).toString(),
+      });
+      return action({ request, context: { cloudflare: { env: null } }, params: {} } as any);
+    }
+
+    describe("loader - passkeys", () => {
+      it("returns enrolled passkeys with ISO timestamps, newest first", async () => {
+        await db.userCredential.create({
+          data: {
+            id: "pk_named",
+            userId: testUserId,
+            publicKey: new Uint8Array([1]),
+            counter: 0n,
+            transports: "internal",
+            name: "MacBook Touch ID",
+            createdAt: new Date("2026-05-01T12:00:00.000Z"),
+          },
+        });
+        await db.userCredential.create({
+          data: { id: "pk_legacy", userId: testUserId, publicKey: new Uint8Array([2]), counter: 0n },
+        });
+
+        const result = await loader({
+          request: loaderRequest(await authedCookie()),
+          context: { cloudflare: { env: null } },
+          params: {},
+        } as any);
+
+        expect(result.user.passkeys).toEqual([
+          {
+            id: "pk_named",
+            name: "MacBook Touch ID",
+            transports: "internal",
+            createdAt: "2026-05-01T12:00:00.000Z",
+          },
+          { id: "pk_legacy", name: null, transports: null, createdAt: null },
+        ]);
+      });
+
+      it("returns an empty passkey list when none are enrolled", async () => {
+        const result = await loader({
+          request: loaderRequest(await authedCookie()),
+          context: { cloudflare: { env: null } },
+          params: {},
+        } as any);
+        expect(result.user.passkeys).toEqual([]);
+      });
+    });
+
+    describe("action - remove passkey", () => {
+      it("returns validation_error when no credential id is supplied", async () => {
+        const result = await runAction(await authedCookie(), { intent: "removePasskey" });
+        expect(result).toMatchObject({ success: false, error: "validation_error" });
+      });
+
+      it("removes a passkey when the user keeps their password", async () => {
+        await db.userCredential.create({
+          data: { id: "pk_pw", userId: testUserId, publicKey: new Uint8Array([1]), counter: 0n },
+        });
+
+        const result = await runAction(await authedCookie(), {
+          intent: "removePasskey",
+          credentialId: "pk_pw",
+        });
+
+        expect(result).toMatchObject({ success: true });
+        expect(await db.userCredential.findUnique({ where: { id: "pk_pw" } })).toBeNull();
+      });
+
+      it("removes a passkey when the user keeps a linked OAuth account", async () => {
+        await db.user.update({ where: { id: testUserId }, data: { hashedPassword: null, salt: null } });
+        await db.oAuth.create({
+          data: {
+            provider: "google",
+            providerUserId: "g-1",
+            providerUsername: "chef@gmail.com",
+            userId: testUserId,
+          },
+        });
+        await db.userCredential.create({
+          data: { id: "pk_oauth", userId: testUserId, publicKey: new Uint8Array([1]), counter: 0n },
+        });
+
+        const result = await runAction(await authedCookie(), {
+          intent: "removePasskey",
+          credentialId: "pk_oauth",
+        });
+
+        expect(result).toMatchObject({ success: true });
+        expect(await db.userCredential.findUnique({ where: { id: "pk_oauth" } })).toBeNull();
+      });
+
+      it("removes a passkey when the user keeps another passkey", async () => {
+        await db.user.update({ where: { id: testUserId }, data: { hashedPassword: null, salt: null } });
+        await db.userCredential.create({
+          data: { id: "pk_a", userId: testUserId, publicKey: new Uint8Array([1]), counter: 0n },
+        });
+        await db.userCredential.create({
+          data: { id: "pk_b", userId: testUserId, publicKey: new Uint8Array([2]), counter: 0n },
+        });
+
+        const result = await runAction(await authedCookie(), {
+          intent: "removePasskey",
+          credentialId: "pk_a",
+        });
+
+        expect(result).toMatchObject({ success: true });
+        const remaining = await db.userCredential.findMany({ where: { userId: testUserId } });
+        expect(remaining.map((c) => c.id)).toEqual(["pk_b"]);
+      });
+
+      it("refuses to remove the only remaining sign-in method", async () => {
+        await db.user.update({ where: { id: testUserId }, data: { hashedPassword: null, salt: null } });
+        await db.userCredential.create({
+          data: { id: "pk_last", userId: testUserId, publicKey: new Uint8Array([1]), counter: 0n },
+        });
+
+        const result = await runAction(await authedCookie(), {
+          intent: "removePasskey",
+          credentialId: "pk_last",
+        });
+
+        expect(result).toMatchObject({ success: false, error: "last_auth_method" });
+        // the passkey is untouched
+        expect(await db.userCredential.findUnique({ where: { id: "pk_last" } })).not.toBeNull();
+      });
+
+      it("returns passkey_not_found for an unknown credential id", async () => {
+        const result = await runAction(await authedCookie(), {
+          intent: "removePasskey",
+          credentialId: "does_not_exist",
+        });
+        expect(result).toMatchObject({ success: false, error: "passkey_not_found" });
+      });
+    });
+
+    describe("component - passkey list", () => {
+      function renderWithPasskeys(overrides: Partial<AccountSettingsLoaderData["user"]>) {
+        const mockData = {
+          user: {
+            id: testUserId,
+            email: testUserEmail.toLowerCase(),
+            username: testUsername,
+            hasPassword: true,
+            oauthAccounts: [],
+            photoUrl: null,
+            passkeys: [],
+            ...overrides,
+          },
+          notifications: { pushSubscribed: false },
+        };
+        const Stub = createTestRoutesStub([
+          {
+            id: "account-settings",
+            path: "/account/settings",
+            Component: AccountSettings,
+            loader: () => mockData,
+          },
+        ]);
+        render(<Stub initialEntries={["/account/settings"]} />);
+        return mockData;
+      }
+
+      it("renders enrolled passkeys with names and formatted dates", async () => {
+        renderWithPasskeys({
+          passkeys: [
+            { id: "pk1", name: "MacBook Touch ID", transports: "internal", createdAt: "2026-05-01T12:00:00.000Z" },
+            { id: "pk2", name: null, transports: null, createdAt: null },
+          ],
+        });
+
+        await screen.findByRole("heading", { name: /account settings/i });
+        const section = screen.getByTestId("passkeys-section");
+        expect(section).toHaveTextContent("MacBook Touch ID");
+        expect(section).toHaveTextContent("Added May 1, 2026");
+        // unnamed, undated passkey falls back to a generic label with no "Added" line
+        expect(section).toHaveTextContent("Passkey");
+      });
+
+      it("walks through the remove-confirm flow", async () => {
+        renderWithPasskeys({
+          passkeys: [{ id: "pk1", name: "MacBook", transports: null, createdAt: null }],
+        });
+
+        await screen.findByRole("heading", { name: /account settings/i });
+        const user = userEvent.setup();
+
+        await user.click(screen.getByRole("button", { name: /remove macbook/i }));
+        expect(screen.getByRole("button", { name: /confirm remove macbook/i })).toBeInTheDocument();
+
+        await user.click(screen.getByRole("button", { name: /cancel/i }));
+        expect(screen.queryByRole("button", { name: /confirm remove macbook/i })).not.toBeInTheDocument();
+      });
+
+      it("disables removal and warns when a passkey is the only sign-in method", async () => {
+        renderWithPasskeys({
+          hasPassword: false,
+          oauthAccounts: [],
+          passkeys: [{ id: "pk1", name: "Only key", transports: null, createdAt: null }],
+        });
+
+        await screen.findByRole("heading", { name: /account settings/i });
+        const section = screen.getByTestId("passkeys-section");
+        expect(section).toHaveTextContent(/only way to sign in/i);
+        expect(screen.getByRole("button", { name: /remove only key/i })).toBeDisabled();
       });
     });
   });

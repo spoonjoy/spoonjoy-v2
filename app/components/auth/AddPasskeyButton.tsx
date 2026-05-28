@@ -12,6 +12,8 @@
  */
 
 import { useEffect, useState } from "react";
+import { Field, Label } from "~/components/ui/fieldset";
+import { Input } from "~/components/ui/input";
 import { Button } from "~/components/ui/button";
 import { Text } from "~/components/ui/text";
 import {
@@ -22,7 +24,7 @@ import {
 export interface AddPasskeyButtonProps {
   /** Test seam: override the support check. */
   supportsPasskeys?: boolean;
-  /** Called after a passkey is successfully added (e.g. to refresh a list). */
+  /** Called after a passkey is successfully added (e.g. to refresh the list). */
   onAdded?: () => void;
 }
 
@@ -30,6 +32,7 @@ export function AddPasskeyButton({ supportsPasskeys, onAdded }: AddPasskeyButton
   const [support, setSupport] = useState<"unknown" | "supported" | "unsupported">("unknown");
   const [status, setStatus] = useState<"idle" | "pending" | "added">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [name, setName] = useState("");
 
   useEffect(() => {
     setSupport(
@@ -49,9 +52,10 @@ export function AddPasskeyButton({ supportsPasskeys, onAdded }: AddPasskeyButton
   async function handleClick() {
     setError(null);
     setStatus("pending");
-    const result = await registerPasskey();
+    const result = await registerPasskey({ name: name.trim() || undefined });
     if (result.ok) {
       setStatus("added");
+      setName("");
       onAdded?.();
     } else {
       setStatus("idle");
@@ -60,7 +64,18 @@ export function AddPasskeyButton({ supportsPasskeys, onAdded }: AddPasskeyButton
   }
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
+      <Field>
+        <Label htmlFor="passkey-name">Name (optional)</Label>
+        <Input
+          type="text"
+          id="passkey-name"
+          name="passkey-name"
+          placeholder="e.g. MacBook Touch ID"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+      </Field>
       <Button type="button" disabled={status === "pending"} onClick={handleClick}>
         {status === "pending" ? "Waiting for passkey…" : "Add a passkey"}
       </Button>

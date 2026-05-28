@@ -23,6 +23,8 @@ import {
   configFromRequest,
   finishAuthentication,
   finishRegistration,
+  listUserPasskeys,
+  removeUserPasskey,
   startAuthentication,
   startRegistration,
   WebAuthnError,
@@ -158,6 +160,133 @@ describe("webauthn-route orchestration", () => {
       await expect(
         finishRegistration(db, user.id, config, {} as never),
       ).rejects.toMatchObject({ status: 400, message: "Registration could not be verified" });
+    });
+
+    it("stores a trimmed name and createdAt when a label is provided", async () => {
+      const user = await db.user.create({
+        data: { ...createTestUser(), webAuthnChallenge: "reg_chal" },
+      });
+      vi.mocked(verifyRegistration).mockResolvedValue({ verified: true } as never);
+      vi.mocked(credentialFromRegistration).mockReturnValue({
+        id: "named_cred",
+        publicKey: new Uint8Array([1]),
+        counter: 0n,
+        transports: "internal",
+      });
+
+      await finishRegistration(db, user.id, config, { id: "named_cred" } as never, "  MacBook  ");
+
+      const stored = await db.userCredential.findUnique({ where: { id: "named_cred" } });
+      expect(stored?.name).toBe("MacBook");
+      expect(stored?.createdAt).toBeInstanceOf(Date);
+    });
+
+    it("stores a null name when the label is blank", async () => {
+      const user = await db.user.create({
+        data: { ...createTestUser(), webAuthnChallenge: "reg_chal" },
+      });
+      vi.mocked(verifyRegistration).mockResolvedValue({ verified: true } as never);
+      vi.mocked(credentialFromRegistration).mockReturnValue({
+        id: "blank_cred",
+        publicKey: new Uint8Array([1]),
+        counter: 0n,
+        transports: null,
+      });
+
+      await finishRegistration(db, user.id, config, { id: "blank_cred" } as never, "   ");
+
+      const stored = await db.userCredential.findUnique({ where: { id: "blank_cred" } });
+      expect(stored?.name).toBeNull();
+    });
+  });
+
+  describe("listUserPasskeys", () => {
+    it("returns a user's passkeys newest-first with name/transports/createdAt", async () => {
+      const user = await db.user.create({ data: createTestUser() });
+      await db.userCredential.create({
+        data: {
+          id: "older",
+          userId: user.id,
+          publicKey: new Uint8Array([1]),
+          counter: 0n,
+          transports: "internal",
+          name: "Old key",
+          createdAt: new Date("2026-01-01T00:00:00.000Z"),
+        },
+      });
+      await db.userCredential.create({
+        data: {
+          id: "newer",
+          userId: user.id,
+          publicKey: new Uint8Array([2]),
+          counter: 0n,
+          transports: null,
+          name: null,
+          createdAt: new Date("2026-05-01T00:00:00.000Z"),
+        },
+      });
+      // A pre-migration credential with no enrollment metadata sorts last.
+      await db.userCredential.create({
+        data: { id: "legacy", userId: user.id, publicKey: new Uint8Array([3]), counter: 0n },
+      });
+
+      const passkeys = await listUserPasskeys(db, user.id);
+      expect(passkeys).toEqual([
+        { id: "newer", name: null, transports: null, createdAt: new Date("2026-05-01T00:00:00.000Z") },
+        {
+          id: "older",
+          name: "Old key",
+          transports: "internal",
+          createdAt: new Date("2026-01-01T00:00:00.000Z"),
+        },
+        { id: "legacy", name: null, transports: null, createdAt: null },
+      ]);
+    });
+
+    it("returns an empty list for a user with no passkeys", async () => {
+      const user = await db.user.create({ data: createTestUser() });
+      expect(await listUserPasskeys(db, user.id)).toEqual([]);
+    });
+
+    it("does not return another user's passkeys", async () => {
+      const user = await db.user.create({ data: createTestUser() });
+      const other = await db.user.create({ data: createTestUser() });
+      await db.userCredential.create({
+        data: { id: "theirs", userId: other.id, publicKey: new Uint8Array([1]), counter: 0n },
+      });
+
+      expect(await listUserPasskeys(db, user.id)).toEqual([]);
+    });
+  });
+
+  describe("removeUserPasskey", () => {
+    it("removes the user's own passkey", async () => {
+      const user = await db.user.create({ data: createTestUser() });
+      await db.userCredential.create({
+        data: { id: "mine", userId: user.id, publicKey: new Uint8Array([1]), counter: 0n },
+      });
+
+      const result = await removeUserPasskey(db, user.id, "mine");
+      expect(result).toEqual({ removed: true });
+      expect(await db.userCredential.findUnique({ where: { id: "mine" } })).toBeNull();
+    });
+
+    it("reports nothing removed for an unknown credential", async () => {
+      const user = await db.user.create({ data: createTestUser() });
+      expect(await removeUserPasskey(db, user.id, "missing")).toEqual({ removed: false });
+    });
+
+    it("will not remove another user's passkey", async () => {
+      const user = await db.user.create({ data: createTestUser() });
+      const other = await db.user.create({ data: createTestUser() });
+      await db.userCredential.create({
+        data: { id: "theirs", userId: other.id, publicKey: new Uint8Array([1]), counter: 0n },
+      });
+
+      const result = await removeUserPasskey(db, user.id, "theirs");
+      expect(result).toEqual({ removed: false });
+      // the credential is untouched
+      expect(await db.userCredential.findUnique({ where: { id: "theirs" } })).not.toBeNull();
     });
   });
 

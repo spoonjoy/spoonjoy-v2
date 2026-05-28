@@ -11,9 +11,9 @@ export async function action({ request, context }: Route.ActionArgs) {
     return Response.json({ error: "Authentication required" }, { status: 401 });
   }
 
-  let body: { response?: RegistrationResponseJSON };
+  let body: { response?: RegistrationResponseJSON; name?: string };
   try {
-    body = (await request.json()) as { response?: RegistrationResponseJSON };
+    body = (await request.json()) as { response?: RegistrationResponseJSON; name?: string };
   } catch {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
@@ -23,7 +23,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 
   try {
     const db = await getRequestDb(context);
-    const result = await finishRegistration(db, userId, configFromRequest(request), body.response);
+    const result = await finishRegistration(db, userId, configFromRequest(request), body.response, body.name);
     return Response.json(result);
   } catch (error) {
     const status = error instanceof WebAuthnError ? error.status : 400;
