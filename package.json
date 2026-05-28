@@ -17,8 +17,6 @@
     "deploy:auto": "SPOONJOY_PREFLIGHT_SKIP_REMOTE=1 pnpm run deploy:preflight && pnpm run build && pnpm exec wrangler d1 migrations apply DB --remote && pnpm run deploy:preflight && pnpm exec wrangler deploy",
     "deploy:preflight": "tsx scripts/deployment-preflight.ts",
     "production:readiness": "tsx scripts/production-readiness.ts",
-    "db:migrate:v1:report": "tsx scripts/migrate-v1-neon-to-d1.ts report",
-    "db:migrate:v1:build-sql": "tsx scripts/migrate-v1-neon-to-d1.ts build-sql",
     "typecheck": "react-router typegen && tsc",
     "test": "vitest",
     "test:ui": "vitest --ui",
