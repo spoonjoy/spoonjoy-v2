@@ -4,6 +4,7 @@ import { getCloudflareEnv, getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
 import { unlinkOAuthAccount } from "~/lib/oauth-user.server";
 import { hashPassword, verifyPassword } from "~/lib/auth.server";
+import { listUserPasskeys, removeUserPasskey } from "~/lib/webauthn-route.server";
 import {
   deleteStoredImage,
   hasUploadedImageFile,
@@ -37,6 +38,12 @@ export interface AccountSettingsLoaderData {
       provider: string;
       providerUsername: string;
     }>;
+    passkeys: Array<{
+      id: string;
+      name: string | null;
+      transports: string | null;
+      createdAt: string | null;
+    }>;
   };
   notifications: {
     pushSubscribed: boolean;
@@ -66,7 +73,8 @@ export interface AccountSettingsActionResult {
     | "no_password_set"
     | "same_password"
     | "password_already_set"
-    | "no_password_to_remove";
+    | "no_password_to_remove"
+    | "passkey_not_found";
   message?: string;
   fieldErrors?: {
     email?: string;
@@ -125,6 +133,7 @@ export async function loadAccountSettings({
     throw new Response("User not found", { status: 404 });
   }
 
+  const passkeys = await listUserPasskeys(database, userId);
   const pushCount = await database.pushSubscription.count({ where: { userId } });
   const prefRow = await database.notificationPreference.findUnique({
     where: { userId },
@@ -146,6 +155,12 @@ export async function loadAccountSettings({
       hasPassword: user.hashedPassword !== null,
       photoUrl: user.photoUrl,
       oauthAccounts: user.OAuth,
+      passkeys: passkeys.map((passkey) => ({
+        id: passkey.id,
+        name: passkey.name,
+        transports: passkey.transports,
+        createdAt: passkey.createdAt ? passkey.createdAt.toISOString() : null,
+      })),
     },
     notifications: {
       pushSubscribed: pushCount > 0,
@@ -597,6 +612,65 @@ export async function handleAccountSettingsAction({
     return {
       success: true,
       message: "Password removed successfully",
+    };
+  }
+
+  if (intent === "removePasskey") {
+    const credentialId = formData.get("credentialId")?.toString() || "";
+
+    if (!credentialId) {
+      return {
+        success: false,
+        error: "validation_error",
+        message: "Missing passkey identifier",
+      };
+    }
+
+    // Don't let the user delete their last remaining way to sign in. A passkey
+    // counts as an auth method, so removal is allowed only when the user keeps a
+    // password, a linked OAuth account, or at least one other passkey.
+    const user = await database.user.findUnique({
+      where: { id: userId },
+      select: {
+        hashedPassword: true,
+        _count: { select: { OAuth: true, credentials: true } },
+      },
+    });
+
+    /* istanbul ignore next -- @preserve user should exist if session is valid */
+    if (!user) {
+      return {
+        success: false,
+        error: "validation_error",
+        message: "User not found",
+      };
+    }
+
+    const hasOtherAuthMethod =
+      user.hashedPassword !== null ||
+      user._count.OAuth > 0 ||
+      user._count.credentials > 1;
+
+    if (!hasOtherAuthMethod) {
+      return {
+        success: false,
+        error: "last_auth_method",
+        message: "Cannot remove your last passkey. You must have at least one way to log in.",
+      };
+    }
+
+    const { removed } = await removeUserPasskey(database, userId, credentialId);
+    if (!removed) {
+      return {
+        success: false,
+        error: "passkey_not_found",
+        message: "That passkey could not be found",
+      };
+    }
+
+    return {
+      success: true,
+      message: "Passkey removed successfully",
     };
   }
 

@@ -89,12 +89,17 @@ model AgentConnectionRequest {
 }
 
 model UserCredential {
-  id         String  @id
+  id         String    @id
   userId     String
-  user       User    @relation(fields: [userId], references: [id])
+  user       User      @relation(fields: [userId], references: [id])
   publicKey  Bytes
   transports String?
   counter    BigInt
+  // Optional user-given label + enrollment time, for passkey management in
+  // account settings. Nullable so existing rows and the ADD COLUMN migration
+  // stay trivial; new passkeys always set createdAt.
+  name       String?
+  createdAt  DateTime?
 
   @@index([userId])
 }

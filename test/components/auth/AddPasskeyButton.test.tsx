@@ -30,6 +30,32 @@ describe("AddPasskeyButton", () => {
     expect(onAdded).toHaveBeenCalledTimes(1);
   });
 
+  it("forwards a trimmed name and clears the field on success", async () => {
+    vi.mocked(registerPasskey).mockResolvedValue({ ok: true });
+    render(<AddPasskeyButton supportsPasskeys />);
+
+    const user = userEvent.setup();
+    const nameInput = screen.getByLabelText(/name \(optional\)/i);
+    await user.type(nameInput, "  MacBook  ");
+    expect(nameInput).toHaveValue("  MacBook  ");
+
+    await user.click(screen.getByRole("button", { name: /add a passkey/i }));
+
+    expect(registerPasskey).toHaveBeenCalledWith({ name: "MacBook" });
+    expect(await screen.findByRole("status")).toBeInTheDocument();
+    expect(nameInput).toHaveValue("");
+  });
+
+  it("sends an undefined name when the field is left blank", async () => {
+    vi.mocked(registerPasskey).mockResolvedValue({ ok: true });
+    render(<AddPasskeyButton supportsPasskeys />);
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: /add a passkey/i }));
+
+    expect(registerPasskey).toHaveBeenCalledWith({ name: undefined });
+  });
+
   it("shows an error when registration fails", async () => {
     vi.mocked(registerPasskey).mockResolvedValue({ ok: false, error: "bad attestation" });
     render(<AddPasskeyButton supportsPasskeys />);

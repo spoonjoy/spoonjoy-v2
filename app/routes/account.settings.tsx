@@ -1,5 +1,5 @@
 import type { Route } from "./+types/account.settings";
-import { useLoaderData, useActionData, Form } from "react-router";
+import { useLoaderData, useActionData, useRevalidator, Form } from "react-router";
 import { useState, useRef, useEffect } from "react";
 import {
   handleAccountSettingsAction,
@@ -30,6 +30,17 @@ const OAUTH_PROVIDERS = ["google", "github", "apple"] as const;
 
 function capitalizeProvider(provider: string): string {
   return provider.charAt(0).toUpperCase() + provider.slice(1);
+}
+
+// UTC so the rendered date is stable regardless of where the worker (or test
+// runner) executes.
+function formatPasskeyDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
 }
 
 function ProfilePhotoUpload({ photoUrl }: { photoUrl: string | null }) {
@@ -92,8 +103,10 @@ function ProfilePhotoUpload({ photoUrl }: { photoUrl: string | null }) {
 export default function AccountSettings() {
   const { user, oauthError, notifications } = useLoaderData<AccountSettingsLoaderData>();
   const actionData = useActionData<AccountSettingsActionResult>();
+  const revalidator = useRevalidator();
   const [isEditing, setIsEditing] = useState(false);
   const [unlinkingProvider, setUnlinkingProvider] = useState<string | null>(null);
+  const [removingPasskeyId, setRemovingPasskeyId] = useState<string | null>(null);
   const [passwordFormState, setPasswordFormState] = useState<"idle" | "change" | "set" | "removeConfirm">("idle");
 
   // Restore form state when there are field errors (e.g., after form submission fails)
@@ -114,6 +127,11 @@ export default function AccountSettings() {
 
   // Determine if user can remove password (has OAuth linked)
   const canRemovePassword = user.oauthAccounts.length > 0;
+
+  // A passkey can be removed only if the user keeps another way to sign in:
+  // a password, a linked OAuth account, or at least one other passkey.
+  const canRemovePasskey =
+    user.hasPassword || user.oauthAccounts.length > 0 || user.passkeys.length > 1;
 
   return (
     <CookbookPage>
@@ -299,6 +317,75 @@ export default function AccountSettings() {
         </div>
       </SettingsPanel>
 
+      {/* Passkeys Section */}
+      <SettingsPanel testId="passkeys-section" title="Passkeys">
+        <Text className="mt-1">
+          Sign in without a password using your device's biometrics or a security key.
+        </Text>
+
+        {!canRemovePasskey && user.passkeys.length > 0 && (
+          <Text className="mt-3 border-y border-[var(--sj-brass)] bg-[color-mix(in_srgb,var(--sj-brass)_12%,var(--sj-panel-solid))] py-3 text-sm text-[var(--sj-brass)]">
+            This passkey is your only way to sign in. Add a password or another passkey before removing it.
+          </Text>
+        )}
+
+        {user.passkeys.length > 0 && (
+          <div className="mt-4 space-y-4">
+            {user.passkeys.map((passkey) => {
+              const label = passkey.name || "Passkey";
+              const isConfirming = removingPasskeyId === passkey.id;
+
+              return (
+                <div
+                  key={passkey.id}
+                  className="flex flex-col gap-3 border-b border-[var(--sj-border)] py-4 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div>
+                    <Text className="font-medium text-[var(--sj-ink)]">{label}</Text>
+                    {passkey.createdAt && (
+                      <Text className="text-sm">Added {formatPasskeyDate(passkey.createdAt)}</Text>
+                    )}
+                  </div>
+                  {isConfirming ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Text className="text-sm">Are you sure?</Text>
+                      <Form method="post" className="inline">
+                        <input type="hidden" name="intent" value="removePasskey" />
+                        <input type="hidden" name="credentialId" value={passkey.id} />
+                        <Button
+                          type="submit"
+                          variant="destructive"
+                          aria-label={`Confirm remove ${label}`}
+                        >
+                          Confirm
+                        </Button>
+                      </Form>
+                      <Button type="button" plain onClick={() => setRemovingPasskeyId(null)}>
+                        Cancel
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      type="button"
+                      plain
+                      aria-label={`Remove ${label}`}
+                      disabled={!canRemovePasskey}
+                      onClick={() => setRemovingPasskeyId(passkey.id)}
+                    >
+                      Remove
+                    </Button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="mt-4">
+          <AddPasskeyButton onAdded={revalidator.revalidate} />
+        </div>
+      </SettingsPanel>
+
       {/* Password Section */}
       <SettingsPanel testId="password-section" title="Password">
         <Text className="mt-1">A first-class fallback for any client, browser, or future importer.</Text>
@@ -429,16 +516,6 @@ export default function AccountSettings() {
               </div>
             )
           )}
-        </div>
-      </SettingsPanel>
-
-      {/* Passkeys Section */}
-      <SettingsPanel testId="passkeys-section" title="Passkeys">
-        <Text className="mt-1">
-          Add a passkey to sign in without a password using your device's biometrics or security key.
-        </Text>
-        <div className="mt-4">
-          <AddPasskeyButton />
         </div>
       </SettingsPanel>
 

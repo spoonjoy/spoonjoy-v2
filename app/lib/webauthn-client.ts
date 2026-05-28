@@ -19,6 +19,8 @@ export type PasskeyResult =
   | { ok: false; error: string };
 
 export interface RegisterPasskeyDeps {
+  /** Optional user-given label for the new passkey. */
+  name?: string;
   fetchImpl?: typeof fetch;
   startRegistration?: typeof defaultStartRegistration;
 }
@@ -51,7 +53,7 @@ async function readError(response: Response): Promise<string> {
  * Register a new passkey for the logged-in user.
  * 1. fetch registration options
  * 2. prompt the authenticator (startRegistration)
- * 3. post the attestation for verification
+ * 3. post the attestation (+ optional name) for verification
  */
 export async function registerPasskey(deps: RegisterPasskeyDeps = {}): Promise<PasskeyResult> {
   const fetchImpl = deps.fetchImpl ?? fetch;
@@ -73,7 +75,7 @@ export async function registerPasskey(deps: RegisterPasskeyDeps = {}): Promise<P
   const verifyResponse = await fetchImpl("/auth/webauthn/register/verify", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ response: attestation }),
+    body: JSON.stringify({ response: attestation, name: deps.name }),
   });
   if (!verifyResponse.ok) {
     return { ok: false, error: await readError(verifyResponse) };

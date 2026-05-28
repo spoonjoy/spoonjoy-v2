@@ -81,6 +81,7 @@ export async function finishRegistration(
   userId: string,
   config: WebAuthnConfig,
   response: RegistrationResponseJSON,
+  name?: string | null,
 ): Promise<{ verified: true; credentialId: string }> {
   const user = await db.user.findUnique({
     where: { id: userId },
@@ -110,6 +111,7 @@ export async function finishRegistration(
 
   // Persist (upsert so re-registering the same authenticator is idempotent),
   // then clear the one-time challenge.
+  const trimmedName = typeof name === "string" ? name.trim() : "";
   await db.userCredential.upsert({
     where: { id: credential.id },
     create: {
@@ -118,6 +120,8 @@ export async function finishRegistration(
       publicKey,
       counter: credential.counter,
       transports: credential.transports,
+      name: trimmedName || null,
+      createdAt: new Date(),
     },
     update: {
       publicKey,
@@ -217,6 +221,46 @@ export async function finishAuthentication(
   });
 
   return { verified: true, userId: user.id };
+}
+
+export interface PasskeySummary {
+  id: string;
+  name: string | null;
+  transports: string | null;
+  createdAt: Date | null;
+}
+
+/** List a user's enrolled passkeys for account-settings management (newest first). */
+export async function listUserPasskeys(
+  db: PrismaClient,
+  userId: string,
+): Promise<PasskeySummary[]> {
+  const rows = await db.userCredential.findMany({
+    where: { userId },
+    select: { id: true, name: true, transports: true, createdAt: true },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+  });
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name ?? null,
+    transports: row.transports ?? null,
+    createdAt: row.createdAt ?? null,
+  }));
+}
+
+/**
+ * Remove one of a user's passkeys. Scoped by userId so a posted credential id
+ * cannot delete another user's passkey. Returns whether a row was removed.
+ */
+export async function removeUserPasskey(
+  db: PrismaClient,
+  userId: string,
+  credentialId: string,
+): Promise<{ removed: boolean }> {
+  const result = await db.userCredential.deleteMany({
+    where: { id: credentialId, userId },
+  });
+  return { removed: result.count > 0 };
 }
 
 /** Derive WebAuthn config from the request's own origin (matches what the browser sees). */
