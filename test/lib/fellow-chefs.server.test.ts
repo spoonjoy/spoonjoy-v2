@@ -287,7 +287,9 @@ describe("fellow-chefs.server", () => {
       const clamped = await listFellowChefs(db, viewer.id, { limit: 9999 });
       expect(clamped.rows).toHaveLength(100);
       expect(clamped.total).toBe(105);
-    });
+      // Seeds 105 users + recipes + spoons sequentially; the default 5s timeout
+      // is tight under single-worker CI load, so give this case more room.
+    }, 30000);
 
     it("returns empty rows when offset is past total but total stays correct", async () => {
       const viewer = await makeUser();
