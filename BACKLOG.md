@@ -1060,7 +1060,7 @@ Execution plan (atomic PRs, top-down):
 
 - **WebAuthn e2e — done (#120, PR-J6):** see SJ-016.
 - **Auth-endpoint rate limiting — done:** dedicated `AUTH_IP_RATE_LIMITER` binding (20/60s per IP, `namespace_id` 1003) applied to login, signup, and the passkey authenticate options/verify endpoints via `enforceAuthRateLimit`. Throttle runs before any password work so brute-force can't burn bcrypt cycles. Fails open (no binding ⇒ allowed), so local/dev/CI are unaffected; only prod enforces.
-- **Security response headers + report-only CSP** — planned.
+- **Security response headers — done:** baseline headers on every Worker response via `app/lib/security-headers.server.ts` wired into `workers/app.ts` (HSTS, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`). Permissions-Policy leaves `publickey-credentials` alone so passkeys keep working. A full CSP (needs nonce/hash for SSR hydration + a report sink) is deliberately split out as a future item.
 - **Session/cookie hardening** — planned.
 - **e2e breadth** (public sharing, agent device-code approval; audit existing recipe/cookbook/shopping/search/spoon specs for gaps) — planned.
 - **Accessibility** (axe assertions in e2e + keyboard/focus) — planned.

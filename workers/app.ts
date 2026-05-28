@@ -1,5 +1,6 @@
 import { createRequestHandler } from "react-router";
 import { canonicalizeRequestUrlForHost } from "../app/lib/canonical-host.server";
+import { withSecurityHeaders } from "../app/lib/security-headers.server";
 import {
   captureException,
   resolvePostHogServerConfig,
@@ -21,13 +22,14 @@ export default {
       canonicalizeRequestUrlForHost(request.url, request.headers.get("Host"));
 
     if (canonicalUrl) {
-      return Response.redirect(canonicalUrl.toString(), 308);
+      return withSecurityHeaders(Response.redirect(canonicalUrl.toString(), 308));
     }
 
     try {
-      return await requestHandler(request, {
+      const response = await requestHandler(request, {
         cloudflare: { env, ctx },
       });
+      return withSecurityHeaders(response);
     } catch (error) {
       // Outer catch: errors that escaped React Router's onError (e.g. thrown
       // before the response stream started, or from a non-route boundary).
