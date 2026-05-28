@@ -1015,17 +1015,21 @@ Completion notes:
 
 Priority: `P2`
 Lane: `mcp`, `connector`, `auth`
-Status: `proposed`
+Status: `in-progress` (server built + deployed; pending real claude.ai verification)
 
 Problem: The `/mcp` connector (`SJ-039`) authenticates with a bearer token, which Claude Code supports via `--header`. claude.ai / Claude Desktop connectors expect OAuth 2.1 (protected-resource + authorization-server metadata, dynamic client registration, PKCE auth-code flow, consent). Implementing it would make Spoonjoy a one-click connector on claude.ai.
 
-Acceptance criteria:
+Decision (token model): access tokens are **long-lived `ApiCredential`s** (no refresh tokens) per Ari — the authorization code is the only short-lived secret.
 
-- `/.well-known/oauth-protected-resource` + `/.well-known/oauth-authorization-server` metadata.
-- `/authorize` (reusing Spoonjoy login + a consent step), `/token`, and dynamic client registration.
-- Access tokens issued as owner-scoped `ApiCredential`s; refresh-token handling.
-- Reuse the existing device-code/agent-connection consent backend where possible.
-- 100% coverage; verified against Claude's connector OAuth flow.
+Built (3 PRs):
+
+- **Core (#123):** `OAuthClient` + `OAuthAuthCode` models (migration 0013) and `oauth-server.server.ts` — DCR with redirect-URI validation, PKCE-S256 authorization-code lifecycle, scope normalization.
+- **Routes (#124):** `POST /oauth/register`, `GET/POST /oauth/authorize` (login gate + consent), `POST /oauth/token` (mints an `ApiCredential`).
+- **Discovery:** `/.well-known/oauth-authorization-server` (RFC 8414) + `/.well-known/oauth-protected-resource` (RFC 9728); `/mcp` returns `401` + `WWW-Authenticate` for a protected `tools/call` without a token, so the connector starts the flow. Docs in `docs/claude-connector.md`.
+
+Remaining:
+
+- **Real claude.ai verification** — only Ari can add the connector + authorize in the browser; iterate on whatever Claude's flow reports.
 
 ### SJ-041 - SpoonDock Responsive Audit (down to iPhone 5 / 320px)
 

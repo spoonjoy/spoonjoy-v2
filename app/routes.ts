@@ -47,6 +47,8 @@ export default [
   route("oauth/register", "routes/oauth.register.ts"),
   route("oauth/authorize", "routes/oauth.authorize.tsx"),
   route("oauth/token", "routes/oauth.token.ts"),
+  route(".well-known/oauth-authorization-server", "routes/well-known.oauth-authorization-server.ts"),
+  route(".well-known/oauth-protected-resource", "routes/well-known.oauth-protected-resource.ts"),
   route("photos/*", "routes/photos.$.tsx"),
   route(".well-known/appspecific/com.chrome.devtools.json", "routes/devtools-well-known.tsx"),
   route("*", "routes/$.tsx"),

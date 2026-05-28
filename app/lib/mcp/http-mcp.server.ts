@@ -24,8 +24,10 @@ import {
 } from "~/lib/mcp/spoonjoy-tools.server";
 import {
   buildSpoonjoyApiContext,
+  PUBLIC_BOOTSTRAP_OPERATIONS,
   resolveApiPrincipal,
 } from "~/lib/spoonjoy-api-request.server";
+import { protectedResourceMetadataUrl } from "~/lib/oauth-metadata.server";
 import {
   enforceRateLimit,
   rateLimitedResponse,
@@ -56,6 +58,54 @@ function jsonResponse(payload: unknown, status = 200): Response {
     status,
     headers: { "Content-Type": "application/json" },
   });
+}
+
+/**
+ * If this message is a `tools/call` for a protected tool and the caller has no
+ * valid principal, answer with an HTTP 401 carrying a `WWW-Authenticate` hint
+ * at the protected-resource metadata. That's the signal an MCP client (e.g. the
+ * claude.ai connector) uses to start the OAuth flow. `initialize`, `tools/list`,
+ * and the public bootstrap tools stay open, and an authenticated caller (the
+ * existing Claude Code bearer-token connection) is never challenged.
+ */
+async function authChallengeIfNeeded(
+  body: string,
+  request: Request,
+  db: PrismaClientType,
+  cloudflareEnv: CloudflareEnvLike | null | undefined,
+): Promise<Response | null> {
+  let parsed: { method?: unknown; params?: { name?: unknown } };
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return null; // let the JSON-RPC layer report the parse error
+  }
+  if (parsed?.method !== "tools/call") return null;
+
+  const toolName = parsed.params?.name;
+  if (typeof toolName !== "string" || PUBLIC_BOOTSTRAP_OPERATIONS.has(toolName)) {
+    return null;
+  }
+
+  let principal = null;
+  try {
+    principal = await resolveApiPrincipal(db, request, cloudflareEnv, toolName);
+  } catch {
+    principal = null; // an invalid token on a protected op also warrants a challenge
+  }
+  if (principal) return null;
+
+  const origin = new URL(request.url).origin;
+  return new Response(
+    JSON.stringify({ error: "unauthorized", message: "Authentication required." }),
+    {
+      status: 401,
+      headers: {
+        "Content-Type": "application/json",
+        "WWW-Authenticate": `Bearer resource_metadata="${protectedResourceMetadataUrl(origin)}"`,
+      },
+    },
+  );
 }
 
 export async function handleMcpHttpRequest(params: HandleMcpHttpRequestParams): Promise<Response> {
@@ -91,6 +141,10 @@ export async function handleMcpHttpRequest(params: HandleMcpHttpRequestParams): 
   };
 
   const body = await request.text();
+
+  const challenge = await authChallengeIfNeeded(body, request, db, cloudflareEnv);
+  if (challenge) return challenge;
+
   const response = await handleJsonRpcLine(body, router);
 
   // Notifications (no id) produce no JSON-RPC response — ack with 202.

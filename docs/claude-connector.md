@@ -27,6 +27,17 @@ The connector authenticates with an owner-scoped `sj_` API token via the standar
 
 You can also mint a token directly from the API while signed in: `POST /api/tokens` with `{ "name": "Claude" }`.
 
+## Auth: OAuth 2.1 (claude.ai / Claude Desktop one-click)
+
+For connectors that expect OAuth, Spoonjoy is also a minimal OAuth 2.1 authorization server, so adding the connector in claude.ai runs a normal sign-in + consent instead of pasting a token.
+
+- **Discovery:** `GET /.well-known/oauth-authorization-server` (RFC 8414) and `GET /.well-known/oauth-protected-resource` (RFC 9728). A `tools/call` for a protected tool without a valid token returns `401` with `WWW-Authenticate: Bearer resource_metadata="…/.well-known/oauth-protected-resource"`, which is the client's cue to start the flow.
+- **Registration:** `POST /oauth/register` — Dynamic Client Registration (RFC 7591); public client, `token_endpoint_auth_method: none`.
+- **Authorize:** `GET /oauth/authorize` — PKCE (S256) only. Signs the user into Spoonjoy if needed, then shows a consent screen for the `kitchen:read` / `kitchen:write` scopes.
+- **Token:** `POST /oauth/token` — `authorization_code` grant. The issued access token is a normal Spoonjoy API credential (long-lived, revocable from account settings); there are no refresh tokens.
+
+The access token is the same kind of bearer token used above, so it flows through the identical per-tool, owner-scoped authorization.
+
 ## Install in Claude Code
 
 ```bash
@@ -60,7 +71,6 @@ The connector exposes the same tools as the [Ouroboros stdio MCP integration](./
 - The endpoint is rate-limited before authentication, so an invalid or leaked token cannot burn database/AI quota.
 - Tokens are stored hashed (SHA-256); the secret is shown once.
 
-## Not yet supported (tracked as SJ-040)
+## Not yet supported
 
-- One-click OAuth 2.1 for **claude.ai / Claude Desktop** connectors (dynamic client registration + consent). Until then, claude.ai users supply a bearer token; Claude Code is fully supported today via `--header`.
 - SSE streaming and JSON-RPC batching (not needed for request/response tool calls).

@@ -85,15 +85,34 @@ describe("handleMcpHttpRequest", () => {
     expect(JSON.parse(body.result.content[0].text)).toMatchObject({ ok: true });
   });
 
-  it("rejects a protected tool/call without auth as a JSON-RPC error", async () => {
+  it("challenges a protected tool/call without auth (401 + WWW-Authenticate)", async () => {
     const response = await handleMcpHttpRequest({
       request: rpcRequest(init(4, "tools/call", { name: "get_shopping_list", arguments: {} })),
       db,
     });
+    expect(response.status).toBe(401);
+    expect(response.headers.get("WWW-Authenticate")).toContain(
+      'resource_metadata="https://spoonjoy.app/.well-known/oauth-protected-resource"',
+    );
+  });
+
+  it("challenges a protected tool/call carrying an invalid token", async () => {
+    const response = await handleMcpHttpRequest({
+      request: rpcRequest(init(4, "tools/call", { name: "get_shopping_list", arguments: {} }), {
+        Authorization: "Bearer sj_not_a_real_token",
+      }),
+      db,
+    });
+    expect(response.status).toBe(401);
+    expect(response.headers.get("WWW-Authenticate")).toContain("Bearer");
+  });
+
+  it("does not challenge a malformed tool/call with no tool name", async () => {
+    const response = await handleMcpHttpRequest({
+      request: rpcRequest(init(4, "tools/call", { arguments: {} })),
+      db,
+    });
     expect(response.status).toBe(200);
-    const body = await response.json() as { error?: { message: string }; result?: unknown };
-    expect(body.result).toBeUndefined();
-    expect(body.error?.message).toMatch(/auth/i);
   });
 
   it("dispatches a protected tool/call with a valid bearer token", async () => {
