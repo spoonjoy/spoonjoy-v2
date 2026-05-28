@@ -10,15 +10,17 @@
 
 import type { PrismaClient as PrismaClientType } from "@prisma/client";
 import { getUserId } from "~/lib/session.server";
-import { createApiCredential } from "~/lib/api-auth.server";
 import {
   clientAllowsRedirect,
   consumeAuthorizationCode,
   createAuthorizationCode,
   getOAuthClient,
+  issueConnectorTokens,
   normalizeScope,
   OAuthError,
   registerOAuthClient,
+  rotateConnectorTokens,
+  type IssuedConnectorTokens,
 } from "~/lib/oauth-server.server";
 
 type Database = PrismaClientType;
@@ -74,7 +76,21 @@ export async function handleOAuthRegister(request: Request, db: Database): Promi
   }
 }
 
-/** RFC 6749 §4.1.3 token endpoint (authorization_code grant, PKCE, public client). */
+function tokenResponse(tokens: IssuedConnectorTokens): Response {
+  return Response.json({
+    access_token: tokens.accessToken,
+    refresh_token: tokens.refreshToken,
+    token_type: "Bearer",
+    expires_in: tokens.expiresIn,
+    scope: tokens.scope,
+  });
+}
+
+/**
+ * RFC 6749 token endpoint. Supports the `authorization_code` grant (PKCE,
+ * public client) and the `refresh_token` grant (rotating). Both return a fresh
+ * access token + refresh token.
+ */
 export async function handleOAuthToken(
   request: Request,
   db: Database,
@@ -91,28 +107,38 @@ export async function handleOAuthToken(
     return Response.json({ error: "invalid_request", error_description: "Invalid form body" }, { status: 400 });
   }
   const field = (name: string) => form.get(name)?.toString() ?? "";
-
   const grantType = field("grant_type");
-  if (grantType !== "authorization_code") {
-    return Response.json(
-      { error: "unsupported_grant_type", error_description: "Only authorization_code is supported" },
-      { status: 400 },
-    );
-  }
 
   try {
-    const grant = await consumeAuthorizationCode(db, {
-      code: field("code"),
-      clientId: field("client_id"),
-      redirectUri: field("redirect_uri"),
-      codeVerifier: field("code_verifier"),
-    });
-    const { token } = await createApiCredential(db, grant.userId, "Claude connector (OAuth)");
-    return Response.json({
-      access_token: token,
-      token_type: "Bearer",
-      scope: grant.scope,
-    });
+    if (grantType === "authorization_code") {
+      const grant = await consumeAuthorizationCode(db, {
+        code: field("code"),
+        clientId: field("client_id"),
+        redirectUri: field("redirect_uri"),
+        codeVerifier: field("code_verifier"),
+      });
+      return tokenResponse(
+        await issueConnectorTokens(db, {
+          userId: grant.userId,
+          clientId: field("client_id"),
+          scope: grant.scope,
+        }),
+      );
+    }
+
+    if (grantType === "refresh_token") {
+      return tokenResponse(
+        await rotateConnectorTokens(db, {
+          refreshToken: field("refresh_token"),
+          clientId: field("client_id"),
+        }),
+      );
+    }
+
+    return Response.json(
+      { error: "unsupported_grant_type", error_description: "Supported grants: authorization_code, refresh_token" },
+      { status: 400 },
+    );
   } catch (error) {
     return oauthErrorResponse(error);
   }

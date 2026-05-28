@@ -6,9 +6,11 @@ import {
   DEFAULT_SCOPE,
   getOAuthClient,
   isValidRedirectUri,
+  issueConnectorTokens,
   normalizeScope,
   OAuthError,
   registerOAuthClient,
+  rotateConnectorTokens,
   verifyPkceS256,
 } from "~/lib/oauth-server.server";
 import { getLocalDb } from "~/lib/db.server";
@@ -237,6 +239,74 @@ describe("authorization code lifecycle", () => {
 
     await expect(
       consumeAuthorizationCode(stub, { code: "oac_race", clientId, redirectUri, codeVerifier: VERIFIER }),
+    ).rejects.toMatchObject({ code: "invalid_grant" });
+  });
+});
+
+describe("connector token issuance + rotation", () => {
+  let db: Awaited<ReturnType<typeof getLocalDb>>;
+  let userId: string;
+  const clientId = "client-tok";
+
+  beforeEach(async () => {
+    await cleanupDatabase();
+    db = await getLocalDb();
+    userId = (await db.user.create({ data: createTestUser() })).id;
+  });
+  afterEach(async () => {
+    await cleanupDatabase();
+  });
+
+  it("issues an expiring access token plus a refresh token", async () => {
+    const tokens = await issueConnectorTokens(db, { userId, clientId, scope: "kitchen:read" });
+    expect(tokens.accessToken).toMatch(/^/);
+    expect(tokens.refreshToken).toMatch(/^ort_/);
+    expect(tokens.expiresIn).toBeGreaterThan(0);
+    expect(tokens.scope).toBe("kitchen:read");
+
+    const credential = await db.apiCredential.findFirst({ where: { userId } });
+    expect(credential?.expiresAt).toBeInstanceOf(Date);
+    expect(await db.oAuthRefreshToken.count({ where: { userId } })).toBe(1);
+  });
+
+  it("rotates a refresh token, revoking the old one", async () => {
+    const first = await issueConnectorTokens(db, { userId, clientId, scope: "kitchen:read" });
+    const rotated = await rotateConnectorTokens(db, { refreshToken: first.refreshToken, clientId });
+    expect(rotated.refreshToken).not.toBe(first.refreshToken);
+    // a second use of the original refresh token is rejected
+    await expect(
+      rotateConnectorTokens(db, { refreshToken: first.refreshToken, clientId }),
+    ).rejects.toMatchObject({ code: "invalid_grant" });
+  });
+
+  it("rejects an empty refresh token", async () => {
+    await expect(
+      rotateConnectorTokens(db, { refreshToken: "", clientId }),
+    ).rejects.toMatchObject({ code: "invalid_grant" });
+  });
+
+  it("rejects an unknown refresh token", async () => {
+    await expect(
+      rotateConnectorTokens(db, { refreshToken: "ort_missing", clientId }),
+    ).rejects.toMatchObject({ code: "invalid_grant" });
+  });
+
+  it("rejects a refresh token presented by a different client", async () => {
+    const first = await issueConnectorTokens(db, { userId, clientId, scope: "kitchen:read" });
+    await expect(
+      rotateConnectorTokens(db, { refreshToken: first.refreshToken, clientId: "someone-else" }),
+    ).rejects.toMatchObject({ code: "invalid_grant" });
+  });
+
+  it("treats a lost rotation race as already-used", async () => {
+    const stub = {
+      oAuthRefreshToken: {
+        findUnique: async () => ({ id: "race", revokedAt: null, clientId, userId, scope: "kitchen:read" }),
+        updateMany: async () => ({ count: 0 }),
+      },
+    } as never;
+    await expect(
+      rotateConnectorTokens(stub, { refreshToken: "ort_race", clientId }),
     ).rejects.toMatchObject({ code: "invalid_grant" });
   });
 });
