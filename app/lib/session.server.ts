@@ -122,20 +122,29 @@ export async function requireUserId(
   return userId;
 }
 
+// Helper to mint a `__session` Set-Cookie string for a user, without
+// building a Response. Useful when the caller wants to attach the session
+// to a non-redirect response (e.g. a JSON passkey-login response).
+export async function createUserSessionCookie(
+  userId: string,
+  env?: SessionEnv | null
+): Promise<string> {
+  const storage = sessionStorageForEnv(env);
+  const session = await storage.getSession();
+  session.set("userId", userId);
+  return storage.commitSession(session);
+}
+
 // Helper to create user session
 export async function createUserSession(
   userId: string,
   redirectTo: string,
   env?: SessionEnv | null
 ) {
-  const storage = sessionStorageForEnv(env);
-  const session = await storage.getSession();
-  session.set("userId", userId);
-
   return new Response(null, {
     status: 302,
     headers: {
-      "Set-Cookie": await storage.commitSession(session),
+      "Set-Cookie": await createUserSessionCookie(userId, env),
       Location: sanitizeSessionRedirect(redirectTo),
     },
   });
