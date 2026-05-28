@@ -39,9 +39,22 @@ declare global {
     ): Response | Promise<Response>;
   }
 
+  /**
+   * Cloudflare's native Workers Rate Limiting binding (sliding window).
+   * Configured in wrangler.json under `unsafe.bindings` until the binding
+   * leaves preview.
+   */
+  interface RateLimitBinding {
+    limit(input: { key: string }): Promise<{ success: boolean }>;
+  }
+
   interface Env {
     DB?: D1Database;
     PHOTOS?: R2Bucket;
+    /** Sliding-window throttle for authenticated bearer-token traffic. */
+    API_TOKEN_RATE_LIMITER?: RateLimitBinding;
+    /** Sliding-window throttle for anonymous IP-based traffic to /api/*. */
+    API_IP_RATE_LIMITER?: RateLimitBinding;
     SESSION_SECRET?: string;
     SPOONJOY_BASE_URL?: string;
     OPENAI_API_KEY?: string;

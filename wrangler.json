@@ -22,7 +22,24 @@
       "bucket_name": "spoonjoy-photos"
     }
   ],
-  
+
+  "unsafe": {
+    "bindings": [
+      {
+        "name": "API_TOKEN_RATE_LIMITER",
+        "type": "ratelimit",
+        "namespace_id": "1001",
+        "simple": { "limit": 120, "period": 60 }
+      },
+      {
+        "name": "API_IP_RATE_LIMITER",
+        "type": "ratelimit",
+        "namespace_id": "1002",
+        "simple": { "limit": 60, "period": 60 }
+      }
+    ]
+  },
+
   "vars": {
     "NODE_ENV": "production",
     "SPOONJOY_BASE_URL": "https://spoonjoy.app"

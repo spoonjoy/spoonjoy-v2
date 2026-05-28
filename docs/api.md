@@ -22,6 +22,27 @@ The raw token is returned once. Spoonjoy stores only a SHA-256 hash plus a short
 
 Owner-scoped write/read-private operations derive the owner from the authenticated principal. If a bearer-authenticated request includes a different `ownerEmail`, Spoonjoy rejects it with `403` instead of allowing cross-owner access.
 
+## Rate Limiting
+
+Every `/api/*` request runs through Cloudflare's native sliding-window rate limiter before authentication:
+
+| Scope | Key | Window | Limit |
+| --- | --- | --- | --- |
+| Bearer token | SHA-256 of the token | 60 seconds | 120 requests |
+| IP (anonymous) | `CF-Connecting-IP` | 60 seconds | 60 requests |
+
+When a request exceeds the limit, the API returns:
+
+```http
+HTTP/1.1 429 Too Many Requests
+Retry-After: 60
+Content-Type: application/json
+
+{ "error": "rate_limited", "message": "Too many requests. Try again later.", "retryAfterSeconds": 60 }
+```
+
+The check runs before token validation so invalid-token requests cannot bypass the limit. CORS headers are preserved on the 429 response so browser clients can read it.
+
 ## Response Shape
 
 Successful responses:

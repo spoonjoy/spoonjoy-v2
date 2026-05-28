@@ -1,5 +1,6 @@
 import type { Route } from "./+types/api.$";
 import { ApiAuthError, authenticateApiRequest } from "~/lib/api-auth.server";
+import { enforceRateLimit, rateLimitedResponse } from "~/lib/rate-limit.server";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { callSpoonjoyApiOperation, listSpoonjoyApiOperations } from "~/lib/spoonjoy-api.server";
 
@@ -140,6 +141,21 @@ async function handleApiRequest({ request, context, params }: Route.LoaderArgs |
     return new Response(null, { status: 204, headers: API_HEADERS });
   }
 
+  const cfEnv = context.cloudflare?.env;
+  const rateLimit = await enforceRateLimit({
+    authorization: request.headers.get("Authorization"),
+    ip: request.headers.get("CF-Connecting-IP"),
+    tokenLimiter: cfEnv?.API_TOKEN_RATE_LIMITER,
+    ipLimiter: cfEnv?.API_IP_RATE_LIMITER,
+  });
+  if (!rateLimit.allowed) {
+    const response = rateLimitedResponse(rateLimit.retryAfterSeconds);
+    for (const [k, v] of Object.entries(API_HEADERS)) {
+      response.headers.set(k, v);
+    }
+    return response;
+  }
+
   try {
     const url = new URL(request.url);
     const splat = params["*"] ?? "";
@@ -182,7 +198,6 @@ async function handleApiRequest({ request, context, params }: Route.LoaderArgs |
     const cloudflare = context.cloudflare;
     const ctx = cloudflare?.ctx;
     const waitUntil = ctx?.waitUntil ? ctx.waitUntil.bind(ctx) : undefined;
-    const cfEnv = cloudflare?.env;
 
     const data = await callSpoonjoyApiOperation(dispatch.operation, dispatch.args, {
       db,

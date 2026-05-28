@@ -222,4 +222,30 @@ describe("Spoonjoy REST API route", () => {
     const missingEndpoint = await loader(routeArgs(new UndiciRequest("http://localhost/api/nope"), "nope"));
     await expect(readJson(missingEndpoint)).resolves.toMatchObject({ ok: false, error: { status: 404 } });
   });
+
+  it("returns 429 with Retry-After when the rate limiter denies the request", async () => {
+    const env = {
+      API_TOKEN_RATE_LIMITER: {
+        limit: async () => ({ success: false }),
+      },
+    };
+    const request = new UndiciRequest("http://localhost/api/health", {
+      headers: { Authorization: "Bearer sj_throttled_token" },
+    });
+    const response = await loader({
+      request: request as any,
+      params: { "*": "health" },
+      context: { cloudflare: { env } },
+    } as any);
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get("Retry-After")).toBe("60");
+    // CORS headers should still be present so browser clients can read the response
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    const body = await readJson(response);
+    expect(body).toMatchObject({
+      error: "rate_limited",
+      retryAfterSeconds: 60,
+    });
+  });
 });
