@@ -43,6 +43,7 @@ export default [
   route("api/push/subscriptions", "routes/api.push.subscriptions.ts"),
   route("api/push/preferences", "routes/api.push.preferences.ts"),
   route("api/*", "routes/api.$.ts"),
+  route("mcp", "routes/mcp.ts"),
   route("photos/*", "routes/photos.$.tsx"),
   route(".well-known/appspecific/com.chrome.devtools.json", "routes/devtools-well-known.tsx"),
   route("*", "routes/$.tsx"),

@@ -1,8 +1,9 @@
 import type { Route } from "./+types/api.$";
-import { ApiAuthError, authenticateApiRequest } from "~/lib/api-auth.server";
+import { ApiAuthError } from "~/lib/api-auth.server";
 import { enforceRateLimit, rateLimitedResponse } from "~/lib/rate-limit.server";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { callSpoonjoyApiOperation, listSpoonjoyApiOperations } from "~/lib/spoonjoy-api.server";
+import { buildSpoonjoyApiContext, resolveApiPrincipal } from "~/lib/spoonjoy-api-request.server";
 
 const API_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -13,12 +14,6 @@ const API_HEADERS = {
 
 const NUMERIC_QUERY_KEYS = new Set(["duration", "limit", "quantity"]);
 const BOOLEAN_QUERY_KEYS = new Set(["checked"]);
-const PUBLIC_BOOTSTRAP_OPERATIONS = new Set([
-  "health",
-  "auth_status",
-  "start_agent_connection",
-  "poll_agent_connection",
-]);
 
 type ApiDispatch = {
   operation: string;
@@ -183,36 +178,17 @@ async function handleApiRequest({ request, context, params }: Route.LoaderArgs |
     if (!dispatch) notFound(path);
 
     const db = await getRequestDb(context);
-    const principal = await authenticateApiRequest(db, request, context.cloudflare?.env)
-      .catch((error: unknown) => {
-        if (
-          error instanceof ApiAuthError &&
-          error.status === 401 &&
-          PUBLIC_BOOTSTRAP_OPERATIONS.has(dispatch.operation)
-        ) {
-          return null;
-        }
-        throw error;
-      });
+    const principal = await resolveApiPrincipal(db, request, context.cloudflare?.env, dispatch.operation);
 
     const cloudflare = context.cloudflare;
     const ctx = cloudflare?.ctx;
     const waitUntil = ctx?.waitUntil ? ctx.waitUntil.bind(ctx) : undefined;
 
-    const data = await callSpoonjoyApiOperation(dispatch.operation, dispatch.args, {
-      db,
-      principal,
-      allowOwnerEmailFallback: false,
-      waitUntil,
-      env: cfEnv ? {
-        OPENAI_API_KEY: cfEnv.OPENAI_API_KEY,
-        SPOONJOY_BASE_URL: cfEnv.SPOONJOY_BASE_URL,
-        VAPID_PUBLIC_KEY: cfEnv.VAPID_PUBLIC_KEY,
-        VAPID_PRIVATE_KEY: cfEnv.VAPID_PRIVATE_KEY,
-        VAPID_SUBJECT: cfEnv.VAPID_SUBJECT,
-      } : null,
-      bucket: cfEnv?.PHOTOS ?? undefined,
-    });
+    const data = await callSpoonjoyApiOperation(
+      dispatch.operation,
+      dispatch.args,
+      buildSpoonjoyApiContext({ db, principal, cloudflareEnv: cfEnv ?? null, waitUntil }),
+    );
     return apiJson({ ok: true, data });
   } catch (error) {
     const status = statusForError(error);

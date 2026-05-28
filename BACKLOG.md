@@ -985,6 +985,45 @@ Acceptance criteria:
 - Tighten manifest icons (recheck 192/512), shortcuts, and theme color.
 - Tests cover install gating, dismissal persistence, offline page rendering.
 
+### SJ-039 - Claude Connector (remote MCP over Streamable HTTP)
+
+Priority: `P1`
+Lane: `mcp`, `connector`, `agent-trust`
+Status: `done`
+
+Problem: Spoonjoy had a stdio MCP server (Ouro) and a REST API, but no way for Claude (Claude Code / claude.ai) to use Spoonjoy as a first-class connector. A Claude connector is a remote MCP server; it must share the existing operation layer and use delegated auth.
+
+Acceptance criteria:
+
+- Stateless remote Streamable-HTTP MCP endpoint at `/mcp` returning `application/json`.
+- Shares the operation layer, tool adapter, auth, and rate limiter with the REST/stdio surfaces.
+- `initialize`/`tools/list` open for discovery; `tools/call` bearer-authenticated with the same bootstrap-tool allowance + cross-owner guard as REST.
+- Delegated auth via the existing device-code flow; no raw credentials in Claude.
+- 100% coverage; installed + confirmed in Claude Code.
+
+Completion notes:
+
+- Extracted transport-agnostic `handleJsonRpcMessage` from `app/lib/mcp/json-rpc.server.ts` (shared by stdio + HTTP) and added protocol-version negotiation.
+- Added shared `app/lib/spoonjoy-api-request.server.ts` (`PUBLIC_BOOTSTRAP_OPERATIONS`, `resolveApiPrincipal`, `buildSpoonjoyApiContext`); refactored `app/routes/api.$.ts` to use it so REST and MCP share one auth+context path.
+- Added `app/lib/mcp/http-mcp.server.ts` + `app/routes/mcp.ts` registered at `/mcp`; rate-limited per token + IP.
+- Documented in `docs/claude-connector.md`; cross-linked from `docs/ouroboros-mcp.md` + README.
+
+### SJ-040 - OAuth 2.1 for claude.ai One-Click Connector
+
+Priority: `P2`
+Lane: `mcp`, `connector`, `auth`
+Status: `proposed`
+
+Problem: The `/mcp` connector (`SJ-039`) authenticates with a bearer token, which Claude Code supports via `--header`. claude.ai / Claude Desktop connectors expect OAuth 2.1 (protected-resource + authorization-server metadata, dynamic client registration, PKCE auth-code flow, consent). Implementing it would make Spoonjoy a one-click connector on claude.ai.
+
+Acceptance criteria:
+
+- `/.well-known/oauth-protected-resource` + `/.well-known/oauth-authorization-server` metadata.
+- `/authorize` (reusing Spoonjoy login + a consent step), `/token`, and dynamic client registration.
+- Access tokens issued as owner-scoped `ApiCredential`s; refresh-token handling.
+- Reuse the existing device-code/agent-connection consent backend where possible.
+- 100% coverage; verified against Claude's connector OAuth flow.
+
 ## Parking Lot
 
 These are intentionally lower-certainty until product direction is clarified:

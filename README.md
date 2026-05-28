@@ -222,6 +222,7 @@ migrations/
 - **Shopping List**: Personal shopping list with check-off
 - **Full Search**: Self-hosted SQLite/D1 FTS5 search across recipes, cookbooks, chefs, and private shopping-list items
 - **Ouroboros MCP**: Stdio MCP server for agent recipe/search/create/shopping-list/cookbook tools with API-token auth
+- **Claude Connector**: Remote MCP endpoint at `/mcp` (Streamable HTTP) for Claude Code / claude.ai, sharing the MCP tool surface with delegated bearer auth — see [`docs/claude-connector.md`](docs/claude-connector.md)
 - **HTTP API**: REST-style JSON API for non-agent clients, sharing the same operation layer as MCP
 
 ## Database Schema

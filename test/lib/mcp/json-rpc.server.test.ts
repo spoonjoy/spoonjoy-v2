@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { handleJsonRpcLine, type JsonRpcToolRouter } from "~/lib/mcp/json-rpc.server";
+import {
+  handleJsonRpcLine,
+  handleJsonRpcMessage,
+  type JsonRpcToolRouter,
+} from "~/lib/mcp/json-rpc.server";
 
 function router(overrides: Partial<JsonRpcToolRouter> = {}): JsonRpcToolRouter {
   return {
@@ -109,6 +113,79 @@ describe("json-rpc MCP server", () => {
       router({ callTool: async () => { throw "string boom"; } })
     )).resolves.toMatchObject({
       error: { code: -32602, message: "string boom" },
+    });
+  });
+});
+
+describe("handleJsonRpcMessage (transport-agnostic core)", () => {
+  it("routes an already-parsed object without re-parsing JSON", async () => {
+    const testRouter = router();
+    const response = await handleJsonRpcMessage(
+      { jsonrpc: "2.0", id: "p", method: "tools/list" },
+      testRouter
+    );
+    expect(response).toEqual({ jsonrpc: "2.0", id: "p", result: { tools: [{ name: "health" }] } });
+  });
+
+  it("returns invalid request for a non-object message", async () => {
+    await expect(handleJsonRpcMessage("nope", router())).resolves.toMatchObject({
+      id: null,
+      error: { code: -32600, message: "Invalid request" },
+    });
+  });
+
+  it("returns null for notifications (no id)", async () => {
+    await expect(
+      handleJsonRpcMessage({ jsonrpc: "2.0", method: "notifications/initialized" }, router())
+    ).resolves.toBeNull();
+  });
+
+  describe("initialize protocol-version negotiation", () => {
+    it("echoes the client's requested protocolVersion when it is a non-empty string", async () => {
+      const response = await handleJsonRpcMessage(
+        { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18" } },
+        router()
+      );
+      expect(response).toMatchObject({ result: { protocolVersion: "2025-06-18" } });
+    });
+
+    it("falls back to the default when protocolVersion is absent", async () => {
+      const response = await handleJsonRpcMessage(
+        { jsonrpc: "2.0", id: 1, method: "initialize" },
+        router()
+      );
+      expect(response).toMatchObject({ result: { protocolVersion: "2024-11-05" } });
+    });
+
+    it("falls back to the default when protocolVersion is blank or non-string", async () => {
+      const blank = await handleJsonRpcMessage(
+        { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "   " } },
+        router()
+      );
+      expect(blank).toMatchObject({ result: { protocolVersion: "2024-11-05" } });
+
+      const nonString = await handleJsonRpcMessage(
+        { jsonrpc: "2.0", id: 2, method: "initialize", params: { protocolVersion: 5 } },
+        router()
+      );
+      expect(nonString).toMatchObject({ result: { protocolVersion: "2024-11-05" } });
+    });
+
+    it("honors a caller-provided defaultProtocolVersion option", async () => {
+      const response = await handleJsonRpcMessage(
+        { jsonrpc: "2.0", id: 1, method: "initialize" },
+        router(),
+        { defaultProtocolVersion: "2025-03-26" }
+      );
+      expect(response).toMatchObject({ result: { protocolVersion: "2025-03-26" } });
+    });
+
+    it("ignores params when it is not an object", async () => {
+      const response = await handleJsonRpcMessage(
+        { jsonrpc: "2.0", id: 1, method: "initialize", params: "garbage" },
+        router()
+      );
+      expect(response).toMatchObject({ result: { protocolVersion: "2024-11-05" } });
     });
   });
 });

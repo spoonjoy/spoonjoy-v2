@@ -57,14 +57,38 @@ function parseCallParams(params: unknown): { name: string; args: Record<string, 
   return { name: params.name, args: rawArgs };
 }
 
-export async function handleJsonRpcLine(line: string, router: JsonRpcToolRouter): Promise<JsonRpcResponse | null> {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(line);
-  } catch {
-    return failure(null, PARSE_ERROR, "Parse error");
-  }
+const DEFAULT_PROTOCOL_VERSION = "2024-11-05";
 
+export interface HandleJsonRpcOptions {
+  /** Protocol version to advertise when the client doesn't request one. */
+  defaultProtocolVersion?: string;
+}
+
+/**
+ * Negotiate the MCP protocol version: echo the client's requested version
+ * when it is a non-empty string, otherwise advertise our default. This lets
+ * modern clients (which send a newer protocolVersion in `initialize`) agree
+ * with the server instead of being pinned to a stale hardcoded value.
+ */
+function negotiateProtocolVersion(params: unknown, fallback: string): string {
+  if (isObject(params) && typeof params.protocolVersion === "string" && params.protocolVersion.trim()) {
+    return params.protocolVersion;
+  }
+  return fallback;
+}
+
+/**
+ * Transport-agnostic JSON-RPC handler. Takes an already-parsed message
+ * (object) and routes it. Shared by the stdio bridge (`handleJsonRpcLine`)
+ * and the HTTP MCP endpoint.
+ *
+ * Returns `null` for notifications (messages with no `id`).
+ */
+export async function handleJsonRpcMessage(
+  parsed: unknown,
+  router: JsonRpcToolRouter,
+  options: HandleJsonRpcOptions = {},
+): Promise<JsonRpcResponse | null> {
   if (!isObject(parsed) || parsed.jsonrpc !== "2.0" || typeof parsed.method !== "string") {
     return failure(requestId(isObject(parsed) ? parsed.id : null), INVALID_REQUEST, "Invalid request");
   }
@@ -79,7 +103,10 @@ export async function handleJsonRpcLine(line: string, router: JsonRpcToolRouter)
           jsonrpc: "2.0",
           id,
           result: {
-            protocolVersion: "2024-11-05",
+            protocolVersion: negotiateProtocolVersion(
+              parsed.params,
+              options.defaultProtocolVersion ?? DEFAULT_PROTOCOL_VERSION,
+            ),
             serverInfo: { name: "spoonjoy", version: "1.0.0" },
             capabilities: { tools: {} },
           },
@@ -98,4 +125,18 @@ export async function handleJsonRpcLine(line: string, router: JsonRpcToolRouter)
     const code = parsed.method === "tools/call" ? INVALID_PARAMS : INTERNAL_ERROR;
     return failure(id, code, message);
   }
+}
+
+export async function handleJsonRpcLine(
+  line: string,
+  router: JsonRpcToolRouter,
+  options: HandleJsonRpcOptions = {},
+): Promise<JsonRpcResponse | null> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(line);
+  } catch {
+    return failure(null, PARSE_ERROR, "Parse error");
+  }
+  return handleJsonRpcMessage(parsed, router, options);
 }
