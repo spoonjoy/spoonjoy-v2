@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("~/lib/apple-oauth.server", () => ({
   createAppleAuthorizationURL: mocks.createAppleAuthorizationURL,
   verifyAppleCallback: mocks.verifyAppleCallback,
+  serializeAppleAuthorizationURL: (url: URL) => url.toString(),
 }));
 
 vi.mock("~/lib/apple-oauth-callback.server", () => ({

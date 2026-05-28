@@ -99,6 +99,7 @@ vi.mock("arctic", () => {
 import {
   createAppleAuthorizationURL,
   generateOAuthState,
+  serializeAppleAuthorizationURL,
   verifyAppleCallback,
   type AppleCallbackData,
   type AppleCallbackResult,
@@ -294,6 +295,33 @@ not-base64-@@@
 
       // Should properly encode the redirect_uri
       expect(url.searchParams.get("redirect_uri")).toBe(redirectWithQuery);
+    });
+  });
+
+  describe("serializeAppleAuthorizationURL", () => {
+    it("re-encodes the scope space as %20 instead of +", () => {
+      const url = new URL("https://appleid.apple.com/auth/authorize?client_id=x&state=s");
+      url.searchParams.set("scope", "email name");
+      expect(url.toString()).toContain("scope=email+name"); // URL serializes space as +
+
+      const serialized = serializeAppleAuthorizationURL(url);
+      expect(serialized).toContain("scope=email%20name");
+      expect(serialized).not.toContain("scope=email+name");
+      // other params are left intact
+      expect(serialized).toContain("client_id=x");
+      expect(serialized).toContain("state=s");
+    });
+
+    it("leaves a single-token scope unchanged", () => {
+      const url = new URL("https://appleid.apple.com/auth/authorize?scope=email&state=s");
+      expect(serializeAppleAuthorizationURL(url)).toContain("scope=email&");
+    });
+
+    it("is a no-op when there is no scope param", () => {
+      const url = new URL("https://appleid.apple.com/auth/authorize?state=s");
+      expect(serializeAppleAuthorizationURL(url)).toBe(
+        "https://appleid.apple.com/auth/authorize?state=s",
+      );
     });
   });
 

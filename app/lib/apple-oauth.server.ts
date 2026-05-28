@@ -142,6 +142,22 @@ export function createAppleAuthorizationURL(
 }
 
 /**
+ * Serialize an Apple authorization URL for the redirect `Location`.
+ *
+ * Apple's authorization endpoint rejects `+` as the space between scopes — it
+ * shows "Sign Up Not Completed" on the consent step (only on a fresh web
+ * sign-in; a signed-in device skips consent, which is why it surfaced only on
+ * desktop). `URL`/`URLSearchParams` always serialize spaces as `+`, so
+ * re-encode just the `scope` value's spaces as `%20`. See Apple TN3107.
+ */
+export function serializeAppleAuthorizationURL(url: URL): string {
+  return url.toString().replace(
+    /([?&]scope=)([^&]*)/,
+    (_match, prefix: string, value: string) => `${prefix}${value.replace(/\+/g, "%20")}`,
+  );
+}
+
+/**
  * Interface for Apple's ID token claims.
  */
 interface AppleIdTokenClaims {
