@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Offline — Spoonjoy</title>
+<link rel="icon" href="/icons/sj-192.png" />
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f6e9cf;
+    --ink: #1a1a1a;
+    --ink-muted: #4a4a4a;
+    --accent: #c64a3a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1916;
+      --ink: #f4ead8;
+      --ink-muted: #c9bda3;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: ui-serif, "Iowan Old Style", "Apple Garamond", Baskerville, "Times New Roman", serif;
+  }
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+  }
+  main {
+    max-width: 32rem;
+    text-align: center;
+  }
+  h1 {
+    margin: 0 0 0.75rem;
+    font-size: 1.75rem;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+  }
+  p {
+    margin: 0 0 1.25rem;
+    color: var(--ink-muted);
+    line-height: 1.5;
+  }
+  button {
+    appearance: none;
+    border: 1px solid currentColor;
+    background: transparent;
+    color: var(--ink);
+    padding: 0.65rem 1.25rem;
+    font: inherit;
+    font-size: 0.95rem;
+    border-radius: 999px;
+    cursor: pointer;
+  }
+  button:hover { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>You're offline</h1>
+  <p>Spoonjoy needs a connection to load this page. Your saved recipes will be here when you're back.</p>
+  <button type="button" onclick="location.reload()">Try again</button>
+</main>
+</body>
+</html>

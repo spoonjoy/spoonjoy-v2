@@ -23,6 +23,7 @@ import { ThemeProvider } from "~/components/ui/theme-provider";
 import { ToastProvider } from "~/components/ui/toast";
 import { ThemeToggle } from "~/components/ui/theme-toggle";
 import { MobileNav, DockContextProvider } from "~/components/navigation";
+import { InstallPromptCard } from "~/components/pwa/InstallPromptCard";
 import { Button } from "~/components/ui/button";
 import { OAuthButtonGroup } from "~/components/ui/oauth";
 import { SpoonjoyLogo } from "~/components/ui/spoonjoy-logo";
@@ -216,6 +217,7 @@ export default function App() {
                 </main>
               </div>
               <MobileNav isAuthenticated={!!userId} />
+              <InstallPromptCard />
             </ToastProvider>
           </DockContextProvider>
         </ThemeProvider>
