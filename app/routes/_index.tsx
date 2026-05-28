@@ -287,14 +287,10 @@ export default function Index() {
           <div className="flex flex-wrap items-center gap-2 lg:justify-end">
             {isOwner ? (
               <>
-                <Link
-                  href="/account/settings"
-                  aria-label="Kitchen settings"
-                  className="font-sj-ui inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-[var(--sj-ink-soft)] no-underline hover:text-[var(--sj-ink)]"
-                >
-                  <Settings className="size-4" aria-hidden="true" />
+                <Button href="/account/settings" plain aria-label="Kitchen settings">
+                  <Settings data-slot="icon" className="size-4" />
                   Settings
-                </Link>
+                </Button>
                 <Button href="/recipes/new">
                   <Plus data-slot="icon" className="size-4" />
                   Create Recipe
