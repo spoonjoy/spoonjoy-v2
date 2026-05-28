@@ -1,9 +1,9 @@
 # Spoonjoy v2 Backlog
 
 Status: proposed canonical backlog
-Audit date: 2026-05-10
-Baseline: `main` at `3533955` (`Upgrade GitHub Actions to Node 24 runtime (#3)`)
-Verification anchor: `pnpm test:coverage` passed with 140 test files, 3521 tests, 0 skipped tests, and 100% statements/branches/functions/lines.
+Audit date: 2026-05-27 (refresh)
+Baseline: `main` at `c89883f` (`chore: gitignore live smoke artifacts (#104)`)
+Verification anchor: `pnpm test:coverage` passes with 228 test files, 0 skipped tests, and 100% statements/branches/functions/lines.
 
 ## How To Use This Backlog
 
@@ -35,23 +35,22 @@ Status meanings:
 
 ## Recommended Next PR Sequence
 
-1. `SJ-001`: Establish backlog/docs source of truth.
-2. `SJ-002`: Finish OAuth route endpoints so visible auth buttons stop posting to missing routes.
-3. `SJ-003`: Fix recipe creation data loss by persisting RecipeBuilder steps and ingredients.
-4. `SJ-004`: Finish recipe image upload/storage on Cloudflare R2.
-5. `SJ-005`: Fix active recipe title uniqueness and unskip the integrity test.
-6. `SJ-006`: Remove or replace skipped tests so 100% coverage also means no hidden skipped assertions.
-7. `SJ-008`: Run the mobile RecipeBuilder/SpoonDock UX pass once core create/edit data paths are trustworthy.
-8. `SJ-009`: Add canonical user profile routes so chef links resolve to shareable profile URLs.
-9. `SJ-013`: Harden shopping-list item actions for idempotency, restore behavior, and cross-user isolation.
-10. `SJ-015`: Add Cloudflare deployment preflight checks and production deployment docs.
-11. `SJ-023`: Remove production build sourcemap warnings so the zero-warning contract covers deploy builds.
-12. `SJ-007`: Split large route modules into testable server/domain modules.
-13. `SJ-024`: Add direct MCP shopping-list item controls for Ouroboros agents.
-14. `SJ-017`: Harden cookbook membership authorization and idempotency.
-15. `SJ-019`: Guard generated artifact hygiene.
+The previous run-through (SJ-001 → SJ-026) is complete. The next wave focuses on cleanup, production hardening, and the long-deferred password-reset/WebAuthn build.
 
-Completed in sequence: `SJ-001`, `SJ-002`, `SJ-003`, `SJ-004`, `SJ-005`, `SJ-006`, `SJ-008`, `SJ-009`, `SJ-013`, `SJ-015`, `SJ-023`, `SJ-007`, `SJ-024`, `SJ-017`, `SJ-019`.
+1. `SJ-034`: Refresh BACKLOG.md and prune stale docs (this PR + follow-up).
+2. `SJ-032`: Remove v1 → v2 migration plumbing now that cutover is complete.
+3. `SJ-035`: Resolve the lone `fellow-chefs.server.ts:26` performance TODO.
+4. `SJ-036`: Finish PostHog setup and add free-tier server-side error tracking.
+5. `SJ-037`: Rate-limit `/api/*` and the MCP bearer surface.
+6. `SJ-038`: Polish PWA install prompt and offline fallback.
+7. `SJ-016`: Build password reset (depends on rate limiting from `SJ-037`).
+8. `SJ-016b`: Build WebAuthn enrollment + sign-in (three PRs: server registration, server assertion, client UX).
+
+Completed waves (in chronological order of completion):
+
+- Foundational wave: `SJ-001`, `SJ-002`, `SJ-003`, `SJ-004`, `SJ-005`, `SJ-006`, `SJ-008`, `SJ-009`, `SJ-013`, `SJ-015`, `SJ-023`, `SJ-007`, `SJ-024`, `SJ-017`, `SJ-019`.
+- Product-expansion wave: `SJ-010` (search + fellow chefs), `SJ-011` (recipe import), `SJ-012` (recipe forking + spoons), `SJ-014` (ingredient parsing provider refresh), `SJ-020` (analytics/privacy), `SJ-021` (a11y pass), `SJ-022` (Ouroboros MCP), `SJ-025` (MCP cookbook tools), `SJ-026` (shared REST/MCP auth).
+- Untracked-at-time-of-shipping wave (now documented retroactively): `SJ-027` (Web Push), `SJ-028` (Cook Mode v2), `SJ-029` (Public Sharing + First-Class Agent Auth), `SJ-030` (Search Index Performance Hardening), `SJ-031` (OAuth Provider Hardening Rounds), `SJ-032` (v1 → v2 Migration Plumbing — now scheduled for removal), `SJ-033` (Cookbook Experience Redesign).
 
 ## Backlog Items
 
@@ -327,7 +326,7 @@ Completion notes:
 
 Priority: `P2`
 Lane: `discovery`, `product-parity`, `social`
-Status: `proposed`
+Status: `done`
 
 Problem: The revised roadmap calls for search and fellow chefs, and v1 included a fellow-chefs page. v2 has basic public kitchen mechanics but no search/discovery surface.
 
@@ -345,11 +344,18 @@ Acceptance criteria:
 - Add empty, loading, privacy, and unauthenticated states.
 - Add e2e smoke coverage for discovering and opening another chef's recipe.
 
+Completion notes:
+
+- Shipped via commit `042e654` (feat: add full search UI and MCP tools) and `86bf3f8` (fix: expose search from kitchen home), with FTS5-backed indices in `app/lib/search.server.ts` and `app/routes/search.tsx`.
+- Fellow chefs landed via PR #42 (commit `155898e`, "feat: E1 Fellow chefs + Kitchen visitors derived-graph views") — `app/lib/fellow-chefs.server.ts` + `app/routes/users.$identifier.fellow-chefs.tsx`.
+- Decision on visibility: recipes are intentionally public (no `isPublic` column); the loader gates ownership-only actions via `isOwner`. Documented in `docs/api.md`. A richer visibility model is parked.
+- Search performance hardening shipped separately as `SJ-030` (PRs #84-#88).
+
 ### SJ-011 - Recipe Import Flow
 
 Priority: `P2`
 Lane: `recipes`, `import`, `v1-parity`
-Status: `proposed`
+Status: `done`
 
 Problem: v1 had import/add recipe routes and backend import helpers. v2 currently has manual recipe creation plus ingredient parsing, but no import flow.
 
@@ -367,11 +373,18 @@ Acceptance criteria:
 - Add validation and recovery states for partial imports.
 - Tests cover happy path, unsupported source, parse failure, duplicate title handling, and cookbook assignment.
 
+Completion notes:
+
+- I1 web-page import landed via PR #40 (commit `4ca7fa7`, "feat: I1 — import_recipe_from_url MCP op (web pages)") — `app/lib/recipe-import-fetch.server.ts` + `recipe-import-jsonld.server.ts` + `recipe-import-llm.server.ts`.
+- I2 video import landed via PR #43 (commit `d52ac1e`, "feat: I2 — import_recipe_from_url video sources (TikTok + YouTube)") — `app/lib/recipe-import-video.server.ts`.
+- Top-level import orchestration in `app/lib/recipe-import.server.ts`. OpenAI wiring fix in PR #81 (`570e859`).
+- All paths surface through the MCP `import_recipe_from_url` op so REST/agent clients share the same logic.
+
 ### SJ-012 - Recipe Forking/Spooning Flow
 
 Priority: `P2`
 Lane: `sharing`, `recipes`, `social`
-Status: `proposed`
+Status: `done`
 
 Problem: The schema has `sourceRecipeId`, `sourceUrl`, and `recipeForks`, and the roadmap names sharing/forking/spooning, but v2 has no user-facing flow for copying another chef's recipe into your own kitchen.
 
@@ -388,6 +401,13 @@ Acceptance criteria:
 - Forked recipes include steps, ingredients, dependencies, image behavior, and cookbook placement decisions.
 - Source attribution renders on detail pages.
 - Tests cover forking own recipe, forking another user's recipe, deleted source behavior, and duplicate title conflict behavior.
+
+Completion notes:
+
+- Forking shipped via PR #41 (commit `c7590fb`, "feat(fork): F1 recipe fork — clone + provenance + MCP op") — `app/lib/recipe-fork.server.ts`, `app/routes/recipes.$id.fork.tsx`, `app/components/recipe/ForkRecipeButton.tsx`.
+- "Spoons" (the related social signal — public acknowledgment of cooking another chef's recipe) shipped via commit `0c2a895` ("feat(spoons): MCP ops, dialog, strip, provenance, e2e") with the spoon-photo affordance refined in `5062e3a`.
+- Forks preserve `sourceRecipeId` provenance, copy steps/ingredients/dependencies in a single transaction, and render source attribution on recipe detail.
+- MCP op exposed for agents; tests cover happy path, deleted source, duplicate title, and cross-owner isolation.
 
 ### SJ-013 - Shopping List Conflict And Idempotency Hardening
 
@@ -480,11 +500,11 @@ Completion notes:
 - Added `SESSION_SECRET` to the Cloudflare `Env` type and refreshed README/GUIDE deploy references.
 - Verified `pnpm deploy:preflight`, focused deployment-preflight tests, `pnpm typecheck`, full `pnpm test:coverage`, `pnpm build`, and `pnpm test:e2e`.
 
-### SJ-016 - Password Reset And WebAuthn Parity Decision
+### SJ-016 - Password Reset And WebAuthn Build
 
 Priority: `P2`
 Lane: `auth`, `v1-parity`, `security`
-Status: `proposed`
+Status: `in-progress`
 
 Problem: v2 schema still has reset-token and WebAuthn credential fields, and v1 included forgot/reset password and WebAuthn client plumbing. v2 has no routes or product decision for these capabilities.
 
@@ -494,12 +514,14 @@ Evidence:
 - v1 routes included `/forgot-password` and `/reset-password`.
 - v1 auth code included WebAuthn client setup.
 
-Acceptance criteria:
+Decision (2026-05-27): **In scope.** Build password reset first (depends on `SJ-037` rate limiting), then WebAuthn registration/sign-in/UX as a three-PR series. Schema fields stay; they were forward-thinking.
 
-- Decide whether password reset and WebAuthn are in v2 scope before public launch.
-- If in scope, implement flows with security review, rate limits, and email/provider strategy.
-- If out of scope, remove dead schema fields or document them as intentionally deferred.
-- Tests cover token lifecycle, expired/used token handling, and account recovery edge cases if implemented.
+Execution plan:
+
+- **PR-I (password reset):** `/forgot-password` request form, token gen with crypto-grade randomness, email send action (provider TBD — Cloudflare Email Workers vs Resend free tier), `/reset-password?token=...` form, token consumption + expiry. Heavily rate-limited via `SJ-037`. Tests cover token lifecycle, expired, used, invalid, and race.
+- **PR-J1 (WebAuthn registration):** Server-side challenge generation + attestation verification (`@simplewebauthn/server`), credential persistence into `UserCredential`. `POST /auth/webauthn/register/options`, `POST /auth/webauthn/register/verify`. RPID = `spoonjoy.app`.
+- **PR-J2 (WebAuthn sign-in):** Server-side assertion verification, `POST /auth/webauthn/sign-in/options`, `POST /auth/webauthn/sign-in/verify`, `signCount` rotation, session creation.
+- **PR-J3 (WebAuthn client UX):** Settings-page "Add a passkey" button + passkey list with rename/remove. Login-page "Sign in with passkey" with conditional mediation. Graceful fallback to password if WebAuthn unavailable. Storybook stories + e2e.
 
 ### SJ-017 - Cookbook Management Completion
 
@@ -782,11 +804,191 @@ Completion notes:
 - Documented the HTTP API and updated Ouroboros MCP docs with authz/authn guidance.
 - Verified targeted REST/MCP/auth tests, `pnpm typecheck`, and full `pnpm run test:coverage`.
 
+### SJ-027 - PWA + Web Push Notifications
+
+Priority: `P1`
+Lane: `pwa`, `notifications`, `engagement`
+Status: `done`
+
+Problem: Spoonjoy is web-only but users would benefit from installable PWA + push notifications for engagement events (forks, spoons, cookbook adds).
+
+Completion notes:
+
+- PR #45 (`d0977f8`, "feat: D-006 PWA + Web Push notifications (infrastructure + first trigger)") shipped the manifest, service worker, VAPID setup, and `Spoon a recipe` notification trigger.
+- PR #46 (`d1dab9e`, "feat: D-006 PWA + Web Push notifications (remaining triggers + preferences UI)") added fork/cookbook triggers and account-settings preferences UI.
+- Install-prompt UX polish + offline fallback tracked separately as `SJ-038`.
+
+### SJ-028 - Paged Cook Mode
+
+Priority: `P1`
+Lane: `cooking`, `ux`
+Status: `done`
+
+Problem: Cook mode rendered all steps inline; reviewers wanted a focused single-step paged surface.
+
+Completion notes:
+
+- PR #75 (`92016ec`, "Add focused cook mode and market list") introduced the first cook mode pass.
+- PR #100 (`9f3c230`, "fix: make cook mode a paged cooking surface") completed the paged surface.
+- Hash-routed (`#cook`) so cook mode stays a single-page surface with browser-back behavior.
+
+### SJ-029 - Public Sharing + First-Class Agent Auth
+
+Priority: `P0`
+Lane: `sharing`, `mcp`, `agent-trust`, `auth`
+Status: `done`
+
+Problem: Recipes were intended to be linkable but the sharing surface and agent-auth model were not first-class.
+
+Completion notes:
+
+- Commit `6482980` ("feat: make public sharing and agent auth first-class") shipped chef-link sharing and the agent-auth contract.
+- Commit `f8f03b3` ("feat: add delegated agent auth for spoonjoy mcp") added delegated auth for the MCP bridge.
+- Follow-up fixes hardened the flow: `a1096bf` (stale-token bootstrap), `f374d9c` (delegated-token MCP status), `ada405f` (UI + MCP readiness gaps), `c9dd9bf` (canonical agent-auth base URL).
+
+### SJ-030 - Search Index Performance Hardening
+
+Priority: `P1`
+Lane: `search`, `performance`, `cloudflare`
+Status: `done`
+
+Problem: Initial FTS5 index build (SJ-010) had quirks under D1's variable limits and freshness expectations.
+
+Completion notes:
+
+- PR #84 (`91d5895`, "fix: keep search indexing under D1 variable limit").
+- PR #85 (`cd357d4`, "fix: rebuild search index with table scans").
+- PR #86 (`76d9d38`, "perf: batch search index inserts").
+- PR #87 (`3abfcc8`, "perf: reuse fresh search index").
+- PR #88 (`f7b8c9d`, "fix: harden search freshness and deploy auto").
+
+### SJ-031 - OAuth Provider Hardening Rounds
+
+Priority: `P0`
+Lane: `auth`, `oauth`, `production-readiness`
+Status: `done`
+
+Problem: Post-cutover OAuth surfaced edge-case provider behaviors (callback URL canonicalization, Apple form-post quirks, GitHub provider error semantics, intentional Google disablement during cutover).
+
+Completion notes:
+
+- PR #89 (`c4b1fd3`, "Harden OAuth environment validation"), PR #90 (`9814ee1`, "Mark Google OAuth intentionally disabled for cutover"), PR #92 (`12517be`, preserve apple oauth callback state), PR #93 (`0986d5a`, harden session + recipe trust boundaries), PR #94-#96 (`7be2e09`, `480621e`, `0884445`), follow-ups (`3879f4c`, `71d22f8`, `3bd221a`, `7852b54`, `3864b18`, `b11dccd`).
+
+### SJ-032 - v1 → v2 Migration Plumbing
+
+Priority: `P0`
+Lane: `migration`, `data`
+Status: `done` (scheduled for removal as part of cleanup wave)
+
+Problem: Cutting over from Spoonjoy v1 (Neon Postgres) to v2 (Cloudflare D1) required one-shot data import.
+
+Completion notes:
+
+- PR #83 (`dbb5bce`, "Prepare v1 data migration and OAuth continuity") shipped `scripts/migrate-v1-neon-to-d1.ts`, `scripts/lib/v1-neon-to-d1.ts`, and a test suite.
+- Cutover is complete. The scripts are scheduled for removal in cleanup PR-D (tracked under `SJ-034`) with a `pre-v1-migration-removal` git tag for reversibility.
+
+### SJ-033 - Cookbook Experience Redesign
+
+Priority: `P1`
+Lane: `cookbooks`, `ux`, `design`
+Status: `done`
+
+Problem: Cookbooks needed an editorial cover surface beyond simple list rendering.
+
+Completion notes:
+
+- Commit `6f3cc2c` ("feat: redesign spoonjoy cookbook experience") shipped the editorial cover treatment.
+- Component covered by `app/components/cookbook/CookbookCoverArt.tsx` and Storybook stories.
+
+### SJ-034 - Backlog Refresh + Stale Doc Pruning
+
+Priority: `P2`
+Lane: `repo-hygiene`, `docs`, `agent-trust`
+Status: `in-progress`
+
+Problem: BACKLOG.md drifted from reality after the foundational wave (4 items marked `proposed` had actually shipped). Repo root accumulated ~6,000 lines of stale Jan/Feb 2026 working-notes and post-cutover artifacts.
+
+Acceptance criteria:
+
+- BACKLOG.md status reflects actual ship state for every `SJ-*` item.
+- Untracked-at-ship features get retroactive entries so future audits don't drift again.
+- Stale Jan/Feb 2026 notes hard-deleted via `git rm` (reachable through git history if ever needed).
+- Post-cutover artifacts removed from `docs/`.
+- Planning doc preserved under `.tasks/`.
+
+Progress notes:
+
+- PR-A (this PR) refreshes BACKLOG.md, marks SJ-010/011/012 done, updates SJ-016 to in-progress, adds SJ-027 through SJ-038, and preserves the planning doc.
+- PR-B will hard-delete stale docs.
+
+### SJ-035 - Resolve `fellow-chefs.server.ts:26` Performance TODO
+
+Priority: `P3`
+Lane: `performance`, `cleanup`
+Status: `proposed`
+
+Problem: A single `TODO(perf): materialize if hot — see inch-worm backlog.` remains in `app/lib/fellow-chefs.server.ts:26`. It's the only TODO in ~32k LOC of app code.
+
+Acceptance criteria:
+
+- Measure current p50/p95 of the fellow-chefs query path in production-shaped data.
+- If hot (p95 > 50ms): add a small in-memory or D1-side materialized cache.
+- If not hot: delete the TODO comment.
+- Either outcome lands in a tiny PR with the measurement as justification.
+
+### SJ-036 - PostHog Setup Completion + Free-Tier Error Tracking
+
+Priority: `P1`
+Lane: `observability`, `production-readiness`
+Status: `proposed`
+
+Problem: PostHog client-side analytics is instrumented but setup was never finished. There is no production server-side error capture. Optimize for free — use PostHog's free Error Tracking feature, not Sentry.
+
+Acceptance criteria:
+
+- Finish PostHog wiring: confirm `VITE_POSTHOG_KEY` resolves in production, sanity-check the project ID, document the dashboard URL in `docs/analytics-privacy.md`.
+- Add `posthog-node` for Workers-side server error capture in `workers/app.ts` and `entry.server.tsx`.
+- Capture: unhandled exceptions, error responses (5xx), promise rejections. Redact PII (email, session cookies) from payloads.
+- Tests cover safe behavior when PostHog env vars missing.
+- Deploy + smoke + intentionally trigger one error to confirm capture.
+
+### SJ-037 - API/MCP Rate Limiting
+
+Priority: `P0`
+Lane: `security`, `production-readiness`, `api`
+Status: `proposed`
+
+Problem: `/api/*` REST endpoints and the MCP bearer surface (from `SJ-026`) accept tokens with no rate limit. A leaked token or abusive script could hammer D1 reads/writes and burn through OpenAI quota via the import path.
+
+Acceptance criteria:
+
+- Per-token + per-IP throttling using Cloudflare Durable Objects (preferred — per-token state isolation) or D1-backed counter (fallback if DOs budget is a concern).
+- Return HTTP 429 with `Retry-After` header.
+- Log/instrument rate-limit hits via SJ-036 telemetry.
+- Tests cover token throttle, IP throttle, reset behavior, `Retry-After` header.
+- Documented in `docs/api.md`.
+- Unblocks `SJ-016` password reset (which needs strict request throttling).
+
+### SJ-038 - PWA Install UX + Offline Fallback
+
+Priority: `P2`
+Lane: `pwa`, `ux`, `engagement`
+Status: `proposed`
+
+Problem: D-006 (`SJ-027`) shipped manifest + service worker. The install prompt UX, dismissal persistence, and offline fallback page are not yet polished.
+
+Acceptance criteria:
+
+- Contextual install hint surface — non-pushy, dismissible, respects `beforeinstallprompt` event timing.
+- Persist dismissal so the prompt doesn't re-nag the same user across sessions.
+- Offline fallback page rendered by the service worker for navigation failures.
+- Tighten manifest icons (recheck 192/512), shortcuts, and theme color.
+- Tests cover install gating, dismissal persistence, offline page rendering.
+
 ## Parking Lot
 
 These are intentionally lower-certainty until product direction is clarified:
 
-- Native mobile app packaging.
-- Public/private recipe visibility model beyond basic profile/kitchen routes.
-- Dedicated admin/moderation tools.
-- Data migration from Spoonjoy v1 production into v2.
+- **Native mobile app packaging.** Deferred 2026-05-27 per Ari: "let things stabilize before native mobile."
+- **Public/private recipe visibility model beyond basic profile/kitchen routes.** Skipped 2026-05-27 per Ari: "all recipes are currently public — we're good." Revisit if granular sharing rules become desired.
+- **Dedicated admin/moderation tools.** No signal needed yet.

@@ -23,7 +23,10 @@ import { toDate, toNumber } from "~/lib/d1-coerce.server";
  * WHEN), MAX, LIMIT/OFFSET, parameterized `?`). SUM/COUNT may return as
  * BigInt depending on the adapter — coerce to Number at the JS boundary.
  *
- * TODO(perf): materialize if hot — see inch-worm backlog.
+ * Profile fellow-chefs is a cold path (visited occasionally from a chef's
+ * profile sub-page), so the single-query implementation is sufficient. If
+ * production measurement ever shows this is hot, open a fresh `SJ-*` for a
+ * materialized view rather than premature optimization.
  */
 
 export interface FellowChefInteractionCounts {

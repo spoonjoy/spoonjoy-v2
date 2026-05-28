@@ -6,8 +6,10 @@
  * graph is notified. This is the only multi-recipient trigger in D-006.
  *
  * The fan-out is capped at 100 recipients (the max page size on
- * `listFellowChefs`) for MVP-scale data. If fan-out becomes hot, materialize
- * the graph and stream — see inch-worm backlog.
+ * `listFellowChefs`) for MVP-scale data. If production measurement ever
+ * shows this exceeds the cap or becomes a hot path, open a fresh `SJ-*`
+ * for a materialized chef-graph + streaming fan-out rather than
+ * premature optimization.
  *
  * The helper is pure: all platform-coupled deps (`waitUntil`, `sendPush`,
  * `listFellowChefs`) are injected so it can be unit-tested in plain Node.
