@@ -4,7 +4,7 @@ import { getCloudflareEnv, getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
 import { unlinkOAuthAccount } from "~/lib/oauth-user.server";
 import { hashPassword, verifyPassword } from "~/lib/auth.server";
-import { listUserPasskeys, removeUserPasskey } from "~/lib/webauthn-route.server";
+import { listUserPasskeys, removeUserPasskey, renameUserPasskey } from "~/lib/webauthn-route.server";
 import {
   deleteStoredImage,
   hasUploadedImageFile,
@@ -671,6 +671,33 @@ export async function handleAccountSettingsAction({
     return {
       success: true,
       message: "Passkey removed successfully",
+    };
+  }
+
+  if (intent === "renamePasskey") {
+    const credentialId = formData.get("credentialId")?.toString() || "";
+    const name = formData.get("name")?.toString() || "";
+
+    if (!credentialId) {
+      return {
+        success: false,
+        error: "validation_error",
+        message: "Missing passkey identifier",
+      };
+    }
+
+    const { renamed } = await renameUserPasskey(database, userId, credentialId, name);
+    if (!renamed) {
+      return {
+        success: false,
+        error: "passkey_not_found",
+        message: "That passkey could not be found",
+      };
+    }
+
+    return {
+      success: true,
+      message: "Passkey renamed successfully",
     };
   }
 

@@ -522,7 +522,8 @@ Execution plan:
 - **PR-J1 (WebAuthn registration):** Server-side challenge generation + attestation verification (`@simplewebauthn/server`), credential persistence into `UserCredential`. `POST /auth/webauthn/register/options`, `POST /auth/webauthn/register/verify`. RPID = `spoonjoy.app`.
 - **PR-J2 (WebAuthn sign-in):** Server-side assertion verification, `POST /auth/webauthn/sign-in/options`, `POST /auth/webauthn/sign-in/verify`, `signCount` rotation, session creation.
 - **PR-J3 (WebAuthn client UX):** Settings-page "Add a passkey" button + passkey list with rename/remove. Login-page "Sign in with passkey" with conditional mediation. Graceful fallback to password if WebAuthn unavailable. Storybook stories + e2e.
-- **PR-J4 (passkey settings management) — done:** Account settings now names a passkey at enrollment (optional label) and lists enrolled passkeys (newest first, name + enrollment date) with per-passkey removal guarded against deleting the user's last remaining sign-in method. Adds `UserCredential.name`/`createdAt` (migration `0012_passkey_metadata.sql`), `listUserPasskeys`/`removeUserPasskey` helpers, and a `removePasskey` action. Post-hoc rename remains a future stretch.
+- **PR-J4 (passkey settings management) — done:** Account settings now names a passkey at enrollment (optional label) and lists enrolled passkeys (newest first, name + enrollment date) with per-passkey removal guarded against deleting the user's last remaining sign-in method. Adds `UserCredential.name`/`createdAt` (migration `0012_passkey_metadata.sql`), `listUserPasskeys`/`removeUserPasskey` helpers, and a `removePasskey` action.
+- **PR-J5 (passkey rename) — done:** Per-passkey inline rename in account settings (`renameUserPasskey` helper + `renamePasskey` action), `userId`-scoped; a blank label clears the name back to the generic fallback. Completes PR-J3's "rename/remove" promise.
 
 ### SJ-017 - Cookbook Management Completion
 

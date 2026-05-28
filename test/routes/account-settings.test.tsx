@@ -4643,6 +4643,54 @@ describe("Account Settings Route", () => {
       });
     });
 
+    describe("action - rename passkey", () => {
+      it("returns validation_error when no credential id is supplied", async () => {
+        const result = await runAction(await authedCookie(), { intent: "renamePasskey", name: "x" });
+        expect(result).toMatchObject({ success: false, error: "validation_error" });
+      });
+
+      it("renames a passkey the user owns", async () => {
+        await db.userCredential.create({
+          data: { id: "pk_ren", userId: testUserId, publicKey: new Uint8Array([1]), counter: 0n, name: "Old" },
+        });
+
+        const result = await runAction(await authedCookie(), {
+          intent: "renamePasskey",
+          credentialId: "pk_ren",
+          name: "Kitchen iPad",
+        });
+
+        expect(result).toMatchObject({ success: true });
+        const stored = await db.userCredential.findUnique({ where: { id: "pk_ren" } });
+        expect(stored?.name).toBe("Kitchen iPad");
+      });
+
+      it("clears the name when the label is left blank", async () => {
+        await db.userCredential.create({
+          data: { id: "pk_clear", userId: testUserId, publicKey: new Uint8Array([1]), counter: 0n, name: "Old" },
+        });
+
+        const result = await runAction(await authedCookie(), {
+          intent: "renamePasskey",
+          credentialId: "pk_clear",
+          name: "",
+        });
+
+        expect(result).toMatchObject({ success: true });
+        const stored = await db.userCredential.findUnique({ where: { id: "pk_clear" } });
+        expect(stored?.name).toBeNull();
+      });
+
+      it("returns passkey_not_found for an unknown credential id", async () => {
+        const result = await runAction(await authedCookie(), {
+          intent: "renamePasskey",
+          credentialId: "does_not_exist",
+          name: "whatever",
+        });
+        expect(result).toMatchObject({ success: false, error: "passkey_not_found" });
+      });
+    });
+
     describe("component - passkey list", () => {
       function renderWithPasskeys(overrides: Partial<AccountSettingsLoaderData["user"]>) {
         const mockData = {
@@ -4712,6 +4760,78 @@ describe("Account Settings Route", () => {
         const section = screen.getByTestId("passkeys-section");
         expect(section).toHaveTextContent(/only way to sign in/i);
         expect(screen.getByRole("button", { name: /remove only key/i })).toBeDisabled();
+      });
+
+      it("opens a prefilled rename form and cancels back", async () => {
+        renderWithPasskeys({
+          passkeys: [{ id: "pk1", name: "MacBook", transports: null, createdAt: null }],
+        });
+
+        await screen.findByRole("heading", { name: /account settings/i });
+        const user = userEvent.setup();
+
+        await user.click(screen.getByRole("button", { name: /rename macbook/i }));
+        const input = screen.getByLabelText(/passkey name/i);
+        expect(input).toHaveValue("MacBook");
+
+        await user.click(screen.getByRole("button", { name: /cancel/i }));
+        expect(screen.queryByLabelText(/passkey name/i)).not.toBeInTheDocument();
+      });
+
+      it("prefills an empty rename field for an unnamed passkey", async () => {
+        renderWithPasskeys({
+          passkeys: [{ id: "pk1", name: null, transports: null, createdAt: null }],
+        });
+
+        await screen.findByRole("heading", { name: /account settings/i });
+        const user = userEvent.setup();
+
+        await user.click(screen.getByRole("button", { name: /rename passkey/i }));
+        expect(screen.getByLabelText(/passkey name/i)).toHaveValue("");
+      });
+
+      it("submits a rename with the new name", async () => {
+        const submitted: Record<string, unknown>[] = [];
+        const mockData = {
+          user: {
+            id: testUserId,
+            email: testUserEmail.toLowerCase(),
+            username: testUsername,
+            hasPassword: true,
+            oauthAccounts: [],
+            photoUrl: null,
+            passkeys: [{ id: "pk1", name: "MacBook", transports: null, createdAt: null }],
+          },
+          notifications: { pushSubscribed: false },
+        };
+        const Stub = createTestRoutesStub([
+          {
+            id: "account-settings",
+            path: "/account/settings",
+            Component: AccountSettings,
+            loader: () => mockData,
+            action: async ({ request }: { request: Request }) => {
+              const fd = await request.formData();
+              submitted.push(Object.fromEntries(fd));
+              return { success: true, message: "Passkey renamed successfully" };
+            },
+          },
+        ]);
+        render(<Stub initialEntries={["/account/settings"]} />);
+
+        await screen.findByRole("heading", { name: /account settings/i });
+        const user = userEvent.setup();
+
+        await user.click(screen.getByRole("button", { name: /rename macbook/i }));
+        const input = screen.getByLabelText(/passkey name/i);
+        await user.clear(input);
+        await user.type(input, "Kitchen iPad");
+        await user.click(screen.getByRole("button", { name: /^save$/i }));
+
+        await screen.findByText(/passkey renamed successfully/i);
+        expect(submitted).toContainEqual(
+          expect.objectContaining({ intent: "renamePasskey", credentialId: "pk1", name: "Kitchen iPad" }),
+        );
       });
     });
   });

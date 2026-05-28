@@ -25,6 +25,7 @@ import {
   finishRegistration,
   listUserPasskeys,
   removeUserPasskey,
+  renameUserPasskey,
   startAuthentication,
   startRegistration,
   WebAuthnError,
@@ -287,6 +288,50 @@ describe("webauthn-route orchestration", () => {
       expect(result).toEqual({ removed: false });
       // the credential is untouched
       expect(await db.userCredential.findUnique({ where: { id: "theirs" } })).not.toBeNull();
+    });
+  });
+
+  describe("renameUserPasskey", () => {
+    it("sets a trimmed name on the user's own passkey", async () => {
+      const user = await db.user.create({ data: createTestUser() });
+      await db.userCredential.create({
+        data: { id: "mine", userId: user.id, publicKey: new Uint8Array([1]), counter: 0n },
+      });
+
+      const result = await renameUserPasskey(db, user.id, "mine", "  Work laptop  ");
+      expect(result).toEqual({ renamed: true });
+      const stored = await db.userCredential.findUnique({ where: { id: "mine" } });
+      expect(stored?.name).toBe("Work laptop");
+    });
+
+    it("clears the name when given a blank label", async () => {
+      const user = await db.user.create({ data: createTestUser() });
+      await db.userCredential.create({
+        data: { id: "mine", userId: user.id, publicKey: new Uint8Array([1]), counter: 0n, name: "Old" },
+      });
+
+      const result = await renameUserPasskey(db, user.id, "mine", "   ");
+      expect(result).toEqual({ renamed: true });
+      const stored = await db.userCredential.findUnique({ where: { id: "mine" } });
+      expect(stored?.name).toBeNull();
+    });
+
+    it("reports nothing renamed for an unknown credential", async () => {
+      const user = await db.user.create({ data: createTestUser() });
+      expect(await renameUserPasskey(db, user.id, "missing", "x")).toEqual({ renamed: false });
+    });
+
+    it("will not rename another user's passkey", async () => {
+      const user = await db.user.create({ data: createTestUser() });
+      const other = await db.user.create({ data: createTestUser() });
+      await db.userCredential.create({
+        data: { id: "theirs", userId: other.id, publicKey: new Uint8Array([1]), counter: 0n, name: "Theirs" },
+      });
+
+      const result = await renameUserPasskey(db, user.id, "theirs", "Hijacked");
+      expect(result).toEqual({ renamed: false });
+      const stored = await db.userCredential.findUnique({ where: { id: "theirs" } });
+      expect(stored?.name).toBe("Theirs");
     });
   });
 

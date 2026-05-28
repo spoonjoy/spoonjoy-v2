@@ -263,6 +263,25 @@ export async function removeUserPasskey(
   return { removed: result.count > 0 };
 }
 
+/**
+ * Rename one of a user's passkeys. Scoped by userId so a posted credential id
+ * cannot rename another user's passkey. A blank label clears the name (the row
+ * falls back to a generic label in the UI). Returns whether a row was updated.
+ */
+export async function renameUserPasskey(
+  db: PrismaClient,
+  userId: string,
+  credentialId: string,
+  name: string,
+): Promise<{ renamed: boolean }> {
+  const trimmedName = name.trim();
+  const result = await db.userCredential.updateMany({
+    where: { id: credentialId, userId },
+    data: { name: trimmedName || null },
+  });
+  return { renamed: result.count > 0 };
+}
+
 /** Derive WebAuthn config from the request's own origin (matches what the browser sees). */
 export function configFromRequest(request: Request): WebAuthnConfig {
   const url = new URL(request.url);

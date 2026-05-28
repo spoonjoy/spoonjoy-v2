@@ -107,6 +107,7 @@ export default function AccountSettings() {
   const [isEditing, setIsEditing] = useState(false);
   const [unlinkingProvider, setUnlinkingProvider] = useState<string | null>(null);
   const [removingPasskeyId, setRemovingPasskeyId] = useState<string | null>(null);
+  const [renamingPasskeyId, setRenamingPasskeyId] = useState<string | null>(null);
   const [passwordFormState, setPasswordFormState] = useState<"idle" | "change" | "set" | "removeConfirm">("idle");
 
   // Restore form state when there are field errors (e.g., after form submission fails)
@@ -334,46 +335,82 @@ export default function AccountSettings() {
             {user.passkeys.map((passkey) => {
               const label = passkey.name || "Passkey";
               const isConfirming = removingPasskeyId === passkey.id;
+              const isRenaming = renamingPasskeyId === passkey.id;
 
               return (
                 <div
                   key={passkey.id}
                   className="flex flex-col gap-3 border-b border-[var(--sj-border)] py-4 sm:flex-row sm:items-center sm:justify-between"
                 >
-                  <div>
-                    <Text className="font-medium text-[var(--sj-ink)]">{label}</Text>
-                    {passkey.createdAt && (
-                      <Text className="text-sm">Added {formatPasskeyDate(passkey.createdAt)}</Text>
-                    )}
-                  </div>
-                  {isConfirming ? (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Text className="text-sm">Are you sure?</Text>
-                      <Form method="post" className="inline">
-                        <input type="hidden" name="intent" value="removePasskey" />
-                        <input type="hidden" name="credentialId" value={passkey.id} />
-                        <Button
-                          type="submit"
-                          variant="destructive"
-                          aria-label={`Confirm remove ${label}`}
-                        >
-                          Confirm
+                  {isRenaming ? (
+                    <Form method="post" className="flex w-full flex-col gap-3 sm:flex-row sm:items-end">
+                      <input type="hidden" name="intent" value="renamePasskey" />
+                      <input type="hidden" name="credentialId" value={passkey.id} />
+                      <Field className="flex-1">
+                        <Label htmlFor={`passkey-name-${passkey.id}`}>Passkey name</Label>
+                        <Input
+                          id={`passkey-name-${passkey.id}`}
+                          name="name"
+                          type="text"
+                          defaultValue={passkey.name ?? ""}
+                          placeholder="e.g. MacBook Touch ID"
+                        />
+                      </Field>
+                      <div className="flex flex-wrap gap-2">
+                        <Button type="submit">Save</Button>
+                        <Button type="button" plain onClick={() => setRenamingPasskeyId(null)}>
+                          Cancel
                         </Button>
-                      </Form>
-                      <Button type="button" plain onClick={() => setRemovingPasskeyId(null)}>
-                        Cancel
-                      </Button>
-                    </div>
+                      </div>
+                    </Form>
                   ) : (
-                    <Button
-                      type="button"
-                      plain
-                      aria-label={`Remove ${label}`}
-                      disabled={!canRemovePasskey}
-                      onClick={() => setRemovingPasskeyId(passkey.id)}
-                    >
-                      Remove
-                    </Button>
+                    <>
+                      <div>
+                        <Text className="font-medium text-[var(--sj-ink)]">{label}</Text>
+                        {passkey.createdAt && (
+                          <Text className="text-sm">Added {formatPasskeyDate(passkey.createdAt)}</Text>
+                        )}
+                      </div>
+                      {isConfirming ? (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Text className="text-sm">Are you sure?</Text>
+                          <Form method="post" className="inline">
+                            <input type="hidden" name="intent" value="removePasskey" />
+                            <input type="hidden" name="credentialId" value={passkey.id} />
+                            <Button
+                              type="submit"
+                              variant="destructive"
+                              aria-label={`Confirm remove ${label}`}
+                            >
+                              Confirm
+                            </Button>
+                          </Form>
+                          <Button type="button" plain onClick={() => setRemovingPasskeyId(null)}>
+                            Cancel
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button
+                            type="button"
+                            plain
+                            aria-label={`Rename ${label}`}
+                            onClick={() => setRenamingPasskeyId(passkey.id)}
+                          >
+                            Rename
+                          </Button>
+                          <Button
+                            type="button"
+                            plain
+                            aria-label={`Remove ${label}`}
+                            disabled={!canRemovePasskey}
+                            onClick={() => setRemovingPasskeyId(passkey.id)}
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               );
