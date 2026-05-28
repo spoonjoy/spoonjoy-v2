@@ -1,7 +1,15 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
-import { ArrowLeft, Edit, Share2, Trash2 } from 'lucide-react'
+import { ArrowLeft, Edit, Share2, ShoppingBag, Trash2 } from 'lucide-react'
 import { MobileNav } from '../app/components/navigation/mobile-nav'
 import { DockContextProvider, useDockActions, type DockAction } from '../app/components/navigation/dock-context'
+
+// iPhone 5/SE (320px) is the narrowest target; 13 mini (375px) is where the
+// dock historically clipped. These let you eyeball every dock variant at the
+// widths the responsive audit (e2e/flows/spoondock-responsive.spec.ts) guards.
+const NARROW_VIEWPORTS = {
+  iphone5: { name: 'iPhone 5/SE — 320px', styles: { width: '320px', height: '568px' } },
+  iphone13mini: { name: 'iPhone 13 mini — 375px', styles: { width: '375px', height: '812px' } },
+}
 
 const meta: Meta<typeof MobileNav> = {
   title: 'Navigation/MobileNav',
@@ -127,6 +135,45 @@ export const RecipeEditContext: Story = {
   render: () => (
     <Frame caption="Recipe edit actions">
       <ContextualEditActions />
+    </Frame>
+  ),
+}
+
+/** Worst case for width: place + primary + three tools (recipe detail, owner). */
+function ContextualRecipeActionsFull() {
+  const actions: DockAction[] = [
+    { id: 'back', icon: ArrowLeft, label: 'Back', sublabel: 'recipes', onAction: '/recipes', position: 'left' },
+    { id: 'list', icon: ShoppingBag, label: 'List', onAction: () => undefined, position: 'right' },
+    { id: 'share', icon: Share2, label: 'Share', onAction: () => undefined, position: 'right' },
+    { id: 'edit', icon: Edit, label: 'Edit', onAction: '/recipes/r-1/edit', position: 'right' },
+  ]
+  useDockActions(actions)
+  return <MobileNav isAuthenticated />
+}
+
+export const RecipeDetailNarrow: Story = {
+  name: 'Recipe detail @ iPhone 5 (worst case)',
+  parameters: {
+    router: { initialEntries: ['/recipes/r-1'] },
+    viewport: { viewports: NARROW_VIEWPORTS, defaultViewport: 'iphone5' },
+  },
+  render: () => (
+    <Frame caption="Recipe detail — 320px">
+      <ContextualRecipeActionsFull />
+    </Frame>
+  ),
+}
+
+export const KitchenHomeNarrow: Story = {
+  name: 'Kitchen home @ iPhone 5',
+  args: { isAuthenticated: true },
+  parameters: {
+    router: { initialEntries: ['/'] },
+    viewport: { viewports: NARROW_VIEWPORTS, defaultViewport: 'iphone5' },
+  },
+  render: (args) => (
+    <Frame caption="Kitchen home — 320px">
+      <MobileNav {...args} />
     </Frame>
   ),
 }
