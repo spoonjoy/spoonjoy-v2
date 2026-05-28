@@ -43,9 +43,13 @@ export function DockItem({
     isPlace && "flex min-w-0 items-center gap-2 overflow-hidden bg-[color-mix(in_srgb,var(--sj-on-photo)_10%,transparent)] px-3 text-left max-[389px]:w-12 max-[389px]:justify-center max-[389px]:gap-0 max-[389px]:px-0",
     isPrimary && [
       "grid min-w-[4.75rem] place-items-center px-4 font-sj-ui text-sm font-bold max-[389px]:min-w-[3.5rem] max-[389px]:px-2.5",
+      // The dock is an always-dark glass surface, so the primary fill must use
+      // an on-photo accent. `--sj-brass` reads clearly on the charcoal in both
+      // light and dark themes; `--sj-action` is dark in light mode and would
+      // make this — the most important action — invisible (dark-on-dark).
       tone === "danger"
         ? "bg-[var(--sj-tomato)] text-[var(--sj-on-photo)]"
-        : "bg-[var(--sj-action)] text-[var(--sj-on-photo)]",
+        : "bg-[var(--sj-brass)] text-[var(--sj-on-photo)]",
     ],
     variant === "tool" && "grid w-[50px] place-items-center bg-[color-mix(in_srgb,var(--sj-on-photo)_10%,transparent)] max-[389px]:w-11",
     active && "dock-item-active",

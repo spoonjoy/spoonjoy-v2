@@ -150,6 +150,20 @@ describe('DockItem', () => {
 
       expect(screen.getByRole('link', { name: /delete/i }).className).toContain('bg-[var(--sj-tomato)]')
     })
+
+    it('uses an on-photo brass fill for the default primary so it stays visible on the dark dock', () => {
+      render(
+        <RouterWrapper>
+          <DockItem {...defaultProps} variant="primary" label="Create" href="/recipes/new" />
+        </RouterWrapper>
+      )
+
+      const link = screen.getByRole('link', { name: /create/i })
+      // --sj-brass reads on the always-dark dock in both themes; --sj-action is
+      // dark-on-dark in light mode and must not be used here.
+      expect(link.className).toContain('bg-[var(--sj-brass)]')
+      expect(link.className).not.toContain('bg-[var(--sj-action)]')
+    })
   })
 
   describe('press state', () => {
