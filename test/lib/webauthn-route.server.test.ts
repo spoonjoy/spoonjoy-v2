@@ -461,6 +461,17 @@ describe("webauthn-route orchestration", () => {
       const cfg = configFromRequest(new Request("http://localhost:5173/auth/webauthn/x"));
       expect(cfg).toEqual({ rpName: "Spoonjoy", rpID: "localhost", origin: "http://localhost:5173" });
     });
+
+    it("uses the forwarded public host, not the worker host (worker fronted by the public domain)", () => {
+      // The worker sees its own *.workers.dev host, but the RP ID must be the
+      // public domain the browser is on or it rejects it ("RP ID … is invalid").
+      const cfg = configFromRequest(
+        new Request("https://spoonjoy-v2.mendelow-studio.workers.dev/auth/webauthn/x", {
+          headers: { "X-Forwarded-Host": "spoonjoy.app", "X-Forwarded-Proto": "https" },
+        }),
+      );
+      expect(cfg).toEqual({ rpName: "Spoonjoy", rpID: "spoonjoy.app", origin: "https://spoonjoy.app" });
+    });
   });
 
   describe("WebAuthnError", () => {

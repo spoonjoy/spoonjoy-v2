@@ -1,7 +1,7 @@
 import type { AppLoadContext } from "react-router";
 import { redirect } from "react-router";
 import { generateState } from "arctic";
-import { canonicalizeOrigin } from "~/lib/canonical-host.server";
+import { requestCanonicalOrigin } from "~/lib/canonical-host.server";
 import type { OAuthEnv } from "~/lib/env.server";
 import { getCloudflareEnv } from "~/lib/route-platform.server";
 import { getOAuthSessionStorage, getUserId, sanitizeSessionRedirect, type SessionEnv } from "~/lib/session.server";
@@ -19,7 +19,6 @@ export interface OAuthStartSessionData {
 }
 
 const OAUTH_SESSION_PREFIX = "oauth";
-const HOST_PATTERN = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?::\d{1,5})?$/i;
 const CALLBACK_PATHS: Record<OAuthProvider, string> = {
   apple: "/auth/apple/callback",
   github: "/auth/github/callback",
@@ -38,20 +37,8 @@ export function getOAuthEnv(context: AppLoadContext): OAuthEnv {
   return (getCloudflareEnv(context) ?? process.env) as OAuthEnv;
 }
 
-function forwardedOrigin(request: Request): string | null {
-  const forwardedHost = request.headers.get("X-Forwarded-Host")?.split(",")[0]?.trim();
-  if (!forwardedHost || !HOST_PATTERN.test(forwardedHost)) return null;
-
-  const forwardedProto = request.headers.get("X-Forwarded-Proto")?.split(",")[0]?.trim().toLowerCase();
-  const protocol = forwardedProto === "http" || forwardedProto === "https" ? forwardedProto : "https";
-  return `${protocol}://${forwardedHost}`;
-}
-
 export function buildOAuthCallbackUrl(request: Request, provider: OAuthProvider): string {
-  const url = new URL(request.url);
-  const origin = canonicalizeOrigin(forwardedOrigin(request) ?? url.origin);
-
-  return `${origin}${CALLBACK_PATHS[provider]}`;
+  return `${requestCanonicalOrigin(request)}${CALLBACK_PATHS[provider]}`;
 }
 
 export function redirectTo(location: string, headers?: HeadersInit) {

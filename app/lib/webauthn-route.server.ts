@@ -26,6 +26,7 @@ import {
   verifyAuthentication,
   verifyRegistration,
 } from "~/lib/webauthn.server";
+import { requestCanonicalOrigin } from "~/lib/canonical-host.server";
 
 export class WebAuthnError extends Error {
   status: number;
@@ -282,12 +283,19 @@ export async function renameUserPasskey(
   return { renamed: result.count > 0 };
 }
 
-/** Derive WebAuthn config from the request's own origin (matches what the browser sees). */
+/**
+ * Derive WebAuthn config (rpID + origin) for the request. The RP ID and origin
+ * MUST match the host the browser is actually on. The public domain fronts the
+ * worker, so `request.url` is the internal `*.workers.dev` host — using it
+ * produces an RP ID the browser rejects ("RP ID … is invalid for this domain").
+ * `requestCanonicalOrigin` resolves the forwarded public host (spoonjoy.app in
+ * prod, localhost in dev), which is the same origin the OAuth callbacks use.
+ */
 export function configFromRequest(request: Request): WebAuthnConfig {
-  const url = new URL(request.url);
+  const origin = requestCanonicalOrigin(request);
   return {
     rpName: "Spoonjoy",
-    rpID: url.hostname,
-    origin: url.origin,
+    rpID: new URL(origin).hostname,
+    origin,
   };
 }
