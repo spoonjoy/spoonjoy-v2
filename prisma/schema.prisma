@@ -32,6 +32,7 @@ model User {
   apiCredentials      ApiCredential[]
   agentConnections    AgentConnectionRequest[]
   oauthAuthCodes      OAuthAuthCode[]
+  oauthRefreshTokens  OAuthRefreshToken[]
   spoons              RecipeSpoon[]
   imageGenLedger      ImageGenLedger[]
 
@@ -52,6 +53,9 @@ model ApiCredential {
   tokenPrefix String
   lastUsedAt  DateTime?
   revokedAt   DateTime?
+  // Optional expiry. Null = non-expiring (API tokens, agent-delegated tokens).
+  // OAuth-connector access tokens set this so they roll over via refresh.
+  expiresAt   DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
@@ -149,6 +153,22 @@ model OAuthAuthCode {
   expiresAt     DateTime
   consumedAt    DateTime?
   createdAt     DateTime  @default(now())
+
+  @@index([userId])
+}
+
+// Long-lived refresh tokens for the connector. Rotated on every use: a refresh
+// mints a new access token + new refresh token and marks the old one revoked,
+// so a replayed refresh token is rejected. Stored only as a SHA-256 hash.
+model OAuthRefreshToken {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clientId  String
+  scope     String
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
 
   @@index([userId])
 }

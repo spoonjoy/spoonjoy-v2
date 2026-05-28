@@ -24,7 +24,7 @@ describe("oauth metadata builders", () => {
       registration_endpoint: "https://spoonjoy.app/oauth/register",
       scopes_supported: ["kitchen:read", "kitchen:write"],
       response_types_supported: ["code"],
-      grant_types_supported: ["authorization_code"],
+      grant_types_supported: ["authorization_code", "refresh_token"],
       code_challenge_methods_supported: ["S256"],
       token_endpoint_auth_methods_supported: ["none"],
     });

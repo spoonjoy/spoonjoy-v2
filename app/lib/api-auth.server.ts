@@ -99,7 +99,8 @@ export async function principalFromUserEmail(
 export async function createApiCredential(
   db: PrismaClientType,
   userId: string,
-  name: string
+  name: string,
+  options: { expiresAt?: Date | null } = {}
 ): Promise<CreatedApiCredential> {
   const token = generateApiToken();
   const tokenHash = await hashApiToken(token);
@@ -109,6 +110,7 @@ export async function createApiCredential(
       name: name.trim(),
       tokenHash,
       tokenPrefix: token.slice(0, 12),
+      expiresAt: options.expiresAt ?? null,
     },
   });
 
@@ -122,7 +124,11 @@ export async function authenticateApiToken(db: PrismaClientType, token: string):
     include: { user: { select: { id: true, email: true, username: true } } },
   });
 
-  if (!credential || credential.revokedAt) {
+  if (
+    !credential ||
+    credential.revokedAt ||
+    (credential.expiresAt !== null && credential.expiresAt.getTime() <= Date.now())
+  ) {
     throw new ApiAuthError("Invalid API token", 401);
   }
 

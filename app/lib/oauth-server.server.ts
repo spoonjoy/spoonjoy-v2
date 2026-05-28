@@ -13,6 +13,7 @@
  */
 
 import type { PrismaClient as PrismaClientType } from "@prisma/client";
+import { createApiCredential } from "~/lib/api-auth.server";
 
 type Database = PrismaClientType;
 
@@ -22,6 +23,12 @@ export const DEFAULT_SCOPE = "kitchen:read kitchen:write";
 
 /** Authorization codes are single-use and expire fast (RFC 6749 §4.1.2). */
 const AUTH_CODE_TTL_SECONDS = 60;
+
+/**
+ * Access-token lifetime — long (30 days) on purpose so connectors refresh
+ * rarely, not constantly. When it lapses the client uses its refresh token.
+ */
+const ACCESS_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60;
 
 /** OAuth 2.1 error, carrying an RFC 6749 error code for the wire response. */
 export class OAuthError extends Error {
@@ -235,4 +242,77 @@ export async function consumeAuthorizationCode(
   }
 
   return { userId: record.userId, scope: record.scope, resource: record.resource };
+}
+
+export interface IssuedConnectorTokens {
+  accessToken: string;
+  refreshToken: string;
+  expiresIn: number;
+  scope: string;
+}
+
+/**
+ * Mint a fresh access token (a long-lived, expiring `ApiCredential`) plus a
+ * refresh token bound to the same user/client/scope. Used by both the
+ * authorization_code grant and refresh rotation.
+ */
+export async function issueConnectorTokens(
+  db: Database,
+  input: { userId: string; clientId: string; scope: string; now?: Date },
+): Promise<IssuedConnectorTokens> {
+  const now = input.now ?? new Date();
+  const { token: accessToken } = await createApiCredential(
+    db,
+    input.userId,
+    "Claude connector (OAuth)",
+    { expiresAt: new Date(now.getTime() + ACCESS_TOKEN_TTL_SECONDS * 1000) },
+  );
+  const refreshToken = randomToken("ort_");
+  await db.oAuthRefreshToken.create({
+    data: {
+      tokenHash: await sha256Hex(refreshToken),
+      userId: input.userId,
+      clientId: input.clientId,
+      scope: input.scope,
+    },
+  });
+  return { accessToken, refreshToken, expiresIn: ACCESS_TOKEN_TTL_SECONDS, scope: input.scope };
+}
+
+/**
+ * Exchange a refresh token for a new token pair (RFC 6749 §6) with rotation:
+ * the presented token is atomically revoked and a new pair issued, so a
+ * replayed refresh token is rejected.
+ */
+export async function rotateConnectorTokens(
+  db: Database,
+  input: { refreshToken: string; clientId: string; now?: Date },
+): Promise<IssuedConnectorTokens> {
+  const now = input.now ?? new Date();
+  if (!input.refreshToken) throw new OAuthError("invalid_grant", "Missing refresh token");
+
+  const record = await db.oAuthRefreshToken.findUnique({
+    where: { tokenHash: await sha256Hex(input.refreshToken) },
+  });
+  if (!record || record.revokedAt) {
+    throw new OAuthError("invalid_grant", "Unknown or revoked refresh token");
+  }
+  if (record.clientId !== input.clientId) {
+    throw new OAuthError("invalid_grant", "Refresh token was issued to a different client");
+  }
+
+  const revoked = await db.oAuthRefreshToken.updateMany({
+    where: { id: record.id, revokedAt: null },
+    data: { revokedAt: now },
+  });
+  if (revoked.count !== 1) {
+    throw new OAuthError("invalid_grant", "Refresh token already used");
+  }
+
+  return issueConnectorTokens(db, {
+    userId: record.userId,
+    clientId: record.clientId,
+    scope: record.scope,
+    now,
+  });
 }

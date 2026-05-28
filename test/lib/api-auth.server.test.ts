@@ -89,6 +89,23 @@ describe("API authentication helpers", () => {
     await expect(authenticateApiToken(db, "sj_missing")).rejects.toThrow("Invalid API token");
   });
 
+  it("honors an optional expiry on a credential", async () => {
+    const user = await db.user.create({ data: { email: uniqueEmail(), username: faker.internet.username() } });
+
+    // A future expiry still authenticates...
+    const future = await createApiCredential(db, user.id, "OAuth token", {
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    expect(future.credential.expiresAt).toBeInstanceOf(Date);
+    await expect(authenticateApiToken(db, future.token)).resolves.toMatchObject({ id: user.id });
+
+    // ...but a past expiry is rejected as invalid.
+    const expired = await createApiCredential(db, user.id, "Expired token", {
+      expiresAt: new Date(Date.now() - 1000),
+    });
+    await expect(authenticateApiToken(db, expired.token)).rejects.toMatchObject({ status: 401 });
+  });
+
   it("authenticates bearer requests, session requests, and lowercased environment users", async () => {
     const user = await db.user.create({ data: { email: uniqueEmail(), username: faker.internet.username() } });
     const created = await createApiCredential(db, user.id, "REST client");

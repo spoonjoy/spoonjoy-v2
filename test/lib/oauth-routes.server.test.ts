@@ -134,7 +134,7 @@ describe("handleOAuthToken", () => {
     await expect(res.json()).resolves.toMatchObject({ error: "unsupported_grant_type" });
   });
 
-  it("exchanges a valid code for an access token", async () => {
+  it("exchanges a valid code for access + refresh tokens", async () => {
     const code = await mintCode();
     const res = await handleOAuthToken(
       formPost("https://spoonjoy.app/oauth/token", {
@@ -145,10 +145,54 @@ describe("handleOAuthToken", () => {
     expect(res.status).toBe(200);
     const body = await res.json() as Record<string, unknown>;
     expect(typeof body.access_token).toBe("string");
+    expect(typeof body.refresh_token).toBe("string");
     expect(body.token_type).toBe("Bearer");
+    expect(body.expires_in).toBeGreaterThan(0);
     expect(body.scope).toBe("kitchen:read kitchen:write");
-    // the access token is a real ApiCredential
+    // the access token is a real ApiCredential, plus one refresh token
     expect(await db.apiCredential.count({ where: { userId } })).toBe(1);
+    expect(await db.oAuthRefreshToken.count({ where: { userId } })).toBe(1);
+  });
+
+  it("exchanges a refresh token for a rotated pair and rejects the old one", async () => {
+    const code = await mintCode();
+    const first = await (await handleOAuthToken(
+      formPost("https://spoonjoy.app/oauth/token", {
+        grant_type: "authorization_code", code, client_id: clientId, redirect_uri: redirectUri, code_verifier: VERIFIER,
+      }),
+      db, null,
+    )).json() as { refresh_token: string };
+
+    const res = await handleOAuthToken(
+      formPost("https://spoonjoy.app/oauth/token", {
+        grant_type: "refresh_token", refresh_token: first.refresh_token, client_id: clientId,
+      }),
+      db, null,
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json() as Record<string, unknown>;
+    expect(typeof body.access_token).toBe("string");
+    expect(body.refresh_token).not.toBe(first.refresh_token); // rotated
+
+    const replay = await handleOAuthToken(
+      formPost("https://spoonjoy.app/oauth/token", {
+        grant_type: "refresh_token", refresh_token: first.refresh_token, client_id: clientId,
+      }),
+      db, null,
+    );
+    expect(replay.status).toBe(400);
+    await expect(replay.json()).resolves.toMatchObject({ error: "invalid_grant" });
+  });
+
+  it("rejects a refresh for an unknown token", async () => {
+    const res = await handleOAuthToken(
+      formPost("https://spoonjoy.app/oauth/token", {
+        grant_type: "refresh_token", refresh_token: "ort_nope", client_id: clientId,
+      }),
+      db, null,
+    );
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({ error: "invalid_grant" });
   });
 
   it("rejects an authorization_code request with the fields missing", async () => {
