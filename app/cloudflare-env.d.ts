@@ -73,6 +73,9 @@ declare global {
     VAPID_PUBLIC_KEY?: string;
     VAPID_PRIVATE_KEY?: string;
     VAPID_SUBJECT?: string;
+    POSTHOG_KEY?: string;
+    POSTHOG_HOST?: string;
+    POSTHOG_DISABLED?: string;
   }
 
   interface CloudflareEnvironment extends Env {}

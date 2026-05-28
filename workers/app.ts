@@ -1,5 +1,9 @@
 import { createRequestHandler } from "react-router";
 import { canonicalizeRequestUrlForHost } from "../app/lib/canonical-host.server";
+import {
+  captureException,
+  resolvePostHogServerConfig,
+} from "../app/lib/analytics-server";
 
 declare global {
   interface CloudflareEnvironment extends Env {}
@@ -20,8 +24,25 @@ export default {
       return Response.redirect(canonicalUrl.toString(), 308);
     }
 
-    return requestHandler(request, {
-      cloudflare: { env, ctx },
-    });
+    try {
+      return await requestHandler(request, {
+        cloudflare: { env, ctx },
+      });
+    } catch (error) {
+      // Outer catch: errors that escaped React Router's onError (e.g. thrown
+      // before the response stream started, or from a non-route boundary).
+      const postHogConfig = resolvePostHogServerConfig(env);
+      if (postHogConfig.enabled) {
+        ctx.waitUntil(
+          captureException(postHogConfig, {
+            error,
+            distinctId: "server",
+            route: new URL(request.url).pathname,
+            method: request.method,
+          }),
+        );
+      }
+      throw error;
+    }
   },
 } satisfies ExportedHandler<CloudflareEnvironment>;

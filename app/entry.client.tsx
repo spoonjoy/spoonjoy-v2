@@ -13,6 +13,7 @@ if (posthogConfig.enabled) {
     api_host: posthogConfig.host,
     capture_pageview: false, // We'll capture manually via React Router
     capture_pageleave: true,
+    capture_exceptions: true, // PostHog auto-captures unhandled errors + promise rejections
     session_recording: {
       maskTextSelector: "*", // Mask all text for privacy
       maskAllInputs: true, // Mask form inputs
