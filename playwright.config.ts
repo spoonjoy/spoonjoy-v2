@@ -28,7 +28,7 @@ export default defineConfig({
         storageState: authFile,
       },
       dependencies: ['setup'],
-      testIgnore: [/.*\.setup\.ts/, /auth\.spec\.ts/, /example\.spec\.ts/, /passkey\.spec\.ts/],
+      testIgnore: [/.*\.setup\.ts/, /auth\.spec\.ts/, /example\.spec\.ts/, /passkey\.spec\.ts/, /oauth-authorize\.spec\.ts/],
     },
     // Tests that don't need authentication (auth flow tests + example)
     {
@@ -42,6 +42,14 @@ export default defineConfig({
       name: 'webauthn',
       use: { ...devices['Desktop Chrome'] },
       testMatch: [/passkey\.spec\.ts/],
+    },
+    // OAuth 2.1 authorize + consent — drives the login gate, so it needs a
+    // fresh, unauthenticated context (no stored auth state) and manages its
+    // own sign-in. Chromium-only (dev server).
+    {
+      name: 'oauth',
+      use: { ...devices['Desktop Chrome'] },
+      testMatch: [/oauth-authorize\.spec\.ts/],
     },
   ],
   webServer: {
