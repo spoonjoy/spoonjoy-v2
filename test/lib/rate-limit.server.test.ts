@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  enforceAuthRateLimit,
   enforceRateLimit,
   hashTokenForRateLimitKey,
   parseBearerToken,
@@ -200,5 +201,31 @@ describe("rateLimitedResponse", () => {
     expect(body.error).toBe("rate_limited");
     expect(body.retryAfterSeconds).toBe(60);
     expect(body.message).toMatch(/too many requests/i);
+  });
+});
+
+describe("enforceAuthRateLimit", () => {
+  function requestWithIp(ip: string | null): Request {
+    const headers = new Headers();
+    if (ip) headers.set("CF-Connecting-IP", ip);
+    return new Request("https://spoonjoy.app/login", { method: "POST", headers });
+  }
+
+  it("blocks on the client IP when the limiter is exhausted", async () => {
+    const ipLimiter = mockLimiter(false);
+    const result = await enforceAuthRateLimit(requestWithIp("203.0.113.4"), ipLimiter);
+    expect(result).toEqual({ allowed: false, retryAfterSeconds: 60, scope: "ip" });
+    expect(ipLimiter.limit).toHaveBeenCalledWith({ key: "ip:203.0.113.4" });
+  });
+
+  it("allows when the limiter has headroom", async () => {
+    const result = await enforceAuthRateLimit(requestWithIp("203.0.113.4"), mockLimiter(true));
+    expect(result.allowed).toBe(true);
+    expect(result.scope).toBe("ip");
+  });
+
+  it("fails open (skip) when no limiter binding is configured", async () => {
+    const result = await enforceAuthRateLimit(requestWithIp("203.0.113.4"), undefined);
+    expect(result).toEqual({ allowed: true, retryAfterSeconds: 0, scope: "skip" });
   });
 });

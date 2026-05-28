@@ -1048,6 +1048,26 @@ Completion notes:
 - Added narrow-viewport stories to `stories/MobileNav.stories.tsx`.
 - Also gitignored `.claude/` and untracked a stray `scheduled_tasks.lock` that had been committed.
 
+### SJ-042 - Hardening & Quality Campaign
+
+Priority: `P1`
+Lane: `security`, `reliability`, `testing`, `a11y`, `observability`
+Status: `in-progress`
+
+Problem: After the auth/passkey + connector waves shipped, the highest-leverage remaining work is hardening and quality — security headers, abuse protection, broader end-to-end coverage, accessibility, performance, and observability — none of which needs product direction or new providers.
+
+Execution plan (atomic PRs, top-down):
+
+- **WebAuthn e2e — done (#120, PR-J6):** see SJ-016.
+- **Auth-endpoint rate limiting — done:** dedicated `AUTH_IP_RATE_LIMITER` binding (20/60s per IP, `namespace_id` 1003) applied to login, signup, and the passkey authenticate options/verify endpoints via `enforceAuthRateLimit`. Throttle runs before any password work so brute-force can't burn bcrypt cycles. Fails open (no binding ⇒ allowed), so local/dev/CI are unaffected; only prod enforces.
+- **Security response headers + report-only CSP** — planned.
+- **Session/cookie hardening** — planned.
+- **e2e breadth** (public sharing, agent device-code approval; audit existing recipe/cookbook/shopping/search/spoon specs for gaps) — planned.
+- **Accessibility** (axe assertions in e2e + keyboard/focus) — planned.
+- **Storybook buildout** (extract `PasskeyList`; primitives) — planned.
+- **Performance** (bundle/code-split, D1 N+1 + indexes) — planned.
+- **Observability/DX** (structured logging, `/health`, fix flaky `fellow-chefs` timeout) — planned.
+
 ## Parking Lot
 
 These are intentionally lower-certainty until product direction is clarified:

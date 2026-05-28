@@ -36,6 +36,12 @@
         "type": "ratelimit",
         "namespace_id": "1002",
         "simple": { "limit": 60, "period": 60 }
+      },
+      {
+        "name": "AUTH_IP_RATE_LIMITER",
+        "type": "ratelimit",
+        "namespace_id": "1003",
+        "simple": { "limit": 20, "period": 60 }
       }
     ]
   },

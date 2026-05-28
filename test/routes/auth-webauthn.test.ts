@@ -34,6 +34,16 @@ function routeArgs(request: Request) {
   return { request, params: {}, context: { cloudflare: { env: null } } } as never;
 }
 
+function routeArgsRateLimited(request: Request) {
+  return {
+    request,
+    params: {},
+    context: {
+      cloudflare: { env: { AUTH_IP_RATE_LIMITER: { limit: async () => ({ success: false }) } } },
+    },
+  } as never;
+}
+
 async function sessionCookie(userId: string) {
   const session = await sessionStorage.getSession();
   session.set("userId", userId);
@@ -135,6 +145,15 @@ describe("WebAuthn routes", () => {
   });
 
   describe("authenticate/options", () => {
+    it("429s when the auth rate limiter is exhausted", async () => {
+      const res = await authenticateOptions(routeArgsRateLimited(jsonRequest(
+        "https://spoonjoy.app/auth/webauthn/authenticate/options",
+        { email: "x@example.com" },
+        { "CF-Connecting-IP": "203.0.113.5" },
+      )));
+      expect(res.status).toBe(429);
+    });
+
     it("400s without an email", async () => {
       const res = await authenticateOptions(routeArgs(jsonRequest("https://spoonjoy.app/auth/webauthn/authenticate/options", {})));
       expect(res.status).toBe(400);
@@ -163,6 +182,15 @@ describe("WebAuthn routes", () => {
   });
 
   describe("authenticate/verify", () => {
+    it("429s when the auth rate limiter is exhausted", async () => {
+      const res = await authenticateVerify(routeArgsRateLimited(jsonRequest(
+        "https://spoonjoy.app/auth/webauthn/authenticate/verify",
+        { email: "x@example.com", response: { id: "vc" } },
+        { "CF-Connecting-IP": "203.0.113.6" },
+      )));
+      expect(res.status).toBe(429);
+    });
+
     it("400s without email + response", async () => {
       const res = await authenticateVerify(routeArgs(jsonRequest("https://spoonjoy.app/auth/webauthn/authenticate/verify", { email: "x@example.com" })));
       expect(res.status).toBe(400);

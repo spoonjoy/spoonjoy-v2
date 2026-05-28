@@ -55,6 +55,8 @@ declare global {
     API_TOKEN_RATE_LIMITER?: RateLimitBinding;
     /** Sliding-window throttle for anonymous IP-based traffic to /api/*. */
     API_IP_RATE_LIMITER?: RateLimitBinding;
+    /** Tighter per-IP throttle for anonymous auth attempts (login/signup/passkey). */
+    AUTH_IP_RATE_LIMITER?: RateLimitBinding;
     SESSION_SECRET?: string;
     SPOONJOY_BASE_URL?: string;
     OPENAI_API_KEY?: string;

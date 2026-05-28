@@ -106,6 +106,24 @@ export async function enforceRateLimit(
 }
 
 /**
+ * Throttle anonymous auth attempts (login, signup, passkey sign-in) per
+ * client IP to blunt brute-force and credential-stuffing. Uses the dedicated
+ * `AUTH_IP_RATE_LIMITER` binding (tighter than the general API limiter).
+ *
+ * Fails OPEN like {@link enforceRateLimit}: with no binding (local dev, tests)
+ * the attempt is allowed and reported as scope `"skip"`.
+ */
+export async function enforceAuthRateLimit(
+  request: Request,
+  ipLimiter: RateLimiterBinding | undefined,
+): Promise<RateLimitResult> {
+  return enforceRateLimit({
+    ip: request.headers.get("CF-Connecting-IP"),
+    ipLimiter,
+  });
+}
+
+/**
  * Build a 429 response with the standard `Retry-After` header.
  * Callers should also set their CORS / API headers on the response if
  * needed (this helper does not, so it stays generic).
