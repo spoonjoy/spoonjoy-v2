@@ -696,6 +696,36 @@ describe("oauth-user.server", () => {
       expect(oauthRecords).toHaveLength(1);
     });
 
+    it("should allow unlinking the only OAuth provider when a passkey remains", async () => {
+      // OAuth-only user (no password) who has also enrolled a passkey.
+      const oauthData = {
+        provider: "google",
+        providerUserId: faker.string.uuid(),
+        providerUsername: "Google User",
+        email: faker.internet.email().toLowerCase(),
+        name: "Test User",
+      };
+      const createResult = await createOAuthUser(db, oauthData);
+      expect(createResult.success).toBe(true);
+      await db.userCredential.create({
+        data: {
+          id: faker.string.uuid(),
+          userId: createResult.user!.id,
+          publicKey: new Uint8Array([1]),
+          counter: 0n,
+        },
+      });
+
+      const result = await unlinkOAuthAccount(db, createResult.user!.id, "google");
+
+      expect(result.success).toBe(true);
+      // The OAuth record is gone; the passkey keeps the account reachable.
+      const oauthRecords = await db.oAuth.findMany({
+        where: { userId: createResult.user!.id },
+      });
+      expect(oauthRecords).toHaveLength(0);
+    });
+
     it("should return error when provider is not linked to user", async () => {
       // Create user with password only (no OAuth)
       const testUser = createTestUser();

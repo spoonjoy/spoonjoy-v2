@@ -123,11 +123,14 @@ export default function AccountSettings() {
 
   const linkedProviders = new Set(user.oauthAccounts.map((a) => a.provider));
 
-  // Determine if user can unlink OAuth (has password OR has multiple OAuth providers)
-  const canUnlinkOAuth = user.hasPassword || user.oauthAccounts.length > 1;
+  // Determine if user can unlink OAuth (keeps a password, another OAuth
+  // provider, or an enrolled passkey as a way back in).
+  const canUnlinkOAuth =
+    user.hasPassword || user.oauthAccounts.length > 1 || user.passkeys.length > 0;
 
-  // Determine if user can remove password (has OAuth linked)
-  const canRemovePassword = user.oauthAccounts.length > 0;
+  // Determine if user can remove password (a linked OAuth account or an
+  // enrolled passkey keeps them able to sign in).
+  const canRemovePassword = user.oauthAccounts.length > 0 || user.passkeys.length > 0;
 
   // A passkey can be removed only if the user keeps another way to sign in:
   // a password, a linked OAuth account, or at least one other passkey.

@@ -337,18 +337,23 @@ export async function unlinkOAuthAccount(
     };
   }
 
-  // Check if this is the only auth method
+  // Check if this is the only auth method. A passkey counts as a way to log in,
+  // so unlinking is allowed when the user keeps a password, another OAuth
+  // provider, or at least one enrolled passkey.
   const hasPassword = user.hashedPassword !== null;
   const oauthCount = await db.oAuth.count({
     where: { userId },
   });
+  const passkeyCount = await db.userCredential.count({
+    where: { userId },
+  });
 
-  if (!hasPassword && oauthCount === 1) {
+  if (!hasPassword && oauthCount === 1 && passkeyCount === 0) {
     return {
       success: false,
       error: "only_auth_method",
       message:
-        "Cannot unlink this provider because it is your only way to log in. Please add a password or another OAuth provider first.",
+        "Cannot unlink this provider because it is your only way to log in. Please add a password, another OAuth provider, or a passkey first.",
     };
   }
 

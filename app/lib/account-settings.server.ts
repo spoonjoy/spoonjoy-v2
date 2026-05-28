@@ -569,7 +569,7 @@ export async function handleAccountSettingsAction({
       select: {
         hashedPassword: true,
         _count: {
-          select: { OAuth: true },
+          select: { OAuth: true, credentials: true },
         },
       },
     });
@@ -582,8 +582,9 @@ export async function handleAccountSettingsAction({
       };
     }
 
-    // Check if password is the only auth method (no OAuth)
-    if (user._count.OAuth === 0) {
+    // Check if the password is the only auth method. A linked OAuth account or
+    // an enrolled passkey both count as a remaining way to log in.
+    if (user._count.OAuth === 0 && user._count.credentials === 0) {
       return {
         success: false,
         error: "last_auth_method",

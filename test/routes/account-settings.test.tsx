@@ -3588,6 +3588,44 @@ describe("Account Settings Route", () => {
         expect(user?.hashedPassword).not.toBeNull();
       });
 
+      it("should allow password removal when a passkey remains (no OAuth)", async () => {
+        // testUser has a password and no OAuth; an enrolled passkey is enough.
+        await db.userCredential.create({
+          data: { id: "pk_pwdrop", userId: testUserId, publicKey: new Uint8Array([1]), counter: 0n },
+        });
+
+        const session = await sessionStorage.getSession();
+        session.set("userId", testUserId);
+        const setCookieHeader = await sessionStorage.commitSession(session);
+        const cookieValue = setCookieHeader.split(";")[0];
+
+        const formData = new FormData();
+        formData.append("intent", "removePassword");
+
+        const headers = new Headers();
+        headers.set("Cookie", cookieValue);
+        headers.set("Content-Type", "application/x-www-form-urlencoded");
+
+        const request = new UndiciRequest("http://localhost:3000/account/settings", {
+          method: "POST",
+          headers,
+          body: new URLSearchParams(formData as any).toString(),
+        });
+
+        const result = await action({
+          request,
+          context: { cloudflare: { env: null } },
+          params: {},
+        } as any);
+
+        expect(result.success).toBe(true);
+        const updatedUser = await db.user.findUnique({
+          where: { id: testUserId },
+          select: { hashedPassword: true },
+        });
+        expect(updatedUser?.hashedPassword).toBeNull();
+      });
+
       it("should return error when user has no password to remove", async () => {
         // Create OAuth-only user (no password)
         const oauthEmail = faker.internet.email();
