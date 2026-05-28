@@ -28,13 +28,20 @@ export default defineConfig({
         storageState: authFile,
       },
       dependencies: ['setup'],
-      testIgnore: [/.*\.setup\.ts/, /auth\.spec\.ts/, /example\.spec\.ts/],
+      testIgnore: [/.*\.setup\.ts/, /auth\.spec\.ts/, /example\.spec\.ts/, /passkey\.spec\.ts/],
     },
     // Tests that don't need authentication (auth flow tests + example)
     {
       name: 'chromium-no-auth',
       use: { ...devices['Desktop Chrome'] },
       testMatch: [/auth\.spec\.ts/, /example\.spec\.ts/],
+    },
+    // WebAuthn passkey lifecycle — needs a fresh, unauthenticated context and a
+    // CDP virtual authenticator (Chromium-only), so it manages its own user.
+    {
+      name: 'webauthn',
+      use: { ...devices['Desktop Chrome'] },
+      testMatch: [/passkey\.spec\.ts/],
     },
   ],
   webServer: {
