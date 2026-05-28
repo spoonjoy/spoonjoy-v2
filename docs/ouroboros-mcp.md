@@ -2,6 +2,8 @@
 
 Spoonjoy v2 ships a stdio MCP server so Ouroboros agents can use Spoonjoy as their first-class recipe memory and shopping-list substrate.
 
+> For using Spoonjoy from Claude (Claude Code / claude.ai) over a remote MCP endpoint, see the [Claude Connector docs](./claude-connector.md). It exposes this same tool surface over MCP Streamable HTTP at `/mcp`.
+
 ## Tools
 
 When registered under the server name `spoonjoy`, the harness exposes these first-class tools as `spoonjoy_health`, `spoonjoy_search_recipes`, and so on:
