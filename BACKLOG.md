@@ -1024,6 +1024,27 @@ Acceptance criteria:
 - Reuse the existing device-code/agent-connection consent backend where possible.
 - 100% coverage; verified against Claude's connector OAuth flow.
 
+### SJ-041 - SpoonDock Responsive Audit (down to iPhone 5 / 320px)
+
+Priority: `P1`
+Lane: `mobile`, `ux`, `navigation`
+Status: `done`
+
+Problem: The mobile SpoonDock broke on narrow phones — even the iPhone 13 mini (375px). With five competing elements (recipe detail: back-place + Cook primary + 3 tools), the grid's left "place" column (`minmax(0,0.9fr)`) collapsed below a usable touch target (measured 24px at 320px) and the `whitespace-nowrap` place label clipped/spilled.
+
+Acceptance criteria:
+
+- Every dock variant fits — no horizontal overflow, in-viewport, >=44px touch targets — at 320px (iPhone 5/SE), 375px (13 mini), and 390px.
+- An automated regression guard covers every variant at those widths.
+- Storybook surfaces the worst-case configs at narrow widths for visual audit.
+
+Completion notes:
+
+- Place item collapses to a centered icon (min 48px) at <=389px (label becomes `sr-only`, preserving the accessible name); labels return at 390px+. Grid left column floored at `minmax(3rem,...)`; primary/tools/gaps/padding tighten at <=389px; side margins reduced to 0.75rem. Place labels `truncate` + `overflow-hidden` as a universal anti-spill net.
+- Added `e2e/flows/spoondock-responsive.spec.ts` auditing all variants (kitchen, search, shopping, account, cookbooks, users, recipe-detail worst case) at 320/375/390px.
+- Added narrow-viewport stories to `stories/MobileNav.stories.tsx`.
+- Also gitignored `.claude/` and untracked a stray `scheduled_tasks.lock` that had been committed.
+
 ## Parking Lot
 
 These are intentionally lower-certainty until product direction is clarified:
