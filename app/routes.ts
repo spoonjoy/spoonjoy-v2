@@ -44,6 +44,7 @@ export default [
   route("api/push/preferences", "routes/api.push.preferences.ts"),
   route("api/*", "routes/api.$.ts"),
   route("mcp", "routes/mcp.ts"),
+  route("health", "routes/health.ts"),
   route("oauth/register", "routes/oauth.register.ts"),
   route("oauth/authorize", "routes/oauth.authorize.tsx"),
   route("oauth/token", "routes/oauth.token.ts"),
