@@ -48,8 +48,8 @@ describe('SpoonDock', () => {
     it('is horizontally centered with safe area insets', () => {
       render(<SpoonDock />)
       const nav = screen.getByRole('navigation')
-      expect(nav).toHaveClass('left-[max(1rem,env(safe-area-inset-left))]')
-      expect(nav).toHaveClass('right-[max(1rem,env(safe-area-inset-right))]')
+      expect(nav).toHaveClass('left-[max(0.75rem,env(safe-area-inset-left))]')
+      expect(nav).toHaveClass('right-[max(0.75rem,env(safe-area-inset-right))]')
       expect(nav).toHaveClass('mx-auto')
     })
   })
@@ -59,14 +59,24 @@ describe('SpoonDock', () => {
       render(<SpoonDock />)
       const nav = screen.getByRole('navigation')
       expect(nav).toHaveClass('grid')
-      expect(nav).toHaveClass('grid-cols-[minmax(0,0.9fr)_minmax(4.75rem,auto)_auto]')
+      expect(nav).toHaveClass('grid-cols-[minmax(3rem,0.9fr)_auto_auto]')
+    })
+
+    it('keeps the left place column tappable and compacts gaps on narrow phones', () => {
+      render(<SpoonDock />)
+      const nav = screen.getByRole('navigation')
+      // Left column has a 3rem (48px) floor so the place item stays a touch target.
+      expect(nav).toHaveClass('grid-cols-[minmax(3rem,0.9fr)_auto_auto]')
+      // Gap + padding tighten at <=389px (iPhone 13 mini / SE / 5).
+      expect(nav).toHaveClass('max-[389px]:gap-1')
+      expect(nav).toHaveClass('max-[389px]:p-1.5')
     })
 
     it('uses one consistent layout for root and contextual docks', () => {
       render(<SpoonDock />)
       const nav = screen.getByRole('navigation')
       expect(nav).toHaveClass('grid')
-      expect(nav).toHaveClass('grid-cols-[minmax(0,0.9fr)_minmax(4.75rem,auto)_auto]')
+      expect(nav).toHaveClass('grid-cols-[minmax(3rem,0.9fr)_auto_auto]')
       expect(nav).not.toHaveClass('grid-cols-[72px_1fr_72px]')
     })
 

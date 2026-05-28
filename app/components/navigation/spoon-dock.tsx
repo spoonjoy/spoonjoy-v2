@@ -17,9 +17,9 @@ export function SpoonDock({
       role="navigation"
       aria-label={ariaLabel}
       className={clsx(
-        "fixed bottom-0 left-[max(1rem,env(safe-area-inset-left))] right-[max(1rem,env(safe-area-inset-right))]",
-        "mx-auto grid h-17 max-w-lg grid-cols-[minmax(0,0.9fr)_minmax(4.75rem,auto)_auto] items-center gap-2",
-        "rounded-full border border-[var(--sj-photo-line)] bg-[color-mix(in_srgb,var(--sj-charcoal)_92%,transparent)] p-2 text-[var(--sj-on-photo)] shadow-[var(--sj-shadow)] backdrop-blur-xl",
+        "fixed bottom-0 left-[max(0.75rem,env(safe-area-inset-left))] right-[max(0.75rem,env(safe-area-inset-right))]",
+        "mx-auto grid h-17 max-w-lg grid-cols-[minmax(3rem,0.9fr)_auto_auto] items-center gap-2 max-[389px]:gap-1",
+        "rounded-full border border-[var(--sj-photo-line)] bg-[color-mix(in_srgb,var(--sj-charcoal)_92%,transparent)] p-2 max-[389px]:p-1.5 text-[var(--sj-on-photo)] shadow-[var(--sj-shadow)] backdrop-blur-xl",
         "z-50 mb-[max(1rem,env(safe-area-inset-bottom))] lg:hidden",
         className,
       )}
