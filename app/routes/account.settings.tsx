@@ -14,6 +14,7 @@ import { Input } from "~/components/ui/input";
 import { Avatar } from "~/components/ui/avatar";
 import { OAuthError } from "~/components/ui/oauth";
 import { NotificationsSection } from "~/components/notifications-section";
+import { AddPasskeyButton } from "~/components/auth/AddPasskeyButton";
 import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
 import { CookbookPage, CookbookHeader, SettingsPanel } from "~/components/cookbook/page";
 
@@ -428,6 +429,16 @@ export default function AccountSettings() {
               </div>
             )
           )}
+        </div>
+      </SettingsPanel>
+
+      {/* Passkeys Section */}
+      <SettingsPanel testId="passkeys-section" title="Passkeys">
+        <Text className="mt-1">
+          Add a passkey to sign in without a password using your device's biometrics or security key.
+        </Text>
+        <div className="mt-4">
+          <AddPasskeyButton />
         </div>
       </SettingsPanel>
 
