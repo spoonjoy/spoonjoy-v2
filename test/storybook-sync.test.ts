@@ -10,6 +10,7 @@ const curatedRootStories = new Set([
   'AppFoundation.stories.tsx',
   'ConfirmationDialog.stories.tsx',
   'MobileNav.stories.tsx',
+  'ProfilePhotoCropper.stories.tsx',
   'SpoonjoyLogo.stories.tsx',
 ])
 

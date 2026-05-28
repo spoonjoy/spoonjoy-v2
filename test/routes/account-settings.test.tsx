@@ -1521,55 +1521,66 @@ describe("Account Settings Route", () => {
         clickSpy.mockRestore();
       });
 
-      it("should auto-submit form when file is selected", async () => {
+      it("should open the cropper instead of auto-submitting when a file is selected", async () => {
         const user = userEvent.setup();
-        const mockData = {
-          user: {
-            id: testUserId,
-            email: testUserEmail.toLowerCase(),
-            username: testUsername,
-            hasPassword: true,
-            oauthAccounts: [],
-            photoUrl: null,
-            passkeys: [],
-          },
-          notifications: { pushSubscribed: false },
-      };
+        const originalCreateObjectURL = URL.createObjectURL;
+        const originalRevokeObjectURL = URL.revokeObjectURL;
+        URL.createObjectURL = vi.fn(() => "blob:http://localhost/mock");
+        URL.revokeObjectURL = vi.fn();
 
-        let actionCalled = false;
-        const Stub = createTestRoutesStub([
-          {
-            path: "/account/settings",
-            Component: AccountSettings,
-            loader: () => mockData,
-            action: async () => {
-              actionCalled = true;
-              return { success: true, photoUrl: "https://example.com/new-photo.jpg" };
+        try {
+          const mockData = {
+            user: {
+              id: testUserId,
+              email: testUserEmail.toLowerCase(),
+              username: testUsername,
+              hasPassword: true,
+              oauthAccounts: [],
+              photoUrl: null,
+              passkeys: [],
             },
-          },
-        ]);
+            notifications: { pushSubscribed: false },
+          };
 
-        render(<Stub initialEntries={["/account/settings"]} />);
+          let actionCalled = false;
+          const Stub = createTestRoutesStub([
+            {
+              path: "/account/settings",
+              Component: AccountSettings,
+              loader: () => mockData,
+              action: async () => {
+                actionCalled = true;
+                return { success: true, photoUrl: "https://example.com/new-photo.jpg" };
+              },
+            },
+          ]);
 
-        await screen.findByRole("heading", { name: /account settings/i });
+          render(<Stub initialEntries={["/account/settings"]} />);
 
-        const profilePhotoSection = screen.getByTestId("profile-photo-section");
-        const fileInput = profilePhotoSection.querySelector(
-          'input[type="file"]'
-        ) as HTMLInputElement;
+          await screen.findByRole("heading", { name: /account settings/i });
 
-        // Create a mock file and simulate file selection
-        const mockFile = new File(["fake image data"], "test-photo.jpg", {
-          type: "image/jpeg",
-        });
+          const profilePhotoSection = screen.getByTestId("profile-photo-section");
+          const fileInput = profilePhotoSection.querySelector(
+            'input[type="file"]'
+          ) as HTMLInputElement;
 
-        await user.upload(fileInput, mockFile);
+          // Create a mock file and simulate file selection
+          const mockFile = new File(["fake image data"], "test-photo.jpg", {
+            type: "image/jpeg",
+          });
 
-        // The form should have been submitted (action called)
-        expect(actionCalled).toBe(true);
+          await user.upload(fileInput, mockFile);
+
+          // The cropper opens for the user to confirm; nothing is submitted yet.
+          expect(await screen.findByRole("button", { name: /save photo/i })).toBeInTheDocument();
+          expect(actionCalled).toBe(false);
+        } finally {
+          URL.createObjectURL = originalCreateObjectURL;
+          URL.revokeObjectURL = originalRevokeObjectURL;
+        }
       });
 
-      it("should not auto-submit form when file selection is cancelled (no file selected)", async () => {
+      it("should not open the cropper when file selection is cancelled (no file selected)", async () => {
         const mockData = {
           user: {
             id: testUserId,
@@ -1615,8 +1626,9 @@ describe("Account Settings Route", () => {
         // Files is already empty by default on the input
         fileInput.dispatchEvent(changeEvent);
 
-        // The form should NOT have been submitted (action not called)
+        // No file selected → no cropper, no submit.
         expect(actionCalled).toBe(false);
+        expect(screen.queryByRole("button", { name: /save photo/i })).not.toBeInTheDocument();
       });
     });
 
