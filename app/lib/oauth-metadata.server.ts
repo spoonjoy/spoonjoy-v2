@@ -7,11 +7,22 @@
  *   `/.well-known/oauth-protected-resource`, pointing the `/mcp` resource at
  *   this authorization server.
  *
- * The issuer/origin is taken from the incoming request so the same code serves
- * correct metadata on localhost and on spoonjoy.app without configuration.
+ * The issuer must be the public host the client reached (spoonjoy.app), which
+ * is NOT necessarily `request.url`: the public domain fronts the worker, so
+ * inside the worker `request.url` is the `*.workers.dev` origin. Prefer the
+ * configured `SPOONJOY_BASE_URL`, falling back to the request origin for local
+ * dev where it isn't set.
  */
 
 import { SUPPORTED_SCOPES } from "~/lib/oauth-server.server";
+
+/**
+ * Resolve the public issuer origin: the configured base URL when present,
+ * otherwise the request's own origin (local dev).
+ */
+export function resolveIssuerOrigin(requestUrl: string, baseUrl?: string | null): string {
+  return new URL(baseUrl || requestUrl).origin;
+}
 
 /** The MCP endpoint these tokens are bound to (the protected resource). */
 export function mcpResourceUrl(origin: string): string {

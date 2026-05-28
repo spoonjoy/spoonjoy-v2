@@ -27,7 +27,7 @@ import {
   PUBLIC_BOOTSTRAP_OPERATIONS,
   resolveApiPrincipal,
 } from "~/lib/spoonjoy-api-request.server";
-import { protectedResourceMetadataUrl } from "~/lib/oauth-metadata.server";
+import { protectedResourceMetadataUrl, resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 import {
   enforceRateLimit,
   rateLimitedResponse,
@@ -95,7 +95,7 @@ async function authChallengeIfNeeded(
   }
   if (principal) return null;
 
-  const origin = new URL(request.url).origin;
+  const origin = resolveIssuerOrigin(request.url, cloudflareEnv?.SPOONJOY_BASE_URL);
   return new Response(
     JSON.stringify({ error: "unauthorized", message: "Authentication required." }),
     {

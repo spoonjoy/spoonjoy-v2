@@ -107,6 +107,23 @@ describe("handleMcpHttpRequest", () => {
     expect(response.headers.get("WWW-Authenticate")).toContain("Bearer");
   });
 
+  it("points the challenge at SPOONJOY_BASE_URL, not the worker's own host", async () => {
+    const request = new UndiciRequest("https://spoonjoy-v2.mendelow-studio.workers.dev/mcp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(init(4, "tools/call", { name: "get_shopping_list", arguments: {} })),
+    }) as unknown as Request;
+    const response = await handleMcpHttpRequest({
+      request,
+      db,
+      cloudflareEnv: { SPOONJOY_BASE_URL: "https://spoonjoy.app" },
+    });
+    expect(response.status).toBe(401);
+    expect(response.headers.get("WWW-Authenticate")).toContain(
+      'resource_metadata="https://spoonjoy.app/.well-known/oauth-protected-resource"',
+    );
+  });
+
   it("does not challenge a malformed tool/call with no tool name", async () => {
     const response = await handleMcpHttpRequest({
       request: rpcRequest(init(4, "tools/call", { arguments: {} })),

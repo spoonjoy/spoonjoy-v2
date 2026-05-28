@@ -4,9 +4,24 @@ import {
   buildProtectedResourceMetadata,
   mcpResourceUrl,
   protectedResourceMetadataUrl,
+  resolveIssuerOrigin,
 } from "~/lib/oauth-metadata.server";
 
 const ORIGIN = "https://spoonjoy.app";
+
+describe("resolveIssuerOrigin", () => {
+  it("prefers the configured base URL over the request origin", () => {
+    // worker sees its *.workers.dev host, but the public issuer is spoonjoy.app
+    expect(
+      resolveIssuerOrigin("https://spoonjoy-v2.workers.dev/.well-known/x", "https://spoonjoy.app"),
+    ).toBe("https://spoonjoy.app");
+  });
+
+  it("falls back to the request origin when no base URL is set", () => {
+    expect(resolveIssuerOrigin("http://localhost:5173/x", undefined)).toBe("http://localhost:5173");
+    expect(resolveIssuerOrigin("http://localhost:5173/x", "")).toBe("http://localhost:5173");
+  });
+});
 
 describe("oauth metadata builders", () => {
   it("derives endpoint URLs from the origin", () => {
