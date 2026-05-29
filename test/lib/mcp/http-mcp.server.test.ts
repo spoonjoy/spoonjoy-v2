@@ -112,10 +112,16 @@ describe("handleMcpHttpRequest", () => {
       db,
     });
     expect(response.status).toBe(200);
-    const body = await response.json() as { result: { tools: { name: string }[] } };
+    const body = await response.json() as {
+      result: { tools: { name: string; title?: string; annotations?: { readOnlyHint?: boolean } }[] };
+    };
     const names = body.result.tools.map((t) => t.name);
     expect(names).toContain("search_spoonjoy");
     expect(names).toContain("get_shopping_list");
+    // Annotations must reach the wire — directories read them from tools/list.
+    const getShoppingList = body.result.tools.find((t) => t.name === "get_shopping_list");
+    expect(getShoppingList?.title).toBe("Get shopping list");
+    expect(getShoppingList?.annotations?.readOnlyHint).toBe(true);
   });
 
   it("acks an authenticated notification with 202 and no body", async () => {

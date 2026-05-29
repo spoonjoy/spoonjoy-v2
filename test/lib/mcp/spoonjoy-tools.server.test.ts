@@ -81,6 +81,36 @@ describe("spoonjoy MCP tools", () => {
     ]);
   });
 
+  it("annotates every tool with a title and behavioral hints (directory requirement)", () => {
+    // Connector directories reject tools missing a title or read/destructive
+    // hints. Asserting every tool here also enforces annotation completeness:
+    // a tool without a map entry would surface as a missing title.
+    for (const tool of listSpoonjoyMcpTools()) {
+      expect(typeof tool.title, tool.name).toBe("string");
+      expect(tool.title.length, tool.name).toBeGreaterThan(0);
+      expect(tool.annotations, tool.name).toBeDefined();
+      expect(tool.annotations.title, tool.name).toBe(tool.title);
+      expect(typeof tool.annotations.readOnlyHint, tool.name).toBe("boolean");
+      if (tool.annotations.readOnlyHint) {
+        // Read-only tools never carry a destructive hint.
+        expect(tool.annotations.destructiveHint, tool.name).toBeUndefined();
+      } else {
+        // Writes must declare destructiveness explicitly (no relying on defaults).
+        expect(typeof tool.annotations.destructiveHint, tool.name).toBe("boolean");
+      }
+    }
+  });
+
+  it("classifies reads, writes, deletes, and the open-world import correctly", () => {
+    const byName = new Map(listSpoonjoyMcpTools().map((tool) => [tool.name, tool.annotations]));
+
+    expect(byName.get("get_recipe")).toMatchObject({ readOnlyHint: true });
+    expect(byName.get("create_recipe")).toMatchObject({ readOnlyHint: false, destructiveHint: false });
+    expect(byName.get("delete_recipe")).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true });
+    expect(byName.get("import_recipe_from_url")).toMatchObject({ readOnlyHint: false, openWorldHint: true });
+    expect(byName.get("add_recipe_to_cookbook")).toMatchObject({ idempotentHint: true });
+  });
+
   it("reports health and writable state", async () => {
     expect(parseJson(await callSpoonjoyMcpTool("health", {}, context))).toMatchObject({
       ok: true,

@@ -2,15 +2,15 @@ import {
   callSpoonjoyApiOperation,
   listSpoonjoyApiOperations,
   type SpoonjoyApiContext,
+  type SpoonjoyMcpToolDescriptor,
 } from "~/lib/spoonjoy-api.server";
 
 export type SpoonjoyMcpContext = SpoonjoyApiContext;
 
-export interface SpoonjoyMcpToolInfo {
-  name: string;
-  description: string;
-  inputSchema: Record<string, unknown>;
-}
+// Tool metadata surfaced through MCP `tools/list`, including the `title` and
+// behavioral annotations connector directories require. Mirrors the operation
+// layer so the two never drift.
+export type SpoonjoyMcpToolInfo = SpoonjoyMcpToolDescriptor;
 
 export function listSpoonjoyMcpTools(): SpoonjoyMcpToolInfo[] {
   return listSpoonjoyApiOperations();
