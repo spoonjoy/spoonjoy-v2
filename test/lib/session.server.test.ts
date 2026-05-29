@@ -31,6 +31,31 @@ describe("session.server", () => {
     }
   });
 
+  describe("SESSION_SECRET fail-closed (production)", () => {
+    it("throws when env.NODE_ENV is production and no SESSION_SECRET is provided", async () => {
+      // Silently falling back to the well-known dev secret in prod would let
+      // anyone with the source forge sessions. Make sure we hard-fail instead.
+      delete process.env.SESSION_SECRET;
+      const request = new Request("http://localhost/", { method: "GET" }) as unknown as globalThis.Request;
+      await expect(getUserId(request, { NODE_ENV: "production" })).rejects.toThrow(
+        /SESSION_SECRET is required in production/,
+      );
+    });
+
+    it("throws when process.env.NODE_ENV is production and no SESSION_SECRET is set", async () => {
+      delete process.env.SESSION_SECRET;
+      vi.stubEnv("NODE_ENV", "production");
+      try {
+        const request = new Request("http://localhost/", { method: "GET" }) as unknown as globalThis.Request;
+        await expect(getUserId(request, null)).rejects.toThrow(
+          /SESSION_SECRET is required in production/,
+        );
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+  });
+
   describe("getUserId", () => {
     it("should return null when no session exists", async () => {
       const request = new Request("http://localhost:3000/test");

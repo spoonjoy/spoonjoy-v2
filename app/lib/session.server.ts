@@ -5,10 +5,18 @@ const DEFAULT_DEV_SESSION_SECRET = "default-dev-secret-please-change-in-producti
 
 export interface SessionEnv {
   SESSION_SECRET?: string;
+  // NODE_ENV is read so we can fail closed in production when SESSION_SECRET
+  // is missing — silently signing sessions with the well-known dev secret in
+  // prod would let anyone with the source forge sessions.
+  NODE_ENV?: string;
 }
 
 const storageCache = new Map<string, ReturnType<typeof createSessionStorageForSecret>>();
 const oauthStorageCache = new Map<string, ReturnType<typeof createOAuthSessionStorageForSecret>>();
+
+function isProduction(env?: SessionEnv | null): boolean {
+  return env?.NODE_ENV === "production" || process.env.NODE_ENV === "production";
+}
 
 function resolveSessionSecret(env?: SessionEnv | null): string {
   if (env?.SESSION_SECRET) {
@@ -17,6 +25,16 @@ function resolveSessionSecret(env?: SessionEnv | null): string {
 
   if (process.env.SESSION_SECRET) {
     return process.env.SESSION_SECRET;
+  }
+
+  // Fail closed in production — signing sessions with the well-known dev
+  // fallback is equivalent to no signing. The audit flagged this as P2
+  // hardening (the worker should already have SESSION_SECRET set); this
+  // turns "wasn't set" into a hard error instead of a silent compromise.
+  if (isProduction(env)) {
+    throw new Error(
+      "SESSION_SECRET is required in production — refusing to sign sessions with the dev fallback.",
+    );
   }
 
   return DEFAULT_DEV_SESSION_SECRET;
