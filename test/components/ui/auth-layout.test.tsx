@@ -74,6 +74,18 @@ describe('AuthLayout', () => {
     })
   })
 
+  describe('legal links', () => {
+    it('always renders Privacy and Terms links beneath the form', () => {
+      render(
+        <AuthLayout>
+          <p>Content</p>
+        </AuthLayout>
+      )
+      expect(screen.getByRole('link', { name: 'Privacy' })).toHaveAttribute('href', '/privacy')
+      expect(screen.getByRole('link', { name: 'Terms' })).toHaveAttribute('href', '/terms')
+    })
+  })
+
   describe('semantic structure', () => {
     it('renders a main element as the root', () => {
       render(

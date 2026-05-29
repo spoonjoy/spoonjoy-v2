@@ -42,7 +42,12 @@ export function AuthLayout({
         </section>
         <section className="flex items-center border-t border-[var(--sj-border)] px-5 py-8 sm:px-8 lg:border-l lg:border-t-0 lg:px-12">
           <div className="w-full max-w-md">
-          {children}
+            {children}
+            <p className="mt-8 text-center text-xs text-[var(--sj-ink-soft)]">
+              <a className="underline hover:text-[var(--sj-ink)]" href="/privacy">Privacy</a>
+              <span aria-hidden="true"> · </span>
+              <a className="underline hover:text-[var(--sj-ink)]" href="/terms">Terms</a>
+            </p>
           </div>
         </section>
       </div>

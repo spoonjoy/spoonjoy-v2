@@ -17,6 +17,8 @@ export default [
   route("auth/webauthn/authenticate/verify", "routes/auth.webauthn.authenticate.verify.ts"),
   route("agent/connect/:requestId", "routes/agent.connect.$requestId.tsx"),
   route(".redwood/functions/auth/oauth", "routes/redwood-functions-auth-oauth.tsx"),
+  route("privacy", "routes/privacy.tsx"),
+  route("terms", "routes/terms.tsx"),
   route("search", "routes/search.tsx"),
   route("og/recipes/:id.png", "routes/og.recipes.$id.png.tsx"),
   route("og/cookbooks/:id.png", "routes/og.cookbooks.$id.png.tsx"),
