@@ -108,7 +108,12 @@ export async function buildRegistrationOptions(
       transports: parseTransports(cred.transports),
     })),
     authenticatorSelection: {
-      residentKey: "preferred",
+      // "required" makes this an unambiguous discoverable-passkey request, so
+      // third-party providers (Bitwarden, 1Password) treat it as a first-class
+      // passkey instead of dismissing and letting macOS fall back to iCloud
+      // Keychain. We deliberately leave authenticatorAttachment unset so any
+      // provider — platform or cross-platform — can answer.
+      residentKey: "required",
       userVerification: "preferred",
     },
   });

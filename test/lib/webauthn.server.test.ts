@@ -90,7 +90,7 @@ describe("buildRegistrationOptions", () => {
       { id: "existing_1", transports: ["internal"] },
     ]);
     expect(opts.authenticatorSelection).toEqual({
-      residentKey: "preferred",
+      residentKey: "required",
       userVerification: "preferred",
     });
   });
