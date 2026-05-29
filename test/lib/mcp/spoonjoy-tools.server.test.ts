@@ -616,6 +616,39 @@ describe("spoonjoy MCP tools", () => {
     expect(second.shoppingList.items[0]).toMatchObject({ name: "sugar", quantity: 2, checked: false });
   });
 
+  it("handles a recipe with no ingredients without touching the shopping list", async () => {
+    // The batched path short-circuits both the existing-items findMany and
+    // the transaction when there's nothing to add. This guards both empty
+    // branches: aggregatedRows.length === 0 and ops.length === 0.
+    const recipe = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+      title: "Empty Sketch",
+      steps: [{ description: "Just an idea." }],
+    }, context));
+
+    const added = parseJson(await callSpoonjoyMcpTool("add_recipe_to_shopping_list", { recipeId: recipe.recipe.id }, context));
+    expect(added).toMatchObject({ created: 0, updated: 0 });
+    expect(added.shoppingList.items).toEqual([]);
+  });
+
+  it("aggregates duplicate (unit, ingredient) pairs within a single recipe into one item", async () => {
+    // Two steps both list the same (Sugar, Cup) — the batched path must sum
+    // them in memory before writing, otherwise the second create hits the
+    // unique constraint. Behavior should match the original per-iteration loop
+    // which happened to update the just-created row.
+    const recipe = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+      title: "Double Sugar Cake",
+      steps: [
+        { description: "Mix first batch", ingredients: [{ name: "Sugar", quantity: 1, unit: "Cup" }] },
+        { description: "Mix second batch", ingredients: [{ name: "Sugar", quantity: 2, unit: "Cup" }] },
+      ],
+    }, context));
+
+    const added = parseJson(await callSpoonjoyMcpTool("add_recipe_to_shopping_list", { recipeId: recipe.recipe.id }, context));
+    expect(added).toMatchObject({ created: 1, updated: 0 });
+    expect(added.shoppingList.items).toHaveLength(1);
+    expect(added.shoppingList.items[0]).toMatchObject({ name: "sugar", unit: "cup", quantity: 3 });
+  });
+
   it("rejects adding a soft-deleted recipe to a shopping list", async () => {
     const recipe = parseJson(await callSpoonjoyMcpTool("create_recipe", {
       title: "Deleted Shopping Cake",
@@ -890,6 +923,32 @@ describe("spoonjoy MCP tools", () => {
       cookbookId: cookbook.cookbook.id,
     }, context));
     expect(stillEmpty.cookbook).toMatchObject({ recipeCount: 0, recipes: [] });
+  });
+
+  it("groups multiple recipes per cookbook in list_cookbooks (batched-fetch regression)", async () => {
+    // The batched listCookbooks fetches every cookbook's recipes in one
+    // findMany and groups them in memory. With 2+ recipes per cookbook the
+    // "append to existing list" branch fires; with a single recipe it doesn't.
+    // This test exercises that branch.
+    const cookbook = parseJson(await callSpoonjoyMcpTool("create_cookbook", {
+      title: "Big Box",
+    }, context));
+    const r1 = parseJson(await callSpoonjoyMcpTool("create_recipe", { title: "Salt Soup" }, context));
+    const r2 = parseJson(await callSpoonjoyMcpTool("create_recipe", { title: "Pepper Soup" }, context));
+    await callSpoonjoyMcpTool("add_recipe_to_cookbook", {
+      cookbookId: cookbook.cookbook.id,
+      recipeId: r1.recipe.id,
+    }, context);
+    await callSpoonjoyMcpTool("add_recipe_to_cookbook", {
+      cookbookId: cookbook.cookbook.id,
+      recipeId: r2.recipe.id,
+    }, context);
+
+    const listed = parseJson(await callSpoonjoyMcpTool("list_cookbooks", {}, context));
+    expect(listed.cookbooks).toHaveLength(1);
+    expect(listed.cookbooks[0].recipeCount).toBe(2);
+    const titles = listed.cookbooks[0].recipes.map((r: { title: string }) => r.title).sort();
+    expect(titles).toEqual(["Pepper Soup", "Salt Soup"]);
   });
 
   it("excludes deleted recipes from cookbook MCP payloads", async () => {

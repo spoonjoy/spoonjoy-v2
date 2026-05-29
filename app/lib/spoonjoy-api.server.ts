@@ -1247,43 +1247,88 @@ const addRecipeToShoppingListTool: SpoonjoyApiOperation = {
       include: { unit: true, ingredientRef: true },
     });
 
-    let created = 0;
-    let updated = 0;
-
+    // Aggregate recipe ingredients in-memory first so duplicate (unit,
+    // ingredient) pairs within the SAME recipe accumulate into one row
+    // (the original per-iteration findUnique/update loop happened to do
+    // this via the just-created row; the batched path must do it
+    // explicitly or hit the unique constraint).
+    type Aggregated = { unitId: string; ingredientRefId: string; quantity: number };
+    const aggregated = new Map<string, Aggregated>();
     for (const ingredient of ingredients) {
-      const existing = await context.db.shoppingListItem.findUnique({
-        where: {
-          shoppingListId_unitId_ingredientRefId: {
-            shoppingListId: shoppingList.id,
-            unitId: ingredient.unitId,
-            ingredientRefId: ingredient.ingredientRefId,
-          },
-        },
-      });
-
-      if (existing) {
-        updated += 1;
-        await context.db.shoppingListItem.update({
-          where: { id: existing.id },
-          data: {
-            quantity: (existing.quantity ?? 0) + ingredient.quantity,
-            checked: false,
-            checkedAt: null,
-            deletedAt: null,
-          },
-        });
+      const key = `${ingredient.unitId}:${ingredient.ingredientRefId}`;
+      const cur = aggregated.get(key);
+      if (cur) {
+        cur.quantity += ingredient.quantity;
       } else {
-        created += 1;
-        await context.db.shoppingListItem.create({
-          data: {
-            shoppingListId: shoppingList.id,
-            quantity: ingredient.quantity,
-            unitId: ingredient.unitId,
-            ingredientRefId: ingredient.ingredientRefId,
-            sortIndex: await nextSortIndex(context.db, shoppingList.id),
-          },
+        aggregated.set(key, {
+          unitId: ingredient.unitId,
+          ingredientRefId: ingredient.ingredientRefId,
+          quantity: ingredient.quantity,
         });
       }
+    }
+
+    // One batched findMany for every existing matching item on the list,
+    // instead of a per-ingredient findUnique (was 1 + N round-trips). The
+    // OR clause uses the same composite uniqueness the original
+    // findUnique relied on.
+    const aggregatedRows = [...aggregated.values()];
+    const existingItems = aggregatedRows.length > 0
+      ? await context.db.shoppingListItem.findMany({
+          where: {
+            shoppingListId: shoppingList.id,
+            OR: aggregatedRows.map((row) => ({
+              unitId: row.unitId,
+              ingredientRefId: row.ingredientRefId,
+            })),
+          },
+        })
+      : [];
+    const existingByKey = new Map<string, typeof existingItems[number]>();
+    for (const item of existingItems) {
+      existingByKey.set(`${item.unitId}:${item.ingredientRefId}`, item);
+    }
+
+    // nextSortIndex once before the loop, then increment in memory for
+    // each new row — was previously re-queried per create.
+    let nextSort = await nextSortIndex(context.db, shoppingList.id);
+    const ops: Prisma.PrismaPromise<unknown>[] = [];
+    let created = 0;
+    let updated = 0;
+    for (const row of aggregatedRows) {
+      const key = `${row.unitId}:${row.ingredientRefId}`;
+      const existing = existingByKey.get(key);
+      if (existing) {
+        updated += 1;
+        ops.push(
+          context.db.shoppingListItem.update({
+            where: { id: existing.id },
+            data: {
+              quantity: (existing.quantity ?? 0) + row.quantity,
+              checked: false,
+              checkedAt: null,
+              deletedAt: null,
+            },
+          }),
+        );
+      } else {
+        created += 1;
+        ops.push(
+          context.db.shoppingListItem.create({
+            data: {
+              shoppingListId: shoppingList.id,
+              quantity: row.quantity,
+              unitId: row.unitId,
+              ingredientRefId: row.ingredientRefId,
+              sortIndex: nextSort,
+            },
+          }),
+        );
+        nextSort += 1;
+      }
+    }
+    if (ops.length > 0) {
+      await context.db.$transaction(ops);
     }
 
     const result = {
@@ -1327,18 +1372,34 @@ const listCookbooksTool: SpoonjoyApiOperation = {
       include: cookbookSummaryInclude,
     });
 
-    const summaries = [];
-    for (const cookbook of cookbooks) {
-      const recipes = await context.db.recipeInCookbook.findMany({
-        where: {
-          cookbookId: cookbook.id,
-          recipe: { deletedAt: null },
-        },
-        orderBy: { createdAt: "desc" },
-        include: cookbookSummaryRecipeInclude,
-      });
-      summaries.push(formatLeanCookbookSummary(cookbook, recipes));
+    // Single batched fetch of every cookbook's recipes instead of one
+    // findMany per cookbook (was up to 1 + N round-trips at the audited
+    // hot path). Group in memory; per-cookbook ordering is preserved by
+    // the shared `orderBy: createdAt desc` + Map insertion order.
+    const cookbookIds = cookbooks.map((cookbook) => cookbook.id);
+    const allRecipes = cookbookIds.length > 0
+      ? await context.db.recipeInCookbook.findMany({
+          where: {
+            cookbookId: { in: cookbookIds },
+            recipe: { deletedAt: null },
+          },
+          orderBy: { createdAt: "desc" },
+          include: cookbookSummaryRecipeInclude,
+        })
+      : [];
+    const byCookbook = new Map<string, typeof allRecipes>();
+    for (const row of allRecipes) {
+      const list = byCookbook.get(row.cookbookId);
+      if (list) {
+        list.push(row);
+      } else {
+        byCookbook.set(row.cookbookId, [row]);
+      }
     }
+
+    const summaries = cookbooks.map((cookbook) =>
+      formatLeanCookbookSummary(cookbook, byCookbook.get(cookbook.id) ?? []),
+    );
 
     return json({ cookbooks: summaries });
   },
