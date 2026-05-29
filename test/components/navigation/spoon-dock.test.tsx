@@ -55,24 +55,23 @@ describe('SpoonDock', () => {
   })
 
   describe('layout', () => {
-    it('centers the primary by default with symmetric side columns', () => {
+    it('is a flex row that lets the growing zones center the primary by default', () => {
       render(<SpoonDock />)
       const nav = screen.getByRole('navigation')
-      // Symmetric minmax(0,1fr) side columns keep the place item at the far
-      // left and tools at the far right with the primary dead-center.
-      expect(nav).toHaveClass('grid')
-      expect(nav).toHaveClass('grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]')
-      expect(nav).not.toHaveClass('flex')
+      // Centered mode is a plain flex row; MobileNav grows the side zones
+      // (flex-1) so they fill the dock and leave the primary dead-center, so
+      // the nav itself must NOT pin items to the edges with justify-between.
+      expect(nav).toHaveClass('flex')
+      expect(nav).not.toHaveClass('justify-between')
     })
 
     it('falls back to edge-to-edge distribution when not centered (full tool cluster)', () => {
       render(<SpoonDock centered={false} />)
       const nav = screen.getByRole('navigation')
-      // No room to center; distribute with equal gaps so it fills the width
-      // without spilling.
+      // No room to grow + center; distribute with equal gaps so it fills the
+      // width without spilling.
       expect(nav).toHaveClass('flex')
       expect(nav).toHaveClass('justify-between')
-      expect(nav).not.toHaveClass('grid')
     })
 
     it('keeps a minimum gap that compacts on narrow phones', () => {

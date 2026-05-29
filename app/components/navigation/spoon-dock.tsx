@@ -28,15 +28,15 @@ export function SpoonDock({
       aria-label={ariaLabel}
       className={clsx(
         "fixed bottom-0 left-[max(0.75rem,env(safe-area-inset-left))] right-[max(0.75rem,env(safe-area-inset-right))]",
-        "mx-auto h-17 max-w-lg items-center gap-2 max-[389px]:gap-1",
-        // Centered: symmetric side columns (minmax(0,1fr)) hold the place item
-        // (far left) and tools (far right) while the primary stays dead-center.
-        // Fallback: edge-to-edge distribution with equal gaps when centering
-        // would leave no room (3-tool view) — fills the width, never crowded,
-        // never spills (guarded by e2e/flows/spoondock-responsive.spec.ts).
-        centered
-          ? "grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]"
-          : "flex justify-between",
+        "mx-auto flex h-17 max-w-lg items-center gap-2 max-[389px]:gap-1",
+        // Centered: the place + tools zones grow (flex-1) to fill all the space
+        // — no bare dock shows between items — and because both side zones are
+        // equal, the primary lands dead-center. Fallback: when the tools
+        // cluster is full (3) there's no room to grow+center without squishing
+        // touch targets below 44px, so distribute edge-to-edge with equal gaps,
+        // which still fills the width without spilling (guarded by
+        // e2e/flows/spoondock-responsive.spec.ts). MobileNav grows the zones.
+        centered ? null : "justify-between",
         // Solid dark fill (no backdrop-filter): a `backdrop-blur` on a
         // position:fixed element is a known iOS Safari bug that detaches/
         // mis-positions the element during scroll (the dock "not sticking to

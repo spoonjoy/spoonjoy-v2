@@ -162,7 +162,7 @@ describe('SpoonDock v3 Layout Integration', () => {
   })
 
   describe('mobile dock layout', () => {
-    it('centers the primary on a root dock (<=2 tools)', () => {
+    it('lays the dock out as a centered flex row by default', () => {
       render(
         <MemoryRouter>
           <AssembledSpoonDock />
@@ -170,8 +170,10 @@ describe('SpoonDock v3 Layout Integration', () => {
       )
 
       const nav = screen.getByRole('navigation')
-      expect(nav).toHaveClass('grid')
-      expect(nav).toHaveClass('grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]')
+      // Centered default: a flex row (MobileNav grows the side zones to fill +
+      // center the primary); the nav must not pin items to the edges.
+      expect(nav).toHaveClass('flex')
+      expect(nav).not.toHaveClass('justify-between')
     })
   })
 
