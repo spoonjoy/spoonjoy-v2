@@ -222,7 +222,8 @@ export default function Search() {
             </Text>
           </aside>
 
-          <main>
+          {/* <section>, not <main>: root.tsx already renders the page's only <main>. */}
+          <section aria-label="Search results">
             <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <Subheading level={2} className="text-2xl/8">{hasQuery ? `Results for "${query.trim()}"` : "Recently searchable"}</Subheading>
@@ -257,7 +258,7 @@ export default function Search() {
                 </Text>
               </RuledEmptyState>
             )}
-          </main>
+          </section>
         </div>
       </section>
     </CookbookPage>

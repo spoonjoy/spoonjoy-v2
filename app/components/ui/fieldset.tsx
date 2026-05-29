@@ -81,8 +81,13 @@ export function ErrorMessage({
   className,
   ...props
 }: { className?: string } & Omit<Headless.DescriptionProps, 'as' | 'className'>) {
+  // role="alert" + the implicit aria-live=assertive makes screen readers
+  // announce form errors when they appear. Without it, login/signup/account-
+  // settings validation failures changed the visible UI but said nothing to
+  // SR users. Callers can override via {...props}.
   return (
     <Headless.Description
+      role="alert"
       data-slot="error"
       {...props}
       className={clsx(className, 'text-base/6 text-[var(--sj-tomato)] data-disabled:opacity-50 sm:text-sm/6')}

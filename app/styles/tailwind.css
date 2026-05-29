@@ -57,7 +57,9 @@
   --sj-brass: #c4945c;
   --sj-action: #b9854b;
   --sj-action-deep: #95683a;
-  --sj-tomato: #d26850;
+  /* Bumped from #d26850 (4.24:1 on --sj-panel-solid) to pass WCAG AA (≥4.5:1)
+   * — it's the error-text color, so it has to be readable. */
+  --sj-tomato: #e58263;
   --sj-herb: #a4b578;
   --sj-ink: var(--sj-bone);
   --sj-ink-soft: var(--sj-charcoal-soft);
@@ -476,6 +478,32 @@ body:has(#cook) .sj-mobile-surface {
 .sj-hover-lift:hover {
   transform: translateY(-2px);
   box-shadow: var(--sj-shadow);
+}
+
+/* Skip-to-content link — invisible until keyboard-focused, then slides down
+ * from the top edge. Rendered by Layout in root.tsx as the first focusable
+ * element so the very first Tab press jumps a keyboard / SR user past the
+ * desktop nav and mobile dock straight to <main id="main">. */
+.sj-skip-link {
+  position: fixed;
+  top: -3rem;
+  left: 0.5rem;
+  z-index: 100;
+  padding: 0.5rem 1rem;
+  background: var(--sj-charcoal);
+  color: var(--sj-bone);
+  font-family: var(--font-sj-ui);
+  font-weight: 600;
+  text-decoration: underline;
+  border-radius: 0 0 var(--sj-radius-small) var(--sj-radius-small);
+  transition: top 0.15s ease;
+}
+
+.sj-skip-link:focus,
+.sj-skip-link:focus-visible {
+  top: 0;
+  outline: 2px solid var(--sj-brass);
+  outline-offset: 2px;
 }
 
 /* Indeterminate progress bar — a thin brass sweep across the top of the page

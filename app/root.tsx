@@ -192,7 +192,11 @@ export default function App() {
           <header className="sj-desktop-topbar sticky top-0 z-30 hidden items-center px-4 lg:flex">
             <AppNavbar userId={userId} oauthProviders={oauthProviders} />
           </header>
-          <main className="sj-desktop-surface sj-mobile-surface grow pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-0">
+          <main
+            id="main"
+            tabIndex={-1}
+            className="sj-desktop-surface sj-mobile-surface grow pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-0"
+          >
             <Outlet />
           </main>
         </div>
@@ -258,7 +262,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
         />
       </head>
       <body className="m-0 bg-[var(--sj-page)] p-0 text-[var(--sj-ink)] antialiased">
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          <a className="sj-skip-link" href="#main">Skip to main content</a>
+          {children}
+        </ThemeProvider>
         <ScrollRestoration />
         <Scripts />
       </body>
@@ -297,7 +304,7 @@ export function ErrorBoundary() {
   }
 
   return (
-    <main className="sj-mobile-surface grow">
+    <main id="main" tabIndex={-1} className="sj-mobile-surface grow">
       <CookbookPage>
         <CookbookHeader eyebrow="Spoonjoy" title={title}>
           <Text>{message}</Text>

@@ -19,8 +19,12 @@ export function AuthLayout({
   title = 'Keep the good recipes close.',
   description = 'Sign in to cook, fork, save, and remember the recipes that actually make it to your table.',
 }: AuthLayoutProps) {
+  // Wrap in <div>, not <main>: root.tsx already renders a single <main id="main">
+  // around every page. Nesting another <main> here breaks landmark navigation.
+  // The marketing title is <h2> so the page's actual <h1> (the form title like
+  // "Log In") stays at level 1, preserving a single h1 per page.
   return (
-    <main className="sj-page min-h-dvh">
+    <div className="sj-page min-h-dvh">
       <div className="grid min-h-dvh lg:grid-cols-[minmax(0,0.92fr)_minmax(24rem,0.58fr)]">
         <section className="flex flex-col justify-between px-5 py-7 sm:px-8 lg:px-12">
           <a href="/" className="inline-flex min-h-11 items-center gap-2 font-sj-display text-2xl font-semibold text-[var(--sj-ink)] no-underline lg:hidden">
@@ -29,9 +33,9 @@ export function AuthLayout({
           </a>
           <div className="max-w-2xl py-16">
             <p className="sj-eyebrow">{eyebrow}</p>
-            <h1 className="font-sj-display mt-3 text-5xl/12 font-semibold text-[var(--sj-ink)] sm:text-6xl/14">
+            <h2 className="font-sj-display mt-3 text-5xl/12 font-semibold text-[var(--sj-ink)] sm:text-6xl/14">
               {title}
-            </h1>
+            </h2>
             <p className="mt-5 max-w-xl text-base/7 text-[var(--sj-ink-soft)]">
               {description}
             </p>
@@ -51,6 +55,6 @@ export function AuthLayout({
           </div>
         </section>
       </div>
-    </main>
+    </div>
   )
 }
