@@ -1,9 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { Request as UndiciRequest } from "undici";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { faker } from "@faker-js/faker";
 import { db } from "~/lib/db.server";
 import { sessionStorage } from "~/lib/session.server";
-import { loadRecipeDetail } from "~/lib/recipe-detail.server";
+import { loadRecipeDetail, handleRecipeDetailAction } from "~/lib/recipe-detail.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 
 async function makeAuthedRequest(userId: string, recipeId: string) {
@@ -105,5 +105,53 @@ describe("loadRecipeDetail sourceRecipe", () => {
     expect(sourceRecipe).not.toBeNull();
     expect(sourceRecipe!.deletedAt).not.toBeNull();
     expect(sourceRecipe!.chef.username).toBe(chefA.username);
+  });
+});
+
+describe("handleRecipeDetailAction addToCookbook error surfacing", () => {
+  beforeEach(async () => { await cleanupDatabase(); });
+  afterEach(async () => { await cleanupDatabase(); });
+
+  it("re-throws non-P2002 errors instead of returning success (audit-fix regression)", async () => {
+    // The old catch swallowed every error as { success: true }, hiding real
+    // failures behind a "saved" UI. The fix narrows to P2002 only and
+    // re-throws everything else. Mocking a non-P2002 reject is the only way
+    // to exercise that branch from a deterministic test.
+    const chef = await makeUser();
+    const recipe = await db.recipe.create({ data: { title: "Greens", chefId: chef.id } });
+    const cookbook = await db.cookbook.create({ data: { title: "Box", authorId: chef.id } });
+
+    const originalCreate = db.recipeInCookbook.create;
+    db.recipeInCookbook.create = vi
+      .fn()
+      .mockRejectedValue(Object.assign(new Error("Database error"), { code: "P2003" }));
+
+    try {
+      const formData = new UndiciFormData();
+      formData.append("intent", "addToCookbook");
+      formData.append("cookbookId", cookbook.id);
+
+      const session = await sessionStorage.getSession();
+      session.set("userId", chef.id);
+      const cookie = (await sessionStorage.commitSession(session)).split(";")[0];
+      const headers = new Headers();
+      headers.set("Cookie", cookie);
+
+      const request = new UndiciRequest(`http://localhost/recipes/${recipe.id}`, {
+        method: "POST",
+        headers,
+        body: formData,
+      }) as unknown as Request;
+
+      await expect(
+        handleRecipeDetailAction({
+          request,
+          params: { id: recipe.id },
+          context: { cloudflare: { env: null } } as any,
+        }),
+      ).rejects.toMatchObject({ message: "Database error", code: "P2003" });
+    } finally {
+      db.recipeInCookbook.create = originalCreate;
+    }
   });
 });

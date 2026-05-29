@@ -411,8 +411,14 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
           },
         });
         return { success: true };
-      } catch {
-        return { success: true };
+      } catch (error: any) {
+        // P2002 = the recipe is already in this cookbook, so re-adding is an
+        // idempotent success. Anything else is a real failure and must surface;
+        // swallowing it silently let "saved" UIs hide actual data loss.
+        if (error?.code === "P2002") {
+          return { success: true };
+        }
+        throw error;
       }
     }
   }

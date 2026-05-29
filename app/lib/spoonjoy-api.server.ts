@@ -614,37 +614,65 @@ async function getCredentialOwner(db: Database, args: Record<string, unknown>, c
   return getOrCreateOwner(db, email);
 }
 
-async function replaceRecipeSteps(db: Database, recipeId: string, steps: ReturnType<typeof parseSteps>) {
-  await db.stepOutputUse.deleteMany({ where: { recipeId } });
-  await db.ingredient.deleteMany({ where: { recipeId } });
-  await db.recipeStep.deleteMany({ where: { recipeId } });
+async function replaceRecipeSteps(db: PrismaClientType, recipeId: string, steps: ReturnType<typeof parseSteps>) {
+  // Pre-resolve all unit + ingredientRef ids OUTSIDE the swap. They're
+  // idempotent getOrCreates and don't need to be atomic with the recipe's
+  // step replacement; they just need their ids ready.
+  const unitNames = new Set<string>();
+  const ingredientNames = new Set<string>();
+  for (const step of steps) {
+    for (const ingredient of step.ingredients) {
+      unitNames.add(normalizeName(ingredient.unit));
+      ingredientNames.add(normalizeName(ingredient.name));
+    }
+  }
+  const unitIds = new Map<string, string>();
+  for (const name of unitNames) {
+    unitIds.set(name, (await getOrCreateUnit(db, name)).id);
+  }
+  const ingredientRefIds = new Map<string, string>();
+  for (const name of ingredientNames) {
+    ingredientRefIds.set(name, (await getOrCreateIngredientRef(db, name)).id);
+  }
 
+  // Atomic swap as a single D1 batch: clear-then-rebuild as one transaction so
+  // a mid-sequence failure rolls back the deletes instead of permanently
+  // gutting the recipe. D1 doesn't support Prisma's interactive
+  // `$transaction(async tx => ...)` form, but it does support the batched
+  // PrismaPromise[] form, which is what we use here.
+  const ops: Prisma.PrismaPromise<unknown>[] = [
+    db.stepOutputUse.deleteMany({ where: { recipeId } }),
+    db.ingredient.deleteMany({ where: { recipeId } }),
+    db.recipeStep.deleteMany({ where: { recipeId } }),
+  ];
   for (const [index, step] of steps.entries()) {
     const stepNum = index + 1;
-    await db.recipeStep.create({
-      data: {
-        recipeId,
-        stepNum,
-        stepTitle: step.title ?? null,
-        description: step.description,
-        duration: step.duration ?? null,
-      },
-    });
-
-    for (const ingredient of step.ingredients) {
-      const unit = await getOrCreateUnit(db, ingredient.unit);
-      const ingredientRef = await getOrCreateIngredientRef(db, ingredient.name);
-      await db.ingredient.create({
+    ops.push(
+      db.recipeStep.create({
         data: {
           recipeId,
           stepNum,
-          quantity: ingredient.quantity,
-          unitId: unit.id,
-          ingredientRefId: ingredientRef.id,
+          stepTitle: step.title ?? null,
+          description: step.description,
+          duration: step.duration ?? null,
         },
-      });
+      }),
+    );
+    for (const ingredient of step.ingredients) {
+      ops.push(
+        db.ingredient.create({
+          data: {
+            recipeId,
+            stepNum,
+            quantity: ingredient.quantity,
+            unitId: unitIds.get(normalizeName(ingredient.unit))!,
+            ingredientRefId: ingredientRefIds.get(normalizeName(ingredient.name))!,
+          },
+        }),
+      );
     }
   }
+  await db.$transaction(ops);
 }
 
 const healthTool: SpoonjoyApiOperation = {

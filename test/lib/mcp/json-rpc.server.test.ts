@@ -115,6 +115,21 @@ describe("json-rpc MCP server", () => {
       error: { code: -32602, message: "string boom" },
     });
   });
+
+  it("invokes onError with the raw exception before collapsing it to JSON-RPC", async () => {
+    // The transport (e.g. /mcp) uses this to report unexpected exceptions to
+    // its observability sink — the wire only carries the message+code, so the
+    // raw Error has to escape the catch through this side channel.
+    const onError = vi.fn();
+    const boom = new Error("kaboom");
+    const response = await handleJsonRpcLine(
+      JSON.stringify({ jsonrpc: "2.0", id: 12, method: "tools/call", params: { name: "explode" } }),
+      router({ callTool: async () => { throw boom; } }),
+      { onError },
+    );
+    expect(onError).toHaveBeenCalledExactlyOnceWith(boom);
+    expect(response).toMatchObject({ error: { code: -32602, message: "kaboom" } });
+  });
 });
 
 describe("handleJsonRpcMessage (transport-agnostic core)", () => {

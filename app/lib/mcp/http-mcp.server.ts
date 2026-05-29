@@ -34,6 +34,7 @@ import {
   rateLimitedResponse,
   type RateLimiterBinding,
 } from "~/lib/rate-limit.server";
+import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
 
 interface CloudflareEnvLike {
   SESSION_SECRET?: string;
@@ -43,6 +44,9 @@ interface CloudflareEnvLike {
   VAPID_PRIVATE_KEY?: string;
   VAPID_SUBJECT?: string;
   PHOTOS?: R2Bucket;
+  POSTHOG_KEY?: string;
+  POSTHOG_HOST?: string;
+  POSTHOG_DISABLED?: string;
 }
 
 export interface HandleMcpHttpRequestParams {
@@ -134,8 +138,25 @@ export async function handleMcpHttpRequest(params: HandleMcpHttpRequestParams): 
     },
   };
 
+  // Surface unexpected exceptions inside tool dispatch to PostHog. Without this
+  // an exception during a tools/call is collapsed to a JSON-RPC -32603 with the
+  // message on the wire and no record of the original stack in observability.
+  const onError = (error: unknown) => {
+    if (!waitUntil || !cloudflareEnv) return;
+    const phConfig = resolvePostHogServerConfig(cloudflareEnv);
+    if (!phConfig.enabled) return;
+    waitUntil(
+      captureException(phConfig, {
+        error,
+        distinctId: principal.id,
+        route: new URL(request.url).pathname,
+        method: request.method,
+      }),
+    );
+  };
+
   const body = await request.text();
-  const response = await handleJsonRpcLine(body, router);
+  const response = await handleJsonRpcLine(body, router, { onError });
 
   // Notifications (no id) produce no JSON-RPC response — ack with 202.
   if (response === null) {

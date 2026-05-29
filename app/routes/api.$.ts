@@ -4,6 +4,7 @@ import { enforceRateLimit, rateLimitedResponse } from "~/lib/rate-limit.server";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { callSpoonjoyApiOperation, listSpoonjoyApiOperations } from "~/lib/spoonjoy-api.server";
 import { buildSpoonjoyApiContext, resolveApiPrincipal } from "~/lib/spoonjoy-api-request.server";
+import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
 
 const API_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -121,22 +122,16 @@ async function dispatchMutation(method: string, path: string, segments: string[]
   notFound(path);
 }
 
-function statusForError(error: unknown): number {
-  if (error instanceof ApiAuthError) return error.status;
-  if (error instanceof Error && /not found/i.test(error.message)) return 404;
-  return 400;
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
 async function handleApiRequest({ request, context, params }: Route.LoaderArgs | Route.ActionArgs) {
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: API_HEADERS });
   }
 
   const cfEnv = context.cloudflare?.env;
+  const cloudflare = context.cloudflare;
+  const ctx = cloudflare?.ctx;
+  const waitUntil = ctx?.waitUntil ? ctx.waitUntil.bind(ctx) : undefined;
+
   const rateLimit = await enforceRateLimit({
     authorization: request.headers.get("Authorization"),
     ip: request.headers.get("CF-Connecting-IP"),
@@ -180,10 +175,6 @@ async function handleApiRequest({ request, context, params }: Route.LoaderArgs |
     const db = await getRequestDb(context);
     const principal = await resolveApiPrincipal(db, request, context.cloudflare?.env, dispatch.operation);
 
-    const cloudflare = context.cloudflare;
-    const ctx = cloudflare?.ctx;
-    const waitUntil = ctx?.waitUntil ? ctx.waitUntil.bind(ctx) : undefined;
-
     const data = await callSpoonjoyApiOperation(
       dispatch.operation,
       dispatch.args,
@@ -191,8 +182,31 @@ async function handleApiRequest({ request, context, params }: Route.LoaderArgs |
     );
     return apiJson({ ok: true, data });
   } catch (error) {
-    const status = statusForError(error);
-    return apiJson({ ok: false, error: { message: errorMessage(error), status } }, status);
+    // ApiAuthError and "Recipe/Cookbook not found"-style errors are intentional
+    // client-visible failures — surface them at their proper status. Anything
+    // else is an unexpected bug or infra failure: log it via PostHog (so prod
+    // incidents aren't invisible) and respond 500 with a generic message rather
+    // than leaking the raw error.
+    if (error instanceof ApiAuthError) {
+      return apiJson({ ok: false, error: { message: error.message, status: error.status } }, error.status);
+    }
+    if (error instanceof Error && /not found/i.test(error.message)) {
+      return apiJson({ ok: false, error: { message: error.message, status: 404 } }, 404);
+    }
+    if (waitUntil && cfEnv) {
+      const phConfig = resolvePostHogServerConfig(cfEnv);
+      if (phConfig.enabled) {
+        waitUntil(
+          captureException(phConfig, {
+            error,
+            distinctId: "server",
+            route: new URL(request.url).pathname,
+            method: request.method,
+          }),
+        );
+      }
+    }
+    return apiJson({ ok: false, error: { message: "Internal server error", status: 500 } }, 500);
   }
 }
 

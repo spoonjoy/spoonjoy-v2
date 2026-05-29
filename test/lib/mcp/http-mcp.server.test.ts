@@ -173,4 +173,51 @@ describe("handleMcpHttpRequest", () => {
     const response = await handleMcpHttpRequest({ request, db, ipLimiter: denyingLimiter });
     expect(response.status).toBe(429);
   });
+
+  // A tools/call with an unknown operation name throws from the API layer →
+  // handleJsonRpcMessage catches it and routes through `onError` before
+  // collapsing to a JSON-RPC failure. These tests cover each branch of the
+  // PostHog capture path wired through `onError`.
+  function badToolCall(token: string) {
+    return rpcRequest(
+      init(8, "tools/call", { name: "no_such_op", arguments: {} }),
+      bearer(token),
+    );
+  }
+
+  it("returns a JSON-RPC failure and skips capture when waitUntil is missing", async () => {
+    const response = await handleMcpHttpRequest({ request: badToolCall(await mintToken()), db });
+    expect(response.status).toBe(200);
+    const body = await response.json() as { error: { code: number; message: string } };
+    expect(body.error.code).toBe(-32602);
+    expect(body.error.message).toMatch(/no_such_op/);
+  });
+
+  it("skips PostHog capture when cloudflareEnv is missing but waitUntil is set", async () => {
+    const waitUntil = vi.fn();
+    await handleMcpHttpRequest({ request: badToolCall(await mintToken()), db, waitUntil });
+    expect(waitUntil).not.toHaveBeenCalled();
+  });
+
+  it("skips PostHog capture when env is set but POSTHOG_KEY is not configured", async () => {
+    const waitUntil = vi.fn();
+    await handleMcpHttpRequest({
+      request: badToolCall(await mintToken()),
+      db,
+      cloudflareEnv: {}, // no POSTHOG_KEY → resolvePostHogServerConfig returns enabled=false
+      waitUntil,
+    });
+    expect(waitUntil).not.toHaveBeenCalled();
+  });
+
+  it("captures the raw exception via waitUntil when PostHog is configured", async () => {
+    const waitUntil = vi.fn();
+    await handleMcpHttpRequest({
+      request: badToolCall(await mintToken()),
+      db,
+      cloudflareEnv: { POSTHOG_KEY: "phc_test" },
+      waitUntil,
+    });
+    expect(waitUntil).toHaveBeenCalledTimes(1);
+  });
 });

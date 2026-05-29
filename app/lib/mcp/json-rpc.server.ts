@@ -62,6 +62,12 @@ const DEFAULT_PROTOCOL_VERSION = "2024-11-05";
 export interface HandleJsonRpcOptions {
   /** Protocol version to advertise when the client doesn't request one. */
   defaultProtocolVersion?: string;
+  /**
+   * Called with the raw Error before it's collapsed into a JSON-RPC failure.
+   * Lets the transport (e.g. /mcp) report unexpected exceptions to its
+   * observability sink without losing the original stack to the wire format.
+   */
+  onError?: (error: unknown) => void;
 }
 
 /**
@@ -121,6 +127,7 @@ export async function handleJsonRpcMessage(
         return failure(id, METHOD_NOT_FOUND, `Method not found: ${parsed.method}`);
     }
   } catch (error) {
+    options.onError?.(error);
     const message = error instanceof Error ? error.message : String(error);
     const code = parsed.method === "tools/call" ? INVALID_PARAMS : INTERNAL_ERROR;
     return failure(id, code, message);
