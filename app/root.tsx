@@ -8,6 +8,7 @@ import {
   useLoaderData,
   useRouteError,
   isRouteErrorResponse,
+  useNavigation,
   Form,
   Link as RouterLink,
   useLocation,
@@ -186,6 +187,7 @@ export default function App() {
   return (
     <DockContextProvider>
       <ToastProvider>
+        <RouteTransitionIndicator />
         <div className="sj-app-shell relative isolate flex min-h-svh w-full flex-col">
           <header className="sj-desktop-topbar sticky top-0 z-30 hidden items-center px-4 lg:flex">
             <AppNavbar userId={userId} oauthProviders={oauthProviders} />
@@ -198,6 +200,27 @@ export default function App() {
         <InstallPromptCard />
       </ToastProvider>
     </DockContextProvider>
+  );
+}
+
+/**
+ * Thin top-of-page brass bar that appears while React Router is loading a new
+ * route or submitting a form. One global affordance covers every action that
+ * used to feel "frozen" between click and response — Fork, Log-cook, account
+ * settings, shopping-list submits, cookbook deletes — without each having to
+ * wire its own pending UI. Disappears the moment navigation returns to idle.
+ */
+function RouteTransitionIndicator() {
+  const navigation = useNavigation();
+  const isActive = navigation.state !== "idle";
+  if (!isActive) return null;
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      aria-label="Loading"
+      className="sj-route-progress pointer-events-none fixed inset-x-0 top-0 z-50 h-[2px] motion-reduce:animate-none"
+    />
   );
 }
 

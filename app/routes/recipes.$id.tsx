@@ -1026,7 +1026,7 @@ export default function RecipeDetail() {
             )}
           </div>
         ) : (
-          <div className="mt-24 border-y border-[var(--sj-border)] sm:mt-0">
+          <div className="mt-6 border-y border-[var(--sj-border)] sm:mt-0">
             {recipe.steps.map((step) => (
               <div key={step.id} id={`step-${step.stepNum}`} className="border-b border-[var(--sj-border)] last:border-b-0">
                 <StepCard
