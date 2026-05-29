@@ -54,33 +54,33 @@ describe('SpoonDock', () => {
     })
   })
 
-  describe('full-width layout', () => {
-    it('distributes place / primary / tools edge-to-edge', () => {
+  describe('layout', () => {
+    it('is a flex row that lets the growing zones center the primary by default', () => {
       render(<SpoonDock />)
       const nav = screen.getByRole('navigation')
-      // Flex + justify-between spreads the groups across the full width with
-      // equal gaps, so the dock never leaves a lopsided void.
+      // Centered mode is a plain flex row; MobileNav grows the side zones
+      // (flex-1) so they fill the dock and leave the primary dead-center, so
+      // the nav itself must NOT pin items to the edges with justify-between.
+      expect(nav).toHaveClass('flex')
+      expect(nav).not.toHaveClass('justify-between')
+    })
+
+    it('falls back to edge-to-edge distribution when not centered (full tool cluster)', () => {
+      render(<SpoonDock centered={false} />)
+      const nav = screen.getByRole('navigation')
+      // No room to grow + center; distribute with equal gaps so it fills the
+      // width without spilling.
       expect(nav).toHaveClass('flex')
       expect(nav).toHaveClass('justify-between')
-      expect(nav).not.toHaveClass('grid')
     })
 
     it('keeps a minimum gap that compacts on narrow phones', () => {
       render(<SpoonDock />)
       const nav = screen.getByRole('navigation')
-      // gap-* is the floor; justify-between adds the remaining slack. Gap +
-      // padding tighten at <=389px (iPhone 13 mini / SE / 5) so items never spill.
+      // Gap + padding tighten at <=389px (iPhone 13 mini / SE / 5) so items never spill.
       expect(nav).toHaveClass('gap-2')
       expect(nav).toHaveClass('max-[389px]:gap-1')
       expect(nav).toHaveClass('max-[389px]:p-1.5')
-    })
-
-    it('uses one consistent layout for root and contextual docks', () => {
-      render(<SpoonDock />)
-      const nav = screen.getByRole('navigation')
-      expect(nav).toHaveClass('flex')
-      expect(nav).toHaveClass('justify-between')
-      expect(nav).not.toHaveClass('grid-cols-[72px_1fr_72px]')
     })
 
     it('centers items vertically', () => {
@@ -90,17 +90,17 @@ describe('SpoonDock', () => {
     })
   })
 
-  describe('glass morphism styling', () => {
-    it('has backdrop blur for glass effect', () => {
+  describe('surface styling', () => {
+    it('uses a solid fill with no backdrop-filter (iOS keeps fixed elements with backdrop-filter from sticking)', () => {
       render(<SpoonDock />)
       const nav = screen.getByRole('navigation')
-      expect(nav.className).toMatch(/backdrop-blur/)
+      expect(nav.className).not.toMatch(/backdrop-blur/)
     })
 
-    it('has semi-transparent background', () => {
+    it('has a solid dark background', () => {
       render(<SpoonDock />)
       const nav = screen.getByRole('navigation')
-      expect(nav.className).toContain('bg-[color-mix(in_srgb,var(--sj-charcoal)_92%,transparent)]')
+      expect(nav.className).toContain('bg-[var(--sj-photo-charcoal)]')
     })
 
     it('has subtle border for glass edge', () => {
