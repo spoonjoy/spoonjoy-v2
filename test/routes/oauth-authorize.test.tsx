@@ -70,6 +70,46 @@ describe("oauth.authorize route", () => {
     expect(result).toMatchObject({ kind: "consent", scope: "kitchen:read" });
   });
 
+  it("loader returns 429 when the IP rate limiter denies the request", async () => {
+    const { query } = await setup();
+    const denyingLimiter = { limit: async () => ({ success: false }) };
+    const headers = new Headers();
+    headers.set("CF-Connecting-IP", "203.0.113.9");
+    const request = new Request(`https://spoonjoy.app/oauth/authorize?${query}`, { headers });
+    await expect(
+      loader({
+        request,
+        context: { cloudflare: { env: { API_IP_RATE_LIMITER: denyingLimiter } } },
+        params: {},
+      } as any),
+    ).rejects.toSatisfy((thrown: Response) => {
+      expect(thrown).toBeInstanceOf(Response);
+      expect(thrown.status).toBe(429);
+      return true;
+    });
+  });
+
+  it("action returns 429 when the IP rate limiter denies the request", async () => {
+    const { query } = await setup();
+    const body = new URLSearchParams(query);
+    body.set("decision", "approve");
+    const denyingLimiter = { limit: async () => ({ success: false }) };
+    const headers = new Headers();
+    headers.set("Content-Type", "application/x-www-form-urlencoded");
+    headers.set("CF-Connecting-IP", "203.0.113.9");
+    const request = new Request("https://spoonjoy.app/oauth/authorize", {
+      method: "POST",
+      headers,
+      body,
+    });
+    const response = await action({
+      request,
+      context: { cloudflare: { env: { API_IP_RATE_LIMITER: denyingLimiter } } },
+      params: {},
+    } as any);
+    expect(response.status).toBe(429);
+  });
+
   it("action mints a code and redirects back on approve", async () => {
     const { userId, clientId, query } = await setup();
     const headers = new Headers();

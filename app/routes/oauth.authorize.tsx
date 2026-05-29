@@ -7,12 +7,27 @@ import {
   type AuthorizeRequestParams,
   type AuthorizeView,
 } from "~/lib/oauth-routes.server";
+import { enforceRateLimit, rateLimitedResponse } from "~/lib/rate-limit.server";
 import { AuthLayout } from "~/components/ui/auth-layout";
 import { Heading } from "~/components/ui/heading";
 import { Button } from "~/components/ui/button";
 import { Text } from "~/components/ui/text";
 
+// Per-IP throttle on the OAuth 2.1 authorize endpoint — applied to both the
+// loader (consent screen / login-gate redirect) and the action (Allow/Deny).
+// Cheap to call; runs before any DB work.
+async function checkAuthorizeRateLimit(request: Request, env: { API_IP_RATE_LIMITER?: unknown } | null | undefined) {
+  const rateLimit = await enforceRateLimit({
+    ip: request.headers.get("CF-Connecting-IP"),
+    ipLimiter: env?.API_IP_RATE_LIMITER as Parameters<typeof enforceRateLimit>[0]["ipLimiter"],
+  });
+  if (!rateLimit.allowed) return rateLimitedResponse(rateLimit.retryAfterSeconds);
+  return null;
+}
+
 export async function loader({ request, context }: Route.LoaderArgs) {
+  const limited = await checkAuthorizeRateLimit(request, context.cloudflare?.env);
+  if (limited) throw limited;
   const db = await getRequestDb(context);
   const result = await loadOAuthAuthorize(request, db, context.cloudflare?.env);
   // Redirects (login gate / error back to the client) are thrown so React
@@ -22,6 +37,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
+  const limited = await checkAuthorizeRateLimit(request, context.cloudflare?.env);
+  if (limited) return limited;
   const db = await getRequestDb(context);
   return handleOAuthAuthorizeAction(request, db, context.cloudflare?.env);
 }
