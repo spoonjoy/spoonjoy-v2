@@ -7,6 +7,7 @@ import {
   requireUserId,
   sanitizeSessionRedirect,
   sessionStorage,
+  _resetSessionWarningLatchForTests,
 } from "~/lib/session.server";
 import { Request } from "undici";
 
@@ -29,6 +30,43 @@ describe("session.server", () => {
     } else {
       delete process.env.SESSION_SECRET;
     }
+  });
+
+  describe("SESSION_SECRET production-fallback warning", () => {
+    it("logs a loud warning when SESSION_SECRET is missing while env.NODE_ENV is production", async () => {
+      // Real prod never legitimately hits this path — SESSION_SECRET is always
+      // configured as a wrangler secret there. The warning is the operator
+      // signal so a misconfigured deploy is loud rather than silent.
+      delete process.env.SESSION_SECRET;
+      _resetSessionWarningLatchForTests();
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        const request = new Request("http://localhost/", { method: "GET" }) as unknown as globalThis.Request;
+        await expect(getUserId(request, { NODE_ENV: "production" })).resolves.toBeNull();
+        expect(warnSpy).toHaveBeenCalledOnce();
+        expect(warnSpy.mock.calls[0][0]).toMatch(/SESSION_SECRET is not set/);
+        // Latch fires once per process — a second call must not re-warn.
+        await getUserId(request, { NODE_ENV: "production" });
+        expect(warnSpy).toHaveBeenCalledOnce();
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+
+    it("also warns when only process.env.NODE_ENV is production (the build-time path)", async () => {
+      delete process.env.SESSION_SECRET;
+      _resetSessionWarningLatchForTests();
+      vi.stubEnv("NODE_ENV", "production");
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        const request = new Request("http://localhost/", { method: "GET" }) as unknown as globalThis.Request;
+        await expect(getUserId(request, null)).resolves.toBeNull();
+        expect(warnSpy).toHaveBeenCalledOnce();
+      } finally {
+        warnSpy.mockRestore();
+        vi.unstubAllEnvs();
+      }
+    });
   });
 
   describe("getUserId", () => {
