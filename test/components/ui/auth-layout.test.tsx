@@ -87,36 +87,37 @@ describe('AuthLayout', () => {
   })
 
   describe('semantic structure', () => {
-    it('renders a main element as the root', () => {
+    it('does not nest a <main> landmark — root.tsx owns the page <main>', () => {
       render(
         <AuthLayout>
           <p>Content</p>
         </AuthLayout>
       )
-      expect(screen.getByRole('main')).toBeInTheDocument()
+      expect(screen.queryByRole('main')).not.toBeInTheDocument()
     })
 
-    it('contains children within the main element', () => {
-      render(
+    it('contains children within the layout', () => {
+      const { container } = render(
         <AuthLayout>
-          <p>Content inside main</p>
+          <p>Content inside layout</p>
         </AuthLayout>
       )
-      const main = screen.getByRole('main')
-      expect(main).toContainElement(screen.getByText('Content inside main'))
+      const root = container.querySelector('div.sj-page') as HTMLElement | null
+      expect(root).not.toBeNull()
+      expect(root!).toContainElement(screen.getByText('Content inside layout'))
     })
   })
 
   describe('layout classes', () => {
-    it('applies flex layout classes to main element', () => {
-      render(
+    it('applies flex layout classes to the root wrapper', () => {
+      const { container } = render(
         <AuthLayout>
           <p>Content</p>
         </AuthLayout>
       )
-      const main = screen.getByRole('main')
-      expect(main).toHaveClass('min-h-dvh')
-      expect(main).toHaveClass('sj-page')
+      const root = container.querySelector('div.sj-page')
+      expect(root).toHaveClass('min-h-dvh')
+      expect(root).toHaveClass('sj-page')
     })
 
     it('applies editorial split wrapper styles', () => {
@@ -125,7 +126,7 @@ describe('AuthLayout', () => {
           <p>Content</p>
         </AuthLayout>
       )
-      const wrapper = container.querySelector('main > div')
+      const wrapper = container.querySelector('div.sj-page > div')
       expect(wrapper).toHaveClass('grid')
       expect(wrapper).toHaveClass('min-h-dvh')
       expect(wrapper).toHaveClass('lg:grid-cols-[minmax(0,0.92fr)_minmax(24rem,0.58fr)]')
@@ -137,7 +138,7 @@ describe('AuthLayout', () => {
           <p>Content</p>
         </AuthLayout>
       )
-      const intro = container.querySelector('main > div > section:first-child')
+      const intro = container.querySelector('div.sj-page > div > section:first-child')
       expect(intro).toHaveClass('flex')
       expect(intro).toHaveClass('flex-col')
       expect(intro).toHaveClass('justify-between')
@@ -150,7 +151,7 @@ describe('AuthLayout', () => {
           <p>Content</p>
         </AuthLayout>
       )
-      const formColumn = container.querySelector('main > div > section:nth-child(2) > div')
+      const formColumn = container.querySelector('div.sj-page > div > section:nth-child(2) > div')
       expect(formColumn).toHaveClass('w-full')
       expect(formColumn).toHaveClass('max-w-md')
     })
