@@ -90,17 +90,17 @@ describe('SpoonDock', () => {
     })
   })
 
-  describe('glass morphism styling', () => {
-    it('has backdrop blur for glass effect', () => {
+  describe('surface styling', () => {
+    it('uses a solid fill with no backdrop-filter (iOS keeps fixed elements with backdrop-filter from sticking)', () => {
       render(<SpoonDock />)
       const nav = screen.getByRole('navigation')
-      expect(nav.className).toMatch(/backdrop-blur/)
+      expect(nav.className).not.toMatch(/backdrop-blur/)
     })
 
-    it('has semi-transparent background', () => {
+    it('has a solid dark background', () => {
       render(<SpoonDock />)
       const nav = screen.getByRole('navigation')
-      expect(nav.className).toContain('bg-[color-mix(in_srgb,var(--sj-charcoal)_92%,transparent)]')
+      expect(nav.className).toContain('bg-[var(--sj-photo-charcoal)]')
     })
 
     it('has subtle border for glass edge', () => {
