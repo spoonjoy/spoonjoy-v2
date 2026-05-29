@@ -58,6 +58,31 @@ export interface SpoonjoyApiOperationInfo {
   inputSchema: Record<string, unknown>;
 }
 
+/**
+ * MCP tool annotations (per the MCP `tools/list` spec). Connector directories
+ * (Anthropic, OpenAI) require every tool to advertise a human `title` and the
+ * applicable behavioral hints; missing/incorrect labels are a top rejection
+ * cause. Hints follow the spec's meaning:
+ *  - `readOnlyHint`: the tool does not modify any state.
+ *  - `destructiveHint`: a write that may remove/overwrite existing data
+ *    (only meaningful when `readOnlyHint` is false).
+ *  - `idempotentHint`: repeating the call with the same args has no extra effect.
+ *  - `openWorldHint`: the tool reaches outside Spoonjoy (e.g. fetches the web).
+ */
+export interface McpToolAnnotations {
+  title: string;
+  readOnlyHint: boolean;
+  destructiveHint?: boolean;
+  idempotentHint?: boolean;
+  openWorldHint?: boolean;
+}
+
+/** A tool descriptor enriched with MCP annotations, as returned to clients. */
+export interface SpoonjoyMcpToolDescriptor extends SpoonjoyApiOperationInfo {
+  title: string;
+  annotations: McpToolAnnotations;
+}
+
 interface SpoonjoyApiOperation extends SpoonjoyApiOperationInfo {
   handle(args: Record<string, unknown>, context: SpoonjoyApiContext): Promise<unknown>;
 }
@@ -2072,8 +2097,51 @@ const tools: SpoonjoyApiOperation[] = [
   listSpoonsByChefTool,
 ];
 
-export function listSpoonjoyApiOperations(): SpoonjoyApiOperationInfo[] {
-  return tools.map(({ name, description, inputSchema }) => ({ name, description, inputSchema }));
+/**
+ * MCP annotations for every operation, keyed by tool name. Kept here (next to
+ * the registry) so reviewers can see the read/write classification at a glance.
+ * Completeness is enforced by a test that asserts every operation in `tools`
+ * has an entry and that there are no orphans.
+ */
+const TOOL_ANNOTATIONS = {
+  health: { title: "Health check", readOnlyHint: true },
+  auth_status: { title: "Authentication status", readOnlyHint: true },
+  start_agent_connection: { title: "Start delegated connection", readOnlyHint: false, destructiveHint: false },
+  poll_agent_connection: { title: "Poll delegated connection", readOnlyHint: false, destructiveHint: false },
+  create_api_token: { title: "Create API token", readOnlyHint: false, destructiveHint: false },
+  list_api_tokens: { title: "List API tokens", readOnlyHint: true },
+  revoke_api_token: { title: "Revoke API token", readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+  search_spoonjoy: { title: "Search Spoonjoy", readOnlyHint: true },
+  search_recipes: { title: "Search recipes", readOnlyHint: true },
+  search_shopping_list: { title: "Search shopping list", readOnlyHint: true },
+  get_recipe: { title: "Get recipe", readOnlyHint: true },
+  create_recipe: { title: "Create recipe", readOnlyHint: false, destructiveHint: false },
+  update_recipe: { title: "Update recipe", readOnlyHint: false, destructiveHint: false },
+  delete_recipe: { title: "Delete recipe", readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+  import_recipe_from_url: { title: "Import recipe from URL", readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+  fork_recipe: { title: "Fork recipe", readOnlyHint: false, destructiveHint: false },
+  add_recipe_to_shopping_list: { title: "Add recipe to shopping list", readOnlyHint: false, destructiveHint: false },
+  list_cookbooks: { title: "List cookbooks", readOnlyHint: true },
+  get_cookbook: { title: "Get cookbook", readOnlyHint: true },
+  create_cookbook: { title: "Create cookbook", readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+  add_recipe_to_cookbook: { title: "Add recipe to cookbook", readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+  remove_recipe_from_cookbook: { title: "Remove recipe from cookbook", readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+  add_shopping_list_item: { title: "Add shopping-list item", readOnlyHint: false, destructiveHint: false },
+  set_shopping_list_item_checked: { title: "Check shopping-list item", readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+  remove_shopping_list_item: { title: "Remove shopping-list item", readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+  get_shopping_list: { title: "Get shopping list", readOnlyHint: true },
+  create_spoon: { title: "Log a cook", readOnlyHint: false, destructiveHint: false },
+  update_spoon: { title: "Update a cook", readOnlyHint: false, destructiveHint: false },
+  delete_spoon: { title: "Delete a cook", readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+  list_spoons_for_recipe: { title: "List cooks for recipe", readOnlyHint: true },
+  list_spoons_by_chef: { title: "List cooks by chef", readOnlyHint: true },
+} satisfies Record<string, McpToolAnnotations>;
+
+export function listSpoonjoyApiOperations(): SpoonjoyMcpToolDescriptor[] {
+  return tools.map(({ name, description, inputSchema }) => {
+    const annotations = TOOL_ANNOTATIONS[name as keyof typeof TOOL_ANNOTATIONS];
+    return { name, title: annotations.title, description, inputSchema, annotations };
+  });
 }
 
 export async function callSpoonjoyApiOperation(
