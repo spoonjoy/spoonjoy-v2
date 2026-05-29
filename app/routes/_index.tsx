@@ -276,7 +276,7 @@ export default function Index() {
               className="size-18 border border-[var(--sj-border-strong)] shadow-[var(--sj-shadow-soft)]"
             />
             <div>
-              <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.22em] text-[var(--sj-brass)]">Kitchen</p>
+              <p className="font-sj-ui text-sm font-semibold tracking-[0.01em] text-[var(--sj-brass)]">@{kitchenUser.username}</p>
               <Heading level={1} className="mt-1 text-5xl/12 sm:text-6xl/14 lg:text-7xl/16">{heading}</Heading>
               <Text className="mt-2 text-sm">
                 {displayRecipes.length} {displayRecipes.length === 1 ? "recipe" : "recipes"} and {cookbooks.length} {cookbooks.length === 1 ? "cookbook" : "cookbooks"}
