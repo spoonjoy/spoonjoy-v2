@@ -9,6 +9,7 @@ import { verifyGitHubCallback } from "~/lib/github-oauth.server";
 import { handleGoogleOAuthCallback } from "~/lib/google-oauth-callback.server";
 import { verifyGoogleCallback } from "~/lib/google-oauth.server";
 import {
+  buildAppleReturnUrl,
   buildOAuthCallbackUrl,
   destroyOAuthStartSession,
   getOAuthEnv,
@@ -73,7 +74,8 @@ export async function handleAppleCallback(request: Request, context: AppLoadCont
     return redirectWithOAuthError(request, "apple", failureRedirect, "oauth_unconfigured", env);
   }
 
-  const redirectUri = stored.redirectUri ?? buildOAuthCallbackUrl(request, "apple");
+  const redirectUri =
+    stored.redirectUri ?? buildAppleReturnUrl(request, stored.linking ? "linkAppleAccount" : "loginWithApple");
   const verifyResult = await verifyAppleCallback(config, redirectUri, {
     code: formData.get("code") ?? "",
     state: callbackState,

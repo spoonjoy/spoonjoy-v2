@@ -63,7 +63,7 @@ describe("Apple OAuth routes", () => {
         keyId: "apple-key",
         privateKey: "apple-private-key",
       },
-      appleRedirectUri,
+      legacyAppleRedirectUri,
       expect.any(String)
     );
   });
@@ -110,6 +110,26 @@ describe("Apple OAuth routes", () => {
 
     expect(response.status).toBe(302);
     expect(response.headers.get("Location")).toBe("/login?redirectTo=/account/settings&oauthError=login_required");
+  });
+
+  it("uses the linkAppleAccount return path for a logged-in linking flow", async () => {
+    const session = await sessionStorage.getSession();
+    session.set("userId", "user-1");
+    const userCookie = await sessionStorage.commitSession(session);
+    const request = new Request("https://spoonjoy.app/auth/apple?linking=true", {
+      headers: { Cookie: cookieHeader(userCookie) },
+    });
+
+    const response = await loader({ request, context: { cloudflare: { env: appleEnv } }, params: {} } as any);
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("Location")).toContain("appleid.apple.com");
+    // Linking must use the registered legacy path with the linkAppleAccount method.
+    expect(mocks.createAppleAuthorizationURL).toHaveBeenCalledWith(
+      expect.anything(),
+      "https://spoonjoy.app/.redwood/functions/auth/oauth?method=linkAppleAccount",
+      expect.any(String),
+    );
   });
 
   it("renders null route components", () => {
@@ -418,7 +438,7 @@ describe("Apple OAuth routes", () => {
         keyId: "apple-key",
         privateKey: "apple-private-key",
       },
-      appleRedirectUri,
+      legacyAppleRedirectUri,
       { code: "", state: "state", user: undefined }
     );
   });
