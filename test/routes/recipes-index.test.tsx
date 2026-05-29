@@ -143,7 +143,10 @@ describe("Recipes Index Route", () => {
 
     render(<Stub initialEntries={["/recipes"]} />);
 
-    expect(await screen.findByRole("heading", { name: /recipes worth opening/i })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Recipes worth opening." })).toBeInTheDocument();
+    // Signed-in visitors must not be told to "sign in".
+    expect(screen.queryByText(/before you sign in/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/then cook, fork, save, or add ingredients to your list/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Public Tomato Beans" })).toHaveAttribute("href", "/recipes/r1");
     expect(screen.getByRole("link", { name: /create recipe/i })).toHaveAttribute("href", "/recipes/new");
   });
@@ -173,6 +176,8 @@ describe("Recipes Index Route", () => {
     const { container } = render(<Stub initialEntries={["/recipes?q=tomato"]} />);
 
     expect(await screen.findByRole("heading", { name: 'Recipes for "tomato"' })).toBeInTheDocument();
+    // Signed-out visitors still see the sign-in invitation in the hero.
+    expect(screen.getByRole("heading", { name: "Recipes worth opening before you sign in." })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Clear" })).toHaveAttribute("href", "/recipes");
     expect(screen.queryByRole("link", { name: /create recipe/i })).not.toBeInTheDocument();
     expect(screen.getAllByText("By rowan").length).toBeGreaterThan(0);

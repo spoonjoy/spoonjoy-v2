@@ -466,6 +466,9 @@ describe("Signup Route", () => {
       expect(screen.getByLabelText("Password")).toBeInTheDocument();
       expect(screen.getByLabelText("Confirm Password")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Sign Up" })).toBeInTheDocument();
+      // Sign-up uses its own marketing voice, not the /login "Kitchen sign-in" copy.
+      expect(screen.getByText("New kitchen")).toBeInTheDocument();
+      expect(screen.queryByText("Kitchen sign-in")).not.toBeInTheDocument();
     });
 
     it("should have correct form field attributes", async () => {
@@ -618,6 +621,23 @@ describe("Signup Route", () => {
         const form = githubButton.closest("form");
         expect(form).toHaveAttribute("action", "/auth/github");
         expect(form).toHaveAttribute("method", "post");
+      });
+
+      it("carries redirectTo into the OAuth form action so signup returns to the connector", async () => {
+        const returnTo = "/oauth/authorize?client_id=abc&response_type=code";
+        const Stub = createTestRoutesStub([
+          {
+            path: "/signup",
+            Component: Signup,
+            loader: () => ({ oauthProviders: ["apple"] }),
+          },
+        ]);
+
+        render(<Stub initialEntries={[`/signup?redirectTo=${encodeURIComponent(returnTo)}`]} />);
+
+        await screen.findByRole("heading", { name: "Sign Up" });
+        const form = screen.getByRole("button", { name: /continue with apple/i }).closest("form");
+        expect(form).toHaveAttribute("action", `/auth/apple?redirectTo=${encodeURIComponent(returnTo)}`);
       });
 
       it("should display OAuth separator between password form and OAuth buttons", async () => {

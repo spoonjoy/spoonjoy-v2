@@ -1,7 +1,24 @@
 import type React from 'react'
 import { SpoonjoyLogo } from './spoonjoy-logo'
 
-export function AuthLayout({ children }: { children: React.ReactNode }) {
+interface AuthLayoutProps {
+  children: React.ReactNode
+  /**
+   * Editorial copy for the marketing column. Defaults to the sign-in voice used
+   * by /login. Sign-up and the connector consent screen (/oauth/authorize) pass
+   * their own so a signed-in user authorizing an app never reads "Sign in to…".
+   */
+  eyebrow?: string
+  title?: string
+  description?: string
+}
+
+export function AuthLayout({
+  children,
+  eyebrow = 'Kitchen sign-in',
+  title = 'Keep the good recipes close.',
+  description = 'Sign in to cook, fork, save, and remember the recipes that actually make it to your table.',
+}: AuthLayoutProps) {
   return (
     <main className="sj-page min-h-dvh">
       <div className="grid min-h-dvh lg:grid-cols-[minmax(0,0.92fr)_minmax(24rem,0.58fr)]">
@@ -11,12 +28,12 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
             SPOONJOY
           </a>
           <div className="max-w-2xl py-16">
-            <p className="sj-eyebrow">Kitchen sign-in</p>
+            <p className="sj-eyebrow">{eyebrow}</p>
             <h1 className="font-sj-display mt-3 text-5xl/12 font-semibold text-[var(--sj-ink)] sm:text-6xl/14">
-              Keep the good recipes close.
+              {title}
             </h1>
             <p className="mt-5 max-w-xl text-base/7 text-[var(--sj-ink-soft)]">
-              Sign in to cook, fork, save, and remember the recipes that actually make it to your table.
+              {description}
             </p>
           </div>
           <p className="hidden border-t border-[var(--sj-border)] pt-4 text-sm text-[var(--sj-ink-soft)] sm:block">

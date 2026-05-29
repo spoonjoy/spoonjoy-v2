@@ -502,6 +502,23 @@ describe("Login Route", () => {
         expect(form).toHaveAttribute("method", "post");
       });
 
+      it("carries redirectTo into the OAuth form action so login returns to the connector", async () => {
+        const returnTo = "/oauth/authorize?client_id=abc&response_type=code";
+        const Stub = createTestRoutesStub([
+          {
+            path: "/login",
+            Component: Login,
+            loader: () => ({ oauthProviders: ["apple"] }),
+          },
+        ]);
+
+        render(<Stub initialEntries={[`/login?redirectTo=${encodeURIComponent(returnTo)}`]} />);
+
+        await screen.findByRole("heading", { name: "Log In" });
+        const form = screen.getByRole("button", { name: /continue with apple/i }).closest("form");
+        expect(form).toHaveAttribute("action", `/auth/apple?redirectTo=${encodeURIComponent(returnTo)}`);
+      });
+
       it("should display OAuth separator between password form and OAuth buttons", async () => {
         const Stub = createTestRoutesStub([
           {

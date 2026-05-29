@@ -31,6 +31,15 @@ const SCOPE_LABELS: Record<string, string> = {
   "kitchen:write": "Add and edit your recipes, cookbooks, and shopping list",
 };
 
+// The consent screen is only ever reached by a signed-in user, so its marketing
+// column must not use the sign-in voice. The error view can render to anyone, so
+// keep this copy auth-state-neutral (no "you're signed in" claim).
+const CONNECTOR_AUTH_COPY = {
+  eyebrow: "Kitchen connection",
+  title: "Bring your kitchen with you.",
+  description: "Review what each app can access before you let it into your kitchen.",
+} as const;
+
 function HiddenParams({ params }: { params: AuthorizeRequestParams }) {
   return (
     <>
@@ -49,7 +58,7 @@ export default function OAuthAuthorize() {
 
   if (view.kind === "error") {
     return (
-      <AuthLayout>
+      <AuthLayout {...CONNECTOR_AUTH_COPY}>
         <div className="w-full max-w-sm">
           <Heading>Connection problem</Heading>
           <Text className="mt-4" role="alert">
@@ -62,7 +71,7 @@ export default function OAuthAuthorize() {
 
   const appName = view.clientName || "This app";
   return (
-    <AuthLayout>
+    <AuthLayout {...CONNECTOR_AUTH_COPY}>
       <div className="w-full max-w-sm">
         <Heading>Authorize {appName}</Heading>
         <Text className="mt-4">

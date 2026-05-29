@@ -103,6 +103,9 @@ describe("oauth.authorize route", () => {
     expect(screen.getByText(/add and edit your recipes/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /allow access/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /deny/i })).toBeInTheDocument();
+    // Consent is only shown to a signed-in user, so the sidebar must not say "Sign in to…".
+    expect(screen.getByText("Kitchen connection")).toBeInTheDocument();
+    expect(screen.queryByText("Kitchen sign-in")).not.toBeInTheDocument();
   });
 
   it("renders an unnamed client and an unknown scope verbatim", async () => {
@@ -120,5 +123,8 @@ describe("oauth.authorize route", () => {
     renderView({ kind: "error", message: "Unknown OAuth client." });
     expect(await screen.findByRole("heading", { name: /connection problem/i })).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("Unknown OAuth client.");
+    // The error view can render to a signed-out visitor, so its copy stays auth-neutral.
+    expect(screen.getByText("Kitchen connection")).toBeInTheDocument();
+    expect(screen.queryByText("Kitchen sign-in")).not.toBeInTheDocument();
   });
 });
