@@ -89,10 +89,12 @@ export default function RecipesIndex() {
             <div>
               <p className="sj-eyebrow">Public recipe box</p>
               <Heading level={1} className="mt-3 max-w-4xl text-5xl/12 sm:text-7xl/18 lg:text-[84px] lg:leading-[1.04]">
-                Recipes worth opening before you sign in.
+                {isAuthenticated ? "Recipes worth opening." : "Recipes worth opening before you sign in."}
               </Heading>
               <Text className="mt-5 max-w-2xl text-lg/8">
-                Browse every public Spoonjoy recipe. Sign in only when you want to cook, fork, save, or add ingredients to your own list.
+                {isAuthenticated
+                  ? "Browse every public Spoonjoy recipe — then cook, fork, save, or add ingredients to your list."
+                  : "Browse every public Spoonjoy recipe. Sign in only when you want to cook, fork, save, or add ingredients to your own list."}
               </Text>
             </div>
 

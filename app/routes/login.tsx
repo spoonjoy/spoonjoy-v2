@@ -121,7 +121,7 @@ export default function Login() {
 
         {oauthProviders.length > 0 && (
           <>
-            <OAuthButtonGroup providers={oauthProviders} className="mt-8" />
+            <OAuthButtonGroup providers={oauthProviders} redirectTo={redirectTo} className="mt-8" />
             <OAuthDivider className="my-6" />
           </>
         )}

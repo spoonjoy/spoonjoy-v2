@@ -43,6 +43,37 @@ describe('AuthLayout', () => {
     })
   })
 
+  describe('marketing copy', () => {
+    it('renders the sign-in voice by default', () => {
+      render(
+        <AuthLayout>
+          <p>Content</p>
+        </AuthLayout>
+      )
+      expect(screen.getByText('Kitchen sign-in')).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Keep the good recipes close.' })).toBeInTheDocument()
+      expect(
+        screen.getByText(/Sign in to cook, fork, save, and remember/)
+      ).toBeInTheDocument()
+    })
+
+    it('renders caller-supplied eyebrow, title, and description', () => {
+      render(
+        <AuthLayout
+          eyebrow="Kitchen connection"
+          title="Bring your kitchen with you."
+          description="Review what each app can access before you let it into your kitchen."
+        >
+          <p>Content</p>
+        </AuthLayout>
+      )
+      expect(screen.getByText('Kitchen connection')).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Bring your kitchen with you.' })).toBeInTheDocument()
+      expect(screen.getByText(/Review what each app can access/)).toBeInTheDocument()
+      expect(screen.queryByText('Kitchen sign-in')).not.toBeInTheDocument()
+    })
+  })
+
   describe('semantic structure', () => {
     it('renders a main element as the root', () => {
       render(

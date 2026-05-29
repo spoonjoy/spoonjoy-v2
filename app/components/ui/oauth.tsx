@@ -18,13 +18,23 @@ const providerStyles: Record<OAuthProvider, { label: string }> = {
 interface OAuthButtonProps {
   provider: OAuthProvider
   className?: string
+  /**
+   * Where to return after sign-in (e.g. the connector's /oauth/authorize URL).
+   * Carried explicitly in the form action so it survives even when the Referer
+   * header is stripped (in-app browsers, strict referrer policies) — relying on
+   * the Referer dropped users on /recipes instead of back where they started.
+   */
+  redirectTo?: string
 }
 
-export function OAuthButton({ provider, className }: OAuthButtonProps) {
+export function OAuthButton({ provider, className, redirectTo }: OAuthButtonProps) {
   const { label } = providerStyles[provider]
+  const action = redirectTo
+    ? `/auth/${provider}?redirectTo=${encodeURIComponent(redirectTo)}`
+    : `/auth/${provider}`
 
   return (
-    <form action={`/auth/${provider}`} method="post">
+    <form action={action} method="post">
       <Button type="submit" className={clsx('w-full', className)}>
         {label}
       </Button>
@@ -52,15 +62,16 @@ export function OAuthDivider({ className }: OAuthDividerProps) {
 interface OAuthButtonGroupProps {
   providers?: OAuthProvider[]
   className?: string
+  redirectTo?: string
 }
 
-export function OAuthButtonGroup({ providers = ['google', 'github', 'apple'], className }: OAuthButtonGroupProps) {
+export function OAuthButtonGroup({ providers = ['google', 'github', 'apple'], className, redirectTo }: OAuthButtonGroupProps) {
   if (providers.length === 0) return null
 
   return (
     <div className={clsx('flex flex-col gap-3', className)}>
       {providers.map((provider) => (
-        <OAuthButton key={provider} provider={provider} />
+        <OAuthButton key={provider} provider={provider} redirectTo={redirectTo} />
       ))}
     </div>
   )

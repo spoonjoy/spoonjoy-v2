@@ -8,8 +8,9 @@ test.describe('Recipe Flow', () => {
   test('recipes page shows recipe cards', async ({ page }) => {
     await page.goto('/recipes');
 
-    // /recipes is public browsing; mutating actions ask users to sign in later.
-    await expect(page.getByRole('heading', { name: /recipes worth opening before you sign in/i })).toBeVisible();
+    // /recipes is public browsing. This project runs authenticated, so the hero
+    // no longer nags about signing in; the copy is auth-aware (see recipes._index).
+    await expect(page.getByRole('heading', { name: /recipes worth opening/i })).toBeVisible();
 
     // Should show recipe rows/cards (links to recipe detail pages, excluding /recipes/new)
     const recipeLinks = recipeDetailLinks(page);
