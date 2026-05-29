@@ -1,7 +1,7 @@
 import type { Route } from "./+types/auth.apple";
 import { redirect } from "react-router";
 import { getAppleOAuthConfig } from "~/lib/env.server";
-import { createAppleAuthorizationURL, serializeAppleAuthorizationURL } from "~/lib/apple-oauth.server";
+import { createAppleAuthorizationURL } from "~/lib/apple-oauth.server";
 import {
   appendOAuthError,
   assertCanStartOAuthLinking,
@@ -38,7 +38,7 @@ async function initiateAppleOAuth({ request, context }: Route.LoaderArgs | Route
 
   const cookie = await commitOAuthStartSession(request, "apple", sessionData, env);
 
-  return redirectTo(serializeAppleAuthorizationURL(authorizationUrl), { "Set-Cookie": cookie });
+  return redirectTo(authorizationUrl.toString(), { "Set-Cookie": cookie });
 }
 
 export async function loader(args: Route.LoaderArgs) {
