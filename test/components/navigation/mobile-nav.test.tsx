@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { ArrowLeft, Edit, Share2 } from "lucide-react";
 import { MobileNav } from "~/components/navigation/mobile-nav";
-import { DockContext, DockContextProvider, type DockAction } from "~/components/navigation";
+import { DockContext, DockContextProvider, useRecipeDetailActions, type DockAction } from "~/components/navigation";
 
 describe("MobileNav unauthenticated variant", () => {
   it("renders a mobile-only Spoonjoy dock", () => {
@@ -194,6 +194,26 @@ describe("MobileNav", () => {
       expect(screen.getByRole("link", { name: /list market/i })).toHaveAttribute("aria-current", "page");
       expect(screen.getByTestId("dock-center")).toContainElement(screen.getByRole("link", { name: /add/i }));
       expect(screen.getByRole("link", { name: /add/i })).toHaveAttribute("href", "/shopping-list#add-item");
+    });
+
+    it("distributes edge-to-edge (not centered) when the tools cluster is full (3 tools)", () => {
+      function RecipeDetailDock() {
+        // Owner recipe detail = Back + Cook(primary) + List/Share/Edit (3 tools),
+        // the one case with no room to grow + center.
+        useRecipeDetailActions({ recipeId: "r1", chefId: "c1", isOwner: true });
+        return <MobileNav isAuthenticated />;
+      }
+
+      render(
+        <MemoryRouter initialEntries={["/recipes/r1"]}>
+          <DockContextProvider>
+            <RecipeDetailDock />
+          </DockContextProvider>
+        </MemoryRouter>,
+      );
+
+      const nav = screen.getByRole("navigation", { name: "Spoonjoy navigation" });
+      expect(nav).toHaveClass("justify-between");
     });
 
     it("provides explicit back navigation for profile-style screens", () => {
