@@ -1,6 +1,6 @@
 import type { Route } from "./+types/account.settings";
 import { useLoaderData, useActionData, useRevalidator, Form } from "react-router";
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import {
   handleAccountSettingsAction,
   loadAccountSettings,
@@ -11,11 +11,10 @@ import { Text } from "~/components/ui/text";
 import { Button } from "~/components/ui/button";
 import { Field, Label, ErrorMessage } from "~/components/ui/fieldset";
 import { Input } from "~/components/ui/input";
-import { Avatar } from "~/components/ui/avatar";
 import { OAuthError } from "~/components/ui/oauth";
 import { NotificationsSection } from "~/components/notifications-section";
 import { AddPasskeyButton } from "~/components/auth/AddPasskeyButton";
-import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
+import { ProfilePhotoField } from "~/components/account/ProfilePhotoField";
 import { CookbookPage, CookbookHeader, SettingsPanel } from "~/components/cookbook/page";
 
 export async function loader({ request, context }: Route.LoaderArgs) {
@@ -41,63 +40,6 @@ function formatPasskeyDate(iso: string): string {
     day: "numeric",
     timeZone: "UTC",
   });
-}
-
-function ProfilePhotoUpload({ photoUrl }: { photoUrl: string | null }) {
-  const actionData = useActionData<AccountSettingsActionResult>();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleUploadClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const currentPhotoUrl = resolveChefAvatarUrl(actionData?.photoUrl || photoUrl);
-  const buttonText = photoUrl ? "Change Photo" : "Upload Photo";
-
-  return (
-    <div className="mt-4 flex flex-col gap-6 sm:flex-row sm:items-start">
-      <Avatar src={currentPhotoUrl} alt="Profile photo" className="size-28 border border-[var(--sj-border)] shadow-[var(--sj-shadow-soft)]" />
-      <div className="flex-1 space-y-4">
-        <div className="flex flex-wrap gap-3">
-          <Form method="post" encType="multipart/form-data">
-            <input type="hidden" name="intent" value="uploadPhoto" />
-            <input
-              ref={fileInputRef}
-              type="file"
-              name="photo"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => {
-                const form = e.currentTarget.form;
-                if (form && e.currentTarget.files?.[0]) {
-                  form.requestSubmit();
-                }
-              }}
-            />
-            <Button type="button" plain onClick={handleUploadClick}>
-              {buttonText}
-            </Button>
-          </Form>
-          {photoUrl && (
-            <Form method="post">
-              <input type="hidden" name="intent" value="removePhoto" />
-              <Button type="submit" variant="destructive">
-                Remove Photo
-              </Button>
-            </Form>
-          )}
-        </div>
-        {actionData?.error && (
-        <Text className="text-sm text-[var(--sj-tomato)]">
-            {actionData.message}
-          </Text>
-        )}
-        <Text className="text-sm">
-          JPG, PNG, or GIF. Max 5MB.
-        </Text>
-      </div>
-    </div>
-  );
 }
 
 export default function AccountSettings() {
@@ -225,7 +167,7 @@ export default function AccountSettings() {
       {/* Profile Photo Section */}
       <SettingsPanel testId="profile-photo-section" title="Profile photo">
         <Text className="mt-1">Make your kitchen feel human before anyone reads a recipe.</Text>
-        <ProfilePhotoUpload photoUrl={user.photoUrl} />
+        <ProfilePhotoField photoUrl={user.photoUrl} />
       </SettingsPanel>
 
       {/* OAuth Providers Section */}
