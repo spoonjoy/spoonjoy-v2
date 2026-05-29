@@ -42,11 +42,13 @@ export function DockItem({
     // or spills the label on iPhone 13 mini / SE / 5 widths.
     isPlace && "flex min-w-0 items-center gap-2 overflow-hidden bg-[color-mix(in_srgb,var(--sj-on-photo)_10%,transparent)] px-3 text-left max-[389px]:w-12 max-[389px]:justify-center max-[389px]:gap-0 max-[389px]:px-0",
     isPrimary && [
-      "grid min-w-[4.75rem] place-items-center px-4 font-sj-ui text-sm font-bold max-[389px]:min-w-[3.5rem] max-[389px]:px-2.5",
-      // The dock is an always-dark glass surface, so the primary fill must use
-      // an on-photo accent. `--sj-brass` reads clearly on the charcoal in both
-      // light and dark themes; `--sj-action` is dark in light mode and would
-      // make this — the most important action — invisible (dark-on-dark).
+      // A circular brass FAB — the hero. Same round language as the tools but
+      // larger and brass-filled so it reads as the primary action. (Rendering a
+      // text label in a wide pill turned a single "+" into a stretched oval next
+      // to the round tools.) The dock is an always-dark glass surface, so the
+      // fill uses an on-photo accent: `--sj-brass` reads on charcoal in both
+      // themes, where `--sj-action` would be dark-on-dark in light mode.
+      "grid size-14 place-items-center max-[389px]:size-13",
       tone === "danger"
         ? "bg-[var(--sj-tomato)] text-[var(--sj-on-photo)]"
         : "bg-[var(--sj-brass)] text-[var(--sj-on-photo)]",
@@ -58,16 +60,17 @@ export function DockItem({
 
   const content = (
     <>
-      {!isPrimary && (
-        <Icon
-          className={clsx(
-            "h-5 w-5 shrink-0 text-[var(--sj-on-photo-soft)]",
-            active && "text-[var(--sj-on-photo)]",
-            iconClassName,
-          )}
-          aria-hidden="true"
-        />
-      )}
+      <Icon
+        className={clsx(
+          "shrink-0",
+          // Primary: a larger cream glyph centered in the brass circle. Others:
+          // smaller, lower-contrast until active.
+          isPrimary ? "h-6 w-6 text-[var(--sj-on-photo)]" : "h-5 w-5 text-[var(--sj-on-photo-soft)]",
+          !isPrimary && active && "text-[var(--sj-on-photo)]",
+          iconClassName,
+        )}
+        aria-hidden="true"
+      />
       {isPlace ? (
         <span className="min-w-0 max-[389px]:sr-only">
           <span
@@ -85,7 +88,7 @@ export function DockItem({
           ) : null}
         </span>
       ) : null}
-      {isPrimary ? <span className={labelClassName}>{label}</span> : null}
+      {isPrimary ? <span className={clsx("sr-only", labelClassName)}>{label}</span> : null}
       {variant === "tool" ? <span className="sr-only">{label}</span> : null}
     </>
   );

@@ -1,3 +1,4 @@
+import clsx from "clsx";
 import { useLocation } from "react-router";
 import {
   ArrowLeft,
@@ -194,18 +195,26 @@ export function MobileNav({ isAuthenticated = true }: MobileNavProps) {
   const activeConfig = config ?? configFromActions(actions) ?? rootConfig(location.pathname, location.search, isAuthenticated);
   const tools = activeConfig.tools.slice(0, 3);
 
+  // Center the primary unless the tools cluster is full (3), where there's no
+  // room to grow + center without squishing touch targets below 44px.
+  const centered = tools.length <= 2;
+
   return (
-    <SpoonDock aria-label={activeConfig.ariaLabel ?? "Spoonjoy navigation"}>
-      <div className="flex min-w-0 justify-start">
+    <SpoonDock aria-label={activeConfig.ariaLabel ?? "Spoonjoy navigation"} centered={centered}>
+      {/* When centered, the side zones grow (flex-1) so the place item and the
+          tools fill the dock — no bare dock between items — and the equal zones
+          leave the primary dead-center. */}
+      <div className={clsx("flex min-w-0 justify-start", centered && "flex-1")}>
         <DockItem
           {...activeConfig.left}
           variant="place"
+          className={centered ? "flex-1" : undefined}
           href={buttonHref(activeConfig.left)}
           onClick={buttonOnClick(activeConfig.left)}
         />
       </div>
 
-      <div className="flex justify-center" data-testid="dock-center">
+      <div className="flex shrink-0 justify-center" data-testid="dock-center">
         <DockItem
           {...activeConfig.primary}
           variant="primary"
@@ -215,12 +224,13 @@ export function MobileNav({ isAuthenticated = true }: MobileNavProps) {
         />
       </div>
 
-      <div className="flex justify-end gap-1">
+      <div className={clsx("flex justify-end gap-1", centered && "flex-1")}>
         {tools.map((tool) => (
           <DockItem
             key={tool.id}
             {...tool}
             variant="tool"
+            className={centered ? "flex-1" : undefined}
             href={buttonHref(tool)}
             onClick={buttonOnClick(tool)}
           />
