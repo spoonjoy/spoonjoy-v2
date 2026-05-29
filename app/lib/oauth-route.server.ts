@@ -41,6 +41,35 @@ export function buildOAuthCallbackUrl(request: Request, provider: OAuthProvider)
   return `${requestCanonicalOrigin(request)}${CALLBACK_PATHS[provider]}`;
 }
 
+/**
+ * ⚠️ SOURCE OF TRUTH — this path MUST exactly match a Return URL registered on
+ * the Apple Service ID `app.spoonjoy.client` in the Apple Developer portal
+ * (Identifiers → Service IDs → Sign In with Apple → Configure → Return URLs).
+ *
+ * The Service ID is registered with the original RedwoodJS dbAuth-oauth plugin's
+ * endpoint `${RWJS_API_URL}/auth/oauth`, which on spoonjoy.app resolves to
+ * `/.redwood/functions/auth/oauth`. v2 keeps a compatibility route there
+ * (`routes/redwood-functions-auth-oauth.tsx`) that dispatches Apple's
+ * `form_post` callback to `handleAppleCallback`.
+ *
+ * Apple validates `redirect_uri` against this registration and rejects any
+ * mismatch with `invalid_request` ON ITS OWN sign-in screen (so no amount of
+ * server-side testing of "the code builds URL X" catches a wrong value — only
+ * matching the portal does). DO NOT change this path without first adding the
+ * new URL to the Service ID's Return URLs. Guarded by:
+ *   - the golden pin test in test/lib/oauth-route.server.test.ts, and
+ *   - scripts/smoke-apple-oauth.ts (hits Apple's real authorize endpoint).
+ */
+export const APPLE_REGISTERED_RETURN_PATH = "/.redwood/functions/auth/oauth";
+
+/**
+ * Build the Apple `redirect_uri` Apple will accept. `method` is `loginWithApple`
+ * for sign-in/up and `linkAppleAccount` when linking an existing account.
+ */
+export function buildAppleReturnUrl(request: Request, method: "loginWithApple" | "linkAppleAccount"): string {
+  return `${requestCanonicalOrigin(request)}${APPLE_REGISTERED_RETURN_PATH}?method=${method}`;
+}
+
 export function redirectTo(location: string, headers?: HeadersInit) {
   return new Response(null, {
     status: 302,

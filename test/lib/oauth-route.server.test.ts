@@ -1,8 +1,10 @@
 // @vitest-environment node
 import { describe, it, expect, vi, afterEach } from "vitest";
 import {
+  APPLE_REGISTERED_RETURN_PATH,
   appendOAuthError,
   assertCanStartOAuthLinking,
+  buildAppleReturnUrl,
   buildOAuthCallbackUrl,
   commitOAuthStartSession,
   generateOAuthState,
@@ -47,6 +49,23 @@ describe("oauth-route.server", () => {
     );
     expect(buildOAuthCallbackUrl(request, "apple")).toBe(
       "https://spoonjoy.app/auth/apple/callback"
+    );
+  });
+
+  // GOLDEN / SOURCE-OF-TRUTH PIN: this exact value must match the Return URL
+  // registered on the Apple Service ID `app.spoonjoy.client`. If this assertion
+  // fails, Sign in with Apple is broken in production (Apple rejects the
+  // redirect_uri with invalid_request). Do not "fix" the test by changing the
+  // expected string — change it only after updating the Apple Developer portal,
+  // and re-run scripts/smoke-apple-oauth.ts against the live endpoint.
+  it("pins the Apple redirect_uri to the registered Service ID Return URL", () => {
+    expect(APPLE_REGISTERED_RETURN_PATH).toBe("/.redwood/functions/auth/oauth");
+    const request = new Request("https://spoonjoy.app/auth/apple");
+    expect(buildAppleReturnUrl(request, "loginWithApple")).toBe(
+      "https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithApple"
+    );
+    expect(buildAppleReturnUrl(request, "linkAppleAccount")).toBe(
+      "https://spoonjoy.app/.redwood/functions/auth/oauth?method=linkAppleAccount"
     );
   });
 

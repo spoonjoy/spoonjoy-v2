@@ -129,8 +129,9 @@ export function createAppleAuthorizationURL(
 ): URL {
   const apple = createAppleClient(config, redirectUri);
 
-  // Arctic's createAuthorizationURL handles the core OAuth URL construction
-  const scopes = ["email", "name"];
+  // Arctic's createAuthorizationURL handles the core OAuth URL construction.
+  // Order matches the production-proven RedwoodJS dbAuth-oauth plugin (name email).
+  const scopes = ["name", "email"];
   const url = apple.createAuthorizationURL(state, scopes);
 
   // Apple requires response_mode=form_post when requesting scopes

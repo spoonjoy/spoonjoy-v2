@@ -37,6 +37,39 @@ async function replaceControlledText(locator, value) {
   await locator.pressSequentially(value)
 }
 
+/**
+ * Apple OAuth regression guard. Apple validates `redirect_uri` against the
+ * Return URLs registered on the Service ID and rejects a mismatch with
+ * `invalid_request` on its OWN sign-in screen — invisible to server-side tests.
+ * This hits production's /auth/apple and then Apple's real authorize endpoint to
+ * assert (a) we send the registered legacy path and (b) Apple actually accepts
+ * it (renders the sign-in form, no invalid_request). Always targets the
+ * registered public host so it stays meaningful regardless of --base-url.
+ */
+async function checkAppleOAuth(page, report) {
+  const PROD = 'https://spoonjoy.app'
+  const start = await page.request.get(`${PROD}/auth/apple`, { maxRedirects: 0 })
+  const location = start.headers()['location'] ?? ''
+  const authorize = new URL(location)
+  const redirectUri = authorize.searchParams.get('redirect_uri') ?? ''
+  report.apple = {
+    authorizeHost: authorize.host,
+    redirectUri,
+    scope: authorize.searchParams.get('scope'),
+    responseMode: authorize.searchParams.get('response_mode'),
+  }
+  // (a) We must send the registered RedwoodJS dbAuth-oauth Return URL.
+  expect(authorize.host).toBe('appleid.apple.com')
+  expect(redirectUri).toBe('https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithApple')
+  expect(authorize.searchParams.get('response_mode')).toBe('form_post')
+  // (b) Apple must actually accept it (renders the sign-in form, not an error).
+  const apple = await page.request.get(location)
+  const body = await apple.text()
+  report.apple.appleAccepts = !body.includes('invalid_request') && body.includes('Sign in to Apple')
+  expect(body.includes('invalid_request')).toBe(false)
+  expect(body.includes('Sign in to Apple')).toBe(true)
+}
+
 async function cleanupRemoteD1(email) {
   const command = `DELETE FROM "User" WHERE email = ${sqlString(email)};`
   const { stdout, stderr } = await execFileAsync(
@@ -154,6 +187,9 @@ async function main() {
     report.pushPublicKeyStatus = pushResponse.status()
     const isLocalhost = new URL(baseUrl).hostname === 'localhost'
     expect(pushResponse.ok() || (isLocalhost && pushResponse.status() === 500)).toBe(true)
+
+    // Sign in with Apple regression guard (hits Apple's real authorize endpoint).
+    await checkAppleOAuth(page, report)
   } finally {
     await context.close()
     await browser.close()

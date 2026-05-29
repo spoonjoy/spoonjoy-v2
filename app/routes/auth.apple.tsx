@@ -5,7 +5,7 @@ import { createAppleAuthorizationURL } from "~/lib/apple-oauth.server";
 import {
   appendOAuthError,
   assertCanStartOAuthLinking,
-  buildOAuthCallbackUrl,
+  buildAppleReturnUrl,
   commitOAuthStartSession,
   generateOAuthState,
   getOAuthEnv,
@@ -27,7 +27,12 @@ async function initiateAppleOAuth({ request, context }: Route.LoaderArgs | Route
     return redirect(appendOAuthError(sessionData.failureRedirect, "oauth_unconfigured"));
   }
 
-  const redirectUri = buildOAuthCallbackUrl(request, "apple");
+  // Apple validates redirect_uri against the Service ID's registered Return
+  // URLs — which is the legacy RedwoodJS dbAuth-oauth path, not /auth/apple/
+  // callback. Send the registered path so Apple doesn't reject on its consent
+  // screen. The compat route (routes/redwood-functions-auth-oauth.tsx) handles
+  // the form_post callback.
+  const redirectUri = buildAppleReturnUrl(request, sessionData.linking ? "linkAppleAccount" : "loginWithApple");
   sessionData.redirectUri = redirectUri;
   let authorizationUrl;
   try {
