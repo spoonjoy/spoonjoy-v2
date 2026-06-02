@@ -80,7 +80,7 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 **Output**: Coverage log saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-1c-coverage.log`; any refactor stays in `app/lib/api-auth.server.ts` and related tests.
 **Acceptance**: 100% coverage on new/changed API credential scope code; focused tests and build still PASS with no warnings.
 
-### ⬜ Unit 2a: API Idempotency Storage — Tests
+### ✅ Unit 2a: API Idempotency Storage — Tests
 **What**: Write failing tests for persistent idempotency-key storage in `prisma/schema.prisma`, `migrations/0016_api_idempotency_keys.sql`, and cleanup hooks, using the exact column names, nullable behavior, unique tuple, and index list from `api-v1-contract.md`.
 **Output**: `test/scripts/migration-0016-api-idempotency-keys.test.ts` asserts the `ApiIdempotencyKey` table with `userId`, nullable `credentialId`, `clientKey`, `key`, `operation`, `requestHash`, nullable `responseStatus`, nullable `responseBody`, `expiresAt`, timestamps, unique `(userId, clientKey, key)`, and indexes on `(userId, createdAt)`, `credentialId`, and `expiresAt`; `test/lib/api-idempotency.server.test.ts` asserts missing helper exports.
 **Acceptance**: Focused tests FAIL because `ApiIdempotencyKey` and `app/lib/api-idempotency.server.ts` do not exist.
@@ -347,3 +347,4 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 - 2026-06-01 19:48 Unit 1b complete: added `ApiCredential.scopes`, normalized personal/delegated/OAuth scopes, preserved legacy expansion, and saved green focused-test/build/Prisma logs
 - 2026-06-01 19:53 Addressed Unit 1b reviewer blocker by moving Cloudflare rate-limit bindings from deprecated `unsafe.bindings` to supported `ratelimits` config and refreshing warning-free build logs
 - 2026-06-01 19:53 Unit 1c complete: added expansion boundary tests, verified 100% coverage on `app/lib/api-auth.server.ts`, and saved green focused-test/build logs
+- 2026-06-01 19:56 Unit 2a complete: idempotency migration/helper tests are red for missing `0016_api_idempotency_keys.sql` and `app/lib/api-idempotency.server.ts`
