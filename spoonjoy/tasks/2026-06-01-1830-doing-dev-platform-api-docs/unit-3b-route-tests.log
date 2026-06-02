@@ -1,0 +1,24 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ✓ test/routes/api.test.ts > Spoonjoy REST API route > serves discovery, health, tools, and CORS preflight 12ms
+ ✓ test/routes/api.test.ts > Spoonjoy REST API route > keeps public search from leaking private shopping-list data 24ms
+ ✓ test/routes/api.test.ts > Spoonjoy REST API route > creates tokens from a session and then uses bearer auth for shopping-list REST calls 37ms
+ ✓ test/routes/api.test.ts > Spoonjoy REST API route > exposes generic tool calls without allowing unauthenticated ownerEmail writes 12ms
+ ✓ test/routes/api.test.ts > Spoonjoy REST API route > routes recipe and cookbook REST endpoints through the shared operation layer 62ms
+ ✓ test/routes/api.test.ts > Spoonjoy REST API route > returns structured REST errors 10ms
+ ✓ test/routes/api.test.ts > Spoonjoy REST API route > returns 429 with Retry-After when the rate limiter denies the request 5ms
+ ✓ test/routes/api-v1-shell.test.ts > /api/v1 shell > is registered before the legacy /api/* catch-all route 1ms
+ ✓ test/routes/api-v1-shell.test.ts > /api/v1 shell > serves the exact discovery envelope with request IDs and CORS headers 3ms
+ ✓ test/routes/api-v1-shell.test.ts > /api/v1 shell > serves anonymous health and generated request IDs 1ms
+ ✓ test/routes/api-v1-shell.test.ts > /api/v1 shell > returns invalid_token for optional-auth routes when a bad bearer is present 9ms
+ ✓ test/routes/api-v1-shell.test.ts > /api/v1 shell > handles CORS preflight for any v1 path 0ms
+ ✓ test/routes/api-v1-shell.test.ts > /api/v1 shell > returns stable envelopes for unknown endpoints, unsupported methods, and malformed JSON 3ms
+ ✓ test/routes/api-v1-shell.test.ts > /api/v1 shell > exports the full v1 error status map 0ms
+ ✓ test/config/api-v1-route-coverage.test.ts > API v1 route coverage config > covers TypeScript route modules in coverage reports 1ms
+
+ Test Files  3 passed (3)
+      Tests  15 passed (15)
+   Start at  20:11:33
+   Duration  1.83s (transform 269ms, setup 197ms, import 521ms, tests 259ms, environment 478ms)
+

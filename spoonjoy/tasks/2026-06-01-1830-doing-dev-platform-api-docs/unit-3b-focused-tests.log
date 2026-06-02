@@ -1,0 +1,17 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ✓ test/config/api-v1-route-coverage.test.ts > API v1 route coverage config > covers TypeScript route modules in coverage reports 1ms
+ ✓ test/routes/api-v1-shell.test.ts > /api/v1 shell > is registered before the legacy /api/* catch-all route 1ms
+ ✓ test/routes/api-v1-shell.test.ts > /api/v1 shell > serves the exact discovery envelope with request IDs and CORS headers 3ms
+ ✓ test/routes/api-v1-shell.test.ts > /api/v1 shell > serves anonymous health and generated request IDs 1ms
+ ✓ test/routes/api-v1-shell.test.ts > /api/v1 shell > returns invalid_token for optional-auth routes when a bad bearer is present 3ms
+ ✓ test/routes/api-v1-shell.test.ts > /api/v1 shell > handles CORS preflight for any v1 path 0ms
+ ✓ test/routes/api-v1-shell.test.ts > /api/v1 shell > returns stable envelopes for unknown endpoints, unsupported methods, and malformed JSON 2ms
+ ✓ test/routes/api-v1-shell.test.ts > /api/v1 shell > exports the full v1 error status map 0ms
+
+ Test Files  2 passed (2)
+      Tests  8 passed (8)
+   Start at  20:09:59
+   Duration  848ms (transform 74ms, setup 134ms, import 120ms, tests 59ms, environment 305ms)
+

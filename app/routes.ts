@@ -44,6 +44,7 @@ export default [
   route("api/push/public-key", "routes/api.push.public-key.ts"),
   route("api/push/subscriptions", "routes/api.push.subscriptions.ts"),
   route("api/push/preferences", "routes/api.push.preferences.ts"),
+  route("api/v1/*", "routes/api.v1.$.ts"),
   route("api/*", "routes/api.$.ts"),
   route("mcp", "routes/mcp.ts"),
   route("health", "routes/health.ts"),

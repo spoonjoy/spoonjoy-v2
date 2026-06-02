@@ -91,6 +91,7 @@ describe("/api/v1 shell", () => {
       }) as unknown as Request, splat));
 
       expect(response.status).toBe(401);
+      expectV1Headers(response, `req_${splat || "root"}`);
       await expect(readJson(response)).resolves.toEqual({
         ok: false,
         requestId: `req_${splat || "root"}`,
@@ -113,6 +114,9 @@ describe("/api/v1 shell", () => {
     expect(response.headers.get("X-Request-Id")).toBe("req_options");
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
     expect(response.headers.get("Access-Control-Allow-Headers")).toBe("Authorization, Content-Type, X-Request-Id");
+    expect(response.headers.get("Access-Control-Allow-Methods")).toBe("GET, POST, PATCH, DELETE, OPTIONS");
+    expect(response.headers.get("Access-Control-Expose-Headers")).toBe("X-Request-Id");
+    expect(response.headers.has("Content-Type")).toBe(false);
     expect(await response.text()).toBe("");
   });
 
@@ -121,6 +125,7 @@ describe("/api/v1 shell", () => {
       headers: { "X-Request-Id": "req_unknown" },
     }) as unknown as Request, "nope"));
     expect(unknown.status).toBe(404);
+    expectV1Headers(unknown, "req_unknown");
     await expect(readJson(unknown)).resolves.toMatchObject({
       ok: false,
       requestId: "req_unknown",
@@ -132,6 +137,7 @@ describe("/api/v1 shell", () => {
       headers: { "X-Request-Id": "req_method" },
     }) as unknown as Request, "health"));
     expect(method.status).toBe(405);
+    expectV1Headers(method, "req_method");
     await expect(readJson(method)).resolves.toMatchObject({
       ok: false,
       requestId: "req_method",
@@ -144,6 +150,7 @@ describe("/api/v1 shell", () => {
       body: "{",
     }) as unknown as Request, "tokens"));
     expect(invalidJson.status).toBe(400);
+    expectV1Headers(invalidJson, "req_bad_json");
     await expect(readJson(invalidJson)).resolves.toMatchObject({
       ok: false,
       requestId: "req_bad_json",
