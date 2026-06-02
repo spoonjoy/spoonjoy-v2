@@ -100,7 +100,7 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 **Output**: `test/routes/api-v1-shell.test.ts` asserts the exact discovery document, health document, optional-auth behavior with no required scope for root/health/openapi, invalid bearer returning `401 invalid_token` for root/health/openapi, success envelope, error envelope, error code map, `OPTIONS /api/v1/*` status, unknown endpoints, malformed JSON, request ID generation/echo, and CORS headers from `api-v1-contract.md`; `test/build-output-hygiene.test.ts` or a new focused config test asserts `vitest.config.ts` coverage includes `app/routes/**/*.ts`.
 **Acceptance**: Focused tests FAIL because `app/routes/api.v1.$.ts` and the v1 shell helpers are absent.
 
-### ⬜ Unit 3b: `/api/v1` Shell, Errors, And Request IDs — Implementation
+### ✅ Unit 3b: `/api/v1` Shell, Errors, And Request IDs — Implementation
 **What**: Register `route("api/v1/*", "routes/api.v1.$.ts")`; create `app/routes/api.v1.$.ts`, `app/lib/api-v1.server.ts`, and `app/lib/api-v1-contract.server.ts` with discovery, health, OPTIONS, request IDs, CORS, JSON body parsing, and error-envelope helpers; update `vitest.config.ts` so coverage includes new `.ts` route files.
 **Output**: Updated `app/routes.ts`, `vitest.config.ts`, new v1 route/helper/contract files, and passing Unit 3a tests.
 **Acceptance**: Unit 3a tests PASS; legacy `/api/*` tests still PASS; `pnpm run build` succeeds with no warnings.
@@ -352,3 +352,5 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 - 2026-06-01 20:01 Unit 2b complete: added `ApiIdempotencyKey`, migration, cleanup hooks, idempotency helper, Prisma logs, green focused tests, typecheck, and build
 - 2026-06-01 20:04 Unit 2c complete: added idempotency helper behavior tests for hashing, first-use/replay/conflict, failed response replay, revoked-credential replay, expiry cleanup/reuse, and 100% helper coverage
 - 2026-06-01 20:08 Unit 3a complete: v1 shell tests are red for missing `routes/api.v1.$`, missing v1 contract helper, and missing exact `.ts` route coverage glob
+- 2026-06-01 20:11 Addressed Unit 3a reviewer finding by asserting full v1 CORS/request-id headers on error and preflight responses
+- 2026-06-01 20:11 Unit 3b complete: registered `/api/v1/*`, added v1 contract/shell helpers, request IDs, CORS, envelopes, optional-auth invalid-token behavior, route coverage config, green legacy/v1 route tests, typecheck, and build
