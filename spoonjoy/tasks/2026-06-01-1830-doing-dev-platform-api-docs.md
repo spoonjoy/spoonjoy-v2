@@ -327,3 +327,4 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 - 2026-06-01 18:54 Validation reviewer converged: cited current paths and source claims match HEAD
 - 2026-06-01 19:00 Added exact v1 contract artifact and wired ambiguous unit assertions to it
 - 2026-06-01 19:02 Closed remaining ambiguity findings by enumerating discovery resources and full shopping-list mutation item shapes
+- 2026-06-01 19:04 Specified OpenAPI schema rules, required fields, nullable handling, and mutation list-content semantics
