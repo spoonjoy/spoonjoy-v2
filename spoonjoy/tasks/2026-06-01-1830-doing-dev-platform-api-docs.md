@@ -90,7 +90,7 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 **Output**: Updated schema, root migration, updated cleanup hooks, no tracked Prisma client artifacts, `pnpm prisma:generate` log saved to artifacts, `pnpm prisma:push` log saved to artifacts, new idempotency helper, and passing Unit 2a tests.
 **Acceptance**: Unit 2a tests PASS; `pnpm run build` succeeds with no warnings.
 
-### ⬜ Unit 2c: API Idempotency Storage — Coverage & Refactor
+### ✅ Unit 2c: API Idempotency Storage — Coverage & Refactor
 **What**: Verify coverage for idempotency helper branches: first use, exact replay, mismatched operation, mismatched request body hash, failed stored response replay, missing credential id, revoked credential after stored replay, expired row deletion, and key reuse after expiry.
 **Output**: Coverage log saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-2c-coverage.log`; any refactor stays in `app/lib/api-idempotency.server.ts` and tests.
 **Acceptance**: 100% coverage on new/changed idempotency storage code; focused tests and build still PASS with no warnings.
@@ -350,3 +350,4 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 - 2026-06-01 19:56 Unit 2a complete: idempotency migration/helper tests are red for missing `0016_api_idempotency_keys.sql` and `app/lib/api-idempotency.server.ts`
 - 2026-06-01 20:01 Addressed Unit 2a reviewer finding by adding cleanup-order assertions for `ApiIdempotencyKey` before credential cleanup
 - 2026-06-01 20:01 Unit 2b complete: added `ApiIdempotencyKey`, migration, cleanup hooks, idempotency helper, Prisma logs, green focused tests, typecheck, and build
+- 2026-06-01 20:04 Unit 2c complete: added idempotency helper behavior tests for hashing, first-use/replay/conflict, failed response replay, revoked-credential replay, expiry cleanup/reuse, and 100% helper coverage
