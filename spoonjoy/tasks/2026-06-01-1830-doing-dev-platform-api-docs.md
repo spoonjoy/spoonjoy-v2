@@ -150,7 +150,7 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 **Output**: Updated v1 route/helper files, token response formatting implemented in `app/lib/api-v1.server.ts`, and passing Unit 6a tests.
 **Acceptance**: Unit 6a tests PASS; legacy `/api/tokens` tests still PASS; `pnpm run build` succeeds with no warnings.
 
-### ⬜ Unit 6c: Personal API Token V1 Metadata — Coverage & Refactor
+### ✅ Unit 6c: Personal API Token V1 Metadata — Coverage & Refactor
 **What**: Verify coverage for token endpoint branches: no bearer token, invalid bearer token, revoked bearer token, missing scope, duplicate token name, blank token name, invalid requested scope, revoke missing credential id, and revoke credential owned by another chef.
 **Output**: Coverage log saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-6c-coverage.log`; refactors stay in token helpers and tests.
 **Acceptance**: 100% coverage on new/changed token v1 code; focused tests and build still PASS with no warnings.
@@ -370,3 +370,5 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 - 2026-06-01 20:52 Unit 6a complete: added v1 token metadata tests for session and bearer list/create/revoke, token secret one-time return, scope normalization/defaults/capping/escalation, self-revoke, auth failures, unknown body fields, invalid JSON, blank names, and invalid scopes; red run fails on unimplemented v1 token routes returning shell 404s
 - 2026-06-01 20:54 Addressed Unit 6a reviewer findings by allowing nullable token metadata date fields and asserting insufficient-scope error envelopes for token list/create/delete paths; regenerated red evidence still fails on unimplemented v1 token routes
 - 2026-06-01 20:57 Unit 6b complete: implemented authenticated token list/create/revoke metadata endpoints with one-time token secret return, bearer scope capping, self-revoke behavior, unknown-field validation, invalid-scope mapping, green v1/legacy token tests, typecheck, and warning-free build
+- 2026-06-01 21:06 Addressed Unit 6b reviewer finding by enforcing token-create authentication and `tokens:write` scope before parsing JSON bodies; unauthenticated and under-scoped malformed bodies now return auth/scope errors before body validation
+- 2026-06-01 21:07 Unit 6c complete: added token branch coverage for duplicate names, no/blank/primitive JSON bodies, invalid scope payloads, missing and cross-owner revokes, already-revoked credentials, 100% coverage on v1 token code, focused route tests, typecheck, and warning-free build

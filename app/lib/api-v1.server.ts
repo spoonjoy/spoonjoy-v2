@@ -419,10 +419,8 @@ function normalizeScopesOrInvalidScope(scopes: string | string[]) {
   try {
     return normalizeCredentialScopes(scopes);
   } catch (error) {
-    if (error instanceof ApiAuthError && error.status === 400) {
-      throw new ApiV1Error("invalid_scope", error.message);
-    }
-    throw error;
+    const { message } = error as Error;
+    throw new ApiV1Error("invalid_scope", message);
   }
 }
 
@@ -453,9 +451,9 @@ async function handleTokenList(args: ApiV1RouteArgs, requestId: string, principa
 }
 
 async function handleTokenCreate(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal | null) {
-  const body = await parseApiV1JsonBody(args.request);
   const authenticated = requirePrincipal(principal);
   assertPrincipalScope(authenticated, "tokens:write");
+  const body = await parseApiV1JsonBody(args.request);
   assertKnownFields(body, ["name", "scopes"]);
   const name = nonblankString(body.name, "name");
   const normalizedScopes = normalizeCreateTokenScopes(body.scopes);

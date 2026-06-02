@@ -135,6 +135,20 @@ describe("API v1 personal token metadata", () => {
     expect(defaults.status).toBe(201);
     expectEnvelopeHeaders(defaults, "req_tokens_create_default");
     expect(defaultsPayload.data.credential.scopes).toEqual([...DEFAULT_PERSONAL_API_TOKEN_SCOPES].sort());
+
+    const duplicateName = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/tokens", {
+      method: "POST",
+      headers: { Cookie: cookie, "Content-Type": "application/json", "X-Request-Id": "req_tokens_duplicate_name" },
+      body: JSON.stringify({ name: "Default client", scopes: ["recipes:read"] }),
+    }) as unknown as Request, "tokens"));
+    const duplicatePayload = await readJson(duplicateName);
+
+    expect(duplicateName.status).toBe(201);
+    expectEnvelopeHeaders(duplicateName, "req_tokens_duplicate_name");
+    expect(duplicatePayload.data.credential).toMatchObject({
+      name: "Default client",
+      scopes: ["recipes:read"],
+    });
   });
 
   it("caps bearer-created token scopes and rejects scope escalation", async () => {
@@ -171,8 +185,10 @@ describe("API v1 personal token metadata", () => {
 
   it("revokes credentials and allows self-revoke for the current request only", async () => {
     const user = await db.user.create({ data: createTestUser() });
+    const otherUser = await db.user.create({ data: createTestUser() });
     const other = await createApiCredential(db, user.id, "Other client", { scopes: ["recipes:read"] });
     const self = await createApiCredential(db, user.id, "Self revoker", { scopes: ["tokens:read", "tokens:write"] });
+    const otherOwnerToken = await createApiCredential(db, otherUser.id, "Other owner", { scopes: ["recipes:read"] });
 
     const revokeOther = await action(routeArgs(new UndiciRequest(`http://localhost/api/v1/tokens/${other.credential.id}`, {
       method: "DELETE",
@@ -187,6 +203,42 @@ describe("API v1 personal token metadata", () => {
       credential: { id: other.credential.id, revokedAt: expect.any(String) },
     });
     expectCredentialMetadataShape(revokeOtherPayload.data.credential);
+
+    const revokeAlreadyRevoked = await action(routeArgs(new UndiciRequest(`http://localhost/api/v1/tokens/${other.credential.id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${self.token}`, "X-Request-Id": "req_tokens_revoke_already_revoked" },
+    }) as unknown as Request, `tokens/${other.credential.id}`));
+    expect(revokeAlreadyRevoked.status).toBe(200);
+    expectEnvelopeHeaders(revokeAlreadyRevoked, "req_tokens_revoke_already_revoked");
+    await expect(readJson(revokeAlreadyRevoked)).resolves.toMatchObject({
+      ok: true,
+      requestId: "req_tokens_revoke_already_revoked",
+      data: { revoked: false, credential: { id: other.credential.id, revokedAt: expect.any(String) } },
+    });
+
+    const missing = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/tokens/missing-credential", {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${self.token}`, "X-Request-Id": "req_tokens_revoke_missing" },
+    }) as unknown as Request, "tokens/missing-credential"));
+    expect(missing.status).toBe(404);
+    expectEnvelopeHeaders(missing, "req_tokens_revoke_missing");
+    await expect(readJson(missing)).resolves.toMatchObject({
+      ok: false,
+      requestId: "req_tokens_revoke_missing",
+      error: { code: "not_found", status: 404 },
+    });
+
+    const crossOwner = await action(routeArgs(new UndiciRequest(`http://localhost/api/v1/tokens/${otherOwnerToken.credential.id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${self.token}`, "X-Request-Id": "req_tokens_revoke_cross_owner" },
+    }) as unknown as Request, `tokens/${otherOwnerToken.credential.id}`));
+    expect(crossOwner.status).toBe(404);
+    expectEnvelopeHeaders(crossOwner, "req_tokens_revoke_cross_owner");
+    await expect(readJson(crossOwner)).resolves.toMatchObject({
+      ok: false,
+      requestId: "req_tokens_revoke_cross_owner",
+      error: { code: "not_found", status: 404 },
+    });
 
     const revokeSelf = await action(routeArgs(new UndiciRequest(`http://localhost/api/v1/tokens/${self.credential.id}`, {
       method: "DELETE",
@@ -267,6 +319,19 @@ describe("API v1 personal token metadata", () => {
       error: { code: "insufficient_scope", status: 403 },
     });
 
+    const malformedWithoutScope = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/tokens", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${readOnly.token}`, "Content-Type": "application/json", "X-Request-Id": "req_tokens_write_scope_bad_json" },
+      body: "{",
+    }) as unknown as Request, "tokens"));
+    expect(malformedWithoutScope.status).toBe(403);
+    expectEnvelopeHeaders(malformedWithoutScope, "req_tokens_write_scope_bad_json");
+    await expect(readJson(malformedWithoutScope)).resolves.toMatchObject({
+      ok: false,
+      requestId: "req_tokens_write_scope_bad_json",
+      error: { code: "insufficient_scope", status: 403 },
+    });
+
     const deleteWithoutScope = await action(routeArgs(new UndiciRequest(`http://localhost/api/v1/tokens/${target.credential.id}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${readOnly.token}`, "X-Request-Id": "req_tokens_delete_scope" },
@@ -292,10 +357,42 @@ describe("API v1 personal token metadata", () => {
       error: { code: "invalid_json", status: 400 },
     });
 
+    for (const [requestId, init] of [
+      ["req_tokens_no_json_body", { method: "POST", headers: { Cookie: cookie, "X-Request-Id": "req_tokens_no_json_body" } }],
+      ["req_tokens_blank_json_body", {
+        method: "POST",
+        headers: { Cookie: cookie, "Content-Type": "application/json", "X-Request-Id": "req_tokens_blank_json_body" },
+        body: "   ",
+      }],
+    ] as const) {
+      const response = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/tokens", init) as unknown as Request, "tokens"));
+      expect(response.status).toBe(400);
+      expectEnvelopeHeaders(response, requestId);
+      await expect(readJson(response)).resolves.toMatchObject({
+        ok: false,
+        requestId,
+        error: { code: "validation_error", status: 400 },
+      });
+    }
+
+    const primitiveJson = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/tokens", {
+      method: "POST",
+      headers: { Cookie: cookie, "Content-Type": "application/json", "X-Request-Id": "req_tokens_primitive_json" },
+      body: JSON.stringify("token"),
+    }) as unknown as Request, "tokens"));
+    expect(primitiveJson.status).toBe(400);
+    expectEnvelopeHeaders(primitiveJson, "req_tokens_primitive_json");
+    await expect(readJson(primitiveJson)).resolves.toMatchObject({
+      ok: false,
+      requestId: "req_tokens_primitive_json",
+      error: { code: "validation_error", status: 400 },
+    });
+
     for (const [requestId, body, code] of [
       ["req_tokens_unknown_field", { name: "Client", ownerEmail: user.email }, "validation_error"],
       ["req_tokens_blank_name", { name: " " }, "validation_error"],
       ["req_tokens_invalid_scope", { name: "Client", scopes: ["recipes:delete"] }, "invalid_scope"],
+      ["req_tokens_invalid_scope_type", { name: "Client", scopes: [1] }, "validation_error"],
     ] as const) {
       const response = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/tokens", {
         method: "POST",

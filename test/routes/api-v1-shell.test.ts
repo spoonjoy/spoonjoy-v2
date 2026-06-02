@@ -231,12 +231,12 @@ describe("/api/v1 shell", () => {
       headers: { "Content-Type": "application/json", "X-Request-Id": "req_bad_json" },
       body: "{",
     }) as unknown as Request, "tokens"));
-    expect(invalidJson.status).toBe(400);
+    expect(invalidJson.status).toBe(401);
     expectV1Headers(invalidJson, "req_bad_json");
     await expect(readJson(invalidJson)).resolves.toMatchObject({
       ok: false,
       requestId: "req_bad_json",
-      error: { code: "invalid_json", status: 400 },
+      error: { code: "authentication_required", status: 401 },
     });
 
     const validJson = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/tokens", {
@@ -256,11 +256,11 @@ describe("/api/v1 shell", () => {
       headers: { "Content-Type": "application/json", "X-Request-Id": "req_primitive_json" },
       body: JSON.stringify("token"),
     }) as unknown as Request, "tokens"));
-    expect(primitiveJson.status).toBe(400);
+    expect(primitiveJson.status).toBe(401);
     await expect(readJson(primitiveJson)).resolves.toMatchObject({
       ok: false,
       requestId: "req_primitive_json",
-      error: { code: "validation_error", status: 400 },
+      error: { code: "authentication_required", status: 401 },
     });
 
     const emptyJson = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/tokens", {
