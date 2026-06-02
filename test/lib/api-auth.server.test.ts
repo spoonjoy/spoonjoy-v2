@@ -9,6 +9,7 @@ import {
   authenticateApiRequest,
   authenticateApiToken,
   createApiCredential,
+  expandCredentialScopes,
   extractBearerToken,
   normalizeCredentialScopes,
   generateApiToken,
@@ -107,6 +108,14 @@ describe("API authentication helpers", () => {
     expect(normalizeCredentialScopes("")).toBe("");
     expect(normalizeCredentialScopes([])).toBe("");
     expect(() => normalizeCredentialScopes(["recipes:read", "recipes:delete"])).toThrow("Unknown API credential scope");
+    expect(expandCredentialScopes("kitchen:write recipes:read")).toEqual([
+      "recipes:read",
+      "shopping_list:write",
+      "tokens:write",
+    ]);
+    expect(expandCredentialScopes(null)).toEqual([]);
+    expect(expandCredentialScopes(undefined)).toEqual([]);
+    expect(() => expandCredentialScopes("recipes:delete")).toThrow("Unknown API credential scope");
 
     const user = await db.user.create({ data: { email: uniqueEmail("scopes"), username: faker.internet.username() } });
     const legacy = await createApiCredential(db, user.id, "Legacy", {

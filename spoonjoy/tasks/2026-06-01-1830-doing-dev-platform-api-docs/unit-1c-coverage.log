@@ -1,0 +1,59 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+      Coverage enabled with istanbul
+
+ ✓ test/lib/oauth-server.server.test.ts > verifyPkceS256 > accepts a verifier whose S256 hash matches the challenge 2ms
+ ✓ test/lib/oauth-server.server.test.ts > verifyPkceS256 > rejects a mismatched verifier 0ms
+ ✓ test/lib/oauth-server.server.test.ts > verifyPkceS256 > rejects empty inputs 0ms
+ ✓ test/lib/oauth-server.server.test.ts > isValidRedirectUri > accepts https and localhost http 0ms
+ ✓ test/lib/oauth-server.server.test.ts > isValidRedirectUri > rejects plain http on a remote host and malformed URLs 0ms
+ ✓ test/lib/oauth-server.server.test.ts > normalizeScope > defaults to read+write when empty 0ms
+ ✓ test/lib/oauth-server.server.test.ts > normalizeScope > passes through a supported subset 0ms
+ ✓ test/lib/oauth-server.server.test.ts > normalizeScope > rejects an unsupported scope 0ms
+ ✓ test/lib/oauth-server.server.test.ts > OAuth client registration > registers a client and reads it back 7ms
+ ✓ test/lib/oauth-server.server.test.ts > OAuth client registration > defaults a blank client name to null 4ms
+ ✓ test/lib/oauth-server.server.test.ts > OAuth client registration > rejects an empty redirect list 4ms
+ ✓ test/lib/oauth-server.server.test.ts > OAuth client registration > rejects an invalid redirect URI 3ms
+ ✓ test/lib/oauth-server.server.test.ts > OAuth client registration > returns null for a missing or empty client id 8ms
+ ✓ test/lib/oauth-server.server.test.ts > authorization code lifecycle > mints a code and exchanges it for the grant 14ms
+ ✓ test/lib/oauth-server.server.test.ts > authorization code lifecycle > stores a null resource when none is provided 6ms
+ ✓ test/lib/oauth-server.server.test.ts > authorization code lifecycle > rejects an empty code 4ms
+ ✓ test/lib/oauth-server.server.test.ts > authorization code lifecycle > rejects an unknown code 5ms
+ ✓ test/lib/oauth-server.server.test.ts > authorization code lifecycle > rejects a code replayed after use 6ms
+ ✓ test/lib/oauth-server.server.test.ts > authorization code lifecycle > rejects an expired code 6ms
+ ✓ test/lib/oauth-server.server.test.ts > authorization code lifecycle > rejects a different client 5ms
+ ✓ test/lib/oauth-server.server.test.ts > authorization code lifecycle > rejects a mismatched redirect URI 6ms
+ ✓ test/lib/oauth-server.server.test.ts > authorization code lifecycle > rejects a bad PKCE verifier 5ms
+ ✓ test/lib/oauth-server.server.test.ts > authorization code lifecycle > treats a lost burn race as already-used 5ms
+ ✓ test/lib/oauth-server.server.test.ts > connector token issuance + rotation > issues an expiring access token plus a refresh token 7ms
+ ✓ test/lib/oauth-server.server.test.ts > connector token issuance + rotation > rotates a refresh token, revoking the old one 8ms
+ ✓ test/lib/oauth-server.server.test.ts > connector token issuance + rotation > rejects an empty refresh token 4ms
+ ✓ test/lib/oauth-server.server.test.ts > connector token issuance + rotation > rejects an unknown refresh token 4ms
+ ✓ test/lib/oauth-server.server.test.ts > connector token issuance + rotation > rejects a refresh token presented by a different client 6ms
+ ✓ test/lib/oauth-server.server.test.ts > connector token issuance + rotation > treats a lost rotation race as already-used 4ms
+ ✓ test/lib/oauth-server.server.test.ts > OAuthError > defaults to status 400 and carries the code 0ms
+ ✓ test/lib/agent-connection.server.test.ts > agent connection requests > starts a short-lived browser approval request without storing the raw device code 10ms
+ ✓ test/lib/agent-connection.server.test.ts > agent connection requests > defaults agent name and base URL, and rejects unsafe non-local base URLs 7ms
+ ✓ test/lib/agent-connection.server.test.ts > agent connection requests > polls pending, expired, denied, claimed, and invalid requests 11ms
+ ✓ test/lib/agent-connection.server.test.ts > agent connection requests > approves once, returns a token once, and authenticates the approved user 11ms
+ ✓ test/lib/agent-connection.server.test.ts > agent connection requests > revokes a token created during a lost claim race 18ms
+ ✓ test/lib/agent-connection.server.test.ts > agent connection requests > does not approve unusable or already-finished requests 10ms
+ ✓ test/lib/api-auth.server.test.ts > API authentication helpers > extracts bearer tokens and reports malformed authorization headers 8ms
+ ✓ test/lib/api-auth.server.test.ts > API authentication helpers > generates, hashes, authenticates, updates, and rejects API tokens 14ms
+ ✓ test/lib/api-auth.server.test.ts > API authentication helpers > normalizes and expands credential scopes 8ms
+ ✓ test/lib/api-auth.server.test.ts > API authentication helpers > honors an optional expiry on a credential 7ms
+ ✓ test/lib/api-auth.server.test.ts > API authentication helpers > authenticates bearer requests, session requests, and lowercased environment users 8ms
+ ✓ test/lib/api-auth.server.test.ts > API authentication helpers > handles absent users and owner authorization checks 5ms
+
+ Test Files  3 passed (3)
+      Tests  42 passed (42)
+   Start at  19:50:47
+   Duration  1.75s (transform 186ms, setup 168ms, import 484ms, tests 319ms, environment 423ms)
+
+ % Coverage report from istanbul
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |     100 |      100 |     100 |     100 |                   
+ ...auth.server.ts |     100 |      100 |     100 |     100 |                   
+-------------------|---------|----------|---------|---------|-------------------
