@@ -120,7 +120,7 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 **Output**: Updated v1 route/helper files and passing Unit 4a tests.
 **Acceptance**: Unit 4a tests PASS; legacy recipe API tests still PASS; `pnpm run build` succeeds with no warnings.
 
-### ⬜ Unit 4c: Public Recipe V1 Reads — Coverage & Refactor
+### ✅ Unit 4c: Public Recipe V1 Reads — Coverage & Refactor
 **What**: Verify coverage for recipe-read branches: blank query, `limit` boundary, malformed `limit`, deleted recipe, missing id, anonymous request with no Authorization header, and bearer token with insufficient scope.
 **Output**: Coverage log saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-4c-coverage.log`; refactors stay in v1 recipe helpers and tests.
 **Acceptance**: 100% coverage on new/changed recipe v1 code; focused tests and build still PASS with no warnings.
@@ -358,3 +358,4 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 - 2026-06-01 20:19 Unit 4a complete: public recipe v1 read tests are red for placeholder 404s on search/detail/list validation and scope checks
 - 2026-06-01 20:23 Addressed Unit 4a reviewer finding by asserting v1 headers on recipe 404, validation, and insufficient-scope errors
 - 2026-06-01 20:23 Unit 4b complete: implemented public recipe list/detail formatting, query/q and limit handling, deleted exclusion, bearer scope checks, green legacy/v1 route tests, typecheck, and build
+- 2026-06-01 20:28 Unit 4c complete: added recipe branch coverage for blank/default limits, malformed limits, anonymous list access, deterministic step/ingredient ordering, verified 100% coverage on v1 shell/recipe files, and saved green build logs
