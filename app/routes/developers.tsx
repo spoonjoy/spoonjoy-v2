@@ -106,7 +106,7 @@ function SectionShell({ title, children }: { title: string; children: ReactNode 
 
 function scopeText(scope: string, exact: boolean) {
   if (exact) return scope;
-  return scopeLabels[scope] ?? scope.replace(/_/g, " ");
+  return scopeLabels[scope]!;
 }
 
 function scopeTone(scope: string) {
