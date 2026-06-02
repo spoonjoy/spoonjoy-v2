@@ -578,7 +578,7 @@ export function buildApiV1OpenApiDocument() {
         summary: meta.summary,
         "x-auth": requirement.auth,
         "x-scopes": [...requirement.scopes],
-        ...(requirement.auth === "bearer" ? { security: [{ bearerAuth: [] }] } : {}),
+        ...(requirement.auth === "bearer" ? { security: [{ bearerAuth: [...requirement.scopes] }] } : {}),
         ...(meta.parameters ? { parameters: meta.parameters } : {}),
         ...(meta.requestBody
           ? {

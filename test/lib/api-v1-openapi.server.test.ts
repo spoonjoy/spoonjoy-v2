@@ -136,15 +136,15 @@ describe("API v1 OpenAPI document", () => {
     });
 
     expect(responseExample(document, "/api/v1/recipes", "GET", "200").data).toMatchObject({
-      query: "lemon",
+      query: "pasta",
       limit: 20,
-      recipes: [expect.objectContaining({ title: "Lemon Pasta" })],
+      recipes: [expect.objectContaining({ title: "Pasta" })],
     });
-    expect(responseExample(document, "/api/v1/tokens", "GET", "200").data.tokens[0].scopes).toEqual(["tokens:read"]);
+    expect(responseExample(document, "/api/v1/tokens", "GET", "200").data.tokens[0].scopes).toEqual(["recipes:read"]);
     expect(responseExample(document, "/api/v1/shopping-list/items", "POST", "201").data).toMatchObject({
       created: true,
       updated: false,
-      mutation: { clientMutationId: "mutation_123", replayed: false },
+      mutation: { clientMutationId: "device-uuid-1", replayed: false },
     });
     expect(errorExample(document, "/api/v1/health", "GET", "401", "invalid_token").error.code).toBe("invalid_token");
     expect(errorExample(document, "/api/v1/shopping-list", "GET", "401", "authentication_required").error.code).toBe("authentication_required");
@@ -152,15 +152,15 @@ describe("API v1 OpenAPI document", () => {
     expect(errorExample(document, "/api/v1/tokens", "POST", "400", "validation_error").error.code).toBe("validation_error");
 
     expect(operation(document, "/api/v1/tokens", "POST").requestBody.content["application/json"].examples.example.value)
-      .toEqual({ name: "Kitchen client", scopes: ["recipes:read", "tokens:read"] });
+      .toEqual({ name: "Tiny client", scopes: ["recipes:read", "shopping_list:read"] });
     expect(operation(document, "/api/v1/shopping-list/items", "POST").requestBody.content["application/json"].examples.example.value)
       .toEqual({
-        clientMutationId: "mutation_123",
-        name: "lemons",
-        quantity: 2,
-        unit: "each",
-        categoryKey: "produce",
-        iconKey: "lemon",
+        clientMutationId: "device-uuid-1",
+        name: "Eggs",
+        quantity: 12,
+        unit: "Each",
+        categoryKey: null,
+        iconKey: null,
       });
   });
 
