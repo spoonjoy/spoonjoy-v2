@@ -85,7 +85,7 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 **Output**: `test/scripts/migration-0016-api-idempotency-keys.test.ts` asserts the `ApiIdempotencyKey` table with `userId`, nullable `credentialId`, `clientKey`, `key`, `operation`, `requestHash`, nullable `responseStatus`, nullable `responseBody`, `expiresAt`, timestamps, unique `(userId, clientKey, key)`, and indexes on `(userId, createdAt)`, `credentialId`, and `expiresAt`; `test/lib/api-idempotency.server.test.ts` asserts missing helper exports.
 **Acceptance**: Focused tests FAIL because `ApiIdempotencyKey` and `app/lib/api-idempotency.server.ts` do not exist.
 
-### ⬜ Unit 2b: API Idempotency Storage — Implementation
+### ✅ Unit 2b: API Idempotency Storage — Implementation
 **What**: Add `ApiIdempotencyKey` to `prisma/schema.prisma` and `migrations/0016_api_idempotency_keys.sql`; create `app/lib/api-idempotency.server.ts` with helpers to reserve, replay, complete, and reject mismatched idempotency keys.
 **Output**: Updated schema, root migration, updated cleanup hooks, no tracked Prisma client artifacts, `pnpm prisma:generate` log saved to artifacts, `pnpm prisma:push` log saved to artifacts, new idempotency helper, and passing Unit 2a tests.
 **Acceptance**: Unit 2a tests PASS; `pnpm run build` succeeds with no warnings.
@@ -348,3 +348,5 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 - 2026-06-01 19:53 Addressed Unit 1b reviewer blocker by moving Cloudflare rate-limit bindings from deprecated `unsafe.bindings` to supported `ratelimits` config and refreshing warning-free build logs
 - 2026-06-01 19:53 Unit 1c complete: added expansion boundary tests, verified 100% coverage on `app/lib/api-auth.server.ts`, and saved green focused-test/build logs
 - 2026-06-01 19:56 Unit 2a complete: idempotency migration/helper tests are red for missing `0016_api_idempotency_keys.sql` and `app/lib/api-idempotency.server.ts`
+- 2026-06-01 20:01 Addressed Unit 2a reviewer finding by adding cleanup-order assertions for `ApiIdempotencyKey` before credential cleanup
+- 2026-06-01 20:01 Unit 2b complete: added `ApiIdempotencyKey`, migration, cleanup hooks, idempotency helper, Prisma logs, green focused tests, typecheck, and build
