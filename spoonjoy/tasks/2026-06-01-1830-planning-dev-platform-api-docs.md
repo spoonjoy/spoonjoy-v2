@@ -93,4 +93,4 @@ The long-term moon includes many client profiles, but the first implementation s
 - 2026-06-01 18:32 Tightened Tinfoil Hat findings: concrete docs route, OAuth-doc drift, and deployed verification
 - 2026-06-01 18:32 Marked planning doc NEEDS_REVIEW for sub-agent reviewer gate
 - 2026-06-01 18:34 Addressed reviewer findings: first v1 resources, scope taxonomy, feed boundary, and shopping-list safety semantics
-- 2026-06-01 18:40 Addressed Round 2 reviewer findings: public cookbook v1 boundary, scope storage/mapping/enforcement, and first-slice credential resources
+- 2026-06-01 18:37 Addressed Round 2 reviewer findings: public cookbook v1 boundary, scope storage/mapping/enforcement, and first-slice credential resources
