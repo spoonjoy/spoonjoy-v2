@@ -153,20 +153,20 @@ Expose Spoonjoy as a developer-friendly platform layer on top of the existing pu
 **Output**: Coverage log saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-6c-coverage.log`; refactors stay in token helpers and tests.
 **Acceptance**: 100% coverage on new/changed token v1 code; focused tests and build still PASS with no warnings.
 
-### ⬜ Unit 7a: V1 Scope Matrix Enforcement — Tests
-**What**: Write failing tests for the exact first-slice scope matrix from the planning doc across all implemented `/api/v1` endpoints.
-**Output**: `test/routes/api-v1-scopes.test.ts` asserts anonymous access for discovery/health/openapi/recipes/cookbooks; authenticated read/write scope requirements for shopping-list and token surfaces; legacy `kitchen:read` and `kitchen:write` compatibility; and no scope requirement for authenticated discovery.
-**Acceptance**: Focused tests FAIL until v1 routes centralize and enforce the planning-doc scope matrix.
+### ⬜ Unit 7a: Public And Token Scope Enforcement — Tests
+**What**: Write failing tests for scope enforcement on the `/api/v1` endpoints implemented through Unit 6.
+**Output**: `test/routes/api-v1-scopes-public-tokens.test.ts` asserts anonymous access for discovery/health/recipes/cookbooks; authenticated `recipes:read` and `cookbooks:read` success; authenticated public-read bearer failure without the relevant read scope; `tokens:read` and `tokens:write` enforcement for token metadata; legacy `kitchen:read` and `kitchen:write` compatibility for public-read and token endpoints; and no scope requirement for authenticated discovery.
+**Acceptance**: Focused tests FAIL until v1 routes centralize and enforce the planning-doc scope rows for discovery, recipes, cookbooks, and token metadata.
 
-### ⬜ Unit 7b: V1 Scope Matrix Enforcement — Implementation
-**What**: Add a single v1 scope-matrix helper in `app/lib/api-v1.server.ts` and route all implemented v1 endpoints through it before operation dispatch or database access.
+### ⬜ Unit 7b: Public And Token Scope Enforcement — Implementation
+**What**: Add a v1 scope-matrix helper in `app/lib/api-v1.server.ts` and route discovery, recipe, cookbook, and token metadata endpoints through it before operation dispatch or database access.
 **Output**: Updated v1 helper/route files and passing Unit 7a tests.
 **Acceptance**: Unit 7a tests PASS; previously completed v1 route tests still PASS; `pnpm run build` succeeds with no warnings.
 
-### ⬜ Unit 7c: V1 Scope Matrix Enforcement — Coverage & Refactor
-**What**: Verify coverage for every scope-matrix row and for both fine-grained and legacy-compatible scope paths.
+### ⬜ Unit 7c: Public And Token Scope Enforcement — Coverage & Refactor
+**What**: Verify coverage for the discovery, recipe, cookbook, and token rows of the scope matrix, including both fine-grained and legacy-compatible scope paths.
 **Output**: Coverage log saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-7c-coverage.log`; refactors stay in v1 auth/scope helpers and tests.
-**Acceptance**: 100% coverage on new/changed scope-matrix code; focused tests and build still PASS with no warnings.
+**Acceptance**: 100% coverage on new/changed public/token scope enforcement code; focused tests and build still PASS with no warnings.
 
 ### ⬜ Unit 8a: Shopping-List Read, Sync, And Tombstones — Tests
 **What**: Write failing tests for `GET /api/v1/shopping-list` and `GET /api/v1/shopping-list/sync`.
@@ -228,74 +228,89 @@ Expose Spoonjoy as a developer-friendly platform layer on top of the existing pu
 **Output**: Coverage log saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-11c-coverage.log`; refactors keep OpenAPI output stable.
 **Acceptance**: 100% coverage on new/changed OpenAPI code; focused tests and build still PASS with no warnings.
 
-### ⬜ Unit 12a: `/developers` Route — Tests
+### ⬜ Unit 12a: Complete V1 Scope Matrix Audit — Tests
+**What**: Write failing tests for the exact first-slice scope matrix from the planning doc across every supported `/api/v1` endpoint after shopping-list and OpenAPI endpoints exist.
+**Output**: `test/routes/api-v1-scopes.test.ts` asserts anonymous access for `GET /api/v1`, `GET /api/v1/health`, `GET /api/v1/openapi.json`, `GET /api/v1/recipes`, `GET /api/v1/recipes/:id`, `GET /api/v1/cookbooks`, and `GET /api/v1/cookbooks/:id`; authenticated-only access for shopping-list and token endpoints; fine-grained scope requirements for every read/write route; and legacy `kitchen:read` / `kitchen:write` compatibility.
+**Acceptance**: Focused tests FAIL until all supported v1 endpoints follow the full planning-doc scope matrix.
+
+### ⬜ Unit 12b: Complete V1 Scope Matrix Audit — Implementation
+**What**: Update `app/lib/api-v1.server.ts` so the single scope-matrix helper covers every supported v1 endpoint, including OpenAPI and shopping-list read/sync/add/check/remove.
+**Output**: Updated v1 scope helper/route files and passing Unit 12a tests.
+**Acceptance**: Unit 12a tests PASS; Units 3-11 route tests still PASS; `pnpm run build` succeeds with no warnings.
+
+### ⬜ Unit 12c: Complete V1 Scope Matrix Audit — Coverage & Refactor
+**What**: Verify coverage for every scope-matrix row and for both fine-grained and legacy-compatible scope paths.
+**Output**: Coverage log saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-12c-coverage.log`; refactors stay in v1 auth/scope helpers and tests.
+**Acceptance**: 100% coverage on new/changed full scope-matrix code; focused tests and build still PASS with no warnings.
+
+### ⬜ Unit 13a: `/developers` Route — Tests
 **What**: Write failing tests for the deployed developer-docs page route, route metadata, and route registration.
 **Output**: `test/routes/developers.test.tsx` asserts page title/meta, visible `/api/v1` endpoints, auth mode distinctions, public-by-default Chef graph language, scope list, idempotency/sync guidance, OpenAPI link, OAuth/DCR/MCP route references, and no Pebble-specific framing.
 **Acceptance**: Focused tests FAIL because `/developers` is not registered or rendered.
 
-### ⬜ Unit 12b: `/developers` Route — Implementation
+### ⬜ Unit 13b: `/developers` Route — Implementation
 **What**: Add `route("developers", "routes/developers.tsx")`; implement `app/routes/developers.tsx` using existing page primitives from `app/components/cookbook/page.tsx` and reference data from `app/lib/api-v1-openapi.server.ts`.
-**Output**: Updated `app/routes.ts`, new developers route, and passing Unit 12a tests.
-**Acceptance**: Unit 12a tests PASS; `pnpm run build` succeeds with no warnings.
+**Output**: Updated `app/routes.ts`, new developers route, and passing Unit 13a tests.
+**Acceptance**: Unit 13a tests PASS; `pnpm run build` succeeds with no warnings.
 
-### ⬜ Unit 12c: `/developers` Route — Coverage & Refactor
+### ⬜ Unit 13c: `/developers` Route — Coverage & Refactor
 **What**: Verify route coverage and inspect the rendered page locally for layout/text issues on desktop and mobile widths.
-**Output**: Coverage log and local render notes saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-12c-render.log`; refactors stay in `app/routes/developers.tsx` and shared reference data.
+**Output**: Coverage log and local render notes saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-13c-render.log`; refactors stay in `app/routes/developers.tsx` and shared reference data.
 **Acceptance**: 100% coverage on new/changed developers route code; focused tests and build still PASS with no warnings.
 
-### ⬜ Unit 13a: Existing Docs Drift — Tests
+### ⬜ Unit 14a: Existing Docs Drift — Tests
 **What**: Write failing docs assertions for `docs/api.md`, `docs/claude-connector.md`, `docs/ouroboros-mcp.md`, and `app/lib/oauth-routes.server.ts`.
 **Output**: `test/docs/developer-platform-docs.test.ts` asserts the docs mention `/developers`, `/api/v1`, refresh-token behavior, OAuth/DCR routes, MCP `/mcp`, delegated `/api/tools/start_agent_connection` and `/api/tools/poll_agent_connection`, and do not claim remote MCP has no refresh tokens.
 **Acceptance**: Focused tests FAIL because existing docs/comment drift remains.
 
-### ⬜ Unit 13b: Existing Docs Drift — Implementation
+### ⬜ Unit 14b: Existing Docs Drift — Implementation
 **What**: Update `docs/api.md`, `docs/claude-connector.md`, `docs/ouroboros-mcp.md`, and the stale refresh-token comment in `app/lib/oauth-routes.server.ts` to match implemented REST/MCP/OAuth behavior and point developers to `/developers`.
-**Output**: Updated docs/comment files and passing Unit 13a tests.
-**Acceptance**: Unit 13a tests PASS; `pnpm run build` succeeds with no warnings.
+**Output**: Updated docs/comment files and passing Unit 14a tests.
+**Acceptance**: Unit 14a tests PASS; `pnpm run build` succeeds with no warnings.
 
-### ⬜ Unit 13c: Existing Docs Drift — Coverage & Refactor
+### ⬜ Unit 14c: Existing Docs Drift — Coverage & Refactor
 **What**: Verify docs assertions cover every drift item from the planning doc and record a no-drift checklist.
-**Output**: Verification log saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-13c-docs-drift.log`; docs wording changes remain limited to the files named in Unit 13b.
+**Output**: Verification log saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-14c-docs-drift.log`; docs wording changes remain limited to the files named in Unit 14b.
 **Acceptance**: Docs-drift tests PASS; no stale no-refresh-token claim remains; build still PASS with no warnings.
 
-### ⬜ Unit 14a: External Client Guide And Sample — Tests
+### ⬜ Unit 15a: External Client Guide And Sample — Tests
 **What**: Write failing docs assertions for a complete external-client guide that reads public recipes/cookbooks, creates a scoped personal token, syncs a private shopping list, and performs an idempotent shopping-list mutation.
 **Output**: `test/docs/developer-platform-guide.test.ts` asserts sample curl commands and prose reference actual implemented paths, required scopes, `Authorization: Bearer`, `clientMutationId`, sync cursor, and OpenAPI URL.
 **Acceptance**: Focused tests FAIL until the guide/sample is added and aligned with implemented endpoints.
 
-### ⬜ Unit 14b: External Client Guide And Sample — Implementation
+### ⬜ Unit 15b: External Client Guide And Sample — Implementation
 **What**: Add the guide/sample to `/developers` and `docs/api.md`, framed for tiny-device, mobile, CLI/script, browser, and agent clients without naming Pebble as the primary target.
-**Output**: Updated developer docs route/docs file and passing Unit 14a tests.
-**Acceptance**: Unit 14a tests PASS; `pnpm run build` succeeds with no warnings.
+**Output**: Updated developer docs route/docs file and passing Unit 15a tests.
+**Acceptance**: Unit 15a tests PASS; `pnpm run build` succeeds with no warnings.
 
-### ⬜ Unit 14c: External Client Guide And Sample — Coverage & Refactor
+### ⬜ Unit 15c: External Client Guide And Sample — Coverage & Refactor
 **What**: Verify guide/sample coverage and polish wording for public-by-default Chef graph, private shopping list, scopes, sync, idempotency, and client profile breadth.
-**Output**: Coverage/log output saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-14c-guide.log`; no unsupported endpoint claims remain in route or markdown docs.
+**Output**: Coverage/log output saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-15c-guide.log`; no unsupported endpoint claims remain in route or markdown docs.
 **Acceptance**: Guide/sample assertions PASS; focused tests and build still PASS with no warnings.
 
-### ⬜ Unit 15a: Full Verification Gate
+### ⬜ Unit 16a: Full Verification Gate
 **What**: Run the full required local verification gate before deployment.
 **Output**: Logs saved to artifacts for `pnpm test:coverage`, `pnpm run typecheck`, `pnpm run build`, and a targeted v1/docs test run.
 **Acceptance**: All verification commands PASS with no warnings.
 
-### ⬜ Unit 16a: Production Deploy
+### ⬜ Unit 17a: Production Deploy
 **What**: Deploy to production using `pnpm run deploy:auto`.
-**Output**: Deploy log saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-16a-deploy.log`.
+**Output**: Deploy log saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-17a-deploy.log`.
 **Acceptance**: Production deploy succeeds with no warnings requiring code changes.
 
-### ⬜ Unit 16b: Live API Docs Verification
+### ⬜ Unit 17b: Live API Docs Verification
 **What**: Live-smoke production endpoints after deploy.
-**Output**: Live verification log saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-16b-live-smoke.log` covering `https://spoonjoy.app/developers`, `https://spoonjoy.app/api/v1`, `https://spoonjoy.app/api/v1/health`, `https://spoonjoy.app/api/v1/openapi.json`, `https://spoonjoy.app/api/v1/recipes`, and `https://spoonjoy.app/api/v1/cookbooks`.
+**Output**: Live verification log saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-17b-live-smoke.log` covering `https://spoonjoy.app/developers`, `https://spoonjoy.app/api/v1`, `https://spoonjoy.app/api/v1/health`, `https://spoonjoy.app/api/v1/openapi.json`, `https://spoonjoy.app/api/v1/recipes`, and `https://spoonjoy.app/api/v1/cookbooks`.
 **Acceptance**: Deployed docs URL and v1 API endpoints return expected status codes and response shapes.
 
-### ⬜ Unit 17a: Final Documentation Sync And Completion
+### ⬜ Unit 18a: Final Documentation Sync And Completion
 **What**: Mark completion criteria in doing/planning docs based on evidence, send the repo-required Slugger completion message, and prepare the final user-facing docs link.
 **Output**: Updated task docs, final verification summary in artifacts, and `ouro msg --to slugger "Done: ..."` notification.
 **Acceptance**: Doing doc status is `done`, planning criteria are synced, all commits are atomic, branch is pushed if a remote is configured, and the final response can give the deployed developer docs URL.
 
 ## Execution
 - **TDD strictly enforced**: tests → red → implement → green → refactor
-- Commit after each unit phase (`Xa`, `Xb`, `Xc`) or single-step unit (`15a`, `16a`, `16b`, `17a`)
+- Commit after each unit phase (`Xa`, `Xb`, `Xc`) or single-step unit (`16a`, `17a`, `17b`, `18a`)
 - Push after each unit complete
 - Run full test suite before marking unit done
 - **All artifacts**: Save outputs, logs, data to `./2026-06-01-1830-doing-dev-platform-api-docs/` directory
