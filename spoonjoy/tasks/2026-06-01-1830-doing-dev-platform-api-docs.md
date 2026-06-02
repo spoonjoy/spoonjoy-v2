@@ -110,7 +110,7 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 **Output**: Coverage log saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-3c-coverage.log`; refactors stay inside the v1 shell files and tests.
 **Acceptance**: 100% coverage on new/changed v1 shell code; focused tests and build still PASS with no warnings.
 
-### ⬜ Unit 4a: Public Recipe V1 Reads — Tests
+### ✅ Unit 4a: Public Recipe V1 Reads — Tests
 **What**: Write failing tests for anonymous and scoped public recipe endpoints `GET /api/v1/recipes` and `GET /api/v1/recipes/:id`.
 **Output**: `test/routes/api-v1-recipes.test.ts` asserts the exact query params, `limit` behavior, summary/detail fields, deleted recipe exclusion, missing recipe 404 envelope, anonymous success, `recipes:read` bearer success, and scoped bearer failure without `recipes:read` from `api-v1-contract.md`.
 **Acceptance**: Focused tests FAIL because recipe reads are not implemented under `/api/v1`.
@@ -355,3 +355,4 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 - 2026-06-01 20:11 Addressed Unit 3a reviewer finding by asserting full v1 CORS/request-id headers on error and preflight responses
 - 2026-06-01 20:11 Unit 3b complete: registered `/api/v1/*`, added v1 contract/shell helpers, request IDs, CORS, envelopes, optional-auth invalid-token behavior, route coverage config, green legacy/v1 route tests, typecheck, and build
 - 2026-06-01 20:17 Unit 3c complete: added v1 shell branch coverage for authenticated health, OpenAPI placeholder, no splat fallback, JSON parse branches, auth/internal error normalization, and 100% coverage on v1 shell files
+- 2026-06-01 20:19 Unit 4a complete: public recipe v1 read tests are red for placeholder 404s on search/detail/list validation and scope checks
