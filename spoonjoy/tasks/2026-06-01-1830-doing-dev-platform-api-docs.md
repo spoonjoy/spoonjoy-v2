@@ -105,7 +105,7 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 **Output**: Updated `app/routes.ts`, `vitest.config.ts`, new v1 route/helper/contract files, and passing Unit 3a tests.
 **Acceptance**: Unit 3a tests PASS; legacy `/api/*` tests still PASS; `pnpm run build` succeeds with no warnings.
 
-### ⬜ Unit 3c: `/api/v1` Shell, Errors, And Request IDs — Coverage & Refactor
+### ✅ Unit 3c: `/api/v1` Shell, Errors, And Request IDs — Coverage & Refactor
 **What**: Verify coverage for v1 shell branches: anonymous request, bearer request with invalid token, OPTIONS preflight, missing route path, JSON parse failure, thrown non-Error value, and request ID fallback.
 **Output**: Coverage log saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-3c-coverage.log`; refactors stay inside the v1 shell files and tests.
 **Acceptance**: 100% coverage on new/changed v1 shell code; focused tests and build still PASS with no warnings.
@@ -354,3 +354,4 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 - 2026-06-01 20:08 Unit 3a complete: v1 shell tests are red for missing `routes/api.v1.$`, missing v1 contract helper, and missing exact `.ts` route coverage glob
 - 2026-06-01 20:11 Addressed Unit 3a reviewer finding by asserting full v1 CORS/request-id headers on error and preflight responses
 - 2026-06-01 20:11 Unit 3b complete: registered `/api/v1/*`, added v1 contract/shell helpers, request IDs, CORS, envelopes, optional-auth invalid-token behavior, route coverage config, green legacy/v1 route tests, typecheck, and build
+- 2026-06-01 20:17 Unit 3c complete: added v1 shell branch coverage for authenticated health, OpenAPI placeholder, no splat fallback, JSON parse branches, auth/internal error normalization, and 100% coverage on v1 shell files
