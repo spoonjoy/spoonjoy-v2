@@ -130,7 +130,7 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 **Output**: `test/routes/api-v1-cookbooks.test.ts` asserts the exact query params, `limit` behavior, summary/detail fields, active recipe counts, deleted recipe exclusion, missing cookbook 404 envelope, anonymous success, `cookbooks:read` bearer success, and scoped bearer failure without `cookbooks:read` from `api-v1-contract.md`.
 **Acceptance**: Focused tests FAIL because cookbook reads are not implemented under `/api/v1`.
 
-### ⬜ Unit 5b: Public Cookbook V1 Reads — Implementation
+### ✅ Unit 5b: Public Cookbook V1 Reads — Implementation
 **What**: Implement `GET /api/v1/cookbooks` and `GET /api/v1/cookbooks/:id` in the v1 route/helper layer using new public cookbook data access in `app/lib/api-v1.server.ts` plus search primitives from `app/lib/search.server.ts`; do not reuse legacy `list_cookbooks` / `get_cookbook` operations from `app/lib/spoonjoy-api.server.ts` because they are owner-scoped.
 **Output**: Updated v1 route/helper files and passing Unit 5a tests.
 **Acceptance**: Unit 5a tests PASS; legacy cookbook API tests still PASS; `pnpm run build` succeeds with no warnings.
@@ -363,3 +363,4 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 - 2026-06-01 20:37 Addressed Unit 4c Round 2 reviewer finding by narrowing empty-bundle suppression to the known server-only route chunks and proving unknown empty bundles still log
 - 2026-06-01 20:34 Unit 5a complete: added public cookbook list/detail tests for query/q, limits, active recipe counts, deleted recipe exclusion, missing cookbook errors, anonymous access, bearer success, and insufficient-scope failure; red run fails on unimplemented v1 cookbook routes returning shell 404s
 - 2026-06-01 20:39 Addressed Unit 5a reviewer findings by adding canonical `query`, anonymous detail success, list deleted-recipe count exclusion, full v1 header assertions on cookbook errors, and non-brittle limit assertions; red run still fails on unimplemented v1 cookbook routes
+- 2026-06-01 20:41 Unit 5b complete: implemented public cookbook list/detail routes, active recipe counts, deleted recipe exclusion, optional-auth scope checks, query/q and limit handling, with green v1/legacy route tests, typecheck, and warning-free build
