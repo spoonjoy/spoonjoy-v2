@@ -1,0 +1,95 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ × test/config/api-v1-route-coverage.test.ts > API v1 route coverage config > covers TypeScript route modules in coverage reports 3ms
+   → expected 'import { defineConfig } from "vitest/…' to match /["']app\/routes\/\*\*\/\*\.ts[…/routes\
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/routes/api-v1-shell.test.ts [ test/routes/api-v1-shell.test.ts ]
+Error: Failed to resolve import "~/routes/api.v1.$" from "test/routes/api-v1-shell.test.ts". Does the file exist?
+  Plugin: vite:import-analysis
+  File: /Users/arimendelow/Projects/spoonjoy-v2/test/routes/api-v1-shell.test.ts:4:31
+  2  |  import { Request as UndiciRequest } from "undici";
+  3  |  import routes from "~/routes";
+  4  |  import { action, loader } from "~/routes/api.v1.$";
+     |                                  ^
+  5  |  import { API_V1_ERROR_STATUS, API_V1_RESOURCES } from "~/lib/api-v1-contract.server";
+  6  |  function routeArgs(request, splat) {
+ ❯ TransformPluginContext._formatLog node_modules/.pnpm/vite@7.3.1_@types+node@25.1.0_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0/node_modules/vite/dist/node/chunks/config.js:28999:43
+ ❯ TransformPluginContext.error node_modules/.pnpm/vite@7.3.1_@types+node@25.1.0_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0/node_modules/vite/dist/node/chunks/config.js:28996:14
+ ❯ normalizeUrl node_modules/.pnpm/vite@7.3.1_@types+node@25.1.0_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0/node_modules/vite/dist/node/chunks/config.js:27119:18
+ ❯ node_modules/.pnpm/vite@7.3.1_@types+node@25.1.0_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0/node_modules/vite/dist/node/chunks/config.js:27177:32
+ ❯ TransformPluginContext.transform node_modules/.pnpm/vite@7.3.1_@types+node@25.1.0_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0/node_modules/vite/dist/node/chunks/config.js:27145:4
+ ❯ EnvironmentPluginContainer.transform node_modules/.pnpm/vite@7.3.1_@types+node@25.1.0_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0/node_modules/vite/dist/node/chunks/config.js:28797:14
+ ❯ loadAndTransform node_modules/.pnpm/vite@7.3.1_@types+node@25.1.0_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0/node_modules/vite/dist/node/chunks/config.js:22670:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/config/api-v1-route-coverage.test.ts > API v1 route coverage config > covers TypeScript route modules in coverage reports
+AssertionError: expected 'import { defineConfig } from "vitest/…' to match /["']app\/routes\/\*\*\/\*\.ts[…/routes\
+
+- Expected: 
+/["']app\/routes\/\*\*\/\*\.ts["']/
+
++ Received: 
+"import { defineConfig } from \"vitest/config\";
+
+const appDirectory = new URL(\"./app\", import.meta.url).pathname;
+const componentsDirectory = new URL(\"./app/components\", import.meta.url).pathname;
+
+export default defineConfig({
+  test: {
+    environment: \"happy-dom\",
+    globals: true,
+    setupFiles: [\"./test/setup.ts\"],
+    pool: \"forks\",
+    // DB-backed route/model tests share test.db and destructive cleanup helpers.
+    // Keep files serial until the suite has per-worker database isolation.
+    maxWorkers: 1,
+    fileParallelism: false,
+    sequence: {
+      shuffle: false,
+    },
+    exclude: [\"**/node_modules/**\", \"**/e2e/**\"],
+    coverage: {
+      provider: \"istanbul\",
+      reporter: [\"text\", \"json\", \"html\"],
+      include: [\"app/lib/**/*.ts\", \"app/routes/**/*.tsx\", \"app/components/**/*.tsx\", \"app/hooks/**/*.ts\"],
+      exclude: [\"node_modules/**\", \"test/**\", \"**/*.config.ts\", \"**/*.d.ts\", \"**/types/**\"],
+      thresholds: {
+        statements: 100,
+        branches: 100,
+        functions: 100,
+        lines: 100,
+      },
+    },
+  },
+  resolve: {
+    alias: {
+      \"~\": appDirectory,
+      \"@\": componentsDirectory,
+    }
+  }
+});
+"
+
+ ❯ test/config/api-v1-route-coverage.test.ts:9:20
+      7|     const config = readFileSync(resolve(__dirname, "..", "..", "vitest…
+      8| 
+      9|     expect(config).toMatch(/["']app\/routes\/\*\*\/\*\.ts["']/);
+       |                    ^
+     10|   });
+     11| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  1 failed (1)
+   Start at  20:07:55
+   Duration  690ms (transform 38ms, setup 134ms, import 6ms, tests 26ms, environment 288ms)
+
