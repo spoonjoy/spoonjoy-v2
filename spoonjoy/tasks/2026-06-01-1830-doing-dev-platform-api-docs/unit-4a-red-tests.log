@@ -1,0 +1,96 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ × test/routes/api-v1-recipes.test.ts > API v1 public recipe reads > searches public recipes anonymously with query alias and limit behavior 50ms
+   → expected 404 to be 200 // Object.is equality
+ × test/routes/api-v1-recipes.test.ts > API v1 public recipe reads > returns recipe detail with steps, ingredients, cookbook links, and scoped bearer success 26ms
+   → expected 404 to be 200 // Object.is equality
+ × test/routes/api-v1-recipes.test.ts > API v1 public recipe reads > excludes deleted recipes and returns missing/deleted recipes as not_found 31ms
+   → expected 404 to be 200 // Object.is equality
+ × test/routes/api-v1-recipes.test.ts > API v1 public recipe reads > validates limit and rejects bearer tokens without recipes:read 27ms
+   → expected 404 to be 400 // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/routes/api-v1-recipes.test.ts > API v1 public recipe reads > searches public recipes anonymously with query alias and limit behavior
+AssertionError: expected 404 to be 200 // Object.is equality
+
+- Expected
++ Received
+
+- 200
++ 404
+
+ ❯ test/routes/api-v1-recipes.test.ts:87:29
+     85|     const payload = await readJson(response);
+     86| 
+     87|     expect(response.status).toBe(200);
+       |                             ^
+     88|     expectEnvelopeHeaders(response, "req_recipe_search");
+     89|     expect(payload).toMatchObject({
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  test/routes/api-v1-recipes.test.ts > API v1 public recipe reads > returns recipe detail with steps, ingredients, cookbook links, and scoped bearer success
+AssertionError: expected 404 to be 200 // Object.is equality
+
+- Expected
++ Received
+
+- 200
++ 404
+
+ ❯ test/routes/api-v1-recipes.test.ts:122:29
+    120|     const payload = await readJson(response);
+    121| 
+    122|     expect(response.status).toBe(200);
+       |                             ^
+    123|     expectEnvelopeHeaders(response, "req_recipe_detail");
+    124|     expect(payload).toMatchObject({
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  test/routes/api-v1-recipes.test.ts > API v1 public recipe reads > excludes deleted recipes and returns missing/deleted recipes as not_found
+AssertionError: expected 404 to be 200 // Object.is equality
+
+- Expected
++ Received
+
+- 200
++ 404
+
+ ❯ test/routes/api-v1-recipes.test.ts:170:25
+    168|     const listPayload = await readJson(list);
+    169| 
+    170|     expect(list.status).toBe(200);
+       |                         ^
+    171|     expect(listPayload.data.recipes.map((recipe: { id: string }) => re…
+    172|     expect(listPayload.data.recipes.map((recipe: { id: string }) => re…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  test/routes/api-v1-recipes.test.ts > API v1 public recipe reads > validates limit and rejects bearer tokens without recipes:read
+AssertionError: expected 404 to be 400 // Object.is equality
+
+- Expected
++ Received
+
+- 400
++ 404
+
+ ❯ test/routes/api-v1-recipes.test.ts:203:33
+    201|       headers: { "X-Request-Id": "req_recipe_limit" },
+    202|     }) as unknown as Request, "recipes"));
+    203|     expect(invalidLimit.status).toBe(400);
+       |                                 ^
+    204|     await expect(readJson(invalidLimit)).resolves.toMatchObject({
+    205|       ok: false,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed (4)
+   Start at  20:19:34
+   Duration  895ms (transform 87ms, setup 122ms, import 223ms, tests 202ms, environment 222ms)
+
