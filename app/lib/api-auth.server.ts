@@ -3,12 +3,50 @@ import { getUserId, type SessionEnv } from "~/lib/session.server";
 
 export type ApiPrincipalSource = "session" | "bearer" | "environment";
 
+export const API_CREDENTIAL_SCOPE_VALUES = [
+  "public:read",
+  "recipes:read",
+  "shopping_list:read",
+  "shopping_list:write",
+  "cookbooks:read",
+  "tokens:read",
+  "tokens:write",
+  "offline_access",
+  "kitchen:read",
+  "kitchen:write",
+] as const;
+
+export type ApiCredentialScope = (typeof API_CREDENTIAL_SCOPE_VALUES)[number];
+
+export const DEFAULT_PERSONAL_API_TOKEN_SCOPES = [
+  "cookbooks:read",
+  "public:read",
+  "recipes:read",
+  "shopping_list:read",
+  "shopping_list:write",
+  "tokens:read",
+  "tokens:write",
+] as const satisfies readonly ApiCredentialScope[];
+
+export const ALL_FIRST_SLICE_SCOPES = [
+  ...DEFAULT_PERSONAL_API_TOKEN_SCOPES,
+  "offline_access",
+] as const satisfies readonly ApiCredentialScope[];
+
+const LEGACY_SCOPE_EXPANSIONS = {
+  "kitchen:read": ["cookbooks:read", "public:read", "recipes:read", "shopping_list:read", "tokens:read"],
+  "kitchen:write": ["shopping_list:write", "tokens:write"],
+} as const satisfies Record<"kitchen:read" | "kitchen:write", readonly ApiCredentialScope[]>;
+
+const API_CREDENTIAL_SCOPE_SET = new Set<string>(API_CREDENTIAL_SCOPE_VALUES);
+
 export interface ApiPrincipal {
   id: string;
   email: string;
   username: string;
   source: ApiPrincipalSource;
   credentialId?: string;
+  scopes: string[];
 }
 
 export interface CreatedApiCredential {
@@ -59,13 +97,59 @@ export function generateApiToken(): string {
   return `sj_${bytesToBase64Url(bytes)}`;
 }
 
-function toPrincipal(user: Pick<User, "id" | "email" | "username">, source: ApiPrincipalSource, credentialId?: string): ApiPrincipal {
+function parseScopeParts(scopes: string | string[]): string[] {
+  const parts = Array.isArray(scopes) ? scopes : scopes.trim().split(/\s+/);
+  return parts.map((scope) => scope.trim()).filter(Boolean);
+}
+
+export function normalizeCredentialScopes(scopes?: string | string[] | null): string {
+  const rawScopes = scopes ?? DEFAULT_PERSONAL_API_TOKEN_SCOPES;
+  const uniqueScopes = new Set<string>();
+
+  for (const scope of parseScopeParts(rawScopes)) {
+    if (!API_CREDENTIAL_SCOPE_SET.has(scope)) {
+      throw new ApiAuthError(`Unknown API credential scope: ${scope}`, 400);
+    }
+    uniqueScopes.add(scope);
+  }
+
+  return Array.from(uniqueScopes).sort().join(" ");
+}
+
+export function expandCredentialScopes(scopes: string | null | undefined): string[] {
+  const expanded = new Set<string>();
+
+  for (const scope of parseScopeParts(scopes ?? "")) {
+    if (!API_CREDENTIAL_SCOPE_SET.has(scope)) {
+      throw new ApiAuthError(`Unknown API credential scope: ${scope}`, 400);
+    }
+
+    if (scope === "kitchen:read" || scope === "kitchen:write") {
+      for (const expandedScope of LEGACY_SCOPE_EXPANSIONS[scope]) {
+        expanded.add(expandedScope);
+      }
+      continue;
+    }
+
+    expanded.add(scope);
+  }
+
+  return Array.from(expanded).sort();
+}
+
+function toPrincipal(
+  user: Pick<User, "id" | "email" | "username">,
+  source: ApiPrincipalSource,
+  credentialId?: string,
+  scopes: readonly string[] = ALL_FIRST_SLICE_SCOPES,
+): ApiPrincipal {
   return {
     id: user.id,
     email: user.email,
     username: user.username,
     source,
     credentialId,
+    scopes: [...scopes],
   };
 }
 
@@ -100,7 +184,7 @@ export async function createApiCredential(
   db: PrismaClientType,
   userId: string,
   name: string,
-  options: { expiresAt?: Date | null } = {}
+  options: { expiresAt?: Date | null; scopes?: string | string[] | null } = {}
 ): Promise<CreatedApiCredential> {
   const token = generateApiToken();
   const tokenHash = await hashApiToken(token);
@@ -110,6 +194,7 @@ export async function createApiCredential(
       name: name.trim(),
       tokenHash,
       tokenPrefix: token.slice(0, 12),
+      scopes: normalizeCredentialScopes(options.scopes),
       expiresAt: options.expiresAt ?? null,
     },
   });
@@ -137,7 +222,7 @@ export async function authenticateApiToken(db: PrismaClientType, token: string):
     data: { lastUsedAt: new Date() },
   });
 
-  return toPrincipal(credential.user, "bearer", credential.id);
+  return toPrincipal(credential.user, "bearer", credential.id, expandCredentialScopes(credential.scopes));
 }
 
 export async function authenticateApiRequest(

@@ -232,6 +232,7 @@ export async function pollAgentConnection(
       db,
       current.approvedById,
       input.tokenName?.trim() || `${current.agentName} delegated token`,
+      { scopes: current.scopes },
     );
     const claimed = await db.agentConnectionRequest.updateMany({
       where: { id: current.id, status: "approved", claimedAt: null },

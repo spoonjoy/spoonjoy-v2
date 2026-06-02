@@ -265,7 +265,10 @@ export async function issueConnectorTokens(
     db,
     input.userId,
     "Claude connector (OAuth)",
-    { expiresAt: new Date(now.getTime() + ACCESS_TOKEN_TTL_SECONDS * 1000) },
+    {
+      expiresAt: new Date(now.getTime() + ACCESS_TOKEN_TTL_SECONDS * 1000),
+      scopes: input.scope,
+    },
   );
   const refreshToken = randomToken("ort_");
   await db.oAuthRefreshToken.create({
