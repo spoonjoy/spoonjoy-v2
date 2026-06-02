@@ -82,6 +82,8 @@ describe("API v1 public cookbook reads", () => {
     await addDeletedRecipeToCookbook(db, first);
     const second = await createCookbookFixture(db, "Api V1 Weeknight");
     await createCookbookFixture(db, "Api V1 Brunch");
+    const tokenOwner = await db.user.create({ data: createTestUser() });
+    const token = await createApiCredential(db, tokenOwner.id, "Cookbook list reader", { scopes: ["cookbooks:read"] });
 
     const queryResponse = await loader(routeArgs(new UndiciRequest("http://localhost/api/v1/cookbooks?query=Api%20V1%20Weeknight&limit=20", {
       headers: { "X-Request-Id": "req_cookbook_query" },
@@ -125,6 +127,17 @@ describe("API v1 public cookbook reads", () => {
     expect(payload.data.cookbooks).toHaveLength(1);
     expect([first.cookbook.id, second.cookbook.id]).toContain(payload.data.cookbooks[0].id);
     expect(queryPayload.data.cookbooks.find((cookbook: { id: string }) => cookbook.id === first.cookbook.id).recipeCount).toBe(1);
+
+    const scoped = await loader(routeArgs(new UndiciRequest("http://localhost/api/v1/cookbooks?query=Api%20V1%20Weeknight", {
+      headers: { Authorization: `Bearer ${token.token}`, "X-Request-Id": "req_cookbook_list_scope_success" },
+    }) as unknown as Request, "cookbooks"));
+    const scopedPayload = await readJson(scoped);
+
+    expect(scoped.status).toBe(200);
+    expectEnvelopeHeaders(scoped, "req_cookbook_list_scope_success");
+    expect(scopedPayload.data.cookbooks.map((cookbook: { id: string }) => cookbook.id)).toEqual(
+      expect.arrayContaining([first.cookbook.id, second.cookbook.id])
+    );
   });
 
   it("returns cookbook detail with active recipe summaries and scoped bearer success", async () => {
@@ -132,6 +145,7 @@ describe("API v1 public cookbook reads", () => {
     const deletedRecipe = await addDeletedRecipeToCookbook(db, fixture);
     const tokenOwner = await db.user.create({ data: createTestUser() });
     const token = await createApiCredential(db, tokenOwner.id, "Cookbook reader", { scopes: ["cookbooks:read"] });
+    const insufficientToken = await createApiCredential(db, tokenOwner.id, "Recipe-only reader", { scopes: ["recipes:read"] });
 
     const anonymous = await loader(routeArgs(new UndiciRequest(`http://localhost/api/v1/cookbooks/${fixture.cookbook.id}`, {
       headers: { "X-Request-Id": "req_cookbook_detail_anon" },
@@ -176,6 +190,18 @@ describe("API v1 public cookbook reads", () => {
       },
     });
     expect(payload.data.cookbook.recipes.map((recipe: { id: string }) => recipe.id)).not.toContain(deletedRecipe.id);
+
+    const insufficient = await loader(routeArgs(new UndiciRequest(`http://localhost/api/v1/cookbooks/${fixture.cookbook.id}`, {
+      headers: { Authorization: `Bearer ${insufficientToken.token}`, "X-Request-Id": "req_cookbook_detail_scope" },
+    }) as unknown as Request, `cookbooks/${fixture.cookbook.id}`));
+
+    expect(insufficient.status).toBe(403);
+    expectEnvelopeHeaders(insufficient, "req_cookbook_detail_scope");
+    await expect(readJson(insufficient)).resolves.toMatchObject({
+      ok: false,
+      requestId: "req_cookbook_detail_scope",
+      error: { code: "insufficient_scope", status: 403 },
+    });
   });
 
   it("returns missing cookbooks as not_found", async () => {
