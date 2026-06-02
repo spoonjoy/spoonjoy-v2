@@ -230,7 +230,7 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 **Output**: Coverage log saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-11c-coverage.log`; refactors keep OpenAPI output stable.
 **Acceptance**: 100% coverage on new/changed OpenAPI code; focused tests and build still PASS with no warnings.
 
-### ⬜ Unit 12a: Complete V1 Scope Matrix Audit — Tests
+### ✅ Unit 12a: Complete V1 Scope Matrix Audit — Tests
 **What**: Write failing tests for the exact first-slice scope matrix from the planning doc across every supported `/api/v1` endpoint after shopping-list and OpenAPI endpoints exist.
 **Output**: `test/routes/api-v1-scopes.test.ts` asserts anonymous access for `GET /api/v1`, `GET /api/v1/health`, `GET /api/v1/openapi.json`, `GET /api/v1/recipes`, `GET /api/v1/recipes/:id`, `GET /api/v1/cookbooks`, and `GET /api/v1/cookbooks/:id`; authenticated-only access for shopping-list and token endpoints; fine-grained scope requirements for every read/write route; and legacy `kitchen:read` / `kitchen:write` compatibility.
 **Acceptance**: Focused tests FAIL until all supported v1 endpoints follow the full planning-doc scope matrix.
@@ -378,6 +378,7 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 - 2026-06-01 21:20 Unit 7c complete: verified 100% coverage on v1 scope enforcement and shell route files plus warning-free build; no additional refactor required
 - 2026-06-01 21:23 Unit 8a complete: added v1 shopping-list read/sync tests for scope rows, authenticated active-list shape, empty-list creation, tombstone sync, cursor filtering, missing auth, insufficient scope, and invalid cursor; red run fails on unimplemented v1 shopping routes returning 404
 - 2026-06-01 21:26 Addressed Unit 8a reviewer findings by asserting exact success envelope/data/list/item keys and adding `GET /api/v1/shopping-list/sync` insufficient-scope coverage
+- 2026-06-01 22:13 Unit 12a complete: added full first-slice scope matrix audit coverage for public, shopping-list, and token endpoints; focused audit passed immediately because prior scope/OpenAPI fixes had already centralized the implementation
 - 2026-06-01 21:27 Unit 8b complete: implemented v1 shopping-list read and sync endpoints with scope rows, active-list formatting, empty-list creation, tombstone-inclusive sync, cursor filtering, invalid cursor errors, focused route tests, typecheck, and warning-free build
 - 2026-06-01 21:33 Unit 8c complete: added sync ordering/cursor fallback coverage, hardened cursor parsing to reject non-round-tripping JavaScript date inputs, and verified 100% v1 coverage plus typecheck and warning-free build
 - 2026-06-01 21:37 Unit 9a complete: added red v1 shopping-list mutation tests for write scope rows, add/check/remove envelopes, restore/merge behavior, unknown fields, clientMutationId validation, idempotent replay/current request IDs, idempotency conflicts, and write-scope enforcement; red run fails on missing v1 mutation routes returning 404 and missing scope rows
