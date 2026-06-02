@@ -186,6 +186,9 @@ describe("API v1 shopping-list mutations", () => {
       sortIndex: 0,
     });
     expectShoppingListShape(addPayload.data.shoppingList);
+    for (const item of addPayload.data.shoppingList.items) {
+      expectShoppingItemShape(item);
+    }
     expect(addPayload.data.shoppingList).toMatchObject({
       id: fixture.list.id,
       chef: { id: fixture.user.id, username: fixture.user.username },
@@ -215,6 +218,9 @@ describe("API v1 shopping-list mutations", () => {
     });
     expectShoppingListShape(checkPayload.data.shoppingList);
     expect(checkPayload.data.shoppingList.items).toHaveLength(1);
+    for (const item of checkPayload.data.shoppingList.items) {
+      expectShoppingItemShape(item);
+    }
     expect(checkPayload.data.shoppingList.items[0]).toMatchObject({ id: addPayload.data.item.id, checked: true });
     expectMutationShape(checkPayload.data.mutation, "client-check-1", false);
 
@@ -253,8 +259,8 @@ describe("API v1 shopping-list mutations", () => {
 
   it("restores matching items, rejects unknown fields, and requires clientMutationId", async () => {
     const fixture = await createShoppingMutationFixture(db);
-    const unit = await getOrCreateUnit(db, `box ${faker.string.alphanumeric(6)}`);
-    const ingredientRef = await getOrCreateIngredientRef(db, `restored ${faker.string.alphanumeric(6)}`);
+    const unit = await getOrCreateUnit(db, `box ${faker.string.alphanumeric(6)}`.toLowerCase());
+    const ingredientRef = await getOrCreateIngredientRef(db, `restored ${faker.string.alphanumeric(6)}`.toLowerCase());
     const existing = await db.shoppingListItem.create({
       data: {
         shoppingListId: fixture.list.id,
@@ -288,6 +294,11 @@ describe("API v1 shopping-list mutations", () => {
     expectSuccessEnvelope(restorePayload, "req_restore_item");
     expectExactKeys(restorePayload.data, ["created", "updated", "item", "shoppingList", "mutation"]);
     expect(restorePayload.data).toMatchObject({ created: false, updated: true });
+    expectShoppingItemShape(restorePayload.data.item);
+    expectShoppingListShape(restorePayload.data.shoppingList);
+    for (const item of restorePayload.data.shoppingList.items) {
+      expectShoppingItemShape(item);
+    }
     expect(restorePayload.data.item).toMatchObject({
       id: existing.id,
       name: ingredientRef.name,
