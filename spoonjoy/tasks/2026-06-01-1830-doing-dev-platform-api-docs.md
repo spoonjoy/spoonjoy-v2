@@ -70,7 +70,7 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 **Output**: `test/scripts/migration-0015-api-credential-scopes.test.ts` asserts the root migration adds `ApiCredential.scopes` as required text with database default `'kitchen:read kitchen:write'`; `test/lib/api-auth.server.test.ts` asserts default personal token scopes, scoped credential creation, principal scope exposure, empty stored scope string expands to no scopes, unknown-scope rejection, legacy expansion, and cleanup behavior; existing agent/OAuth tests assert delegated and connector tokens preserve requested legacy scopes instead of receiving personal-token defaults.
 **Acceptance**: Focused tests FAIL because `ApiCredential.scopes`, scope normalization, legacy scope expansion, scoped credential creation, and principal scope exposure are absent.
 
-### ⬜ Unit 1b: API Credential Scopes — Implementation
+### ✅ Unit 1b: API Credential Scopes — Implementation
 **What**: Add `ApiCredential.scopes` to `prisma/schema.prisma` and `migrations/0015_api_credential_scopes.sql`; update `app/lib/api-auth.server.ts` so credentials store normalized scopes and authenticated principals expose expanded scopes; update `app/lib/agent-connection.server.ts` and `app/lib/oauth-server.server.ts` to pass delegated/OAuth scopes explicitly to `createApiCredential`.
 **Output**: Updated schema, root migration, updated cleanup hooks in `test/setup.ts` and `test/helpers/cleanup.ts`, no tracked Prisma client artifacts, `pnpm prisma:generate` log saved to artifacts, `pnpm prisma:push` log saved to artifacts, and passing Unit 1a tests.
 **Acceptance**: Unit 1a tests PASS; `pnpm run build` succeeds with no warnings.
@@ -344,3 +344,4 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 - 2026-06-01 19:37 Review chain converged: granularity, validation, ambiguity, quality, Stranger scrutiny, and final Tinfoil scrutiny
 - 2026-06-01 19:38 Unit 0 complete: captured branch, route, migration, script, deployment, and contract baseline in `unit-0-setup-research.log`
 - 2026-06-01 19:41 Unit 1a complete: credential-scope migration/auth/delegated/OAuth tests are red for missing scopes implementation
+- 2026-06-01 19:48 Unit 1b complete: added `ApiCredential.scopes`, normalized personal/delegated/OAuth scopes, preserved legacy expansion, and saved green focused-test/build/Prisma logs
