@@ -285,7 +285,7 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 **Output**: Updated developer docs route/docs file and passing Unit 15a tests.
 **Acceptance**: Unit 15a tests PASS; `pnpm run build` succeeds with no warnings.
 
-### ⬜ Unit 15c: External Client Guide And Sample — Coverage & Refactor
+### ✅ Unit 15c: External Client Guide And Sample — Coverage & Refactor
 **What**: Verify guide/sample coverage and polish wording for public-by-default Chef graph, private shopping list, scopes, sync, idempotency, and client profile breadth.
 **Output**: Coverage/log output saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-15c-guide.log`; no unsupported endpoint claims remain in route or markdown docs.
 **Acceptance**: Guide/sample assertions PASS; focused tests and build still PASS with no warnings.
@@ -389,6 +389,7 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 - 2026-06-01 22:35 Unit 14c complete: recorded a no-drift checklist covering every v1 contract path/scope, delegated/OAuth/MCP links, refresh-token rotation wording, absence of stale no-refresh claims, and intended-file-only docs changes
 - 2026-06-01 22:37 Unit 15a complete: added red external-client guide tests for docs/api.md and `/developers`, covering client profiles, public graph reads, scoped token creation, shopping-list sync, idempotent mutation samples, required scopes, bearer auth, cursor, clientMutationId, OpenAPI, and no Pebble framing
 - 2026-06-01 22:42 Unit 15b complete: added the External Client Guide to `/developers` and `docs/api.md`, covering tiny-device/mobile/CLI/browser/agent clients, public graph reads, scoped token creation, shopping-list sync, idempotent mutation samples, bearer auth, cursor, and OpenAPI; guide/docs/route tests and production build passed
+- 2026-06-01 22:43 Unit 15c complete: verified 100% coverage on `app/routes/developers.tsx`, reran guide/docs/route tests, confirmed the focused production build evidence, and scanned `/developers` plus `docs/api.md` for unsupported API v1 endpoint claims
 - 2026-06-01 21:27 Unit 8b complete: implemented v1 shopping-list read and sync endpoints with scope rows, active-list formatting, empty-list creation, tombstone-inclusive sync, cursor filtering, invalid cursor errors, focused route tests, typecheck, and warning-free build
 - 2026-06-01 21:33 Unit 8c complete: added sync ordering/cursor fallback coverage, hardened cursor parsing to reject non-round-tripping JavaScript date inputs, and verified 100% v1 coverage plus typecheck and warning-free build
 - 2026-06-01 21:37 Unit 9a complete: added red v1 shopping-list mutation tests for write scope rows, add/check/remove envelopes, restore/merge behavior, unknown fields, clientMutationId validation, idempotent replay/current request IDs, idempotency conflicts, and write-scope enforcement; red run fails on missing v1 mutation routes returning 404 and missing scope rows
