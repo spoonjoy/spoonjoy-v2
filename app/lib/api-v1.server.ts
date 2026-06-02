@@ -14,6 +14,7 @@ import {
   replayIdempotencyResponse,
   reserveIdempotencyKey,
 } from "~/lib/api-idempotency.server";
+import { buildApiV1OpenApiDocument } from "~/lib/api-v1-openapi.server";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { API_V1_DISCOVERY_DATA, API_V1_ERROR_STATUS, type ApiV1ErrorCode } from "~/lib/api-v1-contract.server";
 
@@ -926,7 +927,9 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
 
     if (args.request.method === "GET" && path === "openapi.json") {
       await authorizeApiV1Route(args, path);
-      return apiV1Success(requestId, { openapi: "3.1.0", info: { title: "Spoonjoy API", version: "v1" } });
+      return Response.json(buildApiV1OpenApiDocument(), {
+        headers: apiV1Headers(requestId),
+      });
     }
 
     if (args.request.method === "GET" && path === "recipes") {

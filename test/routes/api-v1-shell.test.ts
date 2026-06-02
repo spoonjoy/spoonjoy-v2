@@ -158,20 +158,17 @@ describe("/api/v1 shell", () => {
     }
   });
 
-  it("serves the placeholder OpenAPI shell document", async () => {
+  it("serves the OpenAPI shell document", async () => {
     const response = await loader(routeArgs(new UndiciRequest("http://localhost/api/v1/openapi.json", {
       headers: { "X-Request-Id": "req_openapi" },
     }) as unknown as Request, "openapi.json"));
 
     expect(response.status).toBe(200);
     expectV1Headers(response, "req_openapi");
-    await expect(readJson(response)).resolves.toEqual({
-      ok: true,
-      requestId: "req_openapi",
-      data: {
-        openapi: "3.1.0",
-        info: { title: "Spoonjoy API", version: "v1" },
-      },
+    await expect(readJson(response)).resolves.toMatchObject({
+      openapi: "3.1.0",
+      info: { title: "Spoonjoy API", version: "v1" },
+      paths: expect.objectContaining({ "/api/v1/openapi.json": expect.any(Object) }),
     });
   });
 
