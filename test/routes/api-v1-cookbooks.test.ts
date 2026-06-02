@@ -140,6 +140,73 @@ describe("API v1 public cookbook reads", () => {
     );
   });
 
+  it("defaults blank cookbook queries, allows boundary limits, and handles zero active recipes", async () => {
+    const emptyChef = await db.user.create({ data: createTestUser() });
+    const emptyCookbook = await db.cookbook.create({
+      data: { title: `Api V1 Empty Cookbook ${faker.string.alphanumeric(8)}`, authorId: emptyChef.id },
+    });
+    const ordered = await createCookbookFixture(db, "Api V1 Ordered Cookbook");
+    const laterRecipe = await db.recipe.create({
+      data: {
+        ...createTestRecipe(ordered.chef.id),
+        title: `Api V1 Ordered Later ${faker.string.alphanumeric(8)}`,
+        description: "Another active recipe for ordering",
+        servings: "6",
+      },
+    });
+    await db.recipeInCookbook.create({
+      data: { cookbookId: ordered.cookbook.id, recipeId: laterRecipe.id, addedById: ordered.chef.id },
+    });
+
+    const blank = await loader(routeArgs(new UndiciRequest("http://localhost/api/v1/cookbooks?query=&limit=", {
+      headers: { "X-Request-Id": "req_cookbook_blank_query" },
+    }) as unknown as Request, "cookbooks"));
+    const blankPayload = await readJson(blank);
+
+    expect(blank.status).toBe(200);
+    expectEnvelopeHeaders(blank, "req_cookbook_blank_query");
+    expect(blankPayload.data.query).toBeNull();
+    expect(blankPayload.data.limit).toBe(20);
+    expect(blankPayload.data.cookbooks.find((cookbook: { id: string }) => cookbook.id === emptyCookbook.id)).toMatchObject({
+      recipeCount: 0,
+    });
+
+    const boundary = await loader(routeArgs(new UndiciRequest("http://localhost/api/v1/cookbooks?limit=50", {
+      headers: { "X-Request-Id": "req_cookbook_limit_boundary" },
+    }) as unknown as Request, "cookbooks"));
+    const boundaryPayload = await readJson(boundary);
+
+    expect(boundary.status).toBe(200);
+    expectEnvelopeHeaders(boundary, "req_cookbook_limit_boundary");
+    expect(boundaryPayload.data.query).toBeNull();
+    expect(boundaryPayload.data.limit).toBe(50);
+
+    const emptyDetail = await loader(routeArgs(new UndiciRequest(`http://localhost/api/v1/cookbooks/${emptyCookbook.id}`, {
+      headers: { "X-Request-Id": "req_cookbook_empty_detail" },
+    }) as unknown as Request, `cookbooks/${emptyCookbook.id}`));
+    const emptyDetailPayload = await readJson(emptyDetail);
+
+    expect(emptyDetail.status).toBe(200);
+    expectEnvelopeHeaders(emptyDetail, "req_cookbook_empty_detail");
+    expect(emptyDetailPayload.data.cookbook).toMatchObject({
+      id: emptyCookbook.id,
+      recipeCount: 0,
+      recipes: [],
+    });
+
+    const orderedDetail = await loader(routeArgs(new UndiciRequest(`http://localhost/api/v1/cookbooks/${ordered.cookbook.id}`, {
+      headers: { "X-Request-Id": "req_cookbook_ordered_detail" },
+    }) as unknown as Request, `cookbooks/${ordered.cookbook.id}`));
+    const orderedPayload = await readJson(orderedDetail);
+
+    expect(orderedDetail.status).toBe(200);
+    expectEnvelopeHeaders(orderedDetail, "req_cookbook_ordered_detail");
+    expect(orderedPayload.data.cookbook.recipes.map((recipe: { id: string }) => recipe.id)).toEqual([
+      ordered.recipe.id,
+      laterRecipe.id,
+    ]);
+  });
+
   it("returns cookbook detail with active recipe summaries and scoped bearer success", async () => {
     const fixture = await createCookbookFixture(db, "Api V1 Detail Cookbook");
     const deletedRecipe = await addDeletedRecipeToCookbook(db, fixture);

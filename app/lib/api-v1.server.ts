@@ -265,9 +265,7 @@ async function handleRecipeDetail(args: ApiV1RouteArgs, requestId: string, princ
 }
 
 function activeCookbookRecipeEntries(cookbook: CookbookRow) {
-  return cookbook.recipes
-    .filter((entry) => !entry.recipe.deletedAt)
-    .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.recipe.id.localeCompare(b.recipe.id));
+  return cookbook.recipes.filter((entry) => !entry.recipe.deletedAt);
 }
 
 function cookbookSummary(cookbook: CookbookRow) {
