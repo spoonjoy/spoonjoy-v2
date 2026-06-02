@@ -280,7 +280,7 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 **Output**: `test/docs/developer-platform-guide.test.ts` imports `app/lib/api-v1-contract.server.ts` and asserts sample curl commands and prose reference actual implemented paths, required scopes, `Authorization: Bearer`, `clientMutationId`, sync cursor, client-profile breadth, and OpenAPI URL from the contract module.
 **Acceptance**: Focused tests FAIL until the guide/sample is added and aligned with implemented endpoints.
 
-### ⬜ Unit 15b: External Client Guide And Sample — Implementation
+### ✅ Unit 15b: External Client Guide And Sample — Implementation
 **What**: Add the guide/sample to `/developers` and `docs/api.md`, framed for tiny-device, mobile, CLI/script, browser, and agent clients without naming Pebble as the primary target.
 **Output**: Updated developer docs route/docs file and passing Unit 15a tests.
 **Acceptance**: Unit 15a tests PASS; `pnpm run build` succeeds with no warnings.
@@ -388,6 +388,7 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 - 2026-06-01 22:34 Unit 14b complete: rewrote `docs/api.md` around API v1, aligned MCP docs with `/developers` and `/api/v1/openapi.json`, removed stale no-refresh-token prose, and passed focused docs drift tests plus production build
 - 2026-06-01 22:35 Unit 14c complete: recorded a no-drift checklist covering every v1 contract path/scope, delegated/OAuth/MCP links, refresh-token rotation wording, absence of stale no-refresh claims, and intended-file-only docs changes
 - 2026-06-01 22:37 Unit 15a complete: added red external-client guide tests for docs/api.md and `/developers`, covering client profiles, public graph reads, scoped token creation, shopping-list sync, idempotent mutation samples, required scopes, bearer auth, cursor, clientMutationId, OpenAPI, and no Pebble framing
+- 2026-06-01 22:42 Unit 15b complete: added the External Client Guide to `/developers` and `docs/api.md`, covering tiny-device/mobile/CLI/browser/agent clients, public graph reads, scoped token creation, shopping-list sync, idempotent mutation samples, bearer auth, cursor, and OpenAPI; guide/docs/route tests and production build passed
 - 2026-06-01 21:27 Unit 8b complete: implemented v1 shopping-list read and sync endpoints with scope rows, active-list formatting, empty-list creation, tombstone-inclusive sync, cursor filtering, invalid cursor errors, focused route tests, typecheck, and warning-free build
 - 2026-06-01 21:33 Unit 8c complete: added sync ordering/cursor fallback coverage, hardened cursor parsing to reject non-round-tripping JavaScript date inputs, and verified 100% v1 coverage plus typecheck and warning-free build
 - 2026-06-01 21:37 Unit 9a complete: added red v1 shopping-list mutation tests for write scope rows, add/check/remove envelopes, restore/merge behavior, unknown fields, clientMutationId validation, idempotent replay/current request IDs, idempotency conflicts, and write-scope enforcement; red run fails on missing v1 mutation routes returning 404 and missing scope rows
