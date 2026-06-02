@@ -225,7 +225,7 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 **Output**: New OpenAPI helper, updated v1 route/helper files, and passing Unit 11a tests.
 **Acceptance**: Unit 11a tests PASS; `pnpm run build` succeeds with no warnings.
 
-### ⬜ Unit 11c: OpenAPI Contract Metadata — Coverage & Refactor
+### ✅ Unit 11c: OpenAPI Contract Metadata — Coverage & Refactor
 **What**: Verify coverage for schema generation branches: public endpoint, bearer-protected endpoint, write-scope endpoint, path parameter endpoint, query parameter endpoint, and error response generation.
 **Output**: Coverage log saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-11c-coverage.log`; refactors keep OpenAPI output stable.
 **Acceptance**: 100% coverage on new/changed OpenAPI code; focused tests and build still PASS with no warnings.
@@ -389,3 +389,4 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 - 2026-06-01 21:50 Unit 10c complete: verified machine-readable shopping-list error and last-writer-wins branches with 100% v1/idempotency coverage, typecheck, and warning-free build; no additional refactor required
 - 2026-06-01 21:52 Unit 11a complete: added red OpenAPI helper and route tests for top-level metadata, every first-slice path, scopes/auth/security, request/response schemas, examples, error schemas, parameters, strict reusable schemas, and raw `/api/v1/openapi.json`; red run fails because `app/lib/api-v1-openapi.server.ts` does not exist
 - 2026-06-01 21:56 Unit 11b complete: added `app/lib/api-v1-openapi.server.ts`, generated the first-slice OpenAPI 3.1 contract from v1 resource metadata, served `/api/v1/openapi.json` as the raw document, and verified focused OpenAPI tests, typecheck, and warning-free build
+- 2026-06-01 21:58 Unit 11c complete: removed unreachable OpenAPI metadata guard, verified 100% coverage on OpenAPI/v1/idempotency helper files, and saved green typecheck/build logs
