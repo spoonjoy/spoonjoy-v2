@@ -2,6 +2,9 @@ import { ApiAuthError, authenticateApiRequest, type ApiPrincipal } from "~/lib/a
 import { getRequestDb } from "~/lib/route-platform.server";
 import { API_V1_DISCOVERY_DATA, API_V1_ERROR_STATUS, type ApiV1ErrorCode } from "~/lib/api-v1-contract.server";
 
+const DEFAULT_LIST_LIMIT = 20;
+const MAX_LIST_LIMIT = 50;
+
 export interface ApiV1RouteArgs {
   request: Request;
   params: { "*": string };
@@ -128,6 +131,128 @@ function principalSummary(principal: ApiPrincipal | null) {
   };
 }
 
+function assertScope(principal: ApiPrincipal | null, scope: string) {
+  if (principal && !principal.scopes.includes(scope)) {
+    throw new ApiV1Error("insufficient_scope", `Missing required scope: ${scope}`);
+  }
+}
+
+function parseListLimit(url: URL): number {
+  const raw = url.searchParams.get("limit");
+  if (raw === null || raw.trim() === "") return DEFAULT_LIST_LIMIT;
+  const limit = Number(raw);
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_LIST_LIMIT) {
+    throw new ApiV1Error("validation_error", "limit must be an integer between 1 and 50");
+  }
+  return limit;
+}
+
+function recipeSummary(recipe: RecipeRow) {
+  return {
+    id: recipe.id,
+    title: recipe.title,
+    description: recipe.description,
+    servings: recipe.servings,
+    chef: { id: recipe.chef.id, username: recipe.chef.username },
+    href: `/recipes/${recipe.id}`,
+    createdAt: recipe.createdAt.toISOString(),
+    updatedAt: recipe.updatedAt.toISOString(),
+  };
+}
+
+function recipeDetail(recipe: RecipeRow) {
+  return {
+    ...recipeSummary(recipe),
+    steps: [...recipe.steps]
+      .sort((a, b) => a.stepNum - b.stepNum)
+      .map((step) => ({
+        id: step.id,
+        stepNum: step.stepNum,
+        stepTitle: step.stepTitle,
+        description: step.description,
+        duration: step.duration,
+        ingredients: [...step.ingredients]
+          .sort((a, b) => a.ingredientRef.name.localeCompare(b.ingredientRef.name))
+          .map((ingredient) => ({
+            id: ingredient.id,
+            name: ingredient.ingredientRef.name,
+            quantity: ingredient.quantity,
+            unit: ingredient.unit.name,
+          })),
+      })),
+    cookbooks: recipe.cookbooks.map((entry) => ({
+      id: entry.cookbook.id,
+      title: entry.cookbook.title,
+      href: `/cookbooks/${entry.cookbook.id}`,
+    })),
+  };
+}
+
+type RecipeRow = NonNullable<Awaited<ReturnType<typeof loadRecipeById>>>;
+
+async function loadRecipeById(db: Awaited<ReturnType<typeof getRequestDb>>, id: string) {
+  return db.recipe.findFirst({
+    where: { id, deletedAt: null },
+    include: {
+      chef: { select: { id: true, username: true } },
+      steps: {
+        include: { ingredients: { include: { ingredientRef: true, unit: true } } },
+      },
+      cookbooks: {
+        include: { cookbook: { select: { id: true, title: true } } },
+        orderBy: { createdAt: "asc" },
+      },
+    },
+  });
+}
+
+async function handleRecipeList(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal | null) {
+  assertScope(principal, "recipes:read");
+  const db = await getRequestDb(args.context);
+  const url = new URL(args.request.url);
+  const query = (url.searchParams.get("query") ?? url.searchParams.get("q") ?? "").trim();
+  const limit = parseListLimit(url);
+  const recipes = await db.recipe.findMany({
+    where: {
+      deletedAt: null,
+      ...(query
+        ? {
+            OR: [
+              { title: { contains: query } },
+              { description: { contains: query } },
+            ],
+          }
+        : {}),
+    },
+    include: {
+      chef: { select: { id: true, username: true } },
+      steps: {
+        include: { ingredients: { include: { ingredientRef: true, unit: true } } },
+      },
+      cookbooks: { include: { cookbook: { select: { id: true, title: true } } } },
+    },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    take: limit,
+  });
+
+  return apiV1Success(requestId, {
+    query: query || null,
+    limit,
+    recipes: recipes.map(recipeSummary),
+  });
+}
+
+async function handleRecipeDetail(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal | null, id: string) {
+  assertScope(principal, "recipes:read");
+  const db = await getRequestDb(args.context);
+  const recipe = await loadRecipeById(db, id);
+  if (!recipe) {
+    throw new ApiV1Error("not_found", "Recipe not found");
+  }
+
+  return apiV1Success(requestId, { recipe: recipeDetail(recipe) });
+}
+
 export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response> {
   const requestId = requestIdFor(args.request);
 
@@ -156,6 +281,17 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
     if (args.request.method === "GET" && path === "openapi.json") {
       await optionalPrincipal(args);
       return apiV1Success(requestId, { openapi: "3.1.0", info: { title: "Spoonjoy API", version: "v1" } });
+    }
+
+    if (args.request.method === "GET" && path === "recipes") {
+      const principal = await optionalPrincipal(args);
+      return await handleRecipeList(args, requestId, principal);
+    }
+
+    const segments = path.split("/").filter(Boolean);
+    if (args.request.method === "GET" && segments[0] === "recipes" && segments.length === 2) {
+      const principal = await optionalPrincipal(args);
+      return await handleRecipeDetail(args, requestId, principal, segments[1]);
     }
 
     if (args.request.method !== "GET" && args.request.method !== "POST" && args.request.method !== "PATCH" && args.request.method !== "DELETE") {

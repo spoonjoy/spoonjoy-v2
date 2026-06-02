@@ -1,0 +1,32 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ✓ test/routes/api-v1-recipes.test.ts > API v1 public recipe reads > searches public recipes anonymously with query alias and limit behavior 42ms
+ ✓ test/routes/api-v1-recipes.test.ts > API v1 public recipe reads > returns recipe detail with steps, ingredients, cookbook links, and scoped bearer success 18ms
+ ✓ test/routes/api-v1-recipes.test.ts > API v1 public recipe reads > excludes deleted recipes and returns missing/deleted recipes as not_found 27ms
+ ✓ test/routes/api-v1-recipes.test.ts > API v1 public recipe reads > validates limit and rejects bearer tokens without recipes:read 16ms
+ ✓ test/routes/api.test.ts > Spoonjoy REST API route > serves discovery, health, tools, and CORS preflight 11ms
+ ✓ test/routes/api.test.ts > Spoonjoy REST API route > keeps public search from leaking private shopping-list data 20ms
+ ✓ test/routes/api.test.ts > Spoonjoy REST API route > creates tokens from a session and then uses bearer auth for shopping-list REST calls 27ms
+ ✓ test/routes/api.test.ts > Spoonjoy REST API route > exposes generic tool calls without allowing unauthenticated ownerEmail writes 10ms
+ ✓ test/routes/api.test.ts > Spoonjoy REST API route > routes recipe and cookbook REST endpoints through the shared operation layer 117ms
+ ✓ test/routes/api.test.ts > Spoonjoy REST API route > returns structured REST errors 5ms
+ ✓ test/routes/api.test.ts > Spoonjoy REST API route > returns 429 with Retry-After when the rate limiter denies the request 5ms
+ ✓ test/routes/api-v1-shell.test.ts > /api/v1 shell > is registered before the legacy /api/* catch-all route 5ms
+ ✓ test/routes/api-v1-shell.test.ts > /api/v1 shell > serves the exact discovery envelope with request IDs and CORS headers 6ms
+ ✓ test/routes/api-v1-shell.test.ts > /api/v1 shell > treats a missing splat param as the v1 root 3ms
+ ✓ test/routes/api-v1-shell.test.ts > /api/v1 shell > serves anonymous health and generated request IDs 3ms
+ ✓ test/routes/api-v1-shell.test.ts > /api/v1 shell > serves authenticated health with principal summary and scopes 10ms
+ ✓ test/routes/api-v1-shell.test.ts > /api/v1 shell > returns invalid_token for optional-auth routes when a bad bearer is present 5ms
+ ✓ test/routes/api-v1-shell.test.ts > /api/v1 shell > serves the placeholder OpenAPI shell document 3ms
+ ✓ test/routes/api-v1-shell.test.ts > /api/v1 shell > handles CORS preflight for any v1 path 3ms
+ ✓ test/routes/api-v1-shell.test.ts > /api/v1 shell > returns stable envelopes for unknown endpoints, unsupported methods, and malformed JSON 5ms
+ ✓ test/routes/api-v1-shell.test.ts > /api/v1 shell > exports the full v1 error status map 2ms
+ ✓ test/routes/api-v1-shell.test.ts > /api/v1 shell > serializes error details and internal fallback errors 2ms
+ ✓ test/routes/api-v1-shell.test.ts > /api/v1 shell > normalizes unexpected optional-auth failures into internal errors 2ms
+
+ Test Files  3 passed (3)
+      Tests  23 passed (23)
+   Start at  20:23:01
+   Duration  2.11s (transform 221ms, setup 185ms, import 681ms, tests 430ms, environment 456ms)
+

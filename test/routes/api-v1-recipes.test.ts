@@ -175,6 +175,7 @@ describe("API v1 public recipe reads", () => {
       headers: { "X-Request-Id": "req_recipe_deleted" },
     }) as unknown as Request, `recipes/${deleted.recipe.id}`));
     expect(deletedDetail.status).toBe(404);
+    expectEnvelopeHeaders(deletedDetail, "req_recipe_deleted");
     await expect(readJson(deletedDetail)).resolves.toMatchObject({
       ok: false,
       requestId: "req_recipe_deleted",
@@ -185,6 +186,7 @@ describe("API v1 public recipe reads", () => {
       headers: { "X-Request-Id": "req_recipe_missing" },
     }) as unknown as Request, "recipes/missing-recipe"));
     expect(missing.status).toBe(404);
+    expectEnvelopeHeaders(missing, "req_recipe_missing");
     await expect(readJson(missing)).resolves.toMatchObject({
       ok: false,
       requestId: "req_recipe_missing",
@@ -201,6 +203,7 @@ describe("API v1 public recipe reads", () => {
       headers: { "X-Request-Id": "req_recipe_limit" },
     }) as unknown as Request, "recipes"));
     expect(invalidLimit.status).toBe(400);
+    expectEnvelopeHeaders(invalidLimit, "req_recipe_limit");
     await expect(readJson(invalidLimit)).resolves.toMatchObject({
       ok: false,
       requestId: "req_recipe_limit",
@@ -211,6 +214,7 @@ describe("API v1 public recipe reads", () => {
       headers: { Authorization: `Bearer ${token.token}`, "X-Request-Id": "req_recipe_scope" },
     }) as unknown as Request, "recipes"));
     expect(insufficient.status).toBe(403);
+    expectEnvelopeHeaders(insufficient, "req_recipe_scope");
     await expect(readJson(insufficient)).resolves.toMatchObject({
       ok: false,
       requestId: "req_recipe_scope",
