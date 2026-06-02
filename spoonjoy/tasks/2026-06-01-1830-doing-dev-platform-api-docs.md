@@ -338,3 +338,4 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 - 2026-06-01 19:25 Addressed Stranger scrutiny findings: public cookbook reads use new public data access and OAuth refresh-token drift covers both server comments
 - 2026-06-01 19:28 Addressed Stranger Round 2 finding: idempotency hashes include method, concrete path, and body so same-key/different-item conflicts are detected
 - 2026-06-01 19:31 Stranger scrutiny converged after idempotency path-hash fix
+- 2026-06-01 19:34 Addressed final Tinfoil finding by aligning discovery, health, and OpenAPI as optional-auth routes with no required scope
