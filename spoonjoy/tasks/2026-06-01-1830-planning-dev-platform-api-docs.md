@@ -1,6 +1,6 @@
 # Planning: Spoonjoy Developer Platform API And Docs
 
-**Status**: NEEDS_REVIEW
+**Status**: approved
 **Created**: 2026-06-01 18:31
 
 ## Goal
@@ -106,3 +106,4 @@ The long-term moon includes many client profiles, but the first implementation s
 - 2026-06-01 18:34 Addressed reviewer findings: first v1 resources, scope taxonomy, feed boundary, and shopping-list safety semantics
 - 2026-06-01 18:37 Addressed Round 2 reviewer findings: public cookbook v1 boundary, scope storage/mapping/enforcement, and first-slice credential resources
 - 2026-06-01 18:38 Added explicit v1 scope matrix and delegated/MCP bootstrap route boundary
+- 2026-06-01 18:39 Approved after sub-agent reviewer gate and boundary fixes converged
