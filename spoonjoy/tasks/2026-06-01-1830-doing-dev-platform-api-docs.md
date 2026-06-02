@@ -320,3 +320,4 @@ Expose Spoonjoy as a developer-friendly platform layer on top of the existing pu
 ## Progress Log
 - 2026-06-01 18:41 Created from planning doc
 - 2026-06-01 18:47 Addressed granularity reviewer findings by splitting schema, route, docs, verification, deploy, and completion work into smaller TDD units
+- 2026-06-01 18:51 Addressed granularity Round 2 ordering finding by splitting early public/token scope enforcement from the final full scope-matrix audit
