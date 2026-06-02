@@ -1004,6 +1004,10 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
       throw new ApiV1Error("method_not_allowed", "Method not allowed");
     }
 
+    if (args.request.method === "GET") {
+      await authorizeApiV1Route(args, path);
+    }
+
     throw new ApiV1Error("not_found", `Unknown Spoonjoy API v1 endpoint: /api/v1/${path}`);
   } catch (error) {
     if (error instanceof ApiV1Error) {
