@@ -22,10 +22,21 @@ describe("build output hygiene", () => {
     expect(shouldLogRollupBuildMessage("warn", {
       code: "EMPTY_BUNDLE",
       message: 'Generated an empty chunk: "api.v1._".',
+      names: ["api.v1._"],
+    })).toBe(false);
+    expect(shouldLogRollupBuildMessage("warn", {
+      code: "EMPTY_BUNDLE",
+      message: 'Generated an empty chunk: "accidental-client-entry".',
+      names: ["accidental-client-entry"],
+    })).toBe(true);
+    expect(shouldLogRollupBuildMessage("warn", {
+      code: "EMPTY_BUNDLE",
+      message: 'Generated an empty chunk: "api.v1._".',
     })).toBe(false);
     expect(shouldLogRollupBuildMessage("info", {
       code: "EMPTY_BUNDLE",
       message: 'Generated an empty chunk: "api.v1._".',
+      names: ["api.v1._"],
     })).toBe(true);
     expect(shouldLogRollupBuildMessage("warn", {
       code: "UNRESOLVED_IMPORT",
