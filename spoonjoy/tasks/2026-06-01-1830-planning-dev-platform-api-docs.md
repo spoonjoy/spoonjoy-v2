@@ -17,6 +17,14 @@ Expose Spoonjoy as a developer-friendly platform layer on top of the existing pu
 - Keep the existing shared operation layer as the implementation spine for REST, MCP, and future SDK/docs generation.
 - Add or harden machine-readable API documentation, including OpenAPI/JSON Schema coverage, stable response/error shapes, examples, and a deployed `/developers` docs page suitable for external developers.
 - Add fine-grained scope and credential concepts for public clients, personal API tokens, OAuth/PKCE clients, MCP clients, and device/delegated auth, without requiring developers to understand `ownerEmail` or database-user internals. The first scope taxonomy is `public:read`, `recipes:read`, `shopping_list:read`, `shopping_list:write`, `cookbooks:read`, `tokens:read`, `tokens:write`, and `offline_access`. First-slice implementation stores scopes on `ApiCredential`, maps legacy `kitchen:read` and `kitchen:write` grants to the equivalent first-slice fine-grained scopes for backward compatibility, and enforces scopes in the v1 route layer before operation dispatch. OAuth Dynamic Client Registration remains available at `/oauth/register` and documented, but authenticated OAuth app-management resources are out of scope for the first implementation.
+- Enforce this first-slice v1 scope matrix:
+  - `GET /api/v1`, `GET /api/v1/health`, and `GET /api/v1/openapi.json`: anonymous allowed; authenticated callers need no additional scope.
+  - `GET /api/v1/recipes` and `GET /api/v1/recipes/:id`: anonymous allowed; authenticated callers with scoped bearer credentials require `recipes:read` or legacy `kitchen:read`.
+  - `GET /api/v1/cookbooks` and `GET /api/v1/cookbooks/:id`: anonymous allowed; authenticated callers with scoped bearer credentials require `cookbooks:read` or legacy `kitchen:read`.
+  - `GET /api/v1/shopping-list` and `GET /api/v1/shopping-list/sync`: authenticated only; require `shopping_list:read` or legacy `kitchen:read`.
+  - `POST /api/v1/shopping-list/items`, `PATCH /api/v1/shopping-list/items/:itemId`, and `DELETE /api/v1/shopping-list/items/:itemId`: authenticated only; require `shopping_list:write` or legacy `kitchen:write`.
+  - `GET /api/v1/tokens`: authenticated only; require `tokens:read` or legacy `kitchen:read`.
+  - `POST /api/v1/tokens` and `DELETE /api/v1/tokens/:credentialId`: authenticated only; require `tokens:write` or legacy `kitchen:write`.
 - Add integration-safety primitives needed by multiple client classes: idempotency keys, request IDs, rate-limit headers or docs, cursor pagination/sync, shopping-list item tombstones, and machine-readable errors. In the first proving slice, idempotency applies to shopping-list item add/check/remove mutations, sync cursors apply to shopping-list items, tombstones apply to removed shopping-list items, and stale/conflict handling is documented as last-writer-wins for shopping-list checked/delete state.
 - Prioritize a small proving slice that exercises the platform substrate end to end, with shopping-list sync and mutation as the first private/authenticated workflow.
 - Document client profiles and examples for web/browser clients, native/mobile clients, wearable/tiny-device clients, AI/MCP clients, CLI/scripts, portability/import-export bridges, social/public-feed clients, kitchen hardware, and developer tooling. Public feeds are documented as a future client profile in this wave; public feed endpoints are out of scope for the first implementation unless needed for docs navigation.
@@ -25,6 +33,7 @@ Expose Spoonjoy as a developer-friendly platform layer on top of the existing pu
 ### Out of Scope
 - A workspace, organization, household, or paid-creator ownership model as a prerequisite for this platform layer.
 - Authenticated OAuth app-management resources beyond the existing standards endpoints `/oauth/register`, `/oauth/authorize`, and `/oauth/token`.
+- Moving delegated/MCP bootstrap operations under `/api/v1`; `start_agent_connection`, `poll_agent_connection`, `/mcp`, and OAuth protected-resource discovery remain existing documented surfaces in the first slice.
 - Reframing the public product noun away from Chef.
 - Private-by-default recipes or cookbooks as the baseline platform assumption.
 - Full native app, Pebble app, browser extension, smart-appliance app, or CLI product implementation beyond sample/demo clients needed to prove docs and contracts.
@@ -40,6 +49,7 @@ Expose Spoonjoy as a developer-friendly platform layer on top of the existing pu
 - [ ] Auth docs and implementation distinguish personal API tokens, OAuth/PKCE apps, MCP clients, and delegated/device-style authorization.
 - [ ] Existing OAuth/API/MCP docs drift is resolved, including refresh-token behavior and any mismatch between REST coverage and operation-layer coverage.
 - [ ] Fine-grained scopes `public:read`, `recipes:read`, `shopping_list:read`, `shopping_list:write`, `cookbooks:read`, `tokens:read`, `tokens:write`, and `offline_access` are represented in docs, stored on API credentials, backward-compatible with existing `kitchen:read` / `kitchen:write` grants, and enforced for the supported v1 surface.
+- [ ] The supported `/api/v1` surface follows the explicit per-endpoint scope matrix from this plan, including anonymous access for public recipe/cookbook reads and authenticated-only access for shopping-list and token surfaces.
 - [ ] Integration-safety primitives are implemented and documented for the proving slice: idempotent shopping-list add/check/remove mutations, machine-readable errors, request IDs, rate-limit guidance, shopping-list cursor/sync behavior, shopping-list item tombstones, and documented last-writer-wins semantics for shopping-list checked/delete state.
 - [ ] At least one sample or guide demonstrates an external client using the docs to authenticate and operate against Spoonjoy.
 - [ ] The implemented docs/spec do not drift from REST/MCP operation metadata for the supported surface.
@@ -69,6 +79,7 @@ Expose Spoonjoy as a developer-friendly platform layer on top of the existing pu
 - Ship public cookbook search/detail in `/api/v1` to match the accepted public-by-default cookbook premise, while keeping cookbook mutation and personal token management authenticated.
 - Store first-slice scopes on `ApiCredential`; map existing broad `kitchen:read` / `kitchen:write` values to the fine-grained first-slice scope set so existing tokens and OAuth connectors keep working.
 - Limit first-slice credential resources to personal API token list/create/revoke metadata under `/api/v1`; document OAuth/DCR, MCP OAuth, and delegated/device flows, but leave authenticated OAuth app-management resources for later work.
+- Keep delegated/MCP bootstrap operations on their existing routes for this slice: `/mcp`, OAuth metadata/routes, and raw `/api/tools/start_agent_connection` / `/api/tools/poll_agent_connection` are documented but not mirrored under `/api/v1`.
 - Use sub-agent reviewer gates for planning and doing review passes, then use work-doer for execution after the reviewed doing document is ready.
 
 ## Context / References
@@ -94,3 +105,4 @@ The long-term moon includes many client profiles, but the first implementation s
 - 2026-06-01 18:32 Marked planning doc NEEDS_REVIEW for sub-agent reviewer gate
 - 2026-06-01 18:34 Addressed reviewer findings: first v1 resources, scope taxonomy, feed boundary, and shopping-list safety semantics
 - 2026-06-01 18:37 Addressed Round 2 reviewer findings: public cookbook v1 boundary, scope storage/mapping/enforcement, and first-slice credential resources
+- 2026-06-01 18:43 Added explicit v1 scope matrix and delegated/MCP bootstrap route boundary
