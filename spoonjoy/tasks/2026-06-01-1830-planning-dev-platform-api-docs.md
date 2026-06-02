@@ -1,6 +1,6 @@
 # Planning: Spoonjoy Developer Platform API And Docs
 
-**Status**: drafting
+**Status**: NEEDS_REVIEW
 **Created**: 2026-06-01 18:31
 
 ## Goal
@@ -88,3 +88,4 @@ The long-term moon includes many client profiles, but the first implementation s
 ## Progress Log
 - 2026-06-01 18:31 Created
 - 2026-06-01 18:32 Tightened Tinfoil Hat findings: concrete docs route, OAuth-doc drift, and deployed verification
+- 2026-06-01 18:32 Marked planning doc NEEDS_REVIEW for sub-agent reviewer gate
