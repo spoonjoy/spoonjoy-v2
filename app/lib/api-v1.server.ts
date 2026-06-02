@@ -31,6 +31,8 @@ const API_V1_SCOPE_RULES: readonly ApiV1ScopeRule[] = [
   { method: "GET", auth: "optional", scopes: ["recipes:read"], match: (_path, segments) => segments[0] === "recipes" && segments.length === 2 },
   { method: "GET", auth: "optional", scopes: ["cookbooks:read"], match: (path) => path === "cookbooks" },
   { method: "GET", auth: "optional", scopes: ["cookbooks:read"], match: (_path, segments) => segments[0] === "cookbooks" && segments.length === 2 },
+  { method: "GET", auth: "bearer", scopes: ["shopping_list:read"], match: (path) => path === "shopping-list" },
+  { method: "GET", auth: "bearer", scopes: ["shopping_list:read"], match: (path) => path === "shopping-list/sync" },
   { method: "GET", auth: "bearer", scopes: ["tokens:read"], match: (path) => path === "tokens" },
   { method: "POST", auth: "bearer", scopes: ["tokens:write"], match: (path) => path === "tokens" },
   { method: "DELETE", auth: "bearer", scopes: ["tokens:write"], match: (_path, segments) => segments[0] === "tokens" && segments.length === 2 },
@@ -413,6 +415,96 @@ async function handleCookbookDetail(args: ApiV1RouteArgs, requestId: string, pri
   return apiV1Success(requestId, { cookbook: cookbookDetail(cookbook) });
 }
 
+async function loadShoppingListForUser(db: Awaited<ReturnType<typeof getRequestDb>>, userId: string) {
+  const include = {
+    author: { select: { id: true, username: true } },
+    items: {
+      include: { unit: true, ingredientRef: true },
+      orderBy: [{ sortIndex: "asc" as const }, { updatedAt: "asc" as const }, { id: "asc" as const }],
+    },
+  };
+  const existing = await db.shoppingList.findUnique({
+    where: { authorId: userId },
+    include,
+  });
+  if (existing) return existing;
+  return await db.shoppingList.create({
+    data: { authorId: userId },
+    include,
+  });
+}
+
+type ShoppingListRow = NonNullable<Awaited<ReturnType<typeof loadShoppingListForUser>>>;
+type ShoppingItemRow = ShoppingListRow["items"][number];
+
+function shoppingItem(item: ShoppingItemRow) {
+  return {
+    id: item.id,
+    name: item.ingredientRef.name,
+    quantity: item.quantity,
+    unit: item.unit?.name ?? null,
+    checked: item.checked,
+    checkedAt: item.checkedAt?.toISOString() ?? null,
+    deletedAt: item.deletedAt?.toISOString() ?? null,
+    categoryKey: item.categoryKey,
+    iconKey: item.iconKey,
+    sortIndex: item.sortIndex,
+    updatedAt: item.updatedAt.toISOString(),
+  };
+}
+
+function maxUpdatedAt(items: ShoppingItemRow[], fallback: Date) {
+  return items.reduce((latest, item) => (
+    item.updatedAt.getTime() > latest.getTime() ? item.updatedAt : latest
+  ), fallback);
+}
+
+function shoppingListPayload(list: ShoppingListRow) {
+  const activeItems = list.items.filter((item) => !item.deletedAt);
+  return {
+    shoppingList: {
+      id: list.id,
+      chef: { id: list.author.id, username: list.author.username },
+      items: activeItems.map(shoppingItem),
+      updatedAt: list.updatedAt.toISOString(),
+    },
+    nextCursor: maxUpdatedAt(activeItems, list.updatedAt).toISOString(),
+  };
+}
+
+function parseSyncCursor(url: URL): Date | null {
+  const raw = url.searchParams.get("cursor");
+  if (raw === null || raw.trim() === "") return null;
+  const cursor = new Date(raw);
+  if (Number.isNaN(cursor.getTime())) {
+    throw new ApiV1Error("invalid_cursor", "cursor must be an ISO datetime");
+  }
+  return cursor;
+}
+
+async function handleShoppingListRead(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
+  const db = await getRequestDb(args.context);
+  const list = await loadShoppingListForUser(db, principal.id);
+  return apiV1Success(requestId, shoppingListPayload(list));
+}
+
+async function handleShoppingListSync(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
+  const db = await getRequestDb(args.context);
+  const url = new URL(args.request.url);
+  const cursor = parseSyncCursor(url);
+  const list = await loadShoppingListForUser(db, principal.id);
+  const items = list.items
+    .filter((item) => cursor === null || item.updatedAt.getTime() > cursor.getTime())
+    .sort((a, b) => a.updatedAt.getTime() - b.updatedAt.getTime() || a.id.localeCompare(b.id));
+  const nextCursor = (items.length > 0 ? maxUpdatedAt(items, list.updatedAt) : cursor ?? list.updatedAt).toISOString();
+
+  return apiV1Success(requestId, {
+    items: items.map(shoppingItem),
+    nextCursor,
+    hasMore: false,
+  });
+}
+
 function credentialMetadata(credential: ApiCredential) {
   return {
     id: credential.id,
@@ -579,6 +671,16 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
     if (args.request.method === "GET" && segments[0] === "cookbooks" && segments.length === 2) {
       const principal = await authorizeApiV1Route(args, path);
       return await handleCookbookDetail(args, requestId, principal, segments[1]);
+    }
+
+    if (args.request.method === "GET" && path === "shopping-list") {
+      const principal = await authorizeApiV1Route(args, path);
+      return await handleShoppingListRead(args, requestId, principal as ApiPrincipal);
+    }
+
+    if (args.request.method === "GET" && path === "shopping-list/sync") {
+      const principal = await authorizeApiV1Route(args, path);
+      return await handleShoppingListSync(args, requestId, principal as ApiPrincipal);
     }
 
     if (args.request.method === "GET" && path === "tokens") {

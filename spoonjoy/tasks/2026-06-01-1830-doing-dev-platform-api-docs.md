@@ -175,7 +175,7 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 **Output**: `test/routes/api-v1-shopping-sync.test.ts` asserts the exact shopping item shape, list envelope, sync envelope, `nextCursor`, `hasMore: false`, cursor filtering by `updatedAt > cursor`, empty list, deleted-item tombstones from `ShoppingListItem.deletedAt`, invalid cursor error envelope, `shopping_list:read` success, and missing read scope failure from `api-v1-contract.md`.
 **Acceptance**: Focused tests FAIL because shopping-list v1 read/sync payloads and tombstones are not implemented.
 
-### ⬜ Unit 8b: Shopping-List Read, Sync, And Tombstones — Implementation
+### ✅ Unit 8b: Shopping-List Read, Sync, And Tombstones — Implementation
 **What**: Implement shopping-list list and sync endpoints in the v1 route/helper layer using existing `ShoppingListItem` fields `updatedAt`, `deletedAt`, `checked`, and `checkedAt`.
 **Output**: Updated v1 route/helper files and passing Unit 8a tests.
 **Acceptance**: Unit 8a tests PASS; legacy shopping-list API tests still PASS; `pnpm run build` succeeds with no warnings.
@@ -378,3 +378,4 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 - 2026-06-01 21:20 Unit 7c complete: verified 100% coverage on v1 scope enforcement and shell route files plus warning-free build; no additional refactor required
 - 2026-06-01 21:23 Unit 8a complete: added v1 shopping-list read/sync tests for scope rows, authenticated active-list shape, empty-list creation, tombstone sync, cursor filtering, missing auth, insufficient scope, and invalid cursor; red run fails on unimplemented v1 shopping routes returning 404
 - 2026-06-01 21:26 Addressed Unit 8a reviewer findings by asserting exact success envelope/data/list/item keys and adding `GET /api/v1/shopping-list/sync` insufficient-scope coverage
+- 2026-06-01 21:27 Unit 8b complete: implemented v1 shopping-list read and sync endpoints with scope rows, active-list formatting, empty-list creation, tombstone-inclusive sync, cursor filtering, invalid cursor errors, focused route tests, typecheck, and warning-free build
