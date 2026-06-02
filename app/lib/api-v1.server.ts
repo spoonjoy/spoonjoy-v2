@@ -7,6 +7,13 @@ import {
   normalizeCredentialScopes,
   type ApiPrincipal,
 } from "~/lib/api-auth.server";
+import {
+  completeIdempotencyKey,
+  hashIdempotencyRequest,
+  idempotencyClientKey,
+  replayIdempotencyResponse,
+  reserveIdempotencyKey,
+} from "~/lib/api-idempotency.server";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { API_V1_DISCOVERY_DATA, API_V1_ERROR_STATUS, type ApiV1ErrorCode } from "~/lib/api-v1-contract.server";
 
@@ -33,6 +40,9 @@ const API_V1_SCOPE_RULES: readonly ApiV1ScopeRule[] = [
   { method: "GET", auth: "optional", scopes: ["cookbooks:read"], match: (_path, segments) => segments[0] === "cookbooks" && segments.length === 2 },
   { method: "GET", auth: "bearer", scopes: ["shopping_list:read"], match: (path) => path === "shopping-list" },
   { method: "GET", auth: "bearer", scopes: ["shopping_list:read"], match: (path) => path === "shopping-list/sync" },
+  { method: "POST", auth: "bearer", scopes: ["shopping_list:write"], match: (path) => path === "shopping-list/items" },
+  { method: "PATCH", auth: "bearer", scopes: ["shopping_list:write"], match: (_path, segments) => segments[0] === "shopping-list" && segments[1] === "items" && segments.length === 3 },
+  { method: "DELETE", auth: "bearer", scopes: ["shopping_list:write"], match: (_path, segments) => segments[0] === "shopping-list" && segments[1] === "items" && segments.length === 3 },
   { method: "GET", auth: "bearer", scopes: ["tokens:read"], match: (path) => path === "tokens" },
   { method: "POST", auth: "bearer", scopes: ["tokens:write"], match: (path) => path === "tokens" },
   { method: "DELETE", auth: "bearer", scopes: ["tokens:write"], match: (_path, segments) => segments[0] === "tokens" && segments.length === 2 },
@@ -472,6 +482,50 @@ function shoppingListPayload(list: ShoppingListRow) {
   };
 }
 
+function normalizeName(value: string) {
+  return value.trim().toLowerCase();
+}
+
+async function getOrCreateApiV1Unit(db: Awaited<ReturnType<typeof getRequestDb>>, name: string) {
+  const normalized = normalizeName(name);
+  const existing = await db.unit.findUnique({ where: { name: normalized } });
+  if (existing) return existing;
+  return await db.unit.create({ data: { name: normalized } });
+}
+
+async function getOrCreateApiV1IngredientRef(db: Awaited<ReturnType<typeof getRequestDb>>, name: string) {
+  const normalized = normalizeName(name);
+  const existing = await db.ingredientRef.findUnique({ where: { name: normalized } });
+  if (existing) return existing;
+  return await db.ingredientRef.create({ data: { name: normalized } });
+}
+
+async function nextShoppingSortIndex(db: Awaited<ReturnType<typeof getRequestDb>>, shoppingListId: string) {
+  const maxItem = await db.shoppingListItem.findFirst({
+    where: { shoppingListId, deletedAt: null },
+    orderBy: { sortIndex: "desc" },
+    select: { sortIndex: true },
+  });
+  return (maxItem?.sortIndex ?? -1) + 1;
+}
+
+async function reloadShoppingListForUser(db: Awaited<ReturnType<typeof getRequestDb>>, userId: string) {
+  return await db.shoppingList.findUniqueOrThrow({
+    where: { authorId: userId },
+    include: {
+      author: { select: { id: true, username: true } },
+      items: {
+        include: { unit: true, ingredientRef: true },
+        orderBy: [{ sortIndex: "asc" }, { updatedAt: "asc" }, { id: "asc" }],
+      },
+    },
+  });
+}
+
+function shoppingListObject(list: ShoppingListRow) {
+  return shoppingListPayload(list).shoppingList;
+}
+
 function parseSyncCursor(url: URL): Date | null {
   const raw = url.searchParams.get("cursor");
   if (raw === null || raw.trim() === "") return null;
@@ -505,6 +559,226 @@ async function handleShoppingListSync(args: ApiV1RouteArgs, requestId: string, p
     items: items.map(shoppingItem),
     nextCursor,
     hasMore: false,
+  });
+}
+
+function optionalPositiveNumber(value: unknown, field: string): number | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    throw new ApiV1Error("validation_error", `${field} must be a number greater than 0`);
+  }
+  return value;
+}
+
+function optionalNullableString(value: unknown, field: string): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string") {
+    throw new ApiV1Error("validation_error", `${field} must be a string or null`);
+  }
+  const trimmed = value.trim();
+  return trimmed === "" ? null : trimmed;
+}
+
+function requiredBoolean(value: unknown, field: string): boolean {
+  if (typeof value !== "boolean") {
+    throw new ApiV1Error("validation_error", `${field} must be a boolean`);
+  }
+  return value;
+}
+
+function idempotentMutationBody(
+  requestId: string,
+  data: Record<string, unknown>,
+) {
+  return { ok: true, requestId, data };
+}
+
+async function runIdempotentShoppingMutation(
+  args: ApiV1RouteArgs,
+  requestId: string,
+  principal: ApiPrincipal,
+  body: Record<string, unknown>,
+  clientMutationId: string,
+  operation: string,
+  write: () => Promise<{ status: number; data: Record<string, unknown> }>,
+) {
+  const db = await getRequestDb(args.context);
+  const path = normalizeApiV1Path(args.params["*"] ?? "");
+  const requestHash = await hashIdempotencyRequest({
+    method: args.request.method,
+    path: `/api/v1/${path}`,
+    body,
+  });
+  const reservation = await reserveIdempotencyKey(db, {
+    userId: principal.id,
+    credentialId: principal.source === "bearer" ? principal.credentialId : null,
+    clientKey: idempotencyClientKey(principal),
+    key: clientMutationId,
+    operation,
+    requestHash,
+  });
+
+  if (reservation.status === "replay") {
+    const replay = replayIdempotencyResponse(reservation.record, requestId);
+    return Response.json(replay.body, {
+      status: replay.status,
+      headers: apiV1Headers(requestId),
+    });
+  }
+
+  if (reservation.status === "conflict") {
+    throw new ApiV1Error("idempotency_conflict", "clientMutationId was already used for a different request");
+  }
+
+  const result = await write();
+  const responseBody = idempotentMutationBody(requestId, result.data);
+  await completeIdempotencyKey(db, reservation.record.id, {
+    status: result.status,
+    body: responseBody,
+  });
+
+  return Response.json(responseBody, {
+    status: result.status,
+    headers: apiV1Headers(requestId),
+  });
+}
+
+async function handleShoppingItemCreate(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
+  const body = await parseApiV1JsonBody(args.request);
+  assertKnownFields(body, ["clientMutationId", "name", "quantity", "unit", "categoryKey", "iconKey"]);
+  const clientMutationId = nonblankString(body.clientMutationId, "clientMutationId");
+  const name = nonblankString(body.name, "name");
+  const quantity = optionalPositiveNumber(body.quantity, "quantity");
+  const unitName = optionalNullableString(body.unit, "unit");
+  const categoryKey = optionalNullableString(body.categoryKey, "categoryKey");
+  const iconKey = optionalNullableString(body.iconKey, "iconKey");
+
+  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "shopping-list.items.create", async () => {
+    const db = await getRequestDb(args.context);
+    const list = await loadShoppingListForUser(db, principal.id);
+    const ingredientRef = await getOrCreateApiV1IngredientRef(db, name);
+    const unit = unitName ? await getOrCreateApiV1Unit(db, unitName) : null;
+    const existing = await db.shoppingListItem.findFirst({
+      where: {
+        shoppingListId: list.id,
+        ingredientRefId: ingredientRef.id,
+        unitId: unit?.id ?? null,
+      },
+    });
+
+    const item = existing
+      ? await db.shoppingListItem.update({
+          where: { id: existing.id },
+          data: {
+            quantity: quantity === null ? existing.quantity : (existing.quantity ?? 0) + quantity,
+            checked: false,
+            checkedAt: null,
+            deletedAt: null,
+            sortIndex: existing.checked || existing.checkedAt || existing.deletedAt
+              ? await nextShoppingSortIndex(db, list.id)
+              : existing.sortIndex,
+            categoryKey: categoryKey ?? existing.categoryKey,
+            iconKey: iconKey ?? existing.iconKey,
+          },
+          include: { unit: true, ingredientRef: true },
+        })
+      : await db.shoppingListItem.create({
+          data: {
+            shoppingListId: list.id,
+            ingredientRefId: ingredientRef.id,
+            unitId: unit?.id ?? null,
+            quantity,
+            sortIndex: await nextShoppingSortIndex(db, list.id),
+            categoryKey,
+            iconKey,
+          },
+          include: { unit: true, ingredientRef: true },
+        });
+    const reloaded = await reloadShoppingListForUser(db, principal.id);
+
+    return {
+      status: existing ? 200 : 201,
+      data: {
+        created: !existing,
+        updated: Boolean(existing),
+        item: shoppingItem(item),
+        shoppingList: shoppingListObject(reloaded),
+        mutation: { clientMutationId, replayed: false },
+      },
+    };
+  });
+}
+
+async function handleShoppingItemCheck(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, itemId: string) {
+  const body = await parseApiV1JsonBody(args.request);
+  assertKnownFields(body, ["clientMutationId", "checked"]);
+  const clientMutationId = nonblankString(body.clientMutationId, "clientMutationId");
+  const checked = requiredBoolean(body.checked, "checked");
+
+  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "shopping-list.items.check", async () => {
+    const db = await getRequestDb(args.context);
+    const list = await loadShoppingListForUser(db, principal.id);
+    const existing = await db.shoppingListItem.findFirst({
+      where: { id: itemId, shoppingListId: list.id },
+    });
+    if (!existing) {
+      throw new ApiV1Error("not_found", "Shopping list item not found");
+    }
+
+    const item = await db.shoppingListItem.update({
+      where: { id: existing.id },
+      data: {
+        checked,
+        checkedAt: checked ? new Date() : null,
+        deletedAt: null,
+        sortIndex: checked ? await nextShoppingSortIndex(db, list.id) : existing.sortIndex,
+      },
+      include: { unit: true, ingredientRef: true },
+    });
+    const reloaded = await reloadShoppingListForUser(db, principal.id);
+
+    return {
+      status: 200,
+      data: {
+        item: shoppingItem(item),
+        shoppingList: shoppingListObject(reloaded),
+        mutation: { clientMutationId, replayed: false },
+      },
+    };
+  });
+}
+
+async function handleShoppingItemDelete(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, itemId: string) {
+  const body = await parseApiV1JsonBody(args.request);
+  assertKnownFields(body, ["clientMutationId"]);
+  const clientMutationId = nonblankString(body.clientMutationId, "clientMutationId");
+
+  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "shopping-list.items.delete", async () => {
+    const db = await getRequestDb(args.context);
+    const list = await loadShoppingListForUser(db, principal.id);
+    const existing = await db.shoppingListItem.findFirst({
+      where: { id: itemId, shoppingListId: list.id },
+    });
+    if (!existing) {
+      throw new ApiV1Error("not_found", "Shopping list item not found");
+    }
+
+    const item = await db.shoppingListItem.update({
+      where: { id: existing.id },
+      data: { deletedAt: new Date() },
+      include: { unit: true, ingredientRef: true },
+    });
+    const reloaded = await reloadShoppingListForUser(db, principal.id);
+
+    return {
+      status: 200,
+      data: {
+        removed: true,
+        item: shoppingItem(item),
+        shoppingList: shoppingListObject(reloaded),
+        mutation: { clientMutationId, replayed: false },
+      },
+    };
   });
 }
 
@@ -684,6 +958,21 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
     if (args.request.method === "GET" && path === "shopping-list/sync") {
       const principal = await authorizeApiV1Route(args, path);
       return await handleShoppingListSync(args, requestId, principal as ApiPrincipal);
+    }
+
+    if (args.request.method === "POST" && path === "shopping-list/items") {
+      const principal = await authorizeApiV1Route(args, path);
+      return await handleShoppingItemCreate(args, requestId, principal as ApiPrincipal);
+    }
+
+    if (args.request.method === "PATCH" && segments[0] === "shopping-list" && segments[1] === "items" && segments.length === 3) {
+      const principal = await authorizeApiV1Route(args, path);
+      return await handleShoppingItemCheck(args, requestId, principal as ApiPrincipal, segments[2]);
+    }
+
+    if (args.request.method === "DELETE" && segments[0] === "shopping-list" && segments[1] === "items" && segments.length === 3) {
+      const principal = await authorizeApiV1Route(args, path);
+      return await handleShoppingItemDelete(args, requestId, principal as ApiPrincipal, segments[2]);
     }
 
     if (args.request.method === "GET" && path === "tokens") {
