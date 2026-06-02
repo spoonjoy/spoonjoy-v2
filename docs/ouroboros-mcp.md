@@ -4,6 +4,8 @@ Spoonjoy v2 ships a stdio MCP server so Ouroboros agents can use Spoonjoy as the
 
 > For using Spoonjoy from Claude (Claude Code / claude.ai) over a remote MCP endpoint, see the [Claude Connector docs](./claude-connector.md). It exposes this same tool surface over MCP Streamable HTTP at `/mcp`.
 
+For client developers building against Spoonjoy outside the local harness, use [`/developers`](https://spoonjoy.app/developers) as the human guide and [`/api/v1/openapi.json`](https://spoonjoy.app/api/v1/openapi.json) as the machine-readable REST contract.
+
 ## Tools
 
 When registered under the server name `spoonjoy`, the harness exposes these first-class tools as `spoonjoy_health`, `spoonjoy_search_recipes`, and so on:
@@ -50,7 +52,9 @@ Spoonjoy supports three MCP auth modes:
 
 When a token is present, Spoonjoy derives ownership from the authenticated principal. Agents should omit `ownerEmail` after delegated auth; the token is the owner selector. Tool calls that try to override `ownerEmail` to another user are rejected with `403`. Without a token, owner-scoped tools require either `SPOONJOY_MCP_USER_EMAIL` or an explicit `ownerEmail`.
 
-API token lifecycle is available through MCP itself (`create_api_token`, `list_api_tokens`, `revoke_api_token`) and through the HTTP API at `/api/tokens`. The raw token is returned once; save it in the MCP client's secret store or in Ouro vault.
+API token lifecycle is available through MCP itself (`create_api_token`, `list_api_tokens`, `revoke_api_token`) and through API v1 at `/api/v1/tokens`. The raw token is returned once; save it in the MCP client's secret store or in Ouro vault.
+
+Remote OAuth clients can register with `POST /oauth/register`, complete PKCE consent at `GET /oauth/authorize`, and exchange or refresh credentials at `POST /oauth/token`. Delegated agent clients can also use `POST /api/tools/start_agent_connection` and `POST /api/tools/poll_agent_connection` to obtain a one-time owner-scoped API token without handling OAuth directly.
 
 ## Harness Config
 

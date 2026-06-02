@@ -4,8 +4,8 @@
  * under `mcp.ts`). The wire formats follow RFC 6749 / 7591 / 7636; the grant
  * logic lives in `oauth-server.server.ts`.
  *
- * Tokens are long-lived `ApiCredential`s (no refresh), so the token endpoint's
- * job is simply: validate the PKCE code grant, then mint a credential.
+ * The token endpoint validates the PKCE code grant or rotating `refresh_token`
+ * grant, then returns a fresh access token plus refresh token pair.
  */
 
 import type { PrismaClient as PrismaClientType } from "@prisma/client";

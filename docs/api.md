@@ -1,119 +1,136 @@
-# Spoonjoy HTTP API
+# Spoonjoy API
 
-Spoonjoy exposes a normal JSON REST API for non-agent clients while sharing the same operation layer used by MCP. The REST route is intentionally thin: it authenticates the caller, maps HTTP resources to Spoonjoy operations, and returns JSON envelopes.
+Spoonjoy's public developer surface starts at `/developers` and the machine-readable contract lives at `/api/v1/openapi.json`. API v1 is designed for small devices, mobile apps, scripts, browser clients, and agent clients that need to build on the public-by-default Chef graph while keeping private shopping-list data owner-scoped.
 
-## Authentication
+## Base URLs
 
-The API accepts either of these credentials:
-
-- Browser session cookie, for same-origin UI flows.
-- Bearer API token, for external clients: `Authorization: Bearer sj_...`.
-
-Create an API token while signed in:
-
-```bash
-curl -X POST https://<host>/api/tokens \
-  -H 'Content-Type: application/json' \
-  -H 'Cookie: __session=...' \
-  -d '{"name":"CLI recipe importer"}'
-```
-
-The raw token is returned once. Spoonjoy stores only a SHA-256 hash plus a short display prefix.
-
-Owner-scoped write/read-private operations derive the owner from the authenticated principal. If a bearer-authenticated request includes a different `ownerEmail`, Spoonjoy rejects it with `403` instead of allowing cross-owner access.
-
-## Rate Limiting
-
-Every `/api/*` request runs through Cloudflare's native sliding-window rate limiter before authentication:
-
-| Scope | Key | Window | Limit |
-| --- | --- | --- | --- |
-| Bearer token | SHA-256 of the token | 60 seconds | 120 requests |
-| IP (anonymous) | `CF-Connecting-IP` | 60 seconds | 60 requests |
-
-When a request exceeds the limit, the API returns:
-
-```http
-HTTP/1.1 429 Too Many Requests
-Retry-After: 60
-Content-Type: application/json
-
-{ "error": "rate_limited", "message": "Too many requests. Try again later.", "retryAfterSeconds": 60 }
-```
-
-The check runs before token validation so invalid-token requests cannot bypass the limit. CORS headers are preserved on the 429 response so browser clients can read it.
+- Production docs: `https://spoonjoy.app/developers`
+- API discovery: `https://spoonjoy.app/api/v1`
+- OpenAPI 3.1: `https://spoonjoy.app/api/v1/openapi.json`
+- Remote MCP: `https://spoonjoy.app/mcp`
 
 ## Response Shape
 
-Successful responses:
+Successful JSON responses use an envelope except for the raw OpenAPI document:
 
 ```json
 {
   "ok": true,
+  "requestId": "req_example",
   "data": {}
 }
 ```
 
-Errors:
+Errors include a stable code, message, HTTP status, and request id:
 
 ```json
 {
   "ok": false,
+  "requestId": "req_example",
   "error": {
+    "code": "authentication_required",
     "message": "Authentication required",
     "status": 401
   }
 }
 ```
 
-CORS is open for bearer-token clients with `Authorization` and `Content-Type` headers.
+## Authentication
+
+Spoonjoy accepts bearer credentials through `Authorization: Bearer sj_...`. Public recipe and cookbook reads work without a token, but authenticated requests can use scoped tokens to read private resources, mutate the owner shopping list, or manage token metadata.
+
+Supported entry points:
+
+- Personal API tokens: `GET /api/v1/tokens`, `POST /api/v1/tokens`, and `DELETE /api/v1/tokens/{credentialId}`
+- OAuth/DCR clients: `POST /oauth/register`, `GET /oauth/authorize`, and `POST /oauth/token`
+- Delegated agent connection: `POST /api/tools/start_agent_connection` and `POST /api/tools/poll_agent_connection`
+- MCP clients: `POST /mcp`
+
+OAuth access tokens are normal Spoonjoy API credentials. OAuth token responses also include a rotating `refresh_token`; each refresh-token grant rotates the presented token and rejects replay.
+
+## Scopes
+
+Scopes are attached to bearer tokens and OAuth-issued API credentials. Fine-grained REST scopes are:
+
+| Scope | Purpose |
+| --- | --- |
+| `recipes:read` | Read public recipes and recipe detail. |
+| `cookbooks:read` | Read public cookbook lists and cookbook detail. |
+| `shopping_list:read` | Read the authenticated owner's active shopping list and sync feed. |
+| `shopping_list:write` | Add, check, or remove items from the authenticated owner's shopping list. |
+| `tokens:read` | List token metadata for the authenticated owner. |
+| `tokens:write` | Create or revoke scoped personal tokens for the authenticated owner. |
+
+OAuth/MCP consent uses broader `kitchen:read` and `kitchen:write` scopes. The API maps those delegated credentials onto the owner-scoped kitchen operations while preventing cross-owner access.
+
+## Rate Limiting
+
+API v1 is rate limited by IP and credential before authentication work. Anonymous requests are keyed by IP; bearer requests are keyed by the credential hash. Rate-limited responses return HTTP `429`, a `Retry-After` header, and an error envelope with code `rate_limited`.
 
 ## Endpoints
 
-| Method | Path | Operation | Auth |
+| Method | Path | Auth | Required scopes |
 | --- | --- | --- | --- |
-| `GET` | `/api` | API discovery | Public |
-| `GET` | `/api/health` | Health | Public |
-| `GET` | `/api/tools` | Shared operation metadata | Public |
-| `GET` | `/api/search?query=&scope=&limit=` | Unified search | Public, includes private shopping-list hits only when authenticated |
-| `GET` | `/api/recipes?query=&chefEmail=&limit=` | Recipe search | Public |
-| `POST` | `/api/recipes` | Create recipe | Auth required |
-| `GET` | `/api/recipes/:id` | Get recipe | Public |
-| `POST` | `/api/recipes/:id/shopping-list` | Add recipe ingredients to shopping list | Auth required |
-| `GET` | `/api/cookbooks?query=&limit=` | List owner cookbooks | Auth required |
-| `POST` | `/api/cookbooks` | Create cookbook | Auth required |
-| `GET` | `/api/cookbooks/:id` | Get owner cookbook | Auth required |
-| `POST` | `/api/cookbooks/:id/recipes` | Add recipe to cookbook | Auth required |
-| `DELETE` | `/api/cookbooks/:id/recipes/:recipeId` | Remove recipe from cookbook | Auth required |
-| `GET` | `/api/shopping-list` | Get shopping list | Auth required |
-| `GET` | `/api/shopping-list/search?query=&limit=` | Search shopping list | Auth required |
-| `POST` | `/api/shopping-list/items` | Add shopping-list item | Auth required |
-| `PATCH` | `/api/shopping-list/items/:itemId` | Set item checked state | Auth required |
-| `DELETE` | `/api/shopping-list/items/:itemId` | Remove shopping-list item | Auth required |
-| `GET` | `/api/tokens` | List token metadata | Auth required |
-| `POST` | `/api/tokens` | Create token | Auth required |
-| `DELETE` | `/api/tokens/:credentialId` | Revoke token | Auth required |
+| `GET` | `/api/v1` | Optional | none |
+| `GET` | `/api/v1/health` | Optional | none |
+| `GET` | `/api/v1/openapi.json` | Optional | none |
+| `GET` | `/api/v1/recipes` | Optional | `recipes:read` when bearer-authenticated |
+| `GET` | `/api/v1/recipes/{id}` | Optional | `recipes:read` when bearer-authenticated |
+| `GET` | `/api/v1/cookbooks` | Optional | `cookbooks:read` when bearer-authenticated |
+| `GET` | `/api/v1/cookbooks/{id}` | Optional | `cookbooks:read` when bearer-authenticated |
+| `GET` | `/api/v1/shopping-list` | Bearer | `shopping_list:read` |
+| `GET` | `/api/v1/shopping-list/sync` | Bearer | `shopping_list:read` |
+| `POST` | `/api/v1/shopping-list/items` | Bearer | `shopping_list:write` |
+| `PATCH` | `/api/v1/shopping-list/items/{itemId}` | Bearer | `shopping_list:write` |
+| `DELETE` | `/api/v1/shopping-list/items/{itemId}` | Bearer | `shopping_list:write` |
+| `GET` | `/api/v1/tokens` | Bearer | `tokens:read` |
+| `POST` | `/api/v1/tokens` | Bearer | `tokens:write` |
+| `DELETE` | `/api/v1/tokens/{credentialId}` | Bearer | `tokens:write` |
+
+## Sync And Mutations
+
+`GET /api/v1/shopping-list/sync?cursor=...` returns owner-scoped shopping-list changes after the supplied ISO timestamp cursor. Sync responses include active rows and tombstone records so offline or tiny-device clients can remove locally cached items after server-side deletion.
+
+Shopping-list writes accept a `clientMutationId`. Reusing the same mutation id with the same request body returns the recorded response as an idempotency replay; reusing it with a different body returns `409 idempotency_conflict`.
+
+```bash
+curl -X POST https://spoonjoy.app/api/v1/shopping-list/items \
+  -H 'Authorization: Bearer sj_...' \
+  -H 'Content-Type: application/json' \
+  -d '{"clientMutationId":"device-uuid-1","name":"Eggs","quantity":12,"unit":"Each"}'
+```
 
 ## Examples
 
-Search public recipes and chefs:
+Read the public Chef graph without credentials:
 
 ```bash
-curl 'https://<host>/api/search?query=tomato&scope=all&limit=10'
+curl 'https://spoonjoy.app/api/v1/recipes?query=pasta&limit=20'
+curl 'https://spoonjoy.app/api/v1/cookbooks?limit=20'
 ```
 
-Add a shopping-list item with a bearer token:
+Create a scoped token while signed in:
 
 ```bash
-curl -X POST https://<host>/api/shopping-list/items \
-  -H 'Authorization: Bearer sj_...' \
+curl -X POST https://spoonjoy.app/api/v1/tokens \
+  -H 'Authorization: Bearer sj_owner_token' \
   -H 'Content-Type: application/json' \
-  -d '{"name":"Milk","quantity":1,"unit":"gallon","categoryKey":"dairy"}'
+  -d '{"name":"Tiny client","scopes":["recipes:read","shopping_list:read"]}'
 ```
 
-Revoke a token:
+Sync the private shopping list:
 
 ```bash
-curl -X DELETE https://<host>/api/tokens/<credentialId> \
+curl 'https://spoonjoy.app/api/v1/shopping-list/sync?cursor=2026-06-01T00:00:00.000Z' \
   -H 'Authorization: Bearer sj_...'
 ```
+
+Start delegated agent auth:
+
+```bash
+curl -X POST https://spoonjoy.app/api/tools/start_agent_connection \
+  -H 'Content-Type: application/json' \
+  -d '{"agentName":"client","baseUrl":"https://spoonjoy.app"}'
+```
+
+The legacy `/api/*` routes still exist for the app and existing integrations, but new external clients should target `/api/v1`, `/developers`, and the OpenAPI document.
