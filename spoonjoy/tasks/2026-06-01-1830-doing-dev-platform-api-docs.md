@@ -255,9 +255,9 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 **Output**: Updated `app/routes.ts`, new developers route, and passing Unit 13a tests.
 **Acceptance**: Unit 13a tests PASS; `pnpm run build` succeeds with no warnings.
 
-### ⬜ Unit 13c: `/developers` Route — Coverage & Refactor
+### ✅ Unit 13c: `/developers` Route — Coverage & Refactor
 **What**: Verify route coverage and inspect the rendered page locally for layout/text issues on desktop and mobile widths.
-**Output**: Coverage log and local render notes saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-13c-render.log`; refactors stay in `app/routes/developers.tsx` and `app/lib/api-v1-contract.server.ts`.
+**Output**: Coverage log and local render notes saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-13c-coverage.log` and `./2026-06-01-1830-doing-dev-platform-api-docs/unit-13c-render.log`; branch-coverage cleanup stayed in `app/routes/developers.tsx`.
 **Acceptance**: 100% coverage on new/changed developers route code; focused tests and build still PASS with no warnings.
 
 ### ⬜ Unit 14a: Existing Docs Drift — Tests
@@ -383,6 +383,7 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 - 2026-06-01 22:16 Unit 12c complete: covered the v1 scope fallback branch, verified 56 v1 route/OpenAPI tests, and confirmed 100% coverage for `api-v1.server.ts`, `api-v1-openapi.server.ts`, `api-v1-contract.server.ts`, and `api.v1.$.ts`; global coverage table still reports unrelated app files outside this unit
 - 2026-06-01 22:18 Unit 13a complete: added route registration, loader/meta, and rendered developer-docs tests; red run fails because `~/routes/developers` is not implemented yet
 - 2026-06-01 22:22 Unit 13b complete: registered `/developers`, added a contract-backed developer docs route, passed the focused route test, and completed a clean production build
+- 2026-06-01 22:27 Unit 13c complete: removed the developers-route fallback branch after contract-backed scope labels made it unreachable; focused route tests, route coverage, local desktop/mobile render checks, and production build all passed
 - 2026-06-01 21:27 Unit 8b complete: implemented v1 shopping-list read and sync endpoints with scope rows, active-list formatting, empty-list creation, tombstone-inclusive sync, cursor filtering, invalid cursor errors, focused route tests, typecheck, and warning-free build
 - 2026-06-01 21:33 Unit 8c complete: added sync ordering/cursor fallback coverage, hardened cursor parsing to reject non-round-tripping JavaScript date inputs, and verified 100% v1 coverage plus typecheck and warning-free build
 - 2026-06-01 21:37 Unit 9a complete: added red v1 shopping-list mutation tests for write scope rows, add/check/remove envelopes, restore/merge behavior, unknown fields, clientMutationId validation, idempotent replay/current request IDs, idempotency conflicts, and write-scope enforcement; red run fails on missing v1 mutation routes returning 404 and missing scope rows
