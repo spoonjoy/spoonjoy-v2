@@ -16,9 +16,11 @@ async function readJson(response: Response) {
 }
 
 function expectEnvelopeHeaders(response: Response, requestId: string) {
+  expect(response.headers.get("Content-Type")).toContain("application/json");
   expect(response.headers.get("X-Request-Id")).toBe(requestId);
   expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
   expect(response.headers.get("Access-Control-Allow-Headers")).toBe("Authorization, Content-Type, X-Request-Id");
+  expect(response.headers.get("Access-Control-Allow-Methods")).toBe("GET, POST, PATCH, DELETE, OPTIONS");
   expect(response.headers.get("Access-Control-Expose-Headers")).toBe("X-Request-Id");
 }
 
@@ -45,6 +47,24 @@ async function createCookbookFixture(db: Awaited<ReturnType<typeof getLocalDb>>,
   return { chef, cookbook, recipe };
 }
 
+async function addDeletedRecipeToCookbook(
+  db: Awaited<ReturnType<typeof getLocalDb>>,
+  fixture: Awaited<ReturnType<typeof createCookbookFixture>>
+) {
+  const deletedRecipe = await db.recipe.create({
+    data: {
+      ...createTestRecipe(fixture.chef.id),
+      title: `Api V1 Deleted Cookbook Recipe ${faker.string.alphanumeric(8)}`,
+      description: "Deleted recipes stay out of public cookbook details",
+      deletedAt: new Date(),
+    },
+  });
+  await db.recipeInCookbook.create({
+    data: { cookbookId: fixture.cookbook.id, recipeId: deletedRecipe.id, addedById: fixture.chef.id },
+  });
+  return deletedRecipe;
+}
+
 describe("API v1 public cookbook reads", () => {
   let db: Awaited<ReturnType<typeof getLocalDb>>;
 
@@ -59,8 +79,24 @@ describe("API v1 public cookbook reads", () => {
 
   it("searches public cookbooks anonymously with query alias and limit behavior", async () => {
     const first = await createCookbookFixture(db, "Api V1 Weeknight");
+    await addDeletedRecipeToCookbook(db, first);
     const second = await createCookbookFixture(db, "Api V1 Weeknight");
     await createCookbookFixture(db, "Api V1 Brunch");
+
+    const queryResponse = await loader(routeArgs(new UndiciRequest("http://localhost/api/v1/cookbooks?query=Api%20V1%20Weeknight&limit=20", {
+      headers: { "X-Request-Id": "req_cookbook_query" },
+    }) as unknown as Request, "cookbooks"));
+    const queryPayload = await readJson(queryResponse);
+
+    expect(queryResponse.status).toBe(200);
+    expectEnvelopeHeaders(queryResponse, "req_cookbook_query");
+    expect(queryPayload.data.query).toBe("Api V1 Weeknight");
+    expect(queryPayload.data.cookbooks.map((cookbook: { id: string }) => cookbook.id)).toEqual(
+      expect.arrayContaining([first.cookbook.id, second.cookbook.id])
+    );
+    expect(queryPayload.data.cookbooks.find((cookbook: { id: string }) => cookbook.id === first.cookbook.id)).toMatchObject({
+      recipeCount: 1,
+    });
 
     const response = await loader(routeArgs(new UndiciRequest("http://localhost/api/v1/cookbooks?q=Api%20V1%20Weeknight&limit=1", {
       headers: { "X-Request-Id": "req_cookbook_search" },
@@ -87,25 +123,25 @@ describe("API v1 public cookbook reads", () => {
       },
     });
     expect(payload.data.cookbooks).toHaveLength(1);
-    expect(payload.data.cookbooks.map((cookbook: { id: string }) => cookbook.id)).toContain(first.cookbook.id);
-    expect(payload.data.cookbooks.map((cookbook: { id: string }) => cookbook.id)).not.toContain(second.cookbook.id);
+    expect([first.cookbook.id, second.cookbook.id]).toContain(payload.data.cookbooks[0].id);
+    expect(queryPayload.data.cookbooks.find((cookbook: { id: string }) => cookbook.id === first.cookbook.id).recipeCount).toBe(1);
   });
 
   it("returns cookbook detail with active recipe summaries and scoped bearer success", async () => {
     const fixture = await createCookbookFixture(db, "Api V1 Detail Cookbook");
-    const deletedRecipe = await db.recipe.create({
-      data: {
-        ...createTestRecipe(fixture.chef.id),
-        title: `Api V1 Deleted Cookbook Recipe ${faker.string.alphanumeric(8)}`,
-        description: "Deleted recipes stay out of public cookbook details",
-        deletedAt: new Date(),
-      },
-    });
-    await db.recipeInCookbook.create({
-      data: { cookbookId: fixture.cookbook.id, recipeId: deletedRecipe.id, addedById: fixture.chef.id },
-    });
+    const deletedRecipe = await addDeletedRecipeToCookbook(db, fixture);
     const tokenOwner = await db.user.create({ data: createTestUser() });
     const token = await createApiCredential(db, tokenOwner.id, "Cookbook reader", { scopes: ["cookbooks:read"] });
+
+    const anonymous = await loader(routeArgs(new UndiciRequest(`http://localhost/api/v1/cookbooks/${fixture.cookbook.id}`, {
+      headers: { "X-Request-Id": "req_cookbook_detail_anon" },
+    }) as unknown as Request, `cookbooks/${fixture.cookbook.id}`));
+    const anonymousPayload = await readJson(anonymous);
+
+    expect(anonymous.status).toBe(200);
+    expectEnvelopeHeaders(anonymous, "req_cookbook_detail_anon");
+    expect(anonymousPayload.data.cookbook.id).toBe(fixture.cookbook.id);
+    expect(anonymousPayload.data.cookbook.recipeCount).toBe(1);
 
     const response = await loader(routeArgs(new UndiciRequest(`http://localhost/api/v1/cookbooks/${fixture.cookbook.id}`, {
       headers: { Authorization: `Bearer ${token.token}`, "X-Request-Id": "req_cookbook_detail" },
