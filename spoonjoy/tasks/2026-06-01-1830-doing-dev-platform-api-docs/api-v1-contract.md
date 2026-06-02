@@ -54,7 +54,7 @@ Runtime expansion:
 - `clientKey String`, set to `credential:${credentialId}` for bearer calls and `session:${userId}` for session calls
 - `key String`, the request `clientMutationId`
 - `operation String`, one of `shopping_list.items.create`, `shopping_list.items.check`, `shopping_list.items.delete`
-- `requestHash String`, a SHA-256 hex hash of the canonical JSON mutation body excluding no fields
+- `requestHash String`, a SHA-256 hex hash of canonical JSON containing `method`, `path`, and `body`; for `PATCH` and `DELETE`, `path` includes the concrete `itemId`
 - `responseStatus Int?`
 - `responseBody String?`, JSON string of the stored v1 envelope body
 - `expiresAt DateTime`, set by the helper to 24 hours after reservation

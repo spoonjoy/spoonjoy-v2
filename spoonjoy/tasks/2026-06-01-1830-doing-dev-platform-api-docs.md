@@ -187,7 +187,7 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 
 ### ⬜ Unit 9a: Idempotent Shopping-List Mutations — Tests
 **What**: Write failing tests for `POST /api/v1/shopping-list/items`, `PATCH /api/v1/shopping-list/items/:itemId`, and `DELETE /api/v1/shopping-list/items/:itemId` with `clientMutationId` replay behavior.
-**Output**: `test/routes/api-v1-shopping-mutations.test.ts` asserts exact request bodies, status codes, response data fields, add/check/remove success, unknown request body fields rejected with `400 validation_error`, exact replay returns the stored response with only `mutation.replayed` changed to `true`, duplicate key with different operation returns 409, duplicate key with different body returns 409, missing `clientMutationId` returns 400, and `shopping_list:write` enforcement from `api-v1-contract.md`.
+**Output**: `test/routes/api-v1-shopping-mutations.test.ts` asserts exact request bodies, status codes, response data fields, add/check/remove success, unknown request body fields rejected with `400 validation_error`, exact replay returns the stored response with only `requestId` and `mutation.replayed` changed, duplicate key with different operation returns 409, duplicate key with different body returns 409, duplicate key with different `itemId` path target returns 409, missing `clientMutationId` returns 400, and `shopping_list:write` enforcement from `api-v1-contract.md`.
 **Acceptance**: Focused tests FAIL because idempotent shopping-list mutations are not implemented.
 
 ### ⬜ Unit 9b: Idempotent Shopping-List Mutations — Implementation
@@ -196,7 +196,7 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 **Acceptance**: Unit 9a tests PASS; legacy shopping-list mutation tests still PASS; `pnpm run build` succeeds with no warnings.
 
 ### ⬜ Unit 9c: Idempotent Shopping-List Mutations — Coverage & Refactor
-**What**: Verify coverage for mutation branches: add blank text, add duplicate ingredient text, patch checked true, patch checked false, delete existing item, delete already deleted item, replay with current request ID, replay with revoked token, replay with mismatched body hash, and key reuse after idempotency expiry.
+**What**: Verify coverage for mutation branches: add blank text, add duplicate ingredient text, patch checked true, patch checked false, delete existing item, delete already deleted item, replay with current request ID, replay with revoked token, replay with mismatched body hash, replay conflict for same key with different path `itemId`, and key reuse after idempotency expiry.
 **Output**: Coverage log saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-9c-coverage.log`; refactors stay in shopping mutation/idempotency helpers and tests.
 **Acceptance**: 100% coverage on new/changed idempotent mutation code; focused tests and build still PASS with no warnings.
 
