@@ -15,6 +15,7 @@ import {
   reserveIdempotencyKey,
 } from "~/lib/api-idempotency.server";
 import { buildApiV1OpenApiDocument } from "~/lib/api-v1-openapi.server";
+import { enforceRateLimit } from "~/lib/rate-limit.server";
 import { getRequestDb } from "~/lib/route-platform.server";
 import {
   API_V1_DISCOVERY_DATA,
@@ -110,6 +111,26 @@ export function apiV1ErrorResponse(requestId: string, error: ApiV1Error): Respon
     status: error.status,
     headers: apiV1Headers(requestId),
   });
+}
+
+async function enforceApiV1RateLimit(args: ApiV1RouteArgs, requestId: string): Promise<Response | null> {
+  const env = args.context.cloudflare?.env;
+  const rateLimit = await enforceRateLimit({
+    authorization: args.request.headers.get("Authorization"),
+    ip: args.request.headers.get("CF-Connecting-IP"),
+    tokenLimiter: env?.API_TOKEN_RATE_LIMITER,
+    ipLimiter: env?.API_IP_RATE_LIMITER,
+  });
+  if (rateLimit.allowed) return null;
+
+  const response = apiV1ErrorResponse(
+    requestId,
+    new ApiV1Error("rate_limited", "Too many requests. Try again later.", {
+      retryAfterSeconds: rateLimit.retryAfterSeconds,
+    }),
+  );
+  response.headers.set("Retry-After", String(rateLimit.retryAfterSeconds));
+  return response;
 }
 
 function normalizeApiV1Path(path: string): string {
@@ -912,6 +933,9 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
     if (args.request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: apiV1Headers(requestId, false) });
     }
+
+    const throttled = await enforceApiV1RateLimit(args, requestId);
+    if (throttled) return throttled;
 
     const path = args.params["*"] ?? "";
     if (args.request.method === "GET" && path === "") {

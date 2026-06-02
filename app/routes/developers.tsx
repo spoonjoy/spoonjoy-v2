@@ -6,6 +6,7 @@ import {
   Braces,
   KeyRound,
   Link as LinkIcon,
+  Play,
   RefreshCw,
   ShieldCheck,
   ShoppingBasket,
@@ -157,10 +158,16 @@ export default function Developers() {
   return (
     <CookbookPage className="sj-developer-page">
       <CookbookHeader eyebrow="API v1" title="Spoonjoy Developer Platform" action={(
-        <Button href={openapiUrl} plain>
-          <Braces data-slot="icon" aria-hidden="true" />
-          OpenAPI JSON
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button href="/developers/playground">
+            <Play data-slot="icon" aria-hidden="true" />
+            Playground
+          </Button>
+          <Button href={openapiUrl} plain>
+            <Braces data-slot="icon" aria-hidden="true" />
+            OpenAPI JSON
+          </Button>
+        </div>
       )}>
         <Text className="text-lg/8">
           Build clients on Spoonjoy's public-by-default Chef graph, then add scoped auth only when a workflow needs private

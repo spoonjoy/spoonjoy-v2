@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Request as UndiciRequest } from "undici";
 import routes from "~/routes";
 import { action, loader } from "~/routes/api.v1.$";
+import * as apiAuth from "~/lib/api-auth.server";
 import { ApiAuthError, createApiCredential } from "~/lib/api-auth.server";
 import {
   ApiV1Error,
@@ -34,6 +35,7 @@ function expectV1Headers(response: Response, requestId: string) {
 
 describe("/api/v1 shell", () => {
   afterEach(async () => {
+    vi.restoreAllMocks();
     await cleanupDatabase();
   });
 
@@ -134,6 +136,44 @@ describe("/api/v1 shell", () => {
     });
   });
 
+  it("returns the v1 error envelope and Retry-After when the rate limiter denies a request before auth", async () => {
+    const response = await loader({
+      request: new UndiciRequest("http://localhost/api/v1/health", {
+        headers: {
+          Authorization: "Bearer sj_throttled_token",
+          "X-Request-Id": "req_rate_limited",
+        },
+      }) as unknown as Request,
+      params: { "*": "health" },
+      context: {
+        cloudflare: {
+          env: {
+            API_TOKEN_RATE_LIMITER: {
+              limit: async ({ key }: { key: string }) => {
+                expect(key).toMatch(/^token:[a-f0-9]{64}$/);
+                return { success: false };
+              },
+            },
+          },
+        },
+      },
+    } as any);
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get("Retry-After")).toBe("60");
+    expectV1Headers(response, "req_rate_limited");
+    await expect(readJson(response)).resolves.toEqual({
+      ok: false,
+      requestId: "req_rate_limited",
+      error: {
+        code: "rate_limited",
+        message: "Too many requests. Try again later.",
+        status: 429,
+        details: { retryAfterSeconds: 60 },
+      },
+    });
+  });
+
   it("returns invalid_token for optional-auth routes when a bad bearer is present", async () => {
     for (const [path, splat] of [
       ["/api/v1", ""],
@@ -156,6 +196,29 @@ describe("/api/v1 shell", () => {
         },
       });
     }
+  });
+
+  it("normalizes unexpected optional-auth failures to internal_error", async () => {
+    vi.spyOn(apiAuth, "authenticateApiRequest").mockRejectedValueOnce(new Error("auth storage unavailable"));
+
+    const response = await loader(routeArgs(new UndiciRequest("http://localhost/api/v1/health", {
+      headers: {
+        Authorization: "Bearer sj_storage_failure",
+        "X-Request-Id": "req_auth_storage_failure",
+      },
+    }) as unknown as Request, "health"));
+
+    expect(response.status).toBe(500);
+    expectV1Headers(response, "req_auth_storage_failure");
+    await expect(readJson(response)).resolves.toEqual({
+      ok: false,
+      requestId: "req_auth_storage_failure",
+      error: {
+        code: "internal_error",
+        message: "auth storage unavailable",
+        status: 500,
+      },
+    });
   });
 
   it("serves the OpenAPI shell document", async () => {

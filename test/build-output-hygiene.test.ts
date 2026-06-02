@@ -26,6 +26,15 @@ describe("build output hygiene", () => {
     })).toBe(false);
     expect(shouldLogRollupBuildMessage("warn", {
       code: "EMPTY_BUNDLE",
+      message: 'Generated an empty chunk: "api.docs".',
+      names: ["api.docs"],
+    })).toBe(false);
+    expect(shouldLogRollupBuildMessage("warn", {
+      code: "EMPTY_BUNDLE",
+      message: 'Generated an empty chunk: "api.openapi-json".',
+    })).toBe(false);
+    expect(shouldLogRollupBuildMessage("warn", {
+      code: "EMPTY_BUNDLE",
       message: 'Generated an empty chunk: "accidental-client-entry".',
       names: ["accidental-client-entry"],
     })).toBe(true);
