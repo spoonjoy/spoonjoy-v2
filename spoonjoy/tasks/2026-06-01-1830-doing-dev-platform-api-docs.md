@@ -63,99 +63,239 @@ Expose Spoonjoy as a developer-friendly platform layer on top of the existing pu
 **Output**: Notes/logs in `./2026-06-01-1830-doing-dev-platform-api-docs/` with current branch, current route files, relevant test commands, and deployment command choice.
 **Acceptance**: Artifacts exist; no code behavior changed; doing doc remains accurate after source inspection.
 
-### ⬜ Unit 1a: Credential Scopes And Idempotency Schema — Tests
-**What**: Write failing tests for adding credential scopes and idempotency storage. Cover `prisma/schema.prisma`, root migration `migrations/0015_api_scopes_and_idempotency.sql`, cleanup hooks, and auth helper behavior.
-**Output**: Tests in `test/scripts/migration-0015-api-scopes-and-idempotency.test.ts`, `test/lib/api-auth.server.test.ts`, and cleanup/setup updates as needed.
-**Acceptance**: Focused tests FAIL because `ApiCredential.scopes`, `ApiIdempotencyKey`, scope normalization, scope expansion, and scoped credential creation are not implemented yet.
+### ⬜ Unit 1a: API Credential Scopes — Tests
+**What**: Write failing tests for the credential-scope storage and parsing contract in `prisma/schema.prisma`, `migrations/0015_api_credential_scopes.sql`, `app/lib/api-auth.server.ts`, `test/setup.ts`, and `test/helpers/cleanup.ts`.
+**Output**: `test/scripts/migration-0015-api-credential-scopes.test.ts` asserts the root migration adds `ApiCredential.scopes` with the expected default; `test/lib/api-auth.server.test.ts` asserts scoped credential creation, principal scope exposure, empty-scope normalization, unknown-scope rejection, and cleanup behavior.
+**Acceptance**: Focused tests FAIL because `ApiCredential.scopes`, scope normalization, legacy scope expansion, scoped credential creation, and principal scope exposure are absent.
 
-### ⬜ Unit 1b: Credential Scopes And Idempotency Schema — Implementation
-**What**: Add `ApiCredential.scopes`, `ApiIdempotencyKey`, migration SQL, Prisma schema changes, and auth helper support for scope parsing, legacy `kitchen:read` / `kitchen:write` expansion, and scoped credential creation.
-**Output**: Updated `prisma/schema.prisma`, root migration, generated Prisma client artifacts if needed, `app/lib/api-auth.server.ts`, cleanup/setup helpers, and passing focused tests.
+### ⬜ Unit 1b: API Credential Scopes — Implementation
+**What**: Add `ApiCredential.scopes` to `prisma/schema.prisma` and `migrations/0015_api_credential_scopes.sql`; update `app/lib/api-auth.server.ts` so credentials store normalized scopes and authenticated principals expose expanded scopes.
+**Output**: Updated schema, root migration, updated cleanup hooks in `test/setup.ts` and `test/helpers/cleanup.ts`, no tracked Prisma client artifacts, and passing Unit 1a tests.
 **Acceptance**: Unit 1a tests PASS; `pnpm run build` succeeds with no warnings.
 
-### ⬜ Unit 1c: Credential Scopes And Idempotency Schema — Coverage & Refactor
-**What**: Verify coverage for new scope/idempotency code, add missing edge-case tests, and refactor names/types if needed.
-**Output**: Coverage/test output saved to artifacts; any refactor commits keep behavior unchanged.
-**Acceptance**: 100% coverage on new/changed schema helper code; focused tests and build still PASS.
+### ⬜ Unit 1c: API Credential Scopes — Coverage & Refactor
+**What**: Verify coverage for new credential-scope branches: omitted scopes, duplicate scopes, legacy `kitchen:read`, legacy `kitchen:write`, mixed legacy/fine-grained scopes, expired token with scopes, revoked token with scopes, and invalid scope input.
+**Output**: Coverage log saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-1c-coverage.log`; any refactor stays in `app/lib/api-auth.server.ts` and related tests.
+**Acceptance**: 100% coverage on new/changed API credential scope code; focused tests and build still PASS with no warnings.
 
-### ⬜ Unit 2a: `/api/v1` Contract And Scope Matrix — Tests
-**What**: Write failing tests for `api/v1` routing, response envelope, machine-readable errors, request IDs, OpenAPI endpoint, public recipe/cookbook reads, authenticated shopping-list/token surfaces, and the exact scope matrix from planning.
-**Output**: Tests in `test/routes/api-v1.test.ts` and supporting test helpers.
-**Acceptance**: Focused tests FAIL because `/api/v1/*`, public cookbook v1 resources, OpenAPI v1 endpoint, and scope enforcement do not exist yet.
+### ⬜ Unit 2a: API Idempotency Storage — Tests
+**What**: Write failing tests for persistent idempotency-key storage in `prisma/schema.prisma`, `migrations/0016_api_idempotency_keys.sql`, and cleanup hooks.
+**Output**: `test/scripts/migration-0016-api-idempotency-keys.test.ts` asserts the `ApiIdempotencyKey` table, credential/user relation columns, operation/body-hash columns, response payload/status columns, unique key constraint, and timestamp indexes; `test/lib/api-idempotency.server.test.ts` asserts missing helper exports.
+**Acceptance**: Focused tests FAIL because `ApiIdempotencyKey` and `app/lib/api-idempotency.server.ts` do not exist.
 
-### ⬜ Unit 2b: `/api/v1` Contract And Scope Matrix — Implementation
-**What**: Add route registration and implementation for `app/routes/api.v1.$.ts` plus server helpers as needed. Implement v1 discovery/health/openapi, public recipe search/detail, public cookbook search/detail, authenticated token list/create/revoke, scoped auth checks, request IDs, and machine-readable errors.
-**Output**: Updated `app/routes.ts`, new v1 API route/server helpers, updated operation registry helpers if needed, and passing focused tests.
-**Acceptance**: Unit 2a tests PASS; legacy `/api/*` tests still PASS; `pnpm run build` succeeds with no warnings.
+### ⬜ Unit 2b: API Idempotency Storage — Implementation
+**What**: Add `ApiIdempotencyKey` to `prisma/schema.prisma` and `migrations/0016_api_idempotency_keys.sql`; create `app/lib/api-idempotency.server.ts` with helpers to reserve, replay, complete, and reject mismatched idempotency keys.
+**Output**: Updated schema, root migration, updated cleanup hooks, no tracked Prisma client artifacts, new idempotency helper, and passing Unit 2a tests.
+**Acceptance**: Unit 2a tests PASS; `pnpm run build` succeeds with no warnings.
 
-### ⬜ Unit 2c: `/api/v1` Contract And Scope Matrix — Coverage & Refactor
-**What**: Verify coverage for the v1 API route/helpers and add tests for null/empty/boundary/error paths such as malformed JSON, missing scope, revoked token, anonymous public access, unknown endpoint, and CORS/OPTIONS where applicable.
-**Output**: Coverage/test output saved to artifacts; refactors keep v1 route behavior stable.
-**Acceptance**: 100% coverage on new/changed v1 API code; focused tests and build still PASS.
+### ⬜ Unit 2c: API Idempotency Storage — Coverage & Refactor
+**What**: Verify coverage for idempotency helper branches: first use, exact replay, mismatched operation, mismatched request body hash, failed stored response replay, missing credential id, and revoked credential after stored replay.
+**Output**: Coverage log saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-2c-coverage.log`; any refactor stays in `app/lib/api-idempotency.server.ts` and tests.
+**Acceptance**: 100% coverage on new/changed idempotency storage code; focused tests and build still PASS with no warnings.
 
-### ⬜ Unit 3a: Shopping-List Sync And Idempotent Mutations — Tests
-**What**: Write failing tests for v1 shopping-list sync cursor responses, deleted-item tombstones, `clientMutationId` idempotency for add/check/remove, replayed mutation responses, last-writer-wins checked/delete semantics, and scope failures.
-**Output**: Additional tests in `test/routes/api-v1.test.ts` or focused `test/lib` helpers for idempotent v1 mutations.
-**Acceptance**: Focused tests FAIL because sync cursors, tombstone payloads, and mutation replay are not implemented yet.
+### ⬜ Unit 3a: `/api/v1` Shell, Errors, And Request IDs — Tests
+**What**: Write failing tests for route registration and shared v1 response behavior in `app/routes.ts`, `app/routes/api.v1.$.ts`, and `app/lib/api-v1.server.ts`.
+**Output**: `test/routes/api-v1-shell.test.ts` asserts `GET /api/v1`, `GET /api/v1/health`, `OPTIONS /api/v1/*`, unknown endpoints, malformed JSON, machine-readable error envelopes, request ID generation, request ID echo from `X-Request-Id`, and CORS headers.
+**Acceptance**: Focused tests FAIL because `app/routes/api.v1.$.ts` and the v1 shell helpers are absent.
 
-### ⬜ Unit 3b: Shopping-List Sync And Idempotent Mutations — Implementation
-**What**: Implement shopping-list sync payloads and idempotent v1 add/check/remove behavior on top of existing shopping-list operations and the new idempotency table.
-**Output**: Updated v1 API route/server helpers and any shared formatting helpers needed for shopping-list sync.
-**Acceptance**: Unit 3a tests PASS; `pnpm run build` succeeds with no warnings.
+### ⬜ Unit 3b: `/api/v1` Shell, Errors, And Request IDs — Implementation
+**What**: Register `route("api/v1/*", "routes/api.v1.$.ts")`; create `app/routes/api.v1.$.ts` and `app/lib/api-v1.server.ts` with discovery, health, OPTIONS, request IDs, CORS, JSON body parsing, and error-envelope helpers.
+**Output**: Updated `app/routes.ts`, new v1 route/helper files, and passing Unit 3a tests.
+**Acceptance**: Unit 3a tests PASS; legacy `/api/*` tests still PASS; `pnpm run build` succeeds with no warnings.
 
-### ⬜ Unit 3c: Shopping-List Sync And Idempotent Mutations — Coverage & Refactor
-**What**: Verify 100% coverage for sync/idempotency helpers, including empty list, deleted-only changes, duplicate mutation key with mismatched operation/body, and invalid cursor/error handling.
-**Output**: Coverage/test output saved to artifacts; refactors keep v1 shopping behavior stable.
-**Acceptance**: 100% coverage on new/changed shopping-list sync/idempotency code; focused tests and build still PASS.
+### ⬜ Unit 3c: `/api/v1` Shell, Errors, And Request IDs — Coverage & Refactor
+**What**: Verify coverage for v1 shell branches: anonymous request, bearer request with invalid token, OPTIONS preflight, missing route path, JSON parse failure, thrown non-Error value, and request ID fallback.
+**Output**: Coverage log saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-3c-coverage.log`; refactors stay inside the v1 shell files and tests.
+**Acceptance**: 100% coverage on new/changed v1 shell code; focused tests and build still PASS with no warnings.
 
-### ⬜ Unit 4a: Developer Docs, OpenAPI, And Existing Docs Drift — Tests
-**What**: Write failing tests for the `/developers` route, route metadata, docs content, OpenAPI schema content, docs links to v1 endpoints, OAuth refresh-token documentation correction, and route registration.
-**Output**: Tests in `test/routes/developers.test.tsx`, `test/routes/api-v1-openapi.test.ts` if split, and docs-drift assertions as needed.
-**Acceptance**: Focused tests FAIL because `/developers`, OpenAPI schemas/examples, and docs updates are incomplete.
+### ⬜ Unit 4a: Public Recipe V1 Reads — Tests
+**What**: Write failing tests for anonymous and scoped public recipe endpoints `GET /api/v1/recipes` and `GET /api/v1/recipes/:id`.
+**Output**: `test/routes/api-v1-recipes.test.ts` asserts search query parameters, empty search results, public detail payload shape, deleted recipe exclusion, missing recipe 404 envelope, anonymous success, `recipes:read` bearer success, and scoped bearer failure without `recipes:read`.
+**Acceptance**: Focused tests FAIL because recipe reads are not implemented under `/api/v1`.
 
-### ⬜ Unit 4b: Developer Docs, OpenAPI, And Existing Docs Drift — Implementation
-**What**: Add the `/developers` route and any reusable docs/reference data. Generate or construct the supported OpenAPI document from the same v1 contract metadata used by the route. Update `docs/api.md`, `docs/claude-connector.md`, and `docs/ouroboros-mcp.md` to resolve drift and point developers to `/developers`.
-**Output**: `app/routes/developers.tsx`, route registration, v1 OpenAPI/reference helpers, updated docs, and passing focused tests.
-**Acceptance**: Unit 4a tests PASS; `pnpm run build` succeeds with no warnings.
+### ⬜ Unit 4b: Public Recipe V1 Reads — Implementation
+**What**: Implement `GET /api/v1/recipes` and `GET /api/v1/recipes/:id` in the v1 route/helper layer using existing recipe/search data access in `app/lib/spoonjoy-api.server.ts` and `app/lib/search.server.ts` without changing legacy `/api/recipes` behavior.
+**Output**: Updated v1 route/helper files and passing Unit 4a tests.
+**Acceptance**: Unit 4a tests PASS; legacy recipe API tests still PASS; `pnpm run build` succeeds with no warnings.
 
-### ⬜ Unit 4c: Developer Docs, OpenAPI, And Existing Docs Drift — Coverage & Refactor
-**What**: Verify docs/OpenAPI coverage, add tests for edge cases in schema generation, and inspect the rendered docs page for layout/text issues.
-**Output**: Coverage/test output and any local screenshot or HTML smoke notes saved to artifacts.
-**Acceptance**: 100% coverage on new docs/reference code; focused tests and build still PASS.
+### ⬜ Unit 4c: Public Recipe V1 Reads — Coverage & Refactor
+**What**: Verify coverage for recipe-read branches: blank query, `limit` boundary, malformed `limit`, deleted recipe, missing id, anonymous request with no Authorization header, and bearer token with insufficient scope.
+**Output**: Coverage log saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-4c-coverage.log`; refactors stay in v1 recipe helpers and tests.
+**Acceptance**: 100% coverage on new/changed recipe v1 code; focused tests and build still PASS with no warnings.
 
-### ⬜ Unit 5a: Client Guide And Sample Workflow — Tests
-**What**: Write failing tests or docs assertions for a complete external-client guide that creates a token, calls `/api/v1/shopping-list/sync`, performs an idempotent shopping-list mutation, and reads public recipes/cookbooks.
-**Output**: Tests that assert sample commands and docs snippets remain aligned with actual v1 endpoints and scopes.
-**Acceptance**: Tests FAIL until the guide/sample is added and aligned with implemented endpoints.
+### ⬜ Unit 5a: Public Cookbook V1 Reads — Tests
+**What**: Write failing tests for anonymous and scoped public cookbook endpoints `GET /api/v1/cookbooks` and `GET /api/v1/cookbooks/:id`.
+**Output**: `test/routes/api-v1-cookbooks.test.ts` asserts search query parameters, empty results, public cookbook detail shape, active recipe counts, deleted recipe exclusion, missing cookbook 404 envelope, anonymous success, `cookbooks:read` bearer success, and scoped bearer failure without `cookbooks:read`.
+**Acceptance**: Focused tests FAIL because cookbook reads are not implemented under `/api/v1`.
 
-### ⬜ Unit 5b: Client Guide And Sample Workflow — Implementation
-**What**: Add the guide/sample to `/developers` and repo docs. Keep it broadly useful instead of overfitting to Pebble: explain how tiny-device, mobile, CLI, web, and agent clients use the same v1 primitives.
-**Output**: Updated developer docs route/docs files and passing guide/sample tests.
-**Acceptance**: Unit 5a tests PASS; `pnpm run build` succeeds with no warnings.
+### ⬜ Unit 5b: Public Cookbook V1 Reads — Implementation
+**What**: Implement `GET /api/v1/cookbooks` and `GET /api/v1/cookbooks/:id` in the v1 route/helper layer using existing cookbook/search data access from `app/lib/spoonjoy-api.server.ts` and `app/lib/search.server.ts` without changing legacy `/api/cookbooks` owner-scoped behavior.
+**Output**: Updated v1 route/helper files and passing Unit 5a tests.
+**Acceptance**: Unit 5a tests PASS; legacy cookbook API tests still PASS; `pnpm run build` succeeds with no warnings.
 
-### ⬜ Unit 5c: Client Guide And Sample Workflow — Coverage & Refactor
-**What**: Verify guide/sample coverage and polish wording for public-by-default Chef graph, private shopping list, scopes, sync, and idempotency.
-**Output**: Coverage/test output saved to artifacts; no unsupported claims in docs.
-**Acceptance**: 100% coverage on new/changed guide-support code; focused tests and build still PASS.
+### ⬜ Unit 5c: Public Cookbook V1 Reads — Coverage & Refactor
+**What**: Verify coverage for cookbook-read branches: blank query, `limit` boundary, malformed `limit`, cookbook with zero active recipes, missing id, anonymous request with no Authorization header, and bearer token with insufficient scope.
+**Output**: Coverage log saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-5c-coverage.log`; refactors stay in v1 cookbook helpers and tests.
+**Acceptance**: 100% coverage on new/changed cookbook v1 code; focused tests and build still PASS with no warnings.
 
-### ⬜ Unit 6a: Full Verification — Tests
-**What**: Run the full required verification gate before deployment: targeted tests, full coverage, typecheck, and build.
-**Output**: Logs in artifacts for `pnpm test:coverage`, `pnpm run typecheck`, and `pnpm run build`.
+### ⬜ Unit 6a: Personal API Token V1 Metadata — Tests
+**What**: Write failing tests for authenticated personal API token metadata endpoints `GET /api/v1/tokens`, `POST /api/v1/tokens`, and `DELETE /api/v1/tokens/:credentialId`.
+**Output**: `test/routes/api-v1-tokens.test.ts` asserts list metadata, create token one-time secret response, requested scopes normalization, default scopes, revoke behavior, self-revoke behavior, missing auth 401, invalid JSON 400, and `tokens:read` / `tokens:write` enforcement.
+**Acceptance**: Focused tests FAIL because token metadata endpoints are not implemented under `/api/v1`.
+
+### ⬜ Unit 6b: Personal API Token V1 Metadata — Implementation
+**What**: Implement the three token metadata endpoints in the v1 route/helper layer using `createApiCredential`, `revoke_api_token`, and existing credential formatting rules from `app/lib/api-auth.server.ts` and `app/lib/spoonjoy-api.server.ts`.
+**Output**: Updated v1 route/helper files, token response formatting implemented in `app/lib/api-v1.server.ts`, and passing Unit 6a tests.
+**Acceptance**: Unit 6a tests PASS; legacy `/api/tokens` tests still PASS; `pnpm run build` succeeds with no warnings.
+
+### ⬜ Unit 6c: Personal API Token V1 Metadata — Coverage & Refactor
+**What**: Verify coverage for token endpoint branches: no bearer token, invalid bearer token, revoked bearer token, missing scope, duplicate token name, blank token name, invalid requested scope, revoke missing credential id, and revoke credential owned by another chef.
+**Output**: Coverage log saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-6c-coverage.log`; refactors stay in token helpers and tests.
+**Acceptance**: 100% coverage on new/changed token v1 code; focused tests and build still PASS with no warnings.
+
+### ⬜ Unit 7a: V1 Scope Matrix Enforcement — Tests
+**What**: Write failing tests for the exact first-slice scope matrix from the planning doc across all implemented `/api/v1` endpoints.
+**Output**: `test/routes/api-v1-scopes.test.ts` asserts anonymous access for discovery/health/openapi/recipes/cookbooks; authenticated read/write scope requirements for shopping-list and token surfaces; legacy `kitchen:read` and `kitchen:write` compatibility; and no scope requirement for authenticated discovery.
+**Acceptance**: Focused tests FAIL until v1 routes centralize and enforce the planning-doc scope matrix.
+
+### ⬜ Unit 7b: V1 Scope Matrix Enforcement — Implementation
+**What**: Add a single v1 scope-matrix helper in `app/lib/api-v1.server.ts` and route all implemented v1 endpoints through it before operation dispatch or database access.
+**Output**: Updated v1 helper/route files and passing Unit 7a tests.
+**Acceptance**: Unit 7a tests PASS; previously completed v1 route tests still PASS; `pnpm run build` succeeds with no warnings.
+
+### ⬜ Unit 7c: V1 Scope Matrix Enforcement — Coverage & Refactor
+**What**: Verify coverage for every scope-matrix row and for both fine-grained and legacy-compatible scope paths.
+**Output**: Coverage log saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-7c-coverage.log`; refactors stay in v1 auth/scope helpers and tests.
+**Acceptance**: 100% coverage on new/changed scope-matrix code; focused tests and build still PASS with no warnings.
+
+### ⬜ Unit 8a: Shopping-List Read, Sync, And Tombstones — Tests
+**What**: Write failing tests for `GET /api/v1/shopping-list` and `GET /api/v1/shopping-list/sync`.
+**Output**: `test/routes/api-v1-shopping-sync.test.ts` asserts authenticated list payloads, cursor filtering by `updatedAt`, empty list, deleted-item tombstones from `ShoppingListItem.deletedAt`, invalid cursor error envelope, next cursor presence, `shopping_list:read` success, and missing read scope failure.
+**Acceptance**: Focused tests FAIL because shopping-list v1 read/sync payloads and tombstones are not implemented.
+
+### ⬜ Unit 8b: Shopping-List Read, Sync, And Tombstones — Implementation
+**What**: Implement shopping-list list and sync endpoints in the v1 route/helper layer using existing `ShoppingListItem` fields `updatedAt`, `deletedAt`, `checked`, and `checkedAt`.
+**Output**: Updated v1 route/helper files and passing Unit 8a tests.
+**Acceptance**: Unit 8a tests PASS; legacy shopping-list API tests still PASS; `pnpm run build` succeeds with no warnings.
+
+### ⬜ Unit 8c: Shopping-List Read, Sync, And Tombstones — Coverage & Refactor
+**What**: Verify coverage for sync branches: no cursor, valid cursor, future cursor, invalid cursor, deleted-only page, checked item, unchecked item, and empty authenticated list.
+**Output**: Coverage log saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-8c-coverage.log`; refactors stay in shopping sync helpers and tests.
+**Acceptance**: 100% coverage on new/changed shopping-list read/sync code; focused tests and build still PASS with no warnings.
+
+### ⬜ Unit 9a: Idempotent Shopping-List Mutations — Tests
+**What**: Write failing tests for `POST /api/v1/shopping-list/items`, `PATCH /api/v1/shopping-list/items/:itemId`, and `DELETE /api/v1/shopping-list/items/:itemId` with `clientMutationId` replay behavior.
+**Output**: `test/routes/api-v1-shopping-mutations.test.ts` asserts add/check/remove success, exact replay returns the stored response, duplicate key with different operation returns 409, duplicate key with different body returns 409, missing `clientMutationId` returns 400, and `shopping_list:write` enforcement.
+**Acceptance**: Focused tests FAIL because idempotent shopping-list mutations are not implemented.
+
+### ⬜ Unit 9b: Idempotent Shopping-List Mutations — Implementation
+**What**: Implement add/check/remove mutation endpoints using `app/lib/api-idempotency.server.ts` for key reservation/replay and existing shopping-list operation behavior from `app/lib/spoonjoy-api.server.ts`.
+**Output**: Updated v1 route/helper files and passing Unit 9a tests.
+**Acceptance**: Unit 9a tests PASS; legacy shopping-list mutation tests still PASS; `pnpm run build` succeeds with no warnings.
+
+### ⬜ Unit 9c: Idempotent Shopping-List Mutations — Coverage & Refactor
+**What**: Verify coverage for mutation branches: add blank text, add duplicate ingredient text, patch checked true, patch checked false, delete existing item, delete already deleted item, replay with revoked token, and replay with mismatched body hash.
+**Output**: Coverage log saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-9c-coverage.log`; refactors stay in shopping mutation/idempotency helpers and tests.
+**Acceptance**: 100% coverage on new/changed idempotent mutation code; focused tests and build still PASS with no warnings.
+
+### ⬜ Unit 10a: Shopping-List Conflict And Error Semantics — Tests
+**What**: Write failing tests for documented last-writer-wins checked/delete behavior and machine-readable shopping-list mutation errors.
+**Output**: `test/routes/api-v1-shopping-conflicts.test.ts` asserts remove after check, check after remove, stale client timestamp ignored in favor of server write order, unknown item 404 envelope, invalid item id 404 envelope, and malformed mutation JSON 400 envelope.
+**Acceptance**: Focused tests FAIL until shopping-list v1 mutations have explicit conflict/error semantics.
+
+### ⬜ Unit 10b: Shopping-List Conflict And Error Semantics — Implementation
+**What**: Make v1 shopping-list mutation helpers consistently apply server-order last-writer-wins for checked/delete state and return stable error codes for missing item, invalid body, and conflict/idempotency mismatch cases.
+**Output**: Updated v1 shopping mutation helpers and passing Unit 10a tests.
+**Acceptance**: Unit 10a tests PASS; Unit 9 mutation replay tests still PASS; `pnpm run build` succeeds with no warnings.
+
+### ⬜ Unit 10c: Shopping-List Conflict And Error Semantics — Coverage & Refactor
+**What**: Verify coverage for all machine-readable shopping-list error codes and last-writer-wins branches.
+**Output**: Coverage log saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-10c-coverage.log`; refactors stay in shopping mutation helpers and tests.
+**Acceptance**: 100% coverage on new/changed conflict/error code; focused tests and build still PASS with no warnings.
+
+### ⬜ Unit 11a: OpenAPI Contract Metadata — Tests
+**What**: Write failing tests for OpenAPI generation from supported v1 route metadata.
+**Output**: `test/lib/api-v1-openapi.server.test.ts` asserts OpenAPI `3.1.0`, server URL, paths for every first-slice endpoint, request schemas, response schemas, examples, error schemas, auth requirements, and scope requirements; `test/routes/api-v1-openapi.test.ts` asserts `GET /api/v1/openapi.json` serves the same document.
+**Acceptance**: Focused tests FAIL because OpenAPI metadata and endpoint are absent or incomplete.
+
+### ⬜ Unit 11b: OpenAPI Contract Metadata — Implementation
+**What**: Create `app/lib/api-v1-openapi.server.ts` and connect `GET /api/v1/openapi.json` to it; use the same path/scope metadata constants consumed by the v1 route helper.
+**Output**: New OpenAPI helper, updated v1 route/helper files, and passing Unit 11a tests.
+**Acceptance**: Unit 11a tests PASS; `pnpm run build` succeeds with no warnings.
+
+### ⬜ Unit 11c: OpenAPI Contract Metadata — Coverage & Refactor
+**What**: Verify coverage for schema generation branches: public endpoint, bearer-protected endpoint, write-scope endpoint, path parameter endpoint, query parameter endpoint, and error response generation.
+**Output**: Coverage log saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-11c-coverage.log`; refactors keep OpenAPI output stable.
+**Acceptance**: 100% coverage on new/changed OpenAPI code; focused tests and build still PASS with no warnings.
+
+### ⬜ Unit 12a: `/developers` Route — Tests
+**What**: Write failing tests for the deployed developer-docs page route, route metadata, and route registration.
+**Output**: `test/routes/developers.test.tsx` asserts page title/meta, visible `/api/v1` endpoints, auth mode distinctions, public-by-default Chef graph language, scope list, idempotency/sync guidance, OpenAPI link, OAuth/DCR/MCP route references, and no Pebble-specific framing.
+**Acceptance**: Focused tests FAIL because `/developers` is not registered or rendered.
+
+### ⬜ Unit 12b: `/developers` Route — Implementation
+**What**: Add `route("developers", "routes/developers.tsx")`; implement `app/routes/developers.tsx` using existing page primitives from `app/components/cookbook/page.tsx` and reference data from `app/lib/api-v1-openapi.server.ts`.
+**Output**: Updated `app/routes.ts`, new developers route, and passing Unit 12a tests.
+**Acceptance**: Unit 12a tests PASS; `pnpm run build` succeeds with no warnings.
+
+### ⬜ Unit 12c: `/developers` Route — Coverage & Refactor
+**What**: Verify route coverage and inspect the rendered page locally for layout/text issues on desktop and mobile widths.
+**Output**: Coverage log and local render notes saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-12c-render.log`; refactors stay in `app/routes/developers.tsx` and shared reference data.
+**Acceptance**: 100% coverage on new/changed developers route code; focused tests and build still PASS with no warnings.
+
+### ⬜ Unit 13a: Existing Docs Drift — Tests
+**What**: Write failing docs assertions for `docs/api.md`, `docs/claude-connector.md`, `docs/ouroboros-mcp.md`, and `app/lib/oauth-routes.server.ts`.
+**Output**: `test/docs/developer-platform-docs.test.ts` asserts the docs mention `/developers`, `/api/v1`, refresh-token behavior, OAuth/DCR routes, MCP `/mcp`, delegated `/api/tools/start_agent_connection` and `/api/tools/poll_agent_connection`, and do not claim remote MCP has no refresh tokens.
+**Acceptance**: Focused tests FAIL because existing docs/comment drift remains.
+
+### ⬜ Unit 13b: Existing Docs Drift — Implementation
+**What**: Update `docs/api.md`, `docs/claude-connector.md`, `docs/ouroboros-mcp.md`, and the stale refresh-token comment in `app/lib/oauth-routes.server.ts` to match implemented REST/MCP/OAuth behavior and point developers to `/developers`.
+**Output**: Updated docs/comment files and passing Unit 13a tests.
+**Acceptance**: Unit 13a tests PASS; `pnpm run build` succeeds with no warnings.
+
+### ⬜ Unit 13c: Existing Docs Drift — Coverage & Refactor
+**What**: Verify docs assertions cover every drift item from the planning doc and record a no-drift checklist.
+**Output**: Verification log saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-13c-docs-drift.log`; docs wording changes remain limited to the files named in Unit 13b.
+**Acceptance**: Docs-drift tests PASS; no stale no-refresh-token claim remains; build still PASS with no warnings.
+
+### ⬜ Unit 14a: External Client Guide And Sample — Tests
+**What**: Write failing docs assertions for a complete external-client guide that reads public recipes/cookbooks, creates a scoped personal token, syncs a private shopping list, and performs an idempotent shopping-list mutation.
+**Output**: `test/docs/developer-platform-guide.test.ts` asserts sample curl commands and prose reference actual implemented paths, required scopes, `Authorization: Bearer`, `clientMutationId`, sync cursor, and OpenAPI URL.
+**Acceptance**: Focused tests FAIL until the guide/sample is added and aligned with implemented endpoints.
+
+### ⬜ Unit 14b: External Client Guide And Sample — Implementation
+**What**: Add the guide/sample to `/developers` and `docs/api.md`, framed for tiny-device, mobile, CLI/script, browser, and agent clients without naming Pebble as the primary target.
+**Output**: Updated developer docs route/docs file and passing Unit 14a tests.
+**Acceptance**: Unit 14a tests PASS; `pnpm run build` succeeds with no warnings.
+
+### ⬜ Unit 14c: External Client Guide And Sample — Coverage & Refactor
+**What**: Verify guide/sample coverage and polish wording for public-by-default Chef graph, private shopping list, scopes, sync, idempotency, and client profile breadth.
+**Output**: Coverage/log output saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-14c-guide.log`; no unsupported endpoint claims remain in route or markdown docs.
+**Acceptance**: Guide/sample assertions PASS; focused tests and build still PASS with no warnings.
+
+### ⬜ Unit 15a: Full Verification Gate
+**What**: Run the full required local verification gate before deployment.
+**Output**: Logs saved to artifacts for `pnpm test:coverage`, `pnpm run typecheck`, `pnpm run build`, and a targeted v1/docs test run.
 **Acceptance**: All verification commands PASS with no warnings.
 
-### ⬜ Unit 6b: Deploy And Live API Docs Verification — Implementation
-**What**: Deploy to production using the repo-supported deploy command, then live-smoke the deployed docs/spec/API endpoints.
-**Output**: Deploy log and live verification logs in artifacts. Verify at minimum `https://spoonjoy.app/developers`, `https://spoonjoy.app/api/v1`, `https://spoonjoy.app/api/v1/openapi.json`, a public recipe/cookbook endpoint or empty success response, and public docs links.
-**Acceptance**: Production deploy succeeds; live docs URL and v1 API endpoints return expected responses with no warnings in logs available to this task.
+### ⬜ Unit 16a: Production Deploy
+**What**: Deploy to production using `pnpm run deploy:auto`.
+**Output**: Deploy log saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-16a-deploy.log`.
+**Acceptance**: Production deploy succeeds with no warnings requiring code changes.
 
-### ⬜ Unit 6c: Final Documentation Sync And Completion
-**What**: Mark completion criteria in doing/planning docs based on evidence, send the repo-required Slugger completion message, and prepare the final user-facing link.
-**Output**: Updated task docs, final verification summary, and Slugger notification.
+### ⬜ Unit 16b: Live API Docs Verification
+**What**: Live-smoke production endpoints after deploy.
+**Output**: Live verification log saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-16b-live-smoke.log` covering `https://spoonjoy.app/developers`, `https://spoonjoy.app/api/v1`, `https://spoonjoy.app/api/v1/health`, `https://spoonjoy.app/api/v1/openapi.json`, `https://spoonjoy.app/api/v1/recipes`, and `https://spoonjoy.app/api/v1/cookbooks`.
+**Acceptance**: Deployed docs URL and v1 API endpoints return expected status codes and response shapes.
+
+### ⬜ Unit 17a: Final Documentation Sync And Completion
+**What**: Mark completion criteria in doing/planning docs based on evidence, send the repo-required Slugger completion message, and prepare the final user-facing docs link.
+**Output**: Updated task docs, final verification summary in artifacts, and `ouro msg --to slugger "Done: ..."` notification.
 **Acceptance**: Doing doc status is `done`, planning criteria are synced, all commits are atomic, branch is pushed if a remote is configured, and the final response can give the deployed developer docs URL.
 
 ## Execution
 - **TDD strictly enforced**: tests → red → implement → green → refactor
-- Commit after each phase (1a, 1b, 1c)
+- Commit after each unit phase (`Xa`, `Xb`, `Xc`) or single-step unit (`15a`, `16a`, `16b`, `17a`)
 - Push after each unit complete
 - Run full test suite before marking unit done
 - **All artifacts**: Save outputs, logs, data to `./2026-06-01-1830-doing-dev-platform-api-docs/` directory
