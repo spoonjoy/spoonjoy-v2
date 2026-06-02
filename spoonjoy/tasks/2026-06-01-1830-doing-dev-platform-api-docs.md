@@ -165,7 +165,7 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 **Output**: Updated v1 helper/route files and passing Unit 7a tests.
 **Acceptance**: Unit 7a tests PASS; previously completed v1 route tests still PASS; `pnpm run build` succeeds with no warnings.
 
-### ⬜ Unit 7c: Public And Token Scope Enforcement — Coverage & Refactor
+### ✅ Unit 7c: Public And Token Scope Enforcement — Coverage & Refactor
 **What**: Verify coverage for the discovery, recipe, cookbook, and token rows of the scope matrix, including both fine-grained and legacy-compatible scope paths.
 **Output**: Coverage log saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-7c-coverage.log`; refactors stay in v1 auth/scope helpers and tests.
 **Acceptance**: 100% coverage on new/changed public/token scope enforcement code; focused tests and build still PASS with no warnings.
@@ -375,3 +375,4 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 - 2026-06-01 21:09 Unit 7a complete: added public/token scope-matrix tests covering optional discovery routes, anonymous public reads, fine-grained and legacy scope success/failure, session token access, and a red structural assertion for missing `resolveApiV1ScopeRequirement`
 - 2026-06-01 21:12 Addressed Unit 7a reviewer finding by adding explicit `recipes:read` and `cookbooks:read` bearer success assertions for public recipe/cookbook list and detail routes
 - 2026-06-01 21:18 Unit 7b complete: added centralized v1 scope-matrix resolution and routed discovery, health, OpenAPI, recipe, cookbook, and token metadata endpoints through it; focused v1 route tests, 100% v1 coverage, typecheck, and warning-free build passed
+- 2026-06-01 21:20 Unit 7c complete: verified 100% coverage on v1 scope enforcement and shell route files plus warning-free build; no additional refactor required
