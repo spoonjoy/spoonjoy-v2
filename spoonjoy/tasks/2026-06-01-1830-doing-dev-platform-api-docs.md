@@ -215,7 +215,7 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 **Output**: Coverage log saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-10c-coverage.log`; refactors stay in shopping mutation helpers and tests.
 **Acceptance**: 100% coverage on new/changed conflict/error code; focused tests and build still PASS with no warnings.
 
-### ⬜ Unit 11a: OpenAPI Contract Metadata — Tests
+### ✅ Unit 11a: OpenAPI Contract Metadata — Tests
 **What**: Write failing tests for OpenAPI generation from supported v1 route metadata.
 **Output**: `test/lib/api-v1-openapi.server.test.ts` asserts OpenAPI `3.1.0`, server URL, paths for every first-slice endpoint, request schemas, response schemas, examples, error schemas, auth requirements, and `x-scopes` requirements from `app/lib/api-v1-contract.server.ts`; `test/routes/api-v1-openapi.test.ts` asserts `GET /api/v1/openapi.json` serves the same document.
 **Acceptance**: Focused tests FAIL because OpenAPI metadata and endpoint are absent or incomplete.
@@ -387,3 +387,4 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 - 2026-06-01 21:48 Unit 10a complete: added red conflict/error tests for server-order check/delete/restore semantics with ignored client timestamp fields, not-found item error details, invalid item ids, and malformed mutation JSON; red run fails on timestamp fields being treated as unknown and missing item details absent
 - 2026-06-01 21:49 Unit 10b complete: accepted and ignored client timestamp fields for check/delete mutation bodies, added machine-readable missing item details, and verified conflict tests, mutation tests, typecheck, and warning-free build
 - 2026-06-01 21:50 Unit 10c complete: verified machine-readable shopping-list error and last-writer-wins branches with 100% v1/idempotency coverage, typecheck, and warning-free build; no additional refactor required
+- 2026-06-01 21:52 Unit 11a complete: added red OpenAPI helper and route tests for top-level metadata, every first-slice path, scopes/auth/security, request/response schemas, examples, error schemas, parameters, strict reusable schemas, and raw `/api/v1/openapi.json`; red run fails because `app/lib/api-v1-openapi.server.ts` does not exist
