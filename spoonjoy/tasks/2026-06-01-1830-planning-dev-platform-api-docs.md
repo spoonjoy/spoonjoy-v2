@@ -88,4 +88,4 @@ The long-term moon includes many client profiles, but the first implementation s
 - 2026-06-01 18:31 Created
 - 2026-06-01 18:32 Tightened Tinfoil Hat findings: concrete docs route, OAuth-doc drift, and deployed verification
 - 2026-06-01 18:32 Marked planning doc NEEDS_REVIEW for sub-agent reviewer gate
-- 2026-06-01 18:35 Addressed reviewer findings: first v1 resources, scope taxonomy, feed boundary, and shopping-list safety semantics
+- 2026-06-01 18:34 Addressed reviewer findings: first v1 resources, scope taxonomy, feed boundary, and shopping-list safety semantics
