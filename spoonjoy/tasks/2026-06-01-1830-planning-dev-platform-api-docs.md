@@ -17,12 +17,12 @@ Expose Spoonjoy as a developer-friendly platform layer on top of the existing pu
 - Establish a canonical public platform frame: Spoonjoy is a public-by-default Chef graph; recipes, chefs, cookbooks, spoons/cooks, and public feeds are public surfaces unless explicitly protected; shopping lists, credentials, account settings, drafts/import previews, and other private or mutating surfaces require authenticated scoped access.
 - Create versioned API contracts for developer clients, centered on `/api/v1` resources rather than exposing raw operation names as the public contract.
 - Keep the existing shared operation layer as the implementation spine for REST, MCP, and future SDK/docs generation.
-- Add or harden machine-readable API documentation, including OpenAPI/JSON Schema coverage, stable response/error shapes, examples, and a deployed docs page suitable for external developers.
+- Add or harden machine-readable API documentation, including OpenAPI/JSON Schema coverage, stable response/error shapes, examples, and a deployed `/developers` docs page suitable for external developers.
 - Add fine-grained scope and credential concepts for public clients, personal API tokens, OAuth/PKCE clients, MCP clients, and device/delegated auth, without requiring developers to understand `ownerEmail` or database-user internals.
 - Add integration-safety primitives needed by multiple client classes: idempotency keys, request IDs, rate-limit headers or docs, conflict-aware writes where needed, cursor pagination/sync, tombstones for deletions, and machine-readable errors.
 - Prioritize a small proving slice that exercises the platform substrate end to end, with shopping-list sync and mutation as the first private/authenticated workflow.
 - Document client profiles and examples for web/browser clients, native/mobile clients, wearable/tiny-device clients, AI/MCP clients, CLI/scripts, portability/import-export bridges, social/public-feed clients, kitchen hardware, and developer tooling.
-- Include deployed verification of the public docs URL and API docs/spec endpoints before completion.
+- Include deployed verification of `https://spoonjoy.app/developers` and relevant API docs/spec endpoints before completion.
 
 ### Out of Scope
 - A workspace, organization, household, or paid-creator ownership model as a prerequisite for this platform layer.
@@ -34,11 +34,12 @@ Expose Spoonjoy as a developer-friendly platform layer on top of the existing pu
 - A broad redesign of existing Spoonjoy UI unrelated to developer settings/docs, token/app management, or audit visibility.
 
 ## Completion Criteria
-- [ ] Public developer docs are deployed and reachable at a stable URL that can be sent to an external developer.
+- [ ] Public developer docs are deployed and reachable at `https://spoonjoy.app/developers`.
 - [ ] A versioned `/api/v1` contract exists for the first supported resources and does not require clients to call raw `/api/tools/:operation` for ordinary workflows.
 - [ ] Machine-readable API reference exists for the supported developer surface, with request schemas, response schemas, examples, errors, auth requirements, and scope requirements.
 - [ ] Docs clearly explain public-by-default Chef graph semantics and authenticated/private or mutating surfaces.
 - [ ] Auth docs and implementation distinguish personal API tokens, OAuth/PKCE apps, MCP clients, and delegated/device-style authorization.
+- [ ] Existing OAuth/API/MCP docs drift is resolved, including refresh-token behavior and any mismatch between REST coverage and operation-layer coverage.
 - [ ] Fine-grained scopes are represented in docs and enforced for the supported v1 surface.
 - [ ] Integration-safety primitives are implemented and documented for the proving slice: idempotency, machine-readable errors, request IDs, cursor/sync behavior, and deletion/tombstone behavior where applicable.
 - [ ] At least one sample or guide demonstrates an external client using the docs to authenticate and operate against Spoonjoy.
@@ -63,6 +64,7 @@ Expose Spoonjoy as a developer-friendly platform layer on top of the existing pu
 - Treat Spoonjoy content as public by default for recipes, chefs, cookbooks, spoons/cooks, and public feeds; protect shopping lists, credentials, account settings, drafts/import previews, and mutating actions through authenticated scoped access.
 - Do not make workspace/org/household ownership a prerequisite for the first developer-platform implementation; defer it as a separate platform-scale product expansion.
 - Make versioned REST resources and machine-readable docs the primary public developer contract; keep MCP and raw operation metadata aligned but not the default human-developer interface.
+- Use `/developers` as the public developer documentation route for the first deployed docs surface.
 - Use shopping-list sync/mutation as the first private proving slice because it exercises auth, scopes, idempotency, sync, tombstones, errors, docs, and real external-client ergonomics.
 - Use sub-agent reviewer gates for planning and doing review passes, then use work-doer for execution after the reviewed doing document is ready.
 
@@ -81,7 +83,8 @@ Expose Spoonjoy as a developer-friendly platform layer on top of the existing pu
 - Ten client advocate passes from this planning session: wearable/tiny device, native mobile, browser/web, AI/MCP, CLI/scripts, kitchen hardware, portability/import-export, social/public feeds, business/creator, and developer ecosystem.
 
 ## Notes
-The long-term moon includes many client profiles, but the first implementation should build platform primitives once and prove them through a narrow slice rather than creating one-off Pebble, mobile, or agent APIs. The first slice should leave room for future archive/export, public feed, webhook, SDK, and app-registration work without forcing those domains into the initial PRs.
+The long-term moon includes many client profiles, but the first implementation should build platform primitives once and prove them through a narrow slice rather than creating one-off Pebble, mobile, or agent APIs. The first slice should leave room for future archive/export, public feed, webhook, SDK, and app-registration work without forcing those domains into the initial PRs. The required deployment target is Spoonjoy production, so doing units must include build/test verification, deployment, and live smoke checks before completion.
 
 ## Progress Log
 - 2026-06-01 18:31 Created
+- 2026-06-01 18:31 Tightened Tinfoil Hat findings: concrete docs route, OAuth-doc drift, and deployed verification
