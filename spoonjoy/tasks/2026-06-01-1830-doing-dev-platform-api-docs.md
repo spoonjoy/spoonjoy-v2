@@ -336,3 +336,4 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 - 2026-06-01 19:19 Addressed Tinfoil Round 3 findings: bearer token creation cannot escalate scopes and expired idempotency keys can be reused after cleanup
 - 2026-06-01 19:22 Tinfoil scrutiny converged after token-scope and idempotency-expiry fixes
 - 2026-06-01 19:25 Addressed Stranger scrutiny findings: public cookbook reads use new public data access and OAuth refresh-token drift covers both server comments
+- 2026-06-01 19:28 Addressed Stranger Round 2 finding: idempotency hashes include method, concrete path, and body so same-key/different-item conflicts are detected
