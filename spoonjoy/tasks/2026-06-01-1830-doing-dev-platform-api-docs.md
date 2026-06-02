@@ -135,7 +135,7 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 **Output**: Updated v1 route/helper files and passing Unit 5a tests.
 **Acceptance**: Unit 5a tests PASS; legacy cookbook API tests still PASS; `pnpm run build` succeeds with no warnings.
 
-### ⬜ Unit 5c: Public Cookbook V1 Reads — Coverage & Refactor
+### ✅ Unit 5c: Public Cookbook V1 Reads — Coverage & Refactor
 **What**: Verify coverage for cookbook-read branches: blank query, `limit` boundary, malformed `limit`, cookbook with zero active recipes, missing id, anonymous request with no Authorization header, and bearer token with insufficient scope.
 **Output**: Coverage log saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-5c-coverage.log`; refactors stay in v1 cookbook helpers and tests.
 **Acceptance**: 100% coverage on new/changed cookbook v1 code; focused tests and build still PASS with no warnings.
@@ -365,3 +365,4 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 - 2026-06-01 20:39 Addressed Unit 5a reviewer findings by adding canonical `query`, anonymous detail success, list deleted-recipe count exclusion, full v1 header assertions on cookbook errors, and non-brittle limit assertions; red run still fails on unimplemented v1 cookbook routes
 - 2026-06-01 20:41 Unit 5b complete: implemented public cookbook list/detail routes, active recipe counts, deleted recipe exclusion, optional-auth scope checks, query/q and limit handling, with green v1/legacy route tests, typecheck, and warning-free build
 - 2026-06-01 20:45 Addressed Unit 5a Round 2 reviewer findings by covering `cookbooks:read` bearer success on cookbook list and insufficient-scope bearer failure on cookbook detail; regenerated red evidence from the pre-implementation worktree and green Unit 5b logs
+- 2026-06-01 20:48 Unit 5c complete: added cookbook branch coverage for blank/default limits, `limit=50`, zero active recipes, ordered active recipes, malformed limits, missing cookbooks, anonymous access, and bearer insufficient scope; simplified active recipe filtering and verified 100% coverage on v1 shell/recipe/cookbook files plus warning-free build
