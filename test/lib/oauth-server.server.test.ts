@@ -266,6 +266,7 @@ describe("connector token issuance + rotation", () => {
 
     const credential = await db.apiCredential.findFirst({ where: { userId } });
     expect(credential?.expiresAt).toBeInstanceOf(Date);
+    expect(credential?.scopes).toBe("kitchen:read");
     expect(await db.oAuthRefreshToken.count({ where: { userId } })).toBe(1);
   });
 

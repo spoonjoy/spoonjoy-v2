@@ -130,6 +130,18 @@ describe("agent connection requests", () => {
     });
     const principal = await authenticateApiToken(db, tokenResult.token as string);
     expect(principal.email).toBe(user.email);
+    expect(principal.scopes).toEqual([
+      "cookbooks:read",
+      "public:read",
+      "recipes:read",
+      "shopping_list:read",
+      "shopping_list:write",
+      "tokens:read",
+      "tokens:write",
+    ]);
+    await expect(db.apiCredential.findUniqueOrThrow({
+      where: { id: (tokenResult.credential as { id: string }).id },
+    })).resolves.toMatchObject({ scopes: "kitchen:read kitchen:write" });
 
     await expect(pollAgentConnection(db, {
       deviceCode: started.deviceCode,

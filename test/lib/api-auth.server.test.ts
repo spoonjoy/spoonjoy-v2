@@ -10,6 +10,7 @@ import {
   authenticateApiToken,
   createApiCredential,
   extractBearerToken,
+  normalizeCredentialScopes,
   generateApiToken,
   hashApiToken,
   principalFromUserEmail,
@@ -69,6 +70,7 @@ describe("API authentication helpers", () => {
       userId: user.id,
       name: "Harness token",
       tokenPrefix: created.token.slice(0, 12),
+      scopes: "cookbooks:read public:read recipes:read shopping_list:read shopping_list:write tokens:read tokens:write",
       lastUsedAt: null,
       revokedAt: null,
     });
@@ -80,6 +82,15 @@ describe("API authentication helpers", () => {
       username: user.username,
       source: "bearer",
       credentialId: created.credential.id,
+      scopes: [
+        "cookbooks:read",
+        "public:read",
+        "recipes:read",
+        "shopping_list:read",
+        "shopping_list:write",
+        "tokens:read",
+        "tokens:write",
+      ],
     });
     await expect(db.apiCredential.findUniqueOrThrow({ where: { id: created.credential.id } }))
       .resolves.toMatchObject({ lastUsedAt: expect.any(Date) });
@@ -89,15 +100,47 @@ describe("API authentication helpers", () => {
     await expect(authenticateApiToken(db, "sj_missing")).rejects.toThrow("Invalid API token");
   });
 
+  it("normalizes and expands credential scopes", async () => {
+    expect(normalizeCredentialScopes(["recipes:read", "recipes:read", "public:read"]))
+      .toBe("public:read recipes:read");
+    expect(normalizeCredentialScopes(" kitchen:write   shopping_list:read ")).toBe("kitchen:write shopping_list:read");
+    expect(normalizeCredentialScopes("")).toBe("");
+    expect(normalizeCredentialScopes([])).toBe("");
+    expect(() => normalizeCredentialScopes(["recipes:read", "recipes:delete"])).toThrow("Unknown API credential scope");
+
+    const user = await db.user.create({ data: { email: uniqueEmail("scopes"), username: faker.internet.username() } });
+    const legacy = await createApiCredential(db, user.id, "Legacy", {
+      scopes: ["kitchen:read", "kitchen:write"],
+    });
+    const principal = await authenticateApiToken(db, legacy.token);
+    expect(principal.scopes).toEqual([
+      "cookbooks:read",
+      "public:read",
+      "recipes:read",
+      "shopping_list:read",
+      "shopping_list:write",
+      "tokens:read",
+      "tokens:write",
+    ]);
+
+    const empty = await createApiCredential(db, user.id, "Empty", { scopes: [] });
+    expect(empty.credential.scopes).toBe("");
+    await expect(authenticateApiToken(db, empty.token)).resolves.toMatchObject({ scopes: [] });
+  });
+
   it("honors an optional expiry on a credential", async () => {
     const user = await db.user.create({ data: { email: uniqueEmail(), username: faker.internet.username() } });
 
     // A future expiry still authenticates...
     const future = await createApiCredential(db, user.id, "OAuth token", {
       expiresAt: new Date(Date.now() + 60_000),
+      scopes: ["kitchen:read"],
     });
     expect(future.credential.expiresAt).toBeInstanceOf(Date);
-    await expect(authenticateApiToken(db, future.token)).resolves.toMatchObject({ id: user.id });
+    await expect(authenticateApiToken(db, future.token)).resolves.toMatchObject({
+      id: user.id,
+      scopes: ["cookbooks:read", "public:read", "recipes:read", "shopping_list:read", "tokens:read"],
+    });
 
     // ...but a past expiry is rejected as invalid.
     const expired = await createApiCredential(db, user.id, "Expired token", {
