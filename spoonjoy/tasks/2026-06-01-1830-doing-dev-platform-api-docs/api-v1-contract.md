@@ -1,0 +1,493 @@
+# Spoonjoy API v1 Contract
+
+This artifact is normative for the first implementation slice. If a unit says "payload shape", "request schema", "response schema", "example", "scope requirement", or "live response shape", it means the shapes below unless the unit names a narrower assertion.
+
+## Contract Source Of Truth
+
+- Implementation creates `app/lib/api-v1-contract.server.ts`.
+- `app/lib/api-v1-contract.server.ts` owns endpoint metadata, scope requirements, examples, error codes, and schema fragments.
+- `app/lib/api-v1.server.ts`, `app/lib/api-v1-openapi.server.ts`, and `app/routes/developers.tsx` import the contract module.
+- `docs/api.md` is markdown, so it does not import the module; docs tests import `app/lib/api-v1-contract.server.ts` and read `docs/api.md` to assert the public endpoint list, scope list, and guide snippets stay aligned.
+
+## Scopes
+
+Valid first-slice scopes:
+
+- `public:read`
+- `recipes:read`
+- `cookbooks:read`
+- `shopping_list:read`
+- `shopping_list:write`
+- `tokens:read`
+- `tokens:write`
+- `offline_access`
+- legacy `kitchen:read`
+- legacy `kitchen:write`
+
+`ApiCredential.scopes` is a required space-separated string with database default `'kitchen:read kitchen:write'`. The default preserves existing rows and delegated credentials.
+
+Creation-time scope normalization:
+
+- Omitted `scopes` for a new personal API token becomes `public:read recipes:read cookbooks:read shopping_list:read shopping_list:write tokens:read tokens:write`.
+- Provided scopes may be a string or string array.
+- Provided empty string or empty array means no scopes.
+- Duplicate scopes are removed and stored in stable lexical order.
+- Unknown scopes return `400 invalid_scope`.
+- `offline_access` is valid for docs/OAuth consistency but no v1 endpoint requires it in this slice.
+
+Runtime expansion:
+
+- Empty stored scope string expands to no scopes.
+- `kitchen:read` grants `public:read`, `recipes:read`, `cookbooks:read`, `shopping_list:read`, and `tokens:read`.
+- `kitchen:write` grants `shopping_list:write` and `tokens:write`.
+- Session principals are first-party authenticated users and are treated as having all first-slice scopes for their own resources.
+- Bearer principals must satisfy the route's scope requirement after expansion.
+
+## Idempotency Storage
+
+`ApiIdempotencyKey` stores mutation replay state:
+
+- `id String @id @default(cuid())`
+- `userId String` relation to `User`, `onDelete: Cascade`
+- `credentialId String?` relation to `ApiCredential`, `onDelete: SetNull`
+- `clientKey String`, set to `credential:${credentialId}` for bearer calls and `session:${userId}` for session calls
+- `key String`, the request `clientMutationId`
+- `operation String`, one of `shopping_list.items.create`, `shopping_list.items.check`, `shopping_list.items.delete`
+- `requestHash String`, a SHA-256 hex hash of the canonical JSON mutation body excluding no fields
+- `responseStatus Int?`
+- `responseBody String?`, JSON string of the stored v1 envelope body
+- `expiresAt DateTime`, set by the helper to 24 hours after reservation
+- `createdAt DateTime @default(now())`
+- `updatedAt DateTime @default(now()) @updatedAt`
+
+Indexes and constraints:
+
+- Unique tuple: `@@unique([userId, clientKey, key])`
+- `@@index([userId, createdAt])`
+- `@@index([credentialId])`
+- `@@index([expiresAt])`
+
+Replay rules:
+
+- First use reserves the row, runs the mutation, stores status and body, and returns that response.
+- Exact replay for the same `userId`, `clientKey`, `key`, `operation`, and `requestHash` returns the stored status/body with `mutation.replayed: true`.
+- Same key with different operation or request hash returns `409 idempotency_conflict`.
+- Stored 4xx/5xx responses replay exactly.
+- A replay does not require the original credential to remain active if the same client key can authenticate the current request; a revoked bearer token still fails auth before replay lookup.
+
+## Envelope, Headers, And Errors
+
+Every JSON v1 response uses one envelope.
+
+Success:
+
+```json
+{
+  "ok": true,
+  "requestId": "req_abc123",
+  "data": {}
+}
+```
+
+Error:
+
+```json
+{
+  "ok": false,
+  "requestId": "req_abc123",
+  "error": {
+    "code": "validation_error",
+    "message": "A human-readable message.",
+    "status": 400,
+    "details": {}
+  }
+}
+```
+
+`error.details` is omitted when empty. Unknown thrown values become `500 internal_error`.
+
+Required headers on v1 responses:
+
+- `Content-Type: application/json; charset=utf-8` for JSON responses
+- `X-Request-Id`, using incoming `X-Request-Id` when present and nonblank, otherwise generated as `req_${crypto.randomUUID()}`
+- `Access-Control-Allow-Origin: *`
+- `Access-Control-Allow-Headers: Authorization, Content-Type, X-Request-Id`
+- `Access-Control-Allow-Methods: GET, POST, PATCH, DELETE, OPTIONS`
+- `Access-Control-Expose-Headers: X-Request-Id`
+
+`OPTIONS /api/v1/*` returns status `204` with the CORS and request-id headers.
+
+Error code map:
+
+- `invalid_json` -> 400
+- `validation_error` -> 400
+- `invalid_cursor` -> 400
+- `invalid_scope` -> 400
+- `authentication_required` -> 401
+- `invalid_token` -> 401
+- `insufficient_scope` -> 403
+- `not_found` -> 404
+- `method_not_allowed` -> 405
+- `idempotency_conflict` -> 409
+- `rate_limited` -> 429
+- `internal_error` -> 500
+
+## Discovery And Health
+
+`GET /api/v1` returns status `200`:
+
+```json
+{
+  "ok": true,
+  "requestId": "req_abc123",
+  "data": {
+    "app": "spoonjoy",
+    "version": "v1",
+    "status": "ok",
+    "docsUrl": "https://spoonjoy.app/developers",
+    "openapiUrl": "/api/v1/openapi.json",
+    "resources": [
+      { "name": "recipes", "path": "/api/v1/recipes", "methods": ["GET"], "auth": "optional", "scopes": ["recipes:read"] }
+    ],
+    "auth": {
+      "type": "bearer",
+      "tokenUrl": "/api/v1/tokens",
+      "oauth": { "register": "/oauth/register", "authorize": "/oauth/authorize", "token": "/oauth/token" },
+      "mcp": { "endpoint": "/mcp", "startAgentConnection": "/api/tools/start_agent_connection", "pollAgentConnection": "/api/tools/poll_agent_connection" }
+    }
+  }
+}
+```
+
+`resources` contains every supported v1 endpoint, not only the example row above.
+
+`GET /api/v1/health` returns status `200`:
+
+```json
+{
+  "ok": true,
+  "requestId": "req_abc123",
+  "data": {
+    "ok": true,
+    "version": "v1",
+    "authenticated": false,
+    "principal": null,
+    "scopes": []
+  }
+}
+```
+
+Authenticated health sets `authenticated: true`, `principal: { "id": "...", "username": "...", "source": "session|bearer|environment" }`, and expanded `scopes`.
+
+## Public Recipe Reads
+
+`GET /api/v1/recipes?query=pasta&limit=20`
+
+- Query params: `query` optional string; `q` is accepted as an alias; `limit` optional integer 1-50, default 20.
+- Anonymous callers are allowed.
+- Bearer callers require `recipes:read` or legacy `kitchen:read`.
+
+Response status `200`:
+
+```json
+{
+  "ok": true,
+  "requestId": "req_abc123",
+  "data": {
+    "query": "pasta",
+    "limit": 20,
+    "recipes": [
+      {
+        "id": "recipe_1",
+        "title": "Pasta",
+        "description": "Weeknight pasta",
+        "servings": "4",
+        "chef": { "id": "chef_1", "username": "ari" },
+        "href": "/recipes/recipe_1",
+        "createdAt": "2026-06-01T00:00:00.000Z",
+        "updatedAt": "2026-06-01T00:00:00.000Z"
+      }
+    ]
+  }
+}
+```
+
+`GET /api/v1/recipes/:id` returns status `200` with `data.recipe`:
+
+```json
+{
+  "id": "recipe_1",
+  "title": "Pasta",
+  "description": "Weeknight pasta",
+  "servings": "4",
+  "chef": { "id": "chef_1", "username": "ari" },
+  "href": "/recipes/recipe_1",
+  "createdAt": "2026-06-01T00:00:00.000Z",
+  "updatedAt": "2026-06-01T00:00:00.000Z",
+  "steps": [
+    {
+      "id": "step_1",
+      "stepNum": 1,
+      "stepTitle": null,
+      "description": "Boil pasta.",
+      "duration": null,
+      "ingredients": [
+        { "id": "ingredient_1", "name": "pasta", "quantity": 1, "unit": "lb" }
+      ]
+    }
+  ],
+  "cookbooks": [
+    { "id": "cookbook_1", "title": "Weeknights", "href": "/cookbooks/cookbook_1" }
+  ]
+}
+```
+
+Deleted recipes return `404 not_found`.
+
+## Public Cookbook Reads
+
+`GET /api/v1/cookbooks?query=weeknight&limit=20`
+
+- Query params: `query` optional string; `q` is accepted as an alias; `limit` optional integer 1-50, default 20.
+- Anonymous callers are allowed.
+- Bearer callers require `cookbooks:read` or legacy `kitchen:read`.
+
+Response status `200`:
+
+```json
+{
+  "ok": true,
+  "requestId": "req_abc123",
+  "data": {
+    "query": "weeknight",
+    "limit": 20,
+    "cookbooks": [
+      {
+        "id": "cookbook_1",
+        "title": "Weeknights",
+        "chef": { "id": "chef_1", "username": "ari" },
+        "recipeCount": 3,
+        "href": "/cookbooks/cookbook_1",
+        "createdAt": "2026-06-01T00:00:00.000Z",
+        "updatedAt": "2026-06-01T00:00:00.000Z"
+      }
+    ]
+  }
+}
+```
+
+`GET /api/v1/cookbooks/:id` returns status `200` with `data.cookbook`:
+
+```json
+{
+  "id": "cookbook_1",
+  "title": "Weeknights",
+  "chef": { "id": "chef_1", "username": "ari" },
+  "recipeCount": 1,
+  "href": "/cookbooks/cookbook_1",
+  "createdAt": "2026-06-01T00:00:00.000Z",
+  "updatedAt": "2026-06-01T00:00:00.000Z",
+  "recipes": [
+    {
+      "id": "recipe_1",
+      "title": "Pasta",
+      "description": "Weeknight pasta",
+      "servings": "4",
+      "chef": { "id": "chef_1", "username": "ari" },
+      "href": "/recipes/recipe_1",
+      "createdAt": "2026-06-01T00:00:00.000Z",
+      "updatedAt": "2026-06-01T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+Cookbook detail excludes deleted recipes from `recipes` and `recipeCount`.
+
+## Personal Token Metadata
+
+Credential metadata shape:
+
+```json
+{
+  "id": "cred_1",
+  "name": "Tiny client",
+  "tokenPrefix": "sj_abc123456",
+  "scopes": ["public:read", "recipes:read"],
+  "createdAt": "2026-06-01T00:00:00.000Z",
+  "updatedAt": "2026-06-01T00:00:00.000Z",
+  "lastUsedAt": null,
+  "revokedAt": null,
+  "expiresAt": null
+}
+```
+
+`GET /api/v1/tokens`
+
+- Session callers are allowed.
+- Bearer callers require `tokens:read` or legacy `kitchen:read`.
+- Response status `200`: `data: { "tokens": [credentialMetadata] }`.
+
+`POST /api/v1/tokens`
+
+- Body: `{ "name": "Tiny client", "scopes": ["recipes:read", "shopping_list:read"] }`
+- `scopes` is optional; omitted uses default personal API token scopes.
+- Session callers are allowed.
+- Bearer callers require `tokens:write` or legacy `kitchen:write`.
+- Response status `201`: `data: { "token": "sj_secret", "credential": credentialMetadata }`.
+- The `token` field is the only time the secret is returned.
+
+`DELETE /api/v1/tokens/:credentialId`
+
+- Session callers are allowed.
+- Bearer callers require `tokens:write` or legacy `kitchen:write`.
+- Response status `200`: `data: { "revoked": true, "credential": credentialMetadata }`.
+- Self-revoke is allowed. The current request succeeds and the token is invalid for subsequent requests.
+
+## Shopping List Read And Sync
+
+Shopping item shape:
+
+```json
+{
+  "id": "item_1",
+  "name": "eggs",
+  "quantity": 12,
+  "unit": "each",
+  "checked": false,
+  "checkedAt": null,
+  "deletedAt": null,
+  "categoryKey": null,
+  "iconKey": null,
+  "sortIndex": 0,
+  "updatedAt": "2026-06-01T00:00:00.000Z"
+}
+```
+
+`GET /api/v1/shopping-list`
+
+- Authenticated only.
+- Bearer callers require `shopping_list:read` or legacy `kitchen:read`.
+- Response status `200`: `data: { "shoppingList": { "id": "...", "chef": { "id": "...", "username": "..." }, "items": [activeShoppingItem], "updatedAt": "..." }, "nextCursor": "..." }`.
+- `items` excludes tombstones where `deletedAt` is non-null.
+- `nextCursor` is the greatest returned item `updatedAt`, or the list `updatedAt` if there are no items.
+
+`GET /api/v1/shopping-list/sync?cursor=2026-06-01T00:00:00.000Z`
+
+- Authenticated only.
+- Bearer callers require `shopping_list:read` or legacy `kitchen:read`.
+- `cursor` is optional ISO datetime. Invalid cursors return `400 invalid_cursor`.
+- Response status `200`: `data: { "items": [shoppingItemIncludingTombstones], "nextCursor": "...", "hasMore": false }`.
+- No cursor returns all rows for the caller's shopping list, including tombstones.
+- With a cursor, returns rows with `updatedAt > cursor`, ordered by `updatedAt ASC`.
+- `hasMore` is always `false` in the first slice because pagination is not split across pages yet.
+
+## Shopping List Mutations
+
+All mutation bodies include nonblank `clientMutationId`. Missing or blank values return `400 validation_error`.
+
+`POST /api/v1/shopping-list/items`
+
+Request body:
+
+```json
+{
+  "clientMutationId": "device-uuid-1",
+  "name": "Eggs",
+  "quantity": 12,
+  "unit": "Each",
+  "categoryKey": null,
+  "iconKey": null
+}
+```
+
+Response status:
+
+- `201` when a new row is created.
+- `200` when an existing matching row is restored or merged.
+
+Response data:
+
+```json
+{
+  "created": true,
+  "updated": false,
+  "item": { "id": "item_1", "name": "eggs", "quantity": 12, "unit": "each", "checked": false, "checkedAt": null, "deletedAt": null, "categoryKey": null, "iconKey": null, "sortIndex": 0, "updatedAt": "2026-06-01T00:00:00.000Z" },
+  "shoppingList": { "id": "list_1", "items": [] },
+  "mutation": { "clientMutationId": "device-uuid-1", "replayed": false }
+}
+```
+
+`PATCH /api/v1/shopping-list/items/:itemId`
+
+Request body:
+
+```json
+{ "clientMutationId": "device-uuid-2", "checked": true }
+```
+
+Response status `200`; response data:
+
+```json
+{
+  "item": { "id": "item_1", "checked": true },
+  "shoppingList": { "id": "list_1", "items": [] },
+  "mutation": { "clientMutationId": "device-uuid-2", "replayed": false }
+}
+```
+
+`DELETE /api/v1/shopping-list/items/:itemId`
+
+Request body:
+
+```json
+{ "clientMutationId": "device-uuid-3" }
+```
+
+Response status `200`; response data:
+
+```json
+{
+  "removed": true,
+  "item": { "id": "item_1", "deletedAt": "2026-06-01T00:00:00.000Z" },
+  "shoppingList": { "id": "list_1", "items": [] },
+  "mutation": { "clientMutationId": "device-uuid-3", "replayed": false }
+}
+```
+
+Conflict semantics:
+
+- Server write order wins for checked/delete state.
+- DELETE after PATCH sets `deletedAt` and removes the item from active list responses.
+- PATCH after DELETE clears `deletedAt`, sets `checked` from the request body, and returns the item to active list responses.
+- Client-provided timestamps are ignored in this slice.
+- Unknown item ids return `404 not_found`.
+
+Idempotent replay changes only `mutation.replayed` from `false` to `true`; the stored status and all other body fields are the original response.
+
+## OpenAPI
+
+`GET /api/v1/openapi.json` returns status `200` and an OpenAPI `3.1.0` document.
+
+Required top-level fields:
+
+- `openapi: "3.1.0"`
+- `info.title: "Spoonjoy API"`
+- `info.version: "v1"`
+- `servers[0].url: "https://spoonjoy.app"`
+- `paths` entry for every first-slice v1 route
+- `components.securitySchemes.bearerAuth`
+- reusable envelope/error schemas
+- operation examples matching this artifact
+- operation `x-scopes` arrays matching the scope matrix
+
+## Live Smoke Status Codes
+
+After deploy, these checks must pass:
+
+- `GET https://spoonjoy.app/developers` -> 200 HTML containing `Spoonjoy Developer Platform`
+- `GET https://spoonjoy.app/api/v1` -> 200 JSON with `ok: true`, `data.version: "v1"`, and `data.openapiUrl: "/api/v1/openapi.json"`
+- `GET https://spoonjoy.app/api/v1/health` -> 200 JSON with `ok: true`, `data.ok: true`
+- `GET https://spoonjoy.app/api/v1/openapi.json` -> 200 JSON with `openapi: "3.1.0"`
+- `GET https://spoonjoy.app/api/v1/recipes` -> 200 JSON with `ok: true` and `data.recipes` array
+- `GET https://spoonjoy.app/api/v1/cookbooks` -> 200 JSON with `ok: true` and `data.cookbooks` array

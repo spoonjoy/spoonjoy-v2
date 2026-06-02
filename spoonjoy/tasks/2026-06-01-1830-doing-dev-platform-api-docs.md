@@ -58,14 +58,16 @@ Expose Spoonjoy as a developer-friendly platform layer on top of the existing pu
 
 **CRITICAL: Every unit header MUST start with status emoji (⬜ for new units).**
 
+Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-v1-contract.md`. Every unit that asserts v1 request fields, response fields, error codes, scope behavior, idempotency storage, docs/reference ownership, or live-smoke response shapes uses that artifact as the exact contract.
+
 ### ⬜ Unit 0: Setup/Research
 **What**: Confirm branch/task-doc state, verify route/deploy/test patterns, and capture the implementation baseline for API, OAuth, token, shopping-list, docs, and deployment work.
-**Output**: Notes/logs in `./2026-06-01-1830-doing-dev-platform-api-docs/` with current branch, current route files, relevant test commands, and deployment command choice.
-**Acceptance**: Artifacts exist; no code behavior changed; doing doc remains accurate after source inspection.
+**Output**: Notes/logs in `./2026-06-01-1830-doing-dev-platform-api-docs/` with current branch, current route files, relevant test commands, deployment command choice, and confirmation that `api-v1-contract.md` is the exact v1 contract source for execution.
+**Acceptance**: Artifacts exist; `api-v1-contract.md` is present; no code behavior changed; doing doc remains accurate after source inspection.
 
 ### ⬜ Unit 1a: API Credential Scopes — Tests
-**What**: Write failing tests for the credential-scope storage and parsing contract in `prisma/schema.prisma`, `migrations/0015_api_credential_scopes.sql`, `app/lib/api-auth.server.ts`, `test/setup.ts`, and `test/helpers/cleanup.ts`.
-**Output**: `test/scripts/migration-0015-api-credential-scopes.test.ts` asserts the root migration adds `ApiCredential.scopes` with the expected default; `test/lib/api-auth.server.test.ts` asserts scoped credential creation, principal scope exposure, empty-scope normalization, unknown-scope rejection, and cleanup behavior.
+**What**: Write failing tests for the credential-scope storage and parsing contract in `prisma/schema.prisma`, `migrations/0015_api_credential_scopes.sql`, `app/lib/api-auth.server.ts`, `test/setup.ts`, and `test/helpers/cleanup.ts`, using the exact scope/default/legacy expansion rules from `api-v1-contract.md`.
+**Output**: `test/scripts/migration-0015-api-credential-scopes.test.ts` asserts the root migration adds `ApiCredential.scopes` as required text with database default `'kitchen:read kitchen:write'`; `test/lib/api-auth.server.test.ts` asserts default personal token scopes, scoped credential creation, principal scope exposure, empty stored scope string expands to no scopes, unknown-scope rejection, legacy expansion, and cleanup behavior.
 **Acceptance**: Focused tests FAIL because `ApiCredential.scopes`, scope normalization, legacy scope expansion, scoped credential creation, and principal scope exposure are absent.
 
 ### ⬜ Unit 1b: API Credential Scopes — Implementation
@@ -79,8 +81,8 @@ Expose Spoonjoy as a developer-friendly platform layer on top of the existing pu
 **Acceptance**: 100% coverage on new/changed API credential scope code; focused tests and build still PASS with no warnings.
 
 ### ⬜ Unit 2a: API Idempotency Storage — Tests
-**What**: Write failing tests for persistent idempotency-key storage in `prisma/schema.prisma`, `migrations/0016_api_idempotency_keys.sql`, and cleanup hooks.
-**Output**: `test/scripts/migration-0016-api-idempotency-keys.test.ts` asserts the `ApiIdempotencyKey` table, credential/user relation columns, operation/body-hash columns, response payload/status columns, unique key constraint, and timestamp indexes; `test/lib/api-idempotency.server.test.ts` asserts missing helper exports.
+**What**: Write failing tests for persistent idempotency-key storage in `prisma/schema.prisma`, `migrations/0016_api_idempotency_keys.sql`, and cleanup hooks, using the exact column names, nullable behavior, unique tuple, and index list from `api-v1-contract.md`.
+**Output**: `test/scripts/migration-0016-api-idempotency-keys.test.ts` asserts the `ApiIdempotencyKey` table with `userId`, nullable `credentialId`, `clientKey`, `key`, `operation`, `requestHash`, nullable `responseStatus`, nullable `responseBody`, `expiresAt`, timestamps, unique `(userId, clientKey, key)`, and indexes on `(userId, createdAt)`, `credentialId`, and `expiresAt`; `test/lib/api-idempotency.server.test.ts` asserts missing helper exports.
 **Acceptance**: Focused tests FAIL because `ApiIdempotencyKey` and `app/lib/api-idempotency.server.ts` do not exist.
 
 ### ⬜ Unit 2b: API Idempotency Storage — Implementation
@@ -94,13 +96,13 @@ Expose Spoonjoy as a developer-friendly platform layer on top of the existing pu
 **Acceptance**: 100% coverage on new/changed idempotency storage code; focused tests and build still PASS with no warnings.
 
 ### ⬜ Unit 3a: `/api/v1` Shell, Errors, And Request IDs — Tests
-**What**: Write failing tests for route registration and shared v1 response behavior in `app/routes.ts`, `app/routes/api.v1.$.ts`, and `app/lib/api-v1.server.ts`.
-**Output**: `test/routes/api-v1-shell.test.ts` asserts `GET /api/v1`, `GET /api/v1/health`, `OPTIONS /api/v1/*`, unknown endpoints, malformed JSON, machine-readable error envelopes, request ID generation, request ID echo from `X-Request-Id`, and CORS headers.
+**What**: Write failing tests for route registration and shared v1 response behavior in `app/routes.ts`, `app/routes/api.v1.$.ts`, `app/lib/api-v1.server.ts`, and the future `app/lib/api-v1-contract.server.ts`.
+**Output**: `test/routes/api-v1-shell.test.ts` asserts the exact discovery document, health document, success envelope, error envelope, error code map, `OPTIONS /api/v1/*` status, unknown endpoints, malformed JSON, request ID generation/echo, and CORS headers from `api-v1-contract.md`.
 **Acceptance**: Focused tests FAIL because `app/routes/api.v1.$.ts` and the v1 shell helpers are absent.
 
 ### ⬜ Unit 3b: `/api/v1` Shell, Errors, And Request IDs — Implementation
-**What**: Register `route("api/v1/*", "routes/api.v1.$.ts")`; create `app/routes/api.v1.$.ts` and `app/lib/api-v1.server.ts` with discovery, health, OPTIONS, request IDs, CORS, JSON body parsing, and error-envelope helpers.
-**Output**: Updated `app/routes.ts`, new v1 route/helper files, and passing Unit 3a tests.
+**What**: Register `route("api/v1/*", "routes/api.v1.$.ts")`; create `app/routes/api.v1.$.ts`, `app/lib/api-v1.server.ts`, and `app/lib/api-v1-contract.server.ts` with discovery, health, OPTIONS, request IDs, CORS, JSON body parsing, and error-envelope helpers.
+**Output**: Updated `app/routes.ts`, new v1 route/helper/contract files, and passing Unit 3a tests.
 **Acceptance**: Unit 3a tests PASS; legacy `/api/*` tests still PASS; `pnpm run build` succeeds with no warnings.
 
 ### ⬜ Unit 3c: `/api/v1` Shell, Errors, And Request IDs — Coverage & Refactor
@@ -110,7 +112,7 @@ Expose Spoonjoy as a developer-friendly platform layer on top of the existing pu
 
 ### ⬜ Unit 4a: Public Recipe V1 Reads — Tests
 **What**: Write failing tests for anonymous and scoped public recipe endpoints `GET /api/v1/recipes` and `GET /api/v1/recipes/:id`.
-**Output**: `test/routes/api-v1-recipes.test.ts` asserts search query parameters, empty search results, public detail payload shape, deleted recipe exclusion, missing recipe 404 envelope, anonymous success, `recipes:read` bearer success, and scoped bearer failure without `recipes:read`.
+**Output**: `test/routes/api-v1-recipes.test.ts` asserts the exact query params, `limit` behavior, summary/detail fields, deleted recipe exclusion, missing recipe 404 envelope, anonymous success, `recipes:read` bearer success, and scoped bearer failure without `recipes:read` from `api-v1-contract.md`.
 **Acceptance**: Focused tests FAIL because recipe reads are not implemented under `/api/v1`.
 
 ### ⬜ Unit 4b: Public Recipe V1 Reads — Implementation
@@ -125,7 +127,7 @@ Expose Spoonjoy as a developer-friendly platform layer on top of the existing pu
 
 ### ⬜ Unit 5a: Public Cookbook V1 Reads — Tests
 **What**: Write failing tests for anonymous and scoped public cookbook endpoints `GET /api/v1/cookbooks` and `GET /api/v1/cookbooks/:id`.
-**Output**: `test/routes/api-v1-cookbooks.test.ts` asserts search query parameters, empty results, public cookbook detail shape, active recipe counts, deleted recipe exclusion, missing cookbook 404 envelope, anonymous success, `cookbooks:read` bearer success, and scoped bearer failure without `cookbooks:read`.
+**Output**: `test/routes/api-v1-cookbooks.test.ts` asserts the exact query params, `limit` behavior, summary/detail fields, active recipe counts, deleted recipe exclusion, missing cookbook 404 envelope, anonymous success, `cookbooks:read` bearer success, and scoped bearer failure without `cookbooks:read` from `api-v1-contract.md`.
 **Acceptance**: Focused tests FAIL because cookbook reads are not implemented under `/api/v1`.
 
 ### ⬜ Unit 5b: Public Cookbook V1 Reads — Implementation
@@ -140,7 +142,7 @@ Expose Spoonjoy as a developer-friendly platform layer on top of the existing pu
 
 ### ⬜ Unit 6a: Personal API Token V1 Metadata — Tests
 **What**: Write failing tests for authenticated personal API token metadata endpoints `GET /api/v1/tokens`, `POST /api/v1/tokens`, and `DELETE /api/v1/tokens/:credentialId`.
-**Output**: `test/routes/api-v1-tokens.test.ts` asserts list metadata, create token one-time secret response, requested scopes normalization, default scopes, revoke behavior, self-revoke behavior, missing auth 401, invalid JSON 400, and `tokens:read` / `tokens:write` enforcement.
+**Output**: `test/routes/api-v1-tokens.test.ts` asserts the exact credential metadata fields, `token` one-time secret field, requested scope normalization, default personal token scopes, revoke response fields, self-revoke succeeds for the current request and fails on later requests, missing auth 401, invalid JSON 400, and `tokens:read` / `tokens:write` enforcement from `api-v1-contract.md`.
 **Acceptance**: Focused tests FAIL because token metadata endpoints are not implemented under `/api/v1`.
 
 ### ⬜ Unit 6b: Personal API Token V1 Metadata — Implementation
@@ -170,7 +172,7 @@ Expose Spoonjoy as a developer-friendly platform layer on top of the existing pu
 
 ### ⬜ Unit 8a: Shopping-List Read, Sync, And Tombstones — Tests
 **What**: Write failing tests for `GET /api/v1/shopping-list` and `GET /api/v1/shopping-list/sync`.
-**Output**: `test/routes/api-v1-shopping-sync.test.ts` asserts authenticated list payloads, cursor filtering by `updatedAt`, empty list, deleted-item tombstones from `ShoppingListItem.deletedAt`, invalid cursor error envelope, next cursor presence, `shopping_list:read` success, and missing read scope failure.
+**Output**: `test/routes/api-v1-shopping-sync.test.ts` asserts the exact shopping item shape, list envelope, sync envelope, `nextCursor`, `hasMore: false`, cursor filtering by `updatedAt > cursor`, empty list, deleted-item tombstones from `ShoppingListItem.deletedAt`, invalid cursor error envelope, `shopping_list:read` success, and missing read scope failure from `api-v1-contract.md`.
 **Acceptance**: Focused tests FAIL because shopping-list v1 read/sync payloads and tombstones are not implemented.
 
 ### ⬜ Unit 8b: Shopping-List Read, Sync, And Tombstones — Implementation
@@ -185,7 +187,7 @@ Expose Spoonjoy as a developer-friendly platform layer on top of the existing pu
 
 ### ⬜ Unit 9a: Idempotent Shopping-List Mutations — Tests
 **What**: Write failing tests for `POST /api/v1/shopping-list/items`, `PATCH /api/v1/shopping-list/items/:itemId`, and `DELETE /api/v1/shopping-list/items/:itemId` with `clientMutationId` replay behavior.
-**Output**: `test/routes/api-v1-shopping-mutations.test.ts` asserts add/check/remove success, exact replay returns the stored response, duplicate key with different operation returns 409, duplicate key with different body returns 409, missing `clientMutationId` returns 400, and `shopping_list:write` enforcement.
+**Output**: `test/routes/api-v1-shopping-mutations.test.ts` asserts exact request bodies, status codes, response data fields, add/check/remove success, exact replay returns the stored response with only `mutation.replayed` changed to `true`, duplicate key with different operation returns 409, duplicate key with different body returns 409, missing `clientMutationId` returns 400, and `shopping_list:write` enforcement from `api-v1-contract.md`.
 **Acceptance**: Focused tests FAIL because idempotent shopping-list mutations are not implemented.
 
 ### ⬜ Unit 9b: Idempotent Shopping-List Mutations — Implementation
@@ -200,7 +202,7 @@ Expose Spoonjoy as a developer-friendly platform layer on top of the existing pu
 
 ### ⬜ Unit 10a: Shopping-List Conflict And Error Semantics — Tests
 **What**: Write failing tests for documented last-writer-wins checked/delete behavior and machine-readable shopping-list mutation errors.
-**Output**: `test/routes/api-v1-shopping-conflicts.test.ts` asserts remove after check, check after remove, stale client timestamp ignored in favor of server write order, unknown item 404 envelope, invalid item id 404 envelope, and malformed mutation JSON 400 envelope.
+**Output**: `test/routes/api-v1-shopping-conflicts.test.ts` asserts remove after check, check after remove restores the item and clears `deletedAt`, stale client timestamp ignored in favor of server write order, unknown item 404 envelope, invalid item id 404 envelope, and malformed mutation JSON 400 envelope from `api-v1-contract.md`.
 **Acceptance**: Focused tests FAIL until shopping-list v1 mutations have explicit conflict/error semantics.
 
 ### ⬜ Unit 10b: Shopping-List Conflict And Error Semantics — Implementation
@@ -215,7 +217,7 @@ Expose Spoonjoy as a developer-friendly platform layer on top of the existing pu
 
 ### ⬜ Unit 11a: OpenAPI Contract Metadata — Tests
 **What**: Write failing tests for OpenAPI generation from supported v1 route metadata.
-**Output**: `test/lib/api-v1-openapi.server.test.ts` asserts OpenAPI `3.1.0`, server URL, paths for every first-slice endpoint, request schemas, response schemas, examples, error schemas, auth requirements, and scope requirements; `test/routes/api-v1-openapi.test.ts` asserts `GET /api/v1/openapi.json` serves the same document.
+**Output**: `test/lib/api-v1-openapi.server.test.ts` asserts OpenAPI `3.1.0`, server URL, paths for every first-slice endpoint, request schemas, response schemas, examples, error schemas, auth requirements, and `x-scopes` requirements from `app/lib/api-v1-contract.server.ts`; `test/routes/api-v1-openapi.test.ts` asserts `GET /api/v1/openapi.json` serves the same document.
 **Acceptance**: Focused tests FAIL because OpenAPI metadata and endpoint are absent or incomplete.
 
 ### ⬜ Unit 11b: OpenAPI Contract Metadata — Implementation
@@ -245,7 +247,7 @@ Expose Spoonjoy as a developer-friendly platform layer on top of the existing pu
 
 ### ⬜ Unit 13a: `/developers` Route — Tests
 **What**: Write failing tests for the deployed developer-docs page route, route metadata, and route registration.
-**Output**: `test/routes/developers.test.tsx` asserts page title/meta, visible `/api/v1` endpoints, auth mode distinctions, public-by-default Chef graph language, scope list, idempotency/sync guidance, OpenAPI link, OAuth/DCR/MCP route references, and no Pebble-specific framing.
+**Output**: `test/routes/developers.test.tsx` asserts page title/meta, visible `/api/v1` endpoints, auth mode distinctions, public-by-default Chef graph language, scope list, idempotency/sync guidance, OpenAPI link, OAuth/DCR/MCP route references, and no Pebble-specific framing, with endpoint/scope/example data imported from `app/lib/api-v1-contract.server.ts`.
 **Acceptance**: Focused tests FAIL because `/developers` is not registered or rendered.
 
 ### ⬜ Unit 13b: `/developers` Route — Implementation
@@ -255,12 +257,12 @@ Expose Spoonjoy as a developer-friendly platform layer on top of the existing pu
 
 ### ⬜ Unit 13c: `/developers` Route — Coverage & Refactor
 **What**: Verify route coverage and inspect the rendered page locally for layout/text issues on desktop and mobile widths.
-**Output**: Coverage log and local render notes saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-13c-render.log`; refactors stay in `app/routes/developers.tsx` and shared reference data.
+**Output**: Coverage log and local render notes saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-13c-render.log`; refactors stay in `app/routes/developers.tsx` and `app/lib/api-v1-contract.server.ts`.
 **Acceptance**: 100% coverage on new/changed developers route code; focused tests and build still PASS with no warnings.
 
 ### ⬜ Unit 14a: Existing Docs Drift — Tests
 **What**: Write failing docs assertions for `docs/api.md`, `docs/claude-connector.md`, `docs/ouroboros-mcp.md`, and `app/lib/oauth-routes.server.ts`.
-**Output**: `test/docs/developer-platform-docs.test.ts` asserts the docs mention `/developers`, `/api/v1`, refresh-token behavior, OAuth/DCR routes, MCP `/mcp`, delegated `/api/tools/start_agent_connection` and `/api/tools/poll_agent_connection`, and do not claim remote MCP has no refresh tokens.
+**Output**: `test/docs/developer-platform-docs.test.ts` imports `app/lib/api-v1-contract.server.ts` and asserts `docs/api.md` contains the supported endpoint list, scope list, and OpenAPI URL; it also asserts docs mention `/developers`, refresh-token behavior, OAuth/DCR routes, MCP `/mcp`, delegated `/api/tools/start_agent_connection` and `/api/tools/poll_agent_connection`, and do not claim remote MCP has no refresh tokens.
 **Acceptance**: Focused tests FAIL because existing docs/comment drift remains.
 
 ### ⬜ Unit 14b: Existing Docs Drift — Implementation
@@ -275,7 +277,7 @@ Expose Spoonjoy as a developer-friendly platform layer on top of the existing pu
 
 ### ⬜ Unit 15a: External Client Guide And Sample — Tests
 **What**: Write failing docs assertions for a complete external-client guide that reads public recipes/cookbooks, creates a scoped personal token, syncs a private shopping list, and performs an idempotent shopping-list mutation.
-**Output**: `test/docs/developer-platform-guide.test.ts` asserts sample curl commands and prose reference actual implemented paths, required scopes, `Authorization: Bearer`, `clientMutationId`, sync cursor, and OpenAPI URL.
+**Output**: `test/docs/developer-platform-guide.test.ts` imports `app/lib/api-v1-contract.server.ts` and asserts sample curl commands and prose reference actual implemented paths, required scopes, `Authorization: Bearer`, `clientMutationId`, sync cursor, and OpenAPI URL from the contract module.
 **Acceptance**: Focused tests FAIL until the guide/sample is added and aligned with implemented endpoints.
 
 ### ⬜ Unit 15b: External Client Guide And Sample — Implementation
@@ -290,7 +292,7 @@ Expose Spoonjoy as a developer-friendly platform layer on top of the existing pu
 
 ### ⬜ Unit 16a: Full Verification Gate
 **What**: Run the full required local verification gate before deployment.
-**Output**: Logs saved to artifacts for `pnpm test:coverage`, `pnpm run typecheck`, `pnpm run build`, and a targeted v1/docs test run.
+**Output**: Logs saved to artifacts for `pnpm test:coverage`, `pnpm run typecheck` from `package.json`, `pnpm run build`, and a targeted v1/docs test run.
 **Acceptance**: All verification commands PASS with no warnings.
 
 ### ⬜ Unit 17a: Production Deploy
@@ -301,7 +303,7 @@ Expose Spoonjoy as a developer-friendly platform layer on top of the existing pu
 ### ⬜ Unit 17b: Live API Docs Verification
 **What**: Live-smoke production endpoints after deploy.
 **Output**: Live verification log saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-17b-live-smoke.log` covering `https://spoonjoy.app/developers`, `https://spoonjoy.app/api/v1`, `https://spoonjoy.app/api/v1/health`, `https://spoonjoy.app/api/v1/openapi.json`, `https://spoonjoy.app/api/v1/recipes`, and `https://spoonjoy.app/api/v1/cookbooks`.
-**Acceptance**: Deployed docs URL and v1 API endpoints return expected status codes and response shapes.
+**Acceptance**: Deployed docs URL and v1 API endpoints return the exact status codes and response shapes listed in `api-v1-contract.md`.
 
 ### ⬜ Unit 18a: Final Documentation Sync And Completion
 **What**: Mark completion criteria in doing/planning docs based on evidence, send the repo-required Slugger completion message, and prepare the final user-facing docs link.
