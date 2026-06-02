@@ -15,6 +15,7 @@ function renderButton(props: Partial<PasskeySignInButtonProps> = {}) {
   const finalProps: PasskeySignInButtonProps = { email: "", ...props };
   const Stub = createTestRoutesStub([
     { path: "/", Component: () => <PasskeySignInButton {...finalProps} /> },
+    { path: "/recipes", Component: () => <div>Recipes</div> },
   ]);
   return render(<Stub initialEntries={["/"]} />);
 }

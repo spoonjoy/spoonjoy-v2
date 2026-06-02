@@ -102,6 +102,30 @@ describe("POST /api/push/subscriptions", () => {
     expect(response.status).toBe(400);
   });
 
+  it("returns 400 on array JSON bodies", async () => {
+    const user = await createUser();
+    const cookie = await sessionCookie(user.id);
+    const request = new UndiciRequest("http://localhost/api/push/subscriptions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: "[]",
+    });
+    const response = await action(routeArgs(request));
+    expect(response.status).toBe(400);
+  });
+
+  it("treats an empty JSON body as missing endpoint", async () => {
+    const user = await createUser();
+    const cookie = await sessionCookie(user.id);
+    const request = new UndiciRequest("http://localhost/api/push/subscriptions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: "   ",
+    });
+    const response = await action(routeArgs(request));
+    expect(response.status).toBe(400);
+  });
+
   it("creates the subscription row and returns 201 on first POST", async () => {
     const user = await createUser();
     const cookie = await sessionCookie(user.id);
@@ -161,6 +185,42 @@ describe("POST /api/push/subscriptions", () => {
     const rows = await db.pushSubscription.findMany({ where: { userId: user.id } });
     expect(rows).toHaveLength(1);
   });
+
+  it("reassigns an existing endpoint from another user and ignores non-string user agents", async () => {
+    const owner = await createUser();
+    const nextOwner = await createUser();
+    const cookie = await sessionCookie(nextOwner.id);
+    const db = await getLocalDb();
+    const row = await db.pushSubscription.create({
+      data: {
+        userId: owner.id,
+        endpoint: "https://push.example/reassign",
+        p256dh: "old",
+        authSecret: "old-auth",
+        userAgent: "old agent",
+      },
+    });
+
+    const request = new UndiciRequest("http://localhost/api/push/subscriptions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({
+        endpoint: "https://push.example/reassign",
+        keys: { p256dh: "new", auth: "new-auth" },
+        userAgent: 123,
+      }),
+    });
+    const response = await action(routeArgs(request));
+    expect(response.status).toBe(200);
+
+    const updated = await db.pushSubscription.findUniqueOrThrow({ where: { id: row.id } });
+    expect(updated).toMatchObject({
+      userId: nextOwner.id,
+      p256dh: "new",
+      authSecret: "new-auth",
+      userAgent: null,
+    });
+  });
 });
 
 describe("DELETE /api/push/subscriptions", () => {
@@ -181,6 +241,18 @@ describe("DELETE /api/push/subscriptions", () => {
       method: "DELETE",
       headers: { "Content-Type": "application/json", Cookie: cookie },
       body: JSON.stringify({}),
+    });
+    const response = await action(routeArgs(request));
+    expect(response.status).toBe(400);
+  });
+
+  it("returns 400 on array JSON bodies", async () => {
+    const user = await createUser();
+    const cookie = await sessionCookie(user.id);
+    const request = new UndiciRequest("http://localhost/api/push/subscriptions", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: "[]",
     });
     const response = await action(routeArgs(request));
     expect(response.status).toBe(400);

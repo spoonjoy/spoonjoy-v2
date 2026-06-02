@@ -1,6 +1,6 @@
 import type { Route } from "./+types/auth.webauthn.authenticate.options";
 import { getRequestDb } from "~/lib/route-platform.server";
-import { configFromRequest, startAuthentication, WebAuthnError } from "~/lib/webauthn-route.server";
+import { configFromRequest, startAuthentication } from "~/lib/webauthn-route.server";
 import { enforceAuthRateLimit, rateLimitedResponse } from "~/lib/rate-limit.server";
 
 export async function action({ request, context }: Route.ActionArgs) {
@@ -26,8 +26,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     const options = await startAuthentication(db, email, configFromRequest(request));
     return Response.json(options);
   } catch (error) {
-    const status = error instanceof WebAuthnError ? error.status : 400;
     const message = error instanceof Error ? error.message : "Could not start authentication";
-    return Response.json({ error: message }, { status });
+    return Response.json({ error: message }, { status: 400 });
   }
 }

@@ -133,6 +133,42 @@ describe("PATCH /api/push/preferences", () => {
     expect(response.status).toBe(400);
   });
 
+  it("returns 400 on array JSON bodies", async () => {
+    const user = await createUser();
+    const cookie = await sessionCookie(user.id);
+    const response = await action(
+      routeArgs(
+        new UndiciRequest("http://localhost/api/push/preferences", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", Cookie: cookie },
+          body: "[]",
+        }),
+      ),
+    );
+    expect(response.status).toBe(400);
+  });
+
+  it("accepts an empty JSON body and returns defaults", async () => {
+    const user = await createUser();
+    const cookie = await sessionCookie(user.id);
+    const response = await action(
+      routeArgs(
+        new UndiciRequest("http://localhost/api/push/preferences", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", Cookie: cookie },
+          body: "   ",
+        }),
+      ),
+    );
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      notifySpoonOnMyRecipe: true,
+      notifyForkOfMyRecipe: true,
+      notifyCookbookSaveOfMine: true,
+      notifyFellowChefOriginCook: true,
+    });
+  });
+
   it("ignores unknown keys in the body", async () => {
     const user = await createUser();
     const cookie = await sessionCookie(user.id);

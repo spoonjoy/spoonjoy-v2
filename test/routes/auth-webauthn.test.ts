@@ -97,6 +97,18 @@ describe("WebAuthn routes", () => {
       )));
       expect(res.status).toBe(404);
     });
+
+    it("falls back when registration option orchestration throws a non-Error", async () => {
+      const user = await db.user.create({ data: createTestUser() });
+      vi.mocked(buildRegistrationOptions).mockRejectedValue("not an error" as never);
+      const res = await registerOptions(routeArgs(jsonRequest(
+        "https://spoonjoy.app/auth/webauthn/register/options",
+        {},
+        { Cookie: await sessionCookie(user.id) },
+      )));
+      expect(res.status).toBe(400);
+      await expect(res.json()).resolves.toMatchObject({ error: "Could not start registration" });
+    });
   });
 
   describe("register/verify", () => {
@@ -142,6 +154,18 @@ describe("WebAuthn routes", () => {
       expect(res.status).toBe(200);
       await expect(res.json()).resolves.toMatchObject({ verified: true, credentialId: "cred_route" });
     });
+
+    it("maps registration verification errors", async () => {
+      const user = await db.user.create({ data: { ...createTestUser(), webAuthnChallenge: "reg_chal" } });
+      vi.mocked(verifyRegistration).mockRejectedValue(new Error("signature mismatch") as never);
+      const res = await registerVerify(routeArgs(jsonRequest(
+        "https://spoonjoy.app/auth/webauthn/register/verify",
+        { response: { id: "cred_route" } },
+        { Cookie: await sessionCookie(user.id) },
+      )));
+      expect(res.status).toBe(400);
+      await expect(res.json()).resolves.toMatchObject({ error: "signature mismatch" });
+    });
   });
 
   describe("authenticate/options", () => {
@@ -179,6 +203,28 @@ describe("WebAuthn routes", () => {
       expect(res.status).toBe(200);
       await expect(res.json()).resolves.toEqual({ challenge: "ac" });
     });
+
+    it("falls back when authentication option orchestration throws a non-Error", async () => {
+      const user = await db.user.create({ data: createTestUser() });
+      vi.mocked(buildAuthenticationOptions).mockRejectedValue("not an error" as never);
+      const res = await authenticateOptions(routeArgs(jsonRequest(
+        "https://spoonjoy.app/auth/webauthn/authenticate/options",
+        { email: user.email },
+      )));
+      expect(res.status).toBe(400);
+      await expect(res.json()).resolves.toMatchObject({ error: "Could not start authentication" });
+    });
+
+    it("uses Error messages from authentication option orchestration failures", async () => {
+      const user = await db.user.create({ data: createTestUser() });
+      vi.mocked(buildAuthenticationOptions).mockRejectedValue(new Error("auth option setup failed") as never);
+      const res = await authenticateOptions(routeArgs(jsonRequest(
+        "https://spoonjoy.app/auth/webauthn/authenticate/options",
+        { email: user.email },
+      )));
+      expect(res.status).toBe(400);
+      await expect(res.json()).resolves.toMatchObject({ error: "auth option setup failed" });
+    });
   });
 
   describe("authenticate/verify", () => {
@@ -193,6 +239,14 @@ describe("WebAuthn routes", () => {
 
     it("400s without email + response", async () => {
       const res = await authenticateVerify(routeArgs(jsonRequest("https://spoonjoy.app/auth/webauthn/authenticate/verify", { email: "x@example.com" })));
+      expect(res.status).toBe(400);
+    });
+
+    it("400s without email even when a response is present", async () => {
+      const res = await authenticateVerify(routeArgs(jsonRequest(
+        "https://spoonjoy.app/auth/webauthn/authenticate/verify",
+        { response: { id: "vc" } },
+      )));
       expect(res.status).toBe(400);
     });
 
@@ -212,6 +266,25 @@ describe("WebAuthn routes", () => {
       await expect(res.json()).resolves.toMatchObject({ verified: true, redirectTo: "/recipes" });
     });
 
+    it("falls back to the root redirect when no redirect is posted", async () => {
+      const user = await db.user.create({
+        data: { ...createTestUser(), email: "passkey-root-login@example.com", webAuthnChallenge: "ac" },
+      });
+      await db.userCredential.create({ data: { id: "vc-root", userId: user.id, publicKey: new Uint8Array([1]), counter: 1n } });
+      vi.mocked(verifyAuthentication).mockResolvedValue({ verified: true, authenticationInfo: { newCounter: 2 } } as never);
+
+      const res = await authenticateVerify({
+        request: jsonRequest(
+          "https://spoonjoy.app/auth/webauthn/authenticate/verify",
+          { email: user.email, response: { id: "vc-root" } },
+        ),
+        params: {},
+        context: {},
+      } as never);
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toMatchObject({ verified: true, redirectTo: "/" });
+    });
+
     it("400s on invalid JSON", async () => {
       const req = new UndiciRequest("https://spoonjoy.app/auth/webauthn/authenticate/verify", {
         method: "POST",
@@ -220,6 +293,21 @@ describe("WebAuthn routes", () => {
       }) as unknown as Request;
       const res = await authenticateVerify(routeArgs(req));
       expect(res.status).toBe(400);
+    });
+
+    it("maps authentication verification errors", async () => {
+      const user = await db.user.create({
+        data: { ...createTestUser(), email: "passkey-error@example.com", webAuthnChallenge: "ac" },
+      });
+      await db.userCredential.create({ data: { id: "vc-error", userId: user.id, publicKey: new Uint8Array([1]), counter: 1n } });
+      vi.mocked(verifyAuthentication).mockRejectedValue(new Error("bad assertion") as never);
+
+      const res = await authenticateVerify(routeArgs(jsonRequest(
+        "https://spoonjoy.app/auth/webauthn/authenticate/verify",
+        { email: user.email, response: { id: "vc-error" } },
+      )));
+      expect(res.status).toBe(400);
+      await expect(res.json()).resolves.toMatchObject({ error: "bad assertion" });
     });
   });
 });

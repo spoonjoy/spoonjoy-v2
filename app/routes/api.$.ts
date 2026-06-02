@@ -69,11 +69,10 @@ function notFound(path: string): never {
   throw new ApiAuthError(`Unknown Spoonjoy API endpoint: /api/${path}`, 404);
 }
 
-function dispatchGet(path: string, segments: string[], url: URL): ApiDispatch | null {
+function dispatchGet(path: string, segments: string[], url: URL): ApiDispatch {
   const args = queryArgs(url);
 
   if (path === "health") return { operation: "health", args };
-  if (path === "tools") return null;
   if (path === "search") return { operation: "search_spoonjoy", args };
   if (path === "recipes") return { operation: "search_recipes", args };
   if (segments[0] === "recipes" && segments.length === 2) {
@@ -169,8 +168,6 @@ async function handleApiRequest({ request, context, params }: Route.LoaderArgs |
     const dispatch = request.method === "GET"
       ? dispatchGet(path, segments, url)
       : await dispatchMutation(request.method, path, segments, request);
-
-    if (!dispatch) notFound(path);
 
     const db = await getRequestDb(context);
     const principal = await resolveApiPrincipal(db, request, context.cloudflare?.env, dispatch.operation);

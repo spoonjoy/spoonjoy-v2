@@ -42,6 +42,13 @@ describe("Spoonjoy REST API route", () => {
     const root = await loader(routeArgs(new UndiciRequest("http://localhost/api"), ""));
     await expect(readJson(root)).resolves.toMatchObject({ ok: true, data: { app: "spoonjoy-v2" } });
 
+    const rootWithoutSplatParam = await loader({
+      request: new UndiciRequest("http://localhost/api"),
+      params: {},
+      context: { cloudflare: { env: null } },
+    } as any);
+    await expect(readJson(rootWithoutSplatParam)).resolves.toMatchObject({ ok: true, data: { app: "spoonjoy-v2" } });
+
     const health = await loader(routeArgs(new UndiciRequest("http://localhost/api/health"), "health"));
     await expect(readJson(health)).resolves.toMatchObject({ ok: true, data: { ok: true, authenticated: false, writable: false } });
 
@@ -68,6 +75,66 @@ describe("Spoonjoy REST API route", () => {
     const payload = await readJson(response);
     expect(payload).toMatchObject({ ok: true, data: { query: "milk", scope: "all" } });
     expect(payload.data.results.some((result: { type: string }) => result.type === "shopping-list-item")).toBe(false);
+  });
+
+  it("coerces legacy REST query and body edge cases before dispatch", async () => {
+    await expect(readJson(await loader(routeArgs(
+      new UndiciRequest("http://localhost/api/search?duration=2&limit=abc&quantity=3&checked=true"),
+      "search",
+    )))).resolves.toMatchObject({ ok: true });
+    await expect(readJson(await loader(routeArgs(
+      new UndiciRequest("http://localhost/api/search?checked=false"),
+      "search",
+    )))).resolves.toMatchObject({ ok: true });
+    await expect(readJson(await loader(routeArgs(
+      new UndiciRequest("http://localhost/api/search?checked=maybe"),
+      "search",
+    )))).resolves.toMatchObject({ ok: true });
+    await expect(readJson(await loader(routeArgs(
+      new UndiciRequest("http://localhost/api/shopping-list/search"),
+      "shopping-list/search",
+    )))).resolves.toMatchObject({ ok: false, error: { status: 401 } });
+    await expect(readJson(await loader(routeArgs(
+      new UndiciRequest("http://localhost/api/tokens"),
+      "tokens",
+    )))).resolves.toMatchObject({ ok: false, error: { status: 401 } });
+
+    await expect(readJson(await action(routeArgs(new UndiciRequest("http://localhost/api/tokens", {
+      method: "POST",
+      headers: { "Content-Length": "0" },
+    }), "tokens")))).resolves.toMatchObject({ ok: false, error: { status: 401 } });
+    await expect(readJson(await action(routeArgs(new UndiciRequest("http://localhost/api/tokens", {
+      method: "POST",
+      headers: { "Content-Type": "text/plain" },
+      body: "ignored",
+    }), "tokens")))).resolves.toMatchObject({ ok: false, error: { status: 401 } });
+    await expect(readJson(await action(routeArgs(new UndiciRequest("http://localhost/api/tokens", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "   ",
+    }), "tokens")))).resolves.toMatchObject({ ok: false, error: { status: 401 } });
+    await expect(readJson(await action(routeArgs(new UndiciRequest("http://localhost/api/tokens", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "null",
+    }), "tokens")))).resolves.toMatchObject({ ok: false, error: { status: 401 } });
+    await expect(readJson(await action(routeArgs(new UndiciRequest("http://localhost/api/tokens", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "[]",
+    }), "tokens")))).resolves.toMatchObject({
+      ok: false,
+      error: { status: 400, message: "JSON body must be an object" },
+    });
+    await expect(readJson(await action(routeArgs(
+      new UndiciRequest("http://localhost/api/tokens/credential-1", { method: "DELETE" }),
+      "tokens/credential-1",
+    )))).resolves.toMatchObject({ ok: false, error: { status: 401 } });
+    await expect(readJson(await action(routeArgs(new UndiciRequest("http://localhost/api/nope", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    }), "nope")))).resolves.toMatchObject({ ok: false, error: { status: 404 } });
   });
 
   it("creates tokens from a session and then uses bearer auth for shopping-list REST calls", async () => {

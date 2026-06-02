@@ -1,7 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Request as UndiciRequest } from "undici";
 import { faker } from "@faker-js/faker";
+
+vi.mock("~/lib/analytics-server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("~/lib/analytics-server")>()),
+  captureException: vi.fn(async () => undefined),
+}));
+
 import { handleMcpHttpRequest } from "~/lib/mcp/http-mcp.server";
+import { captureException } from "~/lib/analytics-server";
 import { createApiCredential } from "~/lib/api-auth.server";
 import { getLocalDb } from "~/lib/db.server";
 import { cleanupDatabase } from "../../helpers/cleanup";
@@ -29,6 +36,7 @@ describe("handleMcpHttpRequest", () => {
   let db: Awaited<ReturnType<typeof getLocalDb>>;
 
   beforeEach(async () => {
+    vi.clearAllMocks();
     await cleanupDatabase();
     db = await getLocalDb();
   });
@@ -219,5 +227,14 @@ describe("handleMcpHttpRequest", () => {
       waitUntil,
     });
     expect(waitUntil).toHaveBeenCalledTimes(1);
+    expect(captureException).toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: true, key: "phc_test" }),
+      expect.objectContaining({
+        distinctId: expect.any(String),
+        error: expect.any(Error),
+        route: "/mcp",
+        method: "POST",
+      }),
+    );
   });
 });
