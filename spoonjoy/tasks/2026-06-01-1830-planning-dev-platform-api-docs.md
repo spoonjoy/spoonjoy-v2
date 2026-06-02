@@ -1,7 +1,7 @@
 # Planning: Spoonjoy Developer Platform API And Docs
 
 **Status**: drafting
-**Created**: 2026-06-01 18:30
+**Created**: 2026-06-01 18:31
 
 ## Goal
 Expose Spoonjoy as a developer-friendly platform layer on top of the existing public-by-default Chef graph, so external clients can safely read, mutate, sync, and document Spoonjoy data through stable contracts. Deliver a deployed API documentation surface that can be sent to an external developer, while keeping MCP, REST, OAuth, API tokens, and future client profiles aligned through one source of truth.
@@ -84,4 +84,4 @@ Expose Spoonjoy as a developer-friendly platform layer on top of the existing pu
 The long-term moon includes many client profiles, but the first implementation should build platform primitives once and prove them through a narrow slice rather than creating one-off Pebble, mobile, or agent APIs. The first slice should leave room for future archive/export, public feed, webhook, SDK, and app-registration work without forcing those domains into the initial PRs.
 
 ## Progress Log
-- 2026-06-01 18:30 Created
+- 2026-06-01 18:31 Created
