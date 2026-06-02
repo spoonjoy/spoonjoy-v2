@@ -348,9 +348,8 @@ export function buildApiV1OpenApiDocument() {
   for (const path of Object.keys(operationMeta) as ResourcePath[]) {
     paths[path] = {};
     for (const method of Object.keys(operationMeta[path]) as HttpMethod[]) {
-      const meta = operationMeta[path][method];
-      const resource = resourceFor(path, method);
-      if (!meta || !resource) continue;
+      const meta = operationMeta[path][method]!;
+      const resource = resourceFor(path, method)!;
       const responses: Record<string, unknown> = {};
       for (const [status, schemaName] of Object.entries(meta.success)) {
         responses[status] = response(Number(status), schemaName);
