@@ -75,6 +75,7 @@ Replay rules:
 - Same key with different operation or request hash returns `409 idempotency_conflict`.
 - Stored 4xx/5xx responses replay exactly.
 - A replay does not require the original credential to remain active if the same client key can authenticate the current request; a revoked bearer token still fails auth before replay lookup.
+- Replay responses use the current request's `requestId` in the response envelope and `X-Request-Id` header. The stored body is copied, then `requestId` is replaced with the current request id and `mutation.replayed` is set to `true`.
 
 ## Envelope, Headers, And Errors
 
@@ -593,3 +594,7 @@ After deploy, these checks must pass:
 - `GET https://spoonjoy.app/api/v1/openapi.json` -> 200 JSON with `openapi: "3.1.0"`
 - `GET https://spoonjoy.app/api/v1/recipes` -> 200 JSON with `ok: true` and `data.recipes` array
 - `GET https://spoonjoy.app/api/v1/cookbooks` -> 200 JSON with `ok: true` and `data.cookbooks` array
+- `GET https://spoonjoy.app/api/v1/shopping-list` without credentials -> 401 JSON with `ok: false`, `error.code: "authentication_required"`, and `X-Request-Id`
+- `GET https://spoonjoy.app/api/v1/shopping-list/sync` without credentials -> 401 JSON with `ok: false`, `error.code: "authentication_required"`, and `X-Request-Id`
+- `POST https://spoonjoy.app/api/v1/shopping-list/items` without credentials and with JSON body `{ "clientMutationId": "live-smoke", "name": "eggs" }` -> 401 JSON with `ok: false`, `error.code: "authentication_required"`, and `X-Request-Id`
+- `GET https://spoonjoy.app/api/v1/tokens` without credentials -> 401 JSON with `ok: false`, `error.code: "authentication_required"`, and `X-Request-Id`

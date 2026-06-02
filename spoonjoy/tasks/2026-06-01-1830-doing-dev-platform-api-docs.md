@@ -302,7 +302,7 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 
 ### ⬜ Unit 17b: Live API Docs Verification
 **What**: Live-smoke production endpoints after deploy.
-**Output**: Live verification log saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-17b-live-smoke.log` covering `https://spoonjoy.app/developers`, `https://spoonjoy.app/api/v1`, `https://spoonjoy.app/api/v1/health`, `https://spoonjoy.app/api/v1/openapi.json`, `https://spoonjoy.app/api/v1/recipes`, and `https://spoonjoy.app/api/v1/cookbooks`.
+**Output**: Live verification log saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-17b-live-smoke.log` covering `https://spoonjoy.app/developers`, `https://spoonjoy.app/api/v1`, `https://spoonjoy.app/api/v1/health`, `https://spoonjoy.app/api/v1/openapi.json`, `https://spoonjoy.app/api/v1/recipes`, `https://spoonjoy.app/api/v1/cookbooks`, unauthenticated `GET /api/v1/shopping-list`, unauthenticated `GET /api/v1/shopping-list/sync`, unauthenticated `POST /api/v1/shopping-list/items`, and unauthenticated `GET /api/v1/tokens`.
 **Acceptance**: Deployed docs URL and v1 API endpoints return the exact status codes and response shapes listed in `api-v1-contract.md`.
 
 ### ⬜ Unit 18a: Final Documentation Sync And Completion
