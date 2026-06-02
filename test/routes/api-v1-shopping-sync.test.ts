@@ -25,14 +25,45 @@ function expectEnvelopeHeaders(response: Response, requestId: string) {
   expect(response.headers.get("Access-Control-Expose-Headers")).toBe("X-Request-Id");
 }
 
+function expectExactKeys(value: Record<string, unknown>, keys: string[]) {
+  expect(Object.keys(value).sort()).toEqual([...keys].sort());
+}
+
+function expectSuccessEnvelope(payload: any, requestId: string) {
+  expectExactKeys(payload, ["ok", "requestId", "data"]);
+  expect(payload.ok).toBe(true);
+  expect(payload.requestId).toBe(requestId);
+}
+
+function expectShoppingListShape(list: any) {
+  expectExactKeys(list, ["id", "chef", "items", "updatedAt"]);
+  expectExactKeys(list.chef, ["id", "username"]);
+  expect(typeof list.id).toBe("string");
+  expect(typeof list.chef.id).toBe("string");
+  expect(typeof list.chef.username).toBe("string");
+  expect(Array.isArray(list.items)).toBe(true);
+  expect(typeof list.updatedAt).toBe("string");
+}
+
 function expectShoppingItemShape(item: any) {
-  expect(item).toMatchObject({
-    id: expect.any(String),
-    name: expect.any(String),
-    checked: expect.any(Boolean),
-    sortIndex: expect.any(Number),
-    updatedAt: expect.any(String),
-  });
+  expectExactKeys(item, [
+    "id",
+    "name",
+    "quantity",
+    "unit",
+    "checked",
+    "checkedAt",
+    "deletedAt",
+    "categoryKey",
+    "iconKey",
+    "sortIndex",
+    "updatedAt",
+  ]);
+  expect(typeof item.id).toBe("string");
+  expect(typeof item.name).toBe("string");
+  expect(typeof item.checked).toBe("boolean");
+  expect(typeof item.sortIndex).toBe("number");
+  expect(typeof item.updatedAt).toBe("string");
   expect(item.quantity === null || typeof item.quantity === "number").toBe(true);
   for (const key of ["unit", "checkedAt", "deletedAt", "categoryKey", "iconKey"]) {
     expect(item[key] === null || typeof item[key] === "string").toBe(true);
@@ -113,6 +144,9 @@ describe("API v1 shopping-list read and sync", () => {
 
     expect(response.status).toBe(200);
     expectEnvelopeHeaders(response, "req_shopping_list");
+    expectSuccessEnvelope(payload, "req_shopping_list");
+    expectExactKeys(payload.data, ["shoppingList", "nextCursor"]);
+    expectShoppingListShape(payload.data.shoppingList);
     expect(payload).toMatchObject({
       ok: true,
       requestId: "req_shopping_list",
@@ -160,6 +194,9 @@ describe("API v1 shopping-list read and sync", () => {
 
     expect(response.status).toBe(200);
     expectEnvelopeHeaders(response, "req_shopping_empty");
+    expectSuccessEnvelope(payload, "req_shopping_empty");
+    expectExactKeys(payload.data, ["shoppingList", "nextCursor"]);
+    expectShoppingListShape(payload.data.shoppingList);
     expect(payload).toMatchObject({
       ok: true,
       requestId: "req_shopping_empty",
@@ -186,6 +223,8 @@ describe("API v1 shopping-list read and sync", () => {
 
     expect(all.status).toBe(200);
     expectEnvelopeHeaders(all, "req_shopping_sync_all");
+    expectSuccessEnvelope(allPayload, "req_shopping_sync_all");
+    expectExactKeys(allPayload.data, ["items", "nextCursor", "hasMore"]);
     expect(allPayload).toMatchObject({
       ok: true,
       requestId: "req_shopping_sync_all",
@@ -218,6 +257,8 @@ describe("API v1 shopping-list read and sync", () => {
 
     expect(filtered.status).toBe(200);
     expectEnvelopeHeaders(filtered, "req_shopping_sync_cursor");
+    expectSuccessEnvelope(filteredPayload, "req_shopping_sync_cursor");
+    expectExactKeys(filteredPayload.data, ["items", "nextCursor", "hasMore"]);
     expect(filteredPayload.data.items.map((item: { id: string }) => item.id)).toEqual([fixture.tombstone.id]);
     expect(filteredPayload.data.hasMore).toBe(false);
     expect(filteredPayload.data.nextCursor).toBe(filteredPayload.data.items[0].updatedAt);
@@ -245,6 +286,17 @@ describe("API v1 shopping-list read and sync", () => {
     await expect(readJson(missingScope)).resolves.toMatchObject({
       ok: false,
       requestId: "req_shopping_missing_scope",
+      error: { code: "insufficient_scope", status: 403 },
+    });
+
+    const syncMissingScope = await loader(routeArgs(new UndiciRequest("http://localhost/api/v1/shopping-list/sync", {
+      headers: { Authorization: `Bearer ${fixture.writeOnlyCredential.token}`, "X-Request-Id": "req_shopping_sync_missing_scope" },
+    }) as unknown as Request, "shopping-list/sync"));
+    expect(syncMissingScope.status).toBe(403);
+    expectEnvelopeHeaders(syncMissingScope, "req_shopping_sync_missing_scope");
+    await expect(readJson(syncMissingScope)).resolves.toMatchObject({
+      ok: false,
+      requestId: "req_shopping_sync_missing_scope",
       error: { code: "insufficient_scope", status: 403 },
     });
 
