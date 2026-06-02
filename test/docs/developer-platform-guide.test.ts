@@ -29,11 +29,28 @@ const CLIENT_PROFILES = [
 
 const GUIDE_MARKERS = [
   "External Client Guide",
+  "Token Acquisition",
   "Auth Implementation",
   "Read the public Chef graph",
   "Use your Spoonjoy session",
   "Use bearer only outside the session",
   "There is no token to mint or paste for playground calls",
+  "No token: signed-in browser",
+  "password, passkey, or any configured Google, GitHub, or Apple provider",
+  "Personal token: signed-in chef creates one",
+  "existing bearer credential with",
+  "tokens:write",
+  "Delegated token: OAuth/PKCE",
+  "Those provider buttons are Spoonjoy sign-in methods",
+  "The client never handles the chef's password",
+  "Delegated token: approval link",
+  "POST /api/tools/start_agent_connection",
+  "POST /api/tools/poll_agent_connection",
+  "full login surface",
+  "No password-token API",
+  "Spoonjoy does not support an OAuth password grant",
+  "Email/password login creates a session cookie, not an API token",
+  "grant_type=password",
   "Same-origin browser session",
   "credentials: \"same-origin\"",
   "Do not send Authorization",
@@ -79,6 +96,7 @@ describe("external client guide", () => {
     expect(apiDocs).toContain("POST /api/v1/tokens");
     expect(apiDocs).toContain('fetch("/api/v1/shopping-list"');
     expect(apiDocs).toContain("grant_type=authorization_code");
+    expect(apiDocs).toContain("access_token: \"sj_...\"");
     expect(apiDocs).toContain("https://spoonjoy.app/developers/playground");
     expect(apiDocs).toContain("curl 'https://spoonjoy.app/api/v1/shopping-list/sync?cursor=");
     expect(apiDocs).toContain("curl -X POST https://spoonjoy.app/api/v1/shopping-list/items");
@@ -112,6 +130,7 @@ describe("external client guide", () => {
     expect(renderedText).toContain("Generated operation: POST /api/v1/tokens");
     expect(renderedText).toContain('fetch("/api/v1/shopping-list"');
     expect(renderedText).toContain("grant_type=authorization_code");
+    expect(renderedText).toContain("Response: { \"token\": \"sj_...\" }");
     expect(renderedText).toContain("GET /api/v1/shopping-list/sync");
     expect(renderedText).toContain("POST /api/v1/shopping-list/items");
     expect(renderedText).toContain(scopesFor("POST", "/api/v1/tokens")[0]);

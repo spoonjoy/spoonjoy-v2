@@ -111,6 +111,39 @@ const externalGuideSteps = [
   },
 ] as const;
 
+const tokenAcquisitionPaths = [
+  {
+    title: "No token: signed-in browser",
+    mode: "Same-origin",
+    body: "A same-origin browser client does not fetch or store a bearer token. The chef signs into Spoonjoy with password, passkey, or any configured Google, GitHub, or Apple provider, and private API calls use the resulting session cookie.",
+    sample: "Login surface: /login\nThen call: fetch(\"/api/v1/shopping-list\", { credentials: \"same-origin\" })",
+  },
+  {
+    title: "Personal token: signed-in chef creates one",
+    mode: "Direct token",
+    body: "For a script, device, or developer-owned client, the chef signs in first and runs POST /api/v1/tokens from Session auth, such as through the generated playground. An existing bearer credential with tokens:write can also create another token, but never with broader scopes than it already has. Spoonjoy returns the raw sj_... secret once; save it outside browser bundles.",
+    sample: "POST /api/v1/tokens\nAuth: Session cookie or Bearer sj_... with tokens:write\nBody: { \"name\": \"Kitchen script\", \"scopes\": [\"recipes:read\", \"shopping_list:read\"] }\nResponse: { \"token\": \"sj_...\" }",
+  },
+  {
+    title: "Delegated token: OAuth/PKCE",
+    mode: "Third-party",
+    body: "For a third-party app, register a public client and redirect the chef to /oauth/authorize. If they are not signed in, Spoonjoy routes them through /login and the full auth surface before consent. The client never handles the chef's password. The client exchanges the authorization code at /oauth/token for an sj_... access_token plus rotating refresh_token.",
+    sample: "POST /oauth/register\nGET /oauth/authorize?...code_challenge_method=S256\nPOST /oauth/token -> access_token: sj_...",
+  },
+  {
+    title: "Delegated token: approval link",
+    mode: "Agent/device",
+    body: "For clients that cannot run a browser-based OAuth callback, call POST /api/tools/start_agent_connection, show the authorizationUrl to the chef, then poll POST /api/tools/poll_agent_connection. The approval page also uses Spoonjoy's full login surface before issuing a one-time sj_... token.",
+    sample: "POST /api/tools/start_agent_connection -> authorizationUrl + deviceCode\nPOST /api/tools/poll_agent_connection -> token: sj_...",
+  },
+  {
+    title: "No password-token API",
+    mode: "Security",
+    body: "Spoonjoy does not support an OAuth password grant or API endpoint where a third-party client trades a chef's password for a token. Email/password login creates a session cookie, not an API token. Clients should use OAuth/PKCE or delegated approval so Spoonjoy, not the client, handles password, passkey, and provider login.",
+    sample: "Do not implement: grant_type=password\nUse instead: OAuth/PKCE or delegated approval link",
+  },
+] as const;
+
 const authImplementationSteps = [
   {
     title: "Same-origin browser session",
@@ -127,7 +160,7 @@ const authImplementationSteps = [
   {
     title: "OAuth/PKCE app",
     mode: "Delegated",
-    body: "Register a public client with token_endpoint_auth_method: none and no client secret, redirect the signed-in chef through consent, then exchange the single-use 60-second code with a form-encoded POST /oauth/token request. OAuth accepts kitchen:read and kitchen:write scopes; the returned sj_... access_token lasts 30 days, and refresh_token rotates on every refresh grant.",
+    body: "Register a public client with token_endpoint_auth_method: none and no client secret, redirect the chef through consent, then exchange the single-use 60-second code with a form-encoded POST /oauth/token request. If the chef is not signed in, Spoonjoy routes them through /login first, where password, passkey, and configured Google, GitHub, or Apple sign-in all return to consent. Those provider buttons are Spoonjoy sign-in methods; external clients still use the /oauth/* endpoints. OAuth accepts kitchen:read and kitchen:write scopes; the returned sj_... access_token lasts 30 days, and refresh_token rotates on every refresh grant.",
     sample: "POST /oauth/register\nGET /oauth/authorize?response_type=code&scope=kitchen%3Aread+kitchen%3Awrite&code_challenge_method=S256\nPOST /oauth/token\nContent-Type: application/x-www-form-urlencoded\n\ngrant_type=authorization_code&client_id=...&code=...&code_verifier=...",
   },
   {
@@ -266,6 +299,30 @@ export default function Developers() {
               </article>
             ))}
           </div>
+        </div>
+      </SectionShell>
+
+      <SectionShell title="Token Acquisition">
+        <div className="grid gap-4">
+          {tokenAcquisitionPaths.map((path) => (
+            <article
+              key={path.title}
+              className="grid gap-4 border-b border-[var(--sj-border)] py-4 lg:grid-cols-[minmax(13rem,18rem)_minmax(0,1fr)]"
+            >
+              <div>
+                <p className="font-sj-ui text-xs font-bold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">
+                  {path.mode}
+                </p>
+                <h3 className="mt-2 font-sj-display text-2xl/7 font-semibold text-[var(--sj-ink)]">{path.title}</h3>
+              </div>
+              <div className="min-w-0 space-y-3">
+                <p className="text-sm/6 text-[var(--sj-ink-soft)]">{path.body}</p>
+                <pre className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
+                  {path.sample}
+                </pre>
+              </div>
+            </article>
+          ))}
         </div>
       </SectionShell>
 

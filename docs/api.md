@@ -50,6 +50,70 @@ Supported entry points:
 
 OAuth access tokens are normal Spoonjoy API credentials. OAuth token responses also include a rotating `refresh_token`; each refresh-token grant rotates the presented token and rejects replay.
 
+## Token Acquisition
+
+Token acquisition is separate from token usage. `Authorization: Bearer sj_...` is how an external request authenticates after a token exists; the sections below are where that token comes from.
+
+### No token: signed-in browser
+
+A same-origin browser client does not fetch or store a bearer token. The chef signs into Spoonjoy with password, passkey, or any configured Google, GitHub, or Apple provider, and private API calls use the resulting session cookie.
+
+```ts
+await fetch("/api/v1/shopping-list", {
+  credentials: "same-origin",
+});
+```
+
+### Personal token: signed-in chef creates one
+
+For a script, tiny device, or developer-owned client, the chef signs in first and runs `POST /api/v1/tokens` from Session auth, such as through the generated playground. An existing bearer credential with `tokens:write` can also create another token, but never with broader scopes than it already has. Spoonjoy returns the raw `sj_...` secret once; save it outside browser bundles.
+
+```http
+POST /api/v1/tokens
+Auth: Session cookie or Bearer sj_... with tokens:write
+Content-Type: application/json
+
+{
+  "name": "Kitchen script",
+  "scopes": ["recipes:read", "shopping_list:read"]
+}
+```
+
+### Delegated token: OAuth/PKCE
+
+For a third-party app, use OAuth/PKCE. The client registers with `POST /oauth/register`, redirects the chef to `GET /oauth/authorize`, then exchanges the authorization code with `POST /oauth/token`.
+
+If the chef is not signed in, Spoonjoy redirects to `/login?redirectTo=...`. That login page supports password, passkeys, and any configured Google, GitHub, or Apple provider; each path returns to the original OAuth consent request. Those provider buttons are Spoonjoy sign-in methods, not external token grants. The client never handles the chef's password.
+
+```text
+POST /oauth/register
+GET /oauth/authorize?response_type=code&scope=kitchen%3Aread+kitchen%3Awrite&code_challenge_method=S256
+POST /oauth/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=authorization_code&client_id=...&code=...&code_verifier=...
+```
+
+The token response contains `access_token: "sj_..."`, `token_type: "Bearer"`, `expires_in`, `scope`, and a rotating `refresh_token`.
+
+### Delegated token: approval link
+
+For agents or devices that cannot run a browser-based OAuth callback, use the delegated approval link. Call `POST /api/tools/start_agent_connection`, show the returned `authorizationUrl` to the chef, then poll `POST /api/tools/poll_agent_connection` with the returned `deviceCode`. The approval page also uses Spoonjoy's full login surface before issuing a one-time `sj_...` token.
+
+```text
+POST /api/tools/start_agent_connection -> authorizationUrl + deviceCode
+POST /api/tools/poll_agent_connection -> token: sj_...
+```
+
+### No password-token API
+
+Spoonjoy does not support an OAuth password grant or API endpoint where a third-party client trades a chef's password for a token. Email/password login creates a session cookie, not an API token. Clients should use OAuth/PKCE or delegated approval so Spoonjoy, not the client, handles password, passkey, and provider login.
+
+```text
+Do not implement: grant_type=password
+Use instead: OAuth/PKCE or delegated approval link
+```
+
 ## Auth Implementation
 
 Choose one credential mode per request. Same-origin browser code should use the signed-in Spoonjoy session; external clients should use `Authorization: Bearer ...`; delegated browser or mobile apps should use OAuth/PKCE. If an Authorization header is present, bearer auth wins over the session.
@@ -83,7 +147,7 @@ When a signed-in session creates a token and omits `scopes`, Spoonjoy uses the d
 
 Use OAuth/PKCE when a third-party app needs the chef to consent without embedding a long-lived secret. Register a public client with `token_endpoint_auth_method: none`; there is no client secret. Redirect URIs must be HTTPS, with HTTP allowed only for `localhost` and `127.0.0.1`.
 
-OAuth accepts only `kitchen:read` and `kitchen:write` scopes. Omitting `scope` grants both. Redirect the signed-in chef through consent, then exchange the single-use 60-second code with a form-encoded `POST /oauth/token` request.
+OAuth accepts only `kitchen:read` and `kitchen:write` scopes. Omitting `scope` grants both. Redirect the chef through consent, then exchange the single-use 60-second code with a form-encoded `POST /oauth/token` request. If the chef is not signed in, Spoonjoy routes them through `/login` first, where password, passkey, and configured Google, GitHub, or Apple sign-in all return to consent. Those provider buttons are Spoonjoy sign-in methods; external clients still use the `/oauth/*` endpoints.
 
 ```text
 POST /oauth/register
