@@ -145,7 +145,7 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 **Output**: `test/routes/api-v1-tokens.test.ts` asserts the exact credential metadata fields, `token` one-time secret field, requested scope normalization, default personal token scopes, bearer-created token scopes capped to the caller's expanded fine-grained scopes, bearer scope escalation returning `403 insufficient_scope`, unknown request body fields rejected with `400 validation_error`, revoke response fields, self-revoke succeeds for the current request and fails on later requests, missing auth 401, invalid JSON 400, and `tokens:read` / `tokens:write` enforcement from `api-v1-contract.md`.
 **Acceptance**: Focused tests FAIL because token metadata endpoints are not implemented under `/api/v1`.
 
-### ⬜ Unit 6b: Personal API Token V1 Metadata — Implementation
+### ✅ Unit 6b: Personal API Token V1 Metadata — Implementation
 **What**: Implement the three token metadata endpoints in the v1 route/helper layer using `createApiCredential` for creation and direct `db.apiCredential.findMany` / `findFirst` / `update` logic for list and revoke behavior; do not treat the `revoke_api_token` operation name in `app/lib/spoonjoy-api.server.ts` as an exported helper.
 **Output**: Updated v1 route/helper files, token response formatting implemented in `app/lib/api-v1.server.ts`, and passing Unit 6a tests.
 **Acceptance**: Unit 6a tests PASS; legacy `/api/tokens` tests still PASS; `pnpm run build` succeeds with no warnings.
@@ -369,3 +369,4 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 - 2026-06-01 20:51 Addressed Unit 5c reviewer finding by explicitly asserting malformed cookbook `limit=abc`, with regenerated 100% coverage and warning-free build logs
 - 2026-06-01 20:52 Unit 6a complete: added v1 token metadata tests for session and bearer list/create/revoke, token secret one-time return, scope normalization/defaults/capping/escalation, self-revoke, auth failures, unknown body fields, invalid JSON, blank names, and invalid scopes; red run fails on unimplemented v1 token routes returning shell 404s
 - 2026-06-01 20:54 Addressed Unit 6a reviewer findings by allowing nullable token metadata date fields and asserting insufficient-scope error envelopes for token list/create/delete paths; regenerated red evidence still fails on unimplemented v1 token routes
+- 2026-06-01 20:57 Unit 6b complete: implemented authenticated token list/create/revoke metadata endpoints with one-time token secret return, bearer scope capping, self-revoke behavior, unknown-field validation, invalid-scope mapping, green v1/legacy token tests, typecheck, and warning-free build
