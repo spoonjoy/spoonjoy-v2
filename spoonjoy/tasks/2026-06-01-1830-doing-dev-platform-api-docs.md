@@ -155,7 +155,7 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 **Output**: Coverage log saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-6c-coverage.log`; refactors stay in token helpers and tests.
 **Acceptance**: 100% coverage on new/changed token v1 code; focused tests and build still PASS with no warnings.
 
-### ⬜ Unit 7a: Public And Token Scope Enforcement — Tests
+### ✅ Unit 7a: Public And Token Scope Enforcement — Tests
 **What**: Write failing tests for scope enforcement on the `/api/v1` endpoints implemented through Unit 6.
 **Output**: `test/routes/api-v1-scopes-public-tokens.test.ts` asserts anonymous access for discovery/health/recipes/cookbooks; authenticated `recipes:read` and `cookbooks:read` success; authenticated public-read bearer failure without the relevant read scope; `tokens:read` and `tokens:write` enforcement for token metadata; legacy `kitchen:read` and `kitchen:write` compatibility for public-read and token endpoints; and no scope requirement for authenticated discovery.
 **Acceptance**: Focused tests FAIL until v1 routes centralize and enforce the planning-doc scope rows for discovery, recipes, cookbooks, and token metadata.
@@ -372,3 +372,4 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 - 2026-06-01 20:57 Unit 6b complete: implemented authenticated token list/create/revoke metadata endpoints with one-time token secret return, bearer scope capping, self-revoke behavior, unknown-field validation, invalid-scope mapping, green v1/legacy token tests, typecheck, and warning-free build
 - 2026-06-01 21:06 Addressed Unit 6b reviewer finding by enforcing token-create authentication and `tokens:write` scope before parsing JSON bodies; unauthenticated and under-scoped malformed bodies now return auth/scope errors before body validation
 - 2026-06-01 21:07 Unit 6c complete: added token branch coverage for duplicate names, no/blank/primitive JSON bodies, invalid scope payloads, missing and cross-owner revokes, already-revoked credentials, 100% coverage on v1 token code, focused route tests, typecheck, and warning-free build
+- 2026-06-01 21:09 Unit 7a complete: added public/token scope-matrix tests covering optional discovery routes, anonymous public reads, fine-grained and legacy scope success/failure, session token access, and a red structural assertion for missing `resolveApiV1ScopeRequirement`
