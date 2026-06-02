@@ -248,6 +248,11 @@ describe("API v1 personal token metadata", () => {
     }) as unknown as Request, "tokens"));
     expect(readWithoutScope.status).toBe(403);
     expectEnvelopeHeaders(readWithoutScope, "req_tokens_read_scope");
+    await expect(readJson(readWithoutScope)).resolves.toMatchObject({
+      ok: false,
+      requestId: "req_tokens_read_scope",
+      error: { code: "insufficient_scope", status: 403 },
+    });
 
     const writeWithoutScope = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/tokens", {
       method: "POST",
@@ -256,6 +261,11 @@ describe("API v1 personal token metadata", () => {
     }) as unknown as Request, "tokens"));
     expect(writeWithoutScope.status).toBe(403);
     expectEnvelopeHeaders(writeWithoutScope, "req_tokens_write_scope");
+    await expect(readJson(writeWithoutScope)).resolves.toMatchObject({
+      ok: false,
+      requestId: "req_tokens_write_scope",
+      error: { code: "insufficient_scope", status: 403 },
+    });
 
     const deleteWithoutScope = await action(routeArgs(new UndiciRequest(`http://localhost/api/v1/tokens/${target.credential.id}`, {
       method: "DELETE",
@@ -263,6 +273,11 @@ describe("API v1 personal token metadata", () => {
     }) as unknown as Request, `tokens/${target.credential.id}`));
     expect(deleteWithoutScope.status).toBe(403);
     expectEnvelopeHeaders(deleteWithoutScope, "req_tokens_delete_scope");
+    await expect(readJson(deleteWithoutScope)).resolves.toMatchObject({
+      ok: false,
+      requestId: "req_tokens_delete_scope",
+      error: { code: "insufficient_scope", status: 403 },
+    });
 
     const invalidJson = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/tokens", {
       method: "POST",
