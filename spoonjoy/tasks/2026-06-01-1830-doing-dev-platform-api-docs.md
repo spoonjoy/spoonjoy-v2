@@ -180,7 +180,7 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 **Output**: Updated v1 route/helper files and passing Unit 8a tests.
 **Acceptance**: Unit 8a tests PASS; legacy shopping-list API tests still PASS; `pnpm run build` succeeds with no warnings.
 
-### ⬜ Unit 8c: Shopping-List Read, Sync, And Tombstones — Coverage & Refactor
+### ✅ Unit 8c: Shopping-List Read, Sync, And Tombstones — Coverage & Refactor
 **What**: Verify coverage for sync branches: no cursor, valid cursor, future cursor, invalid cursor, deleted-only page, checked item, unchecked item, and empty authenticated list.
 **Output**: Coverage log saved to `./2026-06-01-1830-doing-dev-platform-api-docs/unit-8c-coverage.log`; refactors stay in shopping sync helpers and tests.
 **Acceptance**: 100% coverage on new/changed shopping-list read/sync code; focused tests and build still PASS with no warnings.
@@ -379,3 +379,4 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 - 2026-06-01 21:23 Unit 8a complete: added v1 shopping-list read/sync tests for scope rows, authenticated active-list shape, empty-list creation, tombstone sync, cursor filtering, missing auth, insufficient scope, and invalid cursor; red run fails on unimplemented v1 shopping routes returning 404
 - 2026-06-01 21:26 Addressed Unit 8a reviewer findings by asserting exact success envelope/data/list/item keys and adding `GET /api/v1/shopping-list/sync` insufficient-scope coverage
 - 2026-06-01 21:27 Unit 8b complete: implemented v1 shopping-list read and sync endpoints with scope rows, active-list formatting, empty-list creation, tombstone-inclusive sync, cursor filtering, invalid cursor errors, focused route tests, typecheck, and warning-free build
+- 2026-06-01 21:33 Unit 8c complete: added sync ordering/cursor fallback coverage, hardened cursor parsing to reject non-round-tripping JavaScript date inputs, and verified 100% v1 coverage plus typecheck and warning-free build
