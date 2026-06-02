@@ -131,7 +131,7 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 **Acceptance**: Focused tests FAIL because cookbook reads are not implemented under `/api/v1`.
 
 ### ⬜ Unit 5b: Public Cookbook V1 Reads — Implementation
-**What**: Implement `GET /api/v1/cookbooks` and `GET /api/v1/cookbooks/:id` in the v1 route/helper layer using existing cookbook/search data access from `app/lib/spoonjoy-api.server.ts` and `app/lib/search.server.ts` without changing legacy `/api/cookbooks` owner-scoped behavior.
+**What**: Implement `GET /api/v1/cookbooks` and `GET /api/v1/cookbooks/:id` in the v1 route/helper layer using new public cookbook data access in `app/lib/api-v1.server.ts` plus search primitives from `app/lib/search.server.ts`; do not reuse legacy `list_cookbooks` / `get_cookbook` operations from `app/lib/spoonjoy-api.server.ts` because they are owner-scoped.
 **Output**: Updated v1 route/helper files and passing Unit 5a tests.
 **Acceptance**: Unit 5a tests PASS; legacy cookbook API tests still PASS; `pnpm run build` succeeds with no warnings.
 
@@ -261,12 +261,12 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 **Acceptance**: 100% coverage on new/changed developers route code; focused tests and build still PASS with no warnings.
 
 ### ⬜ Unit 14a: Existing Docs Drift — Tests
-**What**: Write failing docs assertions for `docs/api.md`, `docs/claude-connector.md`, `docs/ouroboros-mcp.md`, and `app/lib/oauth-routes.server.ts`.
-**Output**: `test/docs/developer-platform-docs.test.ts` imports `app/lib/api-v1-contract.server.ts` and asserts `docs/api.md` contains the supported endpoint list, scope list, OpenAPI URL, and rate-limit guidance; it also asserts docs mention `/developers`, refresh-token behavior, OAuth/DCR routes, MCP `/mcp`, delegated `/api/tools/start_agent_connection` and `/api/tools/poll_agent_connection`, and do not claim remote MCP has no refresh tokens.
+**What**: Write failing docs assertions for `docs/api.md`, `docs/claude-connector.md`, `docs/ouroboros-mcp.md`, `app/lib/oauth-routes.server.ts`, and `app/lib/oauth-server.server.ts`.
+**Output**: `test/docs/developer-platform-docs.test.ts` imports `app/lib/api-v1-contract.server.ts` and asserts `docs/api.md` contains the supported endpoint list, scope list, OpenAPI URL, and rate-limit guidance; it also asserts docs and OAuth server comments mention refresh-token rotation, OAuth/DCR routes, MCP `/mcp`, delegated `/api/tools/start_agent_connection` and `/api/tools/poll_agent_connection`, and do not claim remote MCP has no refresh tokens.
 **Acceptance**: Focused tests FAIL because existing docs/comment drift remains.
 
 ### ⬜ Unit 14b: Existing Docs Drift — Implementation
-**What**: Update `docs/api.md`, `docs/claude-connector.md`, `docs/ouroboros-mcp.md`, and the stale refresh-token comment in `app/lib/oauth-routes.server.ts` to match implemented REST/MCP/OAuth behavior and point developers to `/developers`.
+**What**: Update `docs/api.md`, `docs/claude-connector.md`, `docs/ouroboros-mcp.md`, and the stale refresh-token comments in `app/lib/oauth-routes.server.ts` and `app/lib/oauth-server.server.ts` to match implemented REST/MCP/OAuth behavior and point developers to `/developers`.
 **Output**: Updated docs/comment files and passing Unit 14a tests.
 **Acceptance**: Unit 14a tests PASS; `pnpm run build` succeeds with no warnings.
 
