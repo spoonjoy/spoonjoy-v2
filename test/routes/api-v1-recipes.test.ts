@@ -109,8 +109,64 @@ describe("API v1 public recipe reads", () => {
     expect(payload.data.recipes.map((recipe: { id: string }) => recipe.id)).not.toContain(second.recipe.id);
   });
 
+  it("defaults blank recipe queries and validates list limit boundaries", async () => {
+    const fixture = await createRecipeFixture(db, "Api V1 Blank Query");
+
+    const blank = await loader(routeArgs(new UndiciRequest("http://localhost/api/v1/recipes?query=&limit=", {
+      headers: { "X-Request-Id": "req_recipe_blank_query" },
+    }) as unknown as Request, "recipes"));
+    const blankPayload = await readJson(blank);
+
+    expect(blank.status).toBe(200);
+    expectEnvelopeHeaders(blank, "req_recipe_blank_query");
+    expect(blankPayload.data.query).toBeNull();
+    expect(blankPayload.data.limit).toBe(20);
+    expect(blankPayload.data.recipes.map((recipe: { id: string }) => recipe.id)).toContain(fixture.recipe.id);
+
+    const boundary = await loader(routeArgs(new UndiciRequest("http://localhost/api/v1/recipes?limit=50", {
+      headers: { "X-Request-Id": "req_recipe_limit_boundary" },
+    }) as unknown as Request, "recipes"));
+    const boundaryPayload = await readJson(boundary);
+
+    expect(boundary.status).toBe(200);
+    expectEnvelopeHeaders(boundary, "req_recipe_limit_boundary");
+    expect(boundaryPayload.data.query).toBeNull();
+    expect(boundaryPayload.data.limit).toBe(50);
+
+    const malformedLimit = await loader(routeArgs(new UndiciRequest("http://localhost/api/v1/recipes?limit=abc", {
+      headers: { "X-Request-Id": "req_recipe_malformed_limit" },
+    }) as unknown as Request, "recipes"));
+    expect(malformedLimit.status).toBe(400);
+    expectEnvelopeHeaders(malformedLimit, "req_recipe_malformed_limit");
+    await expect(readJson(malformedLimit)).resolves.toMatchObject({
+      ok: false,
+      requestId: "req_recipe_malformed_limit",
+      error: { code: "validation_error", status: 400 },
+    });
+  });
+
   it("returns recipe detail with steps, ingredients, cookbook links, and scoped bearer success", async () => {
     const fixture = await createRecipeFixture(db, "Api V1 Detail");
+    const earlierStep = await db.recipeStep.create({
+      data: {
+        recipeId: fixture.recipe.id,
+        stepNum: 0,
+        stepTitle: "Prep",
+        description: "Gather ingredients.",
+        duration: 3,
+      },
+    });
+    const saltRef = await getOrCreateIngredientRef(db, `a salt ${faker.string.alphanumeric(6)}`);
+    const saltUnit = await getOrCreateUnit(db, "tsp");
+    await db.ingredient.create({
+      data: {
+        recipeId: fixture.recipe.id,
+        stepNum: fixture.step.stepNum,
+        quantity: 2,
+        unitId: saltUnit.id,
+        ingredientRefId: saltRef.id,
+      },
+    });
     const tokenOwner = await db.user.create({ data: createTestUser() });
     const token = await createApiCredential(db, tokenOwner.id, "Recipe reader", { scopes: ["recipes:read"] });
 
@@ -135,12 +191,24 @@ describe("API v1 public recipe reads", () => {
           createdAt: fixture.recipe.createdAt.toISOString(),
           updatedAt: expect.any(String),
           steps: [{
+            id: earlierStep.id,
+            stepNum: 0,
+            stepTitle: "Prep",
+            description: "Gather ingredients.",
+            duration: 3,
+            ingredients: [],
+          }, {
             id: fixture.step.id,
             stepNum: 1,
             stepTitle: "Boil",
             description: "Boil pasta.",
             duration: 12,
             ingredients: [{
+              id: expect.any(String),
+              name: saltRef.name,
+              quantity: 2,
+              unit: "tsp",
+            }, {
               id: expect.any(String),
               name: fixture.ingredientRef.name,
               quantity: 1,
