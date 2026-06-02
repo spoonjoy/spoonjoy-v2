@@ -1,0 +1,49 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ↓ test/scripts/migration-0016-api-idempotency-keys.test.ts > migration 0016 — API idempotency keys > creates the idempotency table with required and nullable fields
+ ↓ test/scripts/migration-0016-api-idempotency-keys.test.ts > migration 0016 — API idempotency keys > sets cascade and set-null foreign key behavior
+ ↓ test/scripts/migration-0016-api-idempotency-keys.test.ts > migration 0016 — API idempotency keys > creates the replay unique tuple and query indexes
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/scripts/migration-0016-api-idempotency-keys.test.ts > migration 0016 — API idempotency keys
+Error: ENOENT: no such file or directory, open '/Users/arimendelow/Projects/spoonjoy-v2/migrations/0016_api_idempotency_keys.sql'
+ ❯ test/scripts/migration-0016-api-idempotency-keys.test.ts:88:13
+     86|   beforeAll(() => {
+     87|     db = freshDb();
+     88|     db.exec(readFileSync(MIGRATION_PATH, "utf8"));
+       |             ^
+     89|   });
+     90| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { errno: -2, code: 'ENOENT', syscall: 'open', path: '/Users/arimendelow/Projects/spoonjoy-v2/migrations/0016_api_idempotency_keys.sql' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  test/lib/api-idempotency.server.test.ts [ test/lib/api-idempotency.server.test.ts ]
+Error: Failed to resolve import "~/lib/api-idempotency.server" from "test/lib/api-idempotency.server.test.ts". Does the file exist?
+  Plugin: vite:import-analysis
+  File: /Users/arimendelow/Projects/spoonjoy-v2/test/lib/api-idempotency.server.test.ts:5:29
+  2  |  describe("API idempotency helpers", () => {
+  3  |    it("exports helpers for hashing, reserving, completing, and replaying idempotent mutations", async () => {
+  4  |      const mod = await import("~/lib/api-idempotency.server");
+     |                               ^
+  5  |      expect(mod).toMatchObject({
+  6  |        hashIdempotencyRequest: expect.any(Function),
+ ❯ TransformPluginContext._formatLog node_modules/.pnpm/vite@7.3.1_@types+node@25.1.0_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0/node_modules/vite/dist/node/chunks/config.js:28999:43
+ ❯ TransformPluginContext.error node_modules/.pnpm/vite@7.3.1_@types+node@25.1.0_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0/node_modules/vite/dist/node/chunks/config.js:28996:14
+ ❯ normalizeUrl node_modules/.pnpm/vite@7.3.1_@types+node@25.1.0_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0/node_modules/vite/dist/node/chunks/config.js:27119:18
+ ❯ node_modules/.pnpm/vite@7.3.1_@types+node@25.1.0_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0/node_modules/vite/dist/node/chunks/config.js:27177:32
+ ❯ TransformPluginContext.transform node_modules/.pnpm/vite@7.3.1_@types+node@25.1.0_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0/node_modules/vite/dist/node/chunks/config.js:27145:4
+ ❯ EnvironmentPluginContainer.transform node_modules/.pnpm/vite@7.3.1_@types+node@25.1.0_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0/node_modules/vite/dist/node/chunks/config.js:28797:14
+ ❯ loadAndTransform node_modules/.pnpm/vite@7.3.1_@types+node@25.1.0_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0/node_modules/vite/dist/node/chunks/config.js:22670:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  3 skipped (3)
+   Start at  19:55:43
+   Duration  801ms (transform 41ms, setup 151ms, import 9ms, tests 59ms, environment 336ms)
+
