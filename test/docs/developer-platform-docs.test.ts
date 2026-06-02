@@ -69,6 +69,16 @@ describe("developer platform docs drift", () => {
     }
   });
 
+  it("does not claim remote MCP tools/list is unauthenticated", () => {
+    expect(claudeConnectorDocs).not.toMatch(/no auth needed/i);
+
+    const toolsListIndex = claudeConnectorDocs.indexOf('"method":"tools/list"');
+    expect(toolsListIndex).toBeGreaterThan(0);
+    const toolsListExample = claudeConnectorDocs.slice(Math.max(0, toolsListIndex - 180), toolsListIndex + 180);
+
+    expect(toolsListExample).toContain("Authorization: Bearer sj_your_token_here");
+  });
+
   it("documents rotating OAuth refresh tokens instead of stale no-refresh-token claims", () => {
     for (const text of [claudeConnectorDocs, oauthRoutesSource, oauthServerSource]) {
       expect(text).toContain("refresh_token");

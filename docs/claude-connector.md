@@ -50,9 +50,10 @@ claude mcp add --transport http spoonjoy https://spoonjoy.app/mcp \
 Then `claude mcp list` shows `spoonjoy`, and the Spoonjoy tools become available (`tools/list`). A quick check:
 
 ```bash
-# discovery (no auth needed)
+# authenticated tools/list
 curl -s -X POST https://spoonjoy.app/mcp \
   -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer sj_your_token_here' \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | jq '.result.tools | length'
 
 # an owner-scoped call (needs the token)
