@@ -97,7 +97,7 @@ Normative contract artifact: `./2026-06-01-1830-doing-dev-platform-api-docs/api-
 
 ### ⬜ Unit 3a: `/api/v1` Shell, Errors, And Request IDs — Tests
 **What**: Write failing tests for route registration and shared v1 response behavior in `app/routes.ts`, `app/routes/api.v1.$.ts`, `app/lib/api-v1.server.ts`, and the future `app/lib/api-v1-contract.server.ts`.
-**Output**: `test/routes/api-v1-shell.test.ts` asserts the exact discovery document, health document, success envelope, error envelope, error code map, `OPTIONS /api/v1/*` status, unknown endpoints, malformed JSON, request ID generation/echo, and CORS headers from `api-v1-contract.md`; `test/build-output-hygiene.test.ts` or a new focused config test asserts `vitest.config.ts` coverage includes `app/routes/**/*.ts`.
+**Output**: `test/routes/api-v1-shell.test.ts` asserts the exact discovery document, health document, optional-auth behavior with no required scope for root/health/openapi, success envelope, error envelope, error code map, `OPTIONS /api/v1/*` status, unknown endpoints, malformed JSON, request ID generation/echo, and CORS headers from `api-v1-contract.md`; `test/build-output-hygiene.test.ts` or a new focused config test asserts `vitest.config.ts` coverage includes `app/routes/**/*.ts`.
 **Acceptance**: Focused tests FAIL because `app/routes/api.v1.$.ts` and the v1 shell helpers are absent.
 
 ### ⬜ Unit 3b: `/api/v1` Shell, Errors, And Request IDs — Implementation

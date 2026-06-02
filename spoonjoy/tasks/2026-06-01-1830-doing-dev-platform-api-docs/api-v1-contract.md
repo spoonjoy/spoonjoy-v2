@@ -157,9 +157,9 @@ Rate-limit guidance for docs:
     "docsUrl": "https://spoonjoy.app/developers",
     "openapiUrl": "/api/v1/openapi.json",
     "resources": [
-      { "name": "root", "path": "/api/v1", "methods": ["GET"], "auth": "none", "scopes": [] },
-      { "name": "health", "path": "/api/v1/health", "methods": ["GET"], "auth": "none", "scopes": [] },
-      { "name": "openapi", "path": "/api/v1/openapi.json", "methods": ["GET"], "auth": "none", "scopes": [] },
+      { "name": "root", "path": "/api/v1", "methods": ["GET"], "auth": "optional", "scopes": [] },
+      { "name": "health", "path": "/api/v1/health", "methods": ["GET"], "auth": "optional", "scopes": [] },
+      { "name": "openapi", "path": "/api/v1/openapi.json", "methods": ["GET"], "auth": "optional", "scopes": [] },
       { "name": "recipes", "path": "/api/v1/recipes", "methods": ["GET"], "auth": "optional", "scopes": ["recipes:read"] },
       { "name": "recipe", "path": "/api/v1/recipes/{id}", "methods": ["GET"], "auth": "optional", "scopes": ["recipes:read"] },
       { "name": "cookbooks", "path": "/api/v1/cookbooks", "methods": ["GET"], "auth": "optional", "scopes": ["cookbooks:read"] },
@@ -181,7 +181,7 @@ Rate-limit guidance for docs:
 }
 ```
 
-`resources` order is exactly the order shown above. `auth: "none"` means no credentials are used, `auth: "optional"` means anonymous is allowed but scoped bearer credentials are checked when present, and `auth: "bearer"` means session or bearer authentication is required.
+`resources` order is exactly the order shown above. `auth: "optional"` means anonymous is allowed but bearer credentials are authenticated and checked when present; an optional-auth route with `scopes: []` requires no additional scope after authentication. `auth: "bearer"` means session or bearer authentication is required.
 
 `GET /api/v1/health` returns status `200`:
 
