@@ -367,4 +367,53 @@ describe("API v1 authenticated telemetry", () => {
       ],
     });
   });
+
+  it("captures authenticated optional public reads with principal metadata instead of downgrading to anonymous", async () => {
+    const sessionUser = await db.user.create({ data: createTestUser() });
+    const cookie = await sessionCookie(sessionUser.id);
+    const health = await loader(routeArgs(apiRequest("http://localhost/api/v1/health", "req_health_session_optional", {
+      Cookie: cookie,
+    }), "health").args);
+
+    expect(health.status).toBe(200);
+    expectAuthenticatedApiV1Event({
+      routeTemplate: "/api/v1/health",
+      requestId: "req_health_session_optional",
+      authMode: "session",
+      principalId: sessionUser.id,
+      scopes: ["tokens:read", "tokens:write", "offline_access"],
+      forbidden: [sessionUser.email, sessionUser.username, cookie],
+    });
+
+    const recipeFixture = await createRecipeFixture(db);
+    const bearerUser = await db.user.create({ data: createTestUser() });
+    const credential = await createApiCredential(db, bearerUser.id, "Optional Public Reader", {
+      scopes: ["recipes:read"],
+    });
+    const recipes = await loader(routeArgs(apiRequest(
+      "http://localhost/api/v1/recipes?query=optional_public_secret&limit=1",
+      "req_recipes_bearer_optional",
+      { Authorization: `Bearer ${credential.token}` },
+    ), "recipes").args);
+
+    expect(recipes.status).toBe(200);
+    expectAuthenticatedApiV1Event({
+      routeTemplate: "/api/v1/recipes",
+      requestId: "req_recipes_bearer_optional",
+      authMode: "bearer",
+      principalId: bearerUser.id,
+      credentialId: credential.credential.id,
+      scopes: ["recipes:read"],
+      forbidden: [
+        bearerUser.email,
+        bearerUser.username,
+        credential.token,
+        credential.credential.tokenPrefix,
+        "Optional Public Reader",
+        "optional_public_secret",
+        recipeFixture.recipe.title,
+        recipeFixture.recipe.description,
+      ],
+    });
+  });
 });
