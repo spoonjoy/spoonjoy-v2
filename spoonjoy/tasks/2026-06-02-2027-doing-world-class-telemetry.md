@@ -67,12 +67,12 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 **Output**: Generic PostHog event capture with controlled event names, explicit distinct id, timestamp, `$lib: "spoonjoy-server"`, safe properties, and swallowed network failures.
 **Acceptance**: `test/lib/analytics-server.test.ts` passes without changing existing exception-capture behavior.
 
-### 🔄 Unit 1c: Server Analytics Helper — Coverage & Refactor
+### ✅ Unit 1c: Server Analytics Helper — Coverage & Refactor
 **What**: Run focused analytics tests with coverage expectations, refactor duplicated endpoint-posting logic if useful, and ensure no unsafe property allow/deny branches are uncovered.
 **Output**: Clean helper code with test coverage for enabled, disabled, missing-key, trailing-slash host, fetch failure, and unsafe property handling.
 **Acceptance**: Focused analytics-server tests pass with no warnings.
 
-### ⬜ Unit 2a: API v1 WaitUntil Context — Tests
+### 🔄 Unit 2a: API v1 WaitUntil Context — Tests
 **What**: Add failing tests or type-focused route-shell coverage proving `app/lib/api-v1.server.ts` can receive a `waitUntil` function from React Router Cloudflare context before it attempts telemetry capture.
 **Output**: Tests proving API v1 telemetry can be scheduled through the Worker execution context without blocking the response.
 **Acceptance**: Tests fail before implementation because `ApiV1RouteArgs` only types `context.cloudflare.env` and no API v1 telemetry scheduling hook is exposed.
@@ -320,3 +320,5 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 - 2026-06-03 07:19 Unit 1b started: implement server event capture helper
 - 2026-06-03 07:22 Unit 1b complete: server event capture helper implemented and focused tests/build pass
 - 2026-06-03 07:22 Unit 1c started: analytics helper coverage/refactor check
+- 2026-06-03 07:24 Unit 1c complete: analytics-server helper reached 100% per-file coverage; global focused coverage threshold behavior documented
+- 2026-06-03 07:24 Unit 2a started: API v1 waitUntil context tests
