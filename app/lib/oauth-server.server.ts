@@ -260,6 +260,7 @@ export interface IssuedConnectorTokens {
   refreshToken: string;
   expiresIn: number;
   scope: string;
+  resource: string | null;
 }
 
 function oauthCredentialName(clientName: string | null | undefined): string {
@@ -298,7 +299,13 @@ export async function issueConnectorTokens(
       resource: input.resource ?? null,
     },
   });
-  return { accessToken, refreshToken, expiresIn: OAUTH_ACCESS_TOKEN_TTL_SECONDS, scope: input.scope };
+  return {
+    accessToken,
+    refreshToken,
+    expiresIn: OAUTH_ACCESS_TOKEN_TTL_SECONDS,
+    scope: input.scope,
+    resource: input.resource ?? null,
+  };
 }
 
 /** Revoke one rotating OAuth refresh token for native/extension disconnect flows. */

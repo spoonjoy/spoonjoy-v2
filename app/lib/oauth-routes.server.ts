@@ -97,6 +97,10 @@ function isRegisterBody(value: unknown): value is RegisterBody {
 }
 
 async function readLimitedFormBody(request: Request): Promise<URLSearchParams> {
+  const contentType = request.headers.get("Content-Type") ?? "";
+  if (contentType && !contentType.toLowerCase().startsWith("application/x-www-form-urlencoded")) {
+    throw new OAuthError("invalid_request", "Form body must be application/x-www-form-urlencoded");
+  }
   return new URLSearchParams(await readLimitedBodyText(request, MAX_OAUTH_FORM_BODY_BYTES));
 }
 
@@ -327,18 +331,31 @@ export async function handleOAuthToken(
   env: OAuthEnv | null | undefined,
 ): Promise<Response> {
   if (request.method !== "POST") {
-    return Response.json({ error: "invalid_request", error_description: "POST required" }, { status: 405 });
+    return withOAuthTokenTelemetry(
+      Response.json({ error: "invalid_request", error_description: "POST required" }, { status: 405 }),
+      { outcome: "error", grantType: "unknown", errorCode: "invalid_request" },
+    );
   }
 
   let form: URLSearchParams;
   try {
     form = await readLimitedFormBody(request);
   } catch (error) {
-    if (error instanceof OAuthError) return oauthErrorResponse(error);
-    return Response.json({ error: "invalid_request", error_description: "Invalid form body" }, { status: 400 });
+    if (error instanceof OAuthError) {
+      return withOAuthTokenTelemetry(
+        oauthErrorResponse(error),
+        { outcome: "error", grantType: "unknown", errorCode: error.code },
+      );
+    }
+    return withOAuthTokenTelemetry(
+      Response.json({ error: "invalid_request", error_description: "Invalid form body" }, { status: 400 }),
+      { outcome: "error", grantType: "unknown", errorCode: "invalid_request" },
+    );
   }
   const field = (name: string) => form.get(name)?.toString() ?? "";
   const grantType = field("grant_type");
+  const safeGrantType = oauthTokenGrantType(grantType);
+  const clientId = field("client_id") || undefined;
 
   try {
     if (grantType === "authorization_code") {
@@ -348,30 +365,60 @@ export async function handleOAuthToken(
         redirectUri: field("redirect_uri"),
         codeVerifier: field("code_verifier"),
       });
-      return tokenResponse(
-        await issueConnectorTokens(db, {
-          userId: grant.userId,
-          clientId: field("client_id"),
+      return withOAuthTokenTelemetry(
+        tokenResponse(
+          await issueConnectorTokens(db, {
+            userId: grant.userId,
+            clientId: field("client_id"),
+            scope: grant.scope,
+            resource: grant.resource,
+          }),
+        ),
+        {
+          outcome: "issued",
+          grantType: "authorization_code",
+          clientId,
           scope: grant.scope,
-          resource: grant.resource,
-        }),
+          resource: grant.resource ?? undefined,
+        },
       );
     }
 
     if (grantType === "refresh_token") {
-      return tokenResponse(
-        await rotateConnectorTokens(db, {
-          refreshToken: field("refresh_token"),
-          clientId: field("client_id"),
-        }),
+      const tokens = await rotateConnectorTokens(db, {
+        refreshToken: field("refresh_token"),
+        clientId: field("client_id"),
+      });
+      return withOAuthTokenTelemetry(
+        tokenResponse(tokens),
+        {
+          outcome: "refreshed",
+          grantType: "refresh_token",
+          clientId,
+          scope: tokens.scope,
+          resource: tokens.resource ?? undefined,
+        },
       );
     }
 
-    return Response.json(
-      { error: "unsupported_grant_type", error_description: "Supported grants: authorization_code, refresh_token" },
-      { status: 400 },
+    return withOAuthTokenTelemetry(
+      Response.json(
+        { error: "unsupported_grant_type", error_description: "Supported grants: authorization_code, refresh_token" },
+        { status: 400 },
+      ),
+      { outcome: "error", grantType: safeGrantType, errorCode: "unsupported_grant_type" },
     );
   } catch (error) {
+    if (error instanceof OAuthError) {
+      return withOAuthTokenTelemetry(
+        oauthErrorResponse(error),
+        {
+          outcome: "error",
+          grantType: safeGrantType,
+          errorCode: error.code,
+        },
+      );
+    }
     return oauthErrorResponse(error);
   }
 }
@@ -450,6 +497,42 @@ export function oauthAuthorizeTelemetryFor(target: AuthorizeView | Response): OA
   return (target as (AuthorizeView | Response) & {
     [oauthAuthorizeTelemetrySymbol]?: OAuthAuthorizeTelemetryMetadata;
   })[oauthAuthorizeTelemetrySymbol] ?? {};
+}
+
+export type OAuthTokenGrantType = "authorization_code" | "refresh_token" | "unsupported" | "unknown";
+
+export interface OAuthTokenTelemetryMetadata {
+  outcome?: "issued" | "refreshed" | "error" | "rate_limited";
+  grantType?: OAuthTokenGrantType;
+  clientId?: string;
+  errorCode?: string;
+  scope?: string;
+  resource?: string;
+}
+
+const oauthTokenTelemetrySymbol = Symbol("spoonjoy.oauth.token.telemetry");
+
+export function withOAuthTokenTelemetry(
+  response: Response,
+  metadata: OAuthTokenTelemetryMetadata,
+): Response {
+  Object.defineProperty(response, oauthTokenTelemetrySymbol, {
+    value: metadata,
+    enumerable: false,
+  });
+  return response;
+}
+
+export function oauthTokenTelemetryFor(response: Response): OAuthTokenTelemetryMetadata {
+  return (response as Response & {
+    [oauthTokenTelemetrySymbol]?: OAuthTokenTelemetryMetadata;
+  })[oauthTokenTelemetrySymbol] ?? {};
+}
+
+function oauthTokenGrantType(value: string): OAuthTokenGrantType {
+  if (value === "authorization_code" || value === "refresh_token") return value;
+  if (value) return "unsupported";
+  return "unknown";
 }
 
 function readAuthorizeParams(source: URLSearchParams | FormData): AuthorizeRequestParams {
