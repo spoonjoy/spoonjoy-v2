@@ -47,7 +47,25 @@ Notes:
 - Google, GitHub, and Apple OAuth secrets are required for the corresponding OAuth login/account-linking provider.
 - `OPENAI_API_KEY` enables ingredient parsing. Missing local keys fall back to deterministic parsing paths where supported, but production should set the secret before enabling AI-assisted flows.
 - `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` are required for `/api/push/public-key` and web-push subscription flows.
+- `POSTHOG_KEY` is optional. When set, it enables server lifecycle telemetry for API v1, legacy API, MCP, OAuth, and Worker error capture. Leave it unset, or set `POSTHOG_DISABLED=true`, to keep server telemetry off.
+- Client analytics is built into the Vite bundle only when `VITE_POSTHOG_KEY` is present during `pnpm run build`. Use `VITE_POSTHOG_HOST` for the ingestion host and `VITE_POSTHOG_DISABLED=true` for an explicit client kill switch. These `VITE_` values are public build-time configuration, not secrets.
 - Optional ingredient parsing runtime knobs are `INGREDIENT_PARSE_PROVIDER`, `INGREDIENT_PARSE_MODEL`, `INGREDIENT_PARSE_TIMEOUT_MS`, and `INGREDIENT_PARSE_MAX_RETRIES`. The safe default is OpenAI with `gpt-4o-mini`, an 8000ms timeout, and 1 retry.
+
+### Optional PostHog Telemetry
+
+To enable server lifecycle telemetry and error capture:
+
+```bash
+wrangler secret put POSTHOG_KEY
+```
+
+To enable client analytics in the production bundle, provide these public build-time values to the deploy environment without committing the key:
+
+```bash
+VITE_POSTHOG_KEY=...
+VITE_POSTHOG_HOST=https://us.i.posthog.com
+VITE_POSTHOG_DISABLED=
+```
 
 ## Local `.dev.vars`
 
@@ -67,6 +85,12 @@ OPENAI_API_KEY=sk-...
 VAPID_PUBLIC_KEY=...
 VAPID_PRIVATE_KEY=...
 VAPID_SUBJECT=mailto:you@example.com
+POSTHOG_KEY=
+POSTHOG_HOST=https://us.i.posthog.com
+POSTHOG_DISABLED=
+VITE_POSTHOG_KEY=
+VITE_POSTHOG_HOST=https://us.i.posthog.com
+VITE_POSTHOG_DISABLED=
 INGREDIENT_PARSE_PROVIDER=openai
 INGREDIENT_PARSE_MODEL=gpt-4o-mini
 INGREDIENT_PARSE_TIMEOUT_MS=8000
@@ -90,6 +114,7 @@ The preflight verifies:
 - `package.json` exposes `smoke:api` for live third-party API/docs/playground drift checks.
 - `app/cloudflare-env.d.ts` types the Cloudflare bindings and documented secrets.
 - README/deployment docs mention required bindings, secrets, and deploy commands.
+- README/deployment docs mention optional PostHog client setup, server lifecycle telemetry, `POSTHOG_KEY`, `POSTHOG_DISABLED`, `VITE_POSTHOG_KEY`, and `VITE_POSTHOG_DISABLED`.
 - Numbered SQL migrations exist in `migrations/`.
 - **Remote D1 migrations**: the preflight invokes `pnpm exec wrangler d1 migrations list DB --remote` and FAILS if any migrations are pending against the remote database. This guards against deploying application code that depends on a schema the remote database has not yet applied (the failure mode that caused the 2026-05-10 `/search` 500 incident).
 

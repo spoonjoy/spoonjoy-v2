@@ -137,3 +137,8 @@
 
 - Unit 7f fresh reviewer returned `CONVERGED`.
 - Reviewer confirmed focused developer telemetry tests pass, `app/lib/analytics.ts` remains 100% covered, typecheck/build pass, and the global coverage caveat is limited to unrelated existing route-module gaps.
+
+## 2026-06-03 10:12
+
+- Unit 8a fresh reviewer returned `CONVERGED`.
+- Reviewer confirmed Unit 8a landed as tests/artifact/doing-doc only, the focused suite failed red for intended docs/config gaps, and the assertions avoid demanding or leaking real PostHog secret values.

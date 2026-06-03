@@ -164,6 +164,26 @@ wrangler secret put APPLE_PRIVATE_KEY
 wrangler secret put OPENAI_API_KEY
 ```
 
+### Optional PostHog Telemetry
+
+Spoonjoy can capture client product telemetry, developer docs/playground UX events, server lifecycle telemetry, and server/client error events through PostHog. See `docs/analytics-privacy.md` for the event names and privacy exclusions.
+
+Server lifecycle telemetry for API v1, legacy API, MCP, OAuth, and Worker errors is enabled only when `POSTHOG_KEY` is present and `POSTHOG_DISABLED` is not true-ish:
+
+```bash
+wrangler secret put POSTHOG_KEY
+```
+
+Client analytics is baked into the Vite bundle at build time. Provide the public project key as a build environment variable, not in source:
+
+```bash
+VITE_POSTHOG_KEY=...
+VITE_POSTHOG_HOST=https://us.i.posthog.com
+VITE_POSTHOG_DISABLED=
+```
+
+Use `POSTHOG_DISABLED=true` or `VITE_POSTHOG_DISABLED=true` to force a telemetry kill switch without removing configured keys. Never paste or print the key value in deploy logs, docs, or committed files.
+
 ### Web Push (VAPID) Secrets
 
 Required for the in-app web push notification system (D-006). Without these the
@@ -281,6 +301,12 @@ The deploy output will show your Worker URL: `https://spoonjoy-v2.<account>.work
 | `VAPID_PUBLIC_KEY` | ✅ Yes | Web push public key |
 | `VAPID_PRIVATE_KEY` | ✅ Yes | Web push private key |
 | `VAPID_SUBJECT` | ✅ Yes | Web push contact subject |
+| `POSTHOG_KEY` | Optional | Server lifecycle telemetry and error capture |
+| `POSTHOG_HOST` | Optional | PostHog ingestion host override |
+| `POSTHOG_DISABLED` | Optional | Server telemetry kill switch |
+| `VITE_POSTHOG_KEY` | Optional | Public build-time client analytics key |
+| `VITE_POSTHOG_HOST` | Optional | Public build-time client ingestion host |
+| `VITE_POSTHOG_DISABLED` | Optional | Client telemetry kill switch |
 
 ## Troubleshooting
 
