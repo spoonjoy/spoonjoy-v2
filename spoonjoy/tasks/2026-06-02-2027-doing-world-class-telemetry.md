@@ -112,12 +112,12 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 **Output**: Tests proving mutation telemetry includes controlled operation names, status/error code, idempotency outcome, request byte count, and latency without payload contents.
 **Acceptance**: Tests fail before implementation and assert no shopping item name, unit name, token name, returned token secret, clientMutationId raw value, or request/response body appears in telemetry.
 
-### 🔄 Unit 3f: API v1 Mutation And Validation Telemetry — Implementation
+### ✅ Unit 3f: API v1 Mutation And Validation Telemetry — Implementation
 **What**: Extend centralized API v1 telemetry so mutation and validation branches report controlled operation/resource names, error codes, idempotency class, and status.
 **Output**: API v1 mutation telemetry that preserves existing response wire formats.
 **Acceptance**: Unit 3e tests pass and existing shopping-list/token API v1 tests still pass.
 
-### ⬜ Unit 3g: API v1 Rate-Limit/Internal-Error Telemetry — Tests
+### 🔄 Unit 3g: API v1 Rate-Limit/Internal-Error Telemetry — Tests
 **What**: Add failing tests for rate-limited requests, method-not-allowed, unknown path, authentication required, insufficient scope, invalid token, and internal errors.
 **Output**: Tests proving API v1 error telemetry emits safe error code/status/rate-limit scope and preserves existing exception logging/capture behavior.
 **Acceptance**: Tests fail before implementation and assert internal error telemetry includes no stack trace except through the existing `$exception` capture path.
@@ -339,3 +339,5 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 - 2026-06-03 07:48 Unit 3e started: API v1 mutation and validation telemetry tests
 - 2026-06-03 07:52 Unit 3e complete: API v1 mutation, idempotency, token, validation, and not-found telemetry tests fail red on missing operation/error/idempotency metadata
 - 2026-06-03 07:52 Unit 3f started: implement API v1 mutation and validation telemetry
+- 2026-06-03 07:56 Unit 3f complete: API v1 operation, error code, idempotency, and request byte telemetry implemented with focused tests, regressions, typecheck, and build passing
+- 2026-06-03 07:56 Unit 3g started: API v1 rate-limit and internal-error telemetry tests
