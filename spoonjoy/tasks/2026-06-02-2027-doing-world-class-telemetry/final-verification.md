@@ -115,3 +115,15 @@ pnpm exec vitest run test/repo-hygiene.test.ts test/build-output-hygiene.test.ts
 ```
 
 Result: PASS, 2 files, 8 tests. `live-smoke-artifacts/` and `api-live-smoke-artifacts/` are ignored generated smoke outputs.
+
+## Completion Notification
+
+```bash
+ouro msg --to slugger "Done: ..."
+```
+
+Result: queued message `msg-20260603173648541`.
+
+MCP completion acknowledgement from Slugger:
+
+> massive. live at spoonjoy.app/api — the docs and playground are now out there.

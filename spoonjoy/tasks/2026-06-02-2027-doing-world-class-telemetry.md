@@ -1,6 +1,6 @@
 # Doing: World-Class Telemetry
 
-**Status**: in-progress
+**Status**: complete
 **Execution Mode**: direct
 **Created**: 2026-06-02 21:32
 **Planning**: ./2026-06-02-2027-planning-world-class-telemetry.md
@@ -19,15 +19,15 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 - None
 
 ## Completion Criteria
-- [ ] Server telemetry captures safe lifecycle events for `/api/v1/*`, legacy `/api/*`, `/mcp`, OAuth registration/authorize/token/revoke, and rate-limit/auth/error paths.
-- [ ] Captured event payloads answer who, why, when, and how much using ids, auth/source metadata, operation names, scopes, status/error codes, latency, and byte/count fields without unsafe content.
-- [ ] PostHog server capture is enabled in production when `POSTHOG_KEY` is configured and remains a no-op when missing or disabled.
-- [ ] Client PostHog setup is documented and verified for production build-time `VITE_POSTHOG_KEY`.
-- [ ] Developer docs/playground client telemetry captures safe UX lifecycle events without token/body/query leakage.
-- [ ] Documentation states the telemetry contract, privacy exclusions, and deployment setup clearly.
-- [ ] 100% test coverage on all new code
-- [ ] All tests pass
-- [ ] No warnings
+- [x] Server telemetry captures safe lifecycle events for `/api/v1/*`, legacy `/api/*`, `/mcp`, OAuth registration/authorize/token/revoke, and rate-limit/auth/error paths.
+- [x] Captured event payloads answer who, why, when, and how much using ids, auth/source metadata, operation names, scopes, status/error codes, latency, and byte/count fields without unsafe content.
+- [x] PostHog server capture is enabled in production when `POSTHOG_KEY` is configured and remains a no-op when missing or disabled.
+- [x] Client PostHog setup is documented and verified for production build-time `VITE_POSTHOG_KEY`.
+- [x] Developer docs/playground client telemetry captures safe UX lifecycle events without token/body/query leakage.
+- [x] Documentation states the telemetry contract, privacy exclusions, and deployment setup clearly.
+- [x] 100% test coverage on all new code
+- [x] All tests pass
+- [x] No warnings
 
 ## Code Coverage Requirements
 **MANDATORY: 100% coverage on all new code.**
@@ -287,7 +287,7 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 **Output**: Deployment version id and live smoke artifact paths recorded in `final-verification.md`.
 **Acceptance**: Deployment succeeds only after Unit 8d is complete or explicitly documented as externally blocked, live smoke checks pass, production does not require PostHog to respond to serve app/API traffic, and no secret values appear in command output or committed files.
 
-### 🔄 Unit 9c: Completion Notification
+### ✅ Unit 9c: Completion Notification
 **What**: Commit/push final state and notify Slugger with a concise completion summary.
 **Output**: Final git commit/push and Slugger notification.
 **Acceptance**: `git status --short` is clean, branch is pushed, Slugger acknowledges completion, and final response includes the deployed API docs/playground link plus verification summary.
@@ -405,3 +405,4 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 - 2026-06-03 10:31 Unit 9b started: deploy production Worker and run live smoke/API smoke checks
 - 2026-06-03 10:34 Unit 9b complete: deployed Worker version `1b0cc956-4d31-4446-a03c-57739fc7a230`, live smoke and API smoke passed, explicit `/api`, `/api/playground`, `/api/v1/health`, `/mcp`, and OAuth metadata probes passed, and remote smoke user cleanup changed 8 rows
 - 2026-06-03 10:35 Unit 9c started: final clean-status check, branch push, and Slugger completion notification
+- 2026-06-03 10:36 Unit 9c complete: Slugger notified via `ouro msg` and MCP completion acknowledgement, branch pushed, generated smoke artifacts ignored, and final clean-status check showed only ignored smoke artifact directories
