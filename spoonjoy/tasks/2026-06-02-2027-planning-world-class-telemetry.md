@@ -95,3 +95,4 @@ Stranger pass local finding: the original doing breakdown verified client bootst
 ## Progress Log
 - 2026-06-02 20:29 Created
 - 2026-06-02 21:30 Approved by user and resolved planning questions
+- 2026-06-02 22:04 Added explicit developer docs/playground client telemetry scope after local Stranger fallback finding
