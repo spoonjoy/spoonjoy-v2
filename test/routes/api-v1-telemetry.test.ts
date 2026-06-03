@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { faker } from "@faker-js/faker";
 import { Request as UndiciRequest } from "undici";
 import { action, loader } from "~/routes/api.v1.$";
+import * as apiAuth from "~/lib/api-auth.server";
 import { createApiCredential } from "~/lib/api-auth.server";
 import { hashIdempotencyRequest, idempotencyClientKey, IDEMPOTENCY_TTL_MS } from "~/lib/api-idempotency.server";
 import { captureEvent } from "~/lib/analytics-server";
@@ -15,7 +16,7 @@ vi.mock("~/lib/analytics-server", async (importOriginal) => ({
   captureEvent: vi.fn(async () => undefined),
 }));
 
-function routeArgs(request: Request, splat: string) {
+function routeArgs(request: Request, splat: string, env: Record<string, unknown> = {}) {
   const scheduled: Promise<unknown>[] = [];
   const waitUntil = vi.fn((promise: Promise<unknown>) => {
     scheduled.push(promise);
@@ -27,7 +28,7 @@ function routeArgs(request: Request, splat: string) {
       params: { "*": splat },
       context: {
         cloudflare: {
-          env: { POSTHOG_KEY: "ph_test" },
+          env: { POSTHOG_KEY: "ph_test", ...env },
           ctx: { waitUntil, passThroughOnException: vi.fn() },
         },
       },
@@ -202,6 +203,7 @@ function expectApiV1OperationEvent(input: {
   requestBytes: number;
   errorCode?: string;
   idempotencyOutcome?: string;
+  rateLimitScope?: string;
   forbidden: readonly string[];
 }) {
   const eventInput = captureInputs().find((candidate) => (
@@ -235,6 +237,11 @@ function expectApiV1OperationEvent(input: {
   } else {
     expect(properties.idempotency_outcome).toBeUndefined();
   }
+  if (input.rateLimitScope) {
+    expect(properties.rate_limit_scope).toBe(input.rateLimitScope);
+  } else {
+    expect(properties.rate_limit_scope).toBeUndefined();
+  }
 
   const serialized = JSON.stringify(eventInput);
   for (const forbidden of input.forbidden) {
@@ -244,6 +251,59 @@ function expectApiV1OperationEvent(input: {
   expect(serialized).not.toContain("Authorization");
   expect(serialized).not.toContain("Bearer ");
   expect(serialized).not.toContain("clientMutationId");
+  return eventInput;
+}
+
+function expectApiV1ErrorEvent(input: {
+  routeTemplate: string;
+  requestId: string;
+  status: number;
+  errorCode: string;
+  authMode: "anonymous" | "session" | "bearer" | "oauth_bearer";
+  operation?: string;
+  privacyClass?: string;
+  rateLimitScope?: string;
+  forbidden?: readonly string[];
+}) {
+  const eventInput = captureInputs().find((candidate) => (
+    candidate.event === "spoonjoy.api_v1.request" &&
+    candidate.properties?.route_template === input.routeTemplate &&
+    candidate.properties?.request_id === input.requestId
+  ));
+
+  expect(eventInput).toMatchObject({
+    event: "spoonjoy.api_v1.request",
+    properties: {
+      route_template: input.routeTemplate,
+      status: input.status,
+      request_id: input.requestId,
+      error_code: input.errorCode,
+      auth_mode: input.authMode,
+      privacy_class: input.privacyClass ?? expect.any(String),
+      latency_ms: expect.any(Number),
+    },
+  });
+
+  const properties = eventInput!.properties as Record<string, unknown>;
+  if (input.operation) {
+    expect(properties.operation).toBe(input.operation);
+  } else {
+    expect(properties.operation).toBeUndefined();
+  }
+  if (input.rateLimitScope) {
+    expect(properties.rate_limit_scope).toBe(input.rateLimitScope);
+  } else {
+    expect(properties.rate_limit_scope).toBeUndefined();
+  }
+
+  const serialized = JSON.stringify(eventInput);
+  for (const forbidden of input.forbidden ?? []) {
+    expect(serialized).not.toContain(forbidden);
+  }
+  expect(serialized).not.toContain("Authorization");
+  expect(serialized).not.toContain("Bearer ");
+  expect(serialized).not.toContain("__session=");
+  expect(serialized).not.toContain("stack");
   return eventInput;
 }
 
@@ -653,6 +713,159 @@ describe("API v1 mutation and validation telemetry", () => {
       idempotencyOutcome: "aborted",
       forbidden: ["raw-missing-mutation-id", missingId, missing.bodyText],
     });
+  });
+});
+
+describe("API v1 rate-limit and error telemetry", () => {
+  let db: Awaited<ReturnType<typeof getLocalDb>>;
+
+  beforeEach(async () => {
+    vi.mocked(captureEvent).mockClear();
+    await cleanupDatabase();
+    db = await getLocalDb();
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await cleanupDatabase();
+  });
+
+  it("captures rate-limited requests with limiter scope without leaking the bearer token", async () => {
+    const token = "sj_rate_limited_secret";
+    const context = routeArgs(apiRequest("http://localhost/api/v1/health", "req_error_rate_limited", {
+      Authorization: `Bearer ${token}`,
+      "CF-Connecting-IP": "203.0.113.4",
+    }), "health", {
+      API_TOKEN_RATE_LIMITER: {
+        limit: async ({ key }: { key: string }) => {
+          expect(key).toMatch(/^token:[a-f0-9]{64}$/);
+          return { success: false };
+        },
+      },
+    });
+    const response = await loader(context.args);
+
+    expect(response.status).toBe(429);
+    expectApiV1ErrorEvent({
+      routeTemplate: "/api/v1/health",
+      requestId: "req_error_rate_limited",
+      status: 429,
+      errorCode: "rate_limited",
+      authMode: "anonymous",
+      operation: "health.read",
+      privacyClass: "public",
+      rateLimitScope: "token",
+      forbidden: [token, "203.0.113.4"],
+    });
+  });
+
+  it("captures auth, scope, method, and unknown-path errors with safe metadata", async () => {
+    const user = await db.user.create({ data: createTestUser() });
+    const writeOnly = await createApiCredential(db, user.id, "Write only telemetry token", {
+      scopes: ["shopping_list:write"],
+    });
+
+    const missingAuth = await loader(routeArgs(
+      apiRequest("http://localhost/api/v1/shopping-list", "req_error_missing_auth"),
+      "shopping-list",
+    ).args);
+    expect(missingAuth.status).toBe(401);
+    expectApiV1ErrorEvent({
+      routeTemplate: "/api/v1/shopping-list",
+      requestId: "req_error_missing_auth",
+      status: 401,
+      errorCode: "authentication_required",
+      authMode: "anonymous",
+      operation: "shopping-list.read",
+      privacyClass: "private",
+    });
+
+    const invalidToken = "sj_invalid_token_secret";
+    const badBearer = await loader(routeArgs(apiRequest("http://localhost/api/v1/health", "req_error_invalid_token", {
+      Authorization: `Bearer ${invalidToken}`,
+    }), "health").args);
+    expect(badBearer.status).toBe(401);
+    expectApiV1ErrorEvent({
+      routeTemplate: "/api/v1/health",
+      requestId: "req_error_invalid_token",
+      status: 401,
+      errorCode: "invalid_token",
+      authMode: "anonymous",
+      operation: "health.read",
+      privacyClass: "public",
+      forbidden: [invalidToken],
+    });
+
+    const missingScope = await loader(routeArgs(apiRequest("http://localhost/api/v1/shopping-list", "req_error_missing_scope", {
+      Authorization: `Bearer ${writeOnly.token}`,
+    }), "shopping-list").args);
+    expect(missingScope.status).toBe(403);
+    expectApiV1ErrorEvent({
+      routeTemplate: "/api/v1/shopping-list",
+      requestId: "req_error_missing_scope",
+      status: 403,
+      errorCode: "insufficient_scope",
+      authMode: "bearer",
+      operation: "shopping-list.read",
+      privacyClass: "authenticated",
+      forbidden: [writeOnly.token, writeOnly.credential.tokenPrefix, "Write only telemetry token"],
+    });
+
+    const methodNotAllowed = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/health", {
+      method: "POST",
+      headers: { "X-Request-Id": "req_error_method_not_allowed" },
+    }) as unknown as Request, "health").args);
+    expect(methodNotAllowed.status).toBe(405);
+    expectApiV1ErrorEvent({
+      routeTemplate: "/api/v1/health",
+      requestId: "req_error_method_not_allowed",
+      status: 405,
+      errorCode: "method_not_allowed",
+      authMode: "anonymous",
+      privacyClass: "public",
+    });
+
+    const missingPath = "missing-secret-path";
+    const unknownPath = await loader(routeArgs(apiRequest(
+      `http://localhost/api/v1/${missingPath}`,
+      "req_error_unknown_path",
+    ), missingPath).args);
+    expect(unknownPath.status).toBe(404);
+    expectApiV1ErrorEvent({
+      routeTemplate: "/api/v1/{unknown}",
+      requestId: "req_error_unknown_path",
+      status: 404,
+      errorCode: "not_found",
+      authMode: "anonymous",
+      privacyClass: "public",
+      forbidden: [missingPath],
+    });
+  });
+
+  it("captures internal errors without stack traces or exception messages in lifecycle telemetry", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.spyOn(apiAuth, "authenticateApiRequest").mockRejectedValueOnce(new Error("auth storage unavailable"));
+    const token = "sj_storage_failure_secret";
+    const response = await loader(routeArgs(apiRequest("http://localhost/api/v1/health", "req_error_internal", {
+      Authorization: `Bearer ${token}`,
+    }), "health").args);
+
+    expect(response.status).toBe(500);
+    expectApiV1ErrorEvent({
+      routeTemplate: "/api/v1/health",
+      requestId: "req_error_internal",
+      status: 500,
+      errorCode: "internal_error",
+      authMode: "anonymous",
+      operation: "health.read",
+      privacyClass: "public",
+      forbidden: [token, "auth storage unavailable", "Error"],
+    });
+    expect(errorSpy).toHaveBeenCalledWith("[api-v1] internal_error", expect.objectContaining({
+      requestId: "req_error_internal",
+      method: "GET",
+      path: "/api/v1/health",
+    }));
   });
 });
 
