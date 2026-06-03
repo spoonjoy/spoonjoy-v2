@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { faker } from "@faker-js/faker";
 import { Request as UndiciRequest } from "undici";
-import { loader } from "~/routes/api.v1.$";
+import { action, loader } from "~/routes/api.v1.$";
 import { createApiCredential } from "~/lib/api-auth.server";
+import { hashIdempotencyRequest, idempotencyClientKey, IDEMPOTENCY_TTL_MS } from "~/lib/api-idempotency.server";
 import { captureEvent } from "~/lib/analytics-server";
 import { getLocalDb } from "~/lib/db.server";
 import { sessionStorage } from "~/lib/session.server";
@@ -58,6 +59,34 @@ function apiRequest(url: string, requestId: string, headers: Record<string, stri
       ...headers,
     },
   }) as unknown as Request;
+}
+
+function apiJsonRequest(
+  method: "POST" | "PATCH" | "DELETE",
+  path: string,
+  requestId: string,
+  headers: Record<string, string>,
+  body: unknown,
+) {
+  const bodyText = typeof body === "string" ? body : JSON.stringify(body);
+  const bodyBytes = new TextEncoder().encode(bodyText).byteLength;
+  return {
+    bodyText,
+    bodyBytes,
+    request: new UndiciRequest(`http://localhost/api/v1/${path}`, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": String(bodyBytes),
+        "X-Request-Id": requestId,
+        Origin: "https://client.example",
+        Referer: "https://docs.example/start?token=secret",
+        "User-Agent": "PostmanRuntime/7.39.0",
+        ...headers,
+      },
+      body: bodyText,
+    }) as unknown as Request,
+  };
 }
 
 async function sessionCookie(userId: string) {
@@ -164,6 +193,60 @@ function expectAuthenticatedApiV1Event(input: {
   return eventInput;
 }
 
+function expectApiV1OperationEvent(input: {
+  routeTemplate: string;
+  requestId: string;
+  operation: string;
+  status: number;
+  authMode: "session" | "bearer" | "oauth_bearer";
+  requestBytes: number;
+  errorCode?: string;
+  idempotencyOutcome?: string;
+  forbidden: readonly string[];
+}) {
+  const eventInput = captureInputs().find((candidate) => (
+    candidate.event === "spoonjoy.api_v1.request" &&
+    candidate.properties?.route_template === input.routeTemplate &&
+    candidate.properties?.request_id === input.requestId
+  ));
+
+  expect(eventInput).toMatchObject({
+    event: "spoonjoy.api_v1.request",
+    properties: {
+      route_template: input.routeTemplate,
+      operation: input.operation,
+      status: input.status,
+      request_id: input.requestId,
+      auth_mode: input.authMode,
+      request_bytes: input.requestBytes,
+      user_agent_family: "postman",
+      latency_ms: expect.any(Number),
+    },
+  });
+
+  const properties = eventInput!.properties as Record<string, unknown>;
+  if (input.errorCode) {
+    expect(properties.error_code).toBe(input.errorCode);
+  } else {
+    expect(properties.error_code).toBeUndefined();
+  }
+  if (input.idempotencyOutcome) {
+    expect(properties.idempotency_outcome).toBe(input.idempotencyOutcome);
+  } else {
+    expect(properties.idempotency_outcome).toBeUndefined();
+  }
+
+  const serialized = JSON.stringify(eventInput);
+  for (const forbidden of input.forbidden) {
+    expect(serialized).not.toContain(forbidden);
+  }
+  expect(serialized).not.toContain("token=secret");
+  expect(serialized).not.toContain("Authorization");
+  expect(serialized).not.toContain("Bearer ");
+  expect(serialized).not.toContain("clientMutationId");
+  return eventInput;
+}
+
 async function createRecipeFixture(db: Awaited<ReturnType<typeof getLocalDb>>) {
   const chef = await db.user.create({ data: createTestUser() });
   const recipe = await db.recipe.create({
@@ -257,6 +340,319 @@ describe("API v1 public telemetry", () => {
     const serialized = JSON.stringify(captureInputs());
     expect(serialized).not.toContain("Telemetry Cookbook");
     expect(serialized).not.toContain(fixture.cookbook.title);
+  });
+});
+
+describe("API v1 mutation and validation telemetry", () => {
+  let db: Awaited<ReturnType<typeof getLocalDb>>;
+
+  beforeEach(async () => {
+    vi.mocked(captureEvent).mockClear();
+    await cleanupDatabase();
+    db = await getLocalDb();
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await cleanupDatabase();
+  });
+
+  it("captures shopping-list item create, check, and delete operations without body values", async () => {
+    const user = await db.user.create({ data: createTestUser() });
+    const credential = await createApiCredential(db, user.id, "Telemetry Shopping Writer", {
+      scopes: ["shopping_list:write"],
+    });
+    const auth = { Authorization: `Bearer ${credential.token}` };
+    const name = `Telemetry Kale ${faker.string.alphanumeric(8)}`;
+    const unit = `bundle ${faker.string.alphanumeric(8)}`;
+    const createBody = {
+      clientMutationId: "raw-create-mutation-id",
+      name,
+      quantity: 2,
+      unit,
+      categoryKey: "produce",
+      iconKey: "greens",
+    };
+    const create = apiJsonRequest("POST", "shopping-list/items", "req_mutation_create", auth, createBody);
+    const createResponse = await action(routeArgs(create.request, "shopping-list/items").args);
+    const createPayload = await createResponse.json() as { data: { item: { id: string } } };
+
+    expect(createResponse.status).toBe(201);
+    expectApiV1OperationEvent({
+      routeTemplate: "/api/v1/shopping-list/items",
+      requestId: "req_mutation_create",
+      operation: "shopping-list.items.create",
+      status: 201,
+      authMode: "bearer",
+      requestBytes: create.bodyBytes,
+      idempotencyOutcome: "committed",
+      forbidden: [
+        name,
+        unit,
+        "raw-create-mutation-id",
+        create.bodyText,
+        credential.token,
+        credential.credential.tokenPrefix,
+      ],
+    });
+
+    const checkBody = { clientMutationId: "raw-check-mutation-id", checked: true };
+    const check = apiJsonRequest(
+      "PATCH",
+      `shopping-list/items/${createPayload.data.item.id}`,
+      "req_mutation_check",
+      auth,
+      checkBody,
+    );
+    const checkResponse = await action(routeArgs(check.request, `shopping-list/items/${createPayload.data.item.id}`).args);
+
+    expect(checkResponse.status).toBe(200);
+    expectApiV1OperationEvent({
+      routeTemplate: "/api/v1/shopping-list/items/{itemId}",
+      requestId: "req_mutation_check",
+      operation: "shopping-list.items.check",
+      status: 200,
+      authMode: "bearer",
+      requestBytes: check.bodyBytes,
+      idempotencyOutcome: "committed",
+      forbidden: ["raw-check-mutation-id", createPayload.data.item.id, check.bodyText],
+    });
+
+    const deleteBody = { clientMutationId: "raw-delete-mutation-id" };
+    const remove = apiJsonRequest(
+      "DELETE",
+      `shopping-list/items/${createPayload.data.item.id}`,
+      "req_mutation_delete",
+      auth,
+      deleteBody,
+    );
+    const removeResponse = await action(routeArgs(remove.request, `shopping-list/items/${createPayload.data.item.id}`).args);
+
+    expect(removeResponse.status).toBe(200);
+    expectApiV1OperationEvent({
+      routeTemplate: "/api/v1/shopping-list/items/{itemId}",
+      requestId: "req_mutation_delete",
+      operation: "shopping-list.items.delete",
+      status: 200,
+      authMode: "bearer",
+      requestBytes: remove.bodyBytes,
+      idempotencyOutcome: "committed",
+      forbidden: ["raw-delete-mutation-id", createPayload.data.item.id, remove.bodyText],
+    });
+  });
+
+  it("captures token list, create, and revoke operations without credential names or secrets", async () => {
+    const user = await db.user.create({ data: createTestUser() });
+    const cookie = await sessionCookie(user.id);
+    const target = await createApiCredential(db, user.id, "Telemetry Target Token", { scopes: ["recipes:read"] });
+    const listResponse = await loader(routeArgs(apiRequest("http://localhost/api/v1/tokens", "req_tokens_operation_list", {
+      Cookie: cookie,
+      "User-Agent": "PostmanRuntime/7.39.0",
+    }), "tokens").args);
+
+    expect(listResponse.status).toBe(200);
+    expectApiV1OperationEvent({
+      routeTemplate: "/api/v1/tokens",
+      requestId: "req_tokens_operation_list",
+      operation: "tokens.list",
+      status: 200,
+      authMode: "session",
+      requestBytes: 0,
+      idempotencyOutcome: "none",
+      forbidden: [
+        "Telemetry Target Token",
+        target.token,
+        target.credential.tokenPrefix,
+        cookie,
+      ],
+    });
+
+    const createdName = `Telemetry Created Token ${faker.string.alphanumeric(8)}`;
+    const create = apiJsonRequest("POST", "tokens", "req_tokens_operation_create", { Cookie: cookie }, {
+      name: createdName,
+      scopes: ["recipes:read"],
+    });
+    const createResponse = await action(routeArgs(create.request, "tokens").args);
+    const createPayload = await createResponse.json() as {
+      data: { token: string; credential: { id: string; tokenPrefix: string } };
+    };
+
+    expect(createResponse.status).toBe(201);
+    expectApiV1OperationEvent({
+      routeTemplate: "/api/v1/tokens",
+      requestId: "req_tokens_operation_create",
+      operation: "tokens.create",
+      status: 201,
+      authMode: "session",
+      requestBytes: create.bodyBytes,
+      idempotencyOutcome: "none",
+      forbidden: [
+        createdName,
+        createPayload.data.token,
+        createPayload.data.credential.tokenPrefix,
+        create.bodyText,
+      ],
+    });
+
+    const revoke = apiJsonRequest(
+      "DELETE",
+      `tokens/${createPayload.data.credential.id}`,
+      "req_tokens_operation_revoke",
+      { Cookie: cookie },
+      {},
+    );
+    const revokeResponse = await action(routeArgs(revoke.request, `tokens/${createPayload.data.credential.id}`).args);
+
+    expect(revokeResponse.status).toBe(200);
+    expectApiV1OperationEvent({
+      routeTemplate: "/api/v1/tokens/{credentialId}",
+      requestId: "req_tokens_operation_revoke",
+      operation: "tokens.revoke",
+      status: 200,
+      authMode: "session",
+      requestBytes: revoke.bodyBytes,
+      idempotencyOutcome: "none",
+      forbidden: [
+        createdName,
+        createPayload.data.credential.id,
+        createPayload.data.credential.tokenPrefix,
+        revoke.bodyText,
+      ],
+    });
+  });
+
+  it("captures idempotency replay, in-progress, and conflict outcomes without mutation ids", async () => {
+    const user = await db.user.create({ data: createTestUser() });
+    const credential = await createApiCredential(db, user.id, "Telemetry Idempotency Writer", {
+      scopes: ["shopping_list:write"],
+    });
+    const auth = { Authorization: `Bearer ${credential.token}` };
+    const replayBody = {
+      clientMutationId: "raw-replay-mutation-id",
+      name: `Replay Rice ${faker.string.alphanumeric(8)}`,
+    };
+    const first = apiJsonRequest("POST", "shopping-list/items", "req_idempotency_first", auth, replayBody);
+    expect((await action(routeArgs(first.request, "shopping-list/items").args)).status).toBe(201);
+
+    const replay = apiJsonRequest("POST", "shopping-list/items", "req_idempotency_replay", auth, replayBody);
+    const replayResponse = await action(routeArgs(replay.request, "shopping-list/items").args);
+    expect(replayResponse.status).toBe(201);
+    expectApiV1OperationEvent({
+      routeTemplate: "/api/v1/shopping-list/items",
+      requestId: "req_idempotency_replay",
+      operation: "shopping-list.items.create",
+      status: 201,
+      authMode: "bearer",
+      requestBytes: replay.bodyBytes,
+      idempotencyOutcome: "replayed",
+      forbidden: ["raw-replay-mutation-id", replayBody.name, replay.bodyText],
+    });
+
+    const conflict = apiJsonRequest("POST", "shopping-list/items", "req_idempotency_conflict", auth, {
+      ...replayBody,
+      name: `Conflict Rice ${faker.string.alphanumeric(8)}`,
+    });
+    const conflictResponse = await action(routeArgs(conflict.request, "shopping-list/items").args);
+    expect(conflictResponse.status).toBe(409);
+    expectApiV1OperationEvent({
+      routeTemplate: "/api/v1/shopping-list/items",
+      requestId: "req_idempotency_conflict",
+      operation: "shopping-list.items.create",
+      status: 409,
+      authMode: "bearer",
+      requestBytes: conflict.bodyBytes,
+      errorCode: "idempotency_conflict",
+      idempotencyOutcome: "conflict",
+      forbidden: ["raw-replay-mutation-id", conflict.bodyText],
+    });
+
+    const inProgressBody = {
+      clientMutationId: "raw-in-progress-mutation-id",
+      name: `Pending Rice ${faker.string.alphanumeric(8)}`,
+    };
+    await db.apiIdempotencyKey.create({
+      data: {
+        userId: user.id,
+        credentialId: credential.credential.id,
+        clientKey: idempotencyClientKey({ id: user.id, source: "bearer", credentialId: credential.credential.id }),
+        key: inProgressBody.clientMutationId,
+        operation: "shopping-list.items.create",
+        requestHash: await hashIdempotencyRequest({
+          method: "POST",
+          path: "/api/v1/shopping-list/items",
+          body: inProgressBody,
+        }),
+        expiresAt: new Date(Date.now() + IDEMPOTENCY_TTL_MS),
+      },
+    });
+
+    const inProgress = apiJsonRequest("POST", "shopping-list/items", "req_idempotency_in_progress", auth, inProgressBody);
+    const inProgressResponse = await action(routeArgs(inProgress.request, "shopping-list/items").args);
+    expect(inProgressResponse.status).toBe(409);
+    expectApiV1OperationEvent({
+      routeTemplate: "/api/v1/shopping-list/items",
+      requestId: "req_idempotency_in_progress",
+      operation: "shopping-list.items.create",
+      status: 409,
+      authMode: "bearer",
+      requestBytes: inProgress.bodyBytes,
+      errorCode: "idempotency_in_progress",
+      idempotencyOutcome: "in_progress",
+      forbidden: ["raw-in-progress-mutation-id", inProgressBody.name, inProgress.bodyText],
+    });
+  });
+
+  it("captures JSON validation and not-found errors without raw request or response details", async () => {
+    const user = await db.user.create({ data: createTestUser() });
+    const credential = await createApiCredential(db, user.id, "Telemetry Error Writer", {
+      scopes: ["shopping_list:write"],
+    });
+    const auth = { Authorization: `Bearer ${credential.token}` };
+    const malformed = apiJsonRequest(
+      "POST",
+      "shopping-list/items",
+      "req_validation_invalid_json",
+      auth,
+      "{\"clientMutationId\":\"raw-invalid-json-id\",\"name\":\"Raw Bad JSON\"",
+    );
+    const malformedResponse = await action(routeArgs(malformed.request, "shopping-list/items").args);
+
+    expect(malformedResponse.status).toBe(400);
+    expectApiV1OperationEvent({
+      routeTemplate: "/api/v1/shopping-list/items",
+      requestId: "req_validation_invalid_json",
+      operation: "shopping-list.items.create",
+      status: 400,
+      authMode: "bearer",
+      requestBytes: malformed.bodyBytes,
+      errorCode: "invalid_json",
+      idempotencyOutcome: "not_attempted",
+      forbidden: ["raw-invalid-json-id", "Raw Bad JSON", malformed.bodyText],
+    });
+
+    const missingId = `missing-${faker.string.alphanumeric(8)}`;
+    const missingBody = { clientMutationId: "raw-missing-mutation-id", checked: true };
+    const missing = apiJsonRequest(
+      "PATCH",
+      `shopping-list/items/${missingId}`,
+      "req_validation_not_found",
+      auth,
+      missingBody,
+    );
+    const missingResponse = await action(routeArgs(missing.request, `shopping-list/items/${missingId}`).args);
+
+    expect(missingResponse.status).toBe(404);
+    expectApiV1OperationEvent({
+      routeTemplate: "/api/v1/shopping-list/items/{itemId}",
+      requestId: "req_validation_not_found",
+      operation: "shopping-list.items.check",
+      status: 404,
+      authMode: "bearer",
+      requestBytes: missing.bodyBytes,
+      errorCode: "not_found",
+      idempotencyOutcome: "aborted",
+      forbidden: ["raw-missing-mutation-id", missingId, missing.bodyText],
+    });
   });
 });
 
