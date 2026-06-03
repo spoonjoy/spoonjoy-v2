@@ -6,6 +6,8 @@ import * as apiAuth from "~/lib/api-auth.server";
 import { ApiAuthError, createApiCredential } from "~/lib/api-auth.server";
 import {
   ApiV1Error,
+  type ApiV1RouteArgs,
+  apiV1WaitUntilFor,
   apiV1ErrorResponse,
   handleApiV1Request,
   normalizeApiV1AuthError,
@@ -95,6 +97,56 @@ describe("/api/v1 shell", () => {
         scopes: [],
       },
     });
+  });
+
+  it("types Workers waitUntil context for future API v1 telemetry scheduling", async () => {
+    const waitUntil = vi.fn();
+    const args = {
+      request: new UndiciRequest("http://localhost/api/v1/health", {
+        headers: { "X-Request-Id": "req_wait_until_context" },
+      }) as unknown as Request,
+      params: { "*": "health" },
+      context: {
+        cloudflare: {
+          env: null,
+          ctx: { waitUntil },
+        },
+      },
+    } satisfies ApiV1RouteArgs;
+
+    const response = await handleApiV1Request(args);
+
+    expect(response.status).toBe(200);
+    expect(waitUntil).not.toHaveBeenCalled();
+  });
+
+  it("exposes a bound waitUntil scheduler from API v1 route args", async () => {
+    const waitUntil = vi.fn();
+    const args = {
+      request: new UndiciRequest("http://localhost/api/v1/health") as unknown as Request,
+      params: { "*": "health" },
+      context: {
+        cloudflare: {
+          env: null,
+          ctx: { waitUntil },
+        },
+      },
+    } satisfies ApiV1RouteArgs;
+    const promise = Promise.resolve("telemetry");
+
+    apiV1WaitUntilFor(args)?.(promise);
+
+    expect(waitUntil).toHaveBeenCalledWith(promise);
+  });
+
+  it("omits the API v1 scheduler when waitUntil is unavailable", () => {
+    const args = {
+      request: new UndiciRequest("http://localhost/api/v1/health") as unknown as Request,
+      params: { "*": "health" },
+      context: { cloudflare: { env: null } },
+    } satisfies ApiV1RouteArgs;
+
+    expect(apiV1WaitUntilFor(args)).toBeUndefined();
   });
 
   it("serves authenticated health with principal summary and scopes", async () => {
