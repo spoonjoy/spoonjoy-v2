@@ -167,7 +167,7 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 **Output**: MCP success telemetry for tool listing and tool calls.
 **Acceptance**: Unit 5c tests pass and existing MCP success tests still pass.
 
-### ⬜ Unit 5e: MCP Error/Notification Telemetry — Tests
+### 🔄 Unit 5e: MCP Error/Notification Telemetry — Tests
 **What**: Add failing tests for JSON-RPC error responses, notifications returning 202, malformed JSON/body cases, and internal tool errors.
 **Output**: Tests proving MCP telemetry includes response status, JSON-RPC error code when present, notification flag, and existing exception capture remains intact.
 **Acceptance**: Tests fail before implementation and prove no JSON-RPC body, params, bearer token, or stack trace appears in lifecycle events.
@@ -357,3 +357,4 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 - 2026-06-03 08:36 Unit 5c started: MCP success metadata telemetry tests
 - 2026-06-03 08:38 Unit 5c complete: MCP success metadata tests fail red on missing `tools/list` and `tools/call` lifecycle capture
 - 2026-06-03 08:40 Unit 5d complete: MCP success lifecycle telemetry implemented with allowlisted JSON-RPC method/tool metadata; focused MCP tests, related telemetry regressions, typecheck, and build pass
+- 2026-06-03 08:41 Unit 5e started: MCP error and notification telemetry tests
