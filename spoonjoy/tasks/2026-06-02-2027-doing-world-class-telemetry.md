@@ -157,7 +157,7 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 **Output**: Best-effort MCP auth/rate-limit lifecycle telemetry.
 **Acceptance**: Unit 5a tests pass and existing MCP auth tests still pass.
 
-### ⬜ Unit 5c: MCP Success Metadata — Tests
+### 🔄 Unit 5c: MCP Success Metadata — Tests
 **What**: Add failing tests for successful `tools/list` and `tools/call` requests.
 **Output**: Tests proving MCP telemetry includes principal id, credential id, OAuth client/resource, JSON-RPC method, and tool name when safely present.
 **Acceptance**: Tests fail before implementation and prove no JSON-RPC args or tool argument values are captured.
@@ -354,3 +354,4 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 - 2026-06-03 08:28 Unit 5a started: MCP auth/rate-limit telemetry tests
 - 2026-06-03 08:32 Unit 5a complete: MCP auth/rate-limit telemetry tests fail red on missing `spoonjoy.mcp.request` lifecycle capture
 - 2026-06-03 08:34 Unit 5b complete: MCP auth/rate-limit lifecycle telemetry implemented; focused MCP tests, related telemetry regressions, typecheck, and build pass
+- 2026-06-03 08:36 Unit 5c started: MCP success metadata telemetry tests
