@@ -10,9 +10,9 @@
  * overrides the ingestion endpoint (defaults to `https://us.i.posthog.com`).
  * `POSTHOG_DISABLED=1/true/yes/on` is a hard kill-switch.
  *
- * Privacy posture: server payloads are limited to error type, message,
- * stack trace, and the request route + method. They do not include
- * request bodies, cookies, or query/hash strings.
+ * Privacy posture: server payloads use explicit safe metadata. They do not
+ * include request bodies, cookies, auth headers, tokens, raw query strings,
+ * or nested objects that could hide user-entered content.
  */
 
 import { DEFAULT_POSTHOG_HOST, isTruthyEnvFlag } from "~/lib/analytics";
@@ -54,6 +54,15 @@ export interface CaptureExceptionInput {
   extras?: Record<string, unknown>;
 }
 
+export interface CaptureEventInput {
+  /** Controlled event name. Server events must live under the `spoonjoy.*` namespace. */
+  event: string;
+  /** Distinct id for PostHog. Use a user id when known, otherwise a stable string like `anon`. */
+  distinctId: string;
+  /** Structured, privacy-safe metadata. Unsafe keys and nested objects are dropped. */
+  properties?: Record<string, unknown>;
+}
+
 interface CapturePayload {
   api_key: string;
   event: string;
@@ -61,6 +70,34 @@ interface CapturePayload {
   timestamp: string;
   properties: Record<string, unknown>;
 }
+
+const SERVER_EVENT_NAME_RE = /^spoonjoy(?:\.[a-z0-9_]+)+$/;
+const UNSAFE_PROPERTY_KEYS = new Set([
+  "authorization",
+  "authheader",
+  "authheaders",
+  "body",
+  "clientsecret",
+  "code",
+  "codechallenge",
+  "codeverifier",
+  "cookie",
+  "cookies",
+  "headers",
+  "password",
+  "rawquery",
+  "rawquerystring",
+  "request",
+  "requestbody",
+  "response",
+  "responsebody",
+  "secret",
+  "setcookie",
+  "stack",
+  "token",
+  "accesstoken",
+  "refreshtoken",
+]);
 
 function errorToProps(error: unknown): Record<string, unknown> {
   if (error instanceof Error) {
@@ -82,6 +119,57 @@ function errorToProps(error: unknown): Record<string, unknown> {
     $exception_message: message,
     $exception_stack_trace_raw: null,
   };
+}
+
+function postHogCaptureUrl(host: string) {
+  return `${host.replace(/\/$/, "")}/i/v0/e/`;
+}
+
+function assertServerEventName(event: string) {
+  if (!SERVER_EVENT_NAME_RE.test(event)) {
+    throw new Error("PostHog server events must use a spoonjoy.* event name");
+  }
+}
+
+function normalizedPropertyKey(key: string) {
+  return key.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function isUnsafePropertyKey(key: string) {
+  return UNSAFE_PROPERTY_KEYS.has(normalizedPropertyKey(key));
+}
+
+function safeAnalyticsValue(value: unknown): unknown {
+  if (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    const safeValues = value.map(safeAnalyticsValue);
+    return safeValues.every((item) => item !== undefined) ? safeValues : undefined;
+  }
+
+  return undefined;
+}
+
+export function safeAnalyticsProperties(properties?: Record<string, unknown>): Record<string, unknown> {
+  const safe: Record<string, unknown> = {};
+  if (!properties) return safe;
+
+  for (const [key, value] of Object.entries(properties)) {
+    if (key === "$lib" || isUnsafePropertyKey(key)) continue;
+
+    const safeValue = safeAnalyticsValue(value);
+    if (safeValue !== undefined) {
+      safe[key] = safeValue;
+    }
+  }
+
+  return safe;
 }
 
 /**
@@ -115,6 +203,30 @@ export function buildCaptureExceptionPayload(
 }
 
 /**
+ * Build the PostHog capture payload for a controlled, non-exception server
+ * event. Payload construction is strict so callers cannot accidentally emit
+ * arbitrary PostHog browser events or raw request data from server code.
+ */
+export function buildCaptureEventPayload(
+  config: Extract<PostHogServerConfig, { enabled: true }>,
+  input: CaptureEventInput,
+  now: () => Date = () => new Date(),
+): CapturePayload {
+  assertServerEventName(input.event);
+
+  return {
+    api_key: config.key,
+    event: input.event,
+    distinct_id: input.distinctId,
+    timestamp: now().toISOString(),
+    properties: {
+      ...safeAnalyticsProperties(input.properties),
+      $lib: "spoonjoy-server",
+    },
+  };
+}
+
+/**
  * Fire-and-forget exception capture. Resolves once the request completes
  * (or the network call fails); never throws — capture failures are
  * swallowed because they must not affect the request response.
@@ -132,7 +244,35 @@ export async function captureException(
   if (!config.enabled) return;
 
   const payload = buildCaptureExceptionPayload(config, input);
-  const url = `${config.host.replace(/\/$/, "")}/i/v0/e/`;
+  await postCapturePayload(config.host, payload, fetchImpl);
+}
+
+/**
+ * Fire-and-forget generic server event capture. It never throws, including
+ * payload-validation failures, because telemetry must not affect responses.
+ */
+export async function captureEvent(
+  config: PostHogServerConfig,
+  input: CaptureEventInput,
+  fetchImpl: typeof fetch = fetch,
+): Promise<void> {
+  if (!config.enabled) return;
+
+  try {
+    const payload = buildCaptureEventPayload(config, input);
+    await postCapturePayload(config.host, payload, fetchImpl);
+  } catch {
+    // Intentional: invalid telemetry input or PostHog outage must not surface
+    // as an app/API error.
+  }
+}
+
+async function postCapturePayload(
+  host: string,
+  payload: CapturePayload,
+  fetchImpl: typeof fetch,
+): Promise<void> {
+  const url = postHogCaptureUrl(host);
 
   try {
     await fetchImpl(url, {
