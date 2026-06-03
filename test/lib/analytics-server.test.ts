@@ -301,6 +301,30 @@ describe("buildCaptureEventPayload", () => {
     expect(JSON.stringify(payload)).not.toContain("soup");
     expect(JSON.stringify(payload)).not.toContain("secret body");
   });
+
+  it("drops mixed arrays when any item is unsupported", () => {
+    const payload = buildCaptureEventPayload(config, {
+      event: "spoonjoy.api_v1.request",
+      distinctId: "chef_123",
+      properties: {
+        safeScopes: ["recipes:read"],
+        mixedValues: ["recipes:read", { requestBody: "secret" }],
+      },
+    });
+
+    expect(payload.properties.safeScopes).toEqual(["recipes:read"]);
+    expect(payload.properties.mixedValues).toBeUndefined();
+    expect(JSON.stringify(payload)).not.toContain("secret");
+  });
+
+  it("uses only locked server metadata when no properties are supplied", () => {
+    const payload = buildCaptureEventPayload(config, {
+      event: "spoonjoy.api_v1.request",
+      distinctId: "chef_123",
+    });
+
+    expect(payload.properties).toEqual({ $lib: "spoonjoy-server" });
+  });
 });
 
 describe("captureEvent", () => {
@@ -351,6 +375,22 @@ describe("captureEvent", () => {
         fetchSpy as unknown as typeof fetch,
       ),
     ).resolves.toBeUndefined();
+  });
+
+  it("falls back to the global fetch for generic events when no fetchImpl is provided", async () => {
+    const globalFetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response("{}", { status: 200 }));
+
+    try {
+      await captureEvent(
+        { enabled: true, key: "ph_test", host: "https://posthog.example" },
+        { event: "spoonjoy.api_v1.request", distinctId: "anon" },
+      );
+      expect(globalFetchSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      globalFetchSpy.mockRestore();
+    }
   });
 });
 
