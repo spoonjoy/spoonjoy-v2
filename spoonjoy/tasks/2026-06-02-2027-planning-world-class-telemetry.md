@@ -1,7 +1,7 @@
 # Planning: World-Class Telemetry
 
 **Status**: NEEDS_REVIEW
-**Created**: 2026-06-02 20:27
+**Created**: 2026-06-02 20:29
 
 ## Goal
 Give Spoonjoy full production visibility across client behavior, REST API usage, OAuth/delegated auth, and MCP clients through PostHog-backed telemetry, while preserving the existing privacy posture that avoids free text, request bodies, cookies, token secrets, and raw query strings.
@@ -86,4 +86,4 @@ Existing telemetry is partial: client pageviews/recipe-detail events are wired w
 Tinfoil hat pass: PostHog is useful for product analytics but is not a guaranteed audit trail. The plan should not promise billing-grade metering unless a durable first-party ledger is added later. API telemetry must be captured after response construction where possible so status/error and latency are available, but before unsafe body inspection. Secret-bearing operations need explicit tests to prove no token/code/refresh/access values reach event payloads.
 
 ## Progress Log
-- 2026-06-02 20:27 Created
+- 2026-06-02 20:29 Created
