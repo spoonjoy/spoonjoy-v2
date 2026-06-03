@@ -82,12 +82,12 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 **Output**: API v1 has the same best-effort background scheduling capability already used by legacy `/api/*` and `/mcp`.
 **Acceptance**: Unit 2a tests pass and API v1 route behavior/wire format is unchanged.
 
-### 🔄 Unit 2c: API v1 WaitUntil Context — Coverage & Refactor
+### ✅ Unit 2c: API v1 WaitUntil Context — Coverage & Refactor
 **What**: Run the focused API v1 route-shell/type tests. Refactor only within `app/lib/api-v1.server.ts` and `app/routes/api.v1.$.ts`.
 **Output**: Covered API v1 context plumbing ready for later telemetry units.
 **Acceptance**: Focused tests pass with no warnings.
 
-### ⬜ Unit 3a: API v1 Public/Discovery Telemetry — Tests
+### 🔄 Unit 3a: API v1 Public/Discovery Telemetry — Tests
 **What**: Add failing tests for `app/lib/api-v1.server.ts` covering anonymous GET `/api/v1`, `/health`, OpenAPI docs, recipe list/detail, and cookbook list/detail.
 **Output**: Tests proving `spoonjoy.api_v1.request` emits route template/resource, method, status, request id, auth mode `anonymous`, latency, request byte count, cache/privacy class, origin/referrer host, and coarse user-agent family.
 **Acceptance**: Tests fail before implementation and assert no raw query string, cookies, authorization header, request body, response body, recipe title, cookbook title, or other free text appears in telemetry.
@@ -326,3 +326,5 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 - 2026-06-03 07:26 Unit 2b started: implement API v1 waitUntil context helper
 - 2026-06-03 07:28 Unit 2b complete: API v1 waitUntil context helper implemented and focused test/build pass
 - 2026-06-03 07:28 Unit 2c started: focused API v1 context verification
+- 2026-06-03 07:30 Unit 2c complete: API v1 waitUntil context tests, typecheck, and build pass after AppLoadContext refactor
+- 2026-06-03 07:30 Unit 3a started: API v1 public/discovery telemetry tests
