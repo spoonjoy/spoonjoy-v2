@@ -52,12 +52,12 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 
 **CRITICAL: Every unit header MUST start with status emoji (⬜ for new units).**
 
-### 🔄 Unit 0: Setup/Research
+### ✅ Unit 0: Setup/Research
 **What**: Record current telemetry state, confirm PostHog Cloudflare secret/build-time env state, and save route choke-point notes for `/api/v1/*`, legacy `/api/*`, `/mcp`, and OAuth routes.
 **Output**: `spoonjoy/tasks/2026-06-02-2027-doing-world-class-telemetry/setup-notes.md` with secret presence only, no secret values.
 **Acceptance**: Notes identify whether `POSTHOG_KEY` exists in Cloudflare, whether local deploy env has `VITE_POSTHOG_KEY`, and the exact implementation files to edit.
 
-### ⬜ Unit 1a: Server Analytics Helper — Tests
+### 🔄 Unit 1a: Server Analytics Helper — Tests
 **What**: Add failing tests in `test/lib/analytics-server.test.ts` for generic PostHog event payload construction, disabled/missing-key no-op behavior, host trimming, safe property merge, capture failure swallowing, and privacy exclusion of unsafe keys.
 **Output**: Failing tests proving `captureEvent`/payload helper behavior before implementation.
 **Acceptance**: Focused analytics-server tests fail because the generic event capture helper does not exist or does not yet enforce the new contract.
@@ -314,3 +314,5 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 - 2026-06-02 21:32 Scrutiny pass 6 Tinfoil Hat Round 2 converged; minor hardening added for pnpm consistency and PostHog-key blocker reporting
 - 2026-06-02 22:04 Local Stranger fallback finding addressed by adding explicit safe developer docs/playground client telemetry units
 - 2026-06-03 07:16 Execution approved by repeated user "go on"; marked Unit 0 in progress
+- 2026-06-03 07:18 Unit 0 complete: recorded PostHog secret/build env presence and route chokepoints in setup notes
+- 2026-06-03 07:18 Unit 1a started: server analytics helper tests
