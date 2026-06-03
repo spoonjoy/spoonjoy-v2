@@ -1,6 +1,6 @@
 # Planning: World-Class Telemetry
 
-**Status**: NEEDS_REVIEW
+**Status**: approved
 **Created**: 2026-06-02 20:29
 
 ## Goal
@@ -48,9 +48,9 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 - Edge cases: null, empty, boundary values
 
 ## Open Questions
-- [ ] Confirm the telemetry privacy boundary: use internal ids, credential ids, OAuth client ids, scopes, endpoint templates, status/error, byte counts, latency, origin/referrer host, and coarse user-agent family; never send user free text, raw query strings, request/response bodies, cookies, authorization headers, tokens, codes, secrets, or full IP addresses.
-- [ ] Provide or allow retrieval of the PostHog project API key so `POSTHOG_KEY` can be set as a Cloudflare secret and `VITE_POSTHOG_KEY` can be present for production builds.
-- [ ] Decide whether “world-class telemetry” also requires a durable first-party usage ledger later; this plan intentionally treats PostHog as the analytics sink, not as a billing/audit database.
+- [x] Confirm the telemetry privacy boundary: use internal ids, credential ids, OAuth client ids, scopes, endpoint templates, status/error, byte counts, latency, origin/referrer host, and coarse user-agent family; never send user free text, raw query strings, request/response bodies, cookies, authorization headers, tokens, codes, secrets, or full IP addresses. Approved by user on 2026-06-02.
+- [x] Provide or allow retrieval of the PostHog project API key so `POSTHOG_KEY` can be set as a Cloudflare secret and `VITE_POSTHOG_KEY` can be present for production builds. User approved continuing; implementation should retrieve/set keys during setup/deploy if available, and surface only if still blocked.
+- [x] Decide whether “world-class telemetry” also requires a durable first-party usage ledger later; this plan intentionally treats PostHog as the analytics sink, not as a billing/audit database. Approved by user on 2026-06-02.
 
 ## Decisions Made
 - PostHog is the telemetry sink because the repo already has `posthog-js`, `@posthog/react`, client initialization, and a server-side PostHog exception wrapper.
@@ -58,6 +58,7 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 - Instrumentation should live at route choke points instead of endpoint-by-endpoint code to avoid duplication and missed coverage.
 - Privacy-safe metadata is preferred over payload capture; route templates and controlled enum-like fields answer the product questions without leaking kitchen content.
 - Cloudflare currently lists no `POSTHOG_KEY` secret, so production server capture is not active yet.
+- The plan was approved by the user on 2026-06-02; PostHog is the immediate telemetry sink, with a durable usage ledger out of scope for this task.
 
 ## Context / References
 - `app/lib/analytics.ts`
@@ -87,3 +88,4 @@ Tinfoil hat pass: PostHog is useful for product analytics but is not a guarantee
 
 ## Progress Log
 - 2026-06-02 20:29 Created
+- 2026-06-02 20:29 Approved by user and resolved planning questions
