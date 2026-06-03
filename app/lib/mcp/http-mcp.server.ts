@@ -62,6 +62,14 @@ interface CloudflareEnvLike {
   POSTHOG_DISABLED?: string;
 }
 
+const MCP_SAFE_JSONRPC_METHODS = new Set([
+  "initialize",
+  "notifications/initialized",
+  "tools/call",
+  "tools/list",
+]);
+const MCP_TOOL_NAMES = new Set(listSpoonjoyMcpTools().map((tool) => tool.name));
+
 export interface HandleMcpHttpRequestParams {
   request: Request;
   db: PrismaClientType;
@@ -76,6 +84,8 @@ type McpTelemetryInput = {
   startedAt: number;
   principal?: ApiPrincipal | null;
   errorCode?: string;
+  jsonRpcMethod?: string;
+  toolName?: string;
   rateLimitScope?: RateLimitScope;
 };
 
@@ -114,6 +124,34 @@ function mcpAuthMode(principal: ApiPrincipal | null): string {
   return principal.oauthClientId ? "oauth_bearer" : principal.source;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function mcpJsonRpcTelemetry(body: string): Pick<McpTelemetryInput, "jsonRpcMethod" | "toolName"> {
+  try {
+    const parsed = JSON.parse(body) as unknown;
+    if (!isRecord(parsed)) return {};
+
+    const method = typeof parsed.method === "string" && MCP_SAFE_JSONRPC_METHODS.has(parsed.method)
+      ? parsed.method
+      : undefined;
+    if (!method) return {};
+
+    const params = parsed.params;
+    const toolName = method === "tools/call" && isRecord(params) && typeof params.name === "string" && MCP_TOOL_NAMES.has(params.name)
+      ? params.name
+      : undefined;
+    return { jsonRpcMethod: method, toolName };
+  } catch {
+    return {};
+  }
+}
+
+function isJsonRpcSuccessResponse(response: unknown): boolean {
+  return isRecord(response) && "result" in response && !("error" in response);
+}
+
 function observeMcpResponse(
   params: HandleMcpHttpRequestParams,
   input: McpTelemetryInput,
@@ -139,6 +177,8 @@ function observeMcpResponse(
       oauth_client_id: principal?.oauthClientId || undefined,
       oauth_resource: principal?.oauthClientId ? (principal.oauthResource ?? null) : undefined,
       scopes: principal?.scopes,
+      jsonrpc_method: input.jsonRpcMethod,
+      tool_name: input.toolName,
       request_bytes: requestContentBytes(request),
       origin_host: safeHeaderHost(request.headers.get("Origin")),
       referrer_host: safeHeaderHost(request.headers.get("Referer")),
@@ -242,6 +282,7 @@ export async function handleMcpHttpRequest(params: HandleMcpHttpRequestParams): 
   };
 
   const body = await request.text();
+  const jsonRpcTelemetry = mcpJsonRpcTelemetry(body);
   const response = await handleJsonRpcLine(body, router, { onError });
 
   // Notifications (no id) produce no JSON-RPC response — ack with 202.
@@ -249,5 +290,12 @@ export async function handleMcpHttpRequest(params: HandleMcpHttpRequestParams): 
     return new Response(null, { status: 202 });
   }
 
-  return jsonResponse(response);
+  const httpResponse = jsonResponse(response);
+  if (!isJsonRpcSuccessResponse(response)) return httpResponse;
+  return observeMcpResponse(params, {
+    response: httpResponse,
+    startedAt,
+    principal,
+    ...jsonRpcTelemetry,
+  });
 }
