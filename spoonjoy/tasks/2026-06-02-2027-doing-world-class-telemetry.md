@@ -122,12 +122,12 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 **Output**: Tests proving API v1 error telemetry emits safe error code/status/rate-limit scope and preserves existing exception logging/capture behavior.
 **Acceptance**: Tests fail before implementation and assert internal error telemetry includes no stack trace except through the existing `$exception` capture path.
 
-### 🔄 Unit 3h: API v1 Rate-Limit/Internal-Error Telemetry — Implementation
+### ✅ Unit 3h: API v1 Rate-Limit/Internal-Error Telemetry — Implementation
 **What**: Extend API v1 telemetry across early rate-limit returns and catch blocks, preserving `logApiV1InternalError` and any existing response behavior.
 **Output**: API v1 error/rate-limit lifecycle telemetry.
 **Acceptance**: Unit 3g tests pass and existing API v1 route tests still pass.
 
-### ⬜ Unit 3i: API v1 Telemetry — Coverage & Refactor
+### 🔄 Unit 3i: API v1 Telemetry — Coverage & Refactor
 **What**: Run focused API v1 telemetry and existing API v1 route tests. Refactor only within `app/lib/api-v1.server.ts` and `app/lib/analytics-server.ts`; any new cross-surface helper file or broader extraction requires updating this doing doc first.
 **Output**: Covered, centralized API v1 telemetry helpers with no duplicated per-endpoint capture calls.
 **Acceptance**: Focused API v1 tests pass with no warnings.
@@ -343,3 +343,5 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 - 2026-06-03 07:56 Unit 3g started: API v1 rate-limit and internal-error telemetry tests
 - 2026-06-03 07:59 Unit 3g complete: API v1 rate-limit/internal-error telemetry tests fail red on early-response/internal-error gaps and missing known-principal insufficient-scope metadata
 - 2026-06-03 07:59 Unit 3h started: implement API v1 rate-limit and internal-error telemetry
+- 2026-06-03 08:03 Unit 3h complete: API v1 rate-limit/internal-error telemetry implemented, Unit 3f reviewer path-template blocker remediated, focused tests/regressions/typecheck/build passing
+- 2026-06-03 08:03 Unit 3i started: API v1 telemetry coverage and refactor verification
