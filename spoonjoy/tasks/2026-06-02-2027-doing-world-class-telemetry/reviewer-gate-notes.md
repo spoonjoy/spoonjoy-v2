@@ -160,3 +160,8 @@
 - Remediation:
   - `test/scripts/deployment-preflight.test.ts` now checks all three `VITE_POSTHOG_*` names for `wrangler secret put` absence, secrets-section absence, and public build-time section presence.
   - The Unit 8c artifact wording now names all three variables instead of using an overbroad wildcard claim.
+
+## 2026-06-03 10:23
+
+- Unit 8d fresh reviewer returned `CONVERGED`.
+- Reviewer confirmed the Cloudflare/local PostHog checks were presence-only, no secret values were printed, the missing `POSTHOG_KEY`/`VITE_POSTHOG_KEY` state is honestly recorded, telemetry remains disabled by default, and Unit 8d is marked complete under the unavailable-key acceptance clause.
