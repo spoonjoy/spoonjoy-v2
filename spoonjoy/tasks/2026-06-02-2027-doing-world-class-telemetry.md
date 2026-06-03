@@ -77,7 +77,7 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 **Acceptance**: Tests fail before implementation because `ApiV1RouteArgs` only types `context.cloudflare.env` and no API v1 telemetry scheduling hook is exposed.
 
 ### ⬜ Unit 2b: API v1 WaitUntil Context — Implementation
-**What**: Update `ApiV1RouteArgs` in `app/lib/api-v1.server.ts` and, if needed, `app/routes/api.v1.$.ts` so API v1 can bind `context.cloudflare.ctx.waitUntil` or an equivalent `waitUntil` callback at the centralized handler.
+**What**: Update `ApiV1RouteArgs` in `app/lib/api-v1.server.ts` so `context.cloudflare.ctx` is typed, and update `app/routes/api.v1.$.ts` only if TypeScript requires a route-shell binding to preserve the existing call signature.
 **Output**: API v1 has the same best-effort background scheduling capability already used by legacy `/api/*` and `/mcp`.
 **Acceptance**: Unit 2a tests pass and API v1 route behavior/wire format is unchanged.
 
@@ -92,7 +92,7 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 **Acceptance**: Tests fail before implementation and assert no raw query string, cookies, authorization header, request body, response body, recipe title, cookbook title, or other free text appears in telemetry.
 
 ### ⬜ Unit 3b: API v1 Public/Discovery Telemetry — Implementation
-**What**: Instrument `handleApiV1Request` in `app/lib/api-v1.server.ts` for public/discovery success paths using shared helper functions in `app/lib/analytics-server.ts` and, only if needed, `app/lib/api-v1.server.ts`.
+**What**: Instrument `handleApiV1Request` in `app/lib/api-v1.server.ts` for public/discovery success paths using shared helper functions in `app/lib/analytics-server.ts`; any API v1-only helper must stay inside `app/lib/api-v1.server.ts`.
 **Output**: Best-effort `ctx.waitUntil(captureEvent(...))` public API v1 telemetry.
 **Acceptance**: Unit 3a tests pass and existing public API v1 tests still pass.
 
@@ -187,7 +187,7 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 **Acceptance**: Tests fail before implementation and prove no raw redirect URI query, raw JSON body, client supplied free-text beyond controlled counts/ids, or request body appears in telemetry.
 
 ### ⬜ Unit 6b: OAuth Register Telemetry — Implementation
-**What**: Instrument `app/routes/oauth.register.ts` and/or `app/lib/oauth-routes.server.ts` for registration lifecycle events.
+**What**: Instrument `app/routes/oauth.register.ts` for route-shell timing/rate-limit metadata and `app/lib/oauth-routes.server.ts` for registration result/error metadata.
 **Output**: Safe OAuth registration telemetry.
 **Acceptance**: Unit 6a tests pass and existing OAuth registration tests still pass.
 
@@ -197,7 +197,7 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 **Acceptance**: Tests fail before implementation and prove no authorization code, state value, code challenge, redirect URI query, or raw form body appears in telemetry.
 
 ### ⬜ Unit 6d: OAuth Authorize Telemetry — Implementation
-**What**: Instrument `app/routes/oauth.authorize.tsx` and/or `app/lib/oauth-routes.server.ts` for authorize loader/action lifecycle events.
+**What**: Instrument `app/routes/oauth.authorize.tsx` for loader/action timing/rate-limit metadata and `app/lib/oauth-routes.server.ts` for authorize result/error/decision metadata.
 **Output**: Safe OAuth authorize telemetry.
 **Acceptance**: Unit 6c tests pass and existing OAuth authorize tests still pass.
 
@@ -207,7 +207,7 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 **Acceptance**: Tests fail before implementation and prove no authorization code, code verifier, access token, refresh token, token prefix, raw form body, or request body appears in telemetry.
 
 ### ⬜ Unit 6f: OAuth Token/Refresh Telemetry — Implementation
-**What**: Instrument `app/routes/oauth.token.ts` and/or `app/lib/oauth-routes.server.ts` for token endpoint lifecycle events.
+**What**: Instrument `app/routes/oauth.token.ts` for route-shell timing/rate-limit metadata and `app/lib/oauth-routes.server.ts` for token/refresh result/error metadata.
 **Output**: Safe OAuth token/refresh telemetry.
 **Acceptance**: Unit 6e tests pass and existing OAuth token tests still pass.
 
@@ -217,7 +217,7 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 **Acceptance**: Tests fail before implementation and prove no refresh token, access token, raw form body, or token value appears in telemetry.
 
 ### ⬜ Unit 6h: OAuth Revoke Telemetry — Implementation
-**What**: Instrument `app/routes/oauth.revoke.ts` and/or `app/lib/oauth-routes.server.ts` for revoke lifecycle events.
+**What**: Instrument `app/routes/oauth.revoke.ts` for route-shell timing/rate-limit metadata and `app/lib/oauth-routes.server.ts` for revoke result/error metadata.
 **Output**: Safe OAuth revoke telemetry.
 **Acceptance**: Unit 6g tests pass and existing OAuth revoke tests still pass.
 
@@ -227,12 +227,12 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 **Acceptance**: Focused OAuth tests pass with no warnings.
 
 ### ⬜ Unit 7a: Docs/Config/Sink Setup — Tests
-**What**: Add failing documentation/config/preflight tests where applicable so `POSTHOG_KEY`, `POSTHOG_HOST`, `POSTHOG_DISABLED`, `VITE_POSTHOG_KEY`, `VITE_POSTHOG_HOST`, and `VITE_POSTHOG_DISABLED` are consistently documented and typed.
+**What**: Add failing documentation/config/preflight tests in `test/scripts/deployment-preflight.test.ts`, `test/scripts/production-readiness.test.ts`, or existing docs tests when those tests already cover the relevant documentation surface. If no existing test covers a documentation file, record that file in Unit 7c verification notes instead of inventing broad snapshot coverage.
 **Output**: Failing tests or doc assertions for telemetry setup and privacy contract updates.
 **Acceptance**: Tests fail before docs/config updates where the repository has existing doc/config test coverage.
 
 ### ⬜ Unit 7b: Docs/Config/Sink Setup — Implementation
-**What**: Update `docs/analytics-privacy.md`, `.env.example`, `README.md`, `DEPLOY.md`, `app/cloudflare-env.d.ts`, and deployment-preflight docs/tests as needed.
+**What**: Update `docs/analytics-privacy.md`, `.env.example`, `README.md`, `DEPLOY.md`, `app/cloudflare-env.d.ts`, and the deployment-preflight docs/tests named by Unit 7a failures.
 **Output**: Updated docs/config explaining server/client telemetry setup, privacy exclusions, and operational checks.
 **Acceptance**: Docs/config tests pass and no documentation suggests printing secret values.
 
@@ -275,3 +275,4 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 - 2026-06-02 21:32 Granularity pass Round 1 addressed by splitting API v1, MCP, OAuth, and sink setup units into smaller slices
 - 2026-06-02 21:32 Granularity pass Round 2 converged
 - 2026-06-02 21:32 Validation pass Round 1 addressed by adding API v1 waitUntil context plumbing units before API v1 telemetry work
+- 2026-06-02 21:32 Validation pass Round 2 converged
