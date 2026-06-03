@@ -152,7 +152,7 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 **Output**: Tests proving `/mcp` emits safe `spoonjoy.mcp.request` events for auth/rate-limit outcomes with status, error code, auth source, latency, and request byte count.
 **Acceptance**: Tests fail before implementation and prove no bearer token, Authorization header, request body, or JSON-RPC params are captured.
 
-### ⬜ Unit 5b: MCP Auth/Rate-Limit Telemetry — Implementation
+### ✅ Unit 5b: MCP Auth/Rate-Limit Telemetry — Implementation
 **What**: Instrument `handleMcpHttpRequest` in `app/lib/mcp/http-mcp.server.ts` for early method/auth/rate-limit branches.
 **Output**: Best-effort MCP auth/rate-limit lifecycle telemetry.
 **Acceptance**: Unit 5a tests pass and existing MCP auth tests still pass.
@@ -353,3 +353,4 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 - 2026-06-03 08:25 Unit 4c complete: legacy route and shared analytics helper coverage reached 100% statements/branches/functions/lines; typecheck and build pass
 - 2026-06-03 08:28 Unit 5a started: MCP auth/rate-limit telemetry tests
 - 2026-06-03 08:32 Unit 5a complete: MCP auth/rate-limit telemetry tests fail red on missing `spoonjoy.mcp.request` lifecycle capture
+- 2026-06-03 08:34 Unit 5b complete: MCP auth/rate-limit lifecycle telemetry implemented; focused MCP tests, related telemetry regressions, typecheck, and build pass
