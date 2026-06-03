@@ -237,7 +237,7 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 **Output**: Verified client PostHog initialization that is disabled without `VITE_POSTHOG_KEY`, kill-switchable by `VITE_POSTHOG_DISABLED`, and privacy-masked when enabled.
 **Acceptance**: Unit 7a tests pass and existing client analytics/pageview tests still pass.
 
-### 🔄 Unit 7c: Client PostHog Bootstrap — Coverage & Refactor
+### ✅ Unit 7c: Client PostHog Bootstrap — Coverage & Refactor
 **What**: Run focused client analytics tests. Refactor only within `app/lib/analytics.ts`, `app/entry.client.tsx`, and `app/vite-env.d.ts`.
 **Output**: Covered client bootstrap and analytics config behavior.
 **Acceptance**: Focused client analytics tests pass with no warnings.
@@ -385,3 +385,4 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 - 2026-06-03 09:44 Unit 7b started: client PostHog bootstrap implementation verification
 - 2026-06-03 09:46 Unit 7b complete: no app-code change required; focused bootstrap tests, typecheck, and build confirm existing PostHog initialization is gated, kill-switchable, host-configurable, exception-enabled only when initialized, and session-recording masked
 - 2026-06-03 09:46 Unit 7c started: client PostHog bootstrap coverage/refactor verification
+- 2026-06-03 09:48 Unit 7c complete: focused client bootstrap tests passed under coverage; `app/lib/analytics.ts` reached 100% statements/branches/functions/lines; global threshold limitation documented for unrelated app files
