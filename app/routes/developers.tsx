@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { API_V1_ERROR_STATUS, API_V1_RESOURCES, API_V1_SCOPE_REQUIREMENTS } from "~/lib/api-v1-contract.server";
 import { API_V1_PLAYGROUND_MANIFEST } from "~/lib/generated/api-v1-playground";
+import { OG_IMAGE_HEIGHT, OG_IMAGE_WIDTH, PAGE_OG_CARDS, absoluteUrlFromPreferredBase, pageOgPath } from "~/lib/og-metadata";
 import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
 import { Text } from "~/components/ui/text";
@@ -30,6 +31,10 @@ const DEVELOPER_SCOPES = [
   "tokens:read",
   "tokens:write",
 ] as const;
+
+const DEVELOPER_OG_CARD = PAGE_OG_CARDS.api;
+const DEVELOPER_CANONICAL_PATH = "/api";
+const DEVELOPER_OG_PATH = pageOgPath("api");
 
 const scopeLabels: Record<string, string> = {
   "public:read": "Public read",
@@ -297,17 +302,36 @@ const scenarioQuickstarts = [
   },
 ] as const;
 
-export function meta() {
+export function meta({ data }: { data?: { canonicalUrl?: string; ogImageUrl?: string } } = {}) {
+  const canonicalUrl = data?.canonicalUrl ?? `https://spoonjoy.app${DEVELOPER_CANONICAL_PATH}`;
+  const ogImageUrl = data?.ogImageUrl ?? `https://spoonjoy.app${DEVELOPER_OG_PATH}`;
+
   return [
-    { title: "Spoonjoy Developer Platform | Spoonjoy" },
+    { title: `${DEVELOPER_OG_CARD.title} | Spoonjoy` },
     {
       name: "description",
-      content: "Build clients on Spoonjoy's public Chef graph, REST API, OAuth, MCP, session auth, and bearer credentials.",
+      content: DEVELOPER_OG_CARD.description,
     },
+    { property: "og:site_name", content: "Spoonjoy" },
+    { property: "og:type", content: "website" },
+    { property: "og:title", content: DEVELOPER_OG_CARD.title },
+    { property: "og:description", content: DEVELOPER_OG_CARD.description },
+    { property: "og:url", content: canonicalUrl },
+    { property: "og:image", content: ogImageUrl },
+    { property: "og:image:width", content: String(OG_IMAGE_WIDTH) },
+    { property: "og:image:height", content: String(OG_IMAGE_HEIGHT) },
+    { property: "og:image:type", content: "image/png" },
+    { name: "twitter:card", content: "summary_large_image" },
+    { name: "twitter:title", content: DEVELOPER_OG_CARD.title },
+    { name: "twitter:description", content: DEVELOPER_OG_CARD.description },
+    { name: "twitter:image", content: ogImageUrl },
   ];
 }
 
-export function loader() {
+export function loader(args?: { request?: Request; context?: { cloudflare?: { env?: Pick<Env, "SPOONJOY_BASE_URL"> | null } } }) {
+  const requestUrl = args?.request?.url;
+  const baseUrl = args?.context?.cloudflare?.env?.SPOONJOY_BASE_URL;
+
   return {
     resources: API_V1_RESOURCES,
     scopeRequirements: API_V1_SCOPE_REQUIREMENTS,
@@ -319,6 +343,8 @@ export function loader() {
     authFlows: API_V1_PLAYGROUND_MANIFEST.authFlows,
     oauthScopeMap: API_V1_PLAYGROUND_MANIFEST.oauthScopeMap,
     currentCapabilities: API_V1_PLAYGROUND_MANIFEST.currentCapabilities,
+    canonicalUrl: absoluteUrlFromPreferredBase({ requestUrl, baseUrl, path: DEVELOPER_CANONICAL_PATH }),
+    ogImageUrl: absoluteUrlFromPreferredBase({ requestUrl, baseUrl, path: DEVELOPER_OG_PATH }),
   };
 }
 

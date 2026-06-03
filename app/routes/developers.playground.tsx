@@ -7,6 +7,7 @@ import {
   type ApiV1PlaygroundOperation,
   type ApiV1PlaygroundParam,
 } from "~/lib/generated/api-v1-playground";
+import { OG_IMAGE_HEIGHT, OG_IMAGE_WIDTH, PAGE_OG_CARDS, absoluteUrlFromPreferredBase, pageOgPath } from "~/lib/og-metadata";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Code, Text } from "~/components/ui/text";
@@ -28,6 +29,10 @@ type PlaygroundResponse = {
 };
 
 export const PLAYGROUND_OPERATIONS: readonly ApiV1PlaygroundOperation[] = API_V1_PLAYGROUND_MANIFEST.operations;
+
+const PLAYGROUND_OG_CARD = PAGE_OG_CARDS["api-playground"];
+const PLAYGROUND_CANONICAL_PATH = "/api/playground";
+const PLAYGROUND_OG_PATH = pageOgPath("api-playground");
 
 const AUTH_MODES: Array<{
   id: PlaygroundAuthMode;
@@ -297,19 +302,44 @@ export function playgroundOperationGroups(operations: readonly ApiV1PlaygroundOp
   return groups;
 }
 
-export function meta() {
+export function meta({ data }: { data?: { canonicalUrl?: string; ogImageUrl?: string } } = {}) {
+  const canonicalUrl = data?.canonicalUrl ?? `https://spoonjoy.app${PLAYGROUND_CANONICAL_PATH}`;
+  const ogImageUrl = data?.ogImageUrl ?? `https://spoonjoy.app${PLAYGROUND_OG_PATH}`;
+
   return [
-    { title: "Spoonjoy API Playground | Spoonjoy" },
+    { title: `${PLAYGROUND_OG_CARD.title} | Spoonjoy` },
     {
       name: "description",
-      content: "Try Spoonjoy API v1 requests from the generated developer playground.",
+      content: PLAYGROUND_OG_CARD.description,
     },
+    { property: "og:site_name", content: "Spoonjoy" },
+    { property: "og:type", content: "website" },
+    { property: "og:title", content: PLAYGROUND_OG_CARD.title },
+    { property: "og:description", content: PLAYGROUND_OG_CARD.description },
+    { property: "og:url", content: canonicalUrl },
+    { property: "og:image", content: ogImageUrl },
+    { property: "og:image:width", content: String(OG_IMAGE_WIDTH) },
+    { property: "og:image:height", content: String(OG_IMAGE_HEIGHT) },
+    { property: "og:image:type", content: "image/png" },
+    { name: "twitter:card", content: "summary_large_image" },
+    { name: "twitter:title", content: PLAYGROUND_OG_CARD.title },
+    { name: "twitter:description", content: PLAYGROUND_OG_CARD.description },
+    { name: "twitter:image", content: ogImageUrl },
   ];
 }
 
-export function loader(): { manifest: ApiV1PlaygroundManifest } {
+export function loader(args?: { request?: Request; context?: { cloudflare?: { env?: Pick<Env, "SPOONJOY_BASE_URL"> | null } } }): {
+  manifest: ApiV1PlaygroundManifest;
+  canonicalUrl: string;
+  ogImageUrl: string;
+} {
+  const requestUrl = args?.request?.url;
+  const baseUrl = args?.context?.cloudflare?.env?.SPOONJOY_BASE_URL;
+
   return {
     manifest: API_V1_PLAYGROUND_MANIFEST,
+    canonicalUrl: absoluteUrlFromPreferredBase({ requestUrl, baseUrl, path: PLAYGROUND_CANONICAL_PATH }),
+    ogImageUrl: absoluteUrlFromPreferredBase({ requestUrl, baseUrl, path: PLAYGROUND_OG_PATH }),
   };
 }
 

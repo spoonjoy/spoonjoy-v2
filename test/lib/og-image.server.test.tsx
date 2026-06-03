@@ -35,13 +35,18 @@ vi.mock("cf-workers-og/workerd", () => ({
 import {
   OG_IMAGE_HEIGHT,
   OG_IMAGE_WIDTH,
+  absoluteUrlFromPreferredBase,
   absoluteUrlFromRequest,
   cookbookOgPath,
   cookbookRecipeLabel,
   createCookbookOgElement,
   createCookbookOgImageResponse,
+  createPageOgElement,
+  createPageOgImageResponse,
   createRecipeOgElement,
   createRecipeOgImageResponse,
+  pageOgInput,
+  pageOgPath,
   recipeOgDescription,
   recipeOgPath,
 } from "~/lib/og-image.server";
@@ -58,8 +63,14 @@ describe("OG image helpers", () => {
     expect(absoluteUrlFromRequest("https://spoonjoy.app/recipes/r1", "https://cdn.example.com/r1.jpg")).toBe("https://cdn.example.com/r1.jpg");
     expect(absoluteUrlFromRequest("https://spoonjoy.app/recipes/r1", null)).toBeNull();
     expect(absoluteUrlFromRequest("https://spoonjoy.app/recipes/r1", "http://[")).toBe("http://[");
+    expect(absoluteUrlFromPreferredBase({
+      requestUrl: "https://spoonjoy-v2.mendelow-studio.workers.dev/api",
+      baseUrl: "https://spoonjoy.app",
+      path: "/api",
+    })).toBe("https://spoonjoy.app/api");
     expect(recipeOgPath("recipe 1")).toBe("/og/recipes/recipe%201.png");
     expect(cookbookOgPath("book 1")).toBe("/og/cookbooks/book%201.png");
+    expect(pageOgPath("api playground")).toBe("/og/pages/api%20playground.png");
   });
 
   it("formats recipe and cookbook copy for share cards", () => {
@@ -68,6 +79,8 @@ describe("OG image helpers", () => {
     expect(recipeOgDescription({ description: null, chefUsername: "ari" })).toBe("A Spoonjoy recipe by ari.");
     expect(cookbookRecipeLabel(1)).toBe("1 recipe");
     expect(cookbookRecipeLabel(3)).toBe("3 recipes");
+    expect(pageOgInput("api")).toMatchObject({ title: "Spoonjoy Developer Platform" });
+    expect(pageOgInput("missing")).toBeNull();
   });
 
   it("creates recipe OG responses with recipe photos and Workers font caching", async () => {
@@ -159,5 +172,16 @@ describe("OG image helpers", () => {
         "0 recipes",
       ).type,
     ).toBe("div");
+  });
+
+  it("creates page OG responses and elements for developer surfaces", async () => {
+    const input = pageOgInput("api-playground")!;
+    const response = await createPageOgImageResponse(input);
+
+    expect(await response.text()).toBe("PNG");
+    expect(response.headers.get("X-OG-Width")).toBe(String(OG_IMAGE_WIDTH));
+    expect(response.headers.get("X-OG-Height")).toBe(String(OG_IMAGE_HEIGHT));
+    expect(mocks.GoogleFont).toHaveBeenCalledTimes(3);
+    expect(createPageOgElement(input).type).toBe("div");
   });
 });

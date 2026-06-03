@@ -87,6 +87,8 @@ describe("/developers/playground", () => {
     ]);
     expect(data.manifest.oauthScopeMap["shopping_list:write"]).toEqual(["shopping_list:write"]);
     expect(data.manifest.currentCapabilities.notYetAvailable).toContain("webhooks, REST Hooks, SSE, and event subscriptions");
+    expect(data.canonicalUrl).toBe("https://spoonjoy.app/api/playground");
+    expect(data.ogImageUrl).toBe("https://spoonjoy.app/og/pages/api-playground.png");
     expect(data.manifest.clientScenarios.map((scenario) => scenario.id)).toEqual([
       "cloudflare-worker-sync",
       "browser-extension-shopping-sync",
@@ -99,6 +101,16 @@ describe("/developers/playground", () => {
     expect(data.manifest.operations.find((operation) => operation.id === "POST /oauth/token")?.profiles).toEqual(["full", "sdk"]);
     expect(data.manifest.operations.find((operation) => operation.id === "POST /mcp")?.profiles).toEqual(["full"]);
     expect(data.manifest.operations.length).toBe(24);
+  });
+
+  it("uses the configured public origin for playground OG URLs", () => {
+    const data = loader({
+      request: new Request("https://spoonjoy-v2.mendelow-studio.workers.dev/developers/playground"),
+      context: { cloudflare: { env: { SPOONJOY_BASE_URL: "https://spoonjoy.app" } } },
+    } as any);
+
+    expect(data.canonicalUrl).toBe("https://spoonjoy.app/api/playground");
+    expect(data.ogImageUrl).toBe("https://spoonjoy.app/og/pages/api-playground.png");
   });
 
   it("groups generated operations by OpenAPI tag", () => {
@@ -115,12 +127,33 @@ describe("/developers/playground", () => {
   });
 
   it("declares playground metadata", () => {
-    expect(meta()).toEqual([
+    const data = loader({ request: new Request("https://local.spoonjoy.test/developers/playground") });
+
+    expect(meta({ data })).toEqual([
       { title: "Spoonjoy API Playground | Spoonjoy" },
       {
         name: "description",
-        content: "Try Spoonjoy API v1 requests from the generated developer playground.",
+        content: "Try every Spoonjoy API v1, OAuth, delegated approval, and MCP operation from the generated developer playground.",
       },
+      { property: "og:site_name", content: "Spoonjoy" },
+      { property: "og:type", content: "website" },
+      { property: "og:title", content: "Spoonjoy API Playground" },
+      {
+        property: "og:description",
+        content: "Try every Spoonjoy API v1, OAuth, delegated approval, and MCP operation from the generated developer playground.",
+      },
+      { property: "og:url", content: "https://local.spoonjoy.test/api/playground" },
+      { property: "og:image", content: "https://local.spoonjoy.test/og/pages/api-playground.png" },
+      { property: "og:image:width", content: "1200" },
+      { property: "og:image:height", content: "630" },
+      { property: "og:image:type", content: "image/png" },
+      { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: "Spoonjoy API Playground" },
+      {
+        name: "twitter:description",
+        content: "Try every Spoonjoy API v1, OAuth, delegated approval, and MCP operation from the generated developer playground.",
+      },
+      { name: "twitter:image", content: "https://local.spoonjoy.test/og/pages/api-playground.png" },
     ]);
   });
 

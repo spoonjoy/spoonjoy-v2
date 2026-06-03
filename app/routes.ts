@@ -21,6 +21,7 @@ export default [
   route("privacy", "routes/privacy.tsx"),
   route("terms", "routes/terms.tsx"),
   route("search", "routes/search.tsx"),
+  route("og/pages/:slug.png", "routes/og.pages.$slug.png.tsx"),
   route("og/recipes/:id.png", "routes/og.recipes.$id.png.tsx"),
   route("og/cookbooks/:id.png", "routes/og.cookbooks.$id.png.tsx"),
   route("recipes", "routes/recipes.tsx", [

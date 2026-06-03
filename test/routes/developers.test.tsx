@@ -27,6 +27,8 @@ describe("/developers route", () => {
     expect(data.openapiUrl).toBe("/api/v1/openapi.json");
     expect(data.sdkOpenapiUrl).toBe("/api/v1/openapi.sdk.json");
     expect(data.connectorOpenapiUrl).toBe("/api/v1/openapi.connector.json");
+    expect(data.canonicalUrl).toBe("https://spoonjoy.app/api");
+    expect(data.ogImageUrl).toBe("https://spoonjoy.app/og/pages/api.png");
     expect(data.scopes).toEqual([
       "public:read",
       "kitchen:read",
@@ -40,13 +42,44 @@ describe("/developers route", () => {
     ]);
   });
 
+  it("uses the configured public origin for docs OG URLs", () => {
+    const data = loader({
+      request: new Request("https://spoonjoy-v2.mendelow-studio.workers.dev/developers"),
+      context: { cloudflare: { env: { SPOONJOY_BASE_URL: "https://spoonjoy.app" } } },
+    } as any);
+
+    expect(data.canonicalUrl).toBe("https://spoonjoy.app/api");
+    expect(data.ogImageUrl).toBe("https://spoonjoy.app/og/pages/api.png");
+  });
+
   it("declares developer-focused metadata", () => {
-    expect(meta({} as any)).toEqual([
+    const data = loader({ request: new Request("https://local.spoonjoy.test/developers") });
+
+    expect(meta({ data } as any)).toEqual([
       { title: "Spoonjoy Developer Platform | Spoonjoy" },
       {
         name: "description",
         content: "Build clients on Spoonjoy's public Chef graph, REST API, OAuth, MCP, session auth, and bearer credentials.",
       },
+      { property: "og:site_name", content: "Spoonjoy" },
+      { property: "og:type", content: "website" },
+      { property: "og:title", content: "Spoonjoy Developer Platform" },
+      {
+        property: "og:description",
+        content: "Build clients on Spoonjoy's public Chef graph, REST API, OAuth, MCP, session auth, and bearer credentials.",
+      },
+      { property: "og:url", content: "https://local.spoonjoy.test/api" },
+      { property: "og:image", content: "https://local.spoonjoy.test/og/pages/api.png" },
+      { property: "og:image:width", content: "1200" },
+      { property: "og:image:height", content: "630" },
+      { property: "og:image:type", content: "image/png" },
+      { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: "Spoonjoy Developer Platform" },
+      {
+        name: "twitter:description",
+        content: "Build clients on Spoonjoy's public Chef graph, REST API, OAuth, MCP, session auth, and bearer credentials.",
+      },
+      { name: "twitter:image", content: "https://local.spoonjoy.test/og/pages/api.png" },
     ]);
   });
 
