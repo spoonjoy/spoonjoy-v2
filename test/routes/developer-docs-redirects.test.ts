@@ -68,9 +68,9 @@ describe("developer docs API aliases", () => {
     expect(response.headers.get("Location")).toBe("/api/v1/openapi.json");
   });
 
-  it("renders the canonical docs and playground modules directly under /api", () => {
+  it("renders the canonical docs and playground modules directly under /api", async () => {
     expect(apiDocs.loader({} as any).resources.length).toBeGreaterThan(0);
-    expect(playground.loader().manifest.operations.length).toBeGreaterThan(0);
-    expect(tryPlayground.loader().manifest.operations.length).toBeGreaterThan(0);
+    expect((await playground.loader()).manifest.operations.length).toBeGreaterThan(0);
+    expect((await tryPlayground.loader()).manifest.operations.length).toBeGreaterThan(0);
   });
 });

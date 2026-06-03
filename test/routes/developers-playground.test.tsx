@@ -1,4 +1,5 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { Request as UndiciRequest } from "undici";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import routes from "~/routes";
 import DeveloperPlayground, {
@@ -16,12 +17,30 @@ import DeveloperPlayground, {
 } from "~/routes/developers.playground";
 import { API_V1_SCOPE_REQUIREMENTS } from "~/lib/api-v1-contract.server";
 import { API_V1_PLAYGROUND_MANIFEST } from "~/lib/generated/api-v1-playground";
+import { createUserSessionCookie } from "~/lib/session.server";
 import { createTestRoutesStub } from "../utils";
 
-function renderPlayground() {
-  const data = loader();
+type PlaygroundLoaderData = Awaited<ReturnType<typeof loader>>;
+
+function cookieHeader(setCookie: string) {
+  return setCookie.split(";")[0];
+}
+
+async function signedInPlaygroundData() {
+  const env = { SESSION_SECRET: "playground-test-secret" };
+  const sessionCookie = await createUserSessionCookie("chef_playground_test", env);
+  return loader({
+    request: new UndiciRequest("https://spoonjoy.app/api/playground", {
+      headers: { Cookie: cookieHeader(sessionCookie) },
+    }) as unknown as Request,
+    context: { cloudflare: { env } },
+  } as any);
+}
+
+async function renderPlayground(data?: PlaygroundLoaderData) {
+  const resolvedData = data ?? await loader();
   const Stub = createTestRoutesStub([
-    { path: "/developers/playground", Component: DeveloperPlayground, loader: () => data },
+    { path: "/developers/playground", Component: DeveloperPlayground, loader: () => resolvedData },
   ]);
   render(<Stub initialEntries={["/developers/playground"]} />);
 }
@@ -50,10 +69,11 @@ describe("/developers/playground", () => {
     expect(routeConfig.indexOf("api/try")).toBeLessThan(routeConfig.indexOf("api/*"));
   });
 
-  it("publishes every generated API v1 operation from the OpenAPI playground manifest", () => {
-    const data = loader();
+  it("publishes every generated API v1 operation from the OpenAPI playground manifest", async () => {
+    const data = await loader();
 
     expect(data.manifest).toEqual(API_V1_PLAYGROUND_MANIFEST);
+    expect(data.viewer.isAuthenticated).toBe(false);
     expect(data.manifest.operations).toEqual(PLAYGROUND_OPERATIONS);
     const v1Operations = data.manifest.operations.filter((operation) => operation.path.startsWith("/api/v1"));
     expect(v1Operations.map((operation) => ({
@@ -103,8 +123,8 @@ describe("/developers/playground", () => {
     expect(data.manifest.operations.length).toBe(24);
   });
 
-  it("uses the configured public origin for playground OG URLs", () => {
-    const data = loader({
+  it("uses the configured public origin for playground OG URLs", async () => {
+    const data = await loader({
       request: new Request("https://spoonjoy-v2.mendelow-studio.workers.dev/developers/playground"),
       context: { cloudflare: { env: { SPOONJOY_BASE_URL: "https://spoonjoy.app" } } },
     } as any);
@@ -126,8 +146,8 @@ describe("/developers/playground", () => {
     ]);
   });
 
-  it("declares playground metadata", () => {
-    const data = loader({ request: new Request("https://local.spoonjoy.test/developers/playground") });
+  it("declares playground metadata", async () => {
+    const data = await loader({ request: new Request("https://local.spoonjoy.test/developers/playground") });
 
     expect(meta({ data })).toEqual([
       { title: "Spoonjoy API Playground | Spoonjoy" },
@@ -228,7 +248,7 @@ describe("/developers/playground", () => {
     }));
     vi.stubGlobal("fetch", fetchMock);
 
-    renderPlayground();
+    await renderPlayground();
     expect(await screen.findByRole("heading", { name: "Spoonjoy API Playground" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Create a bearer credential/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Remove a shopping-list item/i })).toBeInTheDocument();
@@ -257,6 +277,33 @@ describe("/developers/playground", () => {
     expect(screen.getByText("offline")).toBeInTheDocument();
   });
 
+  it("reflects a signed-in Spoonjoy session after returning from login", async () => {
+    const fetchMock = vi.fn(async () => mockApiResponse({
+      ok: true,
+      requestId: "req_signed_in",
+      data: { recipes: [] },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const data = await signedInPlaygroundData();
+    expect(data.viewer.isAuthenticated).toBe(true);
+
+    await renderPlayground(data);
+
+    expect(await screen.findByRole("radio", { name: "Session" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByText("Uses your signed-in Spoonjoy session for same-origin API calls.")).toBeInTheDocument();
+    expect(screen.getByText("Signed in to Spoonjoy. Session requests will include your browser login.")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Sign in" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Send Request" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(fetchMock).toHaveBeenCalledWith("/api/v1/recipes?limit=20", {
+      method: "GET",
+      credentials: "same-origin",
+      headers: expect.objectContaining({ "X-Request-Id": expect.stringMatching(/^pg_/) }),
+    });
+  });
+
   it("uses query params and bearer auth only after the user enables it", async () => {
     const fetchMock = vi.fn(async () => mockApiResponse({
       ok: true,
@@ -265,7 +312,7 @@ describe("/developers/playground", () => {
     }));
     vi.stubGlobal("fetch", fetchMock);
 
-    renderPlayground();
+    await renderPlayground();
     fireEvent.click(await screen.findByRole("button", { name: /Search public recipes/i }));
     fireEvent.change(screen.getByLabelText(/Query/), { target: { value: "pasta" } });
     fireEvent.change(document.querySelector<HTMLInputElement>("#param-query-limit")!, { target: { value: "5" } });
@@ -285,7 +332,7 @@ describe("/developers/playground", () => {
   });
 
   it("filters operations by generated connector profile and search text", async () => {
-    renderPlayground();
+    await renderPlayground();
     await screen.findByRole("heading", { name: "Spoonjoy API Playground" });
 
     fireEvent.click(screen.getByRole("radio", { name: "Connector" }));
@@ -307,7 +354,7 @@ describe("/developers/playground", () => {
     }, { status: 201, statusText: "Created" }));
     vi.stubGlobal("fetch", fetchMock);
 
-    renderPlayground();
+    await renderPlayground();
     fireEvent.click(await screen.findByRole("button", { name: /Create a bearer credential/i }));
     expect(screen.getByText("Authenticated chef")).toBeInTheDocument();
     expect(screen.getByText("tokens:write")).toBeInTheDocument();
@@ -335,7 +382,7 @@ describe("/developers/playground", () => {
     const fetchMock = vi.fn(async () => mockApiResponse({ ok: true }));
     vi.stubGlobal("fetch", fetchMock);
 
-    renderPlayground();
+    await renderPlayground();
     fireEvent.click(await screen.findByRole("button", { name: /Read the authenticated shopping list/i }));
     fireEvent.click(screen.getByRole("radio", { name: "Bearer" }));
 
@@ -345,7 +392,7 @@ describe("/developers/playground", () => {
   });
 
   it("renders required path parameters for generated detail operations", async () => {
-    renderPlayground();
+    await renderPlayground();
 
     fireEvent.click(await screen.findByRole("button", { name: /Read one public recipe/i }));
 
@@ -360,7 +407,7 @@ describe("/developers/playground", () => {
     const fetchMock = vi.fn(async () => mockApiResponse({ ok: true, data: { ok: true } }));
     vi.stubGlobal("fetch", fetchMock);
 
-    renderPlayground();
+    await renderPlayground();
     fireEvent.click(await screen.findByRole("radio", { name: "Anonymous" }));
     fireEvent.click(screen.getByRole("button", { name: "Send Request" }));
 

@@ -8,6 +8,7 @@ import {
   type ApiV1PlaygroundParam,
 } from "~/lib/generated/api-v1-playground";
 import { OG_IMAGE_HEIGHT, OG_IMAGE_WIDTH, PAGE_OG_CARDS, absoluteUrlFromPreferredBase, pageOgPath } from "~/lib/og-metadata";
+import { getUserId } from "~/lib/session.server";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Code, Text } from "~/components/ui/text";
@@ -328,18 +329,25 @@ export function meta({ data }: { data?: { canonicalUrl?: string; ogImageUrl?: st
   ];
 }
 
-export function loader(args?: { request?: Request; context?: { cloudflare?: { env?: Pick<Env, "SPOONJOY_BASE_URL"> | null } } }): {
+type PlaygroundLoaderEnv = Pick<Env, "SESSION_SECRET" | "SPOONJOY_BASE_URL">;
+
+export async function loader(args?: { request?: Request; context?: { cloudflare?: { env?: PlaygroundLoaderEnv | null } } }): Promise<{
   manifest: ApiV1PlaygroundManifest;
   canonicalUrl: string;
   ogImageUrl: string;
-} {
+  viewer: { isAuthenticated: boolean };
+}> {
   const requestUrl = args?.request?.url;
   const baseUrl = args?.context?.cloudflare?.env?.SPOONJOY_BASE_URL;
+  const userId = args?.request
+    ? await getUserId(args.request, args.context?.cloudflare?.env)
+    : null;
 
   return {
     manifest: API_V1_PLAYGROUND_MANIFEST,
     canonicalUrl: absoluteUrlFromPreferredBase({ requestUrl, baseUrl, path: PLAYGROUND_CANONICAL_PATH }),
     ogImageUrl: absoluteUrlFromPreferredBase({ requestUrl, baseUrl, path: PLAYGROUND_OG_PATH }),
+    viewer: { isAuthenticated: Boolean(userId) },
   };
 }
 
@@ -357,14 +365,25 @@ function riskColor(risk: ApiV1PlaygroundOperation["risk"]) {
   return "green";
 }
 
-function authCopy(mode: PlaygroundAuthMode) {
-  if (mode === "session") return "Uses your current Spoonjoy login for same-origin API calls.";
+function authCopy(mode: PlaygroundAuthMode, isAuthenticated = false) {
+  if (mode === "session") {
+    return isAuthenticated
+      ? "Uses your signed-in Spoonjoy session for same-origin API calls."
+      : "Uses your current Spoonjoy login for same-origin API calls.";
+  }
   if (mode === "bearer") return "Uses the bearer token you paste for external-client testing.";
   return "Omits cookies and Authorization for public-only requests.";
 }
 
 function allowedAuthModes(operation: ApiV1PlaygroundOperation) {
   return AUTH_MODES.filter((mode) => operation.credentialModes.includes(mode.id));
+}
+
+function defaultAuthModeFor(operation: ApiV1PlaygroundOperation, isAuthenticated: boolean): PlaygroundAuthMode {
+  const modes = allowedAuthModes(operation).map((mode) => mode.id);
+  if (isAuthenticated && modes.includes("session")) return "session";
+  if (operation.auth === "optional" && modes.includes("anonymous")) return "anonymous";
+  return modes[0] ?? "anonymous";
 }
 
 function freshMutationId(operation: ApiV1PlaygroundOperation) {
@@ -467,7 +486,8 @@ function rovingRadioKeyDown<T extends string>(
 }
 
 export default function DeveloperPlayground() {
-  const { manifest } = useLoaderData<typeof loader>();
+  const { manifest, viewer } = useLoaderData<typeof loader>();
+  const isAuthenticated = viewer.isAuthenticated;
   const operations: readonly ApiV1PlaygroundOperation[] = manifest.operations;
   const [surface, setSurface] = useState<PlaygroundSurface>("full");
   const [operationQuery, setOperationQuery] = useState("");
@@ -486,25 +506,26 @@ export default function DeveloperPlayground() {
         operation.grantableScopes.join(" "),
       ].join(" ").toLowerCase().includes(query);
     });
-	  }, [operationQuery, operations, surface]);
-	  const operationGroups = useMemo(() => playgroundOperationGroups(filteredOperations), [filteredOperations]);
-	  const defaultOperationId = operations.find((operation) => operation.id === "GET /api/v1/recipes")?.id ?? operations[0].id;
-	  const [selectedId, setSelectedId] = useState<string>(defaultOperationId);
-	  const selected = operations.find((operation) => operation.id === selectedId)!;
+  }, [operationQuery, operations, surface]);
+  const operationGroups = useMemo(() => playgroundOperationGroups(filteredOperations), [filteredOperations]);
+  const defaultOperationId = operations.find((operation) => operation.id === "GET /api/v1/recipes")?.id ?? operations[0].id;
+  const [selectedId, setSelectedId] = useState<string>(defaultOperationId);
+  const selected = operations.find((operation) => operation.id === selectedId)!;
   const [paramsByOperation, setParamsByOperation] = useState<Record<string, Record<string, string>>>(() => (
     defaultParamsByOperation(operations)
   ));
   const [bodiesByOperation, setBodiesByOperation] = useState<Record<string, string>>(() => defaultBodies(operations));
-	  const [authMode, setAuthMode] = useState<PlaygroundAuthMode>("anonymous");
+  const [authMode, setAuthMode] = useState<PlaygroundAuthMode>(() => defaultAuthModeFor(selected, isAuthenticated));
   const [token, setToken] = useState("");
   const [pkceVerifier, setPkceVerifier] = useState("");
   const [oauthCallbackUrl, setOauthCallbackUrl] = useState("");
   const [oauthCallbackStatus, setOauthCallbackStatus] = useState("");
   const [confirmedRisk, setConfirmedRisk] = useState(false);
-	  const [response, setResponse] = useState<PlaygroundResponse | null>(null);
+  const [response, setResponse] = useState<PlaygroundResponse | null>(null);
   const [isSending, setIsSending] = useState(false);
   const selectedHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const focusSelectedOperation = useRef(false);
+  const wasAuthenticated = useRef(isAuthenticated);
 
   const params = paramsByOperation[selected.id]!;
   const bodyText = bodiesByOperation[selected.id]!;
@@ -540,10 +561,18 @@ export default function DeveloperPlayground() {
     selectedHeadingRef.current?.focus();
   }, [selected.id]);
 
+  useEffect(() => {
+    const justSignedIn = !wasAuthenticated.current && isAuthenticated;
+    wasAuthenticated.current = isAuthenticated;
+    if (justSignedIn && selected.credentialModes.includes("session")) {
+      setAuthMode("session");
+      setConfirmedRisk(false);
+    }
+  }, [isAuthenticated, selected.credentialModes, selected.id]);
+
   function nextAuthModeFor(operation: ApiV1PlaygroundOperation, current: PlaygroundAuthMode): PlaygroundAuthMode {
     const modes = allowedAuthModes(operation).map((mode) => mode.id);
-    if (operation.auth === "optional" && modes.includes("anonymous")) return "anonymous";
-    return modes.includes(current) ? current : modes[0] ?? "anonymous";
+    return modes.includes(current) ? current : defaultAuthModeFor(operation, isAuthenticated);
   }
 
   function selectOperation(id: string, options: { focusBuilder?: boolean } = {}) {
@@ -871,7 +900,7 @@ export default function DeveloperPlayground() {
                   </button>
                 ))}
               </div>
-              <p className="text-sm/6 text-[var(--sj-ink-soft)]">{authCopy(authMode)}</p>
+              <p className="text-sm/6 text-[var(--sj-ink-soft)]">{authCopy(authMode, isAuthenticated)}</p>
               {!authModeAllowed ? (
                 <p className="text-sm/6 text-[var(--sj-ink-soft)]">
                   This operation does not support the selected auth mode.
@@ -883,12 +912,24 @@ export default function DeveloperPlayground() {
                 </p>
               ) : null}
               {authMode === "session" ? (
+                isAuthenticated ? (
+                  <p className="inline-flex items-start gap-2 text-sm/6 text-[var(--sj-ink-soft)]">
+                    <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-[var(--sj-brass)]" aria-hidden="true" />
+                    <span>Signed in to Spoonjoy. Session requests will include your browser login.</span>
+                  </p>
+                ) : (
+                  <p className="text-sm/6 text-[var(--sj-ink-soft)]">
+                    Session mode is browser-only. If a private request returns 401, sign in and come back to the same operation.
+                    {" "}
+                    <a href="/login?redirectTo=/api/playground" className="font-sj-ui font-bold text-[var(--sj-ink)] underline decoration-[var(--sj-brass)] underline-offset-4">
+                      Sign in
+                    </a>
+                  </p>
+                )
+              ) : null}
+              {authMode === "anonymous" && isAuthenticated ? (
                 <p className="text-sm/6 text-[var(--sj-ink-soft)]">
-                  Session mode is browser-only. If a private request returns 401, sign in and come back to the same operation.
-                  {" "}
-                  <a href="/login?redirectTo=/api/playground" className="font-sj-ui font-bold text-[var(--sj-ink)] underline decoration-[var(--sj-brass)] underline-offset-4">
-                    Sign in
-                  </a>
+                  You are signed in, but Anonymous mode intentionally omits your Spoonjoy session for this request.
                 </p>
               ) : null}
               {authMode === "bearer" ? (
