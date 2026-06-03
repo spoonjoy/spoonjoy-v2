@@ -77,12 +77,12 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 **Output**: Tests proving API v1 telemetry can be scheduled through the Worker execution context without blocking the response.
 **Acceptance**: Tests fail before implementation because `ApiV1RouteArgs` only types `context.cloudflare.env` and no API v1 telemetry scheduling hook is exposed.
 
-### 🔄 Unit 2b: API v1 WaitUntil Context — Implementation
+### ✅ Unit 2b: API v1 WaitUntil Context — Implementation
 **What**: Update `ApiV1RouteArgs` in `app/lib/api-v1.server.ts` so `context.cloudflare.ctx` is typed, and update `app/routes/api.v1.$.ts` only if TypeScript requires a route-shell binding to preserve the existing call signature.
 **Output**: API v1 has the same best-effort background scheduling capability already used by legacy `/api/*` and `/mcp`.
 **Acceptance**: Unit 2a tests pass and API v1 route behavior/wire format is unchanged.
 
-### ⬜ Unit 2c: API v1 WaitUntil Context — Coverage & Refactor
+### 🔄 Unit 2c: API v1 WaitUntil Context — Coverage & Refactor
 **What**: Run the focused API v1 route-shell/type tests. Refactor only within `app/lib/api-v1.server.ts` and `app/routes/api.v1.$.ts`.
 **Output**: Covered API v1 context plumbing ready for later telemetry units.
 **Acceptance**: Focused tests pass with no warnings.
@@ -324,3 +324,5 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 - 2026-06-03 07:24 Unit 2a started: API v1 waitUntil context tests
 - 2026-06-03 07:26 Unit 2a complete: API v1 shell tests fail red on missing waitUntil scheduler helper
 - 2026-06-03 07:26 Unit 2b started: implement API v1 waitUntil context helper
+- 2026-06-03 07:28 Unit 2b complete: API v1 waitUntil context helper implemented and focused test/build pass
+- 2026-06-03 07:28 Unit 2c started: focused API v1 context verification
