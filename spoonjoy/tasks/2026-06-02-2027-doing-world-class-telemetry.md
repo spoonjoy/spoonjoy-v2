@@ -226,37 +226,52 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 **Output**: Covered OAuth telemetry with privacy assertions.
 **Acceptance**: Focused OAuth tests pass with no warnings.
 
-### ⬜ Unit 7a: Docs/Config/Sink Setup — Tests
-**What**: Add failing documentation/config/preflight tests in `test/scripts/deployment-preflight.test.ts`, `test/scripts/production-readiness.test.ts`, or existing docs tests when those tests already cover the relevant documentation surface. If no existing test covers a documentation file, record that file in Unit 7c verification notes instead of inventing broad snapshot coverage.
+### ⬜ Unit 7a: Client PostHog Bootstrap — Tests
+**What**: Add failing tests for `app/lib/analytics.ts` and the client bootstrap contract in `app/entry.client.tsx`/`app/vite-env.d.ts`: missing/blank `VITE_POSTHOG_KEY` disables initialization, truthy `VITE_POSTHOG_DISABLED` disables initialization, configured host is honored, pageview URL remains origin+pathname only, session recording masks text and inputs, and exception capture remains enabled only when PostHog initializes.
+**Output**: Tests proving client analytics is build-time gated by `VITE_POSTHOG_KEY` and never always-on.
+**Acceptance**: Tests fail before any needed implementation/doc fixes and prove no query string, hash, or page text is included in the client pageview helper.
+
+### ⬜ Unit 7b: Client PostHog Bootstrap — Implementation
+**What**: Update `app/lib/analytics.ts`, `app/entry.client.tsx`, and `app/vite-env.d.ts` only if Unit 7a exposes a gap; otherwise record in the test commit that existing bootstrap behavior satisfies the contract.
+**Output**: Verified client PostHog initialization that is disabled without `VITE_POSTHOG_KEY`, kill-switchable by `VITE_POSTHOG_DISABLED`, and privacy-masked when enabled.
+**Acceptance**: Unit 7a tests pass and existing client analytics/pageview tests still pass.
+
+### ⬜ Unit 7c: Client PostHog Bootstrap — Coverage & Refactor
+**What**: Run focused client analytics tests. Refactor only within `app/lib/analytics.ts`, `app/entry.client.tsx`, and `app/vite-env.d.ts`.
+**Output**: Covered client bootstrap and analytics config behavior.
+**Acceptance**: Focused client analytics tests pass with no warnings.
+
+### ⬜ Unit 8a: Docs/Config/Sink Setup — Tests
+**What**: Add failing documentation/config/preflight tests in `test/scripts/deployment-preflight.test.ts`, `test/scripts/production-readiness.test.ts`, or existing docs tests when those tests already cover the relevant documentation surface. If no existing test covers a documentation file, record that file in Unit 8c verification notes instead of inventing broad snapshot coverage.
 **Output**: Failing tests or doc assertions for telemetry setup and privacy contract updates.
 **Acceptance**: Tests fail before docs/config updates where the repository has existing doc/config test coverage.
 
-### ⬜ Unit 7b: Docs/Config/Sink Setup — Implementation
-**What**: Update `docs/analytics-privacy.md`, `.env.example`, `README.md`, `DEPLOY.md`, `app/cloudflare-env.d.ts`, and the deployment-preflight docs/tests named by Unit 7a failures.
+### ⬜ Unit 8b: Docs/Config/Sink Setup — Implementation
+**What**: Update `docs/analytics-privacy.md`, `.env.example`, `README.md`, `DEPLOY.md`, `app/cloudflare-env.d.ts`, and the deployment-preflight docs/tests named by Unit 8a failures.
 **Output**: Updated docs/config explaining server/client telemetry setup, privacy exclusions, and operational checks.
 **Acceptance**: Docs/config tests pass and no documentation suggests printing secret values.
 
-### ⬜ Unit 7c: Docs/Config/Sink Setup — Coverage & Refactor
+### ⬜ Unit 8c: Docs/Config/Sink Setup — Coverage & Refactor
 **What**: Run focused docs/config/preflight tests and verify environment checks do not print secret values.
 **Output**: Complete telemetry setup documentation and safe deployment checks.
 **Acceptance**: Focused docs/config tests pass with no warnings.
 
-### ⬜ Unit 7d: PostHog Secret And Build Env Setup
+### ⬜ Unit 8d: PostHog Secret And Build Env Setup
 **What**: Retrieve the PostHog project API key only through user-authorized PostHog/browser access or user-provided value, then set `POSTHOG_KEY` with `wrangler secret put POSTHOG_KEY` and ensure production deploy builds receive `VITE_POSTHOG_KEY` without committing it. If the key is unavailable, record the blocker in `setup-notes.md` and continue only with code/docs verification.
 **Output**: Secret presence verification through `wrangler secret list` and build-env setup notes, with no secret value printed or committed.
 **Acceptance**: `wrangler secret list` shows `POSTHOG_KEY` when a key is available; otherwise `setup-notes.md` states the remaining external setup blocker.
 
-### ⬜ Unit 8a: Final Verification
+### ⬜ Unit 9a: Final Verification
 **What**: Run `pnpm run typecheck`, all focused telemetry-related tests, full `pnpm exec vitest run`, and `pnpm run build`.
 **Output**: Final verification command summaries saved in `spoonjoy/tasks/2026-06-02-2027-doing-world-class-telemetry/final-verification.md`.
 **Acceptance**: All checks pass with no warnings and no secret values appear in output or artifacts.
 
-### ⬜ Unit 8b: Deploy And Live Smoke
+### ⬜ Unit 9b: Deploy And Live Smoke
 **What**: Run `pnpm run deploy`, `pnpm run smoke:live`, and `pnpm run smoke:api`. Verify deployed `/api/playground`, `/api/v1/health`, `/mcp` challenge, and OAuth metadata still respond.
 **Output**: Deployment version id and live smoke artifact paths recorded in `final-verification.md`.
 **Acceptance**: Deployment succeeds, live smoke checks pass, production does not require PostHog to respond to serve app/API traffic, and no secret values appear in command output or committed files.
 
-### ⬜ Unit 8c: Completion Notification
+### ⬜ Unit 9c: Completion Notification
 **What**: Commit/push final state and notify Slugger with a concise completion summary.
 **Output**: Final git commit/push and Slugger notification.
 **Acceptance**: `git status --short` is clean, branch is pushed, Slugger acknowledges completion, and final response includes the deployed API docs/playground link plus verification summary.
@@ -278,3 +293,4 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 - 2026-06-02 21:32 Validation pass Round 2 converged
 - 2026-06-02 21:32 Ambiguity pass converged after retrying two rate-limited reviewer attempts
 - 2026-06-02 21:32 Quality pass converged
+- 2026-06-02 21:32 Scrutiny pass 6 Tinfoil Hat addressed by adding explicit client PostHog bootstrap units
