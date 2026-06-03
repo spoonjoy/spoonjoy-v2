@@ -272,7 +272,7 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 **Output**: Complete telemetry setup documentation and safe deployment checks.
 **Acceptance**: Focused docs/config tests pass with no warnings.
 
-### ⬜ Unit 8d: PostHog Secret And Build Env Setup
+### 🔄 Unit 8d: PostHog Secret And Build Env Setup
 **What**: Retrieve the PostHog project API key only through user-authorized PostHog/browser access or user-provided value, then set `POSTHOG_KEY` with `wrangler secret put POSTHOG_KEY` and ensure production deploy builds receive `VITE_POSTHOG_KEY` without committing it. If the key is unavailable, record the blocker in `setup-notes.md` and continue only with code/docs verification.
 **Output**: Secret presence verification through `wrangler secret list` and build-env setup notes, with no secret value printed or committed.
 **Acceptance**: `wrangler secret list` shows `POSTHOG_KEY` when a key is available; otherwise `setup-notes.md` states the remaining external setup blocker.
@@ -398,3 +398,4 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 - 2026-06-03 10:15 Unit 8b complete: telemetry docs, `.env.example`, README/DEPLOY/checklist guidance, and deployment-preflight checks updated; focused preflight tests, typecheck, build, and secret scan pass
 - 2026-06-03 10:16 Unit 8c started: verify docs/config/preflight coverage and secret-safe outputs
 - 2026-06-03 10:19 Unit 8c complete: fixed reviewer docs-channel finding, added regression coverage for public Vite build vars vs Worker secrets, verified preflight output is secret-safe, and recorded targeted deployment-preflight coverage
+- 2026-06-03 10:20 Unit 8d started: verify PostHog Cloudflare secret and production build-time client env without printing values
