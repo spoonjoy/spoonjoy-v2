@@ -132,7 +132,7 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 **Output**: Covered, centralized API v1 telemetry helpers with no duplicated per-endpoint capture calls.
 **Acceptance**: Focused API v1 tests pass with no warnings.
 
-### 🔄 Unit 4a: Legacy API Telemetry — Tests
+### ✅ Unit 4a: Legacy API Telemetry — Tests
 **What**: Add failing tests in `test/routes/route-shell-coverage.test.ts` or a focused legacy API route test for `app/routes/api.$.ts`. Cover success, `ApiAuthError`, not-found, rate-limit, and unexpected-error capture.
 **Output**: Tests proving `spoonjoy.legacy_api.request` emits operation name, auth/source metadata when known, status/error, request id if present, latency, and safe request context.
 **Acceptance**: Tests fail before implementation and prove legacy API telemetry does not send args/request bodies or secrets.
@@ -347,3 +347,4 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 - 2026-06-03 08:03 Unit 3i started: API v1 telemetry coverage and refactor verification
 - 2026-06-03 08:08 Unit 3i complete: API v1 telemetry coverage/refactor tests added; focused API v1 tests/typecheck/build pass; coverage command limitation documented for pre-existing route-module gaps
 - 2026-06-03 08:08 Unit 4a started: legacy API telemetry tests
+- 2026-06-03 08:14 Unit 4a complete: legacy REST telemetry tests fail red on missing lifecycle capture for success, auth error, not-found, rate-limit, and unexpected-error paths
