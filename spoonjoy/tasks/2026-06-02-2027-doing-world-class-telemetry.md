@@ -177,7 +177,7 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 **Output**: MCP error and notification lifecycle telemetry.
 **Acceptance**: Unit 5e tests pass and existing MCP error tests still pass.
 
-### 🔄 Unit 5g: MCP Telemetry — Coverage & Refactor
+### ✅ Unit 5g: MCP Telemetry — Coverage & Refactor
 **What**: Run focused MCP tests. Refactor only within `app/lib/mcp/http-mcp.server.ts` and `app/lib/analytics-server.ts`; any new cross-surface helper file or broader extraction requires updating this doing doc first.
 **Output**: Covered MCP telemetry without duplicated auth/rate-limit logic.
 **Acceptance**: Focused MCP tests pass with no warnings.
@@ -361,3 +361,4 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 - 2026-06-03 08:42 Unit 5e complete: MCP notification/error telemetry tests fail red on missing 202 notification lifecycle capture
 - 2026-06-03 08:44 Unit 5f complete: MCP notification and JSON-RPC error lifecycle telemetry implemented while preserving exception capture; focused MCP tests, related telemetry regressions, typecheck, and build pass
 - 2026-06-03 08:45 Unit 5g started: MCP telemetry coverage and refactor verification
+- 2026-06-03 08:47 Unit 5g complete: MCP handler and shared analytics helper coverage reached 100% statements/branches/functions/lines; telemetry regressions, typecheck, and build pass
