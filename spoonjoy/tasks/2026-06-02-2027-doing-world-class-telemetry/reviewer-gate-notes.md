@@ -29,3 +29,12 @@
   - Unit 3h now derives `route_template` from a method-matching resource, then a path-matching resource, then `/api/v1/{unknown}`.
   - Unit 3g added explicit unknown-path telemetry coverage asserting arbitrary path text is not emitted.
   - Unit 3h keeps method-not-allowed routes on the controlled resource template rather than the raw path.
+
+## 2026-06-03 08:13
+
+- Unit 3h fresh reviewer returned `FINDINGS` after the path-template fix.
+- Blocker finding: lifecycle telemetry still emitted `origin_host`/`referrer_host` for IP-literal `Origin`/`Referer` headers.
+- Remediation path:
+  - `headerHost` now drops IPv4 and IPv6 literal hosts before analytics capture.
+  - `test/routes/api-v1-telemetry.test.ts` includes explicit IPv4/IPv6 host regression coverage and verifies those addresses do not appear in serialized lifecycle telemetry.
+  - Focused API v1 telemetry tests pass after commit `0573848`.
