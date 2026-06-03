@@ -252,7 +252,7 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 **Output**: Safe PostHog client events for the developer-facing API docs and playground journey.
 **Acceptance**: Unit 7d tests pass, existing generated-playground tests still pass, and playground request behavior/auth behavior is unchanged.
 
-### 🔄 Unit 7f: Developer Docs/Playground Client Telemetry — Coverage & Refactor
+### ✅ Unit 7f: Developer Docs/Playground Client Telemetry — Coverage & Refactor
 **What**: Run focused analytics, developers-route, and playground tests. Refactor only within `app/lib/analytics.ts`, `app/routes/developers.tsx`, and `app/routes/developers.playground.tsx`.
 **Output**: Covered developer client telemetry with shared helper code and no duplicated operation taxonomy.
 **Acceptance**: Focused client/developer telemetry tests pass with no warnings.
@@ -391,3 +391,4 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 - 2026-06-03 09:54 Unit 7e started: implement safe developer docs/playground client telemetry
 - 2026-06-03 10:00 Unit 7e complete: safe developer docs/playground client telemetry implemented with generated operation metadata, allowlisted client events/properties, privacy scrubbing, focused tests, generated playground regressions, typecheck, and build passing
 - 2026-06-03 10:00 Unit 7f started: developer docs/playground client telemetry coverage/refactor verification
+- 2026-06-03 10:04 Unit 7f complete: focused developer telemetry tests pass; `app/lib/analytics.ts` reached 100% statements/branches/functions/lines; typecheck and build pass; global coverage threshold limitation documented for unrelated app files
