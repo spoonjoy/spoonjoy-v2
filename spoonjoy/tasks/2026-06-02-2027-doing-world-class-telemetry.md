@@ -192,7 +192,7 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 **Output**: Safe OAuth registration telemetry.
 **Acceptance**: Unit 6a tests pass and existing OAuth registration tests still pass.
 
-### ⬜ Unit 6c: OAuth Authorize Telemetry — Tests
+### 🔄 Unit 6c: OAuth Authorize Telemetry — Tests
 **What**: Add failing tests for authorize loader login-gate redirect, consent view, client error view, action approve, action deny, action errors, and rate limit.
 **Output**: Tests proving `spoonjoy.oauth.authorize` emits decision/state class, status, client id, scope/resource, principal id when consent is reached, and latency.
 **Acceptance**: Tests fail before implementation and prove no authorization code, state value, code challenge, redirect URI query, or raw form body appears in telemetry.
@@ -365,3 +365,4 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 - 2026-06-03 08:48 Unit 6a started: OAuth register telemetry tests
 - 2026-06-03 08:51 Unit 6a complete: OAuth register telemetry tests fail red on missing `spoonjoy.oauth.register` lifecycle capture
 - 2026-06-03 08:54 Unit 6b complete: OAuth register telemetry implemented for success, validation errors, method errors, and rate limits; focused register/OAuth regression tests, typecheck, and build pass
+- 2026-06-03 09:02 Unit 6c started: OAuth authorize telemetry tests
