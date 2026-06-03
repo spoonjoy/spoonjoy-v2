@@ -107,6 +107,8 @@ describe("safe client telemetry", () => {
     expect(responseStatusClass(302)).toBe("3xx");
     expect(responseStatusClass(403)).toBe("4xx");
     expect(responseStatusClass(503)).toBe("5xx");
+    expect(responseStatusClass(102)).toBe("unknown");
+    expect(responseStatusClass(600)).toBe("unknown");
 
     expect(latencyBucket(-1)).toBe("unknown");
     expect(latencyBucket(99)).toBe("lt_100ms");
@@ -130,6 +132,7 @@ describe("safe client telemetry", () => {
       latency_bucket: "100_499ms",
       request_body_present: true,
       validation_error_count: 0,
+      operation_count: Number.NaN,
       token: "sj_secret_token",
       authorization: "Bearer sj_secret_token",
       code: "oac_secret_code",
@@ -170,6 +173,24 @@ describe("safe client telemetry", () => {
     expect(serialized).not.toContain("?token=");
   });
 
+  it("drops unsafe values even when the property key is allowlisted", () => {
+    expect(safeClientTelemetryProperties({
+      page: "api_playground",
+      surface: "",
+      operation_id: "GET /api/v1/recipes?query=private",
+      operation_group: "Bearer sj_secret_token",
+      method: "GET\nPOST",
+      auth_mode: { mode: "session" },
+      auth_status: "sj_secret_token",
+      operation_kind: "read",
+      operation_risk: "safe",
+    })).toEqual({
+      page: "api_playground",
+      operation_kind: "read",
+      operation_risk: "safe",
+    });
+  });
+
   it("captures only allowlisted Spoonjoy developer events", () => {
     const posthog = { capture: vi.fn() };
 
@@ -184,8 +205,10 @@ describe("safe client telemetry", () => {
       operation_id: "GET /api/v1/recipes",
     });
     captureSafeClientEvent(null, "spoonjoy.developer.docs.viewed", { page: "api_docs" });
+    captureSafeClientEvent({}, "spoonjoy.developer.docs.viewed", { page: "api_docs" });
+    captureSafeClientEvent(posthog, "spoonjoy.developer.docs.viewed");
 
-    expect(posthog.capture).toHaveBeenCalledTimes(1);
+    expect(posthog.capture).toHaveBeenCalledTimes(2);
     expect(posthog.capture).toHaveBeenCalledWith(
       "spoonjoy.developer.playground.request_submitted",
       {
@@ -195,5 +218,6 @@ describe("safe client telemetry", () => {
         auth_mode: "anonymous",
       },
     );
+    expect(posthog.capture).toHaveBeenCalledWith("spoonjoy.developer.docs.viewed", {});
   });
 });
