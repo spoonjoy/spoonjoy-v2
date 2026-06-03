@@ -247,7 +247,7 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 **Output**: Tests proving docs/playground events use controlled event names, generated operation ids/groups, auth mode, request method, response status class, latency bucket, and outcome fields.
 **Acceptance**: Tests fail before implementation and prove no bearer token, OAuth code, form body, request body, response body, raw query string, raw URL, header value, free-text example, or clientMutationId reaches client telemetry.
 
-### 🔄 Unit 7e: Developer Docs/Playground Client Telemetry — Implementation
+### ✅ Unit 7e: Developer Docs/Playground Client Telemetry — Implementation
 **What**: Add typed safe-event helpers in `app/lib/analytics.ts`, then instrument `app/routes/developers.tsx` and `app/routes/developers.playground.tsx` for docs view, operation selection, auth-mode selection, sign-in handoff, request submitted, and response received events. Use operation metadata from `app/lib/generated/api-v1-playground.ts`; do not duplicate the API surface by hand.
 **Output**: Safe PostHog client events for the developer-facing API docs and playground journey.
 **Acceptance**: Unit 7d tests pass, existing generated-playground tests still pass, and playground request behavior/auth behavior is unchanged.
@@ -389,3 +389,4 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 - 2026-06-03 09:48 Unit 7d started: developer docs/playground client telemetry tests
 - 2026-06-03 09:54 Unit 7d complete: red tests prove missing safe client telemetry helpers and docs/playground event capture, while existing route behavior remains green
 - 2026-06-03 09:54 Unit 7e started: implement safe developer docs/playground client telemetry
+- 2026-06-03 10:00 Unit 7e complete: safe developer docs/playground client telemetry implemented with generated operation metadata, allowlisted client events/properties, privacy scrubbing, focused tests, generated playground regressions, typecheck, and build passing
