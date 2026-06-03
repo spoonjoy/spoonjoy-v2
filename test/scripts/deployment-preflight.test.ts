@@ -500,6 +500,18 @@ describe("deployment docs", () => {
     expect(deployDoc).toContain("wrangler secret put POSTHOG_KEY");
     expect(deployDoc).toContain("VITE_POSTHOG_KEY");
     expect(deployDoc).toContain("POSTHOG_DISABLED");
+    expect(deployDoc).not.toContain("wrangler secret put VITE_POSTHOG_KEY");
+    expect(deployDoc).not.toContain("wrangler secret put VITE_POSTHOG_DISABLED");
+    const secretsSummary = deployDoc.slice(
+      deployDoc.indexOf("### Secrets (set via `wrangler secret put`)"),
+      deployDoc.indexOf("### Optional Worker telemetry variables"),
+    );
+    const publicBuildTimeSummary = deployDoc.slice(deployDoc.indexOf("### Public build-time variables"));
+    expect(secretsSummary).toContain("POSTHOG_KEY");
+    expect(secretsSummary).not.toContain("VITE_POSTHOG_KEY");
+    expect(secretsSummary).not.toContain("VITE_POSTHOG_DISABLED");
+    expect(publicBuildTimeSummary).toContain("VITE_POSTHOG_KEY");
+    expect(publicBuildTimeSummary).toContain("VITE_POSTHOG_DISABLED");
     expect(cloudflareEnvDts).toContain("POSTHOG_KEY?: string;");
     expect(cloudflareEnvDts).toContain("POSTHOG_HOST?: string;");
     expect(cloudflareEnvDts).toContain("POSTHOG_DISABLED?: string;");

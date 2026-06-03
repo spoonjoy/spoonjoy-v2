@@ -302,8 +302,22 @@ The deploy output will show your Worker URL: `https://spoonjoy-v2.<account>.work
 | `VAPID_PRIVATE_KEY` | ✅ Yes | Web push private key |
 | `VAPID_SUBJECT` | ✅ Yes | Web push contact subject |
 | `POSTHOG_KEY` | Optional | Server lifecycle telemetry and error capture |
+
+### Optional Worker telemetry variables
+
+These are Worker runtime variables. They may be set as Wrangler vars or secrets depending on the deploy environment policy; do not print values in logs.
+
+| Variable | Required | Description |
+|----------|----------|-------------|
 | `POSTHOG_HOST` | Optional | PostHog ingestion host override |
 | `POSTHOG_DISABLED` | Optional | Server telemetry kill switch |
+
+### Public build-time variables
+
+These values must be present in the environment that runs `pnpm run build`. They are public Vite build-time configuration, not Worker secrets.
+
+| Variable | Required | Description |
+|----------|----------|-------------|
 | `VITE_POSTHOG_KEY` | Optional | Public build-time client analytics key |
 | `VITE_POSTHOG_HOST` | Optional | Public build-time client ingestion host |
 | `VITE_POSTHOG_DISABLED` | Optional | Client telemetry kill switch |

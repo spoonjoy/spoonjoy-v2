@@ -142,3 +142,13 @@
 
 - Unit 8a fresh reviewer returned `CONVERGED`.
 - Reviewer confirmed Unit 8a landed as tests/artifact/doing-doc only, the focused suite failed red for intended docs/config gaps, and the assertions avoid demanding or leaking real PostHog secret values.
+
+## 2026-06-03 10:17
+
+- Unit 8b fresh reviewer returned `FINDINGS`.
+- Major finding: `DEPLOY.md` listed `VITE_POSTHOG_KEY`, `VITE_POSTHOG_HOST`, and `VITE_POSTHOG_DISABLED` under `Secrets (set via wrangler secret put)`, which could lead operators to set public build-time Vite values as Worker secrets and miss client analytics during `pnpm run build`.
+- Minor finding: `README.md` put optional `wrangler secret put POSTHOG_KEY` inside the main required-looking secret command block.
+- Remediation in Unit 8c:
+  - `DEPLOY.md` now separates Worker secrets, optional Worker telemetry variables, and public build-time variables.
+  - `README.md` now keeps `POSTHOG_KEY` out of the main secret command block and describes it as optional telemetry setup.
+  - `test/scripts/deployment-preflight.test.ts` now asserts that `VITE_POSTHOG_*` values are not documented as `wrangler secret put` secrets and are present in the public build-time section.

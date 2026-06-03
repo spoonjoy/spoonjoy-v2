@@ -180,10 +180,9 @@ pnpm exec prisma migrate diff --from-empty --to-schema-datamodel=./prisma/schema
    wrangler secret put VAPID_PUBLIC_KEY
    wrangler secret put VAPID_PRIVATE_KEY
    wrangler secret put VAPID_SUBJECT
-   wrangler secret put POSTHOG_KEY
    ```
 
-   `POSTHOG_KEY` is optional and only enables server lifecycle telemetry/error capture when present. Build-time client analytics also needs `VITE_POSTHOG_KEY`, `VITE_POSTHOG_HOST`, and optionally `VITE_POSTHOG_DISABLED` in the deploy build environment; do not set those with secret values in source files.
+   Optional telemetry: set `POSTHOG_KEY` with `wrangler secret put POSTHOG_KEY` only when you want server lifecycle telemetry/error capture. Build-time client analytics also needs `VITE_POSTHOG_KEY`, `VITE_POSTHOG_HOST`, and optionally `VITE_POSTHOG_DISABLED` in the deploy build environment; do not set those with secret values in source files.
 
 6. Run the deployment preflight:
    ```bash
