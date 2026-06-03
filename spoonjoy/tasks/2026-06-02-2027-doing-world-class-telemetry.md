@@ -62,12 +62,12 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 **Output**: Failing tests proving `captureEvent`/payload helper behavior before implementation.
 **Acceptance**: Focused analytics-server tests fail because the generic event capture helper does not exist or does not yet enforce the new contract.
 
-### 🔄 Unit 1b: Server Analytics Helper — Implementation
+### ✅ Unit 1b: Server Analytics Helper — Implementation
 **What**: Extend `app/lib/analytics-server.ts` with reusable `captureEvent` and pure payload builder functions that share PostHog config behavior with `captureException`.
 **Output**: Generic PostHog event capture with controlled event names, explicit distinct id, timestamp, `$lib: "spoonjoy-server"`, safe properties, and swallowed network failures.
 **Acceptance**: `test/lib/analytics-server.test.ts` passes without changing existing exception-capture behavior.
 
-### ⬜ Unit 1c: Server Analytics Helper — Coverage & Refactor
+### 🔄 Unit 1c: Server Analytics Helper — Coverage & Refactor
 **What**: Run focused analytics tests with coverage expectations, refactor duplicated endpoint-posting logic if useful, and ensure no unsafe property allow/deny branches are uncovered.
 **Output**: Clean helper code with test coverage for enabled, disabled, missing-key, trailing-slash host, fetch failure, and unsafe property handling.
 **Acceptance**: Focused analytics-server tests pass with no warnings.
@@ -318,3 +318,5 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 - 2026-06-03 07:18 Unit 1a started: server analytics helper tests
 - 2026-06-03 07:19 Unit 1a complete: focused analytics-server tests fail red on missing generic event helpers
 - 2026-06-03 07:19 Unit 1b started: implement server event capture helper
+- 2026-06-03 07:22 Unit 1b complete: server event capture helper implemented and focused tests/build pass
+- 2026-06-03 07:22 Unit 1c started: analytics helper coverage/refactor check
