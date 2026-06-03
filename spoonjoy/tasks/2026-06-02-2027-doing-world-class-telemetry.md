@@ -197,7 +197,7 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 **Output**: Tests proving `spoonjoy.oauth.authorize` emits decision/state class, status, client id, scope/resource, principal id when consent is reached, and latency.
 **Acceptance**: Tests fail before implementation and prove no authorization code, state value, code challenge, redirect URI query, or raw form body appears in telemetry.
 
-### ⬜ Unit 6d: OAuth Authorize Telemetry — Implementation
+### 🔄 Unit 6d: OAuth Authorize Telemetry — Implementation
 **What**: Instrument `app/routes/oauth.authorize.tsx` for loader/action timing/rate-limit metadata and `app/lib/oauth-routes.server.ts` for authorize result/error/decision metadata.
 **Output**: Safe OAuth authorize telemetry.
 **Acceptance**: Unit 6c tests pass and existing OAuth authorize tests still pass.
@@ -367,3 +367,4 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 - 2026-06-03 08:54 Unit 6b complete: OAuth register telemetry implemented for success, validation errors, method errors, and rate limits; focused register/OAuth regression tests, typecheck, and build pass
 - 2026-06-03 09:02 Unit 6c started: OAuth authorize telemetry tests
 - 2026-06-03 09:04 Unit 6c complete: OAuth authorize telemetry tests fail red on missing `spoonjoy.oauth.authorize` lifecycle capture
+- 2026-06-03 09:05 Unit 6d started: implement OAuth authorize telemetry
