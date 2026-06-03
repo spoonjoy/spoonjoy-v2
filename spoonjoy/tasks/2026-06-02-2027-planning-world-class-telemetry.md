@@ -18,6 +18,7 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 - Instrument `/mcp` in `app/lib/mcp/http-mcp.server.ts` with authenticated principal id, OAuth client/resource when present, JSON-RPC method/tool name when safely known, status, latency, and auth/rate-limit failures.
 - Instrument OAuth registration, authorize, token, and revoke routes with lifecycle events that include client id/name only when safely available, grant type, scope/resource, decision, status, latency, and error code, without sending authorization codes, refresh tokens, access tokens, redirect query strings, or request bodies.
 - Ensure client analytics is actually enabled only by build-time `VITE_POSTHOG_KEY`, and document the exact deployment setup needed for both client and server keys.
+- Instrument developer-facing `/api`, `/api/docs`, and `/api/playground` client behavior with safe events for docs views, playground operation selection, auth-mode selection, sign-in handoff, request attempts, and response outcomes using generated operation ids/status metadata rather than pasted tokens, request bodies, response bodies, query strings, or form contents.
 - Add tests for server event payload construction, privacy redaction, disabled/missing-key behavior, and each instrumented route surface.
 - Update `docs/analytics-privacy.md`, `.env.example`, `README.md`, deployment documentation, and Cloudflare env typing as needed.
 - Verify whether `POSTHOG_KEY` is present in Cloudflare and, after the key is provided or retrieved through a signed-in PostHog session, set the needed Cloudflare secret and build-time Vite env before deploy.
@@ -35,6 +36,7 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 - [ ] Captured event payloads answer who, why, when, and how much using ids, auth/source metadata, operation names, scopes, status/error codes, latency, and byte/count fields without unsafe content.
 - [ ] PostHog server capture is enabled in production when `POSTHOG_KEY` is configured and remains a no-op when missing or disabled.
 - [ ] Client PostHog setup is documented and verified for production build-time `VITE_POSTHOG_KEY`.
+- [ ] Developer docs/playground client telemetry captures safe UX lifecycle events without token/body/query leakage.
 - [ ] Documentation states the telemetry contract, privacy exclusions, and deployment setup clearly.
 - [ ] 100% test coverage on all new code
 - [ ] All tests pass
@@ -65,6 +67,8 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 - `app/lib/analytics-server.ts`
 - `app/entry.client.tsx`
 - `app/entry.server.tsx`
+- `app/routes/developers.tsx`
+- `app/routes/developers.playground.tsx`
 - `workers/app.ts`
 - `app/lib/api-v1.server.ts`
 - `app/routes/api.$.ts`
@@ -85,6 +89,8 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 Existing telemetry is partial: client pageviews/recipe-detail events are wired when `VITE_POSTHOG_KEY` is present, and server exception capture exists for some error paths when `POSTHOG_KEY` is present. Cloudflare secret listing does not include `POSTHOG_KEY`, and `.env`/`.env.local` do not advertise PostHog vars, so the sink is not currently complete.
 
 Tinfoil hat pass: PostHog is useful for product analytics but is not a guaranteed audit trail. The plan should not promise billing-grade metering unless a durable first-party ledger is added later. API telemetry must be captured after response construction where possible so status/error and latency are available, but before unsafe body inspection. Secret-bearing operations need explicit tests to prove no token/code/refresh/access values reach event payloads.
+
+Stranger pass local finding: the original doing breakdown verified client bootstrap but did not force safe behavior telemetry for the new developer docs/playground surface. That surface should report how builders explore the API without capturing pasted bearer tokens, OAuth codes, form bodies, request/response examples, raw query strings, or generated client mutation ids.
 
 ## Progress Log
 - 2026-06-02 20:29 Created

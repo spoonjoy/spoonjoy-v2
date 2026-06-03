@@ -23,6 +23,7 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 - [ ] Captured event payloads answer who, why, when, and how much using ids, auth/source metadata, operation names, scopes, status/error codes, latency, and byte/count fields without unsafe content.
 - [ ] PostHog server capture is enabled in production when `POSTHOG_KEY` is configured and remains a no-op when missing or disabled.
 - [ ] Client PostHog setup is documented and verified for production build-time `VITE_POSTHOG_KEY`.
+- [ ] Developer docs/playground client telemetry captures safe UX lifecycle events without token/body/query leakage.
 - [ ] Documentation states the telemetry contract, privacy exclusions, and deployment setup clearly.
 - [ ] 100% test coverage on all new code
 - [ ] All tests pass
@@ -241,6 +242,21 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 **Output**: Covered client bootstrap and analytics config behavior.
 **Acceptance**: Focused client analytics tests pass with no warnings.
 
+### ⬜ Unit 7d: Developer Docs/Playground Client Telemetry — Tests
+**What**: Add failing tests for safe client-side developer telemetry helpers in `test/lib/analytics.test.ts` and focused component/route tests for `app/routes/developers.tsx` and `app/routes/developers.playground.tsx`.
+**Output**: Tests proving docs/playground events use controlled event names, generated operation ids/groups, auth mode, request method, response status class, latency bucket, and outcome fields.
+**Acceptance**: Tests fail before implementation and prove no bearer token, OAuth code, form body, request body, response body, raw query string, raw URL, header value, free-text example, or clientMutationId reaches client telemetry.
+
+### ⬜ Unit 7e: Developer Docs/Playground Client Telemetry — Implementation
+**What**: Add typed safe-event helpers in `app/lib/analytics.ts`, then instrument `app/routes/developers.tsx` and `app/routes/developers.playground.tsx` for docs view, operation selection, auth-mode selection, sign-in handoff, request submitted, and response received events. Use operation metadata from `app/lib/generated/api-v1-playground.ts`; do not duplicate the API surface by hand.
+**Output**: Safe PostHog client events for the developer-facing API docs and playground journey.
+**Acceptance**: Unit 7d tests pass, existing generated-playground tests still pass, and playground request behavior/auth behavior is unchanged.
+
+### ⬜ Unit 7f: Developer Docs/Playground Client Telemetry — Coverage & Refactor
+**What**: Run focused analytics, developers-route, and playground tests. Refactor only within `app/lib/analytics.ts`, `app/routes/developers.tsx`, and `app/routes/developers.playground.tsx`.
+**Output**: Covered developer client telemetry with shared helper code and no duplicated operation taxonomy.
+**Acceptance**: Focused client/developer telemetry tests pass with no warnings.
+
 ### ⬜ Unit 8a: Docs/Config/Sink Setup — Tests
 **What**: Add failing documentation/config/preflight tests in `test/scripts/deployment-preflight.test.ts`, `test/scripts/production-readiness.test.ts`, or existing docs tests when those tests already cover the relevant documentation surface. If no existing test covers a documentation file, record that file in Unit 8c verification notes instead of inventing broad snapshot coverage.
 **Output**: Failing tests or doc assertions for telemetry setup and privacy contract updates.
@@ -296,3 +312,4 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 - 2026-06-02 21:32 Quality pass converged
 - 2026-06-02 21:32 Scrutiny pass 6 Tinfoil Hat addressed by adding explicit client PostHog bootstrap units
 - 2026-06-02 21:32 Scrutiny pass 6 Tinfoil Hat Round 2 converged; minor hardening added for pnpm consistency and PostHog-key blocker reporting
+- 2026-06-02 21:32 Local Stranger fallback finding addressed by adding explicit safe developer docs/playground client telemetry units
