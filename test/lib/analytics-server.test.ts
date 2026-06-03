@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  buildCaptureEventPayload,
   buildCaptureExceptionPayload,
+  captureEvent,
   captureException,
   resolvePostHogServerConfig,
 } from "~/lib/analytics-server";
@@ -194,6 +196,161 @@ describe("buildCaptureExceptionPayload", () => {
 
     expect(payload.properties.route).toBeUndefined();
     expect(payload.properties.method).toBeUndefined();
+  });
+});
+
+describe("buildCaptureEventPayload", () => {
+  const config = {
+    enabled: true as const,
+    key: "ph_test",
+    host: DEFAULT_POSTHOG_HOST,
+  };
+
+  it("builds a generic server event payload with locked server metadata", () => {
+    const payload = buildCaptureEventPayload(
+      config,
+      {
+        event: "spoonjoy.api_v1.request",
+        distinctId: "chef_123",
+        properties: {
+          route: "/api/v1/recipes/:id",
+          method: "GET",
+          status: 200,
+          $lib: "caller-should-not-win",
+        },
+      },
+      () => new Date("2026-06-03T14:00:00.000Z"),
+    );
+
+    expect(payload).toEqual({
+      api_key: "ph_test",
+      event: "spoonjoy.api_v1.request",
+      distinct_id: "chef_123",
+      timestamp: "2026-06-03T14:00:00.000Z",
+      properties: {
+        route: "/api/v1/recipes/:id",
+        method: "GET",
+        status: 200,
+        $lib: "spoonjoy-server",
+      },
+    });
+  });
+
+  it("rejects non-Spoonjoy event names at payload construction time", () => {
+    expect(() =>
+      buildCaptureEventPayload(config, {
+        event: "$pageview",
+        distinctId: "chef_123",
+      }),
+    ).toThrow("PostHog server events must use a spoonjoy.* event name");
+  });
+
+  it("drops unsafe property keys and keeps safe sibling metadata", () => {
+    const payload = buildCaptureEventPayload(config, {
+      event: "spoonjoy.oauth.token",
+      distinctId: "server",
+      properties: {
+        token: "sj_secret",
+        accessToken: "oa_access",
+        refresh_token: "or_refresh",
+        authorization: "Bearer sj_secret",
+        cookie: "session=abc",
+        code_verifier: "pkce_secret",
+        rawQueryString: "code=oac_secret&state=raw",
+        requestBody: { token: "nested" },
+        responseBody: { ok: true },
+        stack: "Error: nope",
+        route_template: "/oauth/token",
+        status: 400,
+        error_code: "invalid_grant",
+      },
+    });
+
+    const serialized = JSON.stringify(payload);
+    expect(serialized).not.toContain("sj_secret");
+    expect(serialized).not.toContain("oa_access");
+    expect(serialized).not.toContain("or_refresh");
+    expect(serialized).not.toContain("Bearer");
+    expect(serialized).not.toContain("session=abc");
+    expect(serialized).not.toContain("pkce_secret");
+    expect(serialized).not.toContain("oac_secret");
+    expect(serialized).not.toContain("Error: nope");
+    expect(payload.properties.route_template).toBe("/oauth/token");
+    expect(payload.properties.status).toBe(400);
+    expect(payload.properties.error_code).toBe("invalid_grant");
+  });
+
+  it("normalizes unsupported property values instead of leaking object contents", () => {
+    const payload = buildCaptureEventPayload(config, {
+      event: "spoonjoy.api_v1.request",
+      distinctId: "chef_123",
+      properties: {
+        scopes: ["recipes:read", "shopping_list:write"],
+        response: new Response("secret body"),
+        request: new Request("https://spoonjoy.app/api/v1/recipes?query=soup"),
+        nested: { query: "soup" },
+        empty: null,
+      },
+    });
+
+    expect(payload.properties.scopes).toEqual(["recipes:read", "shopping_list:write"]);
+    expect(payload.properties.response).toBeUndefined();
+    expect(payload.properties.request).toBeUndefined();
+    expect(payload.properties.nested).toBeUndefined();
+    expect(payload.properties.empty).toBeNull();
+    expect(JSON.stringify(payload)).not.toContain("soup");
+    expect(JSON.stringify(payload)).not.toContain("secret body");
+  });
+});
+
+describe("captureEvent", () => {
+  it("is a no-op when config is disabled", async () => {
+    const fetchSpy = vi.fn();
+    await captureEvent(
+      { enabled: false, reason: "missing-key" },
+      { event: "spoonjoy.api_v1.request", distinctId: "anon" },
+      fetchSpy as unknown as typeof fetch,
+    );
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("posts generic events to the configured PostHog endpoint", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+    await captureEvent(
+      { enabled: true, key: "ph_test", host: "https://posthog.example/" },
+      {
+        event: "spoonjoy.mcp.request",
+        distinctId: "chef_1",
+        properties: {
+          route_template: "/mcp",
+          method: "POST",
+          status: 200,
+        },
+      },
+      fetchSpy as unknown as typeof fetch,
+    );
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchSpy.mock.calls[0];
+    expect(url).toBe("https://posthog.example/i/v0/e/");
+    expect(init.method).toBe("POST");
+    expect(init.headers).toEqual({ "content-type": "application/json" });
+    const body = JSON.parse(init.body as string);
+    expect(body.event).toBe("spoonjoy.mcp.request");
+    expect(body.distinct_id).toBe("chef_1");
+    expect(body.properties.route_template).toBe("/mcp");
+    expect(body.properties.$lib).toBe("spoonjoy-server");
+  });
+
+  it("swallows fetch failures for generic events", async () => {
+    const fetchSpy = vi.fn().mockRejectedValue(new Error("network down"));
+    await expect(
+      captureEvent(
+        { enabled: true, key: "ph_test", host: "https://posthog.example" },
+        { event: "spoonjoy.api_v1.request", distinctId: "anon" },
+        fetchSpy as unknown as typeof fetch,
+      ),
+    ).resolves.toBeUndefined();
   });
 });
 
