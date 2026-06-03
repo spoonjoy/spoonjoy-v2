@@ -219,10 +219,24 @@ function requestContentBytes(request: Request): number {
 function headerHost(value: string | null): string | undefined {
   if (!value) return undefined;
   try {
-    return new URL(value).host.toLowerCase();
+    const url = new URL(value);
+    const hostname = url.hostname.toLowerCase();
+    if (isIpLiteralHost(hostname)) return undefined;
+    return url.host.toLowerCase();
   } catch {
     return undefined;
   }
+}
+
+function isIpLiteralHost(hostname: string): boolean {
+  const normalized = hostname.replace(/^\[|\]$/g, "");
+  if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(normalized)) {
+    return normalized.split(".").every((segment) => {
+      const byte = Number(segment);
+      return Number.isInteger(byte) && byte >= 0 && byte <= 255;
+    });
+  }
+  return normalized.includes(":") && /^[0-9a-f:.]+$/i.test(normalized);
 }
 
 function userAgentFamily(userAgent: string | null): string {

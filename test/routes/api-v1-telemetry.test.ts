@@ -370,7 +370,7 @@ describe("API v1 public telemetry", () => {
       .toBe("openapi.sdk.read");
   });
 
-  it("classifies coarse user-agent families and omits malformed origin hosts", async () => {
+  it("classifies coarse user-agent families and omits unsafe origin hosts", async () => {
     for (const [userAgent, family, requestId] of [
       ["undici/7.20.0 node", "node", "req_api_ua_node"],
       ["Mozilla/5.0 Safari/605.1.15", "browser", "req_api_ua_browser"],
@@ -395,6 +395,28 @@ describe("API v1 public telemetry", () => {
         referrer_host: undefined,
       });
     }
+
+    const ipLiteral = new UndiciRequest("http://localhost/api/v1/health", {
+      headers: {
+        "X-Request-Id": "req_api_ip_literal_hosts",
+        Origin: "http://203.0.113.4:8443",
+        Referer: "http://[2001:db8::1]/docs?token=secret",
+        "User-Agent": "KitchenSyncBot/1.0",
+      },
+    }) as unknown as Request;
+    const response = await loader(routeArgs(ipLiteral, "health").args);
+
+    expect(response.status).toBe(200);
+    const input = apiV1Event("/api/v1/health", "req_api_ip_literal_hosts");
+    expect(input?.properties).toMatchObject({
+      user_agent_family: "other",
+      origin_host: undefined,
+      referrer_host: undefined,
+    });
+    const serialized = JSON.stringify(input);
+    expect(serialized).not.toContain("203.0.113.4");
+    expect(serialized).not.toContain("2001:db8::1");
+    expect(serialized).not.toContain("token=secret");
   });
 
   it("captures public recipe list/detail requests without query strings or recipe text", async () => {
