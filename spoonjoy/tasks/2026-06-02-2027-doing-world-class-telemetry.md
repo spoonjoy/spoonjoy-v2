@@ -267,7 +267,7 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 **Output**: Updated docs/config explaining server/client telemetry setup, privacy exclusions, and operational checks.
 **Acceptance**: Docs/config tests pass and no documentation suggests printing secret values.
 
-### 🔄 Unit 8c: Docs/Config/Sink Setup — Coverage & Refactor
+### ✅ Unit 8c: Docs/Config/Sink Setup — Coverage & Refactor
 **What**: Run focused docs/config/preflight tests and verify environment checks do not print secret values.
 **Output**: Complete telemetry setup documentation and safe deployment checks.
 **Acceptance**: Focused docs/config tests pass with no warnings.
@@ -397,3 +397,4 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 - 2026-06-03 10:10 Unit 8b started: implement telemetry docs/config/preflight checks
 - 2026-06-03 10:15 Unit 8b complete: telemetry docs, `.env.example`, README/DEPLOY/checklist guidance, and deployment-preflight checks updated; focused preflight tests, typecheck, build, and secret scan pass
 - 2026-06-03 10:16 Unit 8c started: verify docs/config/preflight coverage and secret-safe outputs
+- 2026-06-03 10:19 Unit 8c complete: fixed reviewer docs-channel finding, added regression coverage for public Vite build vars vs Worker secrets, verified preflight output is secret-safe, and recorded targeted deployment-preflight coverage
