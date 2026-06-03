@@ -282,7 +282,7 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 **Output**: Final verification command summaries saved in `spoonjoy/tasks/2026-06-02-2027-doing-world-class-telemetry/final-verification.md`.
 **Acceptance**: All checks pass with no warnings, no secret values appear in output or artifacts, and `final-verification.md` explicitly states whether Unit 8d completed or remains blocked by unavailable PostHog key access.
 
-### 🔄 Unit 9b: Deploy And Live Smoke
+### ✅ Unit 9b: Deploy And Live Smoke
 **What**: Run `pnpm run deploy`, `pnpm run smoke:live`, and `pnpm run smoke:api`. Verify deployed `/api/playground`, `/api/v1/health`, `/mcp` challenge, and OAuth metadata still respond.
 **Output**: Deployment version id and live smoke artifact paths recorded in `final-verification.md`.
 **Acceptance**: Deployment succeeds only after Unit 8d is complete or explicitly documented as externally blocked, live smoke checks pass, production does not require PostHog to respond to serve app/API traffic, and no secret values appear in command output or committed files.
@@ -403,3 +403,4 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 - 2026-06-03 10:23 Unit 9a started: final typecheck, focused telemetry tests, full Vitest, build, and secret scan
 - 2026-06-03 10:30 Unit 9a complete: typecheck, focused telemetry tests (25 files/264 tests), full Vitest (286 files/5,452 tests), build, and secret scan completed; final verification artifact records Unit 8d unavailable-key status
 - 2026-06-03 10:31 Unit 9b started: deploy production Worker and run live smoke/API smoke checks
+- 2026-06-03 10:34 Unit 9b complete: deployed Worker version `1b0cc956-4d31-4446-a03c-57739fc7a230`, live smoke and API smoke passed, explicit `/api`, `/api/playground`, `/api/v1/health`, `/mcp`, and OAuth metadata probes passed, and remote smoke user cleanup changed 8 rows
