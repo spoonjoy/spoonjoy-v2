@@ -202,7 +202,7 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 **Output**: Safe OAuth authorize telemetry.
 **Acceptance**: Unit 6c tests pass and existing OAuth authorize tests still pass.
 
-### 🔄 Unit 6e: OAuth Token/Refresh Telemetry — Tests
+### ✅ Unit 6e: OAuth Token/Refresh Telemetry — Tests
 **What**: Add failing tests for authorization-code exchange success, refresh-token rotation success, unsupported grant, invalid grant, invalid form body, method errors, and rate limit.
 **Output**: Tests proving `spoonjoy.oauth.token` emits grant type, status/error code, client id when safely known, scope/resource when returned safely, latency, and safe request context.
 **Acceptance**: Tests fail before implementation and prove no authorization code, code verifier, access token, refresh token, token prefix, raw form body, or request body appears in telemetry.
@@ -370,3 +370,4 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 - 2026-06-03 09:05 Unit 6d started: implement OAuth authorize telemetry
 - 2026-06-03 09:10 Unit 6d complete: OAuth authorize telemetry implemented for loader/action success, errors, decisions, and rate limits; focused tests, OAuth regressions, typecheck, and build pass
 - 2026-06-03 09:11 Unit 6e started: OAuth token/refresh telemetry tests
+- 2026-06-03 09:14 Unit 6e complete: OAuth token/refresh telemetry tests fail red on missing `spoonjoy.oauth.token` lifecycle capture
