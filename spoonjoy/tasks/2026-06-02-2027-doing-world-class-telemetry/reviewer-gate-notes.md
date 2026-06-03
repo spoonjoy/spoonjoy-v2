@@ -38,3 +38,16 @@
   - `headerHost` now drops IPv4 and IPv6 literal hosts before analytics capture.
   - `test/routes/api-v1-telemetry.test.ts` includes explicit IPv4/IPv6 host regression coverage and verifies those addresses do not appear in serialized lifecycle telemetry.
   - Focused API v1 telemetry tests pass after commit `0573848`.
+
+## 2026-06-03 08:28
+
+- Unit 4b fresh reviewer returned `FINDINGS`.
+- Blocker finding: `POST /api/tools/:name` could promote a raw path segment to the legacy `operation` telemetry property before validating it against known operations.
+- Major finding: `X-Request-Id` was copied verbatim into legacy telemetry, allowing client-supplied secrets or free text to ship as `request_id`.
+- Minor finding: the real `Error(/not found/)` response mapping did not assert configured PostHog lifecycle telemetry.
+- Remediation path:
+  - Legacy tool operations are now allowlisted against `listSpoonjoyApiOperations()` before any path segment is promoted to `operation`; unknown tool paths emit `/api/{unknown}` without the raw segment.
+  - Legacy `request_id` now accepts only short `req_...` ids or UUIDs; anything else falls back to `unknown`.
+  - `test/routes/api.test.ts` covers unsafe request-id fallback and unknown tool-path privacy.
+  - `test/routes/route-shell-coverage.test.ts` now asserts `error_code: "not_found"` lifecycle telemetry for real operation not-found responses and verifies the exception message is not in the event.
+  - Focused legacy coverage, API v1 telemetry tests, typecheck, and build pass after commit `a5e779b`.
