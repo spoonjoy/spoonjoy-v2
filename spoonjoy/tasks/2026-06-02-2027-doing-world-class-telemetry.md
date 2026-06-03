@@ -262,7 +262,7 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 **Output**: Failing tests or doc assertions for telemetry setup and privacy contract updates.
 **Acceptance**: Tests fail before docs/config updates where the repository has existing doc/config test coverage.
 
-### 🔄 Unit 8b: Docs/Config/Sink Setup — Implementation
+### ✅ Unit 8b: Docs/Config/Sink Setup — Implementation
 **What**: Update `docs/analytics-privacy.md`, `.env.example`, `README.md`, `DEPLOY.md`, `app/cloudflare-env.d.ts`, and the deployment-preflight docs/tests named by Unit 8a failures.
 **Output**: Updated docs/config explaining server/client telemetry setup, privacy exclusions, and operational checks.
 **Acceptance**: Docs/config tests pass and no documentation suggests printing secret values.
@@ -395,3 +395,4 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 - 2026-06-03 10:04 Unit 8a started: docs/config/sink setup tests
 - 2026-06-03 10:09 Unit 8a complete: deployment-preflight tests now fail red on missing telemetry docs/env validation and incomplete analytics/privacy documentation
 - 2026-06-03 10:10 Unit 8b started: implement telemetry docs/config/preflight checks
+- 2026-06-03 10:15 Unit 8b complete: telemetry docs, `.env.example`, README/DEPLOY/checklist guidance, and deployment-preflight checks updated; focused preflight tests, typecheck, build, and secret scan pass
