@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Request as UndiciRequest } from "undici";
 import { loader, action } from "~/routes/oauth.authorize";
 import { captureEvent } from "~/lib/analytics-server";
+import { oauthAuthorizeTelemetryForRequest } from "~/lib/oauth-routes.server";
 import { registerOAuthClient } from "~/lib/oauth-server.server";
 import { db } from "~/lib/db.server";
 import { sessionStorage } from "~/lib/session.server";
@@ -100,6 +101,10 @@ function expectOAuthAuthorizeEvent(input: {
     candidate.properties?.status === input.status &&
     candidate.properties?.outcome === input.outcome &&
     (
+      input.stateClass === undefined ||
+      candidate.properties?.state_class === input.stateClass
+    ) &&
+    (
       input.errorCode === undefined
         ? candidate.properties?.error_code === undefined
         : candidate.properties?.error_code === input.errorCode
@@ -153,6 +158,11 @@ describe("OAuth authorize telemetry", () => {
 
   afterEach(async () => {
     await cleanupDatabase();
+  });
+
+  it("classifies malformed authorize telemetry requests defensively", async () => {
+    await expect(oauthAuthorizeTelemetryForRequest({ url: "not a url" } as Request, "loader"))
+      .resolves.toEqual({ stateClass: "unknown" });
   });
 
   it("captures safe loader telemetry for login gate, consent view, client errors, and rate limits", async () => {
@@ -228,6 +238,48 @@ describe("OAuth authorize telemetry", () => {
       forbidden: ["203.0.113.7", REDIRECT_URI, codeChallenge],
     });
     expectCaptureScheduled(rateLimitArgs);
+
+    const missingStateQuery = new URLSearchParams(query);
+    missingStateQuery.set("state", "");
+    const missingStateArgs = routeArgs(new Request(`https://spoonjoy.app/oauth/authorize?${missingStateQuery}`, {
+      headers: { "CF-Connecting-IP": "203.0.113.70" },
+    }), {
+      POSTHOG_KEY: "ph_test",
+      API_IP_RATE_LIMITER: {
+        limit: async () => ({ success: false }),
+      },
+    });
+    await expect(loader(missingStateArgs)).rejects.toSatisfy((thrown: Response) => thrown.status === 429);
+    expectOAuthAuthorizeEvent({
+      phase: "loader",
+      status: 429,
+      outcome: "rate_limited",
+      errorCode: "rate_limited",
+      stateClass: "missing",
+      rateLimitScope: "ip",
+      forbidden: [missingStateQuery.toString()],
+    });
+
+    const shortStateQuery = new URLSearchParams(query);
+    shortStateQuery.set("state", "tiny");
+    const shortStateArgs = routeArgs(new Request(`https://spoonjoy.app/oauth/authorize?${shortStateQuery}`, {
+      headers: { "CF-Connecting-IP": "203.0.113.71" },
+    }), {
+      POSTHOG_KEY: "ph_test",
+      API_IP_RATE_LIMITER: {
+        limit: async () => ({ success: false }),
+      },
+    });
+    await expect(loader(shortStateArgs)).rejects.toSatisfy((thrown: Response) => thrown.status === 429);
+    expectOAuthAuthorizeEvent({
+      phase: "loader",
+      status: 429,
+      outcome: "rate_limited",
+      errorCode: "rate_limited",
+      stateClass: "short",
+      rateLimitScope: "ip",
+      forbidden: ["tiny"],
+    });
   });
 
   it("captures safe action telemetry for approve, deny, and validation errors", async () => {
@@ -340,5 +392,44 @@ describe("OAuth authorize telemetry", () => {
       forbidden: ["203.0.113.8", REDIRECT_URI, codeChallenge, rateLimitedBody.toString()],
     });
     expectCaptureScheduled(rateLimitedArgs);
+
+    const invalidContentTypeArgs = routeArgs(new Request("https://spoonjoy.app/oauth/authorize", {
+      method: "POST",
+      headers: {
+        Cookie: await authedCookie(user.id),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ code_challenge: codeChallenge, state: query.get("state") }),
+    }));
+    const invalidContentType = await action(invalidContentTypeArgs);
+    expect(invalidContentType.status).toBe(400);
+    expectOAuthAuthorizeEvent({
+      phase: "action",
+      status: 400,
+      outcome: "error",
+      errorCode: "invalid_request",
+      stateClass: "unknown",
+      forbidden: [codeChallenge, query.get("state")!, "code_challenge"],
+    });
+    expectCaptureScheduled(invalidContentTypeArgs);
+
+    const consumedBodyRequest = new Request("https://spoonjoy.app/oauth/authorize", {
+      method: "POST",
+      headers,
+      body: new URLSearchParams({ decision: "approve" }),
+    });
+    await consumedBodyRequest.text();
+    const consumedBodyArgs = routeArgs(consumedBodyRequest);
+    const consumedBody = await action(consumedBodyArgs);
+    expect(consumedBody.status).toBe(400);
+    expectOAuthAuthorizeEvent({
+      phase: "action",
+      status: 400,
+      outcome: "error",
+      errorCode: "invalid_request",
+      stateClass: "unknown",
+      forbidden: ["Body is unusable", "decision=approve"],
+    });
+    expectCaptureScheduled(consumedBodyArgs);
   });
 });

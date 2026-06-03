@@ -80,6 +80,20 @@ describe("handleOAuthRegister", () => {
     });
   });
 
+  it("rejects declared oversized dynamic registration bodies before reading", async () => {
+    const req = new Request("https://spoonjoy.app/oauth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Content-Length": String(16 * 1024 + 1) },
+    });
+    const res = await handleOAuthRegister(req, db);
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({
+      error: "invalid_request",
+      error_description: "Request body is too large",
+    });
+  });
+
   it("registers a client", async () => {
     const res = await handleOAuthRegister(jsonPost({ redirect_uris: ["https://claude.ai/cb"] }), db);
     expect(res.status).toBe(201);
@@ -122,6 +136,7 @@ describe("handleOAuthRegister", () => {
   it("rejects unsupported auth methods, grants, response types, and scopes", async () => {
     for (const body of [
       { redirect_uris: ["https://claude.ai/cb"], token_endpoint_auth_method: "client_secret_basic" },
+      { redirect_uris: ["https://claude.ai/cb"], grant_types: "authorization_code" },
       { redirect_uris: ["https://claude.ai/cb"], grant_types: ["client_credentials"] },
       { redirect_uris: ["https://claude.ai/cb"], response_types: ["token"] },
       { redirect_uris: ["https://claude.ai/cb"], scope: "tokens:write" },

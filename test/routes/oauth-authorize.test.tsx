@@ -177,6 +177,26 @@ describe("oauth.authorize route", () => {
     expect(screen.getByText(/kitchen:future/)).toBeInTheDocument();
   });
 
+  it("omits the broad-scope warning for narrow scopes", async () => {
+    renderView({
+      kind: "consent",
+      clientName: "Tiny client",
+      scope: "recipes:read",
+      params: {
+        clientId: "c",
+        redirectUri,
+        responseType: "code",
+        state: "state_0123456789abcdef",
+        scope: "recipes:read",
+        codeChallenge: "cc",
+        codeChallengeMethod: "S256",
+        resource: "",
+      },
+    });
+    expect(await screen.findByRole("heading", { name: /authorize tiny client/i })).toBeInTheDocument();
+    expect(screen.queryByText(/broad kitchen scopes/i)).not.toBeInTheDocument();
+  });
+
   it("renders the error view", async () => {
     renderView({ kind: "error", message: "Unknown OAuth client." });
     expect(await screen.findByRole("heading", { name: /connection problem/i })).toBeInTheDocument();

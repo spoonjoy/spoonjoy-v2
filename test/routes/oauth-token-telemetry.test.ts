@@ -264,6 +264,18 @@ describe("OAuth token telemetry", () => {
     });
     expectCaptureScheduled(unsupportedResponse.args);
 
+    const missingGrant = formRequest({ client_id: client.clientId });
+    const missingGrantResponse = await invokeAction(missingGrant.request);
+    expect(missingGrantResponse.response.status).toBe(400);
+    expectOAuthTokenEvent({
+      status: 400,
+      outcome: "error",
+      grantType: "unknown",
+      errorCode: "unsupported_grant_type",
+      forbidden: [missingGrant.bodyText],
+    });
+    expectCaptureScheduled(missingGrantResponse.args);
+
     const invalidGrant = formRequest({
       grant_type: "authorization_code",
       code: "oac_raw_secret_code",
@@ -302,6 +314,25 @@ describe("OAuth token telemetry", () => {
       forbidden: ["oac_raw_json_code", invalidForm.bodyText, "203.0.113.12"],
     });
     expectCaptureScheduled(invalidFormResponse.args);
+
+    const consumedBodyRequest = new Request("https://spoonjoy.app/oauth/token", {
+      method: "POST",
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        code: "oac_raw_consumed_code",
+      }),
+    });
+    await consumedBodyRequest.text();
+    const consumedBodyResponse = await invokeAction(consumedBodyRequest);
+    expect(consumedBodyResponse.response.status).toBe(400);
+    expectOAuthTokenEvent({
+      status: 400,
+      outcome: "error",
+      grantType: "unknown",
+      errorCode: "invalid_request",
+      forbidden: ["oac_raw_consumed_code", "Body is unusable"],
+    });
+    expectCaptureScheduled(consumedBodyResponse.args);
 
     const oversized = rawPost("x".repeat(8 * 1024 + 1));
     const oversizedResponse = await invokeAction(oversized.request);

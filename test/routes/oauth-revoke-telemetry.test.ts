@@ -281,6 +281,21 @@ describe("OAuth revoke telemetry", () => {
     });
     expectCaptureScheduled(invalidBodyResponse.args);
 
+    const consumedBodyRequest = new Request("https://spoonjoy.app/oauth/revoke", {
+      method: "POST",
+      body: new URLSearchParams({ token: "ort_raw_consumed_secret" }),
+    });
+    await consumedBodyRequest.text();
+    const consumedBodyResponse = await invokeAction(consumedBodyRequest);
+    expect(consumedBodyResponse.response.status).toBe(400);
+    expectOAuthRevokeEvent({
+      status: 400,
+      outcome: "error",
+      errorCode: "invalid_request",
+      forbidden: ["ort_raw_consumed_secret", "Body is unusable"],
+    });
+    expectCaptureScheduled(consumedBodyResponse.args);
+
     const rateLimited = formRequest({
       token: "ort_raw_rate_secret",
       client_id: "raw_client_id",
