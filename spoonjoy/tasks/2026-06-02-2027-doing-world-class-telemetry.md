@@ -182,7 +182,7 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 **Output**: Covered MCP telemetry without duplicated auth/rate-limit logic.
 **Acceptance**: Focused MCP tests pass with no warnings.
 
-### ⬜ Unit 6a: OAuth Register Telemetry — Tests
+### 🔄 Unit 6a: OAuth Register Telemetry — Tests
 **What**: Add failing tests for `/oauth/register` success, invalid metadata, invalid redirect, unsupported scope, method errors, and rate limit.
 **Output**: Tests proving `spoonjoy.oauth.register` emits status/error code, client id when created, redirect URI count, scope metadata class, latency, and safe request context.
 **Acceptance**: Tests fail before implementation and prove no raw redirect URI query, raw JSON body, client supplied free-text beyond controlled counts/ids, or request body appears in telemetry.
@@ -362,3 +362,4 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 - 2026-06-03 08:44 Unit 5f complete: MCP notification and JSON-RPC error lifecycle telemetry implemented while preserving exception capture; focused MCP tests, related telemetry regressions, typecheck, and build pass
 - 2026-06-03 08:45 Unit 5g started: MCP telemetry coverage and refactor verification
 - 2026-06-03 08:47 Unit 5g complete: MCP handler and shared analytics helper coverage reached 100% statements/branches/functions/lines; telemetry regressions, typecheck, and build pass
+- 2026-06-03 08:48 Unit 6a started: OAuth register telemetry tests
