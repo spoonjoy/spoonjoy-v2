@@ -2,8 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { faker } from "@faker-js/faker";
 import { Request as UndiciRequest } from "undici";
 import { loader } from "~/routes/api.v1.$";
+import { createApiCredential } from "~/lib/api-auth.server";
 import { captureEvent } from "~/lib/analytics-server";
 import { getLocalDb } from "~/lib/db.server";
+import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createCookbookTitle, createTestRecipe, createTestUser } from "../utils";
 
@@ -46,6 +48,24 @@ function publicRequest(url: string, requestId: string) {
   }) as unknown as Request;
 }
 
+function apiRequest(url: string, requestId: string, headers: Record<string, string> = {}) {
+  return new UndiciRequest(url, {
+    headers: {
+      "X-Request-Id": requestId,
+      Origin: "https://client.example",
+      Referer: "https://docs.example/start?token=secret",
+      "User-Agent": "curl/8.7.1 SpoonjoyTelemetryTest",
+      ...headers,
+    },
+  }) as unknown as Request;
+}
+
+async function sessionCookie(userId: string) {
+  const session = await sessionStorage.getSession();
+  session.set("userId", userId);
+  return (await sessionStorage.commitSession(session)).split(";")[0]!;
+}
+
 function captureInputs() {
   return vi.mocked(captureEvent).mock.calls.map(([, input]) => input);
 }
@@ -80,6 +100,68 @@ function expectSafeApiV1Event(routeTemplate: string, requestId: string) {
   expect(serialized).not.toContain("session=secret");
   expect(serialized).not.toContain("PebbleKit/4.4");
   return input;
+}
+
+function expectAuthenticatedApiV1Event(input: {
+  routeTemplate: string;
+  requestId: string;
+  authMode: "session" | "bearer" | "oauth_bearer";
+  principalId: string;
+  credentialId?: string;
+  oauthClientId?: string;
+  oauthResource?: string | null;
+  scopes: readonly string[];
+  forbidden: readonly string[];
+}) {
+  const eventInput = captureInputs().find((candidate) => (
+    candidate.event === "spoonjoy.api_v1.request" &&
+    candidate.properties?.route_template === input.routeTemplate &&
+    candidate.properties?.request_id === input.requestId
+  ));
+
+  expect(eventInput).toMatchObject({
+    event: "spoonjoy.api_v1.request",
+    distinctId: input.principalId,
+    properties: {
+      route_template: input.routeTemplate,
+      method: "GET",
+      status: 200,
+      request_id: input.requestId,
+      auth_mode: input.authMode,
+      principal_id: input.principalId,
+      request_bytes: 0,
+      privacy_class: "authenticated",
+      origin_host: "client.example",
+      referrer_host: "docs.example",
+      user_agent_family: "curl",
+      latency_ms: expect.any(Number),
+    },
+  });
+
+  const properties = eventInput!.properties as Record<string, unknown>;
+  expect(properties.scopes).toEqual(expect.arrayContaining([...input.scopes]));
+  if (input.credentialId) {
+    expect(properties.credential_id).toBe(input.credentialId);
+  } else {
+    expect(properties.credential_id).toBeUndefined();
+  }
+  if (input.oauthClientId) {
+    expect(properties.oauth_client_id).toBe(input.oauthClientId);
+    expect(properties.oauth_resource).toBe(input.oauthResource ?? null);
+  } else {
+    expect(properties.oauth_client_id).toBeUndefined();
+    expect(properties.oauth_resource).toBeUndefined();
+  }
+
+  const serialized = JSON.stringify(eventInput);
+  for (const forbidden of input.forbidden) {
+    expect(serialized).not.toContain(forbidden);
+  }
+  expect(serialized).not.toContain("token=secret");
+  expect(serialized).not.toContain("Authorization");
+  expect(serialized).not.toContain("Bearer ");
+  expect(serialized).not.toContain("__session=");
+  return eventInput;
 }
 
 async function createRecipeFixture(db: Awaited<ReturnType<typeof getLocalDb>>) {
@@ -175,5 +257,114 @@ describe("API v1 public telemetry", () => {
     const serialized = JSON.stringify(captureInputs());
     expect(serialized).not.toContain("Telemetry Cookbook");
     expect(serialized).not.toContain(fixture.cookbook.title);
+  });
+});
+
+describe("API v1 authenticated telemetry", () => {
+  let db: Awaited<ReturnType<typeof getLocalDb>>;
+
+  beforeEach(async () => {
+    vi.mocked(captureEvent).mockClear();
+    await cleanupDatabase();
+    db = await getLocalDb();
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await cleanupDatabase();
+  });
+
+  it("captures session token-list reads with principal metadata and no profile or token text", async () => {
+    const user = await db.user.create({ data: createTestUser() });
+    const existing = await createApiCredential(db, user.id, "Telemetry Session Token", { scopes: ["recipes:read"] });
+    const cookie = await sessionCookie(user.id);
+    const request = apiRequest("http://localhost/api/v1/tokens", "req_tokens_session", {
+      Cookie: `${cookie}; preview=should_not_ship`,
+    });
+    const response = await loader(routeArgs(request, "tokens").args);
+
+    expect(response.status).toBe(200);
+    expectAuthenticatedApiV1Event({
+      routeTemplate: "/api/v1/tokens",
+      requestId: "req_tokens_session",
+      authMode: "session",
+      principalId: user.id,
+      scopes: ["tokens:read", "tokens:write", "offline_access"],
+      forbidden: [
+        user.email,
+        user.username,
+        cookie,
+        "preview=should_not_ship",
+        "Telemetry Session Token",
+        existing.token,
+        existing.credential.tokenPrefix,
+      ],
+    });
+  });
+
+  it("captures personal bearer shopping-list reads with credential id and scopes but no token text", async () => {
+    const user = await db.user.create({ data: createTestUser() });
+    const credential = await createApiCredential(db, user.id, "Telemetry Shopping Reader", {
+      scopes: ["shopping_list:read"],
+    });
+    const request = apiRequest("http://localhost/api/v1/shopping-list", "req_shopping_bearer_telemetry", {
+      Authorization: `Bearer ${credential.token}`,
+      Cookie: "ignored_session=should_not_ship",
+    });
+    const response = await loader(routeArgs(request, "shopping-list").args);
+
+    expect(response.status).toBe(200);
+    expectAuthenticatedApiV1Event({
+      routeTemplate: "/api/v1/shopping-list",
+      requestId: "req_shopping_bearer_telemetry",
+      authMode: "bearer",
+      principalId: user.id,
+      credentialId: credential.credential.id,
+      scopes: ["shopping_list:read"],
+      forbidden: [
+        user.email,
+        user.username,
+        credential.token,
+        credential.credential.tokenPrefix,
+        "Telemetry Shopping Reader",
+        "ignored_session=should_not_ship",
+      ],
+    });
+  });
+
+  it("captures OAuth bearer sync reads with delegated client metadata and safe resource class", async () => {
+    const user = await db.user.create({ data: createTestUser() });
+    const credential = await createApiCredential(db, user.id, "Delegated Sync Reader", {
+      scopes: ["shopping_list:read"],
+      oauthClientId: "oauth_client_telemetry_sync",
+      oauthResource: null,
+    });
+    const cursor = "2026-06-02T00:00:00.000Z";
+    const request = apiRequest(
+      `http://localhost/api/v1/shopping-list/sync?cursor=${encodeURIComponent(cursor)}`,
+      "req_shopping_oauth_sync_telemetry",
+      { Authorization: `Bearer ${credential.token}` },
+    );
+    const response = await loader(routeArgs(request, "shopping-list/sync").args);
+
+    expect(response.status).toBe(200);
+    expectAuthenticatedApiV1Event({
+      routeTemplate: "/api/v1/shopping-list/sync",
+      requestId: "req_shopping_oauth_sync_telemetry",
+      authMode: "oauth_bearer",
+      principalId: user.id,
+      credentialId: credential.credential.id,
+      oauthClientId: "oauth_client_telemetry_sync",
+      oauthResource: null,
+      scopes: ["shopping_list:read"],
+      forbidden: [
+        user.email,
+        user.username,
+        credential.token,
+        credential.credential.tokenPrefix,
+        "Delegated Sync Reader",
+        cursor,
+      ],
+    });
   });
 });
