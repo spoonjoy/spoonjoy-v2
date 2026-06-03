@@ -71,177 +71,192 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 **Output**: Clean helper code with test coverage for enabled, disabled, missing-key, trailing-slash host, fetch failure, and unsafe property handling.
 **Acceptance**: Focused analytics-server tests pass with no warnings.
 
-### ⬜ Unit 2a: API v1 Public/Discovery Telemetry — Tests
+### ⬜ Unit 2a: API v1 WaitUntil Context — Tests
+**What**: Add failing tests or type-focused route-shell coverage proving `app/lib/api-v1.server.ts` can receive a `waitUntil` function from React Router Cloudflare context before it attempts telemetry capture.
+**Output**: Tests proving API v1 telemetry can be scheduled through the Worker execution context without blocking the response.
+**Acceptance**: Tests fail before implementation because `ApiV1RouteArgs` only types `context.cloudflare.env` and no API v1 telemetry scheduling hook is exposed.
+
+### ⬜ Unit 2b: API v1 WaitUntil Context — Implementation
+**What**: Update `ApiV1RouteArgs` in `app/lib/api-v1.server.ts` and, if needed, `app/routes/api.v1.$.ts` so API v1 can bind `context.cloudflare.ctx.waitUntil` or an equivalent `waitUntil` callback at the centralized handler.
+**Output**: API v1 has the same best-effort background scheduling capability already used by legacy `/api/*` and `/mcp`.
+**Acceptance**: Unit 2a tests pass and API v1 route behavior/wire format is unchanged.
+
+### ⬜ Unit 2c: API v1 WaitUntil Context — Coverage & Refactor
+**What**: Run the focused API v1 route-shell/type tests. Refactor only within `app/lib/api-v1.server.ts` and `app/routes/api.v1.$.ts`.
+**Output**: Covered API v1 context plumbing ready for later telemetry units.
+**Acceptance**: Focused tests pass with no warnings.
+
+### ⬜ Unit 3a: API v1 Public/Discovery Telemetry — Tests
 **What**: Add failing tests for `app/lib/api-v1.server.ts` covering anonymous GET `/api/v1`, `/health`, OpenAPI docs, recipe list/detail, and cookbook list/detail.
 **Output**: Tests proving `spoonjoy.api_v1.request` emits route template/resource, method, status, request id, auth mode `anonymous`, latency, request byte count, cache/privacy class, origin/referrer host, and coarse user-agent family.
 **Acceptance**: Tests fail before implementation and assert no raw query string, cookies, authorization header, request body, response body, recipe title, cookbook title, or other free text appears in telemetry.
 
-### ⬜ Unit 2b: API v1 Public/Discovery Telemetry — Implementation
+### ⬜ Unit 3b: API v1 Public/Discovery Telemetry — Implementation
 **What**: Instrument `handleApiV1Request` in `app/lib/api-v1.server.ts` for public/discovery success paths using shared helper functions in `app/lib/analytics-server.ts` and, only if needed, `app/lib/api-v1.server.ts`.
 **Output**: Best-effort `ctx.waitUntil(captureEvent(...))` public API v1 telemetry.
-**Acceptance**: Unit 2a tests pass and existing public API v1 tests still pass.
+**Acceptance**: Unit 3a tests pass and existing public API v1 tests still pass.
 
-### ⬜ Unit 2c: API v1 Authenticated Metadata — Tests
+### ⬜ Unit 3c: API v1 Authenticated Metadata — Tests
 **What**: Add failing tests for session and bearer authenticated API v1 reads, including bearer credential id, OAuth client id/resource when present, principal id, scopes, and auth source.
 **Output**: Tests proving authenticated API v1 telemetry identifies who called without leaking token values or Authorization headers.
 **Acceptance**: Tests fail before implementation and assert no email, username, bearer token, token prefix, raw header, cookie, or free text appears in telemetry.
 
-### ⬜ Unit 2d: API v1 Authenticated Metadata — Implementation
+### ⬜ Unit 3d: API v1 Authenticated Metadata — Implementation
 **What**: Extend API v1 telemetry to include principal/source/scope metadata after `authorizeApiV1Route` resolves a principal.
 **Output**: Authenticated API v1 telemetry for session, personal bearer, OAuth bearer, and self-revoke cases.
-**Acceptance**: Unit 2c tests pass and existing auth/scopes API v1 tests still pass.
+**Acceptance**: Unit 3c tests pass and existing auth/scopes API v1 tests still pass.
 
-### ⬜ Unit 2e: API v1 Mutation And Validation Telemetry — Tests
+### ⬜ Unit 3e: API v1 Mutation And Validation Telemetry — Tests
 **What**: Add failing tests for shopping-list create/check/delete, token list/create/revoke, idempotency replay/in-progress/conflict, JSON validation errors, and not-found validation paths.
 **Output**: Tests proving mutation telemetry includes controlled operation names, status/error code, idempotency outcome, request byte count, and latency without payload contents.
 **Acceptance**: Tests fail before implementation and assert no shopping item name, unit name, token name, returned token secret, clientMutationId raw value, or request/response body appears in telemetry.
 
-### ⬜ Unit 2f: API v1 Mutation And Validation Telemetry — Implementation
+### ⬜ Unit 3f: API v1 Mutation And Validation Telemetry — Implementation
 **What**: Extend centralized API v1 telemetry so mutation and validation branches report controlled operation/resource names, error codes, idempotency class, and status.
 **Output**: API v1 mutation telemetry that preserves existing response wire formats.
-**Acceptance**: Unit 2e tests pass and existing shopping-list/token API v1 tests still pass.
+**Acceptance**: Unit 3e tests pass and existing shopping-list/token API v1 tests still pass.
 
-### ⬜ Unit 2g: API v1 Rate-Limit/Internal-Error Telemetry — Tests
+### ⬜ Unit 3g: API v1 Rate-Limit/Internal-Error Telemetry — Tests
 **What**: Add failing tests for rate-limited requests, method-not-allowed, unknown path, authentication required, insufficient scope, invalid token, and internal errors.
 **Output**: Tests proving API v1 error telemetry emits safe error code/status/rate-limit scope and preserves existing exception logging/capture behavior.
 **Acceptance**: Tests fail before implementation and assert internal error telemetry includes no stack trace except through the existing `$exception` capture path.
 
-### ⬜ Unit 2h: API v1 Rate-Limit/Internal-Error Telemetry — Implementation
+### ⬜ Unit 3h: API v1 Rate-Limit/Internal-Error Telemetry — Implementation
 **What**: Extend API v1 telemetry across early rate-limit returns and catch blocks, preserving `logApiV1InternalError` and any existing response behavior.
 **Output**: API v1 error/rate-limit lifecycle telemetry.
-**Acceptance**: Unit 2g tests pass and existing API v1 route tests still pass.
+**Acceptance**: Unit 3g tests pass and existing API v1 route tests still pass.
 
-### ⬜ Unit 2i: API v1 Telemetry — Coverage & Refactor
+### ⬜ Unit 3i: API v1 Telemetry — Coverage & Refactor
 **What**: Run focused API v1 telemetry and existing API v1 route tests. Refactor only within `app/lib/api-v1.server.ts` and `app/lib/analytics-server.ts`; any new cross-surface helper file or broader extraction requires updating this doing doc first.
 **Output**: Covered, centralized API v1 telemetry helpers with no duplicated per-endpoint capture calls.
 **Acceptance**: Focused API v1 tests pass with no warnings.
 
-### ⬜ Unit 3a: Legacy API Telemetry — Tests
+### ⬜ Unit 4a: Legacy API Telemetry — Tests
 **What**: Add failing tests in `test/routes/route-shell-coverage.test.ts` or a focused legacy API route test for `app/routes/api.$.ts`. Cover success, `ApiAuthError`, not-found, rate-limit, and unexpected-error capture.
 **Output**: Tests proving `spoonjoy.legacy_api.request` emits operation name, auth/source metadata when known, status/error, request id if present, latency, and safe request context.
 **Acceptance**: Tests fail before implementation and prove legacy API telemetry does not send args/request bodies or secrets.
 
-### ⬜ Unit 3b: Legacy API Telemetry — Implementation
+### ⬜ Unit 4b: Legacy API Telemetry — Implementation
 **What**: Instrument `handleApiRequest` in `app/routes/api.$.ts` without duplicating operation logic. Preserve existing exception capture while adding lifecycle telemetry.
 **Output**: Best-effort legacy API lifecycle telemetry for REST/MCP bootstrap operations routed through `/api/*`.
 **Acceptance**: Legacy API telemetry tests pass and existing route-shell tests still pass.
 
-### ⬜ Unit 3c: Legacy API Telemetry — Coverage & Refactor
+### ⬜ Unit 4c: Legacy API Telemetry — Coverage & Refactor
 **What**: Run focused legacy route tests. Refactor only within `app/routes/api.$.ts` and `app/lib/analytics-server.ts`; any new cross-surface helper file or broader extraction requires updating this doing doc first.
 **Output**: Covered legacy API telemetry with shared helpers where they reduce real duplication.
 **Acceptance**: Focused legacy API tests pass with no warnings.
 
-### ⬜ Unit 4a: MCP Auth/Rate-Limit Telemetry — Tests
+### ⬜ Unit 5a: MCP Auth/Rate-Limit Telemetry — Tests
 **What**: Add failing tests in `test/lib/mcp/http-mcp.server.test.ts` for non-POST 405, unauthenticated challenge, malformed/invalid token, wrong-resource token, and rate limit.
 **Output**: Tests proving `/mcp` emits safe `spoonjoy.mcp.request` events for auth/rate-limit outcomes with status, error code, auth source, latency, and request byte count.
 **Acceptance**: Tests fail before implementation and prove no bearer token, Authorization header, request body, or JSON-RPC params are captured.
 
-### ⬜ Unit 4b: MCP Auth/Rate-Limit Telemetry — Implementation
+### ⬜ Unit 5b: MCP Auth/Rate-Limit Telemetry — Implementation
 **What**: Instrument `handleMcpHttpRequest` in `app/lib/mcp/http-mcp.server.ts` for early method/auth/rate-limit branches.
 **Output**: Best-effort MCP auth/rate-limit lifecycle telemetry.
-**Acceptance**: Unit 4a tests pass and existing MCP auth tests still pass.
+**Acceptance**: Unit 5a tests pass and existing MCP auth tests still pass.
 
-### ⬜ Unit 4c: MCP Success Metadata — Tests
+### ⬜ Unit 5c: MCP Success Metadata — Tests
 **What**: Add failing tests for successful `tools/list` and `tools/call` requests.
 **Output**: Tests proving MCP telemetry includes principal id, credential id, OAuth client/resource, JSON-RPC method, and tool name when safely present.
 **Acceptance**: Tests fail before implementation and prove no JSON-RPC args or tool argument values are captured.
 
-### ⬜ Unit 4d: MCP Success Metadata — Implementation
+### ⬜ Unit 5d: MCP Success Metadata — Implementation
 **What**: Extend MCP telemetry to parse only top-level JSON-RPC `method` and string `params.name` for `tools/call` after authentication.
 **Output**: MCP success telemetry for tool listing and tool calls.
-**Acceptance**: Unit 4c tests pass and existing MCP success tests still pass.
+**Acceptance**: Unit 5c tests pass and existing MCP success tests still pass.
 
-### ⬜ Unit 4e: MCP Error/Notification Telemetry — Tests
+### ⬜ Unit 5e: MCP Error/Notification Telemetry — Tests
 **What**: Add failing tests for JSON-RPC error responses, notifications returning 202, malformed JSON/body cases, and internal tool errors.
 **Output**: Tests proving MCP telemetry includes response status, JSON-RPC error code when present, notification flag, and existing exception capture remains intact.
 **Acceptance**: Tests fail before implementation and prove no JSON-RPC body, params, bearer token, or stack trace appears in lifecycle events.
 
-### ⬜ Unit 4f: MCP Error/Notification Telemetry — Implementation
+### ⬜ Unit 5f: MCP Error/Notification Telemetry — Implementation
 **What**: Extend MCP telemetry across JSON-RPC response/null/error branches while preserving existing `onError` exception capture.
 **Output**: MCP error and notification lifecycle telemetry.
-**Acceptance**: Unit 4e tests pass and existing MCP error tests still pass.
+**Acceptance**: Unit 5e tests pass and existing MCP error tests still pass.
 
-### ⬜ Unit 4g: MCP Telemetry — Coverage & Refactor
+### ⬜ Unit 5g: MCP Telemetry — Coverage & Refactor
 **What**: Run focused MCP tests. Refactor only within `app/lib/mcp/http-mcp.server.ts` and `app/lib/analytics-server.ts`; any new cross-surface helper file or broader extraction requires updating this doing doc first.
 **Output**: Covered MCP telemetry without duplicated auth/rate-limit logic.
 **Acceptance**: Focused MCP tests pass with no warnings.
 
-### ⬜ Unit 5a: OAuth Register Telemetry — Tests
+### ⬜ Unit 6a: OAuth Register Telemetry — Tests
 **What**: Add failing tests for `/oauth/register` success, invalid metadata, invalid redirect, unsupported scope, method errors, and rate limit.
 **Output**: Tests proving `spoonjoy.oauth.register` emits status/error code, client id when created, redirect URI count, scope metadata class, latency, and safe request context.
 **Acceptance**: Tests fail before implementation and prove no raw redirect URI query, raw JSON body, client supplied free-text beyond controlled counts/ids, or request body appears in telemetry.
 
-### ⬜ Unit 5b: OAuth Register Telemetry — Implementation
+### ⬜ Unit 6b: OAuth Register Telemetry — Implementation
 **What**: Instrument `app/routes/oauth.register.ts` and/or `app/lib/oauth-routes.server.ts` for registration lifecycle events.
 **Output**: Safe OAuth registration telemetry.
-**Acceptance**: Unit 5a tests pass and existing OAuth registration tests still pass.
+**Acceptance**: Unit 6a tests pass and existing OAuth registration tests still pass.
 
-### ⬜ Unit 5c: OAuth Authorize Telemetry — Tests
+### ⬜ Unit 6c: OAuth Authorize Telemetry — Tests
 **What**: Add failing tests for authorize loader login-gate redirect, consent view, client error view, action approve, action deny, action errors, and rate limit.
 **Output**: Tests proving `spoonjoy.oauth.authorize` emits decision/state class, status, client id, scope/resource, principal id when consent is reached, and latency.
 **Acceptance**: Tests fail before implementation and prove no authorization code, state value, code challenge, redirect URI query, or raw form body appears in telemetry.
 
-### ⬜ Unit 5d: OAuth Authorize Telemetry — Implementation
+### ⬜ Unit 6d: OAuth Authorize Telemetry — Implementation
 **What**: Instrument `app/routes/oauth.authorize.tsx` and/or `app/lib/oauth-routes.server.ts` for authorize loader/action lifecycle events.
 **Output**: Safe OAuth authorize telemetry.
-**Acceptance**: Unit 5c tests pass and existing OAuth authorize tests still pass.
+**Acceptance**: Unit 6c tests pass and existing OAuth authorize tests still pass.
 
-### ⬜ Unit 5e: OAuth Token/Refresh Telemetry — Tests
+### ⬜ Unit 6e: OAuth Token/Refresh Telemetry — Tests
 **What**: Add failing tests for authorization-code exchange success, refresh-token rotation success, unsupported grant, invalid grant, invalid form body, method errors, and rate limit.
 **Output**: Tests proving `spoonjoy.oauth.token` emits grant type, status/error code, client id when safely known, scope/resource when returned safely, latency, and safe request context.
 **Acceptance**: Tests fail before implementation and prove no authorization code, code verifier, access token, refresh token, token prefix, raw form body, or request body appears in telemetry.
 
-### ⬜ Unit 5f: OAuth Token/Refresh Telemetry — Implementation
+### ⬜ Unit 6f: OAuth Token/Refresh Telemetry — Implementation
 **What**: Instrument `app/routes/oauth.token.ts` and/or `app/lib/oauth-routes.server.ts` for token endpoint lifecycle events.
 **Output**: Safe OAuth token/refresh telemetry.
-**Acceptance**: Unit 5e tests pass and existing OAuth token tests still pass.
+**Acceptance**: Unit 6e tests pass and existing OAuth token tests still pass.
 
-### ⬜ Unit 5g: OAuth Revoke Telemetry — Tests
+### ⬜ Unit 6g: OAuth Revoke Telemetry — Tests
 **What**: Add failing tests for revoke success, invalid token/client binding, invalid form body, method errors, and rate limit.
 **Output**: Tests proving `spoonjoy.oauth.revoke` emits status/error code, token type hint class when present, client id when safely known, latency, and safe request context.
 **Acceptance**: Tests fail before implementation and prove no refresh token, access token, raw form body, or token value appears in telemetry.
 
-### ⬜ Unit 5h: OAuth Revoke Telemetry — Implementation
+### ⬜ Unit 6h: OAuth Revoke Telemetry — Implementation
 **What**: Instrument `app/routes/oauth.revoke.ts` and/or `app/lib/oauth-routes.server.ts` for revoke lifecycle events.
 **Output**: Safe OAuth revoke telemetry.
-**Acceptance**: Unit 5g tests pass and existing OAuth revoke tests still pass.
+**Acceptance**: Unit 6g tests pass and existing OAuth revoke tests still pass.
 
-### ⬜ Unit 5i: OAuth Telemetry — Coverage & Refactor
+### ⬜ Unit 6i: OAuth Telemetry — Coverage & Refactor
 **What**: Run focused OAuth tests. Refactor only within OAuth route shells, `app/lib/oauth-routes.server.ts`, and `app/lib/analytics-server.ts`; any new cross-surface helper file or broader extraction requires updating this doing doc first.
 **Output**: Covered OAuth telemetry with privacy assertions.
 **Acceptance**: Focused OAuth tests pass with no warnings.
 
-### ⬜ Unit 6a: Docs/Config/Sink Setup — Tests
+### ⬜ Unit 7a: Docs/Config/Sink Setup — Tests
 **What**: Add failing documentation/config/preflight tests where applicable so `POSTHOG_KEY`, `POSTHOG_HOST`, `POSTHOG_DISABLED`, `VITE_POSTHOG_KEY`, `VITE_POSTHOG_HOST`, and `VITE_POSTHOG_DISABLED` are consistently documented and typed.
 **Output**: Failing tests or doc assertions for telemetry setup and privacy contract updates.
 **Acceptance**: Tests fail before docs/config updates where the repository has existing doc/config test coverage.
 
-### ⬜ Unit 6b: Docs/Config/Sink Setup — Implementation
+### ⬜ Unit 7b: Docs/Config/Sink Setup — Implementation
 **What**: Update `docs/analytics-privacy.md`, `.env.example`, `README.md`, `DEPLOY.md`, `app/cloudflare-env.d.ts`, and deployment-preflight docs/tests as needed.
 **Output**: Updated docs/config explaining server/client telemetry setup, privacy exclusions, and operational checks.
 **Acceptance**: Docs/config tests pass and no documentation suggests printing secret values.
 
-### ⬜ Unit 6c: Docs/Config/Sink Setup — Coverage & Refactor
+### ⬜ Unit 7c: Docs/Config/Sink Setup — Coverage & Refactor
 **What**: Run focused docs/config/preflight tests and verify environment checks do not print secret values.
 **Output**: Complete telemetry setup documentation and safe deployment checks.
 **Acceptance**: Focused docs/config tests pass with no warnings.
 
-### ⬜ Unit 6d: PostHog Secret And Build Env Setup
+### ⬜ Unit 7d: PostHog Secret And Build Env Setup
 **What**: Retrieve the PostHog project API key only through user-authorized PostHog/browser access or user-provided value, then set `POSTHOG_KEY` with `wrangler secret put POSTHOG_KEY` and ensure production deploy builds receive `VITE_POSTHOG_KEY` without committing it. If the key is unavailable, record the blocker in `setup-notes.md` and continue only with code/docs verification.
 **Output**: Secret presence verification through `wrangler secret list` and build-env setup notes, with no secret value printed or committed.
 **Acceptance**: `wrangler secret list` shows `POSTHOG_KEY` when a key is available; otherwise `setup-notes.md` states the remaining external setup blocker.
 
-### ⬜ Unit 7a: Final Verification
+### ⬜ Unit 8a: Final Verification
 **What**: Run `pnpm run typecheck`, all focused telemetry-related tests, full `pnpm exec vitest run`, and `pnpm run build`.
 **Output**: Final verification command summaries saved in `spoonjoy/tasks/2026-06-02-2027-doing-world-class-telemetry/final-verification.md`.
 **Acceptance**: All checks pass with no warnings and no secret values appear in output or artifacts.
 
-### ⬜ Unit 7b: Deploy And Live Smoke
+### ⬜ Unit 8b: Deploy And Live Smoke
 **What**: Run `pnpm run deploy`, `pnpm run smoke:live`, and `pnpm run smoke:api`. Verify deployed `/api/playground`, `/api/v1/health`, `/mcp` challenge, and OAuth metadata still respond.
 **Output**: Deployment version id and live smoke artifact paths recorded in `final-verification.md`.
 **Acceptance**: Deployment succeeds, live smoke checks pass, production does not require PostHog to respond to serve app/API traffic, and no secret values appear in command output or committed files.
 
-### ⬜ Unit 7c: Completion Notification
+### ⬜ Unit 8c: Completion Notification
 **What**: Commit/push final state and notify Slugger with a concise completion summary.
 **Output**: Final git commit/push and Slugger notification.
 **Acceptance**: `git status --short` is clean, branch is pushed, Slugger acknowledges completion, and final response includes the deployed API docs/playground link plus verification summary.
@@ -259,3 +274,4 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 - 2026-06-02 21:32 Created from planning doc
 - 2026-06-02 21:32 Granularity pass Round 1 addressed by splitting API v1, MCP, OAuth, and sink setup units into smaller slices
 - 2026-06-02 21:32 Granularity pass Round 2 converged
+- 2026-06-02 21:32 Validation pass Round 1 addressed by adding API v1 waitUntil context plumbing units before API v1 telemetry work
