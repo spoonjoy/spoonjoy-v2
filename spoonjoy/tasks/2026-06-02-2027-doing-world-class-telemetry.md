@@ -172,7 +172,7 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 **Output**: Tests proving MCP telemetry includes response status, JSON-RPC error code when present, notification flag, and existing exception capture remains intact.
 **Acceptance**: Tests fail before implementation and prove no JSON-RPC body, params, bearer token, or stack trace appears in lifecycle events.
 
-### ⬜ Unit 5f: MCP Error/Notification Telemetry — Implementation
+### ✅ Unit 5f: MCP Error/Notification Telemetry — Implementation
 **What**: Extend MCP telemetry across JSON-RPC response/null/error branches while preserving existing `onError` exception capture.
 **Output**: MCP error and notification lifecycle telemetry.
 **Acceptance**: Unit 5e tests pass and existing MCP error tests still pass.
@@ -359,3 +359,4 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 - 2026-06-03 08:40 Unit 5d complete: MCP success lifecycle telemetry implemented with allowlisted JSON-RPC method/tool metadata; focused MCP tests, related telemetry regressions, typecheck, and build pass
 - 2026-06-03 08:41 Unit 5e started: MCP error and notification telemetry tests
 - 2026-06-03 08:42 Unit 5e complete: MCP notification/error telemetry tests fail red on missing 202 notification lifecycle capture
+- 2026-06-03 08:44 Unit 5f complete: MCP notification and JSON-RPC error lifecycle telemetry implemented while preserving exception capture; focused MCP tests, related telemetry regressions, typecheck, and build pass
