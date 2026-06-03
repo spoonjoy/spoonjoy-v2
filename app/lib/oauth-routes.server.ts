@@ -32,6 +32,30 @@ interface OAuthEnv {
   SPOONJOY_BASE_URL?: string;
 }
 
+export interface OAuthRegisterTelemetryMetadata {
+  clientId?: string;
+  errorCode?: string;
+  redirectUriCount?: number;
+  scopeCount?: number;
+}
+
+const oauthRegisterTelemetrySymbol = Symbol("spoonjoy.oauth.register.telemetry");
+
+export function withOAuthRegisterTelemetry(
+  response: Response,
+  metadata: OAuthRegisterTelemetryMetadata,
+): Response {
+  Object.defineProperty(response, oauthRegisterTelemetrySymbol, {
+    value: metadata,
+    enumerable: false,
+  });
+  return response;
+}
+
+export function oauthRegisterTelemetryFor(response: Response): OAuthRegisterTelemetryMetadata {
+  return (response as Response & { [oauthRegisterTelemetrySymbol]?: OAuthRegisterTelemetryMetadata })[oauthRegisterTelemetrySymbol] ?? {};
+}
+
 const MAX_OAUTH_JSON_BODY_BYTES = 16 * 1024;
 const MAX_OAUTH_FORM_BODY_BYTES = 8 * 1024;
 
@@ -203,40 +227,66 @@ function validateRegisterMetadata(body: RegisterBody): void {
   }
 }
 
+function registerTelemetryForBody(body: RegisterBody): OAuthRegisterTelemetryMetadata {
+  const redirectUriCount = Array.isArray(body.redirect_uris)
+    ? body.redirect_uris.filter((item) => typeof item === "string").length
+    : undefined;
+  const trimmedScope = typeof body.scope === "string" ? body.scope.trim() : "";
+  return {
+    redirectUriCount,
+    scopeCount: trimmedScope ? trimmedScope.split(/\s+/).length : undefined,
+  };
+}
+
 /** RFC 7591 Dynamic Client Registration. */
 export async function handleOAuthRegister(request: Request, db: Database): Promise<Response> {
   if (request.method !== "POST") {
-    return Response.json({ error: "invalid_request", error_description: "POST required" }, { status: 405 });
+    return withOAuthRegisterTelemetry(
+      Response.json({ error: "invalid_request", error_description: "POST required" }, { status: 405 }),
+      { errorCode: "invalid_request" },
+    );
   }
 
   let body: RegisterBody;
   try {
     body = await readLimitedJsonBody(request);
   } catch (error) {
-    if (error instanceof OAuthError) return oauthErrorResponse(error);
-    return Response.json({ error: "invalid_request", error_description: "Invalid JSON body" }, { status: 400 });
+    if (error instanceof OAuthError) {
+      return withOAuthRegisterTelemetry(oauthErrorResponse(error), { errorCode: error.code });
+    }
+    return withOAuthRegisterTelemetry(
+      Response.json({ error: "invalid_request", error_description: "Invalid JSON body" }, { status: 400 }),
+      { errorCode: "invalid_request" },
+    );
   }
 
   const redirectUris = Array.isArray(body.redirect_uris)
     ? body.redirect_uris.filter((u): u is string => typeof u === "string")
     : [];
   const clientName = typeof body.client_name === "string" ? body.client_name : null;
+  const telemetry = registerTelemetryForBody(body);
 
   try {
     validateRegisterMetadata(body);
     const client = await registerOAuthClient(db, { clientName, redirectUris });
-    return Response.json(
-      {
-        client_id: client.clientId,
-        client_name: client.clientName ?? undefined,
-        redirect_uris: client.redirectUris,
-        token_endpoint_auth_method: "none",
-        grant_types: ["authorization_code", "refresh_token"],
-        response_types: ["code"],
-      },
-      { status: 201 },
+    return withOAuthRegisterTelemetry(
+      Response.json(
+        {
+          client_id: client.clientId,
+          client_name: client.clientName ?? undefined,
+          redirect_uris: client.redirectUris,
+          token_endpoint_auth_method: "none",
+          grant_types: ["authorization_code", "refresh_token"],
+          response_types: ["code"],
+        },
+        { status: 201 },
+      ),
+      { ...telemetry, clientId: client.clientId },
     );
   } catch (error) {
+    if (error instanceof OAuthError) {
+      return withOAuthRegisterTelemetry(oauthErrorResponse(error), { ...telemetry, errorCode: error.code });
+    }
     return oauthErrorResponse(error);
   }
 }
