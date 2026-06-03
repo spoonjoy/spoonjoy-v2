@@ -152,3 +152,11 @@
   - `DEPLOY.md` now separates Worker secrets, optional Worker telemetry variables, and public build-time variables.
   - `README.md` now keeps `POSTHOG_KEY` out of the main secret command block and describes it as optional telemetry setup.
   - `test/scripts/deployment-preflight.test.ts` now asserts that `VITE_POSTHOG_*` values are not documented as `wrangler secret put` secrets and are present in the public build-time section.
+
+## 2026-06-03 10:20
+
+- Unit 8c fresh reviewer returned `FINDINGS`.
+- Major finding: the regression coverage excluded `VITE_POSTHOG_KEY` and `VITE_POSTHOG_DISABLED` from the `wrangler secret put` summary but forgot `VITE_POSTHOG_HOST`.
+- Remediation:
+  - `test/scripts/deployment-preflight.test.ts` now checks all three `VITE_POSTHOG_*` names for `wrangler secret put` absence, secrets-section absence, and public build-time section presence.
+  - The Unit 8c artifact wording now names all three variables instead of using an overbroad wildcard claim.

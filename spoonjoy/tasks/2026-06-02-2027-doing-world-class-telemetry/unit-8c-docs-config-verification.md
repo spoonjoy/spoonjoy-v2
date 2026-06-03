@@ -32,9 +32,10 @@ Remaining uncovered branches are existing helper/default edges at lines 86, 270,
 The Unit 8b reviewer found that `DEPLOY.md` listed `VITE_POSTHOG_KEY`, `VITE_POSTHOG_HOST`, and `VITE_POSTHOG_DISABLED` under the `wrangler secret put` secrets table. Unit 8c adds a regression assertion that:
 
 - `DEPLOY.md` does not document `wrangler secret put VITE_POSTHOG_KEY`
+- `DEPLOY.md` does not document `wrangler secret put VITE_POSTHOG_HOST`
 - `DEPLOY.md` does not document `wrangler secret put VITE_POSTHOG_DISABLED`
-- `VITE_POSTHOG_*` values are not in the `wrangler secret put` summary section
-- `VITE_POSTHOG_*` values are in the public build-time variables section
+- `VITE_POSTHOG_KEY`, `VITE_POSTHOG_HOST`, and `VITE_POSTHOG_DISABLED` are not in the `wrangler secret put` summary section
+- `VITE_POSTHOG_KEY`, `VITE_POSTHOG_HOST`, and `VITE_POSTHOG_DISABLED` are in the public build-time variables section
 
 ## Secret Safety
 
