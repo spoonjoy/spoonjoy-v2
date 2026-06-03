@@ -42,6 +42,10 @@ function expectMcpTelemetryEvent(input: {
   errorCode?: string;
   authMode: "anonymous" | "bearer" | "oauth_bearer";
   method?: string;
+  jsonRpcMethod?: string;
+  toolName?: string;
+  notification?: boolean;
+  jsonRpcErrorCode?: number;
   rateLimitScope?: string;
   forbidden?: readonly string[];
 }) {
@@ -54,6 +58,8 @@ function expectMcpTelemetryEvent(input: {
         : candidate.properties?.error_code === input.errorCode
     ) &&
     candidate.properties?.auth_mode === input.authMode &&
+    (input.jsonRpcMethod ? candidate.properties?.jsonrpc_method === input.jsonRpcMethod : true) &&
+    (input.toolName ? candidate.properties?.tool_name === input.toolName : true) &&
     (input.rateLimitScope ? candidate.properties?.rate_limit_scope === input.rateLimitScope : true)
   ));
 
@@ -71,6 +77,12 @@ function expectMcpTelemetryEvent(input: {
   });
 
   const properties = eventInput!.properties as Record<string, unknown>;
+  if (input.notification !== undefined) {
+    expect(properties.notification).toBe(input.notification);
+  }
+  if (input.jsonRpcErrorCode !== undefined) {
+    expect(properties.jsonrpc_error_code).toBe(input.jsonRpcErrorCode);
+  }
   if (input.rateLimitScope) {
     expect(properties.rate_limit_scope).toBe(input.rateLimitScope);
   } else {
@@ -445,6 +457,87 @@ describe("handleMcpHttpRequest", () => {
       jsonrpc_method: "tools/call",
       tool_name: "search_spoonjoy",
     });
+  });
+
+  it("captures safe MCP notification and JSON-RPC error telemetry while preserving exception capture", async () => {
+    const waitUntil = vi.fn((promise: Promise<unknown>) => {
+      void promise;
+    });
+    const cloudflareEnv = { POSTHOG_KEY: "ph_test", SPOONJOY_BASE_URL: "https://spoonjoy.app" };
+    const personal = await mintCredential({ scopes: ["kitchen:read", "kitchen:write"] });
+
+    const notificationResponse = await handleMcpHttpRequest({
+      request: rpcRequest({ jsonrpc: "2.0", method: "notifications/initialized" }, bearer(personal.token)),
+      db,
+      cloudflareEnv,
+      waitUntil,
+    });
+    expect(notificationResponse.status).toBe(202);
+    expectMcpTelemetryEvent({
+      status: 202,
+      authMode: "bearer",
+      jsonRpcMethod: "notifications/initialized",
+      notification: true,
+      forbidden: [personal.token, personal.credential.tokenPrefix, personal.user.email, personal.user.username],
+    });
+
+    const parseSecret = "raw-parse-error-secret";
+    const parseResponse = await handleMcpHttpRequest({
+      request: rpcRequest(`{"jsonrpc":"2.0","id":51,"method":"tools/call","params":{"name":"get_recipe","arguments":{"id":"${parseSecret}"}`),
+      db,
+      cloudflareEnv,
+      waitUntil,
+    });
+    expect(parseResponse.status).toBe(200);
+    const parseBody = await parseResponse.json() as { error: { code: number } };
+    expect(parseBody.error.code).toBe(-32700);
+    expectMcpTelemetryEvent({
+      status: 200,
+      errorCode: "jsonrpc_error",
+      authMode: "bearer",
+      jsonRpcErrorCode: -32700,
+      forbidden: [parseSecret, "tools/call", "get_recipe"],
+    });
+
+    const unknownToolSecret = "raw-unknown-tool-secret";
+    const unknownToolResponse = await handleMcpHttpRequest({
+      request: rpcRequest(init(52, "tools/call", {
+        name: "no_such_op",
+        arguments: { id: unknownToolSecret },
+      }), bearer(personal.token)),
+      db,
+      cloudflareEnv,
+      waitUntil,
+    });
+    expect(unknownToolResponse.status).toBe(200);
+    const unknownToolBody = await unknownToolResponse.json() as { error: { code: number; message: string } };
+    expect(unknownToolBody.error.code).toBe(-32602);
+    expect(captureException).toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: true, key: "ph_test" }),
+      expect.objectContaining({
+        distinctId: personal.user.id,
+        error: expect.any(Error),
+        route: "/mcp",
+        method: "POST",
+      }),
+    );
+    expectMcpTelemetryEvent({
+      status: 200,
+      errorCode: "jsonrpc_error",
+      authMode: "bearer",
+      jsonRpcMethod: "tools/call",
+      jsonRpcErrorCode: -32602,
+      forbidden: [
+        personal.token,
+        personal.credential.tokenPrefix,
+        personal.user.email,
+        personal.user.username,
+        unknownToolSecret,
+        "no_such_op",
+        unknownToolBody.error.message,
+      ],
+    });
+    expect(JSON.stringify(mcpTelemetryInputs())).not.toContain("No such tool");
   });
 
   // A tools/call with an unknown operation name throws from the API layer →
