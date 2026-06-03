@@ -207,7 +207,7 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 **Output**: Tests proving `spoonjoy.oauth.token` emits grant type, status/error code, client id when safely known, scope/resource when returned safely, latency, and safe request context.
 **Acceptance**: Tests fail before implementation and prove no authorization code, code verifier, access token, refresh token, token prefix, raw form body, or request body appears in telemetry.
 
-### ⬜ Unit 6f: OAuth Token/Refresh Telemetry — Implementation
+### 🔄 Unit 6f: OAuth Token/Refresh Telemetry — Implementation
 **What**: Instrument `app/routes/oauth.token.ts` for route-shell timing/rate-limit metadata and `app/lib/oauth-routes.server.ts` for token/refresh result/error metadata.
 **Output**: Safe OAuth token/refresh telemetry.
 **Acceptance**: Unit 6e tests pass and existing OAuth token tests still pass.
@@ -371,3 +371,4 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 - 2026-06-03 09:10 Unit 6d complete: OAuth authorize telemetry implemented for loader/action success, errors, decisions, and rate limits; focused tests, OAuth regressions, typecheck, and build pass
 - 2026-06-03 09:11 Unit 6e started: OAuth token/refresh telemetry tests
 - 2026-06-03 09:14 Unit 6e complete: OAuth token/refresh telemetry tests fail red on missing `spoonjoy.oauth.token` lifecycle capture
+- 2026-06-03 09:14 Unit 6f started: implement OAuth token/refresh telemetry
