@@ -4,11 +4,12 @@ import { faker } from "@faker-js/faker";
 
 vi.mock("~/lib/analytics-server", async (importOriginal) => ({
   ...(await importOriginal<typeof import("~/lib/analytics-server")>()),
+  captureEvent: vi.fn(async () => undefined),
   captureException: vi.fn(async () => undefined),
 }));
 
 import { handleMcpHttpRequest } from "~/lib/mcp/http-mcp.server";
-import { captureException } from "~/lib/analytics-server";
+import { captureEvent, captureException } from "~/lib/analytics-server";
 import { createApiCredential } from "~/lib/api-auth.server";
 import { getLocalDb } from "~/lib/db.server";
 import { cleanupDatabase } from "../../helpers/cleanup";
@@ -31,6 +32,55 @@ const init = (id: number, method: string, params?: unknown) => ({
   method,
   ...(params === undefined ? {} : { params }),
 });
+
+function mcpTelemetryInputs() {
+  return vi.mocked(captureEvent).mock.calls.map(([, input]) => input);
+}
+
+function expectMcpTelemetryEvent(input: {
+  status: number;
+  errorCode: string;
+  authMode: "anonymous" | "bearer" | "oauth_bearer";
+  method?: string;
+  rateLimitScope?: string;
+  forbidden?: readonly string[];
+}) {
+  const eventInput = mcpTelemetryInputs().find((candidate) => (
+    candidate.event === "spoonjoy.mcp.request" &&
+    candidate.properties?.status === input.status &&
+    candidate.properties?.error_code === input.errorCode &&
+    candidate.properties?.auth_mode === input.authMode &&
+    (input.rateLimitScope ? candidate.properties?.rate_limit_scope === input.rateLimitScope : true)
+  ));
+
+  expect(eventInput).toMatchObject({
+    event: "spoonjoy.mcp.request",
+    properties: {
+      route_template: "/mcp",
+      method: input.method ?? "POST",
+      status: input.status,
+      error_code: input.errorCode,
+      auth_mode: input.authMode,
+      request_bytes: expect.any(Number),
+      latency_ms: expect.any(Number),
+    },
+  });
+
+  const properties = eventInput!.properties as Record<string, unknown>;
+  if (input.rateLimitScope) {
+    expect(properties.rate_limit_scope).toBe(input.rateLimitScope);
+  } else {
+    expect(properties.rate_limit_scope).toBeUndefined();
+  }
+
+  const serialized = JSON.stringify(eventInput);
+  for (const forbidden of input.forbidden ?? []) {
+    expect(serialized).not.toContain(forbidden);
+  }
+  expect(serialized).not.toContain("Authorization");
+  expect(serialized).not.toContain("Bearer ");
+  return eventInput;
+}
 
 describe("handleMcpHttpRequest", () => {
   let db: Awaited<ReturnType<typeof getLocalDb>>;
@@ -203,6 +253,120 @@ describe("handleMcpHttpRequest", () => {
     }) as unknown as Request;
     const response = await handleMcpHttpRequest({ request, db, ipLimiter: denyingLimiter });
     expect(response.status).toBe(429);
+  });
+
+  it("captures safe MCP telemetry for auth failures, wrong-resource tokens, and rate limits", async () => {
+    const waitUntil = vi.fn((promise: Promise<unknown>) => {
+      void promise;
+    });
+    const cloudflareEnv = { POSTHOG_KEY: "ph_test", SPOONJOY_BASE_URL: "https://spoonjoy.app" };
+
+    const methodResponse = await handleMcpHttpRequest({
+      request: new UndiciRequest("https://spoonjoy.app/mcp", { method: "GET" }) as unknown as Request,
+      db,
+      cloudflareEnv,
+      waitUntil,
+    });
+    expect(methodResponse.status).toBe(405);
+    expectMcpTelemetryEvent({
+      status: 405,
+      errorCode: "method_not_allowed",
+      authMode: "anonymous",
+      method: "GET",
+    });
+
+    const bodySecret = "raw-mcp-argument-secret";
+    const unauthenticatedResponse = await handleMcpHttpRequest({
+      request: rpcRequest(init(41, "tools/call", {
+        name: "get_recipe",
+        arguments: { id: bodySecret },
+      })),
+      db,
+      cloudflareEnv,
+      waitUntil,
+    });
+    expect(unauthenticatedResponse.status).toBe(401);
+    expectMcpTelemetryEvent({
+      status: 401,
+      errorCode: "authentication_required",
+      authMode: "anonymous",
+      forbidden: [bodySecret, "tools/call", "get_recipe"],
+    });
+
+    const malformedToken = "sj_malformed_mcp_secret";
+    const malformedResponse = await handleMcpHttpRequest({
+      request: rpcRequest(init(42, "tools/list"), { Authorization: `Bearer ${malformedToken} extra` }),
+      db,
+      cloudflareEnv,
+      waitUntil,
+    });
+    expect(malformedResponse.status).toBe(401);
+    expectMcpTelemetryEvent({
+      status: 401,
+      errorCode: "malformed_authorization",
+      authMode: "anonymous",
+      forbidden: [malformedToken, "tools/list"],
+    });
+
+    const invalidToken = "sj_invalid_mcp_secret";
+    const invalidResponse = await handleMcpHttpRequest({
+      request: rpcRequest(init(43, "tools/list"), { Authorization: `Bearer ${invalidToken}` }),
+      db,
+      cloudflareEnv,
+      waitUntil,
+    });
+    expect(invalidResponse.status).toBe(401);
+    expectMcpTelemetryEvent({
+      status: 401,
+      errorCode: "invalid_token",
+      authMode: "anonymous",
+      forbidden: [invalidToken, "tools/list"],
+    });
+
+    const wrongResourceToken = await mintOAuthToken({ oauthResource: null });
+    const wrongResourceResponse = await handleMcpHttpRequest({
+      request: rpcRequest(init(44, "tools/list"), bearer(wrongResourceToken)),
+      db,
+      cloudflareEnv,
+      waitUntil,
+    });
+    expect(wrongResourceResponse.status).toBe(403);
+    const wrongResourceEvent = expectMcpTelemetryEvent({
+      status: 403,
+      errorCode: "invalid_token",
+      authMode: "oauth_bearer",
+      forbidden: [wrongResourceToken, "tools/list"],
+    });
+    expect(wrongResourceEvent!.properties).toMatchObject({
+      oauth_client_id: "oauth_client_1",
+      oauth_resource: null,
+    });
+
+    const rateLimitedToken = "sj_rate_limited_mcp_secret";
+    const denyingLimiter = {
+      limit: async ({ key }: { key: string }) => {
+        expect(key).toMatch(/^token:[a-f0-9]{64}$/);
+        return { success: false };
+      },
+    };
+    const rateLimitedResponse = await handleMcpHttpRequest({
+      request: rpcRequest(init(45, "tools/list"), {
+        Authorization: `Bearer ${rateLimitedToken}`,
+        "CF-Connecting-IP": "203.0.113.55",
+      }),
+      db,
+      cloudflareEnv,
+      waitUntil,
+      tokenLimiter: denyingLimiter,
+    });
+    expect(rateLimitedResponse.status).toBe(429);
+    expectMcpTelemetryEvent({
+      status: 429,
+      errorCode: "rate_limited",
+      authMode: "anonymous",
+      rateLimitScope: "token",
+      forbidden: [rateLimitedToken, "203.0.113.55", "tools/list"],
+    });
   });
 
   // A tools/call with an unknown operation name throws from the API layer →
