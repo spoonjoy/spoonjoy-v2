@@ -20,6 +20,14 @@ import { API_V1_PLAYGROUND_MANIFEST } from "~/lib/generated/api-v1-playground";
 import { createUserSessionCookie } from "~/lib/session.server";
 import { createTestRoutesStub } from "../utils";
 
+const { posthogCapture } = vi.hoisted(() => ({
+  posthogCapture: vi.fn(),
+}));
+
+vi.mock("@posthog/react", () => ({
+  usePostHog: () => ({ capture: posthogCapture }),
+}));
+
 type PlaygroundLoaderData = Awaited<ReturnType<typeof loader>>;
 
 function cookieHeader(setCookie: string) {
@@ -58,6 +66,7 @@ describe("/developers/playground", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    posthogCapture.mockClear();
   });
 
   it("is registered with API aliases before the legacy /api/* catch-all", () => {
@@ -177,6 +186,65 @@ describe("/developers/playground", () => {
     ]);
   });
 
+  it("captures safe playground view, surface, operation, and auth-mode telemetry from generated metadata", async () => {
+    await renderPlayground();
+
+    await waitFor(() => expect(posthogCapture).toHaveBeenCalledWith(
+      "spoonjoy.developer.playground.viewed",
+      expect.objectContaining({
+        page: "api_playground",
+        auth_status: "anonymous",
+        surface: "full",
+        operation_count: API_V1_PLAYGROUND_MANIFEST.operations.length,
+        operation_id: "GET /api/v1/recipes",
+        operation_group: "Recipes",
+        method: "GET",
+      }),
+    ));
+
+    fireEvent.click(screen.getByRole("radio", { name: "Connector" }));
+    expect(posthogCapture).toHaveBeenCalledWith(
+      "spoonjoy.developer.playground.surface_selected",
+      expect.objectContaining({
+        surface: "connector",
+        operation_count: API_V1_PLAYGROUND_MANIFEST.operations.filter((operation) => operation.profiles.includes("connector")).length,
+      }),
+    );
+
+    fireEvent.change(screen.getByLabelText(/Search operations/i), { target: { value: "cookbooks/{id}" } });
+    fireEvent.click(await screen.findByRole("button", { name: /Read one public cookbook/i }));
+    expect(posthogCapture).toHaveBeenCalledWith(
+      "spoonjoy.developer.playground.operation_selected",
+      expect.objectContaining({
+        operation_id: "GET /api/v1/cookbooks/{id}",
+        operation_group: "Cookbooks",
+        operation_kind: "read",
+        operation_risk: "safe",
+        method: "GET",
+        surface: "connector",
+      }),
+    );
+
+    fireEvent.click(screen.getByRole("radio", { name: "Bearer" }));
+    expect(posthogCapture).toHaveBeenCalledWith(
+      "spoonjoy.developer.playground.auth_mode_selected",
+      expect.objectContaining({
+        operation_id: "GET /api/v1/cookbooks/{id}",
+        operation_group: "Cookbooks",
+        auth_mode: "bearer",
+        auth_status: "anonymous",
+      }),
+    );
+
+    const serialized = JSON.stringify(posthogCapture.mock.calls);
+    expect(serialized).not.toContain("Authorization");
+    expect(serialized).not.toContain("Bearer ");
+    expect(serialized).not.toContain("sj_");
+    expect(serialized).not.toContain("?query=");
+    expect(serialized).not.toContain("request_body");
+    expect(serialized).not.toContain("response_body");
+  });
+
   it("builds request paths from path and query parameters", () => {
     const recipeSearch = PLAYGROUND_OPERATIONS.find((operation) => operation.id === "GET /api/v1/recipes")!;
     const recipeDetail = PLAYGROUND_OPERATIONS.find((operation) => operation.id === "GET /api/v1/recipes/{id}")!;
@@ -275,6 +343,121 @@ describe("/developers/playground", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send Request" }));
     expect(await screen.findByText("0 NETWORK ERROR")).toBeInTheDocument();
     expect(screen.getByText("offline")).toBeInTheDocument();
+  });
+
+  it("captures safe sign-in handoff telemetry without URL or token values", async () => {
+    await renderPlayground();
+
+    fireEvent.click(await screen.findByRole("radio", { name: "Session" }));
+    posthogCapture.mockClear();
+    fireEvent.click(screen.getByRole("link", { name: "Sign in" }));
+
+    expect(posthogCapture).toHaveBeenCalledWith(
+      "spoonjoy.developer.playground.sign_in_clicked",
+      expect.objectContaining({
+        operation_id: "GET /api/v1/recipes",
+        operation_group: "Recipes",
+        auth_mode: "session",
+        auth_status: "anonymous",
+      }),
+    );
+    const serialized = JSON.stringify(posthogCapture.mock.calls);
+    expect(serialized).not.toContain("/login?redirectTo=/api/playground");
+    expect(serialized).not.toContain("https://spoonjoy.app");
+    expect(serialized).not.toContain("sj_");
+    expect(serialized).not.toContain("code_verifier");
+    expect(serialized).not.toContain("state_");
+  });
+
+  it("captures safe request and response telemetry without query, body, token, or response payloads", async () => {
+    const fetchMock = vi.fn(async () => mockApiResponse({
+      ok: true,
+      requestId: "req_playground",
+      data: { recipes: [{ id: "recipe_1", title: "Private pasta" }] },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await renderPlayground();
+    await screen.findByRole("heading", { name: "Spoonjoy API Playground" });
+    posthogCapture.mockClear();
+    fireEvent.change(screen.getByLabelText(/Query/), { target: { value: "private pasta" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send Request" }));
+
+    await waitFor(() => expect(posthogCapture).toHaveBeenCalledWith(
+      "spoonjoy.developer.playground.request_submitted",
+      expect.objectContaining({
+        operation_id: "GET /api/v1/recipes",
+        operation_group: "Recipes",
+        method: "GET",
+        auth_mode: "anonymous",
+        request_body_present: false,
+        validation_error_count: 0,
+      }),
+    ));
+    await waitFor(() => expect(posthogCapture).toHaveBeenCalledWith(
+      "spoonjoy.developer.playground.response_received",
+      expect.objectContaining({
+        operation_id: "GET /api/v1/recipes",
+        operation_group: "Recipes",
+        method: "GET",
+        auth_mode: "anonymous",
+        outcome: "success",
+        response_status: 200,
+        response_status_class: "2xx",
+        latency_bucket: expect.any(String),
+      }),
+    ));
+
+    fetchMock.mockResolvedValueOnce(mockApiResponse({
+      ok: true,
+      requestId: "req_token",
+      data: {
+        token: "sj_secret_token_value",
+        credential: { id: "cred_1" },
+      },
+    }, { status: 201, statusText: "Created" }));
+    posthogCapture.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: /Create a bearer credential/i }));
+    fireEvent.change(screen.getByLabelText("JSON body"), {
+      target: { value: "{\"name\":\"Kitchen secret token\",\"clientMutationId\":\"secret-mutation\",\"scopes\":[\"recipes:read\"]}" },
+    });
+    fireEvent.click(screen.getByLabelText(/I understand this request can change real Spoonjoy data/i));
+    fireEvent.click(screen.getByRole("button", { name: "Send Request" }));
+
+    await waitFor(() => expect(posthogCapture).toHaveBeenCalledWith(
+      "spoonjoy.developer.playground.request_submitted",
+      expect.objectContaining({
+        operation_id: "POST /api/v1/tokens",
+        operation_group: "Tokens",
+        method: "POST",
+        auth_mode: "session",
+        request_body_present: true,
+      }),
+    ));
+    await waitFor(() => expect(posthogCapture).toHaveBeenCalledWith(
+      "spoonjoy.developer.playground.response_received",
+      expect.objectContaining({
+        operation_id: "POST /api/v1/tokens",
+        operation_group: "Tokens",
+        method: "POST",
+        auth_mode: "session",
+        outcome: "success",
+        response_status: 201,
+        response_status_class: "2xx",
+      }),
+    ));
+
+    const serialized = JSON.stringify(posthogCapture.mock.calls);
+    expect(serialized).not.toContain("private pasta");
+    expect(serialized).not.toContain("?query=");
+    expect(serialized).not.toContain("req_playground");
+    expect(serialized).not.toContain("req_token");
+    expect(serialized).not.toContain("Kitchen secret token");
+    expect(serialized).not.toContain("secret-mutation");
+    expect(serialized).not.toContain("clientMutationId");
+    expect(serialized).not.toContain("sj_secret_token_value");
+    expect(serialized).not.toContain("Authorization");
+    expect(serialized).not.toContain("response_body");
   });
 
   it("reflects a signed-in Spoonjoy session after returning from login", async () => {

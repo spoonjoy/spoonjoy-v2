@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import routes from "~/routes";
 import Developers, { loader, meta } from "~/routes/developers";
 import {
@@ -7,9 +7,22 @@ import {
   API_V1_RESOURCES,
   API_V1_SCOPE_REQUIREMENTS,
 } from "~/lib/api-v1-contract.server";
+import { API_V1_PLAYGROUND_MANIFEST } from "~/lib/generated/api-v1-playground";
 import { createTestRoutesStub } from "../utils";
 
+const { posthogCapture } = vi.hoisted(() => ({
+  posthogCapture: vi.fn(),
+}));
+
+vi.mock("@posthog/react", () => ({
+  usePostHog: () => ({ capture: posthogCapture }),
+}));
+
 describe("/developers route", () => {
+  afterEach(() => {
+    posthogCapture.mockClear();
+  });
+
   it("is registered as the public developer docs page", () => {
     const routeConfig = JSON.stringify(routes);
 
@@ -81,6 +94,33 @@ describe("/developers route", () => {
       },
       { name: "twitter:image", content: "https://local.spoonjoy.test/og/pages/api.png" },
     ]);
+  });
+
+  it("captures a safe docs view event without leaking docs prose or URLs", async () => {
+    const data = loader({} as any);
+    const Stub = createTestRoutesStub([
+      { path: "/developers", Component: Developers, loader: () => data },
+    ]);
+
+    render(<Stub initialEntries={["/developers"]} />);
+
+    await waitFor(() => expect(posthogCapture).toHaveBeenCalledWith(
+      "spoonjoy.developer.docs.viewed",
+      expect.objectContaining({
+        page: "api_docs",
+        operation_count: API_V1_PLAYGROUND_MANIFEST.operations.length,
+        auth_flow_count: API_V1_PLAYGROUND_MANIFEST.authFlows.length,
+        client_scenario_count: API_V1_PLAYGROUND_MANIFEST.clientScenarios.length,
+      }),
+    ));
+    const serialized = JSON.stringify(posthogCapture.mock.calls);
+    expect(serialized).not.toContain("grant_type=password");
+    expect(serialized).not.toContain("https://spoonjoy.app/api/playground");
+    expect(serialized).not.toContain("sj_");
+    expect(serialized).not.toContain("clientMutationId");
+    expect(serialized).not.toContain("Authorization");
+    expect(serialized).not.toContain("query=");
+    expect(serialized).not.toContain("body");
   });
 
   it("renders the API reference, auth model, and integration guidance without Pebble-specific framing", async () => {
