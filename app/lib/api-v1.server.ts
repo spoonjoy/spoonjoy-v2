@@ -1,4 +1,5 @@
 import type { ApiCredential } from "@prisma/client";
+import type { AppLoadContext } from "react-router";
 import {
   ApiAuthError,
   authenticateApiRequest,
@@ -52,12 +53,7 @@ type ApiV1WriteDb = ApiV1Db;
 export interface ApiV1RouteArgs {
   request: Request;
   params: { "*": string };
-  context: {
-    cloudflare?: {
-      env?: Env | null;
-      ctx?: Pick<ExecutionContext, "waitUntil"> | null;
-    };
-  };
+  context: AppLoadContext;
 }
 
 export class ApiV1Error extends Error {

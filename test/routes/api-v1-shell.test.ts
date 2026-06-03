@@ -109,7 +109,7 @@ describe("/api/v1 shell", () => {
       context: {
         cloudflare: {
           env: null,
-          ctx: { waitUntil },
+          ctx: { waitUntil, passThroughOnException: vi.fn() },
         },
       },
     } satisfies ApiV1RouteArgs;
@@ -128,7 +128,7 @@ describe("/api/v1 shell", () => {
       context: {
         cloudflare: {
           env: null,
-          ctx: { waitUntil },
+          ctx: { waitUntil, passThroughOnException: vi.fn() },
         },
       },
     } satisfies ApiV1RouteArgs;
