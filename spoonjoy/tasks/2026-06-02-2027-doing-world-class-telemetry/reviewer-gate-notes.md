@@ -11,3 +11,12 @@
   - Planning and doing completion criteria remain unchecked because no implementation evidence exists yet.
   - The developer docs/playground client telemetry gap found locally was added to both planning and doing docs before execution.
 - User repeatedly approved continuing with "go on" on 2026-06-03, so execution proceeded with this limitation recorded rather than blocking indefinitely on reviewer-service rate limits.
+
+## 2026-06-03 07:42
+
+- Unit 3b fresh reviewer returned `FINDINGS`.
+- Major finding: Unit 3b public/discovery telemetry already emitted authenticated principal metadata on optional public routes, while Unit 3c/3d reserve authenticated metadata for a later red-test gate.
+- Remediation path:
+  - Constrain Unit 3b public/discovery telemetry to anonymous/public metadata while preserving authorization behavior and response wire format.
+  - Add supplemental Unit 3c red coverage for authenticated optional public reads.
+  - Reintroduce authenticated metadata in Unit 3d under the now-explicit test contract.

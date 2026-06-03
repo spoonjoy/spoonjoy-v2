@@ -1456,13 +1456,13 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
 
     const path = args.params["*"] ?? "";
     if (args.request.method === "GET" && path === "") {
-      const principal = await authorizeApiV1Route(args, path);
+      await authorizeApiV1Route(args, path);
       return observeApiV1Response(args, {
         requestId,
         path,
         response: apiV1Success(requestId, API_V1_DISCOVERY_DATA),
         startedAt,
-        principal,
+        principal: null,
       });
     }
 
@@ -1478,56 +1478,56 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
       const response = principal
         ? apiV1PrivateSuccess(requestId, health)
         : apiV1Success(requestId, health);
-      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal: null });
     }
 
     if (args.request.method === "GET" && path === "openapi.json") {
-      const principal = await authorizeApiV1Route(args, path);
+      await authorizeApiV1Route(args, path);
       const response = Response.json(buildApiV1OpenApiDocument({ serverUrl: publicOrigin(args) }), {
         headers: apiV1Headers(requestId),
       });
-      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal: null });
     }
 
     if (args.request.method === "GET" && path === "openapi.connector.json") {
-      const principal = await authorizeApiV1Route(args, path);
+      await authorizeApiV1Route(args, path);
       const response = Response.json(buildApiV1ConnectorOpenApiDocument({ serverUrl: publicOrigin(args) }), {
         headers: apiV1Headers(requestId),
       });
-      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal: null });
     }
 
     if (args.request.method === "GET" && path === "openapi.sdk.json") {
-      const principal = await authorizeApiV1Route(args, path);
+      await authorizeApiV1Route(args, path);
       const response = Response.json(buildApiV1SdkOpenApiDocument({ serverUrl: publicOrigin(args) }), {
         headers: apiV1Headers(requestId),
       });
-      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal: null });
     }
 
     if (args.request.method === "GET" && path === "recipes") {
       const principal = await authorizeApiV1Route(args, path);
       const response = await handleRecipeList(args, requestId, principal);
-      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal: null });
     }
 
     const segments = path.split("/").filter(Boolean);
     if (args.request.method === "GET" && segments[0] === "recipes" && segments.length === 2) {
       const principal = await authorizeApiV1Route(args, path);
       const response = await handleRecipeDetail(args, requestId, principal, segments[1]);
-      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal: null });
     }
 
     if (args.request.method === "GET" && path === "cookbooks") {
       const principal = await authorizeApiV1Route(args, path);
       const response = await handleCookbookList(args, requestId, principal);
-      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal: null });
     }
 
     if (args.request.method === "GET" && segments[0] === "cookbooks" && segments.length === 2) {
       const principal = await authorizeApiV1Route(args, path);
       const response = await handleCookbookDetail(args, requestId, principal, segments[1]);
-      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal: null });
     }
 
     if (args.request.method === "GET" && path === "shopping-list") {
