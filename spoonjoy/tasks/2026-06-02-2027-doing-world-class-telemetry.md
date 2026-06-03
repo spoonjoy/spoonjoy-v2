@@ -277,7 +277,7 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 **Output**: Secret presence verification through `wrangler secret list` and build-env setup notes, with no secret value printed or committed.
 **Acceptance**: `wrangler secret list` shows `POSTHOG_KEY` when a key is available; otherwise `setup-notes.md` states the remaining external setup blocker.
 
-### ⬜ Unit 9a: Final Verification
+### 🔄 Unit 9a: Final Verification
 **What**: Run `pnpm run typecheck`, all focused telemetry-related tests, full `pnpm exec vitest run`, and `pnpm run build`.
 **Output**: Final verification command summaries saved in `spoonjoy/tasks/2026-06-02-2027-doing-world-class-telemetry/final-verification.md`.
 **Acceptance**: All checks pass with no warnings, no secret values appear in output or artifacts, and `final-verification.md` explicitly states whether Unit 8d completed or remains blocked by unavailable PostHog key access.
@@ -400,3 +400,4 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 - 2026-06-03 10:19 Unit 8c complete: fixed reviewer docs-channel finding, added regression coverage for public Vite build vars vs Worker secrets, verified preflight output is secret-safe, and recorded targeted deployment-preflight coverage
 - 2026-06-03 10:20 Unit 8d started: verify PostHog Cloudflare secret and production build-time client env without printing values
 - 2026-06-03 10:22 Unit 8d complete: Cloudflare secret names and local build env names checked without printing values; `POSTHOG_KEY`/`VITE_POSTHOG_KEY` are unavailable, so setup-notes record the remaining external PostHog key step and telemetry remains disabled by default
+- 2026-06-03 10:23 Unit 9a started: final typecheck, focused telemetry tests, full Vitest, build, and secret scan
