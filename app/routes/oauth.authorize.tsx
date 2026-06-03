@@ -4,10 +4,20 @@ import { getRequestDb } from "~/lib/route-platform.server";
 import {
   handleOAuthAuthorizeAction,
   loadOAuthAuthorize,
+  oauthAuthorizeTelemetryFor,
+  oauthAuthorizeTelemetryForRequest,
   type AuthorizeRequestParams,
   type AuthorizeView,
+  type OAuthAuthorizeTelemetryMetadata,
 } from "~/lib/oauth-routes.server";
-import { enforceRateLimit, rateLimitedResponse } from "~/lib/rate-limit.server";
+import { enforceRateLimit, rateLimitedResponse, type RateLimitScope } from "~/lib/rate-limit.server";
+import {
+  captureEvent,
+  requestContentBytes,
+  resolvePostHogServerConfig,
+  safeHeaderHost,
+  userAgentFamily,
+} from "~/lib/analytics-server";
 import { AuthLayout } from "~/components/ui/auth-layout";
 import { Heading } from "~/components/ui/heading";
 import { Button } from "~/components/ui/button";
@@ -21,26 +31,131 @@ async function checkAuthorizeRateLimit(request: Request, env: { API_IP_RATE_LIMI
     ip: request.headers.get("CF-Connecting-IP"),
     ipLimiter: env?.API_IP_RATE_LIMITER as Parameters<typeof enforceRateLimit>[0]["ipLimiter"],
   });
-  if (!rateLimit.allowed) return rateLimitedResponse(rateLimit.retryAfterSeconds);
+  if (!rateLimit.allowed) {
+    return {
+      response: rateLimitedResponse(rateLimit.retryAfterSeconds),
+      scope: rateLimit.scope,
+    };
+  }
   return null;
 }
 
+function observeOAuthAuthorizeResult(
+  args: Pick<Route.LoaderArgs, "context" | "request">,
+  input: {
+    phase: "loader" | "action";
+    response: Response;
+    startedAt: number;
+    telemetry?: OAuthAuthorizeTelemetryMetadata;
+    rateLimitScope?: RateLimitScope;
+  },
+): Response {
+  const cloudflare = args.context.cloudflare;
+  const env = cloudflare?.env;
+  const waitUntil = cloudflare?.ctx?.waitUntil ? cloudflare.ctx.waitUntil.bind(cloudflare.ctx) : undefined;
+  if (!env || !waitUntil) return input.response;
+
+  const postHogConfig = resolvePostHogServerConfig(env);
+  if (!postHogConfig.enabled) return input.response;
+
+  const telemetry = { ...oauthAuthorizeTelemetryFor(input.response), ...input.telemetry };
+  waitUntil(captureEvent(postHogConfig, {
+    event: "spoonjoy.oauth.authorize",
+    distinctId: telemetry.principalId ?? telemetry.clientId ?? "anon",
+    properties: {
+      route_template: "/oauth/authorize",
+      phase: input.phase,
+      method: args.request.method,
+      status: input.response.status,
+      outcome: telemetry.outcome ?? (input.response.status >= 400 ? "error" : undefined),
+      client_id: telemetry.clientId,
+      principal_id: telemetry.principalId,
+      decision: telemetry.decision,
+      error_code: telemetry.errorCode,
+      state_class: telemetry.stateClass,
+      scope: telemetry.scope,
+      resource: telemetry.resource,
+      request_bytes: requestContentBytes(args.request),
+      origin_host: safeHeaderHost(args.request.headers.get("Origin")),
+      referrer_host: safeHeaderHost(args.request.headers.get("Referer")),
+      user_agent_family: userAgentFamily(args.request.headers.get("User-Agent")),
+      rate_limit_scope: input.rateLimitScope,
+      latency_ms: Math.max(0, Date.now() - input.startedAt),
+    },
+  }));
+
+  return input.response;
+}
+
+function observeOAuthAuthorizeView(
+  args: Pick<Route.LoaderArgs, "context" | "request">,
+  input: {
+    view: AuthorizeView;
+    startedAt: number;
+  },
+): AuthorizeView {
+  observeOAuthAuthorizeResult(args, {
+    phase: "loader",
+    response: new Response(null, { status: 200 }),
+    startedAt: input.startedAt,
+    telemetry: oauthAuthorizeTelemetryFor(input.view),
+  });
+  return input.view;
+}
+
 export async function loader({ request, context }: Route.LoaderArgs) {
+  const startedAt = Date.now();
   const limited = await checkAuthorizeRateLimit(request, context.cloudflare?.env);
-  if (limited) throw limited;
+  if (limited) {
+    throw observeOAuthAuthorizeResult({ request, context }, {
+      phase: "loader",
+      response: limited.response,
+      startedAt,
+      telemetry: {
+        ...(await oauthAuthorizeTelemetryForRequest(request, "loader")),
+        outcome: "rate_limited",
+        errorCode: "rate_limited",
+      },
+      rateLimitScope: limited.scope,
+    });
+  }
   const db = await getRequestDb(context);
   const result = await loadOAuthAuthorize(request, db, context.cloudflare?.env);
   // Redirects (login gate / error back to the client) are thrown so React
   // Router performs them; consent/error views are returned for rendering.
-  if (result instanceof Response) throw result;
-  return result;
+  if (result instanceof Response) {
+    throw observeOAuthAuthorizeResult({ request, context }, {
+      phase: "loader",
+      response: result,
+      startedAt,
+    });
+  }
+  return observeOAuthAuthorizeView({ request, context }, { view: result, startedAt });
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
+  const startedAt = Date.now();
   const limited = await checkAuthorizeRateLimit(request, context.cloudflare?.env);
-  if (limited) return limited;
+  if (limited) {
+    return observeOAuthAuthorizeResult({ request, context }, {
+      phase: "action",
+      response: limited.response,
+      startedAt,
+      telemetry: {
+        ...(await oauthAuthorizeTelemetryForRequest(request, "action")),
+        outcome: "rate_limited",
+        errorCode: "rate_limited",
+      },
+      rateLimitScope: limited.scope,
+    });
+  }
   const db = await getRequestDb(context);
-  return handleOAuthAuthorizeAction(request, db, context.cloudflare?.env);
+  const response = await handleOAuthAuthorizeAction(request, db, context.cloudflare?.env);
+  return observeOAuthAuthorizeResult({ request, context }, {
+    phase: "action",
+    response,
+    startedAt,
+  });
 }
 
 const SCOPE_LABELS: Record<string, string> = {

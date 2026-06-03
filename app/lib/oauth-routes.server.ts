@@ -420,6 +420,38 @@ export type AuthorizeView =
   | { kind: "consent"; clientName: string | null; scope: string; params: AuthorizeRequestParams }
   | { kind: "error"; message: string };
 
+type OAuthAuthorizeStateClass = "missing" | "short" | "present" | "unknown";
+
+export interface OAuthAuthorizeTelemetryMetadata {
+  outcome?: "login_redirect" | "consent" | "client_error" | "redirect_error" | "approved" | "denied" | "rate_limited" | "error";
+  clientId?: string;
+  principalId?: string;
+  decision?: "approve" | "deny" | "other";
+  errorCode?: string;
+  stateClass?: OAuthAuthorizeStateClass;
+  scope?: string;
+  resource?: string;
+}
+
+const oauthAuthorizeTelemetrySymbol = Symbol("spoonjoy.oauth.authorize.telemetry");
+
+export function withOAuthAuthorizeTelemetry<T extends AuthorizeView | Response>(
+  target: T,
+  metadata: OAuthAuthorizeTelemetryMetadata,
+): T {
+  Object.defineProperty(target, oauthAuthorizeTelemetrySymbol, {
+    value: metadata,
+    enumerable: false,
+  });
+  return target;
+}
+
+export function oauthAuthorizeTelemetryFor(target: AuthorizeView | Response): OAuthAuthorizeTelemetryMetadata {
+  return (target as (AuthorizeView | Response) & {
+    [oauthAuthorizeTelemetrySymbol]?: OAuthAuthorizeTelemetryMetadata;
+  })[oauthAuthorizeTelemetrySymbol] ?? {};
+}
+
 function readAuthorizeParams(source: URLSearchParams | FormData): AuthorizeRequestParams {
   const get = (name: string) => (source.get(name) ?? "").toString();
   return {
@@ -434,6 +466,45 @@ function readAuthorizeParams(source: URLSearchParams | FormData): AuthorizeReque
   };
 }
 
+function authorizeStateClass(state: string): OAuthAuthorizeStateClass {
+  const trimmed = state.trim();
+  if (!trimmed) return "missing";
+  if (trimmed.length < 16) return "short";
+  return "present";
+}
+
+export async function oauthAuthorizeTelemetryForRequest(
+  request: Request,
+  phase: "loader" | "action",
+): Promise<OAuthAuthorizeTelemetryMetadata> {
+  try {
+    if (phase !== "loader") return { stateClass: "unknown" };
+    const params = readAuthorizeParams(new URL(request.url).searchParams);
+    return { stateClass: authorizeStateClass(params.state) };
+  } catch {
+    return { stateClass: "unknown" };
+  }
+}
+
+function validatedAuthorizeTelemetry(
+  params: AuthorizeRequestParams,
+  validation: { scope: string; resource: string | null },
+  principalId?: string,
+): OAuthAuthorizeTelemetryMetadata {
+  return {
+    clientId: params.clientId,
+    principalId,
+    stateClass: authorizeStateClass(params.state),
+    scope: validation.scope,
+    resource: validation.resource ?? undefined,
+  };
+}
+
+function authorizeDecision(value: string): "approve" | "deny" | "other" {
+  if (value === "approve" || value === "deny") return value;
+  return "other";
+}
+
 /**
  * Validate the client + redirect URI before we trust them enough to redirect
  * back to. A bad client/redirect surfaces an on-site error (never an open
@@ -442,11 +513,18 @@ function readAuthorizeParams(source: URLSearchParams | FormData): AuthorizeReque
 async function validateClientRedirect(
   db: Database,
   params: AuthorizeRequestParams,
-): Promise<{ ok: true; clientName: string | null } | { ok: false; message: string }> {
+): Promise<
+  | { ok: true; clientName: string | null }
+  | { ok: false; code: "invalid_client" | "invalid_redirect_uri"; message: string }
+> {
   const client = await getOAuthClient(db, params.clientId);
-  if (!client) return { ok: false, message: "Unknown OAuth client." };
+  if (!client) return { ok: false, code: "invalid_client", message: "Unknown OAuth client." };
   if (!params.redirectUri || !clientAllowsRedirect(client, params.redirectUri)) {
-    return { ok: false, message: "The redirect URI is not registered for this client." };
+    return {
+      ok: false,
+      code: "invalid_redirect_uri",
+      message: "The redirect URI is not registered for this client.",
+    };
   }
   return { ok: true, clientName: client.clientName };
 }
@@ -475,11 +553,11 @@ async function validateAuthorizeRequest(
   params: AuthorizeRequestParams,
 ): Promise<
   | { ok: true; clientName: string | null; scope: string; resource: string | null }
-  | { ok: false; kind: "local"; message: string }
-  | { ok: false; kind: "redirect"; code: string }
+  | { ok: false; kind: "local"; code: string; message: string }
+  | { ok: false; kind: "redirect"; code: string; resource?: string | null }
 > {
   const validation = await validateClientRedirect(db, params);
-  if (!validation.ok) return { ok: false, kind: "local", message: validation.message };
+  if (!validation.ok) return { ok: false, kind: "local", code: validation.code, message: validation.message };
   if (params.responseType !== "code") return { ok: false, kind: "redirect", code: "unsupported_response_type" };
   if (params.state.trim().length < 16) return { ok: false, kind: "redirect", code: "invalid_request" };
   if (params.codeChallengeMethod !== "S256" || !validS256CodeChallenge(params.codeChallenge)) {
@@ -490,7 +568,7 @@ async function validateAuthorizeRequest(
   try {
     return { ok: true, clientName: validation.clientName, scope: normalizeScope(params.scope), resource };
   } catch {
-    return { ok: false, kind: "redirect", code: "invalid_scope" };
+    return { ok: false, kind: "redirect", code: "invalid_scope", resource };
   }
 }
 
@@ -507,24 +585,56 @@ export async function loadOAuthAuthorize(
   const params = readAuthorizeParams(url.searchParams);
 
   const validation = await validateAuthorizeRequest(request, db, env, params);
-  if (!validation.ok && validation.kind === "local") return { kind: "error", message: validation.message };
-  if (!validation.ok) return redirectBackWithError(params, validation.code);
+  if (!validation.ok && validation.kind === "local") {
+    return withOAuthAuthorizeTelemetry(
+      { kind: "error", message: validation.message },
+      {
+        outcome: "client_error",
+        errorCode: validation.code,
+        stateClass: authorizeStateClass(params.state),
+      },
+    );
+  }
+  if (!validation.ok) {
+    return withOAuthAuthorizeTelemetry(
+      redirectBackWithError(params, validation.code),
+      {
+        outcome: "redirect_error",
+        clientId: params.clientId,
+        errorCode: validation.code,
+        stateClass: authorizeStateClass(params.state),
+        resource: validation.resource ?? undefined,
+      },
+    );
+  }
 
   const userId = await getUserId(request, env);
   if (!userId) {
     const returnTo = `${url.pathname}${url.search}`;
-    return new Response(null, {
-      status: 302,
-      headers: { Location: `/login?redirectTo=${encodeURIComponent(returnTo)}` },
-    });
+    return withOAuthAuthorizeTelemetry(
+      new Response(null, {
+        status: 302,
+        headers: { Location: `/login?redirectTo=${encodeURIComponent(returnTo)}` },
+      }),
+      {
+        ...validatedAuthorizeTelemetry(params, validation),
+        outcome: "login_redirect",
+      },
+    );
   }
 
-  return {
-    kind: "consent",
-    clientName: validation.clientName,
-    scope: validation.scope,
-    params: { ...params, scope: validation.scope, resource: validation.resource ?? "" },
-  };
+  return withOAuthAuthorizeTelemetry(
+    {
+      kind: "consent",
+      clientName: validation.clientName,
+      scope: validation.scope,
+      params: { ...params, scope: validation.scope, resource: validation.resource ?? "" },
+    },
+    {
+      ...validatedAuthorizeTelemetry(params, validation, userId),
+      outcome: "consent",
+    },
+  );
 }
 
 /**
@@ -537,25 +647,64 @@ export async function handleOAuthAuthorizeAction(
   env: OAuthEnv | null | undefined,
 ): Promise<Response> {
   const crossOrigin = crossOriginConsentResponse(request);
-  if (crossOrigin) return crossOrigin;
+  if (crossOrigin) {
+    return withOAuthAuthorizeTelemetry(crossOrigin, {
+      outcome: "error",
+      errorCode: "invalid_request",
+      stateClass: "unknown",
+    });
+  }
 
   let form: URLSearchParams;
   try {
     form = await readLimitedFormBody(request);
   } catch (error) {
-    if (error instanceof OAuthError) return oauthErrorResponse(error);
-    return Response.json({ error: "invalid_request", error_description: "Invalid form body" }, { status: 400 });
+    if (error instanceof OAuthError) {
+      return withOAuthAuthorizeTelemetry(oauthErrorResponse(error), {
+        outcome: "error",
+        errorCode: error.code,
+        stateClass: "unknown",
+      });
+    }
+    return withOAuthAuthorizeTelemetry(
+      Response.json({ error: "invalid_request", error_description: "Invalid form body" }, { status: 400 }),
+      {
+        outcome: "error",
+        errorCode: "invalid_request",
+        stateClass: "unknown",
+      },
+    );
   }
   const params = readAuthorizeParams(form);
   const decision = (form.get("decision") ?? "").toString();
+  const userId = await getUserId(request, env);
 
   const validation = await validateAuthorizeRequest(request, db, env, params);
   if (!validation.ok && validation.kind === "local") {
-    return Response.json({ error: "invalid_request", error_description: validation.message }, { status: 400 });
+    return withOAuthAuthorizeTelemetry(
+      Response.json({ error: "invalid_request", error_description: validation.message }, { status: 400 }),
+      {
+        outcome: "client_error",
+        errorCode: validation.code,
+        principalId: userId || undefined,
+        stateClass: authorizeStateClass(params.state),
+      },
+    );
   }
-  if (!validation.ok) return redirectBackWithError(params, validation.code);
+  if (!validation.ok) {
+    return withOAuthAuthorizeTelemetry(
+      redirectBackWithError(params, validation.code),
+      {
+        outcome: "redirect_error",
+        clientId: params.clientId,
+        principalId: userId || undefined,
+        errorCode: validation.code,
+        stateClass: authorizeStateClass(params.state),
+        resource: validation.resource ?? undefined,
+      },
+    );
+  }
 
-  const userId = await getUserId(request, env);
   if (!userId) {
     const returnTo = `/oauth/authorize?${new URLSearchParams({
       client_id: params.clientId,
@@ -567,14 +716,28 @@ export async function handleOAuthAuthorizeAction(
       state: params.state,
       resource: params.resource,
     })}`;
-    return new Response(null, {
-      status: 302,
-      headers: { Location: `/login?redirectTo=${encodeURIComponent(returnTo)}` },
-    });
+    return withOAuthAuthorizeTelemetry(
+      new Response(null, {
+        status: 302,
+        headers: { Location: `/login?redirectTo=${encodeURIComponent(returnTo)}` },
+      }),
+      {
+        ...validatedAuthorizeTelemetry(params, validation),
+        outcome: "login_redirect",
+      },
+    );
   }
 
   if (decision !== "approve") {
-    return redirectBackWithError(params, "access_denied");
+    return withOAuthAuthorizeTelemetry(
+      redirectBackWithError(params, "access_denied"),
+      {
+        ...validatedAuthorizeTelemetry(params, validation, userId),
+        outcome: "denied",
+        decision: authorizeDecision(decision),
+        errorCode: "access_denied",
+      },
+    );
   }
 
   const code = await createAuthorizationCode(db, {
@@ -589,5 +752,12 @@ export async function handleOAuthAuthorizeAction(
   const url = new URL(params.redirectUri);
   url.searchParams.set("code", code);
   if (params.state) url.searchParams.set("state", params.state);
-  return new Response(null, { status: 302, headers: { Location: url.toString() } });
+  return withOAuthAuthorizeTelemetry(
+    new Response(null, { status: 302, headers: { Location: url.toString() } }),
+    {
+      ...validatedAuthorizeTelemetry(params, validation, userId),
+      outcome: "approved",
+      decision: "approve",
+    },
+  );
 }

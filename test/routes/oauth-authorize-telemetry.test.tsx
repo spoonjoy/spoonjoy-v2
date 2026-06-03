@@ -335,7 +335,7 @@ describe("OAuth authorize telemetry", () => {
       status: 429,
       outcome: "rate_limited",
       errorCode: "rate_limited",
-      stateClass: "present",
+      stateClass: "unknown",
       rateLimitScope: "ip",
       forbidden: ["203.0.113.8", REDIRECT_URI, codeChallenge, rateLimitedBody.toString()],
     });
