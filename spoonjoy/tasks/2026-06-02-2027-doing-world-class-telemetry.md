@@ -142,7 +142,7 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 **Output**: Best-effort legacy API lifecycle telemetry for REST/MCP bootstrap operations routed through `/api/*`.
 **Acceptance**: Legacy API telemetry tests pass and existing route-shell tests still pass.
 
-### 🔄 Unit 4c: Legacy API Telemetry — Coverage & Refactor
+### ✅ Unit 4c: Legacy API Telemetry — Coverage & Refactor
 **What**: Run focused legacy route tests. Refactor only within `app/routes/api.$.ts` and `app/lib/analytics-server.ts`; any new cross-surface helper file or broader extraction requires updating this doing doc first.
 **Output**: Covered legacy API telemetry with shared helpers where they reduce real duplication.
 **Acceptance**: Focused legacy API tests pass with no warnings.
@@ -350,3 +350,4 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 - 2026-06-03 08:14 Unit 4a complete: legacy REST telemetry tests fail red on missing lifecycle capture for success, auth error, not-found, rate-limit, and unexpected-error paths
 - 2026-06-03 08:19 Unit 4b complete: legacy REST lifecycle telemetry implemented with shared analytics request-context helpers; focused legacy/API v1 analytics tests, typecheck, and build pass
 - 2026-06-03 08:20 Unit 4c started: focused legacy telemetry coverage and refactor verification
+- 2026-06-03 08:25 Unit 4c complete: legacy route and shared analytics helper coverage reached 100% statements/branches/functions/lines; typecheck and build pass
