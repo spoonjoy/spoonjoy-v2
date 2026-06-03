@@ -257,7 +257,7 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 **Output**: Covered developer client telemetry with shared helper code and no duplicated operation taxonomy.
 **Acceptance**: Focused client/developer telemetry tests pass with no warnings.
 
-### ⬜ Unit 8a: Docs/Config/Sink Setup — Tests
+### 🔄 Unit 8a: Docs/Config/Sink Setup — Tests
 **What**: Add failing documentation/config/preflight tests in `test/scripts/deployment-preflight.test.ts`, `test/scripts/production-readiness.test.ts`, or existing docs tests when those tests already cover the relevant documentation surface. If no existing test covers a documentation file, record that file in Unit 8c verification notes instead of inventing broad snapshot coverage.
 **Output**: Failing tests or doc assertions for telemetry setup and privacy contract updates.
 **Acceptance**: Tests fail before docs/config updates where the repository has existing doc/config test coverage.
@@ -392,3 +392,4 @@ Give Spoonjoy full production visibility across client behavior, REST API usage,
 - 2026-06-03 10:00 Unit 7e complete: safe developer docs/playground client telemetry implemented with generated operation metadata, allowlisted client events/properties, privacy scrubbing, focused tests, generated playground regressions, typecheck, and build passing
 - 2026-06-03 10:00 Unit 7f started: developer docs/playground client telemetry coverage/refactor verification
 - 2026-06-03 10:04 Unit 7f complete: focused developer telemetry tests pass; `app/lib/analytics.ts` reached 100% statements/branches/functions/lines; typecheck and build pass; global coverage threshold limitation documented for unrelated app files
+- 2026-06-03 10:04 Unit 8a started: docs/config/sink setup tests
