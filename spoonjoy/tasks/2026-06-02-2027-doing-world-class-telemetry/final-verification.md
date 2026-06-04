@@ -127,3 +127,27 @@ Result: queued message `msg-20260603173648541`.
 MCP completion acknowledgement from Slugger:
 
 > massive. live at spoonjoy.app/api — the docs and playground are now out there.
+
+## PostHog Enablement Follow-Up
+
+After the original deployment, the user signed in to PostHog and requested telemetry setup immediately.
+
+Checks and setup completed on 2026-06-03:
+
+- Retrieved the existing PostHog project API key from the authenticated PostHog project settings page without printing it.
+- Set Cloudflare Worker secret `POSTHOG_KEY` with `wrangler secret put POSTHOG_KEY`.
+- Updated ignored `.env.local` with `VITE_POSTHOG_KEY`, `VITE_POSTHOG_HOST=https://us.i.posthog.com`, and blank `VITE_POSTHOG_DISABLED`.
+- Verified presence only:
+  - Cloudflare `POSTHOG_KEY`: present.
+  - `.env.local` `VITE_POSTHOG_KEY`: present.
+  - `.env.local` `POSTHOG_KEY`: missing, by design.
+- Redeployed with `pnpm run deploy`.
+- New Worker Version ID: `ba5c472c-cd9d-4ed6-8038-ad7eeace6b10`.
+- Verified live client assets include a PostHog public key pattern, `us.i.posthog.com`, and PostHog code without printing the key.
+- `https://spoonjoy.app/api`: 200.
+- `https://spoonjoy.app/api/playground`: 200.
+- `https://spoonjoy.app/api/v1/health`: 200.
+- `pnpm run smoke:api`: PASS.
+- `pnpm run smoke:live -- --base-url https://spoonjoy.app --remote-cleanup`: PASS, zero console errors, zero page errors, no cleanup error.
+
+The tracked repo still contains no PostHog key value. The key lives in Cloudflare secrets and ignored `.env.local` only.

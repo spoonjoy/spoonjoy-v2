@@ -33,6 +33,28 @@
   - Keep `POSTHOG_DISABLED` and `VITE_POSTHOG_DISABLED` unset or false-ish unless intentionally disabling telemetry.
 - Until those values are supplied, the deployed app remains telemetry-disabled by design while the API/docs/playground code paths continue to function.
 
+## PostHog Enablement Follow-Up
+
+- Rechecked and enabled PostHog on 2026-06-03 at 20:22 after the user signed in to PostHog in the in-app browser.
+- Extracted the existing PostHog project API key from the authenticated project settings page without printing the value.
+- Set Cloudflare Worker runtime telemetry with `wrangler secret put POSTHOG_KEY`.
+- Verified Cloudflare secret names only:
+  - `POSTHOG_KEY`: present.
+  - `SESSION_SECRET`: present.
+  - `VAPID_PUBLIC_KEY`: present.
+  - `VAPID_PRIVATE_KEY`: present.
+  - `VAPID_SUBJECT`: present.
+- Updated ignored `.env.local` for deploy builds:
+  - `VITE_POSTHOG_KEY`: present.
+  - `VITE_POSTHOG_HOST`: present.
+  - `VITE_POSTHOG_DISABLED`: blank.
+  - `POSTHOG_KEY`: not written locally.
+- Verified the live deployed client assets contain the public PostHog key pattern, PostHog host, and PostHog code without printing the key.
+- Redeployed production Worker version `ba5c472c-cd9d-4ed6-8038-ad7eeace6b10`.
+- `pnpm run smoke:api` passed.
+- `pnpm run smoke:live -- --base-url https://spoonjoy.app --remote-cleanup` passed with zero console errors, zero page errors, and no cleanup error.
+- No PostHog key value was printed, committed, or written to tracked artifacts.
+
 ## Existing Telemetry State
 
 - Client analytics is already gated by `VITE_POSTHOG_KEY` in `app/entry.client.tsx` through `resolvePostHogConfig` in `app/lib/analytics.ts`.
