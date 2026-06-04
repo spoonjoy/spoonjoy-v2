@@ -187,6 +187,20 @@ describe("API v1 personal token metadata", () => {
       requestId: "req_tokens_escalation",
       error: { code: "insufficient_scope", status: 403 },
     });
+
+    const longName = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/tokens", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${creator.token}`, "Content-Type": "application/json", "X-Request-Id": "req_tokens_long_name" },
+      body: JSON.stringify({ name: "x".repeat(161), scopes: ["recipes:read"] }),
+    }) as unknown as Request, "tokens"));
+
+    expect(longName.status).toBe(400);
+    expectEnvelopeHeaders(longName, "req_tokens_long_name");
+    await expect(readJson(longName)).resolves.toMatchObject({
+      ok: false,
+      requestId: "req_tokens_long_name",
+      error: { code: "validation_error", status: 400 },
+    });
   });
 
   it("revokes credentials and allows self-revoke for the current request only", async () => {

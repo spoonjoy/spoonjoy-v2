@@ -16,6 +16,10 @@ async function readJson(response: Response) {
   return await response.json() as any;
 }
 
+function syncCursor(value: unknown) {
+  return `v1.${Buffer.from(JSON.stringify(value), "utf8").toString("base64url")}`;
+}
+
 function expectEnvelopeHeaders(response: Response, requestId: string) {
   expect(response.headers.get("Content-Type")).toContain("application/json");
   expect(response.headers.get("X-Request-Id")).toBe(requestId);
@@ -391,6 +395,10 @@ describe("API v1 shopping-list read and sync", () => {
       "2026-06-01T00:00:00",
       "2026-06-01T00:00:00Z",
       "2026-02-30T00:00:00.000Z",
+      "v1.%",
+      syncCursor({}),
+      syncCursor({ updatedAt: "not-a-date", id: "item_1" }),
+      syncCursor({ updatedAt: "2026-06-01T00:00:00.000Z", id: 123 }),
     ];
 
     for (const [index, cursor] of invalidCursors.entries()) {
@@ -405,6 +413,21 @@ describe("API v1 shopping-list read and sync", () => {
         ok: false,
         requestId,
         error: { code: "invalid_cursor", status: 400 },
+      });
+    }
+
+    for (const [index, limit] of ["0", "51", "abc"].entries()) {
+      const requestId = `req_shopping_invalid_limit_${index}`;
+      const invalidLimit = await loader(routeArgs(new UndiciRequest(
+        `http://localhost/api/v1/shopping-list/sync?limit=${limit}`,
+        { headers: { Authorization: `Bearer ${fixture.credential.token}`, "X-Request-Id": requestId } },
+      ) as unknown as Request, "shopping-list/sync"));
+      expect(invalidLimit.status).toBe(400);
+      expectEnvelopeHeaders(invalidLimit, requestId);
+      await expect(readJson(invalidLimit)).resolves.toMatchObject({
+        ok: false,
+        requestId,
+        error: { code: "validation_error", status: 400 },
       });
     }
   });

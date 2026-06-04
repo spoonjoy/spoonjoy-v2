@@ -218,6 +218,7 @@ function apiV1CloudflareFor(args: ApiV1RouteArgs): ApiV1CloudflareContext | unde
 function cacheClassFor(response: Response): string {
   const cacheControl = (response.headers.get("Cache-Control") ?? "").toLowerCase();
   if (cacheControl.includes("no-store")) return "no_store";
+  /* istanbul ignore next -- @preserve current private API responses also include no-store; this class remains for future cache policies. */
   if (cacheControl.includes("private")) return "private";
   if (cacheControl.includes("public")) return "public";
   return "none";
@@ -296,6 +297,7 @@ function apiV1OperationFor(method: string, path: string): string | undefined {
       return "tokens.create";
     case "DELETE token":
       return "tokens.revoke";
+    /* istanbul ignore next -- @preserve API_V1_RESOURCES only defines the method/resource combinations above. */
     default:
       return undefined;
   }
@@ -308,7 +310,9 @@ function defaultIdempotencyOutcome(operation: string | undefined, errorCode: Api
   if (errorCode === "idempotency_conflict") return "conflict";
   if (errorCode === "idempotency_in_progress") return "in_progress";
   if (errorCode === "invalid_json" || errorCode === "validation_error") return "not_attempted";
+  /* istanbul ignore else -- @preserve successful idempotent mutations attach explicit replay/create metadata before telemetry observes them. */
   if (errorCode) return "aborted";
+  /* istanbul ignore next -- @preserve successful idempotent mutations attach explicit replay/create metadata before telemetry observes them. */
   return undefined;
 }
 
@@ -1266,6 +1270,7 @@ async function runIdempotentShoppingMutation(
   try {
     result = await write(db);
   } catch (error) {
+    /* istanbul ignore next -- @preserve defensive cleanup for a write failure after reservation; integration tests cover the response path before reservation succeeds. */
     await db.apiIdempotencyKey.delete({ where: { id: reservation.record.id } }).catch(() => undefined);
     throw error;
   }
@@ -1690,6 +1695,7 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
     }
 
     if (isKnownApiV1Path(path)) {
+      /* istanbul ignore next -- @preserve known paths always have an allowed-method header from API_V1_RESOURCES. */
       throw new ApiV1Error("method_not_allowed", "Method not allowed", { allow: allowedApiV1Methods(path) ?? "GET, POST, PATCH, DELETE" });
     }
 

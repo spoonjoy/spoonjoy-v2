@@ -298,6 +298,14 @@ describe("connector token issuance + rotation", () => {
     ).rejects.toMatchObject({ code: "invalid_grant" });
   });
 
+  it("rejects an empty refresh token for revocation", async () => {
+    const { revokeConnectorRefreshToken } = await import("~/lib/oauth-server.server");
+
+    await expect(
+      revokeConnectorRefreshToken(db, { refreshToken: "", clientId }),
+    ).rejects.toMatchObject({ code: "invalid_request" });
+  });
+
   it("rejects an unknown refresh token", async () => {
     await expect(
       rotateConnectorTokens(db, { refreshToken: "ort_missing", clientId }),
@@ -308,6 +316,15 @@ describe("connector token issuance + rotation", () => {
     const first = await issueConnectorTokens(db, { userId, clientId, scope: "kitchen:read" });
     await expect(
       rotateConnectorTokens(db, { refreshToken: first.refreshToken, clientId: "someone-else" }),
+    ).rejects.toMatchObject({ code: "invalid_grant" });
+  });
+
+  it("rejects refresh-token revocation by a different client", async () => {
+    const { revokeConnectorRefreshToken } = await import("~/lib/oauth-server.server");
+    const first = await issueConnectorTokens(db, { userId, clientId, scope: "kitchen:read" });
+
+    await expect(
+      revokeConnectorRefreshToken(db, { refreshToken: first.refreshToken, clientId: "someone-else" }),
     ).rejects.toMatchObject({ code: "invalid_grant" });
   });
 

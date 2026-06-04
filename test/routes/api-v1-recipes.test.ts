@@ -15,6 +15,10 @@ async function readJson(response: Response) {
   return await response.json() as any;
 }
 
+function listCursor(value: unknown) {
+  return `v1.${Buffer.from(JSON.stringify(value), "utf8").toString("base64url")}`;
+}
+
 function expectEnvelopeHeaders(response: Response, requestId: string) {
   expect(response.headers.get("X-Request-Id")).toBe(requestId);
   expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
@@ -166,6 +170,130 @@ describe("API v1 public recipe reads", () => {
       requestId: "req_recipe_over_limit",
       error: { code: "validation_error", status: 400 },
     });
+  });
+
+  it("validates list cursors and normalizes cover/source URLs", async () => {
+    const stylized = await createRecipeFixture(db, "Api V1 Stylized Cover");
+    await db.recipeCover.create({
+      data: {
+        recipeId: stylized.recipe.id,
+        imageUrl: "/photos/covers/original.png",
+        stylizedImageUrl: "/photos/covers/stylized.png",
+        sourceType: "spoon",
+      },
+    });
+    const imageOnly = await createRecipeFixture(db, "Api V1 Image Cover");
+    await db.recipe.update({
+      where: { id: imageOnly.recipe.id },
+      data: { sourceUrl: "mailto:chef@example.com" },
+    });
+    await db.recipeCover.create({
+      data: {
+        recipeId: imageOnly.recipe.id,
+        imageUrl: "/photos/covers/original-only.png",
+        sourceType: "import",
+      },
+    });
+    const dataCover = await createRecipeFixture(db, "Api V1 Data Cover");
+    await db.recipeCover.create({
+      data: {
+        recipeId: dataCover.recipe.id,
+        imageUrl: "data:image/png;base64,AAAA",
+        sourceType: "ai-placeholder",
+      },
+    });
+    const invalidUrl = await db.recipe.update({
+      where: { id: stylized.recipe.id },
+      data: { sourceUrl: "http://%" },
+    });
+
+    const stylizedDetail = await loader(routeArgs(new UndiciRequest(`http://localhost/api/v1/recipes/${invalidUrl.id}`, {
+      headers: { "X-Request-Id": "req_recipe_stylized_cover" },
+    }) as unknown as Request, `recipes/${invalidUrl.id}`));
+    const stylizedPayload = await readJson(stylizedDetail);
+
+    expect(stylizedDetail.status).toBe(200);
+    expect(stylizedPayload.data.recipe.coverImageUrl).toBe("https://spoonjoy.app/photos/covers/stylized.png");
+    expect(stylizedPayload.data.recipe.attribution.sourceUrl).toBe("http://%");
+    expect(stylizedPayload.data.recipe.attribution.sourceHost).toBeNull();
+
+    const imageDetail = await loader(routeArgs(new UndiciRequest(`http://localhost/api/v1/recipes/${imageOnly.recipe.id}`, {
+      headers: { "X-Request-Id": "req_recipe_image_cover" },
+    }) as unknown as Request, `recipes/${imageOnly.recipe.id}`));
+    const imagePayload = await readJson(imageDetail);
+
+    expect(imageDetail.status).toBe(200);
+    expect(imagePayload.data.recipe.coverImageUrl).toBe("https://spoonjoy.app/photos/covers/original-only.png");
+    expect(imagePayload.data.recipe.attribution.sourceUrl).toBe("mailto:chef@example.com");
+    expect(imagePayload.data.recipe.attribution.sourceHost).toBeNull();
+
+    const dataDetail = await loader(routeArgs(new UndiciRequest(`http://localhost/api/v1/recipes/${dataCover.recipe.id}`, {
+      headers: { "X-Request-Id": "req_recipe_data_cover" },
+    }) as unknown as Request, `recipes/${dataCover.recipe.id}`));
+    const dataPayload = await readJson(dataDetail);
+
+    expect(dataDetail.status).toBe(200);
+    expect(dataPayload.data.recipe.coverImageUrl).toBeNull();
+
+    await db.recipeCover.create({
+      data: {
+        recipeId: dataCover.recipe.id,
+        imageUrl: "",
+        sourceType: "empty-import",
+      },
+    });
+    const emptyCoverDetail = await loader(routeArgs(new UndiciRequest(`http://localhost/api/v1/recipes/${dataCover.recipe.id}`, {
+      headers: { "X-Request-Id": "req_recipe_empty_cover" },
+    }) as unknown as Request, `recipes/${dataCover.recipe.id}`));
+    const emptyCoverPayload = await readJson(emptyCoverDetail);
+    expect(emptyCoverDetail.status).toBe(200);
+    expect(emptyCoverPayload.data.recipe.coverImageUrl).toBeNull();
+
+    await db.recipeCover.create({
+      data: {
+        recipeId: dataCover.recipe.id,
+        imageUrl: "http://%",
+        sourceType: "broken-import",
+      },
+    });
+    const invalidAssetDetail = await loader(routeArgs(new UndiciRequest(`http://localhost/api/v1/recipes/${dataCover.recipe.id}`, {
+      headers: { "X-Request-Id": "req_recipe_invalid_asset" },
+    }) as unknown as Request, `recipes/${dataCover.recipe.id}`));
+    const invalidAssetPayload = await readJson(invalidAssetDetail);
+    expect(invalidAssetDetail.status).toBe(200);
+    expect(invalidAssetPayload.data.recipe.coverImageUrl).toBeNull();
+
+    const validCursor = listCursor({ createdAt: stylized.recipe.createdAt.toISOString(), id: stylized.recipe.id });
+    const cursorResponse = await loader(routeArgs(new UndiciRequest(
+      `http://localhost/api/v1/recipes?cursor=${encodeURIComponent(validCursor)}&limit=50`,
+      { headers: { "X-Request-Id": "req_recipe_valid_cursor" } },
+    ) as unknown as Request, "recipes"));
+    const cursorPayload = await readJson(cursorResponse);
+    expect(cursorResponse.status).toBe(200);
+    expect(cursorPayload.data.cursor).toBe(validCursor);
+    expect(cursorPayload.data.recipes.map((recipe: { id: string }) => recipe.id)).not.toContain(stylized.recipe.id);
+
+    const invalidCursors = [
+      "plain-cursor",
+      "v1.%",
+      listCursor({}),
+      listCursor({ createdAt: "not-a-date", id: "recipe_1" }),
+    ];
+    for (const [index, cursor] of invalidCursors.entries()) {
+      const requestId = `req_recipe_invalid_cursor_${index}`;
+      const response = await loader(routeArgs(new UndiciRequest(
+        `http://localhost/api/v1/recipes?cursor=${encodeURIComponent(cursor)}`,
+        { headers: { "X-Request-Id": requestId } },
+      ) as unknown as Request, "recipes"));
+
+      expect(response.status).toBe(400);
+      expectEnvelopeHeaders(response, requestId);
+      await expect(readJson(response)).resolves.toMatchObject({
+        ok: false,
+        requestId,
+        error: { code: "invalid_cursor", status: 400 },
+      });
+    }
   });
 
   it("returns recipe detail with steps, ingredients, cookbook links, and scoped bearer success", async () => {

@@ -840,6 +840,27 @@ describe("API v1 rate-limit and error telemetry", () => {
       privacyClass: "private",
     });
 
+    const unauthenticatedTokenCreate = apiJsonRequest("POST", "tokens", "req_error_token_create_no_auth", {}, {
+      name: "No auth token body",
+      scopes: ["recipes:read"],
+    });
+    const unauthenticatedTokenCreateResponse = await action(routeArgs(
+      unauthenticatedTokenCreate.request,
+      "tokens",
+    ).args);
+    expect(unauthenticatedTokenCreateResponse.status).toBe(401);
+    const tokenCreateEvent = expectApiV1ErrorEvent({
+      routeTemplate: "/api/v1/tokens",
+      requestId: "req_error_token_create_no_auth",
+      status: 401,
+      errorCode: "authentication_required",
+      authMode: "anonymous",
+      operation: "tokens.create",
+      privacyClass: "private",
+      forbidden: ["No auth token body", unauthenticatedTokenCreate.bodyText],
+    });
+    expect(tokenCreateEvent?.properties?.idempotency_outcome).toBe("none");
+
     const invalidToken = "sj_invalid_token_secret";
     const badBearer = await loader(routeArgs(apiRequest("http://localhost/api/v1/health", "req_error_invalid_token", {
       Authorization: `Bearer ${invalidToken}`,
@@ -905,6 +926,25 @@ describe("API v1 rate-limit and error telemetry", () => {
       forbidden: [itemId],
     });
 
+    const unauthenticatedDelete = apiJsonRequest("DELETE", `shopping-list/items/${itemId}`, "req_error_delete_missing_auth", {}, {
+      clientMutationId: "delete-without-auth",
+    });
+    const unauthenticatedDeleteResponse = await action(routeArgs(
+      unauthenticatedDelete.request,
+      `shopping-list/items/${itemId}`,
+    ).args);
+    expect(unauthenticatedDeleteResponse.status).toBe(401);
+    expectApiV1ErrorEvent({
+      routeTemplate: "/api/v1/shopping-list/items/{itemId}",
+      requestId: "req_error_delete_missing_auth",
+      status: 401,
+      errorCode: "authentication_required",
+      authMode: "anonymous",
+      operation: "shopping-list.items.delete",
+      privacyClass: "private",
+      forbidden: [itemId, unauthenticatedDelete.bodyText],
+    });
+
     const missingPath = "missing-secret-path";
     const unknownPath = await loader(routeArgs(apiRequest(
       `http://localhost/api/v1/${missingPath}`,
@@ -945,6 +985,27 @@ describe("API v1 rate-limit and error telemetry", () => {
       requestId: "req_error_internal",
       method: "GET",
       path: "/api/v1/health",
+    }));
+
+    vi.mocked(captureEvent).mockClear();
+    vi.spyOn(apiAuth, "authenticateApiRequest").mockRejectedValueOnce("auth string unavailable" as never);
+    const stringThrowResponse = await loader(routeArgs(apiRequest("http://localhost/api/v1/health", "req_error_internal_string", {
+      Authorization: `Bearer ${token}`,
+    }), "health").args);
+    expect(stringThrowResponse.status).toBe(500);
+    expectApiV1ErrorEvent({
+      routeTemplate: "/api/v1/health",
+      requestId: "req_error_internal_string",
+      status: 500,
+      errorCode: "internal_error",
+      authMode: "anonymous",
+      operation: "health.read",
+      privacyClass: "public",
+      forbidden: [token, "auth string unavailable"],
+    });
+    expect(errorSpy).toHaveBeenCalledWith("[api-v1] internal_error", expect.objectContaining({
+      requestId: "req_error_internal_string",
+      error: "auth string unavailable",
     }));
   });
 });

@@ -10,27 +10,27 @@ type LoaderData = {
   error: string | null;
 };
 
-function normalizeUserCode(value: string | null): string {
-  const compact = (value ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+function normalizeUserCode(value: string): string {
+  const compact = value.toUpperCase().replace(/[^A-Z0-9]/g, "");
   if (compact.length <= 4) return compact;
   return `${compact.slice(0, 4)}-${compact.slice(4, 8)}`;
 }
 
-async function redirectForCode(request: Request, context: Route.LoaderArgs["context"], code: string): Promise<Response | null> {
+async function redirectForCode(request: Request, context: Route.LoaderArgs["context"], code: string): Promise<void> {
   const userCode = normalizeUserCode(code);
-  if (!userCode) return null;
+  if (!userCode) return;
   const db = await getRequestDb(context);
   const connection = await db.agentConnectionRequest.findUnique({ where: { userCode } });
-  if (!connection) return null;
+  if (!connection) return;
   const url = new URL(request.url);
-  throw redirect(`/agent/connect/${connection.id}?code=${encodeURIComponent(userCode)}${url.searchParams.has("from") ? `&from=${encodeURIComponent(url.searchParams.get("from") ?? "")}` : ""}`);
+  const from = url.searchParams.get("from");
+  throw redirect(`/agent/connect/${connection.id}?code=${encodeURIComponent(userCode)}${from === null ? "" : `&from=${encodeURIComponent(from)}`}`);
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code") ?? "";
-  const redirectResponse = await redirectForCode(request, context, code);
-  if (redirectResponse) throw redirectResponse;
+  await redirectForCode(request, context, code);
   return {
     code: normalizeUserCode(code),
     error: code ? "That connection code was not found or has expired." : null,
@@ -40,8 +40,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 export async function action({ request, context }: Route.ActionArgs) {
   const formData = await request.formData();
   const code = normalizeUserCode(formData.get("code")?.toString() ?? "");
-  const redirectResponse = await redirectForCode(request, context, code);
-  if (redirectResponse) throw redirectResponse;
+  await redirectForCode(request, context, code);
   return { code, error: "That connection code was not found or has expired." } satisfies LoaderData;
 }
 

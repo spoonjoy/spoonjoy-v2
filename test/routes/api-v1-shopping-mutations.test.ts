@@ -491,6 +491,12 @@ describe("API v1 shopping-list mutations", () => {
         body: { clientMutationId: "bad-unit", name: "Tea", unit: 5 },
       },
       {
+        method: "POST" as const,
+        path: "shopping-list/items",
+        requestId: "req_add_long_category",
+        body: { clientMutationId: "bad-category", name: "Tea", categoryKey: "x".repeat(161) },
+      },
+      {
         method: "PATCH" as const,
         path: `shopping-list/items/${firstPayload.data.item.id}`,
         requestId: "req_check_bad_boolean",

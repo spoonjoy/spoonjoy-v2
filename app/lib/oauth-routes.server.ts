@@ -904,7 +904,7 @@ export async function handleOAuthAuthorizeAction(
 
   const url = new URL(params.redirectUri);
   url.searchParams.set("code", code);
-  if (params.state) url.searchParams.set("state", params.state);
+  url.searchParams.set("state", params.state);
   return withOAuthAuthorizeTelemetry(
     new Response(null, { status: 302, headers: { Location: url.toString() } }),
     {

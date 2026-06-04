@@ -224,6 +224,16 @@ describe("session.server", () => {
   });
 
   describe("destroyUserSession", () => {
+    it("destroys sessions through the lazy default storage export", async () => {
+      const session = await sessionStorage.getSession();
+      session.set("userId", "lazy-destroy-user-id");
+
+      const setCookieHeader = await sessionStorage.destroySession(session);
+
+      expect(setCookieHeader).toContain("__session=");
+      expect(setCookieHeader).toContain("Expires=Thu, 01 Jan 1970 00:00:00 GMT");
+    });
+
     it("should destroy session and return redirect response", async () => {
       const session = await sessionStorage.getSession();
       session.set("userId", "test-user-id");

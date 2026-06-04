@@ -71,6 +71,9 @@ jobs:
     name: e2e
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      NODE_ENV: development
+      SESSION_SECRET: ci-e2e-session-secret
 
     steps:
       - uses: actions/checkout@v6

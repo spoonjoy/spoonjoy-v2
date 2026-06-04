@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import routes from "~/routes";
 import Developers, { loader, meta } from "~/routes/developers";
@@ -10,17 +10,23 @@ import {
 import { API_V1_PLAYGROUND_MANIFEST } from "~/lib/generated/api-v1-playground";
 import { createTestRoutesStub } from "../utils";
 
-const { posthogCapture } = vi.hoisted(() => ({
+const { posthogCapture, usePostHogMock } = vi.hoisted(() => ({
   posthogCapture: vi.fn(),
+  usePostHogMock: vi.fn(),
 }));
 
 vi.mock("@posthog/react", () => ({
-  usePostHog: () => ({ capture: posthogCapture }),
+  usePostHog: usePostHogMock,
 }));
 
 describe("/developers route", () => {
+  beforeEach(() => {
+    usePostHogMock.mockReturnValue({ capture: posthogCapture });
+  });
+
   afterEach(() => {
     posthogCapture.mockClear();
+    usePostHogMock.mockReset();
   });
 
   it("is registered as the public developer docs page", () => {
@@ -94,6 +100,27 @@ describe("/developers route", () => {
       },
       { name: "twitter:image", content: "https://local.spoonjoy.test/og/pages/api.png" },
     ]);
+  });
+
+  it("falls back to production developer metadata when loader data is unavailable", () => {
+    expect(meta()).toEqual(expect.arrayContaining([
+      { property: "og:url", content: "https://spoonjoy.app/api" },
+      { property: "og:image", content: "https://spoonjoy.app/og/pages/api.png" },
+      { name: "twitter:image", content: "https://spoonjoy.app/og/pages/api.png" },
+    ]));
+  });
+
+  it("does not capture docs view telemetry without a PostHog client", async () => {
+    usePostHogMock.mockReturnValue(null);
+    const data = loader({} as any);
+    const Stub = createTestRoutesStub([
+      { path: "/developers", Component: Developers, loader: () => data },
+    ]);
+
+    render(<Stub initialEntries={["/developers"]} />);
+
+    expect(await screen.findByRole("heading", { name: "Spoonjoy Developer Platform" })).toBeInTheDocument();
+    expect(posthogCapture).not.toHaveBeenCalled();
   });
 
   it("captures a safe docs view event without leaking docs prose or URLs", async () => {

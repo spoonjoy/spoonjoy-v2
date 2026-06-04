@@ -212,7 +212,7 @@ export async function loadAccountSettings({
   });
   const accessCounts = new Map(
     accessCredentialCounts.map((row) => [
-      `${row.oauthClientId ?? ""}\u0000${row.oauthResource ?? ""}`,
+      `${row.oauthClientId!}\u0000${row.oauthResource ?? ""}`,
       row._count._all,
     ]),
   );

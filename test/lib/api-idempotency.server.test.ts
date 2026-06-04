@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { faker } from "@faker-js/faker";
 import { createApiCredential } from "~/lib/api-auth.server";
 import {
@@ -365,6 +365,128 @@ describe("API idempotency helpers", () => {
     expect(await db.apiIdempotencyKey.count({
       where: { userId, clientKey: `session:${userId}`, key: "reuse" },
     })).toBe(1);
+  });
+
+  it("recovers only true unique-key reservation races", async () => {
+    const racedRecord = {
+      id: "race-id",
+      userId,
+      credentialId: null,
+      clientKey: `session:${userId}`,
+      key: "race",
+      operation: "shopping_list.items.create",
+      requestHash: "hash",
+      responseStatus: null,
+      responseBody: null,
+      createdAt: now,
+      updatedAt: now,
+      expiresAt: new Date(now.getTime() + IDEMPOTENCY_TTL_MS),
+    };
+
+    const raceDb = (target: unknown, raced: unknown = racedRecord) => ({
+      apiIdempotencyKey: {
+        deleteMany: vi.fn(async () => ({ count: 0 })),
+        findUnique: vi.fn()
+          .mockResolvedValueOnce(null)
+          .mockResolvedValueOnce(raced),
+        create: vi.fn(async () => {
+          throw { code: "P2002", meta: { target } };
+        }),
+      },
+    }) as any;
+
+    await expect(reserveIdempotencyKey(raceDb("ApiIdempotencyKey_userId_clientKey_key_key"), {
+      userId,
+      clientKey: `session:${userId}`,
+      key: "race",
+      operation: "shopping_list.items.create",
+      requestHash: "hash",
+      now,
+    })).resolves.toMatchObject({ status: "in_flight", record: { id: "race-id" } });
+
+    await expect(reserveIdempotencyKey(raceDb(["userId", "clientKey", "key"]), {
+      userId,
+      clientKey: `session:${userId}`,
+      key: "race",
+      operation: "shopping_list.items.create",
+      requestHash: "changed",
+      now,
+    })).resolves.toMatchObject({ status: "conflict", record: { id: "race-id" } });
+
+    await expect(reserveIdempotencyKey(raceDb({ userId_clientKey_key: { userId, clientKey: "client", key: "race" } }, null), {
+      userId,
+      clientKey: `session:${userId}`,
+      key: "race",
+      operation: "shopping_list.items.create",
+      requestHash: "hash",
+      now,
+    })).rejects.toMatchObject({ code: "P2002" });
+
+    await expect(reserveIdempotencyKey(raceDb(["userId"]), {
+      userId,
+      clientKey: `session:${userId}`,
+      key: "race",
+      operation: "shopping_list.items.create",
+      requestHash: "hash",
+      now,
+    })).rejects.toMatchObject({ code: "P2002" });
+
+    const nonPrismaDb = {
+      apiIdempotencyKey: {
+        deleteMany: vi.fn(async () => ({ count: 0 })),
+        findUnique: vi.fn(async () => null),
+        create: vi.fn(async () => {
+          throw new Error("not unique");
+        }),
+      },
+    } as any;
+
+    await expect(reserveIdempotencyKey(nonPrismaDb, {
+      userId,
+      clientKey: `session:${userId}`,
+      key: "race",
+      operation: "shopping_list.items.create",
+      requestHash: "hash",
+      now,
+    })).rejects.toThrow("not unique");
+
+    const falsyRaceDb = {
+      apiIdempotencyKey: {
+        deleteMany: vi.fn(async () => ({ count: 0 })),
+        findUnique: vi.fn(async () => null),
+        create: vi.fn(async () => {
+          throw null;
+        }),
+      },
+    } as any;
+
+    await expect(reserveIdempotencyKey(falsyRaceDb, {
+      userId,
+      clientKey: `session:${userId}`,
+      key: "race",
+      operation: "shopping_list.items.create",
+      requestHash: "hash",
+      now,
+    })).rejects.toBeNull();
+
+    const primitiveRaceDb = {
+      apiIdempotencyKey: {
+        deleteMany: vi.fn(async () => ({ count: 0 })),
+        findUnique: vi.fn(async () => null),
+        create: vi.fn(async () => {
+          throw "not an object";
+        }),
+      },
+    } as any;
+
+    await expect(reserveIdempotencyKey(primitiveRaceDb, {
+      userId,
+      clientKey: `session:${userId}`,
+      key: "race",
+      operation: "shopping_list.items.create",
+      requestHash: "hash",
+      now,
+    })).rejects.toBe("not an object");
   });
 
   it("uses the current time when no reservation clock is provided", async () => {

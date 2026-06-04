@@ -471,6 +471,11 @@ describe("API v1 OpenAPI document", () => {
     expect(JSON.stringify(connector)).not.toContain('["string","null"]');
     expect(JSON.stringify(connector)).not.toContain('"type":"null"');
     expect(JSON.stringify(connector)).not.toContain('"exclusiveMinimum":0');
+    expect(connector.components.schemas.CreateShoppingItemRequest.properties.categoryKey).toEqual({
+      type: "string",
+      maxLength: 160,
+      nullable: true,
+    });
     expect(connector.paths["/api/v1/shopping-list/items/{itemId}"].delete.requestBody).toBeUndefined();
     expect(JSON.stringify(connector)).not.toContain('"$ref":"#/components/schemas/SourceRecipeAttribution","nullable":true');
   });

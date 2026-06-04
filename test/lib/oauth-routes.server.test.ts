@@ -226,6 +226,15 @@ describe("handleOAuthToken", () => {
     await expect(res.json()).resolves.toMatchObject({ error: "unsupported_grant_type" });
   });
 
+  it("accepts an empty form-encoded token request and rejects it as an unsupported grant", async () => {
+    const res = await handleOAuthToken(new Request("https://spoonjoy.app/oauth/token", {
+      method: "POST",
+    }), db, null);
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({ error: "unsupported_grant_type" });
+  });
+
   it("exchanges a valid code for access + refresh tokens", async () => {
     const code = await mintCode();
     const res = await handleOAuthToken(
@@ -248,6 +257,37 @@ describe("handleOAuthToken", () => {
     // the access token is a real ApiCredential, plus one refresh token
     expect(await db.apiCredential.count({ where: { userId } })).toBe(1);
     expect(await db.oAuthRefreshToken.count({ where: { userId } })).toBe(1);
+  });
+
+  it("exchanges and refreshes tokens without a resource indicator", async () => {
+    const code = await createAuthorizationCode(db, {
+      clientId,
+      userId,
+      redirectUri,
+      codeChallenge: await challengeFor(VERIFIER),
+      scope: "kitchen:read",
+      resource: null,
+    });
+    const first = await handleOAuthToken(
+      formPost("https://spoonjoy.app/oauth/token", {
+        grant_type: "authorization_code", code, client_id: clientId, redirect_uri: redirectUri, code_verifier: VERIFIER,
+      }),
+      db, null,
+    );
+    expect(first.status).toBe(200);
+    const firstBody = await first.json() as { refresh_token: string };
+    await expect(db.apiCredential.findFirstOrThrow({ where: { userId } }))
+      .resolves.toMatchObject({ oauthClientId: clientId, oauthResource: null });
+
+    const refresh = await handleOAuthToken(
+      formPost("https://spoonjoy.app/oauth/token", {
+        grant_type: "refresh_token", refresh_token: firstBody.refresh_token, client_id: clientId,
+      }),
+      db, null,
+    );
+
+    expect(refresh.status).toBe(200);
+    await expect(refresh.json()).resolves.toMatchObject({ scope: "kitchen:read" });
   });
 
   it("exchanges a refresh token for a rotated pair and rejects the old one", async () => {
@@ -326,6 +366,10 @@ describe("handleOAuthToken", () => {
       db,
     );
     expect(repeat.status).toBe(204);
+
+    const empty = await handleOAuthRevoke(formPost("https://spoonjoy.app/oauth/revoke", {}), db);
+    expect(empty.status).toBe(400);
+    await expect(empty.json()).resolves.toMatchObject({ error: "invalid_request" });
   });
 
   it("rejects an authorization_code request with the fields missing", async () => {
@@ -424,6 +468,22 @@ describe("loadOAuthAuthorize", () => {
     expect(result.headers.get("Location")).toContain("error=invalid_scope");
   });
 
+  it("redirects back with invalid_target for an unexpected resource indicator", async () => {
+    const q = await validQuery();
+    q.resource = "https://evil.example/mcp";
+    const result = await loadOAuthAuthorize(await authorizeGet(q), db, null) as Response;
+    expect(result.headers.get("Location")).toContain("error=invalid_target");
+  });
+
+  it("accepts a blank resource indicator as no resource", async () => {
+    const cookie = await authedCookie(userId);
+    const q = await validQuery();
+    q.resource = "";
+    const result = await loadOAuthAuthorize(await authorizeGet(q, cookie), db, null);
+    expect(result).toMatchObject({ kind: "consent" });
+    expect(result).not.toHaveProperty("resource");
+  });
+
   it("redirects to login when not authenticated", async () => {
     const result = await loadOAuthAuthorize(await authorizeGet(await validQuery()), db, null) as Response;
     expect(result.status).toBe(302);
@@ -482,6 +542,17 @@ describe("handleOAuthAuthorizeAction", () => {
     expect(res.headers.get("Location")).toContain("/login?redirectTo=");
   });
 
+  it("redirects invalid authorize requests back before login", async () => {
+    const res = await handleOAuthAuthorizeAction(
+      formPost("https://spoonjoy.app/oauth/authorize", await fields({ scope: "kitchen:admin" })),
+      db, null,
+    );
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get("Location")).toContain("error=invalid_scope");
+    expect(res.headers.get("Location")).toContain("state=state_0123456789abcdef");
+  });
+
   it("redirects back with access_denied on deny", async () => {
     const cookie = await authedCookie(userId);
     const res = await handleOAuthAuthorizeAction(
@@ -511,6 +582,24 @@ describe("handleOAuthAuthorizeAction", () => {
       error: "invalid_request",
       error_description: "OAuth consent must be submitted from Spoonjoy.",
     });
+  });
+
+  it("allows same-origin consent POSTs through the origin guard", async () => {
+    const cookie = await authedCookie(userId);
+    const headers = new Headers();
+    headers.set("Cookie", cookie);
+    headers.set("Origin", "https://spoonjoy.app");
+    const res = await handleOAuthAuthorizeAction(
+      new Request("https://spoonjoy.app/oauth/authorize", {
+        method: "POST",
+        headers,
+        body: new URLSearchParams(await fields({ scope: "kitchen:admin" })),
+      }),
+      db, null,
+    );
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get("Location")).toContain("error=invalid_scope");
   });
 
   it("redirects back with invalid_scope on a bad scope", async () => {

@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import type { APIRequestContext, Page } from '@playwright/test';
+import { loginAsSeedUser } from '../support/auth';
 
 /**
  * OAuth 2.1 authorize + consent flow against a real browser.
@@ -18,6 +19,8 @@ import type { APIRequestContext, Page } from '@playwright/test';
  */
 
 const REDIRECT_URI = 'http://localhost:5173/oauth/e2e-callback';
+const APPROVE_STATE = 'oauth-e2e-approve-state';
+const DENY_STATE = 'oauth-e2e-deny-state';
 
 function base64UrlEncode(bytes: Uint8Array): string {
   let binary = '';
@@ -59,19 +62,6 @@ function authorizeUrl(opts: { clientId: string; codeChallenge: string; state: st
   return `/oauth/authorize?${params}`;
 }
 
-async function loginAsSeedUser(page: Page) {
-  // The email field is a controlled React input, so a `.fill()` that lands
-  // before hydration finishes gets reset to empty. Re-fill until the value
-  // sticks, then submit.
-  const email = page.getByLabel('Email').first();
-  await expect(async () => {
-    await email.fill('demo@spoonjoy.com');
-    await expect(email).toHaveValue('demo@spoonjoy.com');
-  }).toPass();
-  await page.getByLabel('Password').first().fill('demo1234');
-  await page.getByRole('button', { name: /log in/i }).first().click();
-}
-
 /**
  * Stub the registered redirect_uri so the OAuth callback never triggers a real
  * navigation/load. Resolves with the exact callback URL once the server
@@ -92,7 +82,7 @@ test.describe('OAuth authorize + consent flow', () => {
     const clientId = await registerClient(page.request);
     const verifier = randomVerifier();
     const challenge = await pkceChallenge(verifier);
-    const authorize = authorizeUrl({ clientId, codeChallenge: challenge, state: 'xyz' });
+    const authorize = authorizeUrl({ clientId, codeChallenge: challenge, state: APPROVE_STATE });
 
     // Unauthenticated: the authorize endpoint must redirect to /login, carrying
     // the authorize URL forward in redirectTo so we return after signing in.
@@ -105,7 +95,7 @@ test.describe('OAuth authorize + consent flow', () => {
 
     await expect(page).toHaveURL(/\/oauth\/authorize/);
     await expect(page.getByRole('heading', { name: /authorize/i })).toBeVisible();
-    await expect(page.getByText(/view your recipes/i)).toBeVisible();
+    await expect(page.getByText(/view public recipes, cookbooks, and your shopping list/i)).toBeVisible();
     const allow = page.getByRole('button', { name: /allow access/i });
     await expect(allow).toBeVisible();
 
@@ -114,14 +104,14 @@ test.describe('OAuth authorize + consent flow', () => {
     await allow.click();
     const result = await callback;
     expect(result.searchParams.get('code')).toBeTruthy();
-    expect(result.searchParams.get('state')).toBe('xyz');
+    expect(result.searchParams.get('state')).toBe(APPROVE_STATE);
   });
 
   test('denying consent redirects back with access_denied', async ({ page }) => {
     const clientId = await registerClient(page.request);
     const verifier = randomVerifier();
     const challenge = await pkceChallenge(verifier);
-    const authorize = authorizeUrl({ clientId, codeChallenge: challenge, state: 'denied-state' });
+    const authorize = authorizeUrl({ clientId, codeChallenge: challenge, state: DENY_STATE });
 
     await page.goto(authorize);
     await expect(page).toHaveURL(/\/login\?redirectTo=/);
@@ -136,6 +126,6 @@ test.describe('OAuth authorize + consent flow', () => {
     await deny.click();
     const result = await callback;
     expect(result.searchParams.get('error')).toBe('access_denied');
-    expect(result.searchParams.get('state')).toBe('denied-state');
+    expect(result.searchParams.get('state')).toBe(DENY_STATE);
   });
 });

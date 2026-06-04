@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { faker } from "@faker-js/faker";
 import {
   approveAgentConnectionRequest,
@@ -59,6 +59,34 @@ describe("agent connection requests", () => {
       scopes: "tokens:write",
       now,
     })).rejects.toThrow("Unsupported scope");
+  });
+
+  it("rethrows unexpected delegated scope normalization failures", async () => {
+    let trimCalls = 0;
+    const scopeValue = {
+      trim() {
+        trimCalls += 1;
+        if (trimCalls === 2) {
+          throw new TypeError("scope parser exploded");
+        }
+        return "shopping_list:read";
+      },
+    };
+
+    try {
+      await startAgentConnection({
+        agentConnectionRequest: {
+          create: vi.fn(),
+        },
+      } as any, {
+        scopes: scopeValue as unknown as string,
+        now,
+      });
+      expect.fail("expected scope normalization failure");
+    } catch (error) {
+      expect(error).toBeInstanceOf(TypeError);
+      expect((error as Error).message).toBe("scope parser exploded");
+    }
   });
 
   it("defaults agent name and base URL, and rejects unsafe non-local base URLs", async () => {

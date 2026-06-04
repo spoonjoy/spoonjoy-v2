@@ -12,6 +12,7 @@ import {
   handleApiV1Request,
   normalizeApiV1AuthError,
   normalizeApiV1InternalError,
+  parseApiV1JsonBody,
 } from "~/lib/api-v1.server";
 import { API_V1_DISCOVERY_DATA, API_V1_ERROR_STATUS } from "~/lib/api-v1-contract.server";
 import { getLocalDb } from "~/lib/db.server";
@@ -147,6 +148,25 @@ describe("/api/v1 shell", () => {
     } satisfies ApiV1RouteArgs;
 
     expect(apiV1WaitUntilFor(args)).toBeUndefined();
+  });
+
+  it("does not schedule API v1 telemetry when PostHog is disabled", async () => {
+    const waitUntil = vi.fn();
+    const response = await handleApiV1Request({
+      request: new UndiciRequest("http://localhost/api/v1/health", {
+        headers: { "X-Request-Id": "req_disabled_telemetry" },
+      }) as unknown as Request,
+      params: { "*": "health" },
+      context: {
+        cloudflare: {
+          env: { POSTHOG_KEY: "ph_test", POSTHOG_DISABLED: "true" },
+          ctx: { waitUntil, passThroughOnException: vi.fn() },
+        },
+      },
+    } as any);
+
+    expect(response.status).toBe(200);
+    expect(waitUntil).not.toHaveBeenCalled();
   });
 
   it("serves authenticated health with principal summary and scopes", async () => {
@@ -343,6 +363,17 @@ describe("/api/v1 shell", () => {
       error: { code: "method_not_allowed", status: 405 },
     });
 
+    const unsupportedUnknownPath = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/nope", {
+      method: "PUT",
+      headers: { "X-Request-Id": "req_put_unknown" },
+    }) as unknown as Request, "nope"));
+    expect(unsupportedUnknownPath.status).toBe(405);
+    await expect(readJson(unsupportedUnknownPath)).resolves.toMatchObject({
+      ok: false,
+      requestId: "req_put_unknown",
+      error: { code: "method_not_allowed", status: 405 },
+    });
+
     const unsupportedKnownPath = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/recipes", {
       method: "POST",
       headers: { "X-Request-Id": "req_post_recipes" },
@@ -471,6 +502,38 @@ describe("/api/v1 shell", () => {
       code: "internal_error",
       status: 500,
       message: "Internal error",
+    });
+  });
+
+  it("validates JSON request body shape and byte limits directly", async () => {
+    await expect(parseApiV1JsonBody(new UndiciRequest("http://localhost/api/v1/tokens", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(["token"]),
+    }) as unknown as Request)).rejects.toMatchObject({
+      code: "validation_error",
+      message: "JSON body must be an object",
+    });
+
+    await expect(parseApiV1JsonBody(new UndiciRequest("http://localhost/api/v1/tokens", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": String((16 * 1024) + 1),
+      },
+      body: "{}",
+    }) as unknown as Request)).rejects.toMatchObject({
+      code: "validation_error",
+      message: "JSON body must be at most 16384 bytes",
+    });
+
+    await expect(parseApiV1JsonBody(new UndiciRequest("http://localhost/api/v1/tokens", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ value: "x".repeat(16 * 1024) }),
+    }) as unknown as Request)).rejects.toMatchObject({
+      code: "validation_error",
+      message: "JSON body must be at most 16384 bytes",
     });
   });
 

@@ -1,13 +1,15 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { act, render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { Request as UndiciRequest } from "undici";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import routes from "~/routes";
 import DeveloperPlayground, {
+  absoluteSpecUrl,
   curlFor,
   loader,
   meta,
   playgroundFetchOptions,
   playgroundNetworkError,
+  playgroundOutcomeForStatus,
   playgroundOperationGroups,
   playgroundPath,
   playgroundBodyError,
@@ -66,6 +68,7 @@ describe("/developers/playground", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    vi.useRealTimers();
     posthogCapture.mockClear();
   });
 
@@ -184,6 +187,10 @@ describe("/developers/playground", () => {
       },
       { name: "twitter:image", content: "https://local.spoonjoy.test/og/pages/api-playground.png" },
     ]);
+    expect(meta()).toEqual(expect.arrayContaining([
+      { property: "og:url", content: "https://spoonjoy.app/api/playground" },
+      { property: "og:image", content: "https://spoonjoy.app/og/pages/api-playground.png" },
+    ]));
   });
 
   it("captures safe playground view, surface, operation, and auth-mode telemetry from generated metadata", async () => {
@@ -255,6 +262,18 @@ describe("/developers/playground", () => {
     expect(playgroundPath(recipeDetail, { id: "" })).toBe("/api/v1/recipes/REPLACE_id");
   });
 
+  it("builds SSR-safe spec URLs and response outcome classes", () => {
+    const originalWindow = globalThis.window;
+    vi.stubGlobal("window", undefined);
+    expect(absoluteSpecUrl("/api/v1/openapi.sdk.json")).toBe("https://spoonjoy.app/api/v1/openapi.sdk.json");
+    vi.stubGlobal("window", originalWindow);
+    expect(absoluteSpecUrl("/api/v1/openapi.sdk.json")).toBe("http://localhost:3000/api/v1/openapi.sdk.json");
+
+    expect(playgroundOutcomeForStatus(0)).toBe("network_error");
+    expect(playgroundOutcomeForStatus(302)).toBe("success");
+    expect(playgroundOutcomeForStatus(404)).toBe("error");
+  });
+
   it("builds timestamp request IDs when crypto UUIDs are unavailable", () => {
     expect(playgroundRequestId(null, 12345)).toBe("pg_12345");
     expect(playgroundRequestId({ randomUUID: () => "uuid-1" })).toBe("pg_uuid-1");
@@ -303,6 +322,8 @@ describe("/developers/playground", () => {
         "X-Request-Id": "pg_delete",
       },
     });
+    const generatedRequestId = playgroundFetchOptions(root, "anonymous", "", "");
+    expect(generatedRequestId.headers).toEqual({ "X-Request-Id": expect.stringMatching(/^pg_/) });
     expect(playgroundBodyError(createToken, "")).toBe("This operation requires a request body.");
     expect(playgroundBodyError(createToken, "{bad")).toBe("JSON body is not valid.");
     expect(playgroundBodyError(createToken, "{\"name\":\"Client\"}")).toBeNull();
@@ -476,6 +497,9 @@ describe("/developers/playground", () => {
     expect(screen.getByText("Uses your signed-in Spoonjoy session for same-origin API calls.")).toBeInTheDocument();
     expect(screen.getByText("Signed in to Spoonjoy. Session requests will include your browser login.")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Sign in" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("radio", { name: "Anonymous" }));
+    expect(screen.getByText("You are signed in, but Anonymous mode intentionally omits your Spoonjoy session for this request.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("radio", { name: "Session" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Send Request" }));
 
@@ -485,6 +509,51 @@ describe("/developers/playground", () => {
       credentials: "same-origin",
       headers: expect.objectContaining({ "X-Request-Id": expect.stringMatching(/^pg_/) }),
     });
+  });
+
+  it("switches an already-mounted playground to session mode after sign-in", async () => {
+    vi.resetModules();
+    let routeData: PlaygroundLoaderData = {
+      manifest: API_V1_PLAYGROUND_MANIFEST,
+      canonicalUrl: "https://spoonjoy.app/api/playground",
+      ogImageUrl: "https://spoonjoy.app/og/pages/api-playground.png",
+      viewer: { isAuthenticated: false },
+    };
+    vi.doMock("react-router", async (importOriginal) => ({
+      ...await importOriginal<typeof import("react-router")>(),
+      useLoaderData: () => routeData,
+    }));
+    vi.doMock("@posthog/react", () => ({
+      usePostHog: () => ({ capture: posthogCapture }),
+    }));
+    try {
+      const { default: IsolatedPlayground } = await import("~/routes/developers.playground");
+      const { createMemoryRouter, RouterProvider } = await import("react-router");
+      const React = await import("react");
+      let forceRerender = () => {};
+      function PlaygroundShell() {
+        const [, setTick] = React.useState(0);
+        forceRerender = () => setTick((tick) => tick + 1);
+        return <IsolatedPlayground />;
+      }
+      const router = createMemoryRouter([
+        { path: "/developers/playground", Component: PlaygroundShell },
+      ], { initialEntries: ["/developers/playground"] });
+      render(<RouterProvider router={router} />);
+
+      fireEvent.click(await screen.findByRole("button", { name: /Read the authenticated shopping list/i }));
+      fireEvent.click(screen.getByRole("radio", { name: "Bearer" }));
+      expect(screen.getByRole("radio", { name: "Bearer" })).toHaveAttribute("aria-checked", "true");
+
+      routeData = { ...routeData, viewer: { isAuthenticated: true } };
+      act(() => forceRerender());
+
+      await waitFor(() => expect(screen.getByRole("radio", { name: "Session" })).toHaveAttribute("aria-checked", "true"));
+    } finally {
+      vi.doUnmock("react-router");
+      vi.doUnmock("@posthog/react");
+      vi.resetModules();
+    }
   });
 
   it("uses query params and bearer auth only after the user enables it", async () => {
@@ -518,15 +587,36 @@ describe("/developers/playground", () => {
     await renderPlayground();
     await screen.findByRole("heading", { name: "Spoonjoy API Playground" });
 
+    fireEvent.click(screen.getByRole("button", { name: /Discover the Spoonjoy API/i }));
     fireEvent.click(screen.getByRole("radio", { name: "Connector" }));
     expect(screen.getByRole("radio", { name: "Connector" })).toHaveAttribute("aria-checked", "true");
     expect(screen.getByRole("link", { name: /Open Spec/i })).toHaveAttribute("href", "/api/v1/openapi.connector.json");
+    expect(screen.getByRole("button", { name: /Search public recipes/i })).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByRole("button", { name: /Exchange or refresh an OAuth token/i })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Search public recipes/i })).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText(/Search operations/i), { target: { value: "cookbooks/{id}" } });
     expect(await screen.findByRole("button", { name: /Read one public cookbook/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Search public recipes/i })).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/Search operations/i), { target: { value: "definitely no operation" } });
+    expect(await screen.findByText("No operations match this surface and search.")).toBeInTheDocument();
+  });
+
+  it("uses the first generated operation when a custom manifest has no recipe list", async () => {
+    const manifestWithoutDefaultRecipe = {
+      ...API_V1_PLAYGROUND_MANIFEST,
+      operations: API_V1_PLAYGROUND_MANIFEST.operations.filter((operation) => operation.id !== "GET /api/v1/recipes"),
+    };
+
+    await renderPlayground({
+      manifest: manifestWithoutDefaultRecipe,
+      canonicalUrl: "https://spoonjoy.app/api/playground",
+      ogImageUrl: "https://spoonjoy.app/og/pages/api-playground.png",
+      viewer: { isAuthenticated: false },
+    } as PlaygroundLoaderData);
+
+    expect(await screen.findByRole("button", { name: /Discover the Spoonjoy API/i })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("sends generated JSON-body operations with session auth by default", async () => {
@@ -578,6 +668,7 @@ describe("/developers/playground", () => {
     await renderPlayground();
 
     fireEvent.click(await screen.findByRole("button", { name: /Read one public recipe/i }));
+    fireEvent.submit(screen.getByRole("button", { name: "Send Request" }).closest("form")!);
 
     expect(await screen.findByText(/path required/i)).toBeInTheDocument();
     expect(document.querySelector<HTMLInputElement>("#param-path-id")).toHaveAttribute("placeholder", "recipe_1");
@@ -602,9 +693,84 @@ describe("/developers/playground", () => {
     });
   });
 
+  it("covers generated OAuth, mutation id, example body, and secret-response playground controls", async () => {
+    const fetchMock = vi.fn(async () => mockApiResponse({
+      ok: true,
+      data: {
+        token: "sj_secret_token_value",
+        refresh_token: "ort_refresh_token_value",
+      },
+    }, { status: 201, statusText: "Created" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await renderPlayground();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Redirect the chef through OAuth consent/i }));
+    fireEvent.change(document.querySelector<HTMLInputElement>("#param-query-client_id")!, { target: { value: "cm_e2e_client" } });
+    fireEvent.change(document.querySelector<HTMLInputElement>("#param-query-redirect_uri")!, { target: { value: "https://client.example/callback" } });
+    fireEvent.click(screen.getByRole("button", { name: "Generate PKCE + state" }));
+
+    const bundle = await screen.findByLabelText("PKCE and state bundle");
+    await waitFor(() => expect(bundle.textContent).toContain("code_verifier="));
+    const codeVerifier = bundle.textContent?.match(/code_verifier=(.+)\n/)?.[1] ?? "";
+    const state = bundle.textContent?.match(/state=(.+)\n/)?.[1] ?? "";
+    const codeChallenge = bundle.textContent?.match(/code_challenge=(.+)$/)?.[1] ?? "";
+    window.sessionStorage.setItem("spoonjoy.playground.pkce", JSON.stringify({
+      code_verifier: codeVerifier,
+      state,
+      code_challenge: codeChallenge,
+      client_id: "cm_e2e_client",
+      redirect_uri: "https://client.example/callback",
+    }));
+    expect(state).toMatch(/^state_/);
+
+    const callbackInput = screen.getByLabelText("OAuth callback URL");
+    fireEvent.change(callbackInput, { target: { value: "http://%" } });
+    await waitFor(() => expect(callbackInput).toHaveValue("http://%"));
+    fireEvent.click(screen.getByRole("button", { name: "Prepare token exchange" }));
+    expect(await screen.findByText("Callback URL is not a valid URL or query string.")).toBeInTheDocument();
+
+    fireEvent.change(callbackInput, { target: { value: `?code=oac_123&state=${state}` } });
+    await waitFor(() => expect(callbackInput).toHaveValue(`?code=oac_123&state=${state}`));
+    fireEvent.click(screen.getByRole("button", { name: "Prepare token exchange" }));
+    expect(await screen.findByRole("button", { name: /Exchange or refresh an OAuth token/i })).toHaveAttribute("aria-pressed", "true");
+    await waitFor(() => expect((screen.getByLabelText("Form body") as HTMLTextAreaElement).value).toContain(
+      "grant_type=authorization_code",
+    ));
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh Token" }));
+    expect((screen.getByLabelText("Form body") as HTMLTextAreaElement).value).toContain("grant_type=refresh_token");
+
+    fireEvent.click(screen.getByRole("button", { name: /Set a shopping-list item checked state/i }));
+    fireEvent.change(document.querySelector<HTMLInputElement>("#param-path-itemId")!, { target: { value: "item_1" } });
+    const checkBody = screen.getByLabelText("JSON body");
+    fireEvent.click(screen.getByRole("button", { name: "Fresh mutation id" }));
+    expect((checkBody as HTMLTextAreaElement).value).toContain("patchApiV1ShoppingListItem:");
+
+    fireEvent.click(screen.getByRole("button", { name: /Remove a shopping-list item/i }));
+    fireEvent.change(document.querySelector<HTMLInputElement>("#param-path-itemId")!, { target: { value: "item_1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Fresh mutation id" }));
+    expect(document.querySelector<HTMLInputElement>("#param-header-X-Client-Mutation-Id")!.value).toMatch(/^deleteApiV1ShoppingListItem:/);
+
+    fireEvent.click(screen.getByRole("button", { name: /Revoke a bearer credential/i }));
+    expect(screen.getByText(/A bearer credential may revoke its own credential id/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Create a bearer credential/i }));
+    fireEvent.change(screen.getByLabelText("JSON body"), { target: { value: "{\"name\":\"Client\"}" } });
+    fireEvent.click(screen.getByLabelText(/I understand this request can change real Spoonjoy data/i));
+    fireEvent.click(screen.getByRole("button", { name: "Send Request" }));
+
+    expect(await screen.findByText("Secret values hidden in response body")).toBeInTheDocument();
+    expect(screen.getByLabelText("Response body")).toHaveTextContent("sj_...redacted");
+    fireEvent.click(screen.getByRole("button", { name: "Clear response" }));
+    expect(screen.getByLabelText("Response body")).toHaveTextContent("No response yet.");
+  });
+
   it("renders portable curl for bearer mode and body requests", () => {
     const root = PLAYGROUND_OPERATIONS.find((operation) => operation.id === "GET /api/v1")!;
     const createToken = PLAYGROUND_OPERATIONS.find((operation) => operation.id === "POST /api/v1/tokens")!;
+    const authorize = PLAYGROUND_OPERATIONS.find((operation) => operation.id === "GET /oauth/authorize")!;
+    const deleteItem = PLAYGROUND_OPERATIONS.find((operation) => operation.id === "DELETE /api/v1/shopping-list/items/{itemId}")!;
 
     expect(curlFor("/api/v1", root, "session", "")).toContain("Session mode is browser-only");
     expect(curlFor("/api/v1", root, "session", "")).toContain("await fetch(\"/api/v1\"");
@@ -614,12 +780,33 @@ describe("/developers/playground", () => {
     expect(curlFor("/api/v1/tokens", createToken, "session", "{\"name\":\"Client\"}")).toBe(
       "// Session mode is browser-only: run from a signed-in Spoonjoy page.\nawait fetch(\"/api/v1/tokens\", {\n  method: \"POST\",\n  credentials: \"same-origin\",\n  headers: {\n    \"Content-Type\": \"application/json\",\n  },\n  body: \"{\\\"name\\\":\\\"Client\\\"}\",\n});",
     );
+    expect(curlFor("/api/v1", root, "session", "manual body")).toContain("\"Content-Type\": \"application/json\"");
+    expect(curlFor("/api/v1", root, "anonymous", "manual body")).toContain("-H 'Content-Type: application/json'");
     expect(curlFor("/api/v1/tokens", createToken, "bearer", "{\"name\":\"Client\"}")).toContain(
       "-H 'Authorization: Bearer $SPOONJOY_TOKEN'",
     );
     expect(curlFor("/api/v1/tokens", createToken, "bearer", "{\"name\":\"Client\"}")).toContain(
       "--data '{\"name\":\"Client\"}'",
     );
+    expect(curlFor("/oauth/authorize?client_id=cm_1", authorize, "anonymous", "")).toContain(
+      "open 'https://spoonjoy.app/oauth/authorize?client_id=cm_1'",
+    );
+    expect(curlFor(
+      "/api/v1/shopping-list/items/item_1",
+      deleteItem,
+      "session",
+      "",
+      "https://preview.spoonjoy.test/",
+      { itemId: "item_1", "X-Client-Mutation-Id": "delete:item_1:test" },
+    )).toContain("\"X-Client-Mutation-Id\": \"delete:item_1:test\"");
+    expect(curlFor(
+      "/api/v1/shopping-list/items/item_1",
+      deleteItem,
+      "bearer",
+      "",
+      "https://preview.spoonjoy.test/",
+      { itemId: "item_1", "X-Client-Mutation-Id": "delete:item_1:test" },
+    )).toContain("-H 'X-Client-Mutation-Id: delete:item_1:test'");
   });
 
   it("redacts token-bearing responses while preserving explicit copyable secrets", async () => {
@@ -629,6 +816,7 @@ describe("/developers/playground", () => {
         token: "sj_secret_token_value",
         refresh_token: "ort_refresh_token_value",
         nested: { deviceCode: "sjdc_device_code_value" },
+        tokens: ["sj_array_token_value"],
       },
     }), {
       status: 200,
@@ -639,11 +827,197 @@ describe("/developers/playground", () => {
     expect(response.body).toContain("ort_...redacted");
     expect(response.body).toContain("sjdc_...redacted");
     expect(response.body).not.toContain("sj_secret_token_value");
+    expect(response.body).not.toContain("sj_array_token_value");
     expect(response.secrets).toEqual([
       { label: "token", value: "sj_secret_token_value" },
       { label: "refresh token", value: "ort_refresh_token_value" },
       { label: "device code", value: "sjdc_device_code_value" },
+      { label: "token", value: "sj_array_token_value" },
     ]);
+
+    const duplicate = await playgroundResponseFromFetchResult(new Response("sj_duplicate_token sj_duplicate_token", {
+      status: 200,
+      headers: { "Content-Type": "text/plain" },
+    }), {}, { maskSecrets: true });
+    expect(duplicate.body).toBe("sj_...redacted sj_...redacted");
+    expect(duplicate.secrets).toEqual([{ label: "secret", value: "sj_duplicate_token" }]);
+  });
+
+  it("masks token-like plain text responses", async () => {
+    const response = await playgroundResponseFromFetchResult(new Response("token sj_text_token", {
+      status: 200,
+      headers: { "Content-Type": "text/plain" },
+    }), {}, { maskSecrets: true });
+
+    expect(response.body).toBe("token sj_...redacted");
+    expect(response.secrets).toEqual([{ label: "secret", value: "sj_text_token" }]);
+  });
+
+  it("copies generated playground values and reports clipboard failures", async () => {
+    const writeText = vi.fn()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error("clipboard denied"));
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+
+    await renderPlayground();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Copy import URL" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith("http://localhost:3000/api/v1/openapi.json"));
+    expect(await screen.findByText("Copied Copy import URL")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy path" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText("Could not copy Copy path")).toBeInTheDocument();
+    await new Promise((resolve) => window.setTimeout(resolve, 1700));
+    expect(screen.queryByText("Could not copy Copy path")).not.toBeInTheDocument();
+  });
+
+  it("supports keyboard roving for surface and auth mode radio groups", async () => {
+    await renderPlayground();
+
+    const allApis = await screen.findByRole("radio", { name: "All APIs" });
+    fireEvent.keyDown(allApis, { key: "ArrowRight" });
+    await waitFor(() => expect(screen.getByRole("radio", { name: "Connector" })).toHaveFocus());
+    expect(screen.getByRole("radio", { name: "Connector" })).toHaveAttribute("aria-checked", "true");
+
+    fireEvent.keyDown(screen.getByRole("radio", { name: "Connector" }), { key: "End" });
+    await waitFor(() => expect(screen.getByRole("radio", { name: "SDK" })).toHaveFocus());
+    expect(screen.getByRole("radio", { name: "SDK" })).toHaveAttribute("aria-checked", "true");
+
+    fireEvent.keyDown(screen.getByRole("radio", { name: "SDK" }), { key: "Home" });
+    await waitFor(() => expect(screen.getByRole("radio", { name: "All APIs" })).toHaveFocus());
+    fireEvent.keyDown(screen.getByRole("radio", { name: "All APIs" }), { key: "Escape" });
+    expect(screen.getByRole("radio", { name: "All APIs" })).toHaveAttribute("aria-checked", "true");
+
+    fireEvent.click(screen.getByRole("button", { name: /Search public recipes/i }));
+    const anonymous = screen.getByRole("radio", { name: "Anonymous" });
+    fireEvent.keyDown(anonymous, { key: "ArrowLeft" });
+    await waitFor(() => expect(screen.getByRole("radio", { name: "Bearer" })).toHaveFocus());
+    expect(screen.getByRole("radio", { name: "Bearer" })).toHaveAttribute("aria-checked", "true");
+    fireEvent.keyDown(screen.getByRole("radio", { name: "Bearer" }), { key: "Enter" });
+    expect(screen.getByRole("radio", { name: "Bearer" })).toHaveAttribute("aria-checked", "true");
+  });
+
+  it("handles OAuth callback validation failures and redirect submissions", async () => {
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+
+    await renderPlayground();
+    fireEvent.click(await screen.findByRole("button", { name: /Redirect the chef through OAuth consent/i }));
+
+    const callbackInput = screen.getByLabelText("OAuth callback URL");
+    fireEvent.change(document.querySelector<HTMLInputElement>("#param-query-client_id")!, { target: { value: "cm_without_pkce" } });
+    fireEvent.change(document.querySelector<HTMLInputElement>("#param-query-redirect_uri")!, { target: { value: "https://client.example/callback" } });
+    fireEvent.change(document.querySelector<HTMLInputElement>("#param-query-state")!, { target: { value: "state_without_pkce" } });
+    fireEvent.change(document.querySelector<HTMLInputElement>("#param-query-code_challenge")!, { target: { value: "challenge_without_pkce" } });
+    const riskCheckbox = screen.getByLabelText(/I understand this request can change real Spoonjoy data/i);
+    fireEvent.click(riskCheckbox);
+    fireEvent.click(screen.getByRole("button", { name: "Open authorization URL" }));
+    await waitFor(() => expect(open).toHaveBeenCalledWith(
+      expect.stringContaining("/oauth/authorize?"),
+      "_blank",
+      "noopener,noreferrer",
+    ));
+    open.mockClear();
+    fireEvent.click(riskCheckbox);
+
+    fireEvent.change(callbackInput, { target: { value: "?state=state_missing_code" } });
+    fireEvent.click(screen.getByRole("button", { name: "Prepare token exchange" }));
+    expect(await screen.findByText("Callback URL is missing code.")).toBeInTheDocument();
+
+    fireEvent.change(callbackInput, { target: { value: "?code=oac_123&state=wrong_state" } });
+    fireEvent.click(screen.getByRole("button", { name: "Prepare token exchange" }));
+    expect(await screen.findByText("Callback state does not match the stored PKCE state.")).toBeInTheDocument();
+
+    window.sessionStorage.setItem("spoonjoy.playground.pkce", JSON.stringify({
+      state: "state_ok",
+      code_verifier: "",
+      client_id: "cm_client",
+      redirect_uri: "https://client.example/callback",
+    }));
+    fireEvent.change(callbackInput, { target: { value: "?code=oac_123&state=state_ok" } });
+    fireEvent.click(screen.getByRole("button", { name: "Prepare token exchange" }));
+    expect(await screen.findByText("Missing code_verifier, client_id, or redirect_uri. Generate PKCE and fill the authorize fields first.")).toBeInTheDocument();
+
+    fireEvent.change(document.querySelector<HTMLInputElement>("#param-query-client_id")!, { target: { value: "cm_client" } });
+    fireEvent.change(document.querySelector<HTMLInputElement>("#param-query-redirect_uri")!, { target: { value: "https://client.example/callback" } });
+    fireEvent.change(document.querySelector<HTMLInputElement>("#param-query-state")!, { target: { value: "state_redirect" } });
+    fireEvent.change(document.querySelector<HTMLInputElement>("#param-query-code_challenge")!, { target: { value: "challenge_redirect" } });
+    window.sessionStorage.removeItem("spoonjoy.playground.pkce");
+    fireEvent.click(screen.getByRole("button", { name: "Generate PKCE + state" }));
+    await screen.findByLabelText("PKCE and state bundle");
+    fireEvent.click(screen.getByLabelText(/I understand this request can change real Spoonjoy data/i));
+    fireEvent.click(screen.getByRole("button", { name: "Open authorization URL" }));
+
+    await waitFor(() => expect(open).toHaveBeenCalledWith(
+      expect.stringContaining("/oauth/authorize?"),
+      "_blank",
+      "noopener,noreferrer",
+    ));
+    expect(window.sessionStorage.getItem("spoonjoy.playground.pkce")).toContain("code_verifier");
+
+    const bundle = screen.getByLabelText("PKCE and state bundle");
+    await waitFor(() => expect(bundle.textContent).not.toContain("state_redirect"));
+    const state = bundle.textContent?.match(/state=(.+)\n/)?.[1] ?? "";
+    window.sessionStorage.removeItem("spoonjoy.playground.pkce");
+    fireEvent.change(callbackInput, {
+      target: { value: `https://client.example/callback?code=oac_456&state=${state}` },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Prepare token exchange" }));
+    expect(await screen.findByRole("button", { name: /Exchange or refresh an OAuth token/i })).toHaveAttribute("aria-pressed", "true");
+    expect((screen.getByLabelText("Form body") as HTMLTextAreaElement).value).toContain("code=oac_456");
+  });
+
+  it("reports when a custom manifest omits the OAuth token operation", async () => {
+    const manifestWithoutToken = {
+      ...API_V1_PLAYGROUND_MANIFEST,
+      operations: API_V1_PLAYGROUND_MANIFEST.operations.filter((operation) => operation.id !== "POST /oauth/token"),
+    };
+    await renderPlayground({
+      manifest: manifestWithoutToken,
+      canonicalUrl: "https://spoonjoy.app/api/playground",
+      ogImageUrl: "https://spoonjoy.app/og/pages/api-playground.png",
+      viewer: { isAuthenticated: false },
+    } as PlaygroundLoaderData);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Redirect the chef through OAuth consent/i }));
+    window.sessionStorage.setItem("spoonjoy.playground.pkce", JSON.stringify({
+      state: "state_ok",
+      code_verifier: "verifier_ok",
+      client_id: "cm_client",
+      redirect_uri: "https://client.example/callback",
+    }));
+    fireEvent.change(screen.getByLabelText("OAuth callback URL"), {
+      target: { value: "?code=oac_123&state=state_ok" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Prepare token exchange" }));
+
+    expect(await screen.findByText("OAuth token operation is not available in this playground manifest.")).toBeInTheDocument();
+  });
+
+  it("switches from bearer mode to token creation with session auth", async () => {
+    await renderPlayground();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Read the authenticated shopping list/i }));
+    fireEvent.click(screen.getByRole("radio", { name: "Bearer" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create a token with Session auth" }));
+
+    expect(await screen.findByRole("button", { name: /Create a bearer credential/i })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("radio", { name: "Session" })).toHaveAttribute("aria-checked", "true");
+    expect((screen.getByLabelText("JSON body") as HTMLTextAreaElement).value).toContain("scopes");
+  });
+
+  it("recovers from invalid JSON when generating body mutation ids", async () => {
+    await renderPlayground();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Set a shopping-list item checked state/i }));
+    fireEvent.change(document.querySelector<HTMLInputElement>("#param-path-itemId")!, { target: { value: "item_1" } });
+    fireEvent.change(screen.getByLabelText("JSON body"), { target: { value: "{bad json" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "Fresh mutation id" })[0]);
+
+    expect((screen.getByLabelText("JSON body") as HTMLTextAreaElement).value).toContain("clientMutationId");
   });
 
   it("formats empty non-JSON responses", async () => {
@@ -658,6 +1032,7 @@ describe("/developers/playground", () => {
       requestId: null,
       headers: [{ name: "Content-Type", value: "text/plain" }],
       body: "(empty response)",
+      elapsedMs: 0,
     });
   });
 
@@ -676,6 +1051,7 @@ describe("/developers/playground", () => {
         { name: "Content-Type", value: "text/plain;charset=UTF-8" },
       ],
       body: "Too many requests",
+      elapsedMs: 0,
     });
   });
 
@@ -686,6 +1062,7 @@ describe("/developers/playground", () => {
       requestId: null,
       headers: [],
       body: "offline",
+      elapsedMs: 0,
     });
   });
 
@@ -696,6 +1073,7 @@ describe("/developers/playground", () => {
       requestId: null,
       headers: [],
       body: "Request failed",
+      elapsedMs: 0,
     });
   });
 });
