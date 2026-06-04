@@ -54,6 +54,8 @@ model ApiCredential {
   scopes      String    @default("kitchen:read kitchen:write")
   lastUsedAt  DateTime?
   revokedAt   DateTime?
+  oauthClientId String?
+  oauthResource String?
   // Optional expiry. Null = non-expiring (API tokens, agent-delegated tokens).
   // OAuth-connector access tokens set this so they roll over via refresh.
   expiresAt   DateTime?
@@ -66,6 +68,8 @@ model ApiCredential {
 
   @@index([userId])
   @@index([tokenPrefix])
+  @@index([oauthClientId])
+  @@index([oauthResource])
 }
 
 model ApiIdempotencyKey {
@@ -192,10 +196,12 @@ model OAuthRefreshToken {
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   clientId  String
   scope     String
+  resource  String?
   revokedAt DateTime?
   createdAt DateTime  @default(now())
 
   @@index([userId])
+  @@index([clientId])
 }
 
 model Recipe {

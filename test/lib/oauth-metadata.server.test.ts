@@ -36,8 +36,17 @@ describe("oauth metadata builders", () => {
       issuer: "https://spoonjoy.app",
       authorization_endpoint: "https://spoonjoy.app/oauth/authorize",
       token_endpoint: "https://spoonjoy.app/oauth/token",
+      revocation_endpoint: "https://spoonjoy.app/oauth/revoke",
       registration_endpoint: "https://spoonjoy.app/oauth/register",
-      scopes_supported: ["kitchen:read", "kitchen:write"],
+      scopes_supported: [
+        "cookbooks:read",
+        "kitchen:read",
+        "kitchen:write",
+        "public:read",
+        "recipes:read",
+        "shopping_list:read",
+        "shopping_list:write",
+      ],
       response_types_supported: ["code"],
       grant_types_supported: ["authorization_code", "refresh_token"],
       code_challenge_methods_supported: ["S256"],
@@ -49,7 +58,16 @@ describe("oauth metadata builders", () => {
     expect(buildProtectedResourceMetadata(ORIGIN)).toEqual({
       resource: "https://spoonjoy.app/mcp",
       authorization_servers: ["https://spoonjoy.app"],
-      scopes_supported: ["kitchen:read", "kitchen:write"],
+      scopes_supported: [
+        "cookbooks:read",
+        "kitchen:read",
+        "kitchen:write",
+        "public:read",
+        "recipes:read",
+        "shopping_list:read",
+        "shopping_list:write",
+      ],
+      revocation_endpoint: "https://spoonjoy.app/oauth/revoke",
     });
   });
 

@@ -26,15 +26,28 @@ import {
 } from "~/lib/mcp/spoonjoy-tools.server";
 import {
   buildSpoonjoyApiContext,
-  resolveApiPrincipal,
 } from "~/lib/spoonjoy-api-request.server";
-import { protectedResourceMetadataUrl, resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
+import {
+  ApiAuthError,
+  authenticateApiToken,
+  extractBearerToken,
+  type ApiPrincipal,
+} from "~/lib/api-auth.server";
+import { mcpResourceUrl, protectedResourceMetadataUrl, resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 import {
   enforceRateLimit,
   rateLimitedResponse,
+  type RateLimitScope,
   type RateLimiterBinding,
 } from "~/lib/rate-limit.server";
-import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
+import {
+  captureEvent,
+  captureException,
+  requestContentBytes,
+  resolvePostHogServerConfig,
+  safeHeaderHost,
+  userAgentFamily,
+} from "~/lib/analytics-server";
 
 interface CloudflareEnvLike {
   SESSION_SECRET?: string;
@@ -49,6 +62,14 @@ interface CloudflareEnvLike {
   POSTHOG_DISABLED?: string;
 }
 
+const MCP_SAFE_JSONRPC_METHODS = new Set([
+  "initialize",
+  "notifications/initialized",
+  "tools/call",
+  "tools/list",
+]);
+const MCP_TOOL_NAMES = new Set(listSpoonjoyMcpTools().map((tool) => tool.name));
+
 export interface HandleMcpHttpRequestParams {
   request: Request;
   db: PrismaClientType;
@@ -58,17 +79,24 @@ export interface HandleMcpHttpRequestParams {
   ipLimiter?: RateLimiterBinding;
 }
 
+type McpTelemetryInput = {
+  response: Response;
+  startedAt: number;
+  principal?: ApiPrincipal | null;
+  errorCode?: string;
+  jsonRpcMethod?: string;
+  jsonRpcErrorCode?: number;
+  notification?: boolean;
+  toolName?: string;
+  rateLimitScope?: RateLimitScope;
+};
+
 function jsonResponse(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), {
     status,
     headers: { "Content-Type": "application/json" },
   });
 }
-
-// Any operation name that isn't a public bootstrap op; used so the principal
-// resolver rethrows on an invalid token (rather than swallowing it) and we can
-// uniformly treat "no token" and "bad token" as unauthenticated.
-const MCP_AUTH_OPERATION = "mcp";
 
 /**
  * Build the 401 that tells an MCP client to authenticate. The
@@ -93,14 +121,95 @@ function authChallengeResponse(
   );
 }
 
+function mcpAuthMode(principal: ApiPrincipal | null): string {
+  if (!principal) return "anonymous";
+  return principal.oauthClientId ? "oauth_bearer" : principal.source;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+export function mcpJsonRpcTelemetry(body: string): Pick<McpTelemetryInput, "jsonRpcMethod" | "toolName"> {
+  try {
+    const parsed = JSON.parse(body) as unknown;
+    if (!isRecord(parsed)) return {};
+
+    const method = typeof parsed.method === "string" && MCP_SAFE_JSONRPC_METHODS.has(parsed.method)
+      ? parsed.method
+      : undefined;
+    if (!method) return {};
+
+    const params = parsed.params;
+    const toolName = method === "tools/call" && isRecord(params) && typeof params.name === "string" && MCP_TOOL_NAMES.has(params.name)
+      ? params.name
+      : undefined;
+    return { jsonRpcMethod: method, toolName };
+  } catch {
+    return {};
+  }
+}
+
+function isJsonRpcSuccessResponse(response: unknown): boolean {
+  return isRecord(response) && "result" in response && !("error" in response);
+}
+
+export function jsonRpcErrorCode(response: unknown): number | undefined {
+  if (!isRecord(response) || !isRecord(response.error)) return undefined;
+  return typeof response.error.code === "number" ? response.error.code : undefined;
+}
+
+function observeMcpResponse(
+  params: HandleMcpHttpRequestParams,
+  input: McpTelemetryInput,
+): Response {
+  const { request, cloudflareEnv, waitUntil } = params;
+  if (!cloudflareEnv || !waitUntil) return input.response;
+
+  const postHogConfig = resolvePostHogServerConfig(cloudflareEnv);
+  if (!postHogConfig.enabled) return input.response;
+
+  const principal = input.principal ?? null;
+  waitUntil(captureEvent(postHogConfig, {
+    event: "spoonjoy.mcp.request",
+    distinctId: principal?.id ?? "anon",
+    properties: {
+      route_template: "/mcp",
+      method: request.method,
+      status: input.response.status,
+      error_code: input.errorCode,
+      auth_mode: mcpAuthMode(principal),
+      principal_id: principal?.id,
+      credential_id: principal?.credentialId,
+      oauth_client_id: principal?.oauthClientId || undefined,
+      oauth_resource: principal?.oauthClientId ? (principal.oauthResource ?? null) : undefined,
+      scopes: principal?.scopes,
+      jsonrpc_method: input.jsonRpcMethod,
+      jsonrpc_error_code: input.jsonRpcErrorCode,
+      notification: input.notification,
+      tool_name: input.toolName,
+      request_bytes: requestContentBytes(request),
+      origin_host: safeHeaderHost(request.headers.get("Origin")),
+      referrer_host: safeHeaderHost(request.headers.get("Referer")),
+      user_agent_family: userAgentFamily(request.headers.get("User-Agent")),
+      rate_limit_scope: input.rateLimitScope,
+      latency_ms: Math.max(0, Date.now() - input.startedAt),
+    },
+  }));
+
+  return input.response;
+}
+
 export async function handleMcpHttpRequest(params: HandleMcpHttpRequestParams): Promise<Response> {
   const { request, db, cloudflareEnv, waitUntil, tokenLimiter, ipLimiter } = params;
+  const startedAt = Date.now();
 
   if (request.method !== "POST") {
-    return jsonResponse(
+    const response = jsonResponse(
       { error: "method_not_allowed", message: "The MCP endpoint accepts POST." },
       405,
     );
+    return observeMcpResponse(params, { response, startedAt, errorCode: "method_not_allowed" });
   }
 
   const rateLimit = await enforceRateLimit({
@@ -110,21 +219,47 @@ export async function handleMcpHttpRequest(params: HandleMcpHttpRequestParams): 
     ipLimiter,
   });
   if (!rateLimit.allowed) {
-    return rateLimitedResponse(rateLimit.retryAfterSeconds);
+    const response = rateLimitedResponse(rateLimit.retryAfterSeconds);
+    return observeMcpResponse(params, {
+      response,
+      startedAt,
+      errorCode: "rate_limited",
+      rateLimitScope: rateLimit.scope,
+    });
   }
 
-  // The connector is an OAuth-protected resource: every request — including
-  // `initialize` — must carry a valid token. An unauthenticated request gets a
-  // 401 + WWW-Authenticate so the client runs OAuth before connecting. (Claude
-  // Code's existing bearer-token connection authenticates the same way.)
-  let principal;
+  let principal: ApiPrincipal;
   try {
-    principal = await resolveApiPrincipal(db, request, cloudflareEnv, MCP_AUTH_OPERATION);
-  } catch {
-    principal = null; // an invalid/expired token is treated as unauthenticated
+    const bearerToken = extractBearerToken(request);
+    if (!bearerToken) {
+      const response = authChallengeResponse(request, cloudflareEnv);
+      return observeMcpResponse(params, {
+        response,
+        startedAt,
+        errorCode: "authentication_required",
+      });
+    }
+    principal = await authenticateApiToken(db, bearerToken);
+  } catch (error) {
+    const response = authChallengeResponse(request, cloudflareEnv);
+    return observeMcpResponse(params, {
+      response,
+      startedAt,
+      errorCode: error instanceof ApiAuthError && error.status === 400 ? "malformed_authorization" : "invalid_token",
+    });
   }
-  if (!principal) {
-    return authChallengeResponse(request, cloudflareEnv);
+  const expectedResource = mcpResourceUrl(resolveIssuerOrigin(request.url, cloudflareEnv?.SPOONJOY_BASE_URL));
+  if (principal.oauthClientId && principal.oauthResource !== expectedResource) {
+    const response = jsonResponse(
+      { error: "invalid_token", message: "OAuth access token is not audience-bound to this MCP resource." },
+      403,
+    );
+    return observeMcpResponse(params, {
+      response,
+      startedAt,
+      principal,
+      errorCode: "invalid_token",
+    });
   }
 
   const router: JsonRpcToolRouter = {
@@ -156,12 +291,35 @@ export async function handleMcpHttpRequest(params: HandleMcpHttpRequestParams): 
   };
 
   const body = await request.text();
+  const jsonRpcTelemetry = mcpJsonRpcTelemetry(body);
   const response = await handleJsonRpcLine(body, router, { onError });
 
   // Notifications (no id) produce no JSON-RPC response — ack with 202.
   if (response === null) {
-    return new Response(null, { status: 202 });
+    return observeMcpResponse(params, {
+      response: new Response(null, { status: 202 }),
+      startedAt,
+      principal,
+      ...jsonRpcTelemetry,
+      notification: true,
+    });
   }
 
-  return jsonResponse(response);
+  const httpResponse = jsonResponse(response);
+  if (!isJsonRpcSuccessResponse(response)) {
+    return observeMcpResponse(params, {
+      response: httpResponse,
+      startedAt,
+      principal,
+      ...jsonRpcTelemetry,
+      errorCode: "jsonrpc_error",
+      jsonRpcErrorCode: jsonRpcErrorCode(response),
+    });
+  }
+  return observeMcpResponse(params, {
+    response: httpResponse,
+    startedAt,
+    principal,
+    ...jsonRpcTelemetry,
+  });
 }

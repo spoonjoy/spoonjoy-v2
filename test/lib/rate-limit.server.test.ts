@@ -80,7 +80,7 @@ describe("enforceRateLimit", () => {
     expect(result.allowed).toBe(true);
   });
 
-  it("uses the token limiter when both token and limiter present", async () => {
+  it("uses the IP guard and token limiter when both token and limiter are present", async () => {
     const tokenLimiter = mockLimiter(true);
     const ipLimiter = mockLimiter(true);
 
@@ -97,7 +97,7 @@ describe("enforceRateLimit", () => {
       scope: "token",
     });
     expect(tokenLimiter.limit).toHaveBeenCalledTimes(1);
-    expect(ipLimiter.limit).not.toHaveBeenCalled();
+    expect(ipLimiter.limit).toHaveBeenCalledWith({ key: "ip:1.2.3.4" });
     const callArg = tokenLimiter.limit.mock.calls[0][0] as { key: string };
     expect(callArg.key.startsWith("token:")).toBe(true);
     // 64 hex digits after the "token:" prefix
@@ -117,6 +117,24 @@ describe("enforceRateLimit", () => {
       retryAfterSeconds: 60,
       scope: "token",
     });
+  });
+
+  it("denies on the IP guard before hashing a rotating bearer token", async () => {
+    const ipLimiter = mockLimiter(false);
+    const tokenLimiter = mockLimiter(true);
+    const result = await enforceRateLimit({
+      authorization: "Bearer totally_fake_rotating_token",
+      ip: "1.2.3.4",
+      tokenLimiter,
+      ipLimiter,
+    });
+
+    expect(result).toEqual({
+      allowed: false,
+      retryAfterSeconds: 60,
+      scope: "ip",
+    });
+    expect(tokenLimiter.limit).not.toHaveBeenCalled();
   });
 
   it("uses the IP limiter when no token is present", async () => {

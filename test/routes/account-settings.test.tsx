@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
 import { createUser } from "~/lib/auth.server";
+import { createApiCredential } from "~/lib/api-auth.server";
 import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { faker } from "@faker-js/faker";
@@ -102,6 +103,150 @@ describe("Account Settings Route", () => {
       expect(result.user.oauthAccounts).toHaveLength(1);
       expect(result.user.oauthAccounts[0].provider).toBe("google");
       expect(result.user.oauthAccounts[0].providerUsername).toBe("testuser@gmail.com");
+    });
+
+    it("returns active API credentials and OAuth app connections", async () => {
+      const personal = await createApiCredential(db, testUserId, "Kitchen CLI", {
+        scopes: ["shopping_list:read", "shopping_list:write"],
+      });
+      const noDates = await createApiCredential(db, testUserId, "No dates CLI", {
+        scopes: ["recipes:read"],
+      });
+      const lastUsedAt = new Date("2026-06-01T10:00:00.000Z");
+      const expiresAt = new Date("2026-07-01T10:00:00.000Z");
+      await db.apiCredential.update({
+        where: { id: personal.credential.id },
+        data: { lastUsedAt, expiresAt },
+      });
+      const revoked = await createApiCredential(db, testUserId, "Old script", {
+        scopes: ["recipes:read"],
+      });
+      await db.apiCredential.update({
+        where: { id: revoked.credential.id },
+        data: { revokedAt: new Date() },
+      });
+      const client = await db.oAuthClient.create({
+        data: {
+          clientName: "Grocery helper",
+          redirectUris: JSON.stringify(["https://example.com/callback"]),
+        },
+      });
+      await db.oAuthRefreshToken.create({
+        data: {
+          tokenHash: `refresh-${faker.string.alphanumeric(12)}`,
+          userId: testUserId,
+          clientId: client.id,
+          scope: "shopping_list:read shopping_list:write",
+          resource: null,
+          createdAt: new Date("2026-06-02T10:00:00.000Z"),
+        },
+      });
+      await db.oAuthRefreshToken.create({
+        data: {
+          tokenHash: `refresh-${faker.string.alphanumeric(12)}`,
+          userId: testUserId,
+          clientId: client.id,
+          scope: "recipes:read",
+          resource: null,
+          createdAt: new Date("2026-06-01T10:00:00.000Z"),
+        },
+      });
+      await db.oAuthRefreshToken.create({
+        data: {
+          tokenHash: `refresh-${faker.string.alphanumeric(12)}`,
+          userId: testUserId,
+          clientId: client.id,
+          scope: "cookbooks:read",
+          resource: null,
+          createdAt: new Date("2026-06-01T10:00:00.000Z"),
+        },
+      });
+      await createApiCredential(db, testUserId, "Grocery helper (OAuth)", {
+        scopes: ["shopping_list:read", "shopping_list:write"],
+        oauthClientId: client.id,
+        oauthResource: null,
+        expiresAt: new Date(Date.now() + 60_000),
+      });
+      await db.oAuthRefreshToken.create({
+        data: {
+          tokenHash: `refresh-${faker.string.alphanumeric(12)}`,
+          userId: testUserId,
+          clientId: "missing-client-id",
+          scope: " ",
+          resource: "https://spoonjoy.app/mcp",
+        },
+      });
+      await db.oAuthRefreshToken.create({
+        data: {
+          tokenHash: `refresh-${faker.string.alphanumeric(12)}`,
+          userId: testUserId,
+          clientId: "no-access-client-id",
+          scope: "recipes:read",
+          resource: null,
+        },
+      });
+      await createApiCredential(db, testUserId, "Missing helper (OAuth)", {
+        scopes: ["recipes:read"],
+        oauthClientId: "missing-client-id",
+        oauthResource: "https://spoonjoy.app/mcp",
+        expiresAt: new Date(Date.now() + 60_000),
+      });
+
+      const session = await sessionStorage.getSession();
+      session.set("userId", testUserId);
+      const cookieValue = (await sessionStorage.commitSession(session)).split(";")[0];
+      const request = new UndiciRequest("http://localhost:3000/account/settings", {
+        headers: { Cookie: cookieValue },
+      });
+
+      const result = await loader({
+        request,
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+
+      expect(result.user.apiCredentials).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          id: personal.credential.id,
+          name: "Kitchen CLI",
+          scopes: ["shopping_list:read", "shopping_list:write"],
+          lastUsedAt: lastUsedAt.toISOString(),
+          expiresAt: expiresAt.toISOString(),
+        }),
+        expect.objectContaining({
+          id: noDates.credential.id,
+          name: "No dates CLI",
+          scopes: ["recipes:read"],
+          lastUsedAt: null,
+          expiresAt: null,
+        }),
+      ]));
+      expect(result.user.oauthConnections).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          clientId: client.id,
+          clientName: "Grocery helper",
+          scopes: ["cookbooks:read", "recipes:read", "shopping_list:read", "shopping_list:write"],
+          createdAt: "2026-06-01T10:00:00.000Z",
+          refreshTokenCount: 3,
+          accessTokenCount: 1,
+        }),
+        expect.objectContaining({
+          clientId: "missing-client-id",
+          clientName: null,
+          resource: "https://spoonjoy.app/mcp",
+          scopes: [],
+          refreshTokenCount: 1,
+          accessTokenCount: 1,
+        }),
+        expect.objectContaining({
+          clientId: "no-access-client-id",
+          clientName: null,
+          resource: null,
+          scopes: ["recipes:read"],
+          refreshTokenCount: 1,
+          accessTokenCount: 0,
+        }),
+      ]));
     });
 
     it("should indicate if user has a password set", async () => {
@@ -251,6 +396,55 @@ describe("Account Settings Route", () => {
       render(<Stub initialEntries={["/account/settings"]} />);
 
       expect(await screen.findByRole("heading", { name: /account settings/i })).toBeInTheDocument();
+    });
+
+    it("renders API credential and OAuth app revocation controls", async () => {
+      const mockData = {
+        user: {
+          id: testUserId,
+          email: testUserEmail.toLowerCase(),
+          username: testUsername,
+          hasPassword: true,
+          oauthAccounts: [],
+          photoUrl: null,
+          passkeys: [],
+          apiCredentials: [{
+            id: "cred-1",
+            name: "Kitchen CLI",
+            tokenPrefix: "sj_abc123456",
+            scopes: ["shopping_list:read", "shopping_list:write"],
+            createdAt: "2026-06-01T00:00:00.000Z",
+            lastUsedAt: null,
+            expiresAt: null,
+          }],
+          oauthConnections: [{
+            clientId: "client-1",
+            clientName: "Grocery helper",
+            resource: null,
+            scopes: ["shopping_list:read"],
+            createdAt: "2026-06-01T00:00:00.000Z",
+            refreshTokenCount: 1,
+            accessTokenCount: 1,
+          }],
+        },
+        notifications: { pushSubscribed: false },
+      };
+
+      const Stub = createTestRoutesStub([
+        {
+          path: "/account/settings",
+          Component: AccountSettings,
+          loader: () => mockData,
+        },
+      ]);
+
+      render(<Stub initialEntries={["/account/settings"]} />);
+
+      const section = await screen.findByTestId("api-access-section");
+      expect(section).toHaveTextContent("Kitchen CLI");
+      expect(section).toHaveTextContent("Grocery helper");
+      expect(screen.getByRole("button", { name: /revoke kitchen cli/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /disconnect grocery helper/i })).toBeInTheDocument();
     });
 
     it("should render user info section", async () => {
@@ -1175,6 +1369,210 @@ describe("Account Settings Route", () => {
       } as any);
 
       expect(result.success).toBe(false);
+    });
+  });
+
+  describe("action - API and app access", () => {
+    async function authenticatedPost(formData: FormData) {
+      const session = await sessionStorage.getSession();
+      session.set("userId", testUserId);
+      const cookieValue = (await sessionStorage.commitSession(session)).split(";")[0];
+      const headers = new Headers();
+      headers.set("Cookie", cookieValue);
+      headers.set("Content-Type", "application/x-www-form-urlencoded");
+      const request = new UndiciRequest("http://localhost:3000/account/settings", {
+        method: "POST",
+        headers,
+        body: new URLSearchParams(formData as any).toString(),
+      });
+      return action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+    }
+
+    it("revokes an active API credential owned by the signed-in chef", async () => {
+      const created = await createApiCredential(db, testUserId, "Script token", {
+        scopes: ["shopping_list:read"],
+      });
+      const formData = new FormData();
+      formData.append("intent", "revokeApiCredential");
+      formData.append("credentialId", created.credential.id);
+
+      const result = await authenticatedPost(formData);
+
+      expect(result).toMatchObject({ success: true });
+      await expect(db.apiCredential.findUniqueOrThrow({ where: { id: created.credential.id } }))
+        .resolves.toMatchObject({ revokedAt: expect.any(Date) });
+    });
+
+    it("rejects missing, unknown, or already revoked API credential revocations", async () => {
+      const created = await createApiCredential(db, testUserId, "Already revoked script", {
+        scopes: ["recipes:read"],
+      });
+      await db.apiCredential.update({
+        where: { id: created.credential.id },
+        data: { revokedAt: new Date() },
+      });
+      const missingForm = new FormData();
+      missingForm.append("intent", "revokeApiCredential");
+      const unknownForm = new FormData();
+      unknownForm.append("intent", "revokeApiCredential");
+      unknownForm.append("credentialId", "cred_missing");
+      const revokedForm = new FormData();
+      revokedForm.append("intent", "revokeApiCredential");
+      revokedForm.append("credentialId", created.credential.id);
+
+      await expect(authenticatedPost(missingForm)).resolves.toMatchObject({
+        success: false,
+        error: "credential_not_found",
+        message: "API credential not found",
+      });
+      await expect(authenticatedPost(unknownForm)).resolves.toMatchObject({
+        success: false,
+        error: "credential_not_found",
+        message: "API credential not found or already revoked",
+      });
+      await expect(authenticatedPost(revokedForm)).resolves.toMatchObject({
+        success: false,
+        error: "credential_not_found",
+        message: "API credential not found or already revoked",
+      });
+    });
+
+    it("disconnects an OAuth app by revoking refresh and live access credentials", async () => {
+      const client = await db.oAuthClient.create({
+        data: {
+          clientName: "Grocery helper",
+          redirectUris: JSON.stringify(["https://example.com/callback"]),
+        },
+      });
+      await db.oAuthRefreshToken.create({
+        data: {
+          tokenHash: `refresh-${faker.string.alphanumeric(12)}`,
+          userId: testUserId,
+          clientId: client.id,
+          scope: "shopping_list:read",
+          resource: null,
+        },
+      });
+      const access = await createApiCredential(db, testUserId, "Grocery helper (OAuth)", {
+        scopes: ["shopping_list:read"],
+        oauthClientId: client.id,
+        oauthResource: null,
+        expiresAt: new Date(Date.now() + 60_000),
+      });
+      const formData = new FormData();
+      formData.append("intent", "disconnectOAuthClient");
+      formData.append("clientId", client.id);
+      formData.append("resource", "");
+
+      const result = await authenticatedPost(formData);
+
+      expect(result).toMatchObject({ success: true });
+      await expect(db.oAuthRefreshToken.findFirstOrThrow({ where: { clientId: client.id } }))
+        .resolves.toMatchObject({ revokedAt: expect.any(Date) });
+      await expect(db.apiCredential.findUniqueOrThrow({ where: { id: access.credential.id } }))
+        .resolves.toMatchObject({ revokedAt: expect.any(Date) });
+    });
+
+    it("rejects missing or unknown OAuth app disconnects", async () => {
+      const missingForm = new FormData();
+      missingForm.append("intent", "disconnectOAuthClient");
+      const unknownForm = new FormData();
+      unknownForm.append("intent", "disconnectOAuthClient");
+      unknownForm.append("clientId", "client_missing");
+      unknownForm.append("resource", "");
+
+      await expect(authenticatedPost(missingForm)).resolves.toMatchObject({
+        success: false,
+        error: "oauth_connection_not_found",
+        message: "OAuth connection not found",
+      });
+      await expect(authenticatedPost(unknownForm)).resolves.toMatchObject({
+        success: false,
+        error: "oauth_connection_not_found",
+        message: "OAuth connection not found or already disconnected",
+      });
+    });
+  });
+
+  describe("component - API and app access", () => {
+    it("renders bearer credentials and OAuth app connections with fallback labels", async () => {
+      const mockData: AccountSettingsLoaderData = {
+        user: {
+          id: testUserId,
+          email: testUserEmail.toLowerCase(),
+          username: testUsername,
+          hasPassword: true,
+          oauthAccounts: [],
+          photoUrl: null,
+          passkeys: [],
+          apiCredentials: [
+            {
+              id: "cred_empty",
+              name: "Empty scope token",
+              tokenPrefix: "sj_empty",
+              scopes: [],
+              createdAt: "2026-06-01T00:00:00.000Z",
+              lastUsedAt: "2026-06-02T00:00:00.000Z",
+              expiresAt: "2026-07-01T00:00:00.000Z",
+            },
+          ],
+          oauthConnections: [
+            {
+              clientId: "client_fallback",
+              clientName: null,
+              resource: null,
+              scopes: [],
+              createdAt: "2026-06-03T00:00:00.000Z",
+              refreshTokenCount: 1,
+              accessTokenCount: 1,
+            },
+            {
+              clientId: "client_plural",
+              clientName: "Plural app",
+              resource: "https://spoonjoy.app/mcp",
+              scopes: ["kitchen:read"],
+              createdAt: "2026-06-04T00:00:00.000Z",
+              refreshTokenCount: 2,
+              accessTokenCount: 3,
+            },
+          ],
+        },
+        notifications: {
+          pushSubscribed: false,
+          preferences: {
+            notifySpoonOnMyRecipe: true,
+            notifyForkOfMyRecipe: true,
+            notifyCookbookSaveOfMine: true,
+            notifyFellowChefOriginCook: true,
+          },
+        },
+      };
+      const Stub = createTestRoutesStub([
+        {
+          id: "account-settings",
+          path: "/account/settings",
+          Component: AccountSettings,
+          loader: () => mockData,
+        },
+      ]);
+
+      render(<Stub initialEntries={["/account/settings"]} />);
+
+      await screen.findByRole("heading", { name: /account settings/i });
+      expect(screen.getByText("Empty scope token")).toBeInTheDocument();
+      expect(screen.getByText(/sj_empty\.\.\. · No scopes/)).toBeInTheDocument();
+      expect(screen.getByText(/Last used Jun 2, 2026/)).toBeInTheDocument();
+      expect(screen.getByText(/Expires Jul 1, 2026/)).toBeInTheDocument();
+      expect(screen.getByText("client_fallback")).toBeInTheDocument();
+      expect(screen.getByText(/REST API · No scopes/)).toBeInTheDocument();
+      expect(screen.getByText(/1 refresh token · 1 live access token/)).toBeInTheDocument();
+      expect(screen.getByText("Plural app")).toBeInTheDocument();
+      expect(screen.getByText(/https:\/\/spoonjoy\.app\/mcp · kitchen:read/)).toBeInTheDocument();
+      expect(screen.getByText(/2 refresh tokens · 3 live access tokens/)).toBeInTheDocument();
     });
   });
 

@@ -6,12 +6,15 @@ import * as apiAuth from "~/lib/api-auth.server";
 import { ApiAuthError, createApiCredential } from "~/lib/api-auth.server";
 import {
   ApiV1Error,
+  type ApiV1RouteArgs,
+  apiV1WaitUntilFor,
   apiV1ErrorResponse,
   handleApiV1Request,
   normalizeApiV1AuthError,
   normalizeApiV1InternalError,
+  parseApiV1JsonBody,
 } from "~/lib/api-v1.server";
-import { API_V1_ERROR_STATUS, API_V1_RESOURCES } from "~/lib/api-v1-contract.server";
+import { API_V1_DISCOVERY_DATA, API_V1_ERROR_STATUS } from "~/lib/api-v1-contract.server";
 import { getLocalDb } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestUser } from "../utils";
@@ -28,9 +31,9 @@ function expectV1Headers(response: Response, requestId: string) {
   expect(response.headers.get("Content-Type")).toContain("application/json");
   expect(response.headers.get("X-Request-Id")).toBe(requestId);
   expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
-  expect(response.headers.get("Access-Control-Allow-Headers")).toBe("Authorization, Content-Type, X-Request-Id");
+  expect(response.headers.get("Access-Control-Allow-Headers")).toBe("Authorization, Content-Type, X-Request-Id, X-Client-Mutation-Id");
   expect(response.headers.get("Access-Control-Allow-Methods")).toBe("GET, POST, PATCH, DELETE, OPTIONS");
-  expect(response.headers.get("Access-Control-Expose-Headers")).toBe("X-Request-Id");
+  expect(response.headers.get("Access-Control-Expose-Headers")).toContain("X-Request-Id");
 }
 
 describe("/api/v1 shell", () => {
@@ -56,24 +59,7 @@ describe("/api/v1 shell", () => {
     await expect(readJson(response)).resolves.toEqual({
       ok: true,
       requestId: "req_test_root",
-      data: {
-        app: "spoonjoy",
-        version: "v1",
-        status: "ok",
-        docsUrl: "https://spoonjoy.app/developers",
-        openapiUrl: "/api/v1/openapi.json",
-        resources: API_V1_RESOURCES,
-        auth: {
-          type: "bearer",
-          tokenUrl: "/api/v1/tokens",
-          oauth: { register: "/oauth/register", authorize: "/oauth/authorize", token: "/oauth/token" },
-          mcp: {
-            endpoint: "/mcp",
-            startAgentConnection: "/api/tools/start_agent_connection",
-            pollAgentConnection: "/api/tools/poll_agent_connection",
-          },
-        },
-      },
+      data: API_V1_DISCOVERY_DATA,
     });
   });
 
@@ -114,6 +100,75 @@ describe("/api/v1 shell", () => {
     });
   });
 
+  it("types Workers waitUntil context for future API v1 telemetry scheduling", async () => {
+    const waitUntil = vi.fn();
+    const args = {
+      request: new UndiciRequest("http://localhost/api/v1/health", {
+        headers: { "X-Request-Id": "req_wait_until_context" },
+      }) as unknown as Request,
+      params: { "*": "health" },
+      context: {
+        cloudflare: {
+          env: null,
+          ctx: { waitUntil, passThroughOnException: vi.fn() },
+        },
+      },
+    } satisfies ApiV1RouteArgs;
+
+    const response = await handleApiV1Request(args);
+
+    expect(response.status).toBe(200);
+    expect(waitUntil).not.toHaveBeenCalled();
+  });
+
+  it("exposes a bound waitUntil scheduler from API v1 route args", async () => {
+    const waitUntil = vi.fn();
+    const args = {
+      request: new UndiciRequest("http://localhost/api/v1/health") as unknown as Request,
+      params: { "*": "health" },
+      context: {
+        cloudflare: {
+          env: null,
+          ctx: { waitUntil, passThroughOnException: vi.fn() },
+        },
+      },
+    } satisfies ApiV1RouteArgs;
+    const promise = Promise.resolve("telemetry");
+
+    apiV1WaitUntilFor(args)?.(promise);
+
+    expect(waitUntil).toHaveBeenCalledWith(promise);
+  });
+
+  it("omits the API v1 scheduler when waitUntil is unavailable", () => {
+    const args = {
+      request: new UndiciRequest("http://localhost/api/v1/health") as unknown as Request,
+      params: { "*": "health" },
+      context: { cloudflare: { env: null } },
+    } satisfies ApiV1RouteArgs;
+
+    expect(apiV1WaitUntilFor(args)).toBeUndefined();
+  });
+
+  it("does not schedule API v1 telemetry when PostHog is disabled", async () => {
+    const waitUntil = vi.fn();
+    const response = await handleApiV1Request({
+      request: new UndiciRequest("http://localhost/api/v1/health", {
+        headers: { "X-Request-Id": "req_disabled_telemetry" },
+      }) as unknown as Request,
+      params: { "*": "health" },
+      context: {
+        cloudflare: {
+          env: { POSTHOG_KEY: "ph_test", POSTHOG_DISABLED: "true" },
+          ctx: { waitUntil, passThroughOnException: vi.fn() },
+        },
+      },
+    } as any);
+
+    expect(response.status).toBe(200);
+    expect(waitUntil).not.toHaveBeenCalled();
+  });
+
   it("serves authenticated health with principal summary and scopes", async () => {
     const db = await getLocalDb();
     const user = await db.user.create({ data: createTestUser() });
@@ -131,7 +186,7 @@ describe("/api/v1 shell", () => {
         version: "v1",
         authenticated: true,
         principal: { id: user.id, username: user.username, source: "bearer" },
-        scopes: ["cookbooks:read", "public:read", "recipes:read", "shopping_list:read", "tokens:read"],
+        scopes: ["cookbooks:read", "kitchen:read", "public:read", "recipes:read", "shopping_list:read"],
       },
     });
   });
@@ -169,7 +224,7 @@ describe("/api/v1 shell", () => {
         code: "rate_limited",
         message: "Too many requests. Try again later.",
         status: 429,
-        details: { retryAfterSeconds: 60 },
+        details: { retryAfterSeconds: 60, scope: "token" },
       },
     });
   });
@@ -199,6 +254,7 @@ describe("/api/v1 shell", () => {
   });
 
   it("normalizes unexpected optional-auth failures to internal_error", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     vi.spyOn(apiAuth, "authenticateApiRequest").mockRejectedValueOnce(new Error("auth storage unavailable"));
 
     const response = await loader(routeArgs(new UndiciRequest("http://localhost/api/v1/health", {
@@ -215,10 +271,19 @@ describe("/api/v1 shell", () => {
       requestId: "req_auth_storage_failure",
       error: {
         code: "internal_error",
-        message: "auth storage unavailable",
+        message: "Internal error",
         status: 500,
       },
     });
+    expect(errorSpy).toHaveBeenCalledWith("[api-v1] internal_error", expect.objectContaining({
+      requestId: "req_auth_storage_failure",
+      method: "GET",
+      path: "/api/v1/health",
+      error: expect.objectContaining({
+        name: "Error",
+        message: "auth storage unavailable",
+      }),
+    }));
   });
 
   it("serves the OpenAPI shell document", async () => {
@@ -244,9 +309,9 @@ describe("/api/v1 shell", () => {
     expect(response.status).toBe(204);
     expect(response.headers.get("X-Request-Id")).toBe("req_options");
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
-    expect(response.headers.get("Access-Control-Allow-Headers")).toBe("Authorization, Content-Type, X-Request-Id");
+    expect(response.headers.get("Access-Control-Allow-Headers")).toBe("Authorization, Content-Type, X-Request-Id, X-Client-Mutation-Id");
     expect(response.headers.get("Access-Control-Allow-Methods")).toBe("GET, POST, PATCH, DELETE, OPTIONS");
-    expect(response.headers.get("Access-Control-Expose-Headers")).toBe("X-Request-Id");
+    expect(response.headers.get("Access-Control-Expose-Headers")).toBe("X-Request-Id, Retry-After");
     expect(response.headers.has("Content-Type")).toBe(false);
     expect(await response.text()).toBe("");
   });
@@ -295,6 +360,17 @@ describe("/api/v1 shell", () => {
     await expect(readJson(unsupported)).resolves.toMatchObject({
       ok: false,
       requestId: "req_put",
+      error: { code: "method_not_allowed", status: 405 },
+    });
+
+    const unsupportedUnknownPath = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/nope", {
+      method: "PUT",
+      headers: { "X-Request-Id": "req_put_unknown" },
+    }) as unknown as Request, "nope"));
+    expect(unsupportedUnknownPath.status).toBe(405);
+    await expect(readJson(unsupportedUnknownPath)).resolves.toMatchObject({
+      ok: false,
+      requestId: "req_put_unknown",
       error: { code: "method_not_allowed", status: 405 },
     });
 
@@ -381,6 +457,7 @@ describe("/api/v1 shell", () => {
       not_found: 404,
       method_not_allowed: 405,
       idempotency_conflict: 409,
+      idempotency_in_progress: 409,
       rate_limited: 429,
       internal_error: 500,
     });
@@ -419,7 +496,7 @@ describe("/api/v1 shell", () => {
     expect(normalizeApiV1InternalError(new Error("Exploded"))).toMatchObject({
       code: "internal_error",
       status: 500,
-      message: "Exploded",
+      message: "Internal error",
     });
     expect(normalizeApiV1InternalError("surprise")).toMatchObject({
       code: "internal_error",
@@ -428,7 +505,40 @@ describe("/api/v1 shell", () => {
     });
   });
 
+  it("validates JSON request body shape and byte limits directly", async () => {
+    await expect(parseApiV1JsonBody(new UndiciRequest("http://localhost/api/v1/tokens", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(["token"]),
+    }) as unknown as Request)).rejects.toMatchObject({
+      code: "validation_error",
+      message: "JSON body must be an object",
+    });
+
+    await expect(parseApiV1JsonBody(new UndiciRequest("http://localhost/api/v1/tokens", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": String((16 * 1024) + 1),
+      },
+      body: "{}",
+    }) as unknown as Request)).rejects.toMatchObject({
+      code: "validation_error",
+      message: "JSON body must be at most 16384 bytes",
+    });
+
+    await expect(parseApiV1JsonBody(new UndiciRequest("http://localhost/api/v1/tokens", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ value: "x".repeat(16 * 1024) }),
+    }) as unknown as Request)).rejects.toMatchObject({
+      code: "validation_error",
+      message: "JSON body must be at most 16384 bytes",
+    });
+  });
+
   it("normalizes unexpected optional-auth failures into internal errors", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     let cloudflareReads = 0;
     const context = {
       get cloudflare() {
@@ -455,9 +565,14 @@ describe("/api/v1 shell", () => {
       requestId: "req_platform_error",
       error: {
         code: "internal_error",
-        message: "Platform env unavailable",
+        message: "Internal error",
         status: 500,
       },
     });
+    expect(errorSpy).toHaveBeenCalledWith("[api-v1] internal_error", expect.objectContaining({
+      requestId: "req_platform_error",
+      method: "GET",
+      path: "/api/v1/health",
+    }));
   });
 });

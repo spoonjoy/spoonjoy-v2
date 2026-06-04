@@ -4,7 +4,7 @@ Spoonjoy serves a remote [Model Context Protocol](https://modelcontextprotocol.i
 
 The connector is the **same tool surface** as the [Ouroboros stdio MCP integration](./ouroboros-mcp.md) and the [HTTP API](./api.md): all three route through one shared operation layer (`app/lib/spoonjoy-api.server.ts`). The connector just exposes it over MCP's Streamable-HTTP transport.
 
-For the broader developer platform, including REST API v1 and tiny-device/client guidance, start at [`/developers`](https://spoonjoy.app/developers) or the OpenAPI document at [`/api/v1/openapi.json`](https://spoonjoy.app/api/v1/openapi.json).
+For the broader developer platform, including REST API v1 and tiny-device/client guidance, start at [`/api`](https://spoonjoy.app/api) or the OpenAPI document at [`/api/v1/openapi.json`](https://spoonjoy.app/api/v1/openapi.json).
 
 ## Endpoint
 
@@ -22,19 +22,19 @@ POST https://spoonjoy.app/mcp
 
 The connector authenticates with an owner-scoped `sj_` API token via the standard `Authorization: Bearer …` header. Tokens are obtained through Spoonjoy's **delegated device-code flow** — you never paste a password into Claude:
 
-1. Start a connection (unauthenticated): call the `start_agent_connection` tool, or `POST /api/tools/start_agent_connection` with `{ "agentName": "claude", "baseUrl": "https://spoonjoy.app" }`. You get an `authorizationUrl`.
+1. Start a connection (unauthenticated): call `POST /api/tools/start_agent_connection` with `{ "agentName": "claude", "scopes": "kitchen:read kitchen:write" }` for the full MCP kitchen tool surface, or `shopping_list:read shopping_list:write` for shopping-list-only clients. You get `verificationUri`, `userCode`, and a complete `authorizationUrl`.
 2. Open the URL in a browser while signed in to Spoonjoy and approve the connection.
 3. Poll `poll_agent_connection`, or `POST /api/tools/poll_agent_connection`, with the returned `deviceCode`; after approval it returns a one-time `sj_…` token.
 4. Configure the connector with that token (below). Store it like a password.
 
-You can also create a bearer credential directly from API v1 while signed in: `POST /api/v1/tokens` with `{ "name": "Claude", "scopes": ["recipes:read", "cookbooks:read", "shopping_list:read", "shopping_list:write"] }`.
+You can also create a bearer credential directly from API v1 while signed in: `POST /api/v1/tokens` with `{ "name": "Claude MCP", "scopes": ["kitchen:read", "kitchen:write"] }` for the full MCP kitchen tool surface. For a shopping-list-only connector, use `{ "scopes": ["shopping_list:read", "shopping_list:write"] }`.
 
 ## Auth: OAuth 2.1 (claude.ai / Claude Desktop one-click)
 
 For connectors that expect OAuth, Spoonjoy is also a minimal OAuth 2.1 authorization server, so adding the connector in claude.ai runs a normal sign-in + consent instead of pasting a token.
 
-- **Discovery:** `GET /.well-known/oauth-authorization-server` (RFC 8414) and `GET /.well-known/oauth-protected-resource` (RFC 9728). A `tools/call` for a protected tool without a valid token returns `401` with `WWW-Authenticate: Bearer resource_metadata="…/.well-known/oauth-protected-resource"`, which is the client's cue to start the flow.
-- **Registration:** `POST /oauth/register` — Dynamic Client Registration (RFC 7591); public client, `token_endpoint_auth_method: none`.
+- **Discovery:** `GET /.well-known/oauth-authorization-server` (RFC 8414) and `GET /.well-known/oauth-protected-resource` (RFC 9728). Any unauthenticated MCP request, including `initialize`, `tools/list`, or `tools/call`, returns `401` with `WWW-Authenticate: Bearer resource_metadata="…/.well-known/oauth-protected-resource"`, which is the client's cue to start the flow.
+- **Registration:** `POST /oauth/register` — Dynamic Client Registration (RFC 7591); public client, `token_endpoint_auth_method: none`. Spoonjoy accepts common client metadata from OAuth libraries, but stores only `client_name` and exact `redirect_uris` today.
 - **Authorize:** `GET /oauth/authorize` — PKCE (S256) only. Signs the user into Spoonjoy if needed, then shows a consent screen for the `kitchen:read` / `kitchen:write` scopes.
 - **Token:** `POST /oauth/token` — `authorization_code` and rotating `refresh_token` grants. The issued access token is a normal Spoonjoy API credential with an expiry; the response also includes a refresh token in the `refresh_token` field. Refresh-token grants rotate the presented token and reject replay.
 
@@ -65,7 +65,7 @@ curl -s -X POST https://spoonjoy.app/mcp \
 
 ## Tools
 
-The connector exposes the same tools as the [Ouroboros stdio MCP integration](./ouroboros-mcp.md#tools) — health, search, recipe CRUD, cookbook organization, shopping-list management, and the delegated-auth bootstrap tools. See that doc for the full table and owner-scoping semantics.
+The connector exposes the same authenticated tools as the [Ouroboros stdio MCP integration](./ouroboros-mcp.md#tools) — health, search, recipe CRUD, cookbook organization, shopping-list management, and token lifecycle. Use `POST /api/tools/start_agent_connection` and `POST /api/tools/poll_agent_connection` before connecting to `/mcp`; unauthenticated `/mcp` calls are challenged.
 
 ## Security posture
 

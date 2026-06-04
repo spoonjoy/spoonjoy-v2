@@ -67,4 +67,35 @@ describe("/mcp route", () => {
     const callBody = await callResponse.json() as { result: { content: { text: string }[] } };
     expect(JSON.parse(callBody.result.content[0].text)).toHaveProperty("shoppingList");
   });
+
+  it("accepts OAuth tokens bound to /mcp and rejects tokens bound elsewhere", async () => {
+    const user = await db.user.create({ data: { email: uniqueEmail(), username: faker.internet.username() } });
+    const matching = await createApiCredential(db, user.id, "MCP OAuth token", {
+      scopes: ["kitchen:read", "kitchen:write"],
+      oauthClientId: "oauth_client_mcp_match",
+      oauthResource: "https://spoonjoy.app/mcp",
+    });
+    const mismatched = await createApiCredential(db, user.id, "Other OAuth token", {
+      scopes: ["kitchen:read", "kitchen:write"],
+      oauthClientId: "oauth_client_mcp_mismatch",
+      oauthResource: "https://elsewhere.example/mcp",
+    });
+
+    const matchingResponse = await action(routeArgs(rpc(
+      { jsonrpc: "2.0", id: 4, method: "tools/list" },
+      { Authorization: `Bearer ${matching.token}` },
+    )));
+    expect(matchingResponse.status).toBe(200);
+    await expect(matchingResponse.json()).resolves.toMatchObject({ result: { tools: expect.any(Array) } });
+
+    const mismatchedResponse = await action(routeArgs(rpc(
+      { jsonrpc: "2.0", id: 5, method: "tools/list" },
+      { Authorization: `Bearer ${mismatched.token}` },
+    )));
+    expect(mismatchedResponse.status).toBe(403);
+    await expect(mismatchedResponse.json()).resolves.toEqual({
+      error: "invalid_token",
+      message: "OAuth access token is not audience-bound to this MCP resource.",
+    });
+  });
 });

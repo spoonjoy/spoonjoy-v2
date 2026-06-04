@@ -91,6 +91,7 @@ describe("API v1 complete scope matrix", () => {
     expect(resolveApiV1ScopeRequirement("GET", "")).toEqual({ auth: "optional", scopes: [] });
     expect(resolveApiV1ScopeRequirement("GET", "health")).toEqual({ auth: "optional", scopes: [] });
     expect(resolveApiV1ScopeRequirement("GET", "openapi.json")).toEqual({ auth: "optional", scopes: [] });
+    expect(resolveApiV1ScopeRequirement("GET", "openapi.sdk.json")).toEqual({ auth: "optional", scopes: [] });
     expect(resolveApiV1ScopeRequirement("GET", "recipes")).toEqual({ auth: "optional", scopes: ["recipes:read"] });
     expect(resolveApiV1ScopeRequirement("GET", "recipes/recipe_1")).toEqual({ auth: "optional", scopes: ["recipes:read"] });
     expect(resolveApiV1ScopeRequirement("GET", "cookbooks")).toEqual({ auth: "optional", scopes: ["cookbooks:read"] });
@@ -111,6 +112,7 @@ describe("API v1 complete scope matrix", () => {
       ["root", "http://localhost/api/v1", "", fixture.noScopes.token],
       ["health", "http://localhost/api/v1/health", "health", fixture.noScopes.token],
       ["openapi", "http://localhost/api/v1/openapi.json", "openapi.json", fixture.noScopes.token],
+      ["openapi-sdk", "http://localhost/api/v1/openapi.sdk.json", "openapi.sdk.json", fixture.noScopes.token],
       ["recipes", "http://localhost/api/v1/recipes", "recipes", fixture.recipesRead.token],
       ["recipe", `http://localhost/api/v1/recipes/${fixture.recipe.id}`, `recipes/${fixture.recipe.id}`, fixture.recipesRead.token],
       ["cookbooks", "http://localhost/api/v1/cookbooks", "cookbooks", fixture.cookbooksRead.token],
@@ -129,11 +131,10 @@ describe("API v1 complete scope matrix", () => {
       expect(allowed.status).toBe(200);
 
       if (["recipes", "recipe", "cookbooks", "cookbook"].includes(name)) {
-        const insufficient = await loader(routeArgs(new UndiciRequest(url, {
+        const publicOnly = await loader(routeArgs(new UndiciRequest(url, {
           headers: bearer(fixture.publicOnly.token, `req_matrix_${name}_public_only`),
         }) as unknown as Request, splat));
-        expect(insufficient.status).toBe(403);
-        expectError(await readJson(insufficient), `req_matrix_${name}_public_only`, "insufficient_scope", 403);
+        expect(publicOnly.status).toBe(200);
 
         const legacy = await loader(routeArgs(new UndiciRequest(url, {
           headers: bearer(fixture.legacyRead.token, `req_matrix_${name}_legacy`),
@@ -226,7 +227,7 @@ describe("API v1 complete scope matrix", () => {
     expect(legacyAdd.status).toBe(201);
   });
 
-  it("enforces authenticated token read/write scopes with legacy compatibility", async () => {
+  it("enforces authenticated token read/write scopes without kitchen-scope escalation", async () => {
     const fixture = await createFixtures(db);
     const missingList = await loader(routeArgs(new UndiciRequest("http://localhost/api/v1/tokens", {
       headers: { "X-Request-Id": "req_matrix_tokens_missing" },
@@ -238,10 +239,10 @@ describe("API v1 complete scope matrix", () => {
     }) as unknown as Request, "tokens"));
     expect(readAllowed.status).toBe(200);
 
-    const legacyReadAllowed = await loader(routeArgs(new UndiciRequest("http://localhost/api/v1/tokens", {
+    const legacyReadBlocked = await loader(routeArgs(new UndiciRequest("http://localhost/api/v1/tokens", {
       headers: bearer(fixture.legacyRead.token, "req_matrix_tokens_legacy_read"),
     }) as unknown as Request, "tokens"));
-    expect(legacyReadAllowed.status).toBe(200);
+    expect(legacyReadBlocked.status).toBe(403);
 
     const writeOnlyList = await loader(routeArgs(new UndiciRequest("http://localhost/api/v1/tokens", {
       headers: bearer(fixture.tokensWrite.token, "req_matrix_tokens_write_only"),
@@ -263,9 +264,15 @@ describe("API v1 complete scope matrix", () => {
     expect(createInsufficient.status).toBe(403);
     expectError(await readJson(createInsufficient), "req_matrix_tokens_create_insufficient", "insufficient_scope", 403);
 
-    const deleteAllowed = await action(routeArgs(new UndiciRequest(`http://localhost/api/v1/tokens/${fixture.publicOnly.credential.id}`, {
+    const legacyDeleteBlocked = await action(routeArgs(new UndiciRequest(`http://localhost/api/v1/tokens/${fixture.publicOnly.credential.id}`, {
       method: "DELETE",
       headers: bearer(fixture.legacyWrite.token, "req_matrix_tokens_delete_legacy"),
+    }) as unknown as Request, `tokens/${fixture.publicOnly.credential.id}`));
+    expect(legacyDeleteBlocked.status).toBe(403);
+
+    const deleteAllowed = await action(routeArgs(new UndiciRequest(`http://localhost/api/v1/tokens/${fixture.publicOnly.credential.id}`, {
+      method: "DELETE",
+      headers: bearer(fixture.tokensWrite.token, "req_matrix_tokens_delete"),
     }) as unknown as Request, `tokens/${fixture.publicOnly.credential.id}`));
     expect(deleteAllowed.status).toBe(200);
   });

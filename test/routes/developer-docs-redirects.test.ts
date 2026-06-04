@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import routes from "~/routes";
 import { action, loader } from "~/routes/api.docs";
+import * as apiDocs from "~/routes/api";
 import * as openapiRedirect from "~/routes/api.openapi";
-import * as playgroundRedirect from "~/routes/api.playground";
+import * as playground from "~/routes/api.playground";
+import * as tryPlayground from "~/routes/api.try";
 
 function routeArgs(url: string) {
   return { request: new Request(url) };
@@ -14,6 +16,7 @@ describe("developer docs API aliases", () => {
     const legacyApiIndex = routeConfig.indexOf("api/*");
 
     for (const alias of [
+      "api",
       "api/docs",
       "api/docs/*",
       "api/developer",
@@ -32,11 +35,11 @@ describe("developer docs API aliases", () => {
   });
 
   it.each([
-    ["/api/docs", "/developers"],
-    ["/api/docs/auth", "/developers"],
-    ["/api/developer", "/developers"],
-    ["/api/developers", "/developers"],
-    ["/api/developers/scopes?from=wearable", "/developers?from=wearable"],
+    ["/api/docs", "/api"],
+    ["/api/docs/auth", "/api"],
+    ["/api/developer", "/api"],
+    ["/api/developers", "/api"],
+    ["/api/developers/scopes?from=wearable", "/api?from=wearable"],
   ])("redirects %s to %s", (from, to) => {
     const response = loader(routeArgs(`https://spoonjoy.app${from}`));
 
@@ -48,7 +51,7 @@ describe("developer docs API aliases", () => {
     const response = action(routeArgs("https://spoonjoy.app/api/docs"));
 
     expect(response.status).toBe(301);
-    expect(response.headers.get("Location")).toBe("/developers");
+    expect(response.headers.get("Location")).toBe("/api");
   });
 
   it.each(["/api/openapi", "/api/openapi.json", "/api/spec"])("redirects %s to the machine-readable OpenAPI spec", (from) => {
@@ -65,17 +68,9 @@ describe("developer docs API aliases", () => {
     expect(response.headers.get("Location")).toBe("/api/v1/openapi.json");
   });
 
-  it.each(["/api/playground", "/api/try"])("redirects %s to the developer playground", (from) => {
-    const response = playgroundRedirect.loader(routeArgs(`https://spoonjoy.app${from}`));
-
-    expect(response.status).toBe(301);
-    expect(response.headers.get("Location")).toBe("/developers/playground");
-  });
-
-  it("redirects playground mutation methods to the playground too", () => {
-    const response = playgroundRedirect.action(routeArgs("https://spoonjoy.app/api/playground"));
-
-    expect(response.status).toBe(301);
-    expect(response.headers.get("Location")).toBe("/developers/playground");
+  it("renders the canonical docs and playground modules directly under /api", async () => {
+    expect(apiDocs.loader({} as any).resources.length).toBeGreaterThan(0);
+    expect((await playground.loader()).manifest.operations.length).toBeGreaterThan(0);
+    expect((await tryPlayground.loader()).manifest.operations.length).toBeGreaterThan(0);
   });
 });

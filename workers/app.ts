@@ -1,5 +1,6 @@
 import { createRequestHandler } from "react-router";
 import { canonicalizeRequestUrlForHost } from "../app/lib/canonical-host.server";
+import { oauthCorsPreflightResponse } from "../app/lib/oauth-cors.server";
 import { withSecurityHeaders } from "../app/lib/security-headers.server";
 import {
   captureException,
@@ -17,6 +18,11 @@ const requestHandler = createRequestHandler(
 
 export default {
   async fetch(request, env, ctx) {
+    const oauthPreflight = oauthCorsPreflightResponse(request);
+    if (oauthPreflight) {
+      return withSecurityHeaders(oauthPreflight);
+    }
+
     const canonicalUrl =
       canonicalizeRequestUrlForHost(request.url, request.headers.get("X-Forwarded-Host")) ??
       canonicalizeRequestUrlForHost(request.url, request.headers.get("Host"));

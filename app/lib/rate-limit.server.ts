@@ -71,16 +71,35 @@ export async function hashTokenForRateLimitKey(token: string): Promise<string> {
 /**
  * Pick the right limiter + key for this request and call it.
  *
- * - If a bearer token is present and a token limiter is configured,
- *   uses the token path.
- * - Else if an IP is present and an IP limiter is configured, uses
- *   the IP path.
+ * - If an IP is present and an IP limiter is configured, applies an IP guard.
+ * - If a bearer token is present and a token limiter is configured, also
+ *   applies the token path. This keeps invalid-token rotation from bypassing
+ *   rate limits before auth can reject the token.
  * - Otherwise returns `{ allowed: true, scope: "skip" }`.
  */
 export async function enforceRateLimit(
   ctx: RateLimitContext,
 ): Promise<RateLimitResult> {
   const token = parseBearerToken(ctx.authorization);
+
+  if (ctx.ip && ctx.ipLimiter) {
+    const key = `ip:${ctx.ip}`;
+    const { success } = await ctx.ipLimiter.limit({ key });
+    if (!success) {
+      return {
+        allowed: false,
+        retryAfterSeconds: DEFAULT_RETRY_AFTER_SECONDS,
+        scope: "ip",
+      };
+    }
+    if (!token || !ctx.tokenLimiter) {
+      return {
+        allowed: true,
+        retryAfterSeconds: 0,
+        scope: "ip",
+      };
+    }
+  }
 
   if (token && ctx.tokenLimiter) {
     const key = `token:${await hashTokenForRateLimitKey(token)}`;
@@ -89,16 +108,6 @@ export async function enforceRateLimit(
       allowed: success,
       retryAfterSeconds: success ? 0 : DEFAULT_RETRY_AFTER_SECONDS,
       scope: "token",
-    };
-  }
-
-  if (ctx.ip && ctx.ipLimiter) {
-    const key = `ip:${ctx.ip}`;
-    const { success } = await ctx.ipLimiter.limit({ key });
-    return {
-      allowed: success,
-      retryAfterSeconds: success ? 0 : DEFAULT_RETRY_AFTER_SECONDS,
-      scope: "ip",
     };
   }
 

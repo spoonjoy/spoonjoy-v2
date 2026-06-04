@@ -51,6 +51,9 @@ export async function cleanupDatabase() {
   await db.agentConnectionRequest.deleteMany({});
   await db.apiIdempotencyKey.deleteMany({});
   await db.apiCredential.deleteMany({});
+  await db.oAuthAuthCode.deleteMany({});
+  await db.oAuthRefreshToken.deleteMany({});
+  await db.oAuthClient.deleteMany({});
   await db.userCredential.deleteMany({});
   await db.oAuth.deleteMany({});
   await db.user.deleteMany({});

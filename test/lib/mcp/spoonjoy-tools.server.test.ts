@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import { faker } from "@faker-js/faker";
 import { getLocalDb } from "~/lib/db.server";
-import { authenticateApiToken } from "~/lib/api-auth.server";
+import { authenticateApiToken, createApiCredential } from "~/lib/api-auth.server";
 import { callSpoonjoyMcpTool, listSpoonjoyMcpTools, type SpoonjoyMcpContext } from "~/lib/mcp/spoonjoy-tools.server";
 import { ACTIVE_RECIPE_TITLE_CONFLICT_ERROR } from "~/lib/recipe-title-uniqueness.server";
 import { cleanupDatabase } from "../../helpers/cleanup";
@@ -106,6 +106,7 @@ describe("spoonjoy MCP tools", () => {
 
     expect(byName.get("get_recipe")).toMatchObject({ readOnlyHint: true });
     expect(byName.get("create_recipe")).toMatchObject({ readOnlyHint: false, destructiveHint: false });
+    expect(byName.get("update_recipe")).toMatchObject({ readOnlyHint: false, destructiveHint: true });
     expect(byName.get("delete_recipe")).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true });
     expect(byName.get("import_recipe_from_url")).toMatchObject({ readOnlyHint: false, openWorldHint: true });
     expect(byName.get("add_recipe_to_cookbook")).toMatchObject({ idempotentHint: true });
@@ -135,7 +136,7 @@ describe("spoonjoy MCP tools", () => {
       defaultOwner: null,
       writable: false,
       standards: [
-        "OAuth 2.0 Device Authorization Grant (RFC 8628)",
+        "Custom Spoonjoy delegated approval link",
         "MCP OAuth authorization",
       ],
       guidance: expect.stringContaining("never ask for their password"),
@@ -197,7 +198,8 @@ describe("spoonjoy MCP tools", () => {
       deviceCode: expect.stringMatching(/^sjdc_/),
       userCode: expect.stringMatching(/^[A-Z2-9]{4}-[A-Z2-9]{4}$/),
       authorizationUrl: expect.stringContaining("https://spoonjoy.app/agent/connect/"),
-      verificationUri: expect.stringContaining("https://spoonjoy.app/agent/connect/"),
+      verificationUri: "https://spoonjoy.app/agent/connect",
+      verificationUriComplete: expect.stringContaining("https://spoonjoy.app/agent/connect/"),
       interval: 2,
       message: expect.stringContaining("Never ask"),
     });
@@ -278,8 +280,29 @@ describe("spoonjoy MCP tools", () => {
     const health = parseJson(await callSpoonjoyMcpTool("health", {}, authedContext));
     expect(health).toMatchObject({ authenticated: true, authSource: "bearer", writable: true });
 
+    const limited = await createApiCredential(context.db, principal.id, "Limited issuer", {
+      scopes: ["recipes:read", "tokens:write"],
+    });
+    const limitedPrincipal = await authenticateApiToken(context.db, limited.token);
+    const limitedContext: SpoonjoyMcpContext = { db: context.db, principal: limitedPrincipal };
+    const inherited = parseJson(await callSpoonjoyMcpTool("create_api_token", {
+      name: "Inherited limited token",
+    }, limitedContext));
+    await expect(context.db.apiCredential.findUniqueOrThrow({ where: { id: inherited.credential.id } }))
+      .resolves.toMatchObject({ scopes: "recipes:read tokens:write" });
+    const subset = parseJson(await callSpoonjoyMcpTool("create_api_token", {
+      name: "Recipe reader child",
+      scopes: ["recipes:read"],
+    }, limitedContext));
+    await expect(context.db.apiCredential.findUniqueOrThrow({ where: { id: subset.credential.id } }))
+      .resolves.toMatchObject({ scopes: "recipes:read" });
+    await expect(callSpoonjoyMcpTool("create_api_token", {
+      name: "Too broad",
+      scopes: ["shopping_list:write"],
+    }, limitedContext)).rejects.toThrow("outside the caller's scopes");
+
     const listed = parseJson(await callSpoonjoyMcpTool("list_api_tokens", {}, authedContext));
-    expect(listed.credentials).toHaveLength(2);
+    expect(listed.credentials).toHaveLength(5);
     expect(listed.credentials).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: created.credential.id, name: "Ouro vault token" }),
       expect.objectContaining({ id: defaultNamed.credential.id, name: "Spoonjoy API token" }),

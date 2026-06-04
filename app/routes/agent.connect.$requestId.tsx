@@ -16,8 +16,19 @@ type LoaderData = {
   status: AgentConnectionPublicStatus | "missing";
   agentName: string;
   userCode: string | null;
+  scopes: string[];
   userEmail: string | null;
   expiresAt: string | null;
+};
+
+const SCOPE_LABELS: Record<string, string> = {
+  "cookbooks:read": "Read public cookbooks",
+  "kitchen:read": "Read public recipes, cookbooks, and your shopping list",
+  "kitchen:write": "Use write-capable kitchen tools and shopping-list writes",
+  "public:read": "Read public Spoonjoy data",
+  "recipes:read": "Read public recipes",
+  "shopping_list:read": "Read your shopping list",
+  "shopping_list:write": "Add, check, and remove shopping-list items",
 };
 
 function loginRedirect(request: Request): string {
@@ -33,6 +44,12 @@ function connectionTitle(status: LoaderData["status"]): string {
   return "Connection Expired";
 }
 
+function normalizeUserCode(value: string | null): string {
+  const compact = (value ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (compact.length <= 4) return compact;
+  return `${compact.slice(0, 4)}-${compact.slice(4, 8)}`;
+}
+
 export async function loader({ request, context, params }: Route.LoaderArgs) {
   const db = await getRequestDb(context);
   const connection = await getAgentConnectionRequest(db, params.requestId);
@@ -41,6 +58,19 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
       status: "missing",
       agentName: "this agent",
       userCode: null,
+      scopes: [],
+      userEmail: null,
+      expiresAt: null,
+    } satisfies LoaderData;
+  }
+
+  const suppliedCode = normalizeUserCode(new URL(request.url).searchParams.get("code"));
+  if (connection.status === "pending" && suppliedCode !== connection.userCode) {
+    return {
+      status: "missing",
+      agentName: "this agent",
+      userCode: null,
+      scopes: [],
       userEmail: null,
       expiresAt: null,
     } satisfies LoaderData;
@@ -59,6 +89,7 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
     status: connection.status as AgentConnectionPublicStatus,
     agentName: connection.agentName,
     userCode: connection.userCode,
+    scopes: connection.scopes.split(/\s+/).filter(Boolean),
     userEmail: user?.email ?? null,
     expiresAt: connection.expiresAt.toISOString(),
   } satisfies LoaderData;
@@ -70,7 +101,12 @@ export async function action({ request, context, params }: Route.ActionArgs) {
 
   const formData = await request.formData();
   const intent = formData.get("intent")?.toString();
+  const userCode = normalizeUserCode(formData.get("userCode")?.toString() ?? "");
   const db = await getRequestDb(context);
+  const connection = await getAgentConnectionRequest(db, params.requestId);
+  if (!connection || userCode !== connection.userCode) {
+    return data({ error: "Connection code is required" }, { status: 400 });
+  }
 
   if (intent === "approve") {
     await approveAgentConnectionRequest(db, params.requestId, userId);
@@ -88,6 +124,8 @@ export async function action({ request, context, params }: Route.ActionArgs) {
 export default function AgentConnect() {
   const connection = useLoaderData<typeof loader>();
   const actionable = connection.status === "pending";
+  const scopes = connection.scopes ?? [];
+  const broadScopes = scopes.filter((scope) => scope === "kitchen:read" || scope === "kitchen:write");
 
   return (
     <main className="mx-auto flex min-h-[70svh] w-full max-w-xl flex-col justify-center px-6 py-12">
@@ -97,7 +135,7 @@ export default function AgentConnect() {
       <Heading className="mt-3">{connectionTitle(connection.status)}</Heading>
       <Text className="mt-5 text-lg/7">
         {actionable
-          ? `${connection.agentName} wants permission to view and edit your Spoonjoy kitchen.`
+          ? `${connection.agentName} wants permission to use Spoonjoy with these exact scopes.`
           : connection.status === "approved" || connection.status === "claimed"
             ? `${connection.agentName} can now use Spoonjoy on your behalf.`
             : connection.status === "denied"
@@ -116,14 +154,45 @@ export default function AgentConnect() {
         </div>
       )}
 
+      {actionable && scopes.length > 0 ? (
+        <div className="mt-6 border-y border-[var(--sj-border)] py-5">
+          <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)]">
+            Requested scopes
+          </p>
+          <ul className="mt-3 grid gap-2">
+            {scopes.map((scope) => (
+              <li key={scope} className="text-sm/6 text-[var(--sj-ink)]">
+                <span className="font-mono font-semibold">{scope}</span>
+                {" "}
+                <span className="text-[var(--sj-ink-soft)]">{SCOPE_LABELS[scope] ?? "Custom delegated scope"}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       {connection.userEmail && actionable && (
         <Text className="mt-5">
           You are approving as {connection.userEmail}.
         </Text>
       )}
 
+      {actionable ? (
+        <>
+          {broadScopes.length ? (
+            <Text className="mt-5" role="alert">
+              This request includes broad kitchen scopes. Approve only if you trust this client to act across Spoonjoy kitchen data.
+            </Text>
+          ) : null}
+          <Text className="mt-5">
+            Approval creates a normal Spoonjoy bearer token for this client. The client should never ask for your Spoonjoy password, and the token can be revoked later through Spoonjoy token-management APIs.
+          </Text>
+        </>
+      ) : null}
+
       {actionable && (
         <Form method="post" className="mt-8 flex flex-col gap-3 sm:flex-row">
+          <input type="hidden" name="userCode" value={connection.userCode ?? ""} />
           <Button type="submit" name="intent" value="approve">
             Approve Access
           </Button>

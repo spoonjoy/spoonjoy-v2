@@ -26,6 +26,9 @@ describe("API v1 recipe list query", () => {
         title: "Tiny-device pasta",
         description: "Summary-safe recipe",
         servings: "2",
+        sourceUrl: null,
+        sourceRecipe: null,
+        covers: [],
         chef: { id: "chef_1", username: "ari" },
         createdAt: new Date("2026-06-01T12:00:00.000Z"),
         updatedAt: new Date("2026-06-01T12:30:00.000Z"),
@@ -63,9 +66,22 @@ describe("API v1 recipe list query", () => {
         title: true,
         description: true,
         servings: true,
+        sourceUrl: true,
         createdAt: true,
         updatedAt: true,
         chef: { select: { id: true, username: true } },
+        sourceRecipe: {
+          select: {
+            id: true,
+            title: true,
+            deletedAt: true,
+            chef: { select: { id: true, username: true } },
+          },
+        },
+        covers: {
+          select: { id: true, imageUrl: true, stylizedImageUrl: true, createdAt: true },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        },
       },
     }));
     expect(mocks.recipeFindMany.mock.calls[0][0]).not.toHaveProperty("include");

@@ -49,9 +49,9 @@ function expectEnvelopeHeaders(response: Response, requestId: string) {
   expect(response.headers.get("Content-Type")).toContain("application/json");
   expect(response.headers.get("X-Request-Id")).toBe(requestId);
   expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
-  expect(response.headers.get("Access-Control-Allow-Headers")).toBe("Authorization, Content-Type, X-Request-Id");
+  expect(response.headers.get("Access-Control-Allow-Headers")).toBe("Authorization, Content-Type, X-Request-Id, X-Client-Mutation-Id");
   expect(response.headers.get("Access-Control-Allow-Methods")).toBe("GET, POST, PATCH, DELETE, OPTIONS");
-  expect(response.headers.get("Access-Control-Expose-Headers")).toBe("X-Request-Id");
+  expect(response.headers.get("Access-Control-Expose-Headers")).toBe("X-Request-Id, Retry-After");
 }
 
 function expectSuccessEnvelope(payload: any, requestId: string) {
@@ -178,7 +178,7 @@ describe("API v1 shopping-list mutations", () => {
     expect(add.status).toBe(201);
     expectEnvelopeHeaders(add, "req_add_item");
     expectSuccessEnvelope(addPayload, "req_add_item");
-    expectExactKeys(addPayload.data, ["created", "updated", "item", "shoppingList", "mutation"]);
+    expectExactKeys(addPayload.data, ["created", "updated", "item", "mutation"]);
     expect(addPayload.data).toMatchObject({ created: true, updated: false });
     expectShoppingItemShape(addPayload.data.item);
     expect(addPayload.data.item).toMatchObject({
@@ -191,15 +191,6 @@ describe("API v1 shopping-list mutations", () => {
       categoryKey: "dairy",
       iconKey: "egg",
       sortIndex: 0,
-    });
-    expectShoppingListShape(addPayload.data.shoppingList);
-    for (const item of addPayload.data.shoppingList.items) {
-      expectShoppingItemShape(item);
-    }
-    expect(addPayload.data.shoppingList).toMatchObject({
-      id: fixture.list.id,
-      chef: { id: fixture.user.id, username: fixture.user.username },
-      items: [{ id: addPayload.data.item.id }],
     });
     expectMutationShape(addPayload.data.mutation, "client-add-1", false);
 
@@ -215,7 +206,7 @@ describe("API v1 shopping-list mutations", () => {
     expect(check.status).toBe(200);
     expectEnvelopeHeaders(check, "req_check_item");
     expectSuccessEnvelope(checkPayload, "req_check_item");
-    expectExactKeys(checkPayload.data, ["item", "shoppingList", "mutation"]);
+    expectExactKeys(checkPayload.data, ["item", "mutation"]);
     expectShoppingItemShape(checkPayload.data.item);
     expect(checkPayload.data.item).toMatchObject({
       id: addPayload.data.item.id,
@@ -223,12 +214,6 @@ describe("API v1 shopping-list mutations", () => {
       checkedAt: expect.any(String),
       deletedAt: null,
     });
-    expectShoppingListShape(checkPayload.data.shoppingList);
-    expect(checkPayload.data.shoppingList.items).toHaveLength(1);
-    for (const item of checkPayload.data.shoppingList.items) {
-      expectShoppingItemShape(item);
-    }
-    expect(checkPayload.data.shoppingList.items[0]).toMatchObject({ id: addPayload.data.item.id, checked: true });
     expectMutationShape(checkPayload.data.mutation, "client-check-1", false);
 
     const remove = await action(routeArgs(
@@ -242,7 +227,7 @@ describe("API v1 shopping-list mutations", () => {
     expect(remove.status).toBe(200);
     expectEnvelopeHeaders(remove, "req_remove_item");
     expectSuccessEnvelope(removePayload, "req_remove_item");
-    expectExactKeys(removePayload.data, ["removed", "item", "shoppingList", "mutation"]);
+    expectExactKeys(removePayload.data, ["removed", "item", "mutation"]);
     expect(removePayload.data.removed).toBe(true);
     expectShoppingItemShape(removePayload.data.item);
     expect(removePayload.data.item).toMatchObject({
@@ -250,8 +235,6 @@ describe("API v1 shopping-list mutations", () => {
       checked: true,
       deletedAt: expect.any(String),
     });
-    expectShoppingListShape(removePayload.data.shoppingList);
-    expect(removePayload.data.shoppingList.items).toEqual([]);
     expectMutationShape(removePayload.data.mutation, "client-remove-1", false);
 
     const legacyAdd = await action(routeArgs(
@@ -312,13 +295,9 @@ describe("API v1 shopping-list mutations", () => {
     expect(restore.status).toBe(200);
     expectEnvelopeHeaders(restore, "req_restore_item");
     expectSuccessEnvelope(restorePayload, "req_restore_item");
-    expectExactKeys(restorePayload.data, ["created", "updated", "item", "shoppingList", "mutation"]);
+    expectExactKeys(restorePayload.data, ["created", "updated", "item", "mutation"]);
     expect(restorePayload.data).toMatchObject({ created: false, updated: true });
     expectShoppingItemShape(restorePayload.data.item);
-    expectShoppingListShape(restorePayload.data.shoppingList);
-    for (const item of restorePayload.data.shoppingList.items) {
-      expectShoppingItemShape(item);
-    }
     expect(restorePayload.data.item).toMatchObject({
       id: existing.id,
       name: ingredientRef.name,
@@ -415,9 +394,6 @@ describe("API v1 shopping-list mutations", () => {
       item: { id: firstPayload.data.item.id, quantity: 4, checked: false, deletedAt: null },
       mutation: { clientMutationId: "duplicate-second", replayed: false },
     });
-    for (const item of duplicatePayload.data.shoppingList.items) {
-      expectShoppingItemShape(item);
-    }
 
     const nullQuantityName = `Null Quantity Plums ${faker.string.alphanumeric(6)}`;
     const nullQuantityFirst = await action(routeArgs(
@@ -494,10 +470,6 @@ describe("API v1 shopping-list mutations", () => {
       item: { id: firstPayload.data.item.id, deletedAt: expect.any(String) },
       mutation: { clientMutationId: "delete-twice", replayed: false },
     });
-    expect(deleteAgainPayload.data.shoppingList.items.map((item: { id: string }) => item.id)).not.toContain(firstPayload.data.item.id);
-    for (const item of deleteAgainPayload.data.shoppingList.items) {
-      expectShoppingItemShape(item);
-    }
 
     const validationCases = [
       {
@@ -517,6 +489,12 @@ describe("API v1 shopping-list mutations", () => {
         path: "shopping-list/items",
         requestId: "req_add_bad_unit",
         body: { clientMutationId: "bad-unit", name: "Tea", unit: 5 },
+      },
+      {
+        method: "POST" as const,
+        path: "shopping-list/items",
+        requestId: "req_add_long_category",
+        body: { clientMutationId: "bad-category", name: "Tea", categoryKey: "x".repeat(161) },
       },
       {
         method: "PATCH" as const,

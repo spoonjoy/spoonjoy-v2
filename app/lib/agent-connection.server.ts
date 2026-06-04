@@ -1,12 +1,13 @@
 import type { AgentConnectionRequest, PrismaClient as PrismaClientType } from "@prisma/client";
 import { ApiAuthError, createApiCredential, hashApiToken } from "~/lib/api-auth.server";
+import { normalizeScope, OAuthError } from "~/lib/oauth-server.server";
 
 type Database = PrismaClientType;
 
 const DEFAULT_AGENT_NAME = "Ouroboros agent";
 const DEFAULT_BASE_URL = "https://spoonjoy.app";
 const DEFAULT_TTL_MINUTES = 10;
-const DEFAULT_SCOPES = "kitchen:read kitchen:write";
+const DEFAULT_SCOPES = "shopping_list:read shopping_list:write";
 const USER_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 export type AgentConnectionPublicStatus = "pending" | "approved" | "denied" | "expired" | "claimed";
@@ -15,6 +16,8 @@ export interface StartedAgentConnection {
   request: AgentConnectionRequest;
   deviceCode: string;
   authorizationUrl: string;
+  verificationUri: string;
+  verificationUriComplete: string;
   expiresIn: number;
   interval: number;
 }
@@ -23,13 +26,17 @@ export interface PolledAgentConnection {
   status: AgentConnectionPublicStatus;
   expiresAt: string;
   authorizationUrl?: string;
+  verificationUri?: string;
+  verificationUriComplete?: string;
   userCode?: string;
   token?: string;
   credential?: {
     id: string;
     name: string;
     tokenPrefix: string;
+    scopes: string[];
     createdAt: string;
+    expiresAt: string | null;
   };
   storage?: {
     vaultItem: string;
@@ -67,6 +74,18 @@ function normalizeAgentName(value: string | undefined): string {
   return trimmed.slice(0, 80);
 }
 
+function normalizeDelegatedScopes(value: string | undefined): string {
+  if (value === undefined || value.trim() === "") return DEFAULT_SCOPES;
+  try {
+    return normalizeScope(value);
+  } catch (error) {
+    if (error instanceof OAuthError) {
+      throw new ApiAuthError(error.message, error.status);
+    }
+    throw error;
+  }
+}
+
 function normalizeBaseUrl(value: string | undefined): string {
   const url = new URL(value?.trim() || DEFAULT_BASE_URL);
   if (url.protocol !== "https:" && url.hostname !== "localhost" && url.hostname !== "127.0.0.1") {
@@ -79,6 +98,10 @@ function connectionUrl(baseUrl: string, id: string, userCode: string): string {
   const url = new URL(`/agent/connect/${encodeURIComponent(id)}`, baseUrl);
   url.searchParams.set("code", userCode);
   return url.toString();
+}
+
+function verificationUrl(baseUrl: string): string {
+  return new URL("/agent/connect", baseUrl).toString();
 }
 
 function secondsBetween(from: Date, to: Date): number {
@@ -119,6 +142,7 @@ export async function startAgentConnection(
   input: {
     agentName?: string;
     baseUrl?: string;
+    scopes?: string;
     now?: Date;
     ttlMinutes?: number;
   } = {},
@@ -133,15 +157,19 @@ export async function startAgentConnection(
       deviceCodeHash: await hashApiToken(deviceCode),
       userCode,
       agentName: normalizeAgentName(input.agentName),
-      scopes: DEFAULT_SCOPES,
+      scopes: normalizeDelegatedScopes(input.scopes),
       expiresAt,
     },
   });
 
+  const baseUrl = normalizeBaseUrl(input.baseUrl);
+  const authorizationUrl = connectionUrl(baseUrl, request.id, userCode);
   return {
     request,
     deviceCode,
-    authorizationUrl: connectionUrl(normalizeBaseUrl(input.baseUrl), request.id, userCode),
+    authorizationUrl,
+    verificationUri: verificationUrl(baseUrl),
+    verificationUriComplete: authorizationUrl,
     expiresIn: secondsBetween(now, expiresAt),
     interval: 2,
   };
@@ -217,10 +245,14 @@ export async function pollAgentConnection(
   const expiresAt = current.expiresAt.toISOString();
 
   if (status === "pending") {
+    const baseUrl = normalizeBaseUrl(input.baseUrl);
+    const authorizationUrl = connectionUrl(baseUrl, current.id, current.userCode);
     return {
       status,
       expiresAt,
-      authorizationUrl: connectionUrl(normalizeBaseUrl(input.baseUrl), current.id, current.userCode),
+      authorizationUrl,
+      verificationUri: verificationUrl(baseUrl),
+      verificationUriComplete: authorizationUrl,
       userCode: current.userCode,
       message: "Waiting for the user to approve this Spoonjoy connection.",
     };
@@ -262,7 +294,9 @@ export async function pollAgentConnection(
         id: created.credential.id,
         name: created.credential.name,
         tokenPrefix: created.credential.tokenPrefix,
+        scopes: created.credential.scopes.trim().split(/\s+/).filter(Boolean),
         createdAt: created.credential.createdAt.toISOString(),
+        expiresAt: created.credential.expiresAt?.toISOString() ?? null,
       },
       storage: {
         vaultItem: "spoonjoy.app",

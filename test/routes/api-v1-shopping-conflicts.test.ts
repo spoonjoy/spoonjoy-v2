@@ -3,6 +3,7 @@ import { faker } from "@faker-js/faker";
 import { Request as UndiciRequest } from "undici";
 import { action } from "~/routes/api.v1.$";
 import { createApiCredential } from "~/lib/api-auth.server";
+import { hashIdempotencyRequest, idempotencyClientKey, IDEMPOTENCY_TTL_MS } from "~/lib/api-idempotency.server";
 import { getLocalDb } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestUser } from "../utils";
@@ -31,9 +32,9 @@ function expectEnvelopeHeaders(response: Response, requestId: string) {
   expect(response.headers.get("Content-Type")).toContain("application/json");
   expect(response.headers.get("X-Request-Id")).toBe(requestId);
   expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
-  expect(response.headers.get("Access-Control-Allow-Headers")).toBe("Authorization, Content-Type, X-Request-Id");
+  expect(response.headers.get("Access-Control-Allow-Headers")).toBe("Authorization, Content-Type, X-Request-Id, X-Client-Mutation-Id");
   expect(response.headers.get("Access-Control-Allow-Methods")).toBe("GET, POST, PATCH, DELETE, OPTIONS");
-  expect(response.headers.get("Access-Control-Expose-Headers")).toBe("X-Request-Id");
+  expect(response.headers.get("Access-Control-Expose-Headers")).toBe("X-Request-Id, Retry-After");
 }
 
 function expectSuccess(payload: any, requestId: string) {
@@ -78,11 +79,11 @@ describe("API v1 shopping-list conflict and error semantics", () => {
     await cleanupDatabase();
   });
 
-  it("uses server write order for check/delete conflicts and ignores client timestamps", async () => {
+  it("uses server write order for check/delete conflicts and rejects client timestamps", async () => {
     const fixture = await createFixture(db);
     const item = await addItem(fixture.credential.token);
 
-    const checked = await action(routeArgs(
+    const staleTimestamp = await action(routeArgs(
       mutationRequest("PATCH", `shopping-list/items/${item.id}`, fixture.credential.token, "req_conflict_check", {
         clientMutationId: "conflict-check",
         checked: true,
@@ -91,11 +92,32 @@ describe("API v1 shopping-list conflict and error semantics", () => {
       }),
       `shopping-list/items/${item.id}`,
     ));
+    const staleTimestampPayload = await readJson(staleTimestamp);
+
+    expect(staleTimestamp.status).toBe(400);
+    expectEnvelopeHeaders(staleTimestamp, "req_conflict_check");
+    expect(staleTimestampPayload).toMatchObject({
+      ok: false,
+      requestId: "req_conflict_check",
+      error: {
+        code: "validation_error",
+        status: 400,
+        details: { fields: ["updatedAt", "checkedAt"] },
+      },
+    });
+
+    const checked = await action(routeArgs(
+      mutationRequest("PATCH", `shopping-list/items/${item.id}`, fixture.credential.token, "req_conflict_check_valid", {
+        clientMutationId: "conflict-check",
+        checked: true,
+      }),
+      `shopping-list/items/${item.id}`,
+    ));
     const checkedPayload = await readJson(checked);
 
     expect(checked.status).toBe(200);
-    expectEnvelopeHeaders(checked, "req_conflict_check");
-    expectSuccess(checkedPayload, "req_conflict_check");
+    expectEnvelopeHeaders(checked, "req_conflict_check_valid");
+    expectSuccess(checkedPayload, "req_conflict_check_valid");
     expect(checkedPayload.data.item).toMatchObject({
       id: item.id,
       checked: true,
@@ -108,8 +130,6 @@ describe("API v1 shopping-list conflict and error semantics", () => {
     const removed = await action(routeArgs(
       mutationRequest("DELETE", `shopping-list/items/${item.id}`, fixture.credential.token, "req_conflict_remove", {
         clientMutationId: "conflict-remove",
-        updatedAt: "1900-01-01T00:00:00.000Z",
-        deletedAt: "1900-01-01T00:00:00.000Z",
       }),
       `shopping-list/items/${item.id}`,
     ));
@@ -121,34 +141,27 @@ describe("API v1 shopping-list conflict and error semantics", () => {
     expect(removedPayload.data).toMatchObject({
       removed: true,
       item: { id: item.id, checked: true, deletedAt: expect.any(String) },
-      shoppingList: { items: [] },
     });
+    expect(removedPayload.data).not.toHaveProperty("shoppingList");
     expect(removedPayload.data.item.deletedAt).not.toBe("1900-01-01T00:00:00.000Z");
     expectMutation(removedPayload, "conflict-remove");
 
-    const restored = await action(routeArgs(
+    const staleRestore = await action(routeArgs(
       mutationRequest("PATCH", `shopping-list/items/${item.id}`, fixture.credential.token, "req_conflict_restore", {
         clientMutationId: "conflict-restore",
         checked: false,
-        updatedAt: "1900-01-01T00:00:00.000Z",
-        checkedAt: "1900-01-01T00:00:00.000Z",
-        deletedAt: "1900-01-01T00:00:00.000Z",
       }),
       `shopping-list/items/${item.id}`,
     ));
-    const restoredPayload = await readJson(restored);
+    const staleRestorePayload = await readJson(staleRestore);
 
-    expect(restored.status).toBe(200);
-    expectEnvelopeHeaders(restored, "req_conflict_restore");
-    expectSuccess(restoredPayload, "req_conflict_restore");
-    expect(restoredPayload.data.item).toMatchObject({
-      id: item.id,
-      checked: false,
-      checkedAt: null,
-      deletedAt: null,
+    expect(staleRestore.status).toBe(404);
+    expectEnvelopeHeaders(staleRestore, "req_conflict_restore");
+    expect(staleRestorePayload).toMatchObject({
+      ok: false,
+      requestId: "req_conflict_restore",
+      error: { code: "not_found", status: 404 },
     });
-    expect(restoredPayload.data.shoppingList.items.map((active: { id: string }) => active.id)).toContain(item.id);
-    expectMutation(restoredPayload, "conflict-restore");
   });
 
   it("returns machine-readable missing item and malformed JSON errors", async () => {
@@ -212,6 +225,49 @@ describe("API v1 shopping-list conflict and error semantics", () => {
       ok: false,
       requestId: "req_conflict_malformed_json",
       error: { code: "invalid_json", status: 400 },
+    });
+  });
+
+  it("returns retry semantics while an idempotent mutation is in progress", async () => {
+    const fixture = await createFixture(db);
+    const body = {
+      clientMutationId: "conflict-in-flight",
+      name: `In Flight Eggs ${faker.string.alphanumeric(6)}`,
+    };
+    const now = new Date();
+    await db.apiIdempotencyKey.create({
+      data: {
+        userId: fixture.user.id,
+        credentialId: fixture.credential.credential.id,
+        clientKey: idempotencyClientKey({ id: fixture.user.id, source: "bearer", credentialId: fixture.credential.credential.id }),
+        key: body.clientMutationId,
+        operation: "shopping-list.items.create",
+        requestHash: await hashIdempotencyRequest({
+          method: "POST",
+          path: "/api/v1/shopping-list/items",
+          body,
+        }),
+        expiresAt: new Date(now.getTime() + IDEMPOTENCY_TTL_MS),
+      },
+    });
+
+    const response = await action(routeArgs(
+      mutationRequest("POST", "shopping-list/items", fixture.credential.token, "req_conflict_in_flight", body),
+      "shopping-list/items",
+    ));
+    const payload = await readJson(response);
+
+    expect(response.status).toBe(409);
+    expectEnvelopeHeaders(response, "req_conflict_in_flight");
+    expect(response.headers.get("Retry-After")).toBe("2");
+    expect(payload).toMatchObject({
+      ok: false,
+      requestId: "req_conflict_in_flight",
+      error: {
+        code: "idempotency_in_progress",
+        status: 409,
+        details: { retryAfterSeconds: 2 },
+      },
     });
   });
 });

@@ -26,9 +26,9 @@ function expectEnvelopeHeaders(response: Response, requestId: string) {
   expect(response.headers.get("Content-Type")).toContain("application/json");
   expect(response.headers.get("X-Request-Id")).toBe(requestId);
   expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
-  expect(response.headers.get("Access-Control-Allow-Headers")).toBe("Authorization, Content-Type, X-Request-Id");
+  expect(response.headers.get("Access-Control-Allow-Headers")).toBe("Authorization, Content-Type, X-Request-Id, X-Client-Mutation-Id");
   expect(response.headers.get("Access-Control-Allow-Methods")).toBe("GET, POST, PATCH, DELETE, OPTIONS");
-  expect(response.headers.get("Access-Control-Expose-Headers")).toBe("X-Request-Id");
+  expect(response.headers.get("Access-Control-Expose-Headers")).toBe("X-Request-Id, Retry-After");
 }
 
 function expectCredentialMetadataShape(credential: any) {
@@ -112,6 +112,8 @@ describe("API v1 personal token metadata", () => {
 
     expect(requested.status).toBe(201);
     expectEnvelopeHeaders(requested, "req_tokens_create_requested");
+    expect(requested.headers.get("Cache-Control")).toBe("no-store");
+    expect(requested.headers.get("Pragma")).toBe("no-cache");
     expect(requestedPayload.data.token).toMatch(/^sj_/);
     expect(requestedPayload.data.credential).toMatchObject({
       name: "Tiny client",
@@ -134,6 +136,8 @@ describe("API v1 personal token metadata", () => {
 
     expect(defaults.status).toBe(201);
     expectEnvelopeHeaders(defaults, "req_tokens_create_default");
+    expect(defaults.headers.get("Cache-Control")).toBe("no-store");
+    expect(defaults.headers.get("Pragma")).toBe("no-cache");
     expect(defaultsPayload.data.credential.scopes).toEqual([...DEFAULT_PERSONAL_API_TOKEN_SCOPES].sort());
 
     const duplicateName = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/tokens", {
@@ -166,6 +170,8 @@ describe("API v1 personal token metadata", () => {
 
     expect(omitted.status).toBe(201);
     expectEnvelopeHeaders(omitted, "req_tokens_bearer_create");
+    expect(omitted.headers.get("Cache-Control")).toBe("no-store");
+    expect(omitted.headers.get("Pragma")).toBe("no-cache");
     expect(omittedPayload.data.credential.scopes).toEqual(["recipes:read", "tokens:write"]);
 
     const escalation = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/tokens", {
@@ -181,6 +187,20 @@ describe("API v1 personal token metadata", () => {
       requestId: "req_tokens_escalation",
       error: { code: "insufficient_scope", status: 403 },
     });
+
+    const longName = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/tokens", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${creator.token}`, "Content-Type": "application/json", "X-Request-Id": "req_tokens_long_name" },
+      body: JSON.stringify({ name: "x".repeat(161), scopes: ["recipes:read"] }),
+    }) as unknown as Request, "tokens"));
+
+    expect(longName.status).toBe(400);
+    expectEnvelopeHeaders(longName, "req_tokens_long_name");
+    await expect(readJson(longName)).resolves.toMatchObject({
+      ok: false,
+      requestId: "req_tokens_long_name",
+      error: { code: "validation_error", status: 400 },
+    });
   });
 
   it("revokes credentials and allows self-revoke for the current request only", async () => {
@@ -188,6 +208,7 @@ describe("API v1 personal token metadata", () => {
     const otherUser = await db.user.create({ data: createTestUser() });
     const other = await createApiCredential(db, user.id, "Other client", { scopes: ["recipes:read"] });
     const self = await createApiCredential(db, user.id, "Self revoker", { scopes: ["tokens:read", "tokens:write"] });
+    const narrowSelf = await createApiCredential(db, user.id, "Narrow self revoker", { scopes: ["shopping_list:read", "shopping_list:write"] });
     const otherOwnerToken = await createApiCredential(db, otherUser.id, "Other owner", { scopes: ["recipes:read"] });
 
     const revokeOther = await action(routeArgs(new UndiciRequest(`http://localhost/api/v1/tokens/${other.credential.id}`, {
@@ -238,6 +259,18 @@ describe("API v1 personal token metadata", () => {
       ok: false,
       requestId: "req_tokens_revoke_cross_owner",
       error: { code: "not_found", status: 404 },
+    });
+
+    const revokeNarrowSelf = await action(routeArgs(new UndiciRequest(`http://localhost/api/v1/tokens/${narrowSelf.credential.id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${narrowSelf.token}`, "X-Request-Id": "req_tokens_revoke_narrow_self" },
+    }) as unknown as Request, `tokens/${narrowSelf.credential.id}`));
+    expect(revokeNarrowSelf.status).toBe(200);
+    expectEnvelopeHeaders(revokeNarrowSelf, "req_tokens_revoke_narrow_self");
+    await expect(readJson(revokeNarrowSelf)).resolves.toMatchObject({
+      ok: true,
+      requestId: "req_tokens_revoke_narrow_self",
+      data: { revoked: true, credential: { id: narrowSelf.credential.id, revokedAt: expect.any(String) } },
     });
 
     const revokeSelf = await action(routeArgs(new UndiciRequest(`http://localhost/api/v1/tokens/${self.credential.id}`, {

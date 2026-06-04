@@ -4,7 +4,7 @@ Spoonjoy v2 ships a stdio MCP server so Ouroboros agents can use Spoonjoy as the
 
 > For using Spoonjoy from Claude (Claude Code / claude.ai) over a remote MCP endpoint, see the [Claude Connector docs](./claude-connector.md). It exposes this same tool surface over MCP Streamable HTTP at `/mcp`.
 
-For client developers building against Spoonjoy outside the local harness, use [`/developers`](https://spoonjoy.app/developers) as the human guide and [`/api/v1/openapi.json`](https://spoonjoy.app/api/v1/openapi.json) as the machine-readable REST contract.
+For client developers building against Spoonjoy outside the local harness, use [`/api`](https://spoonjoy.app/api) as the human guide and [`/api/v1/openapi.json`](https://spoonjoy.app/api/v1/openapi.json) as the machine-readable REST contract.
 
 ## Tools
 

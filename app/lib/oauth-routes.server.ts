@@ -19,15 +19,45 @@ import {
   normalizeScope,
   OAuthError,
   registerOAuthClient,
+  revokeConnectorRefreshToken,
   rotateConnectorTokens,
   type IssuedConnectorTokens,
 } from "~/lib/oauth-server.server";
+import { mcpResourceUrl, resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 
 type Database = PrismaClientType;
 
 interface OAuthEnv {
   SESSION_SECRET?: string;
+  SPOONJOY_BASE_URL?: string;
 }
+
+export interface OAuthRegisterTelemetryMetadata {
+  clientId?: string;
+  errorCode?: string;
+  redirectUriCount?: number;
+  scopeCount?: number;
+}
+
+const oauthRegisterTelemetrySymbol = Symbol("spoonjoy.oauth.register.telemetry");
+
+export function withOAuthRegisterTelemetry(
+  response: Response,
+  metadata: OAuthRegisterTelemetryMetadata,
+): Response {
+  Object.defineProperty(response, oauthRegisterTelemetrySymbol, {
+    value: metadata,
+    enumerable: false,
+  });
+  return response;
+}
+
+export function oauthRegisterTelemetryFor(response: Response): OAuthRegisterTelemetryMetadata {
+  return (response as Response & { [oauthRegisterTelemetrySymbol]?: OAuthRegisterTelemetryMetadata })[oauthRegisterTelemetrySymbol] ?? {};
+}
+
+const MAX_OAUTH_JSON_BODY_BYTES = 16 * 1024;
+const MAX_OAUTH_FORM_BODY_BYTES = 8 * 1024;
 
 function oauthErrorResponse(error: unknown): Response {
   /* istanbul ignore if -- @preserve unexpected errors bubble to the platform handler */
@@ -40,38 +70,237 @@ function oauthErrorResponse(error: unknown): Response {
   );
 }
 
+function bodyTooLargeError(): OAuthError {
+  return new OAuthError("invalid_request", "Request body is too large");
+}
+
+async function readLimitedBodyText(request: Request, maxBytes: number): Promise<string> {
+  const declaredLength = Number(request.headers.get("Content-Length") ?? "0");
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    throw bodyTooLargeError();
+  }
+
+  const text = await request.text();
+  if (new TextEncoder().encode(text).byteLength > maxBytes) {
+    throw bodyTooLargeError();
+  }
+  return text;
+}
+
+async function readLimitedJsonBody(request: Request): Promise<RegisterBody> {
+  const text = await readLimitedBodyText(request, MAX_OAUTH_JSON_BODY_BYTES);
+  return JSON.parse(text) as RegisterBody;
+}
+
+function isRegisterBody(value: unknown): value is RegisterBody {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+async function readLimitedFormBody(request: Request): Promise<URLSearchParams> {
+  const contentType = request.headers.get("Content-Type") ?? "";
+  if (contentType && !contentType.toLowerCase().startsWith("application/x-www-form-urlencoded")) {
+    throw new OAuthError("invalid_request", "Form body must be application/x-www-form-urlencoded");
+  }
+  return new URLSearchParams(await readLimitedBodyText(request, MAX_OAUTH_FORM_BODY_BYTES));
+}
+
+function crossOriginConsentResponse(request: Request): Response | null {
+  const origin = request.headers.get("Origin");
+  if (!origin) return null;
+  try {
+    if (new URL(origin).origin === new URL(request.url).origin) return null;
+  } catch {
+    // Treat malformed Origin as hostile instead of guessing.
+  }
+  return Response.json(
+    { error: "invalid_request", error_description: "OAuth consent must be submitted from Spoonjoy." },
+    { status: 403 },
+  );
+}
+
+type RegisterBody = {
+  redirect_uris?: unknown;
+  client_name?: unknown;
+  token_endpoint_auth_method?: unknown;
+  grant_types?: unknown;
+  response_types?: unknown;
+  scope?: unknown;
+  application_type?: unknown;
+  client_uri?: unknown;
+  logo_uri?: unknown;
+  policy_uri?: unknown;
+  tos_uri?: unknown;
+  contacts?: unknown;
+  jwks_uri?: unknown;
+  jwks?: unknown;
+  sector_identifier_uri?: unknown;
+  subject_type?: unknown;
+  software_id?: unknown;
+  software_version?: unknown;
+  default_max_age?: unknown;
+  require_auth_time?: unknown;
+  default_acr_values?: unknown;
+  initiate_login_uri?: unknown;
+  request_uris?: unknown;
+  id_token_signed_response_alg?: unknown;
+  id_token_encrypted_response_alg?: unknown;
+  id_token_encrypted_response_enc?: unknown;
+  userinfo_signed_response_alg?: unknown;
+  userinfo_encrypted_response_alg?: unknown;
+  userinfo_encrypted_response_enc?: unknown;
+  request_object_signing_alg?: unknown;
+  request_object_encryption_alg?: unknown;
+  request_object_encryption_enc?: unknown;
+  token_endpoint_auth_signing_alg?: unknown;
+};
+
+const REGISTER_METADATA_FIELDS = new Set([
+  "redirect_uris",
+  "client_name",
+  "token_endpoint_auth_method",
+  "grant_types",
+  "response_types",
+  "scope",
+  "application_type",
+  "client_uri",
+  "logo_uri",
+  "policy_uri",
+  "tos_uri",
+  "contacts",
+  "jwks_uri",
+  "jwks",
+  "sector_identifier_uri",
+  "subject_type",
+  "software_id",
+  "software_version",
+  "default_max_age",
+  "require_auth_time",
+  "default_acr_values",
+  "initiate_login_uri",
+  "request_uris",
+  "id_token_signed_response_alg",
+  "id_token_encrypted_response_alg",
+  "id_token_encrypted_response_enc",
+  "userinfo_signed_response_alg",
+  "userinfo_encrypted_response_alg",
+  "userinfo_encrypted_response_enc",
+  "request_object_signing_alg",
+  "request_object_encryption_alg",
+  "request_object_encryption_enc",
+  "token_endpoint_auth_signing_alg",
+]);
+
+function rejectInvalidClientMetadata(message: string): never {
+  throw new OAuthError("invalid_client_metadata", message);
+}
+
+function validateStringArray(value: unknown, field: string): string[] | null {
+  if (value === undefined) return null;
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+    rejectInvalidClientMetadata(`${field} must be an array of strings`);
+  }
+  return value;
+}
+
+function validateRegisterMetadata(body: RegisterBody): void {
+  for (const key of Object.keys(body)) {
+    if (!REGISTER_METADATA_FIELDS.has(key)) {
+      rejectInvalidClientMetadata(`Unsupported client metadata: ${key}`);
+    }
+  }
+
+  if (
+    body.token_endpoint_auth_method !== undefined
+    && body.token_endpoint_auth_method !== "none"
+  ) {
+    rejectInvalidClientMetadata("Only token_endpoint_auth_method: none is supported");
+  }
+
+  const grantTypes = validateStringArray(body.grant_types, "grant_types");
+  if (grantTypes) {
+    const allowed = new Set(["authorization_code", "refresh_token"]);
+    if (!grantTypes.includes("authorization_code") || grantTypes.some((grant) => !allowed.has(grant))) {
+      rejectInvalidClientMetadata("Supported grant_types are authorization_code and refresh_token");
+    }
+  }
+
+  const responseTypes = validateStringArray(body.response_types, "response_types");
+  if (responseTypes && (responseTypes.length !== 1 || responseTypes[0] !== "code")) {
+    rejectInvalidClientMetadata("Only response_types: [\"code\"] is supported");
+  }
+
+  if (body.scope !== undefined) {
+    if (typeof body.scope !== "string") rejectInvalidClientMetadata("scope must be a string");
+    normalizeScope(body.scope);
+  }
+}
+
+function registerTelemetryForBody(body: RegisterBody): OAuthRegisterTelemetryMetadata {
+  const redirectUriCount = Array.isArray(body.redirect_uris)
+    ? body.redirect_uris.filter((item) => typeof item === "string").length
+    : undefined;
+  const trimmedScope = typeof body.scope === "string" ? body.scope.trim() : "";
+  return {
+    redirectUriCount,
+    scopeCount: trimmedScope ? trimmedScope.split(/\s+/).length : undefined,
+  };
+}
+
 /** RFC 7591 Dynamic Client Registration. */
 export async function handleOAuthRegister(request: Request, db: Database): Promise<Response> {
   if (request.method !== "POST") {
-    return Response.json({ error: "invalid_request", error_description: "POST required" }, { status: 405 });
+    return withOAuthRegisterTelemetry(
+      Response.json({ error: "invalid_request", error_description: "POST required" }, { status: 405 }),
+      { errorCode: "invalid_request" },
+    );
   }
 
-  let body: { redirect_uris?: unknown; client_name?: unknown };
+  let body: RegisterBody;
   try {
-    body = (await request.json()) as typeof body;
-  } catch {
-    return Response.json({ error: "invalid_request", error_description: "Invalid JSON body" }, { status: 400 });
+    body = await readLimitedJsonBody(request);
+  } catch (error) {
+    if (error instanceof OAuthError) {
+      return withOAuthRegisterTelemetry(oauthErrorResponse(error), { errorCode: error.code });
+    }
+    return withOAuthRegisterTelemetry(
+      Response.json({ error: "invalid_request", error_description: "Invalid JSON body" }, { status: 400 }),
+      { errorCode: "invalid_request" },
+    );
+  }
+  if (!isRegisterBody(body)) {
+    return withOAuthRegisterTelemetry(
+      Response.json({ error: "invalid_request", error_description: "Registration metadata must be a JSON object" }, { status: 400 }),
+      { errorCode: "invalid_request" },
+    );
   }
 
   const redirectUris = Array.isArray(body.redirect_uris)
     ? body.redirect_uris.filter((u): u is string => typeof u === "string")
     : [];
   const clientName = typeof body.client_name === "string" ? body.client_name : null;
+  const telemetry = registerTelemetryForBody(body);
 
   try {
+    validateRegisterMetadata(body);
     const client = await registerOAuthClient(db, { clientName, redirectUris });
-    return Response.json(
-      {
-        client_id: client.clientId,
-        client_name: client.clientName ?? undefined,
-        redirect_uris: client.redirectUris,
-        token_endpoint_auth_method: "none",
-        grant_types: ["authorization_code"],
-        response_types: ["code"],
-      },
-      { status: 201 },
+    return withOAuthRegisterTelemetry(
+      Response.json(
+        {
+          client_id: client.clientId,
+          client_name: client.clientName ?? undefined,
+          redirect_uris: client.redirectUris,
+          token_endpoint_auth_method: "none",
+          grant_types: ["authorization_code", "refresh_token"],
+          response_types: ["code"],
+        },
+        { status: 201 },
+      ),
+      { ...telemetry, clientId: client.clientId },
     );
   } catch (error) {
+    if (error instanceof OAuthError) {
+      return withOAuthRegisterTelemetry(oauthErrorResponse(error), { ...telemetry, errorCode: error.code });
+    }
     return oauthErrorResponse(error);
   }
 }
@@ -83,6 +312,11 @@ function tokenResponse(tokens: IssuedConnectorTokens): Response {
     token_type: "Bearer",
     expires_in: tokens.expiresIn,
     scope: tokens.scope,
+  }, {
+    headers: {
+      "Cache-Control": "no-store",
+      Pragma: "no-cache",
+    },
   });
 }
 
@@ -97,17 +331,31 @@ export async function handleOAuthToken(
   env: OAuthEnv | null | undefined,
 ): Promise<Response> {
   if (request.method !== "POST") {
-    return Response.json({ error: "invalid_request", error_description: "POST required" }, { status: 405 });
+    return withOAuthTokenTelemetry(
+      Response.json({ error: "invalid_request", error_description: "POST required" }, { status: 405 }),
+      { outcome: "error", grantType: "unknown", errorCode: "invalid_request" },
+    );
   }
 
-  let form: FormData;
+  let form: URLSearchParams;
   try {
-    form = await request.formData();
-  } catch {
-    return Response.json({ error: "invalid_request", error_description: "Invalid form body" }, { status: 400 });
+    form = await readLimitedFormBody(request);
+  } catch (error) {
+    if (error instanceof OAuthError) {
+      return withOAuthTokenTelemetry(
+        oauthErrorResponse(error),
+        { outcome: "error", grantType: "unknown", errorCode: error.code },
+      );
+    }
+    return withOAuthTokenTelemetry(
+      Response.json({ error: "invalid_request", error_description: "Invalid form body" }, { status: 400 }),
+      { outcome: "error", grantType: "unknown", errorCode: "invalid_request" },
+    );
   }
   const field = (name: string) => form.get(name)?.toString() ?? "";
   const grantType = field("grant_type");
+  const safeGrantType = oauthTokenGrantType(grantType);
+  const clientId = field("client_id") || undefined;
 
   try {
     if (grantType === "authorization_code") {
@@ -117,29 +365,125 @@ export async function handleOAuthToken(
         redirectUri: field("redirect_uri"),
         codeVerifier: field("code_verifier"),
       });
-      return tokenResponse(
-        await issueConnectorTokens(db, {
-          userId: grant.userId,
-          clientId: field("client_id"),
+      return withOAuthTokenTelemetry(
+        tokenResponse(
+          await issueConnectorTokens(db, {
+            userId: grant.userId,
+            clientId: field("client_id"),
+            scope: grant.scope,
+            resource: grant.resource,
+          }),
+        ),
+        {
+          outcome: "issued",
+          grantType: "authorization_code",
+          clientId,
           scope: grant.scope,
-        }),
+          resource: grant.resource ?? undefined,
+        },
       );
     }
 
     if (grantType === "refresh_token") {
-      return tokenResponse(
-        await rotateConnectorTokens(db, {
-          refreshToken: field("refresh_token"),
-          clientId: field("client_id"),
-        }),
+      const tokens = await rotateConnectorTokens(db, {
+        refreshToken: field("refresh_token"),
+        clientId: field("client_id"),
+      });
+      return withOAuthTokenTelemetry(
+        tokenResponse(tokens),
+        {
+          outcome: "refreshed",
+          grantType: "refresh_token",
+          clientId,
+          scope: tokens.scope,
+          resource: tokens.resource ?? undefined,
+        },
       );
     }
 
-    return Response.json(
-      { error: "unsupported_grant_type", error_description: "Supported grants: authorization_code, refresh_token" },
-      { status: 400 },
+    return withOAuthTokenTelemetry(
+      Response.json(
+        { error: "unsupported_grant_type", error_description: "Supported grants: authorization_code, refresh_token" },
+        { status: 400 },
+      ),
+      { outcome: "error", grantType: safeGrantType, errorCode: "unsupported_grant_type" },
     );
   } catch (error) {
+    if (error instanceof OAuthError) {
+      return withOAuthTokenTelemetry(
+        oauthErrorResponse(error),
+        {
+          outcome: "error",
+          grantType: safeGrantType,
+          errorCode: error.code,
+        },
+      );
+    }
+    return oauthErrorResponse(error);
+  }
+}
+
+/**
+ * RFC 7009-style refresh-token revocation. Spoonjoy OAuth clients are public,
+ * so revocation authenticates by possession of the refresh token and optional
+ * client_id binding.
+ */
+export async function handleOAuthRevoke(request: Request, db: Database): Promise<Response> {
+  if (request.method !== "POST") {
+    return withOAuthRevokeTelemetry(
+      Response.json({ error: "invalid_request", error_description: "POST required" }, { status: 405 }),
+      {
+        outcome: "error",
+        errorCode: "invalid_request",
+        tokenTypeHint: "unknown",
+      },
+    );
+  }
+
+  let form: URLSearchParams;
+  try {
+    form = await readLimitedFormBody(request);
+  } catch (error) {
+    if (error instanceof OAuthError) {
+      return withOAuthRevokeTelemetry(oauthErrorResponse(error), {
+        outcome: "error",
+        errorCode: error.code,
+        tokenTypeHint: "unknown",
+      });
+    }
+    return withOAuthRevokeTelemetry(
+      Response.json({ error: "invalid_request", error_description: "Invalid form body" }, { status: 400 }),
+      {
+        outcome: "error",
+        errorCode: "invalid_request",
+        tokenTypeHint: "unknown",
+      },
+    );
+  }
+  const clientId = (form.get("client_id") ?? "").toString() || undefined;
+  const tokenTypeHint = oauthRevokeTokenHint((form.get("token_type_hint") ?? "").toString());
+
+  try {
+    const revoked = await revokeConnectorRefreshToken(db, {
+      refreshToken: (form.get("token") ?? "").toString(),
+      clientId,
+    });
+    return withOAuthRevokeTelemetry(
+      new Response(null, { status: 204 }),
+      {
+        outcome: revoked ? "revoked" : "not_found",
+        clientId: revoked ? clientId : undefined,
+        tokenTypeHint,
+      },
+    );
+  } catch (error) {
+    if (error instanceof OAuthError) {
+      return withOAuthRevokeTelemetry(oauthErrorResponse(error), {
+        outcome: "error",
+        errorCode: error.code,
+        tokenTypeHint,
+      });
+    }
     return oauthErrorResponse(error);
   }
 }
@@ -147,9 +491,11 @@ export async function handleOAuthToken(
 export interface AuthorizeRequestParams {
   clientId: string;
   redirectUri: string;
+  responseType: string;
   state: string;
   scope: string;
   codeChallenge: string;
+  codeChallengeMethod: string;
   resource: string;
 }
 
@@ -157,16 +503,159 @@ export type AuthorizeView =
   | { kind: "consent"; clientName: string | null; scope: string; params: AuthorizeRequestParams }
   | { kind: "error"; message: string };
 
+type OAuthAuthorizeStateClass = "missing" | "short" | "present" | "unknown";
+
+export interface OAuthAuthorizeTelemetryMetadata {
+  outcome?: "login_redirect" | "consent" | "client_error" | "redirect_error" | "approved" | "denied" | "rate_limited" | "error";
+  clientId?: string;
+  principalId?: string;
+  decision?: "approve" | "deny" | "other";
+  errorCode?: string;
+  stateClass?: OAuthAuthorizeStateClass;
+  scope?: string;
+  resource?: string;
+}
+
+const oauthAuthorizeTelemetrySymbol = Symbol("spoonjoy.oauth.authorize.telemetry");
+
+export function withOAuthAuthorizeTelemetry<T extends AuthorizeView | Response>(
+  target: T,
+  metadata: OAuthAuthorizeTelemetryMetadata,
+): T {
+  Object.defineProperty(target, oauthAuthorizeTelemetrySymbol, {
+    value: metadata,
+    enumerable: false,
+  });
+  return target;
+}
+
+export function oauthAuthorizeTelemetryFor(target: AuthorizeView | Response): OAuthAuthorizeTelemetryMetadata {
+  return (target as (AuthorizeView | Response) & {
+    [oauthAuthorizeTelemetrySymbol]?: OAuthAuthorizeTelemetryMetadata;
+  })[oauthAuthorizeTelemetrySymbol] ?? {};
+}
+
+export type OAuthTokenGrantType = "authorization_code" | "refresh_token" | "unsupported" | "unknown";
+
+export interface OAuthTokenTelemetryMetadata {
+  outcome?: "issued" | "refreshed" | "error" | "rate_limited";
+  grantType?: OAuthTokenGrantType;
+  clientId?: string;
+  errorCode?: string;
+  scope?: string;
+  resource?: string;
+}
+
+const oauthTokenTelemetrySymbol = Symbol("spoonjoy.oauth.token.telemetry");
+
+export function withOAuthTokenTelemetry(
+  response: Response,
+  metadata: OAuthTokenTelemetryMetadata,
+): Response {
+  Object.defineProperty(response, oauthTokenTelemetrySymbol, {
+    value: metadata,
+    enumerable: false,
+  });
+  return response;
+}
+
+export function oauthTokenTelemetryFor(response: Response): OAuthTokenTelemetryMetadata {
+  return (response as Response & {
+    [oauthTokenTelemetrySymbol]?: OAuthTokenTelemetryMetadata;
+  })[oauthTokenTelemetrySymbol] ?? {};
+}
+
+function oauthTokenGrantType(value: string): OAuthTokenGrantType {
+  if (value === "authorization_code" || value === "refresh_token") return value;
+  if (value) return "unsupported";
+  return "unknown";
+}
+
+type OAuthRevokeTokenHint = "refresh_token" | "unsupported" | "unknown";
+
+export interface OAuthRevokeTelemetryMetadata {
+  outcome?: "revoked" | "not_found" | "error" | "rate_limited";
+  clientId?: string;
+  errorCode?: string;
+  tokenTypeHint?: OAuthRevokeTokenHint;
+}
+
+const oauthRevokeTelemetrySymbol = Symbol("spoonjoy.oauth.revoke.telemetry");
+
+export function withOAuthRevokeTelemetry(
+  response: Response,
+  metadata: OAuthRevokeTelemetryMetadata,
+): Response {
+  Object.defineProperty(response, oauthRevokeTelemetrySymbol, {
+    value: metadata,
+    enumerable: false,
+  });
+  return response;
+}
+
+export function oauthRevokeTelemetryFor(response: Response): OAuthRevokeTelemetryMetadata {
+  return (response as Response & {
+    [oauthRevokeTelemetrySymbol]?: OAuthRevokeTelemetryMetadata;
+  })[oauthRevokeTelemetrySymbol] ?? {};
+}
+
+function oauthRevokeTokenHint(value: string): OAuthRevokeTokenHint {
+  if (value === "refresh_token") return "refresh_token";
+  if (value) return "unsupported";
+  return "unknown";
+}
+
 function readAuthorizeParams(source: URLSearchParams | FormData): AuthorizeRequestParams {
   const get = (name: string) => (source.get(name) ?? "").toString();
   return {
     clientId: get("client_id"),
     redirectUri: get("redirect_uri"),
+    responseType: get("response_type"),
     state: get("state"),
     scope: get("scope"),
     codeChallenge: get("code_challenge"),
+    codeChallengeMethod: get("code_challenge_method"),
     resource: get("resource"),
   };
+}
+
+function authorizeStateClass(state: string): OAuthAuthorizeStateClass {
+  const trimmed = state.trim();
+  if (!trimmed) return "missing";
+  if (trimmed.length < 16) return "short";
+  return "present";
+}
+
+export async function oauthAuthorizeTelemetryForRequest(
+  request: Request,
+  phase: "loader" | "action",
+): Promise<OAuthAuthorizeTelemetryMetadata> {
+  try {
+    if (phase !== "loader") return { stateClass: "unknown" };
+    const params = readAuthorizeParams(new URL(request.url).searchParams);
+    return { stateClass: authorizeStateClass(params.state) };
+  } catch {
+    return { stateClass: "unknown" };
+  }
+}
+
+function validatedAuthorizeTelemetry(
+  params: AuthorizeRequestParams,
+  validation: { scope: string; resource: string | null },
+  principalId?: string,
+): OAuthAuthorizeTelemetryMetadata {
+  return {
+    clientId: params.clientId,
+    principalId,
+    stateClass: authorizeStateClass(params.state),
+    scope: validation.scope,
+    resource: validation.resource ?? undefined,
+  };
+}
+
+function authorizeDecision(value: string): "approve" | "deny" | "other" {
+  if (value === "approve" || value === "deny") return value;
+  return "other";
 }
 
 /**
@@ -177,11 +666,18 @@ function readAuthorizeParams(source: URLSearchParams | FormData): AuthorizeReque
 async function validateClientRedirect(
   db: Database,
   params: AuthorizeRequestParams,
-): Promise<{ ok: true; clientName: string | null } | { ok: false; message: string }> {
+): Promise<
+  | { ok: true; clientName: string | null }
+  | { ok: false; code: "invalid_client" | "invalid_redirect_uri"; message: string }
+> {
   const client = await getOAuthClient(db, params.clientId);
-  if (!client) return { ok: false, message: "Unknown OAuth client." };
+  if (!client) return { ok: false, code: "invalid_client", message: "Unknown OAuth client." };
   if (!params.redirectUri || !clientAllowsRedirect(client, params.redirectUri)) {
-    return { ok: false, message: "The redirect URI is not registered for this client." };
+    return {
+      ok: false,
+      code: "invalid_redirect_uri",
+      message: "The redirect URI is not registered for this client.",
+    };
   }
   return { ok: true, clientName: client.clientName };
 }
@@ -191,6 +687,42 @@ function redirectBackWithError(params: AuthorizeRequestParams, code: string): Re
   url.searchParams.set("error", code);
   if (params.state) url.searchParams.set("state", params.state);
   return new Response(null, { status: 302, headers: { Location: url.toString() } });
+}
+
+function validS256CodeChallenge(value: string) {
+  return /^[A-Za-z0-9_-]{43}$/.test(value);
+}
+
+function normalizeAuthorizeResource(request: Request, env: OAuthEnv | null | undefined, resource: string) {
+  if (!resource) return null;
+  const expected = mcpResourceUrl(resolveIssuerOrigin(request.url, env?.SPOONJOY_BASE_URL));
+  return resource === expected ? resource : "";
+}
+
+async function validateAuthorizeRequest(
+  request: Request,
+  db: Database,
+  env: OAuthEnv | null | undefined,
+  params: AuthorizeRequestParams,
+): Promise<
+  | { ok: true; clientName: string | null; scope: string; resource: string | null }
+  | { ok: false; kind: "local"; code: string; message: string }
+  | { ok: false; kind: "redirect"; code: string; resource?: string | null }
+> {
+  const validation = await validateClientRedirect(db, params);
+  if (!validation.ok) return { ok: false, kind: "local", code: validation.code, message: validation.message };
+  if (params.responseType !== "code") return { ok: false, kind: "redirect", code: "unsupported_response_type" };
+  if (params.state.trim().length < 16) return { ok: false, kind: "redirect", code: "invalid_request" };
+  if (params.codeChallengeMethod !== "S256" || !validS256CodeChallenge(params.codeChallenge)) {
+    return { ok: false, kind: "redirect", code: "invalid_request" };
+  }
+  const resource = normalizeAuthorizeResource(request, env, params.resource);
+  if (resource === "") return { ok: false, kind: "redirect", code: "invalid_target" };
+  try {
+    return { ok: true, clientName: validation.clientName, scope: normalizeScope(params.scope), resource };
+  } catch {
+    return { ok: false, kind: "redirect", code: "invalid_scope", resource };
+  }
 }
 
 /**
@@ -205,33 +737,57 @@ export async function loadOAuthAuthorize(
   const url = new URL(request.url);
   const params = readAuthorizeParams(url.searchParams);
 
-  const validation = await validateClientRedirect(db, params);
-  if (!validation.ok) return { kind: "error", message: validation.message };
-
-  // Past this point we can safely report errors back to the client.
-  if (url.searchParams.get("response_type") !== "code") {
-    return redirectBackWithError(params, "unsupported_response_type");
+  const validation = await validateAuthorizeRequest(request, db, env, params);
+  if (!validation.ok && validation.kind === "local") {
+    return withOAuthAuthorizeTelemetry(
+      { kind: "error", message: validation.message },
+      {
+        outcome: "client_error",
+        errorCode: validation.code,
+        stateClass: authorizeStateClass(params.state),
+      },
+    );
   }
-  if (url.searchParams.get("code_challenge_method") !== "S256" || !params.codeChallenge) {
-    return redirectBackWithError(params, "invalid_request");
-  }
-  let scope: string;
-  try {
-    scope = normalizeScope(params.scope);
-  } catch {
-    return redirectBackWithError(params, "invalid_scope");
+  if (!validation.ok) {
+    return withOAuthAuthorizeTelemetry(
+      redirectBackWithError(params, validation.code),
+      {
+        outcome: "redirect_error",
+        clientId: params.clientId,
+        errorCode: validation.code,
+        stateClass: authorizeStateClass(params.state),
+        resource: validation.resource ?? undefined,
+      },
+    );
   }
 
   const userId = await getUserId(request, env);
   if (!userId) {
     const returnTo = `${url.pathname}${url.search}`;
-    return new Response(null, {
-      status: 302,
-      headers: { Location: `/login?redirectTo=${encodeURIComponent(returnTo)}` },
-    });
+    return withOAuthAuthorizeTelemetry(
+      new Response(null, {
+        status: 302,
+        headers: { Location: `/login?redirectTo=${encodeURIComponent(returnTo)}` },
+      }),
+      {
+        ...validatedAuthorizeTelemetry(params, validation),
+        outcome: "login_redirect",
+      },
+    );
   }
 
-  return { kind: "consent", clientName: validation.clientName, scope, params: { ...params, scope } };
+  return withOAuthAuthorizeTelemetry(
+    {
+      kind: "consent",
+      clientName: validation.clientName,
+      scope: validation.scope,
+      params: { ...params, scope: validation.scope, resource: validation.resource ?? "" },
+    },
+    {
+      ...validatedAuthorizeTelemetry(params, validation, userId),
+      outcome: "consent",
+    },
+  );
 }
 
 /**
@@ -243,42 +799,98 @@ export async function handleOAuthAuthorizeAction(
   db: Database,
   env: OAuthEnv | null | undefined,
 ): Promise<Response> {
-  const form = await request.formData();
-  const params = readAuthorizeParams(form);
-  const decision = (form.get("decision") ?? "").toString();
-
-  const validation = await validateClientRedirect(db, params);
-  if (!validation.ok) {
-    return Response.json({ error: "invalid_request", error_description: validation.message }, { status: 400 });
+  const crossOrigin = crossOriginConsentResponse(request);
+  if (crossOrigin) {
+    return withOAuthAuthorizeTelemetry(crossOrigin, {
+      outcome: "error",
+      errorCode: "invalid_request",
+      stateClass: "unknown",
+    });
   }
 
+  let form: URLSearchParams;
+  try {
+    form = await readLimitedFormBody(request);
+  } catch (error) {
+    if (error instanceof OAuthError) {
+      return withOAuthAuthorizeTelemetry(oauthErrorResponse(error), {
+        outcome: "error",
+        errorCode: error.code,
+        stateClass: "unknown",
+      });
+    }
+    return withOAuthAuthorizeTelemetry(
+      Response.json({ error: "invalid_request", error_description: "Invalid form body" }, { status: 400 }),
+      {
+        outcome: "error",
+        errorCode: "invalid_request",
+        stateClass: "unknown",
+      },
+    );
+  }
+  const params = readAuthorizeParams(form);
+  const decision = (form.get("decision") ?? "").toString();
   const userId = await getUserId(request, env);
+
+  const validation = await validateAuthorizeRequest(request, db, env, params);
+  if (!validation.ok && validation.kind === "local") {
+    return withOAuthAuthorizeTelemetry(
+      Response.json({ error: "invalid_request", error_description: validation.message }, { status: 400 }),
+      {
+        outcome: "client_error",
+        errorCode: validation.code,
+        principalId: userId || undefined,
+        stateClass: authorizeStateClass(params.state),
+      },
+    );
+  }
+  if (!validation.ok) {
+    return withOAuthAuthorizeTelemetry(
+      redirectBackWithError(params, validation.code),
+      {
+        outcome: "redirect_error",
+        clientId: params.clientId,
+        principalId: userId || undefined,
+        errorCode: validation.code,
+        stateClass: authorizeStateClass(params.state),
+        resource: validation.resource ?? undefined,
+      },
+    );
+  }
+
   if (!userId) {
     const returnTo = `/oauth/authorize?${new URLSearchParams({
       client_id: params.clientId,
       redirect_uri: params.redirectUri,
-      response_type: "code",
+      response_type: params.responseType,
       code_challenge: params.codeChallenge,
-      code_challenge_method: "S256",
+      code_challenge_method: params.codeChallengeMethod,
       scope: params.scope,
       state: params.state,
       resource: params.resource,
     })}`;
-    return new Response(null, {
-      status: 302,
-      headers: { Location: `/login?redirectTo=${encodeURIComponent(returnTo)}` },
-    });
+    return withOAuthAuthorizeTelemetry(
+      new Response(null, {
+        status: 302,
+        headers: { Location: `/login?redirectTo=${encodeURIComponent(returnTo)}` },
+      }),
+      {
+        ...validatedAuthorizeTelemetry(params, validation),
+        outcome: "login_redirect",
+      },
+    );
   }
 
   if (decision !== "approve") {
-    return redirectBackWithError(params, "access_denied");
-  }
-
-  let scope: string;
-  try {
-    scope = normalizeScope(params.scope);
-  } catch {
-    return redirectBackWithError(params, "invalid_scope");
+    return withOAuthAuthorizeTelemetry(
+      redirectBackWithError(params, "access_denied"),
+      {
+        ...validatedAuthorizeTelemetry(params, validation, userId),
+        outcome: "denied",
+        decision: authorizeDecision(decision),
+        errorCode: "access_denied",
+      },
+    );
   }
 
   const code = await createAuthorizationCode(db, {
@@ -286,12 +898,19 @@ export async function handleOAuthAuthorizeAction(
     userId,
     redirectUri: params.redirectUri,
     codeChallenge: params.codeChallenge,
-    scope,
-    resource: params.resource || null,
+    scope: validation.scope,
+    resource: validation.resource,
   });
 
   const url = new URL(params.redirectUri);
   url.searchParams.set("code", code);
-  if (params.state) url.searchParams.set("state", params.state);
-  return new Response(null, { status: 302, headers: { Location: url.toString() } });
+  url.searchParams.set("state", params.state);
+  return withOAuthAuthorizeTelemetry(
+    new Response(null, { status: 302, headers: { Location: url.toString() } }),
+    {
+      ...validatedAuthorizeTelemetry(params, validation, userId),
+      outcome: "approved",
+      decision: "approve",
+    },
+  );
 }

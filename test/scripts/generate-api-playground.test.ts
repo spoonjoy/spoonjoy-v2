@@ -30,7 +30,10 @@ describe("generate-api-playground", () => {
       },
     });
     expect(manifest.operations.find((operation) => operation.id === "GET /api/v1/recipes/{id}")).toMatchObject({
-      params: [expect.objectContaining({ name: "id", in: "path", placeholder: "recipe_1" })],
+      params: expect.arrayContaining([
+        expect.objectContaining({ name: "id", in: "path", placeholder: "recipe_1" }),
+        expect.objectContaining({ name: "X-Request-Id", in: "header" }),
+      ]),
     });
   });
 

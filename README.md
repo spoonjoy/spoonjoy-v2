@@ -70,7 +70,7 @@ APPLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----..."
 
 For production, use `wrangler secret put` for sensitive values.
 
-For optional PostHog analytics, see [`docs/analytics-privacy.md`](docs/analytics-privacy.md). Analytics stays disabled when `VITE_POSTHOG_KEY` is absent or `VITE_POSTHOG_DISABLED` is true-ish.
+For optional PostHog analytics and server lifecycle telemetry, see [`docs/analytics-privacy.md`](docs/analytics-privacy.md). Client analytics stays disabled when `VITE_POSTHOG_KEY` is absent or `VITE_POSTHOG_DISABLED` is true-ish. Worker API/OAuth/MCP telemetry stays disabled when `POSTHOG_KEY` is absent or `POSTHOG_DISABLED` is true-ish.
 
 For Ouroboros agent integration, see [`docs/ouroboros-mcp.md`](docs/ouroboros-mcp.md).
 
@@ -177,7 +177,12 @@ pnpm exec prisma migrate diff --from-empty --to-schema-datamodel=./prisma/schema
    wrangler secret put APPLE_KEY_ID
    wrangler secret put APPLE_PRIVATE_KEY
    wrangler secret put OPENAI_API_KEY
+   wrangler secret put VAPID_PUBLIC_KEY
+   wrangler secret put VAPID_PRIVATE_KEY
+   wrangler secret put VAPID_SUBJECT
    ```
+
+   Optional telemetry: set `POSTHOG_KEY` with `wrangler secret put POSTHOG_KEY` only when you want server lifecycle telemetry/error capture. Build-time client analytics also needs `VITE_POSTHOG_KEY`, `VITE_POSTHOG_HOST`, and optionally `VITE_POSTHOG_DISABLED` in the deploy build environment; do not set those with secret values in source files.
 
 6. Run the deployment preflight:
    ```bash

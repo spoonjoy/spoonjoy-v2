@@ -39,6 +39,7 @@ export function buildAuthorizationServerMetadata(origin: string): Record<string,
     issuer: origin,
     authorization_endpoint: `${origin}/oauth/authorize`,
     token_endpoint: `${origin}/oauth/token`,
+    revocation_endpoint: `${origin}/oauth/revoke`,
     registration_endpoint: `${origin}/oauth/register`,
     scopes_supported: [...SUPPORTED_SCOPES],
     response_types_supported: ["code"],
@@ -53,5 +54,6 @@ export function buildProtectedResourceMetadata(origin: string): Record<string, u
     resource: mcpResourceUrl(origin),
     authorization_servers: [origin],
     scopes_supported: [...SUPPORTED_SCOPES],
+    revocation_endpoint: `${origin}/oauth/revoke`,
   };
 }

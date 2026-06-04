@@ -109,9 +109,9 @@ describe("API authentication helpers", () => {
     expect(normalizeCredentialScopes([])).toBe("");
     expect(() => normalizeCredentialScopes(["recipes:read", "recipes:delete"])).toThrow("Unknown API credential scope");
     expect(expandCredentialScopes("kitchen:write recipes:read")).toEqual([
+      "kitchen:write",
       "recipes:read",
       "shopping_list:write",
-      "tokens:write",
     ]);
     expect(expandCredentialScopes(null)).toEqual([]);
     expect(expandCredentialScopes(undefined)).toEqual([]);
@@ -124,12 +124,12 @@ describe("API authentication helpers", () => {
     const principal = await authenticateApiToken(db, legacy.token);
     expect(principal.scopes).toEqual([
       "cookbooks:read",
+      "kitchen:read",
+      "kitchen:write",
       "public:read",
       "recipes:read",
       "shopping_list:read",
       "shopping_list:write",
-      "tokens:read",
-      "tokens:write",
     ]);
 
     const empty = await createApiCredential(db, user.id, "Empty", { scopes: [] });
@@ -148,7 +148,7 @@ describe("API authentication helpers", () => {
     expect(future.credential.expiresAt).toBeInstanceOf(Date);
     await expect(authenticateApiToken(db, future.token)).resolves.toMatchObject({
       id: user.id,
-      scopes: ["cookbooks:read", "public:read", "recipes:read", "shopping_list:read", "tokens:read"],
+      scopes: ["cookbooks:read", "kitchen:read", "public:read", "recipes:read", "shopping_list:read"],
     });
 
     // ...but a past expiry is rejected as invalid.

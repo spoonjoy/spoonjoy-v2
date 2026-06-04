@@ -59,7 +59,7 @@ describe("developer platform docs drift", () => {
 
   it("keeps MCP docs pointed at the same auth and REST surface", () => {
     for (const docs of [claudeConnectorDocs, ouroborosMcpDocs]) {
-      expect(docs).toContain("/developers");
+      expect(docs).toContain("/api");
       expect(docs).toContain("/api/v1/openapi.json");
       expect(docs).toContain("/api/tools/start_agent_connection");
       expect(docs).toContain("/api/tools/poll_agent_connection");

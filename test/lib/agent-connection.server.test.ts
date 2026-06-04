@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { faker } from "@faker-js/faker";
 import {
   approveAgentConnectionRequest,
@@ -44,8 +44,49 @@ describe("agent connection requests", () => {
     expect(started.authorizationUrl).toBe(
       `http://localhost:5173/agent/connect/${started.request.id}?code=${started.request.userCode}`,
     );
+    expect(started.verificationUri).toBe("http://localhost:5173/agent/connect");
+    expect(started.verificationUriComplete).toBe(started.authorizationUrl);
     expect(started.expiresIn).toBe(300);
     expect(started.interval).toBe(2);
+
+    const leastPrivilege = await startAgentConnection(db, {
+      agentName: "tiny sync",
+      scopes: "shopping_list:read shopping_list:write",
+      now,
+    });
+    expect(leastPrivilege.request.scopes).toBe("shopping_list:read shopping_list:write");
+    await expect(startAgentConnection(db, {
+      scopes: "tokens:write",
+      now,
+    })).rejects.toThrow("Unsupported scope");
+  });
+
+  it("rethrows unexpected delegated scope normalization failures", async () => {
+    let trimCalls = 0;
+    const scopeValue = {
+      trim() {
+        trimCalls += 1;
+        if (trimCalls === 2) {
+          throw new TypeError("scope parser exploded");
+        }
+        return "shopping_list:read";
+      },
+    };
+
+    try {
+      await startAgentConnection({
+        agentConnectionRequest: {
+          create: vi.fn(),
+        },
+      } as any, {
+        scopes: scopeValue as unknown as string,
+        now,
+      });
+      expect.fail("expected scope normalization failure");
+    } catch (error) {
+      expect(error).toBeInstanceOf(TypeError);
+      expect((error as Error).message).toBe("scope parser exploded");
+    }
   });
 
   it("defaults agent name and base URL, and rejects unsafe non-local base URLs", async () => {
@@ -131,17 +172,12 @@ describe("agent connection requests", () => {
     const principal = await authenticateApiToken(db, tokenResult.token as string);
     expect(principal.email).toBe(user.email);
     expect(principal.scopes).toEqual([
-      "cookbooks:read",
-      "public:read",
-      "recipes:read",
       "shopping_list:read",
       "shopping_list:write",
-      "tokens:read",
-      "tokens:write",
     ]);
     await expect(db.apiCredential.findUniqueOrThrow({
       where: { id: (tokenResult.credential as { id: string }).id },
-    })).resolves.toMatchObject({ scopes: "kitchen:read kitchen:write" });
+    })).resolves.toMatchObject({ scopes: "shopping_list:read shopping_list:write" });
 
     await expect(pollAgentConnection(db, {
       deviceCode: started.deviceCode,

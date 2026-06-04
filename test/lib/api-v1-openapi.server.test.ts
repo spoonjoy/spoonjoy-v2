@@ -1,12 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { buildApiV1OpenApiDocument } from "~/lib/api-v1-openapi.server";
+import { buildApiV1ConnectorOpenApiDocument, buildApiV1OpenApiDocument, buildApiV1SdkOpenApiDocument } from "~/lib/api-v1-openapi.server";
 import { API_V1_ERROR_STATUS, API_V1_RESOURCES } from "~/lib/api-v1-contract.server";
 
 const RESOURCE_PATHS = Array.from(new Set(API_V1_RESOURCES.map((resource) => resource.path))).sort();
+const AUTH_PATHS = [
+  "/api/tools/poll_agent_connection",
+  "/api/tools/start_agent_connection",
+  "/mcp",
+  "/oauth/authorize",
+  "/oauth/register",
+  "/oauth/revoke",
+  "/oauth/token",
+];
 const OPERATION_SCOPES = {
   "GET /api/v1": [],
   "GET /api/v1/health": [],
   "GET /api/v1/openapi.json": [],
+  "GET /api/v1/openapi.sdk.json": [],
+  "GET /api/v1/openapi.connector.json": [],
   "GET /api/v1/recipes": ["recipes:read"],
   "GET /api/v1/recipes/{id}": ["recipes:read"],
   "GET /api/v1/cookbooks": ["cookbooks:read"],
@@ -34,6 +45,16 @@ function errorExample(document: any, path: string, method: string, status: strin
   return operation(document, path, method).responses[status].content["application/json"].examples[code].value;
 }
 
+function dedupeSecurity(security: Array<Record<string, unknown>>) {
+  const seen = new Set<string>();
+  return security.filter((entry) => {
+    const key = JSON.stringify(entry);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 describe("API v1 OpenAPI document", () => {
   it("generates the required top-level OpenAPI 3.1 contract", () => {
     const document = buildApiV1OpenApiDocument();
@@ -45,12 +66,57 @@ describe("API v1 OpenAPI document", () => {
       description: expect.stringContaining("public-by-default Chef graph"),
     });
     expect(document.servers).toEqual([{ url: "https://spoonjoy.app" }]);
-    expect(Object.keys(document.paths).sort()).toEqual(RESOURCE_PATHS);
+    const preview = buildApiV1OpenApiDocument({ serverUrl: "https://preview.example" });
+    expect(preview.servers).toEqual([{ url: "https://preview.example" }]);
+    expect(preview.components.securitySchemes.oauth2.flows.authorizationCode.authorizationUrl)
+      .toBe("https://preview.example/oauth/authorize");
+    expect(preview.components.securitySchemes.oauth2.flows.authorizationCode.tokenUrl)
+      .toBe("https://preview.example/oauth/token");
+    expect(preview["x-oauth-discovery"].dynamicRegistrationUrl).toBe("https://preview.example/oauth/register");
+    expect(preview["x-public-data-policy"].termsUrl).toBe("https://preview.example/terms");
+    expect(document.security).toEqual([]);
+    expect(Object.keys(document.paths).sort()).toEqual([...AUTH_PATHS, ...RESOURCE_PATHS].sort());
     expect(document.components.securitySchemes.bearerAuth).toEqual({
       type: "http",
       scheme: "bearer",
       bearerFormat: "Spoonjoy API token",
     });
+    expect(document.components.securitySchemes.cookieAuth).toMatchObject({
+      type: "apiKey",
+      in: "cookie",
+      name: "__session",
+    });
+    expect(document.components.securitySchemes.oauth2).toMatchObject({
+      type: "oauth2",
+      flows: {
+        authorizationCode: {
+          authorizationUrl: "https://spoonjoy.app/oauth/authorize",
+          tokenUrl: "https://spoonjoy.app/oauth/token",
+          scopes: {
+            "kitchen:read": expect.any(String),
+            "kitchen:write": expect.any(String),
+            "shopping_list:read": expect.any(String),
+            "shopping_list:write": expect.any(String),
+          },
+        },
+      },
+    });
+    expect(document["x-oauth-scope-map"]).toEqual({
+      "cookbooks:read": ["cookbooks:read"],
+      "kitchen:read": ["cookbooks:read", "public:read", "recipes:read", "shopping_list:read"],
+      "kitchen:write": ["shopping_list:write"],
+      "public:read": ["recipes:read", "cookbooks:read"],
+      "recipes:read": ["recipes:read"],
+      "shopping_list:read": ["shopping_list:read"],
+      "shopping_list:write": ["shopping_list:write"],
+    });
+    expect(document["x-auth-flows"].map((flow: { id: string }) => flow.id)).toEqual(["oauth-pkce", "delegated-approval", "mcp"]);
+    expect(document["x-client-scenarios"].map((scenario: { id: string }) => scenario.id)).toEqual([
+      "cloudflare-worker-sync",
+      "browser-extension-shopping-sync",
+      "no-code-connector",
+      "public-data-export",
+    ]);
   });
 
   it("declares paths, auth, scopes, parameters, examples, and error responses for every resource", () => {
@@ -80,11 +146,35 @@ describe("API v1 OpenAPI document", () => {
           ]),
         );
 
+        const operationScopes = OPERATION_SCOPES[`${method} ${resource.path}`];
+        const oauthScopes = operationScopes.filter((scope) => !scope.startsWith("tokens:"));
+
+        const acceptedOauthScopes = op["x-accepted-oauth-scopes"] ?? [];
         if (resource.auth === "bearer") {
-          expect(op.security).toEqual([{ bearerAuth: OPERATION_SCOPES[`${method} ${resource.path}`] }]);
+          expect(op.security).toEqual(dedupeSecurity([
+            { bearerAuth: [] },
+            { cookieAuth: [] },
+            ...(oauthScopes.length > 0 ? [{ oauth2: oauthScopes }] : []),
+            ...acceptedOauthScopes.map((scopeSet: string[]) => ({ oauth2: scopeSet })),
+          ]));
+        } else if (operationScopes.length > 0) {
+          expect(op.security).toEqual(dedupeSecurity([
+            {},
+            { bearerAuth: [] },
+            { cookieAuth: [] },
+            { oauth2: oauthScopes },
+            ...acceptedOauthScopes.map((scopeSet: string[]) => ({ oauth2: scopeSet })),
+            ...(oauthScopes.some((scope) => scope === "recipes:read" || scope === "cookbooks:read") ? [{ oauth2: ["public:read"] }] : []),
+          ]));
         } else {
-          expect(op.security).toBeUndefined();
+          expect(op.security).toEqual([{}]);
         }
+        if (oauthScopes.length > 0) {
+          expect(op["x-credential-modes"]).toContain("oauth_pkce");
+        } else {
+          expect(op["x-credential-modes"]).not.toContain("oauth_pkce");
+        }
+        expect(op["x-retry-policy"]).toEqual(expect.any(Object));
       }
     }
 
@@ -97,15 +187,23 @@ describe("API v1 OpenAPI document", () => {
         schema: { type: "integer", minimum: 1, maximum: 50, default: 20 },
       }),
     ]));
-    expect(operation(document, "/api/v1/recipes/{id}", "GET").parameters).toEqual([
+    expect(operation(document, "/api/v1/recipes/{id}", "GET").parameters).toEqual(expect.arrayContaining([
       expect.objectContaining({ name: "id", in: "path", required: true, schema: { type: "string", minLength: 1 } }),
-    ]);
-    expect(operation(document, "/api/v1/shopping-list/sync", "GET").parameters).toEqual([
-      expect.objectContaining({ name: "cursor", in: "query", required: false, schema: { type: "string", format: "date-time" } }),
-    ]);
-    expect(operation(document, "/api/v1/shopping-list/items/{itemId}", "PATCH").parameters).toEqual([
+      expect.objectContaining({ name: "X-Request-Id", in: "header", required: false }),
+    ]));
+    expect(operation(document, "/api/v1/shopping-list/sync", "GET").parameters).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "cursor", in: "query", required: false, schema: { type: "string" } }),
+      expect.objectContaining({
+        name: "limit",
+        in: "query",
+        schema: { type: "integer", minimum: 1, maximum: 50, default: 20 },
+      }),
+      expect.objectContaining({ name: "X-Request-Id", in: "header", required: false }),
+    ]));
+    expect(operation(document, "/api/v1/shopping-list/items/{itemId}", "PATCH").parameters).toEqual(expect.arrayContaining([
       expect.objectContaining({ name: "itemId", in: "path", required: true, schema: { type: "string", minLength: 1 } }),
-    ]);
+      expect.objectContaining({ name: "X-Request-Id", in: "header", required: false }),
+    ]));
   });
 
   it("documents raw OpenAPI, method-level token scopes, health principal source, and concrete examples", () => {
@@ -113,6 +211,8 @@ describe("API v1 OpenAPI document", () => {
 
     expect(operation(document, "/api/v1/openapi.json", "GET").responses["200"].content["application/json"].schema.$ref)
       .toBe("#/components/schemas/OpenApiDocument");
+    expect(operation(document, "/api/v1/openapi.connector.json", "GET").responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/ConnectorOpenApiDocument");
     expect(responseExample(document, "/api/v1/openapi.json", "GET", "200")).toMatchObject({
       openapi: "3.1.0",
       info: { title: "Spoonjoy API", version: "v1" },
@@ -121,8 +221,8 @@ describe("API v1 OpenAPI document", () => {
 
     expect(operation(document, "/api/v1/tokens", "GET")["x-scopes"]).toEqual(["tokens:read"]);
     expect(operation(document, "/api/v1/tokens", "POST")["x-scopes"]).toEqual(["tokens:write"]);
-    expect(operation(document, "/api/v1/tokens", "GET").security).toEqual([{ bearerAuth: ["tokens:read"] }]);
-    expect(operation(document, "/api/v1/tokens", "POST").security).toEqual([{ bearerAuth: ["tokens:write"] }]);
+    expect(operation(document, "/api/v1/tokens", "GET").security).toEqual([{ bearerAuth: [] }, { cookieAuth: [] }]);
+    expect(operation(document, "/api/v1/tokens", "POST").security).toEqual([{ bearerAuth: [] }, { cookieAuth: [] }]);
 
     expect(document.components.schemas.HealthData.properties.principal.oneOf).toEqual([
       { $ref: "#/components/schemas/ApiPrincipalSummary" },
@@ -140,7 +240,7 @@ describe("API v1 OpenAPI document", () => {
       limit: 20,
       recipes: [expect.objectContaining({ title: "Pasta" })],
     });
-    expect(responseExample(document, "/api/v1/tokens", "GET", "200").data.tokens[0].scopes).toEqual(["recipes:read"]);
+    expect(responseExample(document, "/api/v1/tokens", "GET", "200").data.tokens[0].scopes).toEqual(["recipes:read", "shopping_list:read", "shopping_list:write"]);
     expect(responseExample(document, "/api/v1/shopping-list/items", "POST", "201").data).toMatchObject({
       created: true,
       updated: false,
@@ -152,7 +252,9 @@ describe("API v1 OpenAPI document", () => {
     expect(errorExample(document, "/api/v1/tokens", "POST", "400", "validation_error").error.code).toBe("validation_error");
 
     expect(operation(document, "/api/v1/tokens", "POST").requestBody.content["application/json"].examples.example.value)
-      .toEqual({ name: "Tiny client", scopes: ["recipes:read", "shopping_list:read"] });
+      .toEqual({ name: "Tiny client", scopes: ["recipes:read", "shopping_list:read", "shopping_list:write"] });
+    expect(operation(document, "/oauth/revoke", "POST").requestBody.content["application/x-www-form-urlencoded"].examples.refresh_token.value)
+      .toMatchObject({ token: "ort_...", client_id: "cm_client_id_from_register" });
     expect(operation(document, "/api/v1/shopping-list/items", "POST").requestBody.content["application/json"].examples.example.value)
       .toEqual({
         clientMutationId: "device-uuid-1",
@@ -162,6 +264,27 @@ describe("API v1 OpenAPI document", () => {
         categoryKey: null,
         iconKey: null,
       });
+
+    const authorizeParams = operation(document, "/oauth/authorize", "GET").parameters;
+    expect(authorizeParams).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        name: "redirect_uri",
+        schema: expect.objectContaining({
+          description: expect.stringContaining("HTTPS"),
+        }),
+      }),
+      expect.objectContaining({
+        name: "scope",
+        "x-recommended-scope": "shopping_list:read shopping_list:write",
+        schema: expect.not.objectContaining({ default: expect.anything() }),
+      }),
+      expect.objectContaining({
+        name: "state",
+        schema: expect.not.objectContaining({ default: expect.anything() }),
+      }),
+    ]));
+    expect(document.components.schemas.OAuthRegisterRequest.properties.redirect_uris.items.description)
+      .toContain("custom schemes");
   });
 
   it("uses response examples whose status and envelope shape match each response", () => {
@@ -172,6 +295,7 @@ describe("API v1 OpenAPI document", () => {
         const op = document.paths[path][method];
 
         for (const [statusKey, response] of Object.entries(op.responses) as Array<[string, any]>) {
+          if (!response.content?.["application/json"]) continue;
           const status = Number(statusKey);
           const schemaRef = response.content["application/json"].schema.$ref;
 
@@ -179,19 +303,35 @@ describe("API v1 OpenAPI document", () => {
             const value = example.value;
 
             if (status >= 200 && status < 300) {
-              if (schemaRef === "#/components/schemas/OpenApiDocument") {
-                expect(value).toMatchObject({ openapi: "3.1.0", info: expect.any(Object), paths: expect.any(Object) });
+              if (schemaRef === "#/components/schemas/OpenApiDocument" || schemaRef === "#/components/schemas/SdkOpenApiDocument" || schemaRef === "#/components/schemas/ConnectorOpenApiDocument") {
+                expect(value).toMatchObject({ openapi: expect.stringMatching(/^3\./), info: expect.any(Object), paths: expect.any(Object) });
                 expect(value.ok).toBeUndefined();
-              } else {
+              } else if (path.startsWith("/api/v1")) {
                 expect(value).toMatchObject({ ok: true, requestId: "req_example" });
                 expect(value.data).not.toEqual({});
+              } else if (path.startsWith("/api/tools/")) {
+                expect(value).toMatchObject({ ok: true, data: expect.any(Object) });
+              } else if (path === "/mcp") {
+                expect(value).toMatchObject({ jsonrpc: "2.0" });
+              } else {
+                expect(value).toEqual(expect.any(Object));
               }
               continue;
             }
 
-            expect(value).toMatchObject({ ok: false, requestId: "req_example" });
-            expect(API_V1_ERROR_STATUS[value.error.code as keyof typeof API_V1_ERROR_STATUS]).toBe(status);
-            expect(value.error.status).toBe(status);
+            if (path.startsWith("/api/v1")) {
+              expect(value).toMatchObject({ ok: false, requestId: "req_example" });
+              expect(API_V1_ERROR_STATUS[value.error.code as keyof typeof API_V1_ERROR_STATUS]).toBe(status);
+              expect(value.error.status).toBe(status);
+            } else if (path.startsWith("/api/tools/")) {
+              if (value.error === "rate_limited") {
+                expect(value).toMatchObject({ error: "rate_limited", retryAfterSeconds: expect.any(Number) });
+              } else {
+                expect(value).toMatchObject({ ok: false, error: { status } });
+              }
+            } else {
+              expect(value).toEqual(expect.any(Object));
+            }
           }
         }
       }
@@ -207,13 +347,31 @@ describe("API v1 OpenAPI document", () => {
       .toBe("#/components/schemas/CreateShoppingItemRequest");
     expect(operation(document, "/api/v1/shopping-list/items/{itemId}", "PATCH").requestBody.content["application/json"].schema.$ref)
       .toBe("#/components/schemas/CheckShoppingItemRequest");
-    expect(operation(document, "/api/v1/shopping-list/items/{itemId}", "DELETE").requestBody.content["application/json"].schema.$ref)
-      .toBe("#/components/schemas/DeleteShoppingItemRequest");
+    expect(operation(document, "/api/v1/shopping-list/items/{itemId}", "DELETE").requestBody).toBeUndefined();
+    expect(operation(document, "/api/v1/shopping-list/items/{itemId}", "DELETE").parameters).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "itemId", in: "path", required: true }),
+      expect.objectContaining({ name: "X-Client-Mutation-Id", in: "header", required: true }),
+      expect.objectContaining({ name: "X-Request-Id", in: "header", required: false }),
+    ]));
+    expect(operation(document, "/api/v1/shopping-list/sync", "GET")["x-cursor-policy"]).toMatchObject({
+      cursor: "opaque",
+      tombstones: expect.any(String),
+    });
+    expect(operation(document, "/api/v1/shopping-list/items", "POST")["x-idempotency"]).toMatchObject({
+      key: "clientMutationId",
+      retentionHours: 24,
+      inProgressRetryAfterSeconds: 2,
+      retryBodyRule: expect.stringContaining("canonicalizes object key order"),
+    });
+    expect(operation(document, "/api/v1/tokens", "POST")["x-personal-token-only"]).toBe(true);
 
     expect(operation(document, "/api/v1/shopping-list/items", "POST").responses).toMatchObject({
       200: { content: { "application/json": { schema: { $ref: "#/components/schemas/CreateShoppingItemEnvelope" } } } },
       201: { content: { "application/json": { schema: { $ref: "#/components/schemas/CreateShoppingItemEnvelope" } } } },
-      409: { content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } },
+      409: {
+        headers: { "Retry-After": expect.any(Object) },
+        content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } },
+      },
     });
     expect(operation(document, "/api/v1/shopping-list/items/{itemId}", "PATCH").responses["404"].content["application/json"].schema.$ref)
       .toBe("#/components/schemas/ErrorEnvelope");
@@ -225,7 +383,7 @@ describe("API v1 OpenAPI document", () => {
     const { components } = buildApiV1OpenApiDocument();
 
     for (const [name, schema] of Object.entries(components.schemas) as Array<[string, any]>) {
-      if (schema.type === "object" && name !== "ErrorDetails") {
+      if (schema.type === "object" && name !== "ErrorDetails" && name !== "OpenApiDocument" && name !== "SdkOpenApiDocument" && name !== "ConnectorOpenApiDocument") {
         expect(schema.additionalProperties).toBe(false);
       }
     }
@@ -264,9 +422,83 @@ describe("API v1 OpenAPI document", () => {
       additionalProperties: false,
       required: ["clientMutationId", "name"],
       properties: {
+        clientMutationId: { type: "string", minLength: 1, maxLength: 160 },
+        name: { type: "string", minLength: 1, maxLength: 160 },
         quantity: { type: "number", exclusiveMinimum: 0 },
         categoryKey: { type: ["string", "null"] },
       },
     });
+    expect(components.schemas.CreateTokenRequest.properties.name).toEqual({ type: "string", minLength: 1, maxLength: 160 });
+    expect(components.schemas.CreateShoppingItemData.required).toEqual(["created", "updated", "item", "mutation"]);
+    expect(components.schemas.UpdateShoppingItemData.required).toEqual(["item", "mutation"]);
+    expect(components.schemas.DeleteShoppingItemData.required).toEqual(["removed", "item", "mutation"]);
+  });
+
+  it("publishes an OpenAPI 3.0 REST-only connector profile for no-code importers", () => {
+    const connector = buildApiV1ConnectorOpenApiDocument();
+    const previewConnector = buildApiV1ConnectorOpenApiDocument({ serverUrl: "https://preview.example" });
+
+    expect(connector.openapi).toBe("3.0.3");
+    expect(Object.keys(connector.paths).sort()).toEqual([
+      "/api/v1/cookbooks",
+      "/api/v1/cookbooks/{id}",
+      "/api/v1/recipes",
+      "/api/v1/recipes/{id}",
+      "/api/v1/shopping-list",
+      "/api/v1/shopping-list/items",
+      "/api/v1/shopping-list/items/{itemId}",
+      "/api/v1/shopping-list/sync",
+    ].sort());
+    expect(connector.paths["/mcp"]).toBeUndefined();
+    expect(connector.paths["/oauth/authorize"]).toBeUndefined();
+    expect(connector.components.securitySchemes.cookieAuth).toBeUndefined();
+    expect(JSON.stringify(connector.paths)).not.toContain("cookieAuth");
+    expect(connector["x-connector-profile"].oauth.authorizationUrl).toBe("https://spoonjoy.app/oauth/authorize");
+    expect(previewConnector["x-connector-profile"].oauth.authorizationUrl).toBe("https://preview.example/oauth/authorize");
+    expect(previewConnector["x-connector-profile"].playgroundUrl).toBe("https://preview.example/api/playground");
+    expect(connector["x-connector-profile"].triggers[0]).toMatchObject({
+      path: "/api/v1/shopping-list/sync",
+      eventName: "new_updated_or_removed_shopping_list_item",
+      tombstoneField: "deletedAt",
+      removalWhen: "deletedAt is not null",
+    });
+    expect(connector.paths["/api/v1/shopping-list/sync"].get).toMatchObject({
+      "x-display-name": "New, updated, or removed shopping-list item",
+      "x-tombstone-field": "deletedAt",
+      "x-removal-when": "deletedAt is not null",
+    });
+    expect(JSON.stringify(connector)).not.toContain('"const"');
+    expect(JSON.stringify(connector)).not.toContain('["string","null"]');
+    expect(JSON.stringify(connector)).not.toContain('"type":"null"');
+    expect(JSON.stringify(connector)).not.toContain('"exclusiveMinimum":0');
+    expect(connector.components.schemas.CreateShoppingItemRequest.properties.categoryKey).toEqual({
+      type: "string",
+      maxLength: 160,
+      nullable: true,
+    });
+    expect(connector.paths["/api/v1/shopping-list/items/{itemId}"].delete.requestBody).toBeUndefined();
+    expect(JSON.stringify(connector)).not.toContain('"$ref":"#/components/schemas/SourceRecipeAttribution","nullable":true');
+  });
+
+  it("publishes an SDK profile with token lifecycle but without browser/session/MCP routes", () => {
+    const sdk = buildApiV1SdkOpenApiDocument();
+    const previewSdk = buildApiV1SdkOpenApiDocument({ serverUrl: "https://preview.example" });
+
+    expect(sdk.openapi).toBe("3.1.0");
+    expect(sdk.info.title).toBe("Spoonjoy API v1 SDK Profile");
+    expect(sdk.paths["/oauth/register"]).toBeDefined();
+    expect(sdk.paths["/oauth/token"]).toBeDefined();
+    expect(sdk.paths["/oauth/revoke"]).toBeDefined();
+    expect(sdk.paths["/oauth/authorize"]).toBeDefined();
+    expect(sdk.paths["/mcp"]).toBeUndefined();
+    expect(sdk.paths["/api/tools/start_agent_connection"]).toBeDefined();
+    expect(sdk.paths["/api/tools/poll_agent_connection"]).toBeDefined();
+    expect(sdk.paths["/api/v1/openapi.json"]).toBeUndefined();
+    expect(sdk.components.securitySchemes.cookieAuth).toBeUndefined();
+    expect(JSON.stringify(sdk.paths)).not.toContain("cookieAuth");
+    expect(sdk["x-sdk-profile"].omitted).toContain("same-origin cookieAuth");
+    expect(previewSdk.components.securitySchemes.oauth2.flows.authorizationCode.authorizationUrl)
+      .toBe("https://preview.example/oauth/authorize");
+    expect(previewSdk["x-sdk-profile"].docsUrl).toBe("https://preview.example/api");
   });
 });

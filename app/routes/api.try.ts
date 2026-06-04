@@ -1,1 +1,1 @@
-export { action, loader } from "./api.playground";
+export { default, loader, meta } from "./developers.playground";

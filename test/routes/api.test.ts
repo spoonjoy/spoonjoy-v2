@@ -1,19 +1,34 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Request as UndiciRequest } from "undici";
 import { faker } from "@faker-js/faker";
 import { action, loader } from "~/routes/api.$";
 import { createApiCredential } from "~/lib/api-auth.server";
+import { captureEvent } from "~/lib/analytics-server";
 import { getLocalDb } from "~/lib/db.server";
 import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { getOrCreateIngredientRef } from "../utils";
 
+vi.mock("~/lib/analytics-server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("~/lib/analytics-server")>()),
+  captureEvent: vi.fn(async () => undefined),
+  captureException: vi.fn(async () => undefined),
+}));
+
 function uniqueEmail(prefix = "rest") {
   return `${prefix}-${faker.string.alphanumeric(8).toLowerCase()}@example.com`;
 }
 
-function routeArgs(request: Request, splat: string) {
-  return { request, params: { "*": splat }, context: { cloudflare: { env: null } } } as any;
+function routeArgs(request: Request, splat: string, env: Record<string, unknown> | null = null) {
+  const waitUntil = vi.fn((promise: Promise<unknown>) => {
+    void promise;
+  });
+  return {
+    request,
+    params: { "*": splat },
+    context: { cloudflare: { env, ctx: { waitUntil } } },
+    waitUntil,
+  } as any;
 }
 
 async function readJson(response: Response) {
@@ -26,10 +41,62 @@ async function sessionCookie(userId: string) {
   return (await sessionStorage.commitSession(session)).split(";")[0];
 }
 
+function legacyTelemetryInputs() {
+  return vi.mocked(captureEvent).mock.calls.map(([, input]) => input);
+}
+
+function expectLegacyEvent(input: {
+  requestId: string;
+  operation?: string;
+  status: number;
+  authMode: "anonymous" | "bearer" | "oauth_bearer" | "session";
+  routeTemplate?: string;
+  errorCode?: string;
+  rateLimitScope?: string;
+  forbidden?: readonly string[];
+}) {
+  const eventInput = legacyTelemetryInputs().find((candidate) => (
+    candidate.event === "spoonjoy.legacy_api.request" &&
+    candidate.properties?.request_id === input.requestId &&
+    candidate.properties?.status === input.status &&
+    (!input.routeTemplate || candidate.properties?.route_template === input.routeTemplate)
+  ));
+
+  expect(eventInput).toMatchObject({
+    event: "spoonjoy.legacy_api.request",
+    properties: {
+      route_template: input.routeTemplate ?? "/api/{operation}",
+      operation: input.operation,
+      status: input.status,
+      request_id: input.requestId,
+      auth_mode: input.authMode,
+      error_code: input.errorCode,
+      latency_ms: expect.any(Number),
+    },
+  });
+
+  const properties = eventInput!.properties as Record<string, unknown>;
+  if (input.rateLimitScope) {
+    expect(properties.rate_limit_scope).toBe(input.rateLimitScope);
+  } else {
+    expect(properties.rate_limit_scope).toBeUndefined();
+  }
+
+  const serialized = JSON.stringify(eventInput);
+  for (const forbidden of input.forbidden ?? []) {
+    expect(serialized).not.toContain(forbidden);
+  }
+  expect(serialized).not.toContain("Authorization");
+  expect(serialized).not.toContain("Bearer ");
+  expect(serialized).not.toContain("__session=");
+  return eventInput;
+}
+
 describe("Spoonjoy REST API route", () => {
   let db: Awaited<ReturnType<typeof getLocalDb>>;
 
   beforeEach(async () => {
+    vi.mocked(captureEvent).mockClear();
     await cleanupDatabase();
     db = await getLocalDb();
   });
@@ -75,6 +142,28 @@ describe("Spoonjoy REST API route", () => {
     const payload = await readJson(response);
     expect(payload).toMatchObject({ ok: true, data: { query: "milk", scope: "all" } });
     expect(payload.data.results.some((result: { type: string }) => result.type === "shopping-list-item")).toBe(false);
+  });
+
+  it("rejects MCP audience-bound OAuth tokens on the legacy REST surface", async () => {
+    const user = await db.user.create({ data: { email: uniqueEmail(), username: faker.internet.username() } });
+    const { token } = await createApiCredential(db, user.id, "MCP-bound OAuth token", {
+      scopes: ["kitchen:read"],
+      oauthClientId: "oauth_client_mcp",
+      oauthResource: "https://spoonjoy.app/mcp",
+    });
+
+    const response = await loader(routeArgs(new UndiciRequest("http://localhost/api/search?query=pasta", {
+      headers: { Authorization: `Bearer ${token}` },
+    }), "search"));
+
+    expect(response.status).toBe(403);
+    await expect(readJson(response)).resolves.toMatchObject({
+      ok: false,
+      error: {
+        status: 403,
+        message: "OAuth access token is bound to a protected resource and cannot call legacy /api routes.",
+      },
+    });
   });
 
   it("coerces legacy REST query and body edge cases before dispatch", async () => {
@@ -224,7 +313,7 @@ describe("Spoonjoy REST API route", () => {
 
   it("routes recipe and cookbook REST endpoints through the shared operation layer", async () => {
     const user = await db.user.create({ data: { email: uniqueEmail(), username: faker.internet.username() } });
-    const { token } = await createApiCredential(db, user.id, "REST recipe token");
+    const { token } = await createApiCredential(db, user.id, "REST recipe token", { scopes: ["kitchen:read", "kitchen:write"] });
     const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
 
     const recipeResponse = await action(routeArgs(new UndiciRequest("http://localhost/api/recipes", {
@@ -288,6 +377,17 @@ describe("Spoonjoy REST API route", () => {
 
     const missingEndpoint = await loader(routeArgs(new UndiciRequest("http://localhost/api/nope"), "nope"));
     await expect(readJson(missingEndpoint)).resolves.toMatchObject({ ok: false, error: { status: 404 } });
+
+    const missingDeviceCode = await action(routeArgs(new UndiciRequest("http://localhost/api/tools/poll_agent_connection", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    }), "tools/poll_agent_connection"));
+    expect(missingDeviceCode.status).toBe(400);
+    await expect(readJson(missingDeviceCode)).resolves.toMatchObject({
+      ok: false,
+      error: { status: 400, message: "deviceCode is required" },
+    });
   });
 
   it("returns 429 with Retry-After when the rate limiter denies the request", async () => {
@@ -313,6 +413,273 @@ describe("Spoonjoy REST API route", () => {
     expect(body).toMatchObject({
       error: "rate_limited",
       retryAfterSeconds: 60,
+    });
+  });
+
+  it("captures safe legacy REST telemetry for public success, bearer success, auth errors, not-found, and rate limits", async () => {
+    const telemetryEnv = { POSTHOG_KEY: "ph_test" };
+    const publicResponse = await loader(routeArgs(new UndiciRequest("http://localhost/api/health", {
+      headers: {
+        "X-Request-Id": "req_legacy_health",
+        Origin: "https://client.example",
+        Referer: "https://docs.example/start?token=secret",
+        "User-Agent": "curl/8.7.1",
+      },
+    }), "health", telemetryEnv));
+
+    expect(publicResponse.status).toBe(200);
+    expectLegacyEvent({
+      requestId: "req_legacy_health",
+      operation: "health",
+      status: 200,
+      authMode: "anonymous",
+      forbidden: ["token=secret", "curl/8.7.1"],
+    });
+
+    const unsafeRequestId = "Bearer sj_request_id_secret";
+    const unsafeRequestIdResponse = await loader(routeArgs(new UndiciRequest("http://localhost/api/health", {
+      headers: {
+        "X-Request-Id": unsafeRequestId,
+      },
+    }), "health", telemetryEnv));
+    expect(unsafeRequestIdResponse.status).toBe(200);
+    expectLegacyEvent({
+      requestId: "unknown",
+      operation: "health",
+      status: 200,
+      authMode: "anonymous",
+      forbidden: [unsafeRequestId, "sj_request_id_secret"],
+    });
+
+    const user = await db.user.create({ data: { email: uniqueEmail("telemetry"), username: faker.internet.username() } });
+    const credential = await createApiCredential(db, user.id, "Legacy Telemetry Reader", { scopes: ["kitchen:read"] });
+    const bearerResponse = await loader(routeArgs(new UndiciRequest("http://localhost/api/shopping-list", {
+      headers: {
+        Authorization: `Bearer ${credential.token}`,
+        "X-Request-Id": "req_legacy_bearer",
+      },
+    }), "shopping-list", telemetryEnv));
+
+    expect(bearerResponse.status).toBe(200);
+    expectLegacyEvent({
+      requestId: "req_legacy_bearer",
+      operation: "get_shopping_list",
+      status: 200,
+      authMode: "bearer",
+      forbidden: [
+        credential.token,
+        credential.credential.tokenPrefix,
+        "Legacy Telemetry Reader",
+        user.email,
+        user.username,
+      ],
+    });
+
+    const oauthCredential = await createApiCredential(db, user.id, "Legacy OAuth Client Reader", {
+      scopes: ["kitchen:read"],
+      oauthClientId: "legacy-oauth-client",
+    });
+    const oauthBearerResponse = await loader(routeArgs(new UndiciRequest("http://localhost/api/shopping-list", {
+      headers: {
+        Authorization: `Bearer ${oauthCredential.token}`,
+        "X-Request-Id": "req_legacy_oauth_bearer",
+      },
+    }), "shopping-list", telemetryEnv));
+
+    expect(oauthBearerResponse.status).toBe(200);
+    const oauthEvent = expectLegacyEvent({
+      requestId: "req_legacy_oauth_bearer",
+      operation: "get_shopping_list",
+      status: 200,
+      authMode: "oauth_bearer",
+      forbidden: [oauthCredential.token, oauthCredential.credential.tokenPrefix, "Legacy OAuth Client Reader"],
+    });
+    expect(oauthEvent!.properties).toMatchObject({
+      oauth_client_id: "legacy-oauth-client",
+      oauth_resource: null,
+    });
+
+    const missingAuth = await loader(routeArgs(new UndiciRequest("http://localhost/api/shopping-list", {
+      headers: { "X-Request-Id": "req_legacy_missing_auth" },
+    }), "shopping-list", telemetryEnv));
+    expect(missingAuth.status).toBe(401);
+    expectLegacyEvent({
+      requestId: "req_legacy_missing_auth",
+      operation: "get_shopping_list",
+      status: 401,
+      authMode: "anonymous",
+      errorCode: "api_auth_error",
+    });
+
+    const unknown = await loader(routeArgs(new UndiciRequest("http://localhost/api/unknown-secret-path", {
+      headers: { "X-Request-Id": "req_legacy_unknown" },
+    }), "unknown-secret-path", telemetryEnv));
+    expect(unknown.status).toBe(404);
+    expectLegacyEvent({
+      requestId: "req_legacy_unknown",
+      status: 404,
+      authMode: "anonymous",
+      routeTemplate: "/api/{unknown}",
+      errorCode: "api_auth_error",
+      forbidden: ["unknown-secret-path"],
+    });
+
+    const rawToolName = "sj_tool_path_secret@example.com";
+    const unknownTool = await action(routeArgs(new UndiciRequest(`http://localhost/api/tools/${encodeURIComponent(rawToolName)}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Request-Id": "req_legacy_unknown_tool",
+      },
+      body: "{}",
+    }), `tools/${rawToolName}`, telemetryEnv));
+    expect(unknownTool.status).toBe(404);
+    expectLegacyEvent({
+      requestId: "req_legacy_unknown_tool",
+      status: 404,
+      authMode: "anonymous",
+      routeTemplate: "/api/{unknown}",
+      errorCode: "api_auth_error",
+      forbidden: [rawToolName, "sj_tool_path_secret"],
+    });
+
+    const malformedSplat = "%E0%A4%A";
+    const malformed = await loader(routeArgs(new UndiciRequest(`http://localhost/api/${malformedSplat}`, {
+      headers: { "X-Request-Id": "req_legacy_malformed_path" },
+    }), malformedSplat, telemetryEnv));
+    expect(malformed.status).toBe(500);
+    expectLegacyEvent({
+      requestId: "req_legacy_malformed_path",
+      status: 500,
+      authMode: "anonymous",
+      routeTemplate: "/api/{unknown}",
+      errorCode: "internal_error",
+      forbidden: [malformedSplat],
+    });
+
+    const token = "sj_legacy_rate_limited_secret";
+    const throttled = await loader(routeArgs(new UndiciRequest("http://localhost/api/health", {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "X-Request-Id": "req_legacy_rate_limited",
+      },
+    }), "health", {
+      POSTHOG_KEY: "ph_test",
+      API_TOKEN_RATE_LIMITER: {
+        limit: async () => ({ success: false }),
+      },
+    }));
+    expect(throttled.status).toBe(429);
+    expectLegacyEvent({
+      requestId: "req_legacy_rate_limited",
+      operation: "health",
+      status: 429,
+      authMode: "anonymous",
+      errorCode: "rate_limited",
+      rateLimitScope: "token",
+      forbidden: [token],
+    });
+
+    const throttledTools = await loader(routeArgs(new UndiciRequest("http://localhost/api/tools", {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "X-Request-Id": "req_legacy_rate_limited_tools",
+      },
+    }), "tools", {
+      POSTHOG_KEY: "ph_test",
+      API_TOKEN_RATE_LIMITER: {
+        limit: async () => ({ success: false }),
+      },
+    }));
+    expect(throttledTools.status).toBe(429);
+    expectLegacyEvent({
+      requestId: "req_legacy_rate_limited_tools",
+      operation: "tools",
+      status: 429,
+      authMode: "anonymous",
+      errorCode: "rate_limited",
+      rateLimitScope: "token",
+      forbidden: [token],
+    });
+
+    const throttledMissingSplat = await loader({
+      request: new UndiciRequest("http://localhost/api/health", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "X-Request-Id": "req_legacy_rate_limited_missing_splat",
+        },
+      }),
+      params: {},
+      context: {
+        cloudflare: {
+          env: {
+            POSTHOG_KEY: "ph_test",
+            API_TOKEN_RATE_LIMITER: {
+              limit: async () => ({ success: false }),
+            },
+          },
+          ctx: {
+            waitUntil: vi.fn((promise: Promise<unknown>) => {
+              void promise;
+            }),
+          },
+        },
+      },
+    } as any);
+    expect(throttledMissingSplat.status).toBe(429);
+    expectLegacyEvent({
+      requestId: "req_legacy_rate_limited_missing_splat",
+      operation: "root",
+      status: 429,
+      authMode: "anonymous",
+      errorCode: "rate_limited",
+      rateLimitScope: "token",
+      forbidden: [token],
+    });
+
+    const throttledPost = await action(routeArgs(new UndiciRequest("http://localhost/api/health", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "X-Request-Id": "req_legacy_rate_limited_post",
+      },
+    }), "health", {
+      POSTHOG_KEY: "ph_test",
+      API_TOKEN_RATE_LIMITER: {
+        limit: async () => ({ success: false }),
+      },
+    }));
+    expect(throttledPost.status).toBe(429);
+    expectLegacyEvent({
+      requestId: "req_legacy_rate_limited_post",
+      status: 429,
+      authMode: "anonymous",
+      routeTemplate: "/api/{unknown}",
+      errorCode: "rate_limited",
+      rateLimitScope: "token",
+      forbidden: [token],
+    });
+
+    const throttledMalformed = await loader(routeArgs(new UndiciRequest(`http://localhost/api/${malformedSplat}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "X-Request-Id": "req_legacy_rate_limited_malformed",
+      },
+    }), malformedSplat, {
+      POSTHOG_KEY: "ph_test",
+      API_TOKEN_RATE_LIMITER: {
+        limit: async () => ({ success: false }),
+      },
+    }));
+    expect(throttledMalformed.status).toBe(429);
+    expectLegacyEvent({
+      requestId: "req_legacy_rate_limited_malformed",
+      status: 429,
+      authMode: "anonymous",
+      routeTemplate: "/api/{unknown}",
+      errorCode: "rate_limited",
+      rateLimitScope: "token",
+      forbidden: [token, malformedSplat],
     });
   });
 });

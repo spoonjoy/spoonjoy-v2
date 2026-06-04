@@ -18,18 +18,26 @@ import { createApiCredential } from "~/lib/api-auth.server";
 
 type Database = PrismaClientType;
 
-/** Scopes Spoonjoy understands, mirroring the agent-connection delegated grant. */
-export const SUPPORTED_SCOPES = ["kitchen:read", "kitchen:write"] as const;
-export const DEFAULT_SCOPE = "kitchen:read kitchen:write";
+/** Scopes Spoonjoy understands for delegated OAuth consent. */
+export const SUPPORTED_SCOPES = [
+  "cookbooks:read",
+  "kitchen:read",
+  "kitchen:write",
+  "public:read",
+  "recipes:read",
+  "shopping_list:read",
+  "shopping_list:write",
+] as const;
+export const DEFAULT_SCOPE = "kitchen:read";
 
 /** Authorization codes are single-use and expire fast (RFC 6749 §4.1.2). */
 const AUTH_CODE_TTL_SECONDS = 60;
 
 /**
- * Access-token lifetime — long (30 days) on purpose so connectors refresh
- * rarely, not constantly. When it lapses the client uses its refresh token.
+ * OAuth access tokens are intentionally short-lived. Continuity comes from the
+ * rotating refresh token; personal bearer tokens remain separate credentials.
  */
-const ACCESS_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60;
+export const OAUTH_ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
 
 /** OAuth 2.1 error, carrying an RFC 6749 error code for the wire response. */
 export class OAuthError extends Error {
@@ -67,6 +75,7 @@ async function sha256Hex(input: string): Promise<string> {
 /** Verify a PKCE `code_verifier` against the stored S256 `code_challenge`. */
 export async function verifyPkceS256(verifier: string, challenge: string): Promise<boolean> {
   if (!verifier || !challenge) return false;
+  if (!/^[A-Za-z0-9._~-]{43,128}$/.test(verifier)) return false;
   return (await sha256Base64Url(verifier)) === challenge;
 }
 
@@ -78,19 +87,20 @@ export function isValidRedirectUri(value: string): boolean {
   } catch {
     return false;
   }
+  if (url.hash || url.username || url.password || url.hostname.includes("*")) return false;
   if (url.protocol === "https:") return true;
   return url.protocol === "http:" && (url.hostname === "localhost" || url.hostname === "127.0.0.1");
 }
 
 /**
  * Reduce a requested scope string to the supported subset. An empty/absent
- * request grants the default (read+write); an unsupported scope is rejected so
+ * request grants the read-only default; an unsupported scope is rejected so
  * the client never silently gets less than it asked for.
  */
 export function normalizeScope(requested: string | null | undefined): string {
   const trimmed = (requested ?? "").trim();
   if (!trimmed) return DEFAULT_SCOPE;
-  const parts = trimmed.split(/\s+/);
+  const parts = Array.from(new Set(trimmed.split(/\s+/)));
   for (const part of parts) {
     if (!SUPPORTED_SCOPES.includes(part as (typeof SUPPORTED_SCOPES)[number])) {
       throw new OAuthError("invalid_scope", `Unsupported scope: ${part}`);
@@ -250,6 +260,11 @@ export interface IssuedConnectorTokens {
   refreshToken: string;
   expiresIn: number;
   scope: string;
+  resource: string | null;
+}
+
+function oauthCredentialName(clientName: string | null | undefined): string {
+  return `${clientName?.trim() || "OAuth client"} (OAuth)`;
 }
 
 /**
@@ -259,16 +274,19 @@ export interface IssuedConnectorTokens {
  */
 export async function issueConnectorTokens(
   db: Database,
-  input: { userId: string; clientId: string; scope: string; now?: Date },
+  input: { userId: string; clientId: string; scope: string; resource?: string | null; now?: Date },
 ): Promise<IssuedConnectorTokens> {
   const now = input.now ?? new Date();
+  const client = await getOAuthClient(db, input.clientId);
   const { token: accessToken } = await createApiCredential(
     db,
     input.userId,
-    "Claude connector (OAuth)",
+    oauthCredentialName(client?.clientName),
     {
-      expiresAt: new Date(now.getTime() + ACCESS_TOKEN_TTL_SECONDS * 1000),
+      expiresAt: new Date(now.getTime() + OAUTH_ACCESS_TOKEN_TTL_SECONDS * 1000),
       scopes: input.scope,
+      oauthClientId: input.clientId,
+      oauthResource: input.resource ?? null,
     },
   );
   const refreshToken = randomToken("ort_");
@@ -278,9 +296,53 @@ export async function issueConnectorTokens(
       userId: input.userId,
       clientId: input.clientId,
       scope: input.scope,
+      resource: input.resource ?? null,
     },
   });
-  return { accessToken, refreshToken, expiresIn: ACCESS_TOKEN_TTL_SECONDS, scope: input.scope };
+  return {
+    accessToken,
+    refreshToken,
+    expiresIn: OAUTH_ACCESS_TOKEN_TTL_SECONDS,
+    scope: input.scope,
+    resource: input.resource ?? null,
+  };
+}
+
+/** Revoke one rotating OAuth refresh token for native/extension disconnect flows. */
+export async function revokeConnectorRefreshToken(
+  db: Database,
+  input: { refreshToken: string; clientId?: string; now?: Date },
+): Promise<boolean> {
+  const now = input.now ?? new Date();
+  if (!input.refreshToken) throw new OAuthError("invalid_request", "Missing refresh token");
+
+  const record = await db.oAuthRefreshToken.findUnique({
+    where: { tokenHash: await sha256Hex(input.refreshToken) },
+  });
+  if (!record) return false;
+  if (input.clientId && record.clientId !== input.clientId) {
+    throw new OAuthError("invalid_grant", "Refresh token was issued to a different client");
+  }
+  if (record.revokedAt) return false;
+
+  await db.oAuthRefreshToken.update({
+    where: { id: record.id },
+    data: { revokedAt: now },
+  });
+  await db.apiCredential.updateMany({
+    where: {
+      userId: record.userId,
+      oauthClientId: record.clientId,
+      oauthResource: record.resource,
+      revokedAt: null,
+      OR: [
+        { expiresAt: null },
+        { expiresAt: { gt: now } },
+      ],
+    },
+    data: { revokedAt: now },
+  });
+  return true;
 }
 
 /**
@@ -317,6 +379,7 @@ export async function rotateConnectorTokens(
     userId: record.userId,
     clientId: record.clientId,
     scope: record.scope,
+    resource: record.resource,
     now,
   });
 }

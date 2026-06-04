@@ -19,9 +19,9 @@ function expectEnvelopeHeaders(response: Response, requestId: string) {
   expect(response.headers.get("Content-Type")).toContain("application/json");
   expect(response.headers.get("X-Request-Id")).toBe(requestId);
   expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
-  expect(response.headers.get("Access-Control-Allow-Headers")).toBe("Authorization, Content-Type, X-Request-Id");
+  expect(response.headers.get("Access-Control-Allow-Headers")).toBe("Authorization, Content-Type, X-Request-Id, X-Client-Mutation-Id");
   expect(response.headers.get("Access-Control-Allow-Methods")).toBe("GET, POST, PATCH, DELETE, OPTIONS");
-  expect(response.headers.get("Access-Control-Expose-Headers")).toBe("X-Request-Id");
+  expect(response.headers.get("Access-Control-Expose-Headers")).toContain("X-Request-Id");
 }
 
 async function createCookbookFixture(db: Awaited<ReturnType<typeof getLocalDb>>, titlePrefix = "Api V1 Weeknight") {
@@ -92,6 +92,9 @@ describe("API v1 public cookbook reads", () => {
 
     expect(queryResponse.status).toBe(200);
     expectEnvelopeHeaders(queryResponse, "req_cookbook_query");
+    expect(queryResponse.headers.get("Cache-Control")).toBe("public, max-age=60, stale-while-revalidate=300");
+    expect(queryResponse.headers.get("Vary")).toBe("Authorization, Cookie");
+    expect(queryResponse.headers.get("Access-Control-Expose-Headers")).toContain("Cache-Control");
     expect(queryPayload.data.query).toBe("Api V1 Weeknight");
     expect(queryPayload.data.cookbooks.map((cookbook: { id: string }) => cookbook.id)).toEqual(
       expect.arrayContaining([first.cookbook.id, second.cookbook.id])
@@ -118,7 +121,13 @@ describe("API v1 public cookbook reads", () => {
           title: expect.stringContaining("Api V1 Weeknight"),
           chef: { id: expect.any(String), username: expect.any(String) },
           recipeCount: 1,
+          coverImageUrls: [],
           href: expect.stringMatching(/^\/cookbooks\//),
+          canonicalUrl: expect.stringMatching(/^https:\/\/spoonjoy\.app\/cookbooks\//),
+          attribution: {
+            creditText: expect.stringContaining(" on Spoonjoy"),
+            canonicalUrl: expect.stringMatching(/^https:\/\/spoonjoy\.app\/cookbooks\//),
+          },
           createdAt: expect.any(String),
           updatedAt: expect.any(String),
         })],
@@ -221,6 +230,8 @@ describe("API v1 public cookbook reads", () => {
 
     expect(anonymous.status).toBe(200);
     expectEnvelopeHeaders(anonymous, "req_cookbook_detail_anon");
+    expect(anonymous.headers.get("Cache-Control")).toBe("public, max-age=60, stale-while-revalidate=300");
+    expect(anonymous.headers.get("Vary")).toBe("Authorization, Cookie");
     expect(anonymousPayload.data.cookbook.id).toBe(fixture.cookbook.id);
     expect(anonymousPayload.data.cookbook.recipeCount).toBe(1);
 
@@ -240,7 +251,13 @@ describe("API v1 public cookbook reads", () => {
           title: fixture.cookbook.title,
           chef: { id: fixture.chef.id, username: fixture.chef.username },
           recipeCount: 1,
+          coverImageUrls: [],
           href: `/cookbooks/${fixture.cookbook.id}`,
+          canonicalUrl: `https://spoonjoy.app/cookbooks/${fixture.cookbook.id}`,
+          attribution: {
+            creditText: `${fixture.cookbook.title} by ${fixture.chef.username} on Spoonjoy`,
+            canonicalUrl: `https://spoonjoy.app/cookbooks/${fixture.cookbook.id}`,
+          },
           createdAt: fixture.cookbook.createdAt.toISOString(),
           updatedAt: expect.any(String),
           recipes: [{
@@ -249,7 +266,16 @@ describe("API v1 public cookbook reads", () => {
             description: "A public cookbook recipe for API tests",
             servings: "2",
             chef: { id: fixture.chef.id, username: fixture.chef.username },
+            coverImageUrl: null,
             href: `/recipes/${fixture.recipe.id}`,
+            canonicalUrl: `https://spoonjoy.app/recipes/${fixture.recipe.id}`,
+            attribution: {
+              creditText: `${fixture.recipe.title} by ${fixture.chef.username} on Spoonjoy`,
+              canonicalUrl: `https://spoonjoy.app/recipes/${fixture.recipe.id}`,
+              sourceUrl: null,
+              sourceHost: null,
+              sourceRecipe: null,
+            },
             createdAt: fixture.recipe.createdAt.toISOString(),
             updatedAt: expect.any(String),
           }],
@@ -309,6 +335,17 @@ describe("API v1 public cookbook reads", () => {
     await expect(readJson(malformedLimit)).resolves.toMatchObject({
       ok: false,
       requestId: "req_cookbook_malformed_limit",
+      error: { code: "validation_error", status: 400 },
+    });
+
+    const overLimit = await loader(routeArgs(new UndiciRequest("http://localhost/api/v1/cookbooks?limit=51", {
+      headers: { "X-Request-Id": "req_cookbook_over_limit" },
+    }) as unknown as Request, "cookbooks"));
+    expect(overLimit.status).toBe(400);
+    expectEnvelopeHeaders(overLimit, "req_cookbook_over_limit");
+    await expect(readJson(overLimit)).resolves.toMatchObject({
+      ok: false,
+      requestId: "req_cookbook_over_limit",
       error: { code: "validation_error", status: 400 },
     });
 

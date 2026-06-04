@@ -3,6 +3,8 @@ import {
   ApiAuthError,
   assertCanUseOwnerEmail,
   createApiCredential,
+  expandCredentialScopes,
+  normalizeCredentialScopes,
   requireApiPrincipal,
   type ApiPrincipal,
 } from "~/lib/api-auth.server";
@@ -56,6 +58,7 @@ export interface SpoonjoyApiOperationInfo {
   name: string;
   description: string;
   inputSchema: Record<string, unknown>;
+  requiredScopes?: readonly string[];
 }
 
 /**
@@ -191,7 +194,7 @@ function hasArgument(args: Record<string, unknown>, key: string): boolean {
 
 function requiredString(args: Record<string, unknown>, key: string): string {
   const value = optionalString(args[key]);
-  if (!value) throw new Error(`${key} is required`);
+  if (!value) throw new ApiAuthError(`${key} is required`, 400);
   return value;
 }
 
@@ -614,6 +617,33 @@ async function getCredentialOwner(db: Database, args: Record<string, unknown>, c
   return getOrCreateOwner(db, email);
 }
 
+function normalizeCreateApiTokenScopes(value: unknown, principal: ApiPrincipal | null | undefined): string | undefined {
+  let storedScopes: string | undefined;
+
+  if (value === undefined) {
+    storedScopes = principal?.source === "bearer"
+      ? normalizeCredentialScopes(principal.scopes.filter((scope) => scope !== "offline_access"))
+      : undefined;
+  } else if (typeof value === "string") {
+    storedScopes = normalizeCredentialScopes(value);
+  } else if (Array.isArray(value) && value.every((scope) => typeof scope === "string")) {
+    storedScopes = normalizeCredentialScopes(value);
+  } else {
+    throw new ApiAuthError("scopes must be a string or string array", 400);
+  }
+
+  if (principal?.source === "bearer" && storedScopes !== undefined) {
+    const requestedScopes = expandCredentialScopes(storedScopes);
+    const callerScopes = new Set(principal.scopes.filter((scope) => scope !== "offline_access"));
+    const missing = requestedScopes.filter((scope) => !callerScopes.has(scope));
+    if (missing.length > 0) {
+      throw new ApiAuthError(`Cannot create a token with scopes outside the caller's scopes: ${missing.join(", ")}`, 403);
+    }
+  }
+
+  return storedScopes;
+}
+
 async function replaceRecipeSteps(db: PrismaClientType, recipeId: string, steps: ReturnType<typeof parseSteps>) {
   // Pre-resolve all unit + ingredientRef ids OUTSIDE the swap. They're
   // idempotent getOrCreates and don't need to be atomic with the recipe's
@@ -726,7 +756,7 @@ const authStatusTool: SpoonjoyApiOperation = {
         ? { id: defaultOwner.id, email: defaultOwner.email, username: defaultOwner.username }
         : null,
       writable,
-      standards: ["OAuth 2.0 Device Authorization Grant (RFC 8628)", "MCP OAuth authorization"],
+      standards: ["Custom Spoonjoy delegated approval link", "MCP OAuth authorization"],
       guidance: writable
         ? "Use the authenticated principal or configured owner. Never ask for raw Spoonjoy credentials."
         : "Public reads are available. For writes, ask the user to approve a delegated Spoonjoy authorization link or provide a scoped API token; never ask for their password.",
@@ -743,6 +773,7 @@ const startAgentConnectionTool: SpoonjoyApiOperation = {
     properties: {
       agentName: { type: "string" },
       baseUrl: { type: "string" },
+      scopes: { type: "string" },
     },
     additionalProperties: false,
   },
@@ -750,18 +781,20 @@ const startAgentConnectionTool: SpoonjoyApiOperation = {
     const started = await startAgentConnection(context.db, {
       agentName: optionalString(args.agentName),
       baseUrl: context.env?.SPOONJOY_BASE_URL ?? optionalString(args.baseUrl),
+      scopes: optionalString(args.scopes),
     });
 
     return json({
       deviceCode: started.deviceCode,
       userCode: started.request.userCode,
       authorizationUrl: started.authorizationUrl,
-      verificationUri: started.authorizationUrl,
+      verificationUri: started.verificationUri,
+      verificationUriComplete: started.verificationUriComplete,
       expiresAt: started.request.expiresAt.toISOString(),
       expiresIn: started.expiresIn,
       interval: started.interval,
       message:
-        "Send authorizationUrl to the user. After they approve, call poll_agent_connection with deviceCode. Never ask for their Spoonjoy password.",
+        "Send authorizationUrl to the user, or show verificationUri plus userCode on constrained devices. After approval, call poll_agent_connection with deviceCode. Never ask for their Spoonjoy password.",
     });
   },
 };
@@ -792,18 +825,26 @@ const pollAgentConnectionTool: SpoonjoyApiOperation = {
 const createApiTokenTool: SpoonjoyApiOperation = {
   name: "create_api_token",
   description: "Create an owner-scoped Spoonjoy API token. The token is returned once and is stored hashed.",
+  requiredScopes: ["tokens:write"],
   inputSchema: {
     type: "object",
     properties: {
       ownerEmail: { type: "string" },
       name: { type: "string" },
+      scopes: {
+        oneOf: [
+          { type: "string" },
+          { type: "array", items: { type: "string" } },
+        ],
+      },
     },
     additionalProperties: false,
   },
   async handle(args, context) {
     const owner = await getCredentialOwner(context.db, args, context);
     const name = optionalString(args.name) ?? "Spoonjoy API token";
-    const created = await createApiCredential(context.db, owner.id, name);
+    const scopes = normalizeCreateApiTokenScopes(args.scopes, context.principal);
+    const created = await createApiCredential(context.db, owner.id, name, { scopes });
 
     return json({
       token: created.token,
@@ -815,6 +856,7 @@ const createApiTokenTool: SpoonjoyApiOperation = {
 const listApiTokensTool: SpoonjoyApiOperation = {
   name: "list_api_tokens",
   description: "List API token metadata for the configured owner. Token secrets are never returned.",
+  requiredScopes: ["tokens:read"],
   inputSchema: {
     type: "object",
     properties: {
@@ -836,6 +878,7 @@ const listApiTokensTool: SpoonjoyApiOperation = {
 const revokeApiTokenTool: SpoonjoyApiOperation = {
   name: "revoke_api_token",
   description: "Revoke one API token owned by the configured owner.",
+  requiredScopes: ["tokens:write"],
   inputSchema: {
     type: "object",
     properties: {
@@ -871,6 +914,7 @@ const revokeApiTokenTool: SpoonjoyApiOperation = {
 const searchRecipesTool: SpoonjoyApiOperation = {
   name: "search_recipes",
   description: "Full-text search Spoonjoy recipes by title, description, source URL, steps, ingredients, and optional chef email.",
+  requiredScopes: ["recipes:read"],
   inputSchema: {
     type: "object",
     properties: {
@@ -923,6 +967,7 @@ const searchRecipesTool: SpoonjoyApiOperation = {
 const searchSpoonjoyTool: SpoonjoyApiOperation = {
   name: "search_spoonjoy",
   description: "Full-text search Spoonjoy recipes, cookbooks, chefs, and the configured owner's private shopping list.",
+  requiredScopes: ["recipes:read", "cookbooks:read", "shopping_list:read"],
   inputSchema: {
     type: "object",
     properties: {
@@ -960,6 +1005,7 @@ const searchSpoonjoyTool: SpoonjoyApiOperation = {
 const searchShoppingListTool: SpoonjoyApiOperation = {
   name: "search_shopping_list",
   description: "Full-text search the configured owner's private shopping list by ingredient, unit, category, icon, and checked state.",
+  requiredScopes: ["shopping_list:read"],
   inputSchema: {
     type: "object",
     properties: {
@@ -991,6 +1037,7 @@ const searchShoppingListTool: SpoonjoyApiOperation = {
 const getRecipeTool: SpoonjoyApiOperation = {
   name: "get_recipe",
   description: "Fetch a Spoonjoy recipe by id or exact title with ordered steps and ingredients.",
+  requiredScopes: ["recipes:read"],
   inputSchema: {
     type: "object",
     properties: {
@@ -1008,6 +1055,7 @@ const getRecipeTool: SpoonjoyApiOperation = {
 const createRecipeTool: SpoonjoyApiOperation = {
   name: "create_recipe",
   description: "Create a Spoonjoy recipe for the configured owner, including steps and ingredients.",
+  requiredScopes: ["kitchen:write"],
   inputSchema: {
     type: "object",
     properties: {
@@ -1086,6 +1134,7 @@ const createRecipeTool: SpoonjoyApiOperation = {
 const updateRecipeTool: SpoonjoyApiOperation = {
   name: "update_recipe",
   description: "Update a recipe owned by the configured owner, optionally replacing its steps and ingredients.",
+  requiredScopes: ["kitchen:write"],
   inputSchema: {
     type: "object",
     properties: {
@@ -1181,6 +1230,7 @@ const updateRecipeTool: SpoonjoyApiOperation = {
 const deleteRecipeTool: SpoonjoyApiOperation = {
   name: "delete_recipe",
   description: "Soft-delete a recipe owned by the configured owner.",
+  requiredScopes: ["kitchen:write"],
   inputSchema: {
     type: "object",
     properties: {
@@ -1221,6 +1271,7 @@ const deleteRecipeTool: SpoonjoyApiOperation = {
 const addRecipeToShoppingListTool: SpoonjoyApiOperation = {
   name: "add_recipe_to_shopping_list",
   description: "Add all ingredients from a recipe to the configured owner shopping list, merging duplicates.",
+  requiredScopes: ["shopping_list:write"],
   inputSchema: {
     type: "object",
     properties: {
@@ -1348,6 +1399,7 @@ const addRecipeToShoppingListTool: SpoonjoyApiOperation = {
 const listCookbooksTool: SpoonjoyApiOperation = {
   name: "list_cookbooks",
   description: "List cookbooks owned by the configured owner, with active recipe counts and covers.",
+  requiredScopes: ["cookbooks:read"],
   inputSchema: {
     type: "object",
     properties: {
@@ -1408,6 +1460,7 @@ const listCookbooksTool: SpoonjoyApiOperation = {
 const getCookbookTool: SpoonjoyApiOperation = {
   name: "get_cookbook",
   description: "Fetch one cookbook owned by the configured owner by cookbookId or exact title.",
+  requiredScopes: ["cookbooks:read"],
   inputSchema: {
     type: "object",
     properties: {
@@ -1430,6 +1483,7 @@ const getCookbookTool: SpoonjoyApiOperation = {
 const createCookbookTool: SpoonjoyApiOperation = {
   name: "create_cookbook",
   description: "Create or return an existing cookbook for the configured owner by exact title.",
+  requiredScopes: ["kitchen:write"],
   inputSchema: {
     type: "object",
     properties: {
@@ -1466,6 +1520,7 @@ const createCookbookTool: SpoonjoyApiOperation = {
 const addRecipeToCookbookTool: SpoonjoyApiOperation = {
   name: "add_recipe_to_cookbook",
   description: "Idempotently add an active recipe to a cookbook owned by the configured owner.",
+  requiredScopes: ["kitchen:write"],
   inputSchema: {
     type: "object",
     properties: {
@@ -1544,6 +1599,7 @@ const addRecipeToCookbookTool: SpoonjoyApiOperation = {
 const removeRecipeFromCookbookTool: SpoonjoyApiOperation = {
   name: "remove_recipe_from_cookbook",
   description: "Idempotently remove a recipe from a cookbook owned by the configured owner.",
+  requiredScopes: ["kitchen:write"],
   inputSchema: {
     type: "object",
     properties: {
@@ -1582,6 +1638,7 @@ const removeRecipeFromCookbookTool: SpoonjoyApiOperation = {
 const addShoppingListItemTool: SpoonjoyApiOperation = {
   name: "add_shopping_list_item",
   description: "Add or restore one manual item on the configured owner shopping list, merging matching items.",
+  requiredScopes: ["shopping_list:write"],
   inputSchema: {
     type: "object",
     properties: {
@@ -1659,6 +1716,7 @@ const addShoppingListItemTool: SpoonjoyApiOperation = {
 const setShoppingListItemCheckedTool: SpoonjoyApiOperation = {
   name: "set_shopping_list_item_checked",
   description: "Set checked state for one active item on the configured owner shopping list.",
+  requiredScopes: ["shopping_list:write"],
   inputSchema: {
     type: "object",
     properties: {
@@ -1699,6 +1757,7 @@ const setShoppingListItemCheckedTool: SpoonjoyApiOperation = {
 const removeShoppingListItemTool: SpoonjoyApiOperation = {
   name: "remove_shopping_list_item",
   description: "Soft-remove one item from the configured owner shopping list.",
+  requiredScopes: ["shopping_list:write"],
   inputSchema: {
     type: "object",
     properties: {
@@ -1735,6 +1794,7 @@ const removeShoppingListItemTool: SpoonjoyApiOperation = {
 const getShoppingListTool: SpoonjoyApiOperation = {
   name: "get_shopping_list",
   description: "Fetch the configured owner shopping list.",
+  requiredScopes: ["shopping_list:read"],
   inputSchema: {
     type: "object",
     properties: {
@@ -1755,6 +1815,7 @@ const getShoppingListTool: SpoonjoyApiOperation = {
 const createSpoonTool: SpoonjoyApiOperation = {
   name: "create_spoon",
   description: "Create a RecipeSpoon (cook event) authored by the authenticated principal.",
+  requiredScopes: ["kitchen:write"],
   inputSchema: {
     type: "object",
     properties: {
@@ -1862,6 +1923,7 @@ const createSpoonTool: SpoonjoyApiOperation = {
 const updateSpoonTool: SpoonjoyApiOperation = {
   name: "update_spoon",
   description: "Update note, nextTime, photoUrl, or cookedAt on a spoon owned by the authenticated principal.",
+  requiredScopes: ["kitchen:write"],
   inputSchema: {
     type: "object",
     properties: {
@@ -1929,6 +1991,7 @@ function formatSpoonWithChef(spoon: {
 const listSpoonsForRecipeTool: SpoonjoyApiOperation = {
   name: "list_spoons_for_recipe",
   description: "List the most-recent non-deleted spoons for a recipe.",
+  requiredScopes: ["recipes:read"],
   inputSchema: {
     type: "object",
     properties: {
@@ -1970,6 +2033,7 @@ const listSpoonsForRecipeTool: SpoonjoyApiOperation = {
 const listSpoonsByChefTool: SpoonjoyApiOperation = {
   name: "list_spoons_by_chef",
   description: "List the chef's most-recent non-deleted spoons across all recipes.",
+  requiredScopes: ["recipes:read"],
   inputSchema: {
     type: "object",
     properties: {
@@ -2010,6 +2074,7 @@ const listSpoonsByChefTool: SpoonjoyApiOperation = {
 const deleteSpoonTool: SpoonjoyApiOperation = {
   name: "delete_spoon",
   description: "Soft-delete a spoon owned by the authenticated principal.",
+  requiredScopes: ["kitchen:write"],
   inputSchema: {
     type: "object",
     properties: { spoonId: { type: "string" } },
@@ -2029,6 +2094,7 @@ const importRecipeFromUrlTool: SpoonjoyApiOperation = {
   name: "import_recipe_from_url",
   description:
     "Import a recipe from a public web URL into the authenticated principal's library.",
+  requiredScopes: ["kitchen:write"],
   inputSchema: {
     type: "object",
     properties: {
@@ -2085,6 +2151,7 @@ const forkRecipeTool: SpoonjoyApiOperation = {
   name: "fork_recipe",
   description:
     "Fork an existing Spoonjoy recipe into the authenticated principal's kitchen. Clones title, description, servings, steps, ingredients, and step-output uses; snapshots the source's latest cover; sets sourceRecipeId on the new recipe.",
+  requiredScopes: ["kitchen:write"],
   inputSchema: {
     type: "object",
     properties: {
@@ -2205,7 +2272,7 @@ const TOOL_ANNOTATIONS = {
   search_shopping_list: { title: "Search shopping list", readOnlyHint: true },
   get_recipe: { title: "Get recipe", readOnlyHint: true },
   create_recipe: { title: "Create recipe", readOnlyHint: false, destructiveHint: false },
-  update_recipe: { title: "Update recipe", readOnlyHint: false, destructiveHint: false },
+  update_recipe: { title: "Update recipe", readOnlyHint: false, destructiveHint: true },
   delete_recipe: { title: "Delete recipe", readOnlyHint: false, destructiveHint: true, idempotentHint: true },
   import_recipe_from_url: { title: "Import recipe from URL", readOnlyHint: false, destructiveHint: false, openWorldHint: true },
   fork_recipe: { title: "Fork recipe", readOnlyHint: false, destructiveHint: false },
@@ -2227,10 +2294,19 @@ const TOOL_ANNOTATIONS = {
 } satisfies Record<string, McpToolAnnotations>;
 
 export function listSpoonjoyApiOperations(): SpoonjoyMcpToolDescriptor[] {
-  return tools.map(({ name, description, inputSchema }) => {
+  return tools.map(({ name, description, inputSchema, requiredScopes }) => {
     const annotations = TOOL_ANNOTATIONS[name as keyof typeof TOOL_ANNOTATIONS];
-    return { name, title: annotations.title, description, inputSchema, annotations };
+    return { name, title: annotations.title, description, inputSchema, requiredScopes, annotations };
   });
+}
+
+function assertToolScopes(tool: SpoonjoyApiOperation, context: SpoonjoyApiContext) {
+  if (!context.principal || !tool.requiredScopes?.length) return;
+  const principalScopes = new Set(context.principal.scopes);
+  const missing = tool.requiredScopes.find((scope) => !principalScopes.has(scope));
+  if (missing) {
+    throw new ApiAuthError(`Missing required scope: ${missing}`, 403);
+  }
 }
 
 export async function callSpoonjoyApiOperation(
@@ -2240,5 +2316,6 @@ export async function callSpoonjoyApiOperation(
 ): Promise<unknown> {
   const tool = tools.find((candidate) => candidate.name === name);
   if (!tool) throw new Error(`Unknown Spoonjoy operation: ${name}`);
+  assertToolScopes(tool, context);
   return tool.handle(args, context);
 }

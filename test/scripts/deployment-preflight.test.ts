@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { describe, expect, it, vi } from "vitest";
 import {
   checkRemoteMigrations,
@@ -33,12 +34,13 @@ function validInputs(): DeploymentPreflightInputs {
         typecheck: "react-router typegen && tsc",
         "test:coverage": "vitest run --coverage",
         "test:e2e": "env -u FORCE_COLOR -u NO_COLOR playwright test",
+        "smoke:api": "node scripts/smoke-api-live.mjs",
         "db:seed": "pnpm exec tsx prisma/seed.ts",
       },
     },
-    cloudflareEnvDts: "DB?: D1Database; PHOTOS?: R2Bucket; SESSION_SECRET?: string; OPENAI_API_KEY?: string; GOOGLE_CLIENT_ID?: string; GOOGLE_CLIENT_SECRET?: string; GITHUB_CLIENT_ID?: string; GITHUB_CLIENT_SECRET?: string; APPLE_CLIENT_ID?: string; APPLE_TEAM_ID?: string; APPLE_KEY_ID?: string; APPLE_PRIVATE_KEY?: string;",
-    readme: "pnpm run deploy:preflight wrangler d1 migrations apply DB --remote wrangler r2 bucket create spoonjoy-photos wrangler secret put SESSION_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET APPLE_CLIENT_ID APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY OPENAI_API_KEY",
-    deploymentDoc: "pnpm run deploy:preflight wrangler d1 migrations apply DB --remote wrangler r2 bucket create spoonjoy-photos wrangler secret put SESSION_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET APPLE_CLIENT_ID APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY OPENAI_API_KEY",
+    cloudflareEnvDts: "DB?: D1Database; PHOTOS?: R2Bucket; SESSION_SECRET?: string; OPENAI_API_KEY?: string; GOOGLE_CLIENT_ID?: string; GOOGLE_CLIENT_SECRET?: string; GITHUB_CLIENT_ID?: string; GITHUB_CLIENT_SECRET?: string; APPLE_CLIENT_ID?: string; APPLE_TEAM_ID?: string; APPLE_KEY_ID?: string; APPLE_PRIVATE_KEY?: string; VAPID_PUBLIC_KEY?: string; VAPID_PRIVATE_KEY?: string; VAPID_SUBJECT?: string; POSTHOG_KEY?: string; POSTHOG_HOST?: string; POSTHOG_DISABLED?: string;",
+    readme: "pnpm run deploy:preflight wrangler d1 migrations apply DB --remote wrangler r2 bucket create spoonjoy-photos wrangler secret put SESSION_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET APPLE_CLIENT_ID APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY OPENAI_API_KEY VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY VAPID_SUBJECT VITE_POSTHOG_KEY VITE_POSTHOG_HOST VITE_POSTHOG_DISABLED POSTHOG_KEY POSTHOG_HOST POSTHOG_DISABLED server lifecycle telemetry docs/analytics-privacy.md",
+    deploymentDoc: "pnpm run deploy:preflight smoke:api wrangler d1 migrations apply DB --remote wrangler r2 bucket create spoonjoy-photos wrangler secret put SESSION_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET APPLE_CLIENT_ID APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY OPENAI_API_KEY VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY VAPID_SUBJECT wrangler secret put POSTHOG_KEY VITE_POSTHOG_KEY VITE_POSTHOG_HOST VITE_POSTHOG_DISABLED POSTHOG_KEY POSTHOG_HOST POSTHOG_DISABLED server lifecycle telemetry",
     migrationFiles: ["0000_init.sql"],
   };
 }
@@ -140,6 +142,28 @@ describe("deployment preflight", () => {
 
     expect(result.errors).toEqual([]);
     expect(result.warnings.map((item) => item.name)).toContain("production node env");
+  });
+
+  it("flags missing telemetry typing, documentation, and deployment commands", () => {
+    const inputs = validInputs();
+    inputs.cloudflareEnvDts = inputs.cloudflareEnvDts.replace(
+      " POSTHOG_KEY?: string; POSTHOG_HOST?: string; POSTHOG_DISABLED?: string;",
+      "",
+    );
+    inputs.readme = inputs.readme.replace(
+      " VITE_POSTHOG_KEY VITE_POSTHOG_HOST VITE_POSTHOG_DISABLED POSTHOG_KEY POSTHOG_HOST POSTHOG_DISABLED server lifecycle telemetry docs/analytics-privacy.md",
+      "",
+    );
+    inputs.deploymentDoc = inputs.deploymentDoc.replace(
+      " wrangler secret put POSTHOG_KEY VITE_POSTHOG_KEY VITE_POSTHOG_HOST VITE_POSTHOG_DISABLED POSTHOG_KEY POSTHOG_HOST POSTHOG_DISABLED server lifecycle telemetry",
+      "",
+    );
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toEqual(
+      expect.arrayContaining(["telemetry env typing", "telemetry documentation", "telemetry deployment commands"]),
+    );
   });
 });
 
@@ -404,27 +428,96 @@ describe("checkRemoteMigrations", () => {
 
 describe("deployment docs", () => {
   it("docs/deployment.md mentions pnpm deploy:auto", async () => {
-    const fs = await import("node:fs/promises");
-    const doc = await fs.readFile(`${process.cwd()}/docs/deployment.md`, "utf8");
+    const doc = await readFile(`${process.cwd()}/docs/deployment.md`, "utf8");
     expect(doc).toContain("pnpm deploy:auto");
   });
 
   it("docs/deployment.md documents SPOONJOY_PREFLIGHT_SKIP_REMOTE", async () => {
-    const fs = await import("node:fs/promises");
-    const doc = await fs.readFile(`${process.cwd()}/docs/deployment.md`, "utf8");
+    const doc = await readFile(`${process.cwd()}/docs/deployment.md`, "utf8");
     expect(doc).toContain("SPOONJOY_PREFLIGHT_SKIP_REMOTE");
   });
 
   it("DEPLOY.md mentions pnpm deploy:auto", async () => {
-    const fs = await import("node:fs/promises");
-    const doc = await fs.readFile(`${process.cwd()}/DEPLOY.md`, "utf8");
+    const doc = await readFile(`${process.cwd()}/DEPLOY.md`, "utf8");
     expect(doc).toContain("pnpm deploy:auto");
   });
 
   it("DEPLOY.md documents SPOONJOY_PREFLIGHT_SKIP_REMOTE", async () => {
-    const fs = await import("node:fs/promises");
-    const doc = await fs.readFile(`${process.cwd()}/DEPLOY.md`, "utf8");
+    const doc = await readFile(`${process.cwd()}/DEPLOY.md`, "utf8");
     expect(doc).toContain("SPOONJOY_PREFLIGHT_SKIP_REMOTE");
+  });
+
+  it("documents the full PostHog client and server telemetry setup", async () => {
+    const [analyticsDoc, readme, deployDoc, envExample, cloudflareEnvDts] = await Promise.all([
+      readFile(`${process.cwd()}/docs/analytics-privacy.md`, "utf8"),
+      readFile(`${process.cwd()}/README.md`, "utf8"),
+      readFile(`${process.cwd()}/DEPLOY.md`, "utf8"),
+      readFile(`${process.cwd()}/.env.example`, "utf8"),
+      readFile(`${process.cwd()}/app/cloudflare-env.d.ts`, "utf8"),
+    ]);
+
+    const eventNames = [
+      "spoonjoy.api_v1.request",
+      "spoonjoy.legacy_api.request",
+      "spoonjoy.mcp.request",
+      "spoonjoy.oauth.register",
+      "spoonjoy.oauth.authorize",
+      "spoonjoy.oauth.token",
+      "spoonjoy.oauth.revoke",
+      "spoonjoy.developer.docs.viewed",
+      "spoonjoy.developer.playground.request_submitted",
+      "spoonjoy.developer.playground.response_received",
+    ];
+    for (const eventName of eventNames) {
+      expect(analyticsDoc).toContain(eventName);
+    }
+
+    for (const unsafePayload of ["request bodies", "response bodies", "cookies", "headers", "query strings"]) {
+      expect(analyticsDoc).toContain(unsafePayload);
+    }
+
+    for (const envName of [
+      "VITE_POSTHOG_KEY",
+      "VITE_POSTHOG_HOST",
+      "VITE_POSTHOG_DISABLED",
+      "POSTHOG_KEY",
+      "POSTHOG_HOST",
+      "POSTHOG_DISABLED",
+    ]) {
+      expect(analyticsDoc).toContain(envName);
+      expect(envExample).toContain(envName);
+    }
+
+    expect(envExample).toMatch(/^VITE_POSTHOG_KEY=""$/m);
+    expect(envExample).toMatch(/^VITE_POSTHOG_DISABLED=""$/m);
+    expect(envExample).toMatch(/^POSTHOG_KEY=""$/m);
+    expect(envExample).toMatch(/^POSTHOG_DISABLED=""$/m);
+    expect(envExample).not.toMatch(/(?:VITE_)?POSTHOG_KEY="(?:phc|phx|sj|sk)_[^"]+"/);
+
+    expect(readme).toContain("POSTHOG_KEY");
+    expect(readme).toContain("POSTHOG_DISABLED");
+    expect(readme).toContain("server lifecycle telemetry");
+    expect(deployDoc).toContain("wrangler secret put POSTHOG_KEY");
+    expect(deployDoc).toContain("VITE_POSTHOG_KEY");
+    expect(deployDoc).toContain("POSTHOG_DISABLED");
+    expect(deployDoc).not.toContain("wrangler secret put VITE_POSTHOG_KEY");
+    expect(deployDoc).not.toContain("wrangler secret put VITE_POSTHOG_HOST");
+    expect(deployDoc).not.toContain("wrangler secret put VITE_POSTHOG_DISABLED");
+    const secretsSummary = deployDoc.slice(
+      deployDoc.indexOf("### Secrets (set via `wrangler secret put`)"),
+      deployDoc.indexOf("### Optional Worker telemetry variables"),
+    );
+    const publicBuildTimeSummary = deployDoc.slice(deployDoc.indexOf("### Public build-time variables"));
+    expect(secretsSummary).toContain("POSTHOG_KEY");
+    expect(secretsSummary).not.toContain("VITE_POSTHOG_KEY");
+    expect(secretsSummary).not.toContain("VITE_POSTHOG_HOST");
+    expect(secretsSummary).not.toContain("VITE_POSTHOG_DISABLED");
+    expect(publicBuildTimeSummary).toContain("VITE_POSTHOG_KEY");
+    expect(publicBuildTimeSummary).toContain("VITE_POSTHOG_HOST");
+    expect(publicBuildTimeSummary).toContain("VITE_POSTHOG_DISABLED");
+    expect(cloudflareEnvDts).toContain("POSTHOG_KEY?: string;");
+    expect(cloudflareEnvDts).toContain("POSTHOG_HOST?: string;");
+    expect(cloudflareEnvDts).toContain("POSTHOG_DISABLED?: string;");
   });
 });
 

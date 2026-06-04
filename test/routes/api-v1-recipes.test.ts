@@ -15,11 +15,15 @@ async function readJson(response: Response) {
   return await response.json() as any;
 }
 
+function listCursor(value: unknown) {
+  return `v1.${Buffer.from(JSON.stringify(value), "utf8").toString("base64url")}`;
+}
+
 function expectEnvelopeHeaders(response: Response, requestId: string) {
   expect(response.headers.get("X-Request-Id")).toBe(requestId);
   expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
-  expect(response.headers.get("Access-Control-Allow-Headers")).toBe("Authorization, Content-Type, X-Request-Id");
-  expect(response.headers.get("Access-Control-Expose-Headers")).toBe("X-Request-Id");
+  expect(response.headers.get("Access-Control-Allow-Headers")).toBe("Authorization, Content-Type, X-Request-Id, X-Client-Mutation-Id");
+  expect(response.headers.get("Access-Control-Expose-Headers")).toContain("X-Request-Id");
 }
 
 async function createRecipeFixture(db: Awaited<ReturnType<typeof getLocalDb>>, titlePrefix = "Api V1 Pasta") {
@@ -86,6 +90,9 @@ describe("API v1 public recipe reads", () => {
 
     expect(response.status).toBe(200);
     expectEnvelopeHeaders(response, "req_recipe_search");
+    expect(response.headers.get("Cache-Control")).toBe("public, max-age=60, stale-while-revalidate=300");
+    expect(response.headers.get("Vary")).toBe("Authorization, Cookie");
+    expect(response.headers.get("Access-Control-Expose-Headers")).toContain("Cache-Control");
     expect(payload).toMatchObject({
       ok: true,
       requestId: "req_recipe_search",
@@ -98,7 +105,16 @@ describe("API v1 public recipe reads", () => {
           description: "Weeknight pasta for public API tests",
           servings: "4",
           chef: { id: expect.any(String), username: expect.any(String) },
+          coverImageUrl: null,
           href: expect.stringMatching(/^\/recipes\//),
+          canonicalUrl: expect.stringMatching(/^https:\/\/spoonjoy\.app\/recipes\//),
+          attribution: {
+            creditText: expect.stringContaining(" on Spoonjoy"),
+            canonicalUrl: expect.stringMatching(/^https:\/\/spoonjoy\.app\/recipes\//),
+            sourceUrl: null,
+            sourceHost: null,
+            sourceRecipe: null,
+          },
           createdAt: expect.any(String),
           updatedAt: expect.any(String),
         })],
@@ -143,6 +159,141 @@ describe("API v1 public recipe reads", () => {
       requestId: "req_recipe_malformed_limit",
       error: { code: "validation_error", status: 400 },
     });
+
+    const overLimit = await loader(routeArgs(new UndiciRequest("http://localhost/api/v1/recipes?limit=51", {
+      headers: { "X-Request-Id": "req_recipe_over_limit" },
+    }) as unknown as Request, "recipes"));
+    expect(overLimit.status).toBe(400);
+    expectEnvelopeHeaders(overLimit, "req_recipe_over_limit");
+    await expect(readJson(overLimit)).resolves.toMatchObject({
+      ok: false,
+      requestId: "req_recipe_over_limit",
+      error: { code: "validation_error", status: 400 },
+    });
+  });
+
+  it("validates list cursors and normalizes cover/source URLs", async () => {
+    const stylized = await createRecipeFixture(db, "Api V1 Stylized Cover");
+    await db.recipeCover.create({
+      data: {
+        recipeId: stylized.recipe.id,
+        imageUrl: "/photos/covers/original.png",
+        stylizedImageUrl: "/photos/covers/stylized.png",
+        sourceType: "spoon",
+      },
+    });
+    const imageOnly = await createRecipeFixture(db, "Api V1 Image Cover");
+    await db.recipe.update({
+      where: { id: imageOnly.recipe.id },
+      data: { sourceUrl: "mailto:chef@example.com" },
+    });
+    await db.recipeCover.create({
+      data: {
+        recipeId: imageOnly.recipe.id,
+        imageUrl: "/photos/covers/original-only.png",
+        sourceType: "import",
+      },
+    });
+    const dataCover = await createRecipeFixture(db, "Api V1 Data Cover");
+    await db.recipeCover.create({
+      data: {
+        recipeId: dataCover.recipe.id,
+        imageUrl: "data:image/png;base64,AAAA",
+        sourceType: "ai-placeholder",
+      },
+    });
+    const invalidUrl = await db.recipe.update({
+      where: { id: stylized.recipe.id },
+      data: { sourceUrl: "http://%" },
+    });
+
+    const stylizedDetail = await loader(routeArgs(new UndiciRequest(`http://localhost/api/v1/recipes/${invalidUrl.id}`, {
+      headers: { "X-Request-Id": "req_recipe_stylized_cover" },
+    }) as unknown as Request, `recipes/${invalidUrl.id}`));
+    const stylizedPayload = await readJson(stylizedDetail);
+
+    expect(stylizedDetail.status).toBe(200);
+    expect(stylizedPayload.data.recipe.coverImageUrl).toBe("https://spoonjoy.app/photos/covers/stylized.png");
+    expect(stylizedPayload.data.recipe.attribution.sourceUrl).toBe("http://%");
+    expect(stylizedPayload.data.recipe.attribution.sourceHost).toBeNull();
+
+    const imageDetail = await loader(routeArgs(new UndiciRequest(`http://localhost/api/v1/recipes/${imageOnly.recipe.id}`, {
+      headers: { "X-Request-Id": "req_recipe_image_cover" },
+    }) as unknown as Request, `recipes/${imageOnly.recipe.id}`));
+    const imagePayload = await readJson(imageDetail);
+
+    expect(imageDetail.status).toBe(200);
+    expect(imagePayload.data.recipe.coverImageUrl).toBe("https://spoonjoy.app/photos/covers/original-only.png");
+    expect(imagePayload.data.recipe.attribution.sourceUrl).toBe("mailto:chef@example.com");
+    expect(imagePayload.data.recipe.attribution.sourceHost).toBeNull();
+
+    const dataDetail = await loader(routeArgs(new UndiciRequest(`http://localhost/api/v1/recipes/${dataCover.recipe.id}`, {
+      headers: { "X-Request-Id": "req_recipe_data_cover" },
+    }) as unknown as Request, `recipes/${dataCover.recipe.id}`));
+    const dataPayload = await readJson(dataDetail);
+
+    expect(dataDetail.status).toBe(200);
+    expect(dataPayload.data.recipe.coverImageUrl).toBeNull();
+
+    await db.recipeCover.create({
+      data: {
+        recipeId: dataCover.recipe.id,
+        imageUrl: "",
+        sourceType: "empty-import",
+      },
+    });
+    const emptyCoverDetail = await loader(routeArgs(new UndiciRequest(`http://localhost/api/v1/recipes/${dataCover.recipe.id}`, {
+      headers: { "X-Request-Id": "req_recipe_empty_cover" },
+    }) as unknown as Request, `recipes/${dataCover.recipe.id}`));
+    const emptyCoverPayload = await readJson(emptyCoverDetail);
+    expect(emptyCoverDetail.status).toBe(200);
+    expect(emptyCoverPayload.data.recipe.coverImageUrl).toBeNull();
+
+    await db.recipeCover.create({
+      data: {
+        recipeId: dataCover.recipe.id,
+        imageUrl: "http://%",
+        sourceType: "broken-import",
+      },
+    });
+    const invalidAssetDetail = await loader(routeArgs(new UndiciRequest(`http://localhost/api/v1/recipes/${dataCover.recipe.id}`, {
+      headers: { "X-Request-Id": "req_recipe_invalid_asset" },
+    }) as unknown as Request, `recipes/${dataCover.recipe.id}`));
+    const invalidAssetPayload = await readJson(invalidAssetDetail);
+    expect(invalidAssetDetail.status).toBe(200);
+    expect(invalidAssetPayload.data.recipe.coverImageUrl).toBeNull();
+
+    const validCursor = listCursor({ createdAt: stylized.recipe.createdAt.toISOString(), id: stylized.recipe.id });
+    const cursorResponse = await loader(routeArgs(new UndiciRequest(
+      `http://localhost/api/v1/recipes?cursor=${encodeURIComponent(validCursor)}&limit=50`,
+      { headers: { "X-Request-Id": "req_recipe_valid_cursor" } },
+    ) as unknown as Request, "recipes"));
+    const cursorPayload = await readJson(cursorResponse);
+    expect(cursorResponse.status).toBe(200);
+    expect(cursorPayload.data.cursor).toBe(validCursor);
+    expect(cursorPayload.data.recipes.map((recipe: { id: string }) => recipe.id)).not.toContain(stylized.recipe.id);
+
+    const invalidCursors = [
+      "plain-cursor",
+      "v1.%",
+      listCursor({}),
+      listCursor({ createdAt: "not-a-date", id: "recipe_1" }),
+    ];
+    for (const [index, cursor] of invalidCursors.entries()) {
+      const requestId = `req_recipe_invalid_cursor_${index}`;
+      const response = await loader(routeArgs(new UndiciRequest(
+        `http://localhost/api/v1/recipes?cursor=${encodeURIComponent(cursor)}`,
+        { headers: { "X-Request-Id": requestId } },
+      ) as unknown as Request, "recipes"));
+
+      expect(response.status).toBe(400);
+      expectEnvelopeHeaders(response, requestId);
+      await expect(readJson(response)).resolves.toMatchObject({
+        ok: false,
+        requestId,
+        error: { code: "invalid_cursor", status: 400 },
+      });
+    }
   });
 
   it("returns recipe detail with steps, ingredients, cookbook links, and scoped bearer success", async () => {
@@ -187,7 +338,16 @@ describe("API v1 public recipe reads", () => {
           description: "Weeknight pasta for public API tests",
           servings: "4",
           chef: { id: fixture.chef.id, username: fixture.chef.username },
+          coverImageUrl: null,
           href: `/recipes/${fixture.recipe.id}`,
+        canonicalUrl: `https://spoonjoy.app/recipes/${fixture.recipe.id}`,
+          attribution: {
+            creditText: `${fixture.recipe.title} by ${fixture.chef.username} on Spoonjoy`,
+          canonicalUrl: `https://spoonjoy.app/recipes/${fixture.recipe.id}`,
+            sourceUrl: null,
+            sourceHost: null,
+            sourceRecipe: null,
+          },
           createdAt: fixture.recipe.createdAt.toISOString(),
           updatedAt: expect.any(String),
           steps: [{
@@ -219,6 +379,7 @@ describe("API v1 public recipe reads", () => {
             id: fixture.cookbook.id,
             title: fixture.cookbook.title,
             href: `/cookbooks/${fixture.cookbook.id}`,
+            canonicalUrl: `https://spoonjoy.app/cookbooks/${fixture.cookbook.id}`,
           }],
         },
       },
@@ -259,6 +420,45 @@ describe("API v1 public recipe reads", () => {
       ok: false,
       requestId: "req_recipe_missing",
       error: { code: "not_found", status: 404 },
+    });
+  });
+
+  it("redacts deleted source recipe attribution", async () => {
+    const source = await createRecipeFixture(db, "Api V1 Source Recipe");
+    const forker = await db.user.create({ data: createTestUser() });
+    const fork = await db.recipe.create({
+      data: {
+        ...createTestRecipe(forker.id),
+        title: `Api V1 Fork ${faker.string.alphanumeric(8)}`,
+        sourceRecipeId: source.recipe.id,
+      },
+    });
+
+    const beforeDelete = await loader(routeArgs(new UndiciRequest(`http://localhost/api/v1/recipes/${fork.id}`, {
+      headers: { "X-Request-Id": "req_recipe_source_before_delete" },
+    }) as unknown as Request, `recipes/${fork.id}`));
+    const beforePayload = await readJson(beforeDelete);
+    expect(beforePayload.data.recipe.attribution.sourceRecipe).toMatchObject({
+      id: source.recipe.id,
+      title: source.recipe.title,
+      chef: { id: source.chef.id, username: source.chef.username },
+      href: `/recipes/${source.recipe.id}`,
+      deleted: false,
+    });
+
+    await db.recipe.update({ where: { id: source.recipe.id }, data: { deletedAt: new Date() } });
+
+    const afterDelete = await loader(routeArgs(new UndiciRequest(`http://localhost/api/v1/recipes/${fork.id}`, {
+      headers: { "X-Request-Id": "req_recipe_source_after_delete" },
+    }) as unknown as Request, `recipes/${fork.id}`));
+    const afterPayload = await readJson(afterDelete);
+    expect(afterPayload.data.recipe.attribution.sourceRecipe).toEqual({
+      id: source.recipe.id,
+      title: null,
+      chef: null,
+      href: null,
+      canonicalUrl: null,
+      deleted: true,
     });
   });
 

@@ -28,6 +28,7 @@ async function makeUser(db: Database) {
     email: user.email,
     username: user.username,
     source: "bearer",
+    scopes: ["cookbooks:read", "public:read", "recipes:read", "shopping_list:read", "shopping_list:write", "tokens:read", "tokens:write", "kitchen:read", "kitchen:write"],
   };
   return { user, principal };
 }

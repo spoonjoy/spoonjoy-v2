@@ -29,8 +29,12 @@ const CLIENT_PROFILES = [
 
 const GUIDE_MARKERS = [
   "External Client Guide",
+  "Terminal Quickstart",
+  "Current API Boundary",
   "Token Acquisition",
   "Auth Implementation",
+  "OAuth And Delegated Flows",
+  "OAuth Scope Mapping",
   "Read the public Chef graph",
   "Use your Spoonjoy session",
   "Use bearer only outside the session",
@@ -47,6 +51,13 @@ const GUIDE_MARKERS = [
   "POST /api/tools/start_agent_connection",
   "POST /api/tools/poll_agent_connection",
   "full login surface",
+  "not in API v1 yet",
+  "Recipe write, import, or export endpoints",
+  "Meal plan or \"today's recipes\" APIs",
+  "Full account export APIs",
+  "Canonical unit registry or density-based ingredient conversion",
+  "webhooks, REST Hooks, SSE, and event subscriptions",
+  "curl + jq",
   "No password-token API",
   "Spoonjoy does not support an OAuth password grant",
   "Email/password login creates a session cookie, not an API token",
@@ -61,22 +72,43 @@ const GUIDE_MARKERS = [
   "OAuth/PKCE app",
   "token_endpoint_auth_method: none",
   "no client secret",
+  "Do not request `offline_access`",
   "kitchen:read",
+  "kitchen:write",
+  "public:read",
   "single-use 60-second code",
   "application/x-www-form-urlencoded",
-  "30 days",
+  "15 minutes",
+  "expires_in: 900",
   "refresh_token rotates",
+  "code_verifier",
+  "S256",
+  "Omit `Authorization` on public calls",
+  "free-form display strings",
+  "/api/v1/units",
   "Auth failures",
   "validation_error",
   "invalid_token",
   "insufficient_scope",
   "X-Request-Id",
-  "Sync a private shopping list",
-  "Perform an idempotent shopping-list mutation",
+  "Native mobile OAuth",
+  "Browser extension OAuth",
+  "Cron shopping-list export/import",
+  "Cloudflare Worker sync bridge",
+  "No-code connector profile",
+  "Public BI snapshot export",
+  "REST-powered embeds only",
+  "retained for 24 hours",
+  "mutation.replayed: true",
+  "idempotency_conflict",
   "Session",
   "Authorization: Bearer",
   "clientMutationId",
   "cursor",
+  "/api/v1/openapi.connector.json",
+  "Cache-Control: public, max-age=60, stale-while-revalidate=300",
+  "REST Hooks",
+  "caches.default",
   API_V1_DISCOVERY_DATA.openapiUrl,
 ] as const;
 
@@ -97,9 +129,9 @@ describe("external client guide", () => {
     expect(apiDocs).toContain('fetch("/api/v1/shopping-list"');
     expect(apiDocs).toContain("grant_type=authorization_code");
     expect(apiDocs).toContain("access_token: \"sj_...\"");
-    expect(apiDocs).toContain("https://spoonjoy.app/developers/playground");
-    expect(apiDocs).toContain("curl 'https://spoonjoy.app/api/v1/shopping-list/sync?cursor=");
-    expect(apiDocs).toContain("curl -X POST https://spoonjoy.app/api/v1/shopping-list/items");
+    expect(apiDocs).toContain("https://spoonjoy.app/api/playground");
+    expect(apiDocs).toContain("curl -fsS 'https://spoonjoy.app/api/v1/shopping-list/sync");
+    expect(apiDocs).toContain("curl -fsS -X POST 'https://spoonjoy.app/api/v1/shopping-list/items'");
     expect(apiDocs).toContain(scopesFor("POST", "/api/v1/tokens")[0]);
     expect(apiDocs).toContain(scopesFor("GET", "/api/v1/shopping-list/sync")[0]);
     expect(apiDocs).toContain(scopesFor("POST", "/api/v1/shopping-list/items")[0]);
@@ -130,7 +162,7 @@ describe("external client guide", () => {
     expect(renderedText).toContain("Generated operation: POST /api/v1/tokens");
     expect(renderedText).toContain('fetch("/api/v1/shopping-list"');
     expect(renderedText).toContain("grant_type=authorization_code");
-    expect(renderedText).toContain("Response: { \"token\": \"sj_...\" }");
+    expect(renderedText).toContain("Response: { \"ok\": true");
     expect(renderedText).toContain("GET /api/v1/shopping-list/sync");
     expect(renderedText).toContain("POST /api/v1/shopping-list/items");
     expect(renderedText).toContain(scopesFor("POST", "/api/v1/tokens")[0]);

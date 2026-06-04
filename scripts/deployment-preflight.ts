@@ -39,6 +39,21 @@ const REQUIRED_SECRET_NAMES = [
   "APPLE_KEY_ID",
   "APPLE_PRIVATE_KEY",
   "OPENAI_API_KEY",
+  "VAPID_PUBLIC_KEY",
+  "VAPID_PRIVATE_KEY",
+  "VAPID_SUBJECT",
+] as const;
+
+const TELEMETRY_SERVER_ENV_NAMES = [
+  "POSTHOG_KEY",
+  "POSTHOG_HOST",
+  "POSTHOG_DISABLED",
+] as const;
+
+const TELEMETRY_CLIENT_ENV_NAMES = [
+  "VITE_POSTHOG_KEY",
+  "VITE_POSTHOG_HOST",
+  "VITE_POSTHOG_DISABLED",
 ] as const;
 
 const REQUIRED_PACKAGE_SCRIPTS = [
@@ -49,6 +64,7 @@ const REQUIRED_PACKAGE_SCRIPTS = [
   "typecheck",
   "test:coverage",
   "test:e2e",
+  "smoke:api",
   "db:seed",
 ] as const;
 
@@ -155,6 +171,30 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
         "wrangler secret put SESSION_SECRET",
       ].every((command) => readmeAndDeploymentDoc.includes(command)),
       "Deployment docs must include preflight, D1 migration, R2 bucket, and secret commands."
+    ),
+    check(
+      "telemetry env typing",
+      TELEMETRY_SERVER_ENV_NAMES.every((name) => inputs.cloudflareEnvDts.includes(`${name}?`)),
+      `app/cloudflare-env.d.ts must type optional telemetry runtime env: ${TELEMETRY_SERVER_ENV_NAMES.join(", ")}.`
+    ),
+    check(
+      "telemetry documentation",
+      [
+        ...TELEMETRY_CLIENT_ENV_NAMES,
+        ...TELEMETRY_SERVER_ENV_NAMES,
+        "docs/analytics-privacy.md",
+        "server lifecycle telemetry",
+      ].every((item) => readmeAndDeploymentDoc.includes(item)),
+      "README/deployment docs must explain optional PostHog client and server lifecycle telemetry setup."
+    ),
+    check(
+      "telemetry deployment commands",
+      [
+        "wrangler secret put POSTHOG_KEY",
+        "VITE_POSTHOG_KEY",
+        "POSTHOG_DISABLED",
+      ].every((item) => readmeAndDeploymentDoc.includes(item)),
+      "Deployment docs must show how to enable or intentionally disable PostHog without printing secret values."
     ),
     check(
       "migration files",

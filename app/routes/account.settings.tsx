@@ -51,6 +51,8 @@ export default function AccountSettings() {
   const [removingPasskeyId, setRemovingPasskeyId] = useState<string | null>(null);
   const [renamingPasskeyId, setRenamingPasskeyId] = useState<string | null>(null);
   const [passwordFormState, setPasswordFormState] = useState<"idle" | "change" | "set" | "removeConfirm">("idle");
+  const apiCredentials = user.apiCredentials ?? [];
+  const oauthConnections = user.oauthConnections ?? [];
 
   // Restore form state when there are field errors (e.g., after form submission fails)
   useEffect(() => {
@@ -260,6 +262,90 @@ export default function AccountSettings() {
               </div>
             );
           })}
+        </div>
+      </SettingsPanel>
+
+      <SettingsPanel testId="api-access-section" title="API and app access">
+        <Text className="mt-1">
+          Revoke personal, delegated, and OAuth app access without exposing token secrets.
+        </Text>
+
+        <div className="mt-5 space-y-6">
+          <div>
+            <Text className="font-sj-ui text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">
+              Bearer credentials
+            </Text>
+            {apiCredentials.length > 0 ? (
+              <div className="mt-2 space-y-3">
+                {apiCredentials.map((credential) => (
+                  <div
+                    key={credential.id}
+                    className="flex flex-col gap-3 border-b border-[var(--sj-border)] py-4 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <Text className="font-medium text-[var(--sj-ink)]">{credential.name}</Text>
+                      <Text className="break-words text-sm">
+                        {credential.tokenPrefix}... · {credential.scopes.join(", ") || "No scopes"}
+                      </Text>
+                      <Text className="text-xs">
+                        Created {formatPasskeyDate(credential.createdAt)}
+                        {credential.lastUsedAt ? ` · Last used ${formatPasskeyDate(credential.lastUsedAt)}` : ""}
+                        {credential.expiresAt ? ` · Expires ${formatPasskeyDate(credential.expiresAt)}` : ""}
+                      </Text>
+                    </div>
+                    <Form method="post">
+                      <input type="hidden" name="intent" value="revokeApiCredential" />
+                      <input type="hidden" name="credentialId" value={credential.id} />
+                      <Button type="submit" variant="destructive" aria-label={`Revoke ${credential.name}`}>
+                        Revoke
+                      </Button>
+                    </Form>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <Text className="mt-2 text-sm">No active bearer credentials.</Text>
+            )}
+          </div>
+
+          <div>
+            <Text className="font-sj-ui text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">
+              OAuth app connections
+            </Text>
+            {oauthConnections.length > 0 ? (
+              <div className="mt-2 space-y-3">
+                {oauthConnections.map((connection) => {
+                  const appName = connection.clientName || connection.clientId;
+                  return (
+                    <div
+                      key={`${connection.clientId}:${connection.resource ?? ""}`}
+                      className="flex flex-col gap-3 border-b border-[var(--sj-border)] py-4 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div className="min-w-0">
+                        <Text className="font-medium text-[var(--sj-ink)]">{appName}</Text>
+                        <Text className="break-words text-sm">
+                          {connection.resource || "REST API"} · {connection.scopes.join(", ") || "No scopes"}
+                        </Text>
+                        <Text className="text-xs">
+                          Connected {formatPasskeyDate(connection.createdAt)} · {connection.refreshTokenCount} refresh token{connection.refreshTokenCount === 1 ? "" : "s"} · {connection.accessTokenCount} live access token{connection.accessTokenCount === 1 ? "" : "s"}
+                        </Text>
+                      </div>
+                      <Form method="post">
+                        <input type="hidden" name="intent" value="disconnectOAuthClient" />
+                        <input type="hidden" name="clientId" value={connection.clientId} />
+                        <input type="hidden" name="resource" value={connection.resource ?? ""} />
+                        <Button type="submit" variant="destructive" aria-label={`Disconnect ${appName}`}>
+                          Disconnect
+                        </Button>
+                      </Form>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <Text className="mt-2 text-sm">No active OAuth app connections.</Text>
+            )}
+          </div>
         </div>
       </SettingsPanel>
 

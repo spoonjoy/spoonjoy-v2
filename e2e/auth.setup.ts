@@ -1,4 +1,5 @@
-import { test as setup, expect } from '@playwright/test';
+import { test as setup } from '@playwright/test';
+import { loginAsSeedUser } from './support/auth';
 
 const authFile = './e2e/.auth/user.json';
 
@@ -6,13 +7,7 @@ setup('authenticate', async ({ page }) => {
   // Go to login page
   await page.goto('/login');
 
-  // Fill in credentials (demo user from seed data)
-  // Use first() because responsive layouts duplicate form fields
-  await page.getByLabel('Email').first().fill('demo@spoonjoy.com');
-  await page.getByLabel('Password').first().fill('demo1234');
-
-  // Click login button
-  await page.getByRole('button', { name: /log in/i }).first().click();
+  await loginAsSeedUser(page);
 
   // Wait for redirect away from /login — login redirects to /recipes by default,
   // but tests may follow up by navigating elsewhere.

@@ -29,6 +29,7 @@
     "ui:inventory": "node scripts/inventory-ui.mjs .",
     "ui:crawl": "node scripts/crawl-ui.mjs",
     "smoke:live": "node scripts/smoke-live.mjs",
+    "smoke:api": "node scripts/smoke-api-live.mjs",
     "mcp:serve": "tsx scripts/spoonjoy-mcp-server.ts",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",

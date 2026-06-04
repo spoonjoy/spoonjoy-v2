@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { loginAsSeedUser, submitPasswordLogin } from '../support/auth';
 
 // These tests run WITHOUT auth (chromium-no-auth project)
 test.describe('Auth Flow', () => {
@@ -17,10 +18,7 @@ test.describe('Auth Flow', () => {
   test('login with valid credentials redirects to public recipe index', async ({ page }) => {
     await page.goto('/login');
     
-    // Fill in valid credentials
-    await page.getByLabel('Email').first().fill('demo@spoonjoy.com');
-    await page.getByLabel('Password').first().fill('demo1234');
-    await page.getByRole('button', { name: /log in/i }).first().click();
+    await loginAsSeedUser(page);
     
     // Should redirect to the public recipe index.
     await expect(page).toHaveURL('/recipes');
@@ -30,10 +28,7 @@ test.describe('Auth Flow', () => {
   test('login with invalid credentials shows error', async ({ page }) => {
     await page.goto('/login');
     
-    // Fill in invalid credentials
-    await page.getByLabel('Email').first().fill('wrong@example.com');
-    await page.getByLabel('Password').first().fill('wrongpassword');
-    await page.getByRole('button', { name: /log in/i }).first().click();
+    await submitPasswordLogin(page, 'wrong@example.com', 'wrongpassword');
     
     // Should show error message (stay on login page)
     await expect(page).toHaveURL('/login');
@@ -44,9 +39,7 @@ test.describe('Auth Flow', () => {
   test('logout redirects to landing page', async ({ page }) => {
     // First login
     await page.goto('/login');
-    await page.getByLabel('Email').first().fill('demo@spoonjoy.com');
-    await page.getByLabel('Password').first().fill('demo1234');
-    await page.getByRole('button', { name: /log in/i }).first().click();
+    await loginAsSeedUser(page);
     await expect(page).toHaveURL('/recipes');
     
     // Click logout

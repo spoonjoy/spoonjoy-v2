@@ -34,8 +34,8 @@ export const ALL_FIRST_SLICE_SCOPES = [
 ] as const satisfies readonly ApiCredentialScope[];
 
 const LEGACY_SCOPE_EXPANSIONS = {
-  "kitchen:read": ["cookbooks:read", "public:read", "recipes:read", "shopping_list:read", "tokens:read"],
-  "kitchen:write": ["shopping_list:write", "tokens:write"],
+  "kitchen:read": ["cookbooks:read", "public:read", "recipes:read", "shopping_list:read"],
+  "kitchen:write": ["shopping_list:write"],
 } as const satisfies Record<"kitchen:read" | "kitchen:write", readonly ApiCredentialScope[]>;
 
 const API_CREDENTIAL_SCOPE_SET = new Set<string>(API_CREDENTIAL_SCOPE_VALUES);
@@ -46,6 +46,8 @@ export interface ApiPrincipal {
   username: string;
   source: ApiPrincipalSource;
   credentialId?: string;
+  oauthClientId?: string | null;
+  oauthResource?: string | null;
   scopes: string[];
 }
 
@@ -125,6 +127,7 @@ export function expandCredentialScopes(scopes: string | null | undefined): strin
     }
 
     if (scope === "kitchen:read" || scope === "kitchen:write") {
+      expanded.add(scope);
       for (const expandedScope of LEGACY_SCOPE_EXPANSIONS[scope]) {
         expanded.add(expandedScope);
       }
@@ -142,6 +145,8 @@ function toPrincipal(
   source: ApiPrincipalSource,
   credentialId?: string,
   scopes: readonly string[] = ALL_FIRST_SLICE_SCOPES,
+  oauthClientId?: string | null,
+  oauthResource?: string | null,
 ): ApiPrincipal {
   return {
     id: user.id,
@@ -149,6 +154,8 @@ function toPrincipal(
     username: user.username,
     source,
     credentialId,
+    oauthClientId,
+    oauthResource,
     scopes: [...scopes],
   };
 }
@@ -184,7 +191,7 @@ export async function createApiCredential(
   db: PrismaClientType,
   userId: string,
   name: string,
-  options: { expiresAt?: Date | null; scopes?: string | string[] | null } = {}
+  options: { expiresAt?: Date | null; scopes?: string | string[] | null; oauthClientId?: string | null; oauthResource?: string | null } = {}
 ): Promise<CreatedApiCredential> {
   const token = generateApiToken();
   const tokenHash = await hashApiToken(token);
@@ -195,6 +202,8 @@ export async function createApiCredential(
       tokenHash,
       tokenPrefix: token.slice(0, 12),
       scopes: normalizeCredentialScopes(options.scopes),
+      oauthClientId: options.oauthClientId ?? null,
+      oauthResource: options.oauthResource ?? null,
       expiresAt: options.expiresAt ?? null,
     },
   });
@@ -222,7 +231,14 @@ export async function authenticateApiToken(db: PrismaClientType, token: string):
     data: { lastUsedAt: new Date() },
   });
 
-  return toPrincipal(credential.user, "bearer", credential.id, expandCredentialScopes(credential.scopes));
+  return toPrincipal(
+    credential.user,
+    "bearer",
+    credential.id,
+    expandCredentialScopes(credential.scopes),
+    credential.oauthClientId,
+    credential.oauthResource,
+  );
 }
 
 export async function authenticateApiRequest(

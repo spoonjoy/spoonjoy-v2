@@ -71,6 +71,9 @@ jobs:
     name: e2e
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      NODE_ENV: development
+      SESSION_SECRET: ci-e2e-session-secret
 
     steps:
       - uses: actions/checkout@v6
@@ -105,6 +108,10 @@ jobs:
 
       - name: 🌱 Seed local D1 database
         run: pnpm db:seed
+
+      - name: 🔐 Configure local Worker secrets
+        run: |
+          printf 'SESSION_SECRET=%s\nNODE_ENV=development\n' "$SESSION_SECRET" > .dev.vars
 
       - name: 🎭 Run Playwright tests
         run: pnpm test:e2e

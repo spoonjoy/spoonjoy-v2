@@ -24,6 +24,7 @@ const SERVER_ONLY_ROUTE_CHUNKS = new Set([
   "oauth.register",
   "oauth.token",
   "og.cookbooks._id.png",
+  "og.pages._slug.png",
   "og.recipes._id.png",
   "photos._",
   "recipes._id.fork",

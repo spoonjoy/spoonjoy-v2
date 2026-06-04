@@ -32,39 +32,38 @@ describe("session.server", () => {
     }
   });
 
-  describe("SESSION_SECRET production-fallback warning", () => {
-    it("logs a loud warning when SESSION_SECRET is missing while env.NODE_ENV is production", async () => {
-      // Real prod never legitimately hits this path — SESSION_SECRET is always
-      // configured as a wrangler secret there. The warning is the operator
-      // signal so a misconfigured deploy is loud rather than silent.
+  describe("SESSION_SECRET production fallback", () => {
+    it("fails closed when SESSION_SECRET is missing while env.NODE_ENV is production", async () => {
       delete process.env.SESSION_SECRET;
       _resetSessionWarningLatchForTests();
-      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-      try {
-        const request = new Request("http://localhost/", { method: "GET" }) as unknown as globalThis.Request;
-        await expect(getUserId(request, { NODE_ENV: "production" })).resolves.toBeNull();
-        expect(warnSpy).toHaveBeenCalledOnce();
-        expect(warnSpy.mock.calls[0][0]).toMatch(/SESSION_SECRET is not set/);
-        // Latch fires once per process — a second call must not re-warn.
-        await getUserId(request, { NODE_ENV: "production" });
-        expect(warnSpy).toHaveBeenCalledOnce();
-      } finally {
-        warnSpy.mockRestore();
-      }
+      const request = new Request("http://localhost/", { method: "GET" }) as unknown as globalThis.Request;
+      await expect(getUserId(request, { NODE_ENV: "production" })).rejects.toThrow(/SESSION_SECRET is required/);
     });
 
-    it("also warns when only process.env.NODE_ENV is production (the build-time path)", async () => {
+    it("also fails closed when only process.env.NODE_ENV is production", async () => {
       delete process.env.SESSION_SECRET;
       _resetSessionWarningLatchForTests();
       vi.stubEnv("NODE_ENV", "production");
-      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
       try {
         const request = new Request("http://localhost/", { method: "GET" }) as unknown as globalThis.Request;
-        await expect(getUserId(request, null)).resolves.toBeNull();
-        expect(warnSpy).toHaveBeenCalledOnce();
+        await expect(getUserId(request, null)).rejects.toThrow(/SESSION_SECRET is required/);
       } finally {
-        warnSpy.mockRestore();
         vi.unstubAllEnvs();
+      }
+    });
+
+    it("does not resolve default session storage during production module import", async () => {
+      delete process.env.SESSION_SECRET;
+      vi.stubEnv("NODE_ENV", "production");
+      vi.resetModules();
+      try {
+        const module = await import("~/lib/session.server");
+        expect(module.sessionStorage).toBeDefined();
+        const request = new Request("http://localhost/", { method: "GET" }) as unknown as globalThis.Request;
+        await expect(module.getUserId(request, { NODE_ENV: "production" })).rejects.toThrow(/SESSION_SECRET is required/);
+      } finally {
+        vi.unstubAllEnvs();
+        vi.resetModules();
       }
     });
   });
@@ -225,6 +224,16 @@ describe("session.server", () => {
   });
 
   describe("destroyUserSession", () => {
+    it("destroys sessions through the lazy default storage export", async () => {
+      const session = await sessionStorage.getSession();
+      session.set("userId", "lazy-destroy-user-id");
+
+      const setCookieHeader = await sessionStorage.destroySession(session);
+
+      expect(setCookieHeader).toContain("__session=");
+      expect(setCookieHeader).toContain("Expires=Thu, 01 Jan 1970 00:00:00 GMT");
+    });
+
     it("should destroy session and return redirect response", async () => {
       const session = await sessionStorage.getSession();
       session.set("userId", "test-user-id");

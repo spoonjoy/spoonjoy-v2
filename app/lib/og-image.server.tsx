@@ -1,5 +1,22 @@
-export const OG_IMAGE_WIDTH = 1200;
-export const OG_IMAGE_HEIGHT = 630;
+import {
+  OG_IMAGE_HEIGHT,
+  OG_IMAGE_WIDTH,
+  type CookbookOgInput,
+  type PageOgInput,
+  type RecipeOgInput,
+} from "~/lib/og-metadata";
+export {
+  OG_IMAGE_HEIGHT,
+  OG_IMAGE_WIDTH,
+  PAGE_OG_CARDS,
+  absoluteUrlFromPreferredBase,
+  absoluteUrlFromRequest,
+  cookbookOgPath,
+  pageOgInput,
+  pageOgPath,
+  recipeOgPath,
+} from "~/lib/og-metadata";
+export type { CookbookOgInput, PageOgInput, RecipeOgInput } from "~/lib/og-metadata";
 
 const COLORS = {
   paper: "#f8f5ee",
@@ -27,44 +44,10 @@ export interface OgExecutionContext {
   waitUntil(promise: Promise<unknown>): void;
 }
 
-export interface RecipeOgInput {
-  title: string;
-  description: string | null;
-  chefUsername: string;
-  servingsLabel: string | null;
-  coverImageUrl: string | null;
-}
-
-export interface CookbookOgInput {
-  title: string;
-  authorUsername: string;
-  recipeCount: number;
-  coverImageUrls: string[];
-}
-
 type OgRuntime = typeof import("cf-workers-og/workerd");
 
 async function loadOgRuntime(): Promise<OgRuntime> {
   return import("cf-workers-og/workerd");
-}
-
-export function absoluteUrlFromRequest(requestUrl: string, value: string): string;
-export function absoluteUrlFromRequest(requestUrl: string, value: string | null): string | null;
-export function absoluteUrlFromRequest(requestUrl: string, value: string | null) {
-  if (!value) return null;
-  try {
-    return new URL(value, requestUrl).toString();
-  } catch {
-    return value;
-  }
-}
-
-export function recipeOgPath(recipeId: string) {
-  return `/og/recipes/${encodeURIComponent(recipeId)}.png`;
-}
-
-export function cookbookOgPath(cookbookId: string) {
-  return `/og/cookbooks/${encodeURIComponent(cookbookId)}.png`;
 }
 
 export function recipeOgDescription(input: Pick<RecipeOgInput, "description" | "chefUsername">) {
@@ -108,6 +91,18 @@ export async function createCookbookOgImageResponse(input: CookbookOgInput, ctx?
   const text = [input.title, input.authorUsername, recipeLabel].join(" ");
 
   return runtime.ImageResponse.create(createCookbookOgElement(input, recipeLabel), {
+    width: OG_IMAGE_WIDTH,
+    height: OG_IMAGE_HEIGHT,
+    fonts: ogFonts(runtime, text, ctx),
+    headers: OG_HEADERS,
+  });
+}
+
+export async function createPageOgImageResponse(input: PageOgInput, ctx?: OgExecutionContext) {
+  const runtime = await loadOgRuntime();
+  const text = [input.eyebrow, input.title, input.description, ...input.highlights].join(" ");
+
+  return runtime.ImageResponse.create(createPageOgElement(input), {
     width: OG_IMAGE_WIDTH,
     height: OG_IMAGE_HEIGHT,
     fonts: ogFonts(runtime, text, ctx),
@@ -279,6 +274,151 @@ export function createCookbookOgElement(input: CookbookOgInput, recipeLabel: str
         >
           <span>By {input.authorUsername}</span>
           <span style={{ color: COLORS.brass }}>{recipeLabel}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function createPageOgElement(input: PageOgInput) {
+  const displayUrl = input.slug === "api" ? "spoonjoy.app/api" : "spoonjoy.app/api/playground";
+
+  return (
+    <div
+      style={{
+        width: `${OG_IMAGE_WIDTH}px`,
+        height: `${OG_IMAGE_HEIGHT}px`,
+        display: "flex",
+        background: COLORS.paper,
+        color: COLORS.ink,
+        fontFamily: "Fraunces",
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          width: "44%",
+          height: "100%",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "space-between",
+          padding: "54px 48px",
+          background: COLORS.charcoal,
+          color: COLORS.white,
+        }}
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+          <div
+            style={{
+              fontFamily: "IBM Plex Sans Condensed",
+              fontSize: 24,
+              fontWeight: 600,
+              letterSpacing: "0.16em",
+              textTransform: "uppercase",
+              color: COLORS.brass,
+            }}
+          >
+            {input.eyebrow}
+          </div>
+          <div
+            style={{
+              width: 148,
+              height: 148,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              border: `2px solid ${COLORS.brass}`,
+              fontSize: 86,
+              lineHeight: 1,
+              fontWeight: 700,
+              color: COLORS.paper,
+            }}
+          >
+            sj
+          </div>
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+          {input.highlights.map((highlight) => (
+            <div
+              key={highlight}
+              style={{
+                display: "flex",
+                border: `1px solid ${COLORS.brass}`,
+                padding: "10px 14px",
+                fontFamily: "IBM Plex Sans Condensed",
+                fontSize: 18,
+                fontWeight: 600,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                color: COLORS.white,
+              }}
+            >
+              {highlight}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div
+        style={{
+          width: "56%",
+          height: "100%",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+          padding: "60px 70px",
+          background: COLORS.paper,
+        }}
+      >
+        <div
+          style={{
+            fontFamily: "IBM Plex Sans Condensed",
+            fontSize: 24,
+            fontWeight: 600,
+            letterSpacing: "0.18em",
+            textTransform: "uppercase",
+            color: COLORS.brass,
+          }}
+        >
+          Spoonjoy
+        </div>
+        <div
+          style={{
+            marginTop: 26,
+            fontSize: 80,
+            fontWeight: 700,
+            lineHeight: 0.96,
+            color: COLORS.ink,
+            maxWidth: 570,
+          }}
+        >
+          {input.title}
+        </div>
+        <div
+          style={{
+            marginTop: 30,
+            paddingLeft: 18,
+            borderLeft: `5px solid ${COLORS.action}`,
+            fontSize: 29,
+            lineHeight: 1.32,
+            color: COLORS.inkSoft,
+            maxWidth: 540,
+            fontWeight: 500,
+          }}
+        >
+          {input.description}
+        </div>
+        <div
+          style={{
+            marginTop: 40,
+            fontFamily: "IBM Plex Sans Condensed",
+            fontSize: 22,
+            fontWeight: 600,
+            letterSpacing: "0.12em",
+            textTransform: "uppercase",
+            color: COLORS.brass,
+          }}
+        >
+          {displayUrl}
         </div>
       </div>
     </div>

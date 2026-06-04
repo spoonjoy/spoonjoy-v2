@@ -6,6 +6,11 @@ import {
   buildSpoonjoyApiContext,
   resolveApiPrincipal,
 } from "~/lib/spoonjoy-api-request.server";
+import {
+  callSpoonjoyApiOperation,
+  type ApiPrincipal,
+  type SpoonjoyApiContext,
+} from "~/lib/spoonjoy-api.server";
 import { createApiCredential } from "~/lib/api-auth.server";
 import { getLocalDb } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
@@ -107,6 +112,58 @@ describe("spoonjoy-api-request shared helper", () => {
       expect(context.env).toBeNull();
       expect(context.bucket).toBeUndefined();
       expect(context.waitUntil).toBeUndefined();
+    });
+  });
+
+  describe("callSpoonjoyApiOperation auth and token scope edges", () => {
+    async function makePrincipal(scopes: string[]): Promise<ApiPrincipal> {
+      const user = await db.user.create({ data: { email: uniqueEmail("apiop"), username: faker.internet.username() } });
+      return {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        source: "bearer",
+        credentialId: "cred_test",
+        scopes,
+      };
+    }
+
+    it("rejects protected operations when the bearer principal lacks the required scope", async () => {
+      const principal = await makePrincipal(["recipes:read"]);
+      const context: SpoonjoyApiContext = { db, principal };
+
+      await expect(
+        callSpoonjoyApiOperation("create_api_token", { name: "limited" }, context),
+      ).rejects.toMatchObject({
+        status: 403,
+        message: "Missing required scope: tokens:write",
+      });
+    });
+
+    it("accepts token scopes supplied as a string", async () => {
+      const principal = await makePrincipal(["tokens:write", "recipes:read"]);
+      const context: SpoonjoyApiContext = { db, principal };
+
+      const result = await callSpoonjoyApiOperation(
+        "create_api_token",
+        { name: "read token", scopes: "recipes:read" },
+        context,
+      ) as { credential: { id: string } };
+
+      await expect(db.apiCredential.findUniqueOrThrow({ where: { id: result.credential.id } }))
+        .resolves.toMatchObject({ scopes: "recipes:read" });
+    });
+
+    it("rejects token scopes that are neither a string nor string array", async () => {
+      const principal = await makePrincipal(["tokens:write"]);
+      const context: SpoonjoyApiContext = { db, principal };
+
+      await expect(
+        callSpoonjoyApiOperation("create_api_token", { name: "bad token", scopes: 123 }, context),
+      ).rejects.toMatchObject({
+        status: 400,
+        message: "scopes must be a string or string array",
+      });
     });
   });
 });

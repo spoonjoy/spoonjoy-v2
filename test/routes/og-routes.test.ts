@@ -38,6 +38,7 @@ vi.mock("cf-workers-og/workerd", () => ({
 
 import { loader as recipeOgLoader } from "~/routes/og.recipes.$id.png";
 import { loader as cookbookOgLoader } from "~/routes/og.cookbooks.$id.png";
+import { loader as pageOgLoader } from "~/routes/og.pages.$slug.png";
 
 function uniqueEmail(prefix: string) {
   return `${prefix}-${faker.string.alphanumeric(8).toLowerCase()}@example.com`;
@@ -62,6 +63,33 @@ describe("dynamic OG image routes", () => {
 
   afterEach(async () => {
     await cleanupDatabase();
+  });
+
+  it("renders on-demand PNG cards for developer pages", async () => {
+    for (const slug of ["api", "api-playground"]) {
+      mocks.create.mockClear();
+      const response = await pageOgLoader({
+        request: new Request(`https://spoonjoy.app/og/pages/${slug}.png`),
+        params: { slug },
+        context: { cloudflare: { env: null, ctx: { waitUntil: vi.fn() } } },
+      } as any);
+
+      expect(await response.text()).toBe("PNG");
+      expect(response.headers.get("Content-Type")).toContain("image/png");
+      expect(response.headers.get("X-OG-Width")).toBe("1200");
+      expect(response.headers.get("X-OG-Height")).toBe("630");
+      expect(mocks.create).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("404s unknown developer page OG cards", async () => {
+    await expect(
+      pageOgLoader({
+        request: new Request("https://spoonjoy.app/og/pages/missing.png"),
+        params: { slug: "missing" },
+        context: { cloudflare: { env: null } },
+      } as any),
+    ).rejects.toMatchObject({ status: 404 });
   });
 
   it("renders an on-demand PNG card for a public recipe", async () => {

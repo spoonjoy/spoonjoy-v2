@@ -8,7 +8,7 @@ Complete guide for deploying Spoonjoy v2 to Cloudflare Workers with D1 database.
 
 - [Cloudflare account](https://dash.cloudflare.com/sign-up)
 - [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/install-and-update/) installed (`npm install -g wrangler`)
-- Node.js 20+
+- Node.js 22.x (`package.json` requires `>=22 <23`)
 - Git
 
 ## Step 1: Authenticate with Cloudflare
@@ -164,6 +164,26 @@ wrangler secret put APPLE_PRIVATE_KEY
 wrangler secret put OPENAI_API_KEY
 ```
 
+### Optional PostHog Telemetry
+
+Spoonjoy can capture client product telemetry, developer docs/playground UX events, server lifecycle telemetry, and server/client error events through PostHog. See `docs/analytics-privacy.md` for the event names and privacy exclusions.
+
+Server lifecycle telemetry for API v1, legacy API, MCP, OAuth, and Worker errors is enabled only when `POSTHOG_KEY` is present and `POSTHOG_DISABLED` is not true-ish:
+
+```bash
+wrangler secret put POSTHOG_KEY
+```
+
+Client analytics is baked into the Vite bundle at build time. Provide the public project key as a build environment variable, not in source:
+
+```bash
+VITE_POSTHOG_KEY=...
+VITE_POSTHOG_HOST=https://us.i.posthog.com
+VITE_POSTHOG_DISABLED=
+```
+
+Use `POSTHOG_DISABLED=true` or `VITE_POSTHOG_DISABLED=true` to force a telemetry kill switch without removing configured keys. Never paste or print the key value in deploy logs, docs, or committed files.
+
 ### Web Push (VAPID) Secrets
 
 Required for the in-app web push notification system (D-006). Without these the
@@ -278,6 +298,29 @@ The deploy output will show your Worker URL: `https://spoonjoy-v2.<account>.work
 | `APPLE_KEY_ID` | If using Apple login | Apple OAuth |
 | `APPLE_PRIVATE_KEY` | If using Apple login | Apple OAuth |
 | `OPENAI_API_KEY` | Optional | AI features |
+| `VAPID_PUBLIC_KEY` | ✅ Yes | Web push public key |
+| `VAPID_PRIVATE_KEY` | ✅ Yes | Web push private key |
+| `VAPID_SUBJECT` | ✅ Yes | Web push contact subject |
+| `POSTHOG_KEY` | Optional | Server lifecycle telemetry and error capture |
+
+### Optional Worker telemetry variables
+
+These are Worker runtime variables. They may be set as Wrangler vars or secrets depending on the deploy environment policy; do not print values in logs.
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `POSTHOG_HOST` | Optional | PostHog ingestion host override |
+| `POSTHOG_DISABLED` | Optional | Server telemetry kill switch |
+
+### Public build-time variables
+
+These values must be present in the environment that runs `pnpm run build`. They are public Vite build-time configuration, not Worker secrets.
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `VITE_POSTHOG_KEY` | Optional | Public build-time client analytics key |
+| `VITE_POSTHOG_HOST` | Optional | Public build-time client ingestion host |
+| `VITE_POSTHOG_DISABLED` | Optional | Client telemetry kill switch |
 
 ## Troubleshooting
 

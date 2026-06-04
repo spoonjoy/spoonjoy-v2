@@ -44,6 +44,24 @@ export interface AccountSettingsLoaderData {
       transports: string | null;
       createdAt: string | null;
     }>;
+    apiCredentials?: Array<{
+      id: string;
+      name: string;
+      tokenPrefix: string;
+      scopes: string[];
+      createdAt: string;
+      lastUsedAt: string | null;
+      expiresAt: string | null;
+    }>;
+    oauthConnections?: Array<{
+      clientId: string;
+      clientName: string | null;
+      resource: string | null;
+      scopes: string[];
+      createdAt: string;
+      refreshTokenCount: number;
+      accessTokenCount: number;
+    }>;
   };
   notifications: {
     pushSubscribed: boolean;
@@ -74,7 +92,9 @@ export interface AccountSettingsActionResult {
     | "same_password"
     | "password_already_set"
     | "no_password_to_remove"
-    | "passkey_not_found";
+    | "passkey_not_found"
+    | "credential_not_found"
+    | "oauth_connection_not_found";
   message?: string;
   fieldErrors?: {
     email?: string;
@@ -146,6 +166,84 @@ export async function loadAccountSettings({
         notifyFellowChefOriginCook: prefRow.notifyFellowChefOriginCook,
       }
     : DEFAULT_NOTIFICATION_PREFERENCES;
+  const apiCredentials = await database.apiCredential.findMany({
+    where: {
+      userId,
+      revokedAt: null,
+      oauthClientId: null,
+    },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    select: {
+      id: true,
+      name: true,
+      tokenPrefix: true,
+      scopes: true,
+      createdAt: true,
+      lastUsedAt: true,
+      expiresAt: true,
+    },
+  });
+  const activeRefreshTokens = await database.oAuthRefreshToken.findMany({
+    where: { userId, revokedAt: null },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    select: {
+      clientId: true,
+      resource: true,
+      scope: true,
+      createdAt: true,
+    },
+  });
+  const oauthClientIds = [...new Set(activeRefreshTokens.map((token) => token.clientId))];
+  const oauthClients = oauthClientIds.length
+    ? await database.oAuthClient.findMany({
+        where: { id: { in: oauthClientIds } },
+        select: { id: true, clientName: true },
+      })
+    : [];
+  const clientNames = new Map(oauthClients.map((client) => [client.id, client.clientName]));
+  const accessCredentialCounts = await database.apiCredential.groupBy({
+    by: ["oauthClientId", "oauthResource"],
+    where: {
+      userId,
+      revokedAt: null,
+      oauthClientId: { in: oauthClientIds.length ? oauthClientIds : ["__none__"] },
+    },
+    _count: { _all: true },
+  });
+  const accessCounts = new Map(
+    accessCredentialCounts.map((row) => [
+      `${row.oauthClientId!}\u0000${row.oauthResource ?? ""}`,
+      row._count._all,
+    ]),
+  );
+  const oauthConnectionGroups = new Map<string, {
+    clientId: string;
+    clientName: string | null;
+    resource: string | null;
+    scopes: Set<string>;
+    createdAt: Date;
+    refreshTokenCount: number;
+    accessTokenCount: number;
+  }>();
+  for (const token of activeRefreshTokens) {
+    const key = `${token.clientId}\u0000${token.resource ?? ""}`;
+    const existing = oauthConnectionGroups.get(key);
+    if (existing) {
+      for (const scope of token.scope.trim().split(/\s+/).filter(Boolean)) existing.scopes.add(scope);
+      if (token.createdAt < existing.createdAt) existing.createdAt = token.createdAt;
+      existing.refreshTokenCount += 1;
+      continue;
+    }
+    oauthConnectionGroups.set(key, {
+      clientId: token.clientId,
+      clientName: clientNames.get(token.clientId) ?? null,
+      resource: token.resource,
+      scopes: new Set(token.scope.trim().split(/\s+/).filter(Boolean)),
+      createdAt: token.createdAt,
+      refreshTokenCount: 1,
+      accessTokenCount: accessCounts.get(key) ?? 0,
+    });
+  }
 
   return {
     user: {
@@ -160,6 +258,24 @@ export async function loadAccountSettings({
         name: passkey.name,
         transports: passkey.transports,
         createdAt: passkey.createdAt ? passkey.createdAt.toISOString() : null,
+      })),
+      apiCredentials: apiCredentials.map((credential) => ({
+        id: credential.id,
+        name: credential.name,
+        tokenPrefix: credential.tokenPrefix,
+        scopes: credential.scopes.trim().split(/\s+/).filter(Boolean),
+        createdAt: credential.createdAt.toISOString(),
+        lastUsedAt: credential.lastUsedAt ? credential.lastUsedAt.toISOString() : null,
+        expiresAt: credential.expiresAt ? credential.expiresAt.toISOString() : null,
+      })),
+      oauthConnections: Array.from(oauthConnectionGroups.values()).map((connection) => ({
+        clientId: connection.clientId,
+        clientName: connection.clientName,
+        resource: connection.resource,
+        scopes: Array.from(connection.scopes).sort(),
+        createdAt: connection.createdAt.toISOString(),
+        refreshTokenCount: connection.refreshTokenCount,
+        accessTokenCount: connection.accessTokenCount,
       })),
     },
     notifications: {
@@ -371,6 +487,71 @@ export async function handleAccountSettingsAction({
     return {
       success: true,
       message: `${provider.charAt(0).toUpperCase() + provider.slice(1)} account unlinked successfully`,
+    };
+  }
+
+  if (intent === "revokeApiCredential") {
+    const credentialId = formData.get("credentialId")?.toString() || "";
+    if (!credentialId) {
+      return {
+        success: false,
+        error: "credential_not_found",
+        message: "API credential not found",
+      };
+    }
+
+    const result = await database.apiCredential.updateMany({
+      where: { id: credentialId, userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+
+    if (result.count === 0) {
+      return {
+        success: false,
+        error: "credential_not_found",
+        message: "API credential not found or already revoked",
+      };
+    }
+
+    return {
+      success: true,
+      message: "API credential revoked",
+    };
+  }
+
+  if (intent === "disconnectOAuthClient") {
+    const clientId = formData.get("clientId")?.toString() || "";
+    const resourceValue = formData.get("resource")?.toString() || "";
+    const resource = resourceValue || null;
+    if (!clientId) {
+      return {
+        success: false,
+        error: "oauth_connection_not_found",
+        message: "OAuth connection not found",
+      };
+    }
+
+    const now = new Date();
+    const refresh = await database.oAuthRefreshToken.updateMany({
+      where: { userId, clientId, resource, revokedAt: null },
+      data: { revokedAt: now },
+    });
+    const access = await database.apiCredential.updateMany({
+      where: { userId, oauthClientId: clientId, oauthResource: resource, revokedAt: null },
+      data: { revokedAt: now },
+    });
+
+    if (refresh.count === 0 && access.count === 0) {
+      return {
+        success: false,
+        error: "oauth_connection_not_found",
+        message: "OAuth connection not found or already disconnected",
+      };
+    }
+
+    return {
+      success: true,
+      message: "OAuth connection disconnected",
     };
   }
 

@@ -1,6 +1,6 @@
 # Analytics And Privacy
 
-Spoonjoy uses optional PostHog analytics for product usage signals (client) and free-tier error tracking (client + server). All capture paths are disabled by default in local development and in any environment without the PostHog key configured.
+Spoonjoy uses optional PostHog analytics for product usage signals, API lifecycle telemetry, developer docs/playground UX telemetry, and free-tier error tracking. All capture paths are disabled by default in local development and in any environment without the relevant PostHog key configured.
 
 ## Configuration
 
@@ -18,7 +18,7 @@ These variables are public Vite client variables baked into the bundle at build 
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `POSTHOG_KEY` | No | Enables server-side error capture when present and non-blank. Set via `wrangler secret put POSTHOG_KEY` in production, or in `.dev.vars` locally. |
+| `POSTHOG_KEY` | No | Enables server-side lifecycle telemetry and error capture when present and non-blank. Set via `wrangler secret put POSTHOG_KEY` in production, or in `.dev.vars` locally. |
 | `POSTHOG_HOST` | No | Overrides the PostHog ingestion host. Defaults to `https://us.i.posthog.com`. |
 | `POSTHOG_DISABLED` | No | Force-disables server PostHog when set to `1`, `true`, `yes`, or `on`. |
 
@@ -30,17 +30,30 @@ Basic local development does not need analytics configuration. If `VITE_POSTHOG_
 
 Set `VITE_POSTHOG_DISABLED=true` when you need to verify a production-like environment while guaranteeing analytics and session recording stay off.
 
+## Lifecycle Events
+
+Current analytics events are intentionally limited to controlled product, API, OAuth, MCP, and developer-experience telemetry:
+
+| Surface | Event names | Event data |
+| --- | --- | --- |
+| Route changes | `$pageview` | Page URL origin and pathname only; query strings and hashes are not sent. |
+| Logged-in sessions | PostHog `identify` | Internal Spoonjoy user id only; no email or username. |
+| Recipe detail | `spoonjoy.recipe.*` | Recipe id, chef id, step counts, owner status, time-on-page, scale factor, checklist ids/counts, share method/success, cookbook ids, and shopping-list source. |
+| Public and authenticated API v1 | `spoonjoy.api_v1.request` | Route template, operation/resource names, method, status/error class, auth mode/source, principal id, credential id, OAuth client/resource ids, scopes, idempotency class, latency, request byte count, cache/privacy class, request id, origin/referrer host when safe, and coarse user-agent family. |
+| Legacy API routes | `spoonjoy.legacy_api.request` | Controlled operation name, route template, method, status/error class, auth/source metadata when known, latency, request id when it matches the safe id shape, and safe request context. |
+| MCP HTTP endpoint | `spoonjoy.mcp.request` | HTTP status/error, auth source, principal id, credential id, OAuth client/resource ids, JSON-RPC method, allowlisted tool name, notification flag, latency, and request byte count. |
+| OAuth dynamic registration | `spoonjoy.oauth.register` | Status/error code, created client id when available, redirect URI count, scope metadata class, latency, method, and safe request context. |
+| OAuth authorization | `spoonjoy.oauth.authorize` | Loader/action phase, decision/state class, status/error code, client id, scope/resource, principal id after consent is reached, and latency. |
+| OAuth token and refresh | `spoonjoy.oauth.token` | Grant type, status/error code, client id when safely known, returned scope/resource classes, and latency. |
+| OAuth revocation | `spoonjoy.oauth.revoke` | Status/error code, token type hint class when present, client id when safely known, and latency. |
+| Developer docs | `spoonjoy.developer.docs.viewed` | Page id and generated API surface counts. |
+| Developer playground | `spoonjoy.developer.playground.viewed`, `spoonjoy.developer.playground.surface_selected`, `spoonjoy.developer.playground.operation_selected`, `spoonjoy.developer.playground.auth_mode_selected`, `spoonjoy.developer.playground.sign_in_clicked`, `spoonjoy.developer.playground.request_submitted`, `spoonjoy.developer.playground.response_received` | Generated operation id/tag/kind/risk/auth/method, selected surface, auth mode/status, status class, latency bucket, and coarse outcome. |
+
 ## Payload Review
 
-Current analytics events are intentionally limited to product telemetry:
+The telemetry contract answers who, why, when, and how much with ids, controlled enum-like values, counts, statuses, scopes, and latency buckets. It must not include request bodies, response bodies, cookies, authorization headers, arbitrary headers, bearer tokens, OAuth codes, OAuth code verifiers, refresh tokens, raw query strings, hash fragments, raw request URLs, raw form bodies, JSON-RPC params, stack traces in lifecycle events, IP-literal host values, or client-supplied free text.
 
-| Surface | Event data |
-| --- | --- |
-| Route changes | Page URL origin and pathname only; query strings and hashes are not sent. |
-| Logged-in sessions | Internal Spoonjoy user id through PostHog `identify`; no email or username. |
-| Recipe detail | Recipe id, chef id, step counts, owner status, time-on-page, scale factor, checklist ids/counts, share method/success, cookbook ids, and shopping-list source. |
-
-User-entered free text, including recipe titles, cookbook titles, recipe descriptions, ingredient names, and shopping-list item names, should not be added to analytics payloads without a fresh privacy review.
+User-entered free text, including recipe titles, cookbook titles, recipe descriptions, ingredient names, shopping-list item names, OAuth `state`, redirect URI queries, raw request ids outside the safe id shape, and playground request/response examples, should not be added to analytics payloads without a fresh privacy review.
 
 ## Error Tracking
 
@@ -51,7 +64,7 @@ Error tracking uses PostHog's free-tier `$exception` event type. Two capture pat
 | Client | `posthog-js` `capture_exceptions: true` auto-captures unhandled errors and unhandled promise rejections. | PostHog auto-collects error name/message/stack; PostHog distinct id is the visitor or `identify`-ed user. |
 | Server (Worker) | `app/entry.server.tsx` `onError` and `workers/app.ts` outer try/catch call `captureException`. | `$exception_type`, `$exception_message`, `$exception_stack_trace_raw`, `route` (origin pathname), `method` (HTTP method), `distinct_id: "server"`. |
 
-Server-side capture never includes request bodies, cookies, headers, query strings, or hash fragments. Capture failures (PostHog outage) are swallowed so they cannot affect the request response.
+Server-side capture never includes request bodies, response bodies, cookies, headers, query strings, or hash fragments. Lifecycle events use controlled error codes instead of stack traces; stack traces are limited to the existing `$exception` path. Capture failures (PostHog outage) are swallowed so they cannot affect the request response.
 
 ## Session Recording
 

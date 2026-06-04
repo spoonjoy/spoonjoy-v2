@@ -2,7 +2,7 @@ import { redirect } from "react-router";
 
 function redirectToDeveloperDocs(request: Request) {
   const url = new URL(request.url);
-  const target = `/developers${url.search}`;
+  const target = `/api${url.search}`;
   return redirect(target, 301);
 }
 
