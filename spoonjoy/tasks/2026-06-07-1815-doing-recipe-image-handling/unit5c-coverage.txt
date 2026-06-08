@@ -1,0 +1,590 @@
+
+> spoonjoy-v2@1.0.0 test:coverage /Users/arimendelow/Projects/spoonjoy-v2
+> pnpm run api:playground:generate && vitest run --coverage
+
+
+> spoonjoy-v2@1.0.0 api:playground:generate /Users/arimendelow/Projects/spoonjoy-v2
+> tsx scripts/generate-api-playground.ts
+
+Generated app/lib/generated/api-v1-playground.ts
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+      Coverage enabled with istanbul
+
+ ✓ test/routes/recipes-id-steps-id-edit.test.tsx (99 tests) 18273ms
+         ✓ should update parsed ingredient when edited  1213ms
+         ✓ should switch to manual mode when clicking Add Manually button on parse error  1203ms
+         ✓ should remove parsed ingredient when remove button is clicked  1185ms
+ ✓ test/routes/recipes-id-steps-id-edit-ingredient-integration.test.tsx (37 tests) 17135ms
+       ✓ renders the IngredientInputToggle when ingredient form is shown  320ms
+       ✓ shows ParsedIngredientList when AI parsing returns results  1176ms
+       ✓ shows ingredient count in ParsedIngredientList header  1182ms
+       ✓ shows Add All button when ingredients are parsed  1159ms
+       ✓ shows loading indicator while parsing  1148ms
+       ✓ displays parse error when AI parsing fails  1174ms
+       ✓ clears error when user types new text  1167ms
+       ✓ calls onParsed callback when parsing succeeds  1157ms
+       ✓ manual input and AI input do not interfere with each other  1167ms
+       ✓ parsed ingredients can be edited individually  1154ms
+       ✓ Add All from ParsedIngredientList adds all ingredients  1192ms
+       ✓ removes parsed ingredient when remove button is clicked  1171ms
+       ✓ clears parsed ingredients when text is cleared  1144ms
+ ✓ test/routes/recipes-id.test.tsx (83 tests) 13666ms
+ ✓ test/routes/account-settings.test.tsx (148 tests) 13518ms
+ ✓ test/routes/recipes-id-edit.test.tsx (71 tests) 11370ms
+       ✓ should populate hidden form and submit when Save Recipe is clicked  343ms
+       ✓ should keep the mobile dock off edit forms and submit from the in-flow Save Recipe button  336ms
+ ✓ test/routes/recipes-id-steps-new.test.tsx (58 tests) 8945ms
+ ✓ test/routes/cookbooks-id.test.tsx (47 tests) 7145ms
+ ✓ test/lib/recipe-import.test.ts (69 tests) 5711ms
+ ✓ test/routes/recipes-new.test.tsx (51 tests) 5030ms
+       ✓ should populate hidden form and submit when RecipeBuilder saves  352ms
+ ✓ test/routes/developers-playground.test.tsx (36 tests) 3622ms
+     ✓ copies generated playground values and reports clipboard failures  1765ms
+     ✓ supports keyboard roving for surface and auth mode radio groups  386ms
+ ✓ test/routes/shopping-list-route.test.ts (42 tests) 3619ms
+ ✓ test/routes/recipes-id-spoons.test.tsx (20 tests) 3153ms
+ ✓ test/components/recipe/RecipeImageUpload.test.tsx (63 tests) 2876ms
+       ✓ revokes old preview URL when dropping new file  1827ms
+ ✓ test/routes/recipe-creation-flow-e2e.test.tsx (28 tests) 2848ms
+       ✓ should handle API connection failure gracefully  565ms
+ ✓ test/routes/recipes-form-integration.test.tsx (21 tests) 2289ms
+ ✓ test/routes/step-reorder-protection-e2e.test.tsx (26 tests) 2254ms
+ ✓ test/lib/recipe-import-video.dispatcher.test.ts (27 tests) 2122ms
+ ✓ test/routes/edit-dependencies-e2e.test.tsx (23 tests) 2043ms
+ ✓ test/routes/step-deletion-protection-e2e.test.tsx (20 tests) 1760ms
+ ✓ test/lib/ai-placeholder-cover.server.test.ts (10 tests) 1528ms
+     ✓ constructs a real OpenAI runner when no explicit runner is passed and the API key is set  1424ms
+ ✓ test/lib/auth.server.test.ts (17 tests) 1422ms
+ ✓ test/components/recipe/RecipeBuilder.test.tsx (37 tests) 1410ms
+ ✓ test/components/recipe/StepEditorCard.test.tsx (75 tests) 1312ms
+ ✓ test/lib/step-output-use-mutations.test.ts (16 tests) 1299ms
+ ✓ test/routes/cookbooks-new.test.tsx (14 tests) 1169ms
+ ✓ test/routes/login.test.tsx (34 tests) 1146ms
+ ✓ test/components/recipe/StepList.test.tsx (45 tests) 1185ms
+ ✓ test/routes/recipe-with-dependencies-e2e.test.tsx (12 tests) 1152ms
+ ✓ test/components/recipe/ManualIngredientInput.test.tsx (41 tests) 1036ms
+ ✓ test/lib/spoonjoy-api-import.test.ts (19 tests) 963ms
+ ✓ test/lib/recipe-create.server.test.ts (11 tests) 870ms
+ ✓ test/routes/cookbooks-id-notification.test.ts (5 tests) 786ms
+ ✓ test/components/recipe/ParsedIngredientRow.test.tsx (46 tests) 777ms
+ ✓ test/routes/users-identifier-fellow-chefs.test.tsx (15 tests) 761ms
+ ✓ test/components/recipe/SaveToCookbookDropdown.test.tsx (28 tests) 712ms
+ ✓ test/routes/recipes-id-fanout-notification.test.ts (3 tests) 696ms
+ ✓ test/lib/recipe-import-video.integration.test.ts (8 tests) 664ms
+ ✓ test/components/recipe/SpoonDialog.test.tsx (16 tests) 655ms
+ ✓ test/routes/recipes-id-fork-notification.test.ts (4 tests) 620ms
+ ✓ test/routes/recipes-id-spoon-notification.test.ts (4 tests) 628ms
+ ✓ test/lib/recipe-import.integration.test.ts (7 tests) 601ms
+ ✓ test/routes/signup.test.tsx (35 tests) 627ms
+ ✓ test/routes/shopping-list-openai-coverage.test.ts (7 tests) 594ms
+ ✓ test/routes/index.test.tsx (16 tests) 578ms
+ ✓ test/routes/users-identifier-kitchen-visitors.test.tsx (14 tests) 587ms
+ ✓ test/routes/users-identifier.test.tsx (14 tests) 566ms
+ ✓ test/routes/html5-validation-attributes.test.tsx (21 tests) 507ms
+ ✓ test/lib/mcp/spoonjoy-tools.server.test.ts (42 tests) 557ms
+ ✓ test/components/ui/listbox.test.tsx (49 tests) 538ms
+ ✓ test/routes/users-identifier-spoons.test.tsx (3 tests) 526ms
+ ✓ test/lib/fellow-chefs.server.test.ts (33 tests) 505ms
+ ✓ test/routes/shopping-list.test.tsx (34 tests) 562ms
+ ✓ test/routes/og-routes.test.ts (6 tests) 486ms
+ ✓ test/components/ui/combobox.test.tsx (34 tests) 439ms
+ ✓ test/components/ui/dropdown.test.tsx (32 tests) 422ms
+ ✓ test/lib/spoonjoy-api-spoons.test.ts (54 tests) 429ms
+ ✓ test/components/ui/stacked-layout.test.tsx (44 tests) 427ms
+ ✓ test/routes/route-shell-coverage.test.ts (12 tests) 838ms
+ ✓ test/lib/recipe-spoon.server.test.ts (46 tests) 357ms
+ ✓ test/routes/shopping-list-ux.test.tsx (16 tests) 350ms
+ ✓ test/components/recipe/IngredientParseInput.test.tsx (41 tests) 419ms
+ ✓ test/components/ui/sidebar-layout.test.tsx (37 tests) 360ms
+ ✓ test/routes/recipes-index.test.tsx (7 tests) 422ms
+ ✓ test/components/ui/radio.test.tsx (43 tests) 320ms
+ ✓ test/lib/step-reorder-validation.server.test.ts (39 tests) 345ms
+ ✓ test/routes/recipes-id-scaling.test.tsx (11 tests) 329ms
+ ✓ test/components/confirmation-dialog.test.tsx (23 tests) 305ms
+ ✓ test/components/notifications-section.test.tsx (19 tests) 305ms
+ ✓ test/lib/oauth-routes.server.test.ts (43 tests) 301ms
+ ✓ test/components/recipe/ParsedIngredientList.test.tsx (35 tests) 295ms
+ ✓ test/routes/recipes-layout.test.tsx (3 tests) 271ms
+ ✓ test/routes/developers.test.tsx (8 tests) 267ms
+ ✓ test/hooks/useIngredientParser.test.tsx (30 tests) 257ms
+ ✓ test/lib/oauth-user.server.test.ts (42 tests) 253ms
+ ✓ test/components/recipe/IngredientInputToggle.test.tsx (32 tests) 257ms
+ ✓ test/lib/webauthn-route.server.test.ts (36 tests) 227ms
+ ✓ test/lib/recipe-fork.server.test.ts (17 tests) 241ms
+ ✓ test/components/ui/switch.test.tsx (42 tests) 247ms
+ ✓ test/lib/mcp/http-mcp.server.test.ts (23 tests) 237ms
+ ✓ test/lib/spoonjoy-api-fork.test.ts (16 tests) 180ms
+ ✓ test/components/recipe/StepDependencySelector.test.tsx (22 tests) 220ms
+ ✓ test/lib/step-output-use-queries.server.test.ts (23 tests) 220ms
+ ✓ test/components/ui/checkbox.test.tsx (34 tests) 217ms
+ ✓ test/components/ui/alert.test.tsx (15 tests) 215ms
+ ✓ test/routes/api-v1-telemetry.test.ts (15 tests) 214ms
+ ✓ test/routes/focused-step-editor-flow-e2e.test.tsx (4 tests) 211ms
+ ✓ test/components/ui/dialog.test.tsx (15 tests) 212ms
+ ✓ test/routes/api.test.ts (12 tests) 219ms
+ ✓ test/components/ui/textarea.test.tsx (49 tests) 200ms
+ ✓ test/components/account/ProfilePhotoCropper.test.tsx (11 tests) 244ms
+ ✓ test/routes/search.test.tsx (10 tests) 191ms
+ ✓ test/components/recipe/ForkRecipeButton.test.tsx (9 tests) 201ms
+ ✓ test/routes/api-v1-shopping-mutations.test.ts (6 tests) 178ms
+ ✓ test/lib/notification-dispatch.server.test.ts (16 tests) 101ms
+ ✓ test/components/recipe/ScaleSelector.test.tsx (29 tests) 166ms
+ ✓ test/routes/api-v1-recipes.test.ts (7 tests) 164ms
+ ✓ test/routes/oauth-authorize.test.tsx (9 tests) 161ms
+ ✓ test/lib/oauth-server.server.test.ts (34 tests) 167ms
+ ✓ test/components/ui/select.test.tsx (47 tests) 169ms
+ ✓ test/routes/api-v1-shopping-sync.test.ts (6 tests) 158ms
+ ✓ test/lib/search.server.test.ts (7 tests) 161ms
+ ✓ test/routes/agent-connect.test.tsx (9 tests) 162ms
+ ✓ test/routes/auth-webauthn.test.ts (22 tests) 164ms
+ ✓ test/routes/api-v1-scopes.test.ts (4 tests) 160ms
+ ✓ test/components/auth/AddPasskeyButton.test.tsx (7 tests) 163ms
+ ✓ test/components/ui/sidebar.test.tsx (80 tests) 145ms
+ ✓ test/components/auth/PasskeySignInButton.test.tsx (9 tests) 145ms
+ ✓ test/components/ui/theme-toggle.test.tsx (11 tests) 145ms
+ ✓ test/components/account/ProfilePhotoField.test.tsx (12 tests) 145ms
+ ✓ test/routes/recipes-step-edit-parse-action.test.ts (19 tests) 174ms
+ ✓ test/components/ui/input.test.tsx (38 tests) 140ms
+ ✓ test/routes/recipes-id-steps-new-callbacks.test.tsx (2 tests) 138ms
+ ✓ test/components/pwa/InstallPromptCard.test.tsx (17 tests) 138ms
+ ✓ test/routes/cookbooks-index.test.tsx (3 tests) 129ms
+ ✓ test/components/ui/theme-provider.test.tsx (13 tests) 128ms
+ ✓ test/models/recipe-step.test.ts (15 tests) 131ms
+ ✓ test/components/navigation/mobile-nav.test.tsx (19 tests) 142ms
+ ✓ test/lib/image-gen-ledger.server.test.ts (18 tests) 133ms
+ ✓ test/routes/api-v1-scopes-public-tokens.test.ts (5 tests) 139ms
+ ✓ test/components/recipe/IngredientList.test.tsx (26 tests) 144ms
+ ✓ test/lib/db.server.test.ts (5 tests) 133ms
+ ✓ test/components/ui/navbar.test.tsx (54 tests) 129ms
+ ✓ test/routes/api-v1-cookbooks.test.ts (5 tests) 97ms
+ ✓ test/components/recipe/RecipeHeader.test.tsx (24 tests) 134ms
+ ✓ test/lib/recipe-cover.server.test.ts (19 tests) 116ms
+ ✓ test/lib/step-deletion-validation.server.test.ts (10 tests) 115ms
+ ✓ test/lib/api-idempotency.server.test.ts (11 tests) 110ms
+ ✓ test/components/ui/toast.test.tsx (7 tests) 111ms
+ ✓ test/routes/recipes.test.ts (11 tests) 105ms
+ ✓ test/routes/api-v1-tokens.test.ts (5 tests) 100ms
+ ✓ test/components/recipe/StepOutputUseCallout.test.tsx (28 tests) 108ms
+ ✓ test/routes/api-v1-shell.test.ts (19 tests) 108ms
+ ✓ test/components/ui/link.test.tsx (29 tests) 95ms
+ ✓ test/routes/cookbooks.test.ts (14 tests) 108ms
+ ✓ test/repo-hygiene.test.ts (6 tests) 107ms
+ ✓ test/lib/apple-oauth-callback.server.test.ts (28 tests) 99ms
+ ✓ test/lib/spoon-cover-stylization.server.test.ts (8 tests) 107ms
+ ✓ test/components/ui/pagination.test.tsx (63 tests) 109ms
+ ✓ test/routes/api-v1-shopping-conflicts.test.ts (3 tests) 151ms
+ ✓ app/__tests__/root.test.tsx (12 tests) 89ms
+ ✓ test/docs/developer-platform-guide.test.ts (2 tests) 101ms
+ ✓ test/components/pantry/RecipeGrid.test.tsx (24 tests) 90ms
+ ✓ test/lib/agent-connection.server.test.ts (7 tests) 94ms
+ ✓ test/lib/google-oauth-callback.server.test.ts (28 tests) 92ms
+ ✓ test/components/ui/table.test.tsx (48 tests) 83ms
+ ✓ test/components/ui/fieldset.test.tsx (35 tests) 86ms
+ ✓ test/models/cookbook.test.ts (10 tests) 84ms
+ ✓ test/components/navigation/layout-integration.test.tsx (10 tests) 88ms
+ ✓ test/lib/api-auth.server.test.ts (6 tests) 81ms
+ ✓ test/routes/api.push.subscriptions.test.ts (17 tests) 76ms
+ ✓ test/components/recipe/SpoonsStrip.test.tsx (17 tests) 81ms
+ ✓ test/lib/notification-triggers.server.test.ts (14 tests) 81ms
+ ✓ test/models/shopping-list.test.ts (8 tests) 75ms
+ ✓ test/lib/notification-fanout.server.test.ts (5 tests) 94ms
+ ✓ test/components/pantry/CookbookCard.test.tsx (16 tests) 81ms
+ ✓ test/models/recipe-cover.test.ts (9 tests) 77ms
+ ✓ test/lib/spoonjoy-api-request.server.test.ts (10 tests) 79ms
+ ✓ test/routes/logout.test.tsx (6 tests) 70ms
+ ✓ test/components/navigation/dock-item.test.tsx (18 tests) 83ms
+ ✓ test/scripts/deployment-preflight.test.ts (54 tests) 71ms
+ ✓ test/components/ui/avatar.test.tsx (26 tests) 69ms
+ ✓ test/root-navbar.test.tsx (3 tests) 79ms
+ ✓ test/lib/spoonjoy-api-cookbook-notification.test.ts (4 tests) 89ms
+ ✓ test/components/ui/badge.test.tsx (22 tests) 78ms
+ ✓ test/components/navigation/dock-center.test.tsx (14 tests) 72ms
+ ✓ test/routes/oauth-token-telemetry.test.ts (2 tests) 69ms
+ ✓ test/routes/oauth-authorize-telemetry.test.tsx (3 tests) 73ms
+ ✓ test/lib/recipe-detail.server.test.ts (4 tests) 66ms
+ ✓ test/components/pantry/BioCard.test.tsx (5 tests) 66ms
+ ✓ test/routes/mcp.test.ts (4 tests) 67ms
+ ✓ test/routes/api.push.preferences.test.ts (10 tests) 62ms
+ ✓ test/routes/oauth-revoke-telemetry.test.ts (2 tests) 66ms
+ ✓ test/components/cookbook/page.test.tsx (3 tests) 59ms
+ ✓ test/components/ui/auth-layout.test.tsx (12 tests) 61ms
+ ✓ test/models/recipe.test.ts (8 tests) 65ms
+ ✓ test/components/navigation/dock-indicator.test.tsx (16 tests) 59ms
+ ✓ test/components/users/FellowChefList.test.tsx (10 tests) 61ms
+ ✓ test/components/navigation/recipe-dock-actions.test.tsx (11 tests) 61ms
+ ✓ test/components/navigation/dock-context.test.tsx (20 tests) 58ms
+ ✓ test/routes/api-v1-openapi.test.ts (2 tests) 62ms
+ ✓ test/components/recipe/RecipeProvenance.test.tsx (11 tests) 55ms
+ ✓ test/models/recipe-spoon.test.ts (6 tests) 54ms
+ ✓ test/routes/privacy.test.tsx (2 tests) 60ms
+ ✓ test/lib/recipe-title-uniqueness.server.test.ts (4 tests) 54ms
+ ✓ test/routes/terms.test.tsx (2 tests) 60ms
+ ✓ test/routes/catch-all.test.tsx (4 tests) 61ms
+ ✓ test/components/pantry/PantryPage.test.tsx (2 tests) 58ms
+ ✓ test/routes/api-v1-shopping-d1.test.ts (1 test) 47ms
+ ✓ test/components/ui/button.test.tsx (10 tests) 53ms
+ ✓ test/components/ui/validation-error.test.tsx (19 tests) 51ms
+ ✓ test/components/ui/heading.test.tsx (10 tests) 51ms
+ ✓ test/components/navigation/spoon-dock.test.tsx (20 tests) 51ms
+ ✓ test/lib/api-v1-openapi.server.test.ts (8 tests) 56ms
+ ✓ test/models/image-gen-ledger.test.ts (6 tests) 50ms
+ ✓ test/routes/auth-apple.test.ts (25 tests) 58ms
+ ✓ test/components/ui/oauth.test.tsx (4 tests) 49ms
+ ✓ test/components/ui/text.test.tsx (11 tests) 50ms
+ ✓ test/components/ui/description-list.test.tsx (17 tests) 48ms
+ ✓ test/routes/recipe-dock-integration.test.tsx (5 tests) 53ms
+ ✓ test/components/cookbook/CookbookCoverArt.test.tsx (6 tests) 49ms
+ ✓ test/components/StepOutputUseDisplay.test.tsx (8 tests) 47ms
+ ✓ test/components/ui/spoonjoy-logo.test.tsx (12 tests) 45ms
+ ✓ test/lib/oauth-routes-defensive-coverage.test.ts (3 tests) 57ms
+ ✓ test/components/ui/divider.test.tsx (7 tests) 39ms
+ ✓ test/lib/web-push.server.test.ts (14 tests) 46ms
+ ✓ test/components/recipe/ScaledQuantity.test.tsx (21 tests) 49ms
+ ✓ test/routes/oauth-register-telemetry.test.ts (2 tests) 48ms
+ ✓ test/routes/devtools-well-known.test.tsx (2 tests) 42ms
+ ✓ test/lib/github-oauth-callback.server.test.ts (7 tests) 65ms
+ ✓ test/components/recipe/StepCard.test.tsx (4 tests) 43ms
+ ✓ test/entry-client-analytics.test.tsx (3 tests) 42ms
+ ✓ test/scripts/generate-api-playground.test.ts (2 tests) 48ms
+ ✓ test/lib/image-gen.server.test.ts (41 tests) 39ms
+ ✓ test/routes/auth-google.test.ts (18 tests) 39ms
+ ✓ test/components/ui/design-system-hygiene.test.ts (11 tests) 79ms
+ ✓ test/routes/auth-github.test.ts (17 tests) 38ms
+ ✓ test/lib/recipe-import-video.test.ts (51 tests) 36ms
+ ✓ test/lib/session.server.test.ts (15 tests) 35ms
+ ✓ test/lib/recipe-import-fetch.test.ts (59 tests) 33ms
+ ✓ test/lib/oauth-route.server.test.ts (28 tests) 35ms
+ ✓ app/lib/quantity.test.ts (83 tests) 29ms
+ ✓ test/lib/ingredient-parse.server.test.ts (68 tests) 33ms
+ ✓ test/lib/analytics-server.test.ts (33 tests) 33ms
+ ✓ test/lib/recipe-import-llm.test.ts (32 tests) 33ms
+ ✓ test/lib/google-oauth.server.test.ts (40 tests) 33ms
+ ✓ test/lib/image-storage.server.test.ts (26 tests) 32ms
+ ✓ test/lib/safe-image-fetch.server.test.ts (9 tests) 31ms
+ ✓ test/lib/apple-oauth.server.test.ts (39 tests) 29ms
+ ✓ test/build-output-hygiene.test.ts (2 tests) 30ms
+ ✓ test/lib/push-client.test.ts (35 tests) 29ms
+ ✓ test/lib/mcp/json-rpc.server.test.ts (17 tests) 27ms
+ ✓ test/routes/recipes-ui-css.test.ts (40 tests) 28ms
+ ✓ test/lib/webauthn.server.test.ts (20 tests) 29ms
+ ✓ test/lib/rate-limit.server.test.ts (23 tests) 30ms
+ ✓ test/lib/og-image.server.test.tsx (7 tests) 29ms
+ ✓ test/lib/api-v1-recipe-list-query.test.ts (1 test) 30ms
+ ✓ test/scripts/migration-0009-create.test.ts (13 tests) 28ms
+ ✓ test/lib/webauthn-client.test.ts (19 tests) 28ms
+ ✓ test/lib/validation.test.ts (91 tests) 28ms
+ ✓ test/scripts/generate-vapid-keys.test.ts (19 tests) 28ms
+ ✓ test/scripts/migration-0011-agent-connection-requests.test.ts (3 tests) 25ms
+ ✓ test/lib/mcp/spoonjoy-token-cache.server.test.ts (9 tests) 28ms
+ ✓ test/routes/redwood-functions-auth-oauth.test.ts (6 tests) 27ms
+ ✓ test/workers/app.test.ts (3 tests) 28ms
+ ✓ test/lib/analytics.test.ts (11 tests) 25ms
+ ✓ test/lib/github-oauth.server.test.ts (10 tests) 28ms
+ ✓ test/lib/env.server.test.ts (38 tests) 27ms
+ ✓ test/lib/image-crop.test.ts (18 tests) 26ms
+ ✓ test/storybook-sync.test.ts (8 tests) 26ms
+ ✓ test/lib/recipe-image-assignment.server.test.ts (5 tests) 26ms
+ ✓ test/lib/recipe-import-jsonld.test.ts (43 tests) 26ms
+ ✓ test/lib/oauth-metadata.server.test.ts (6 tests) 24ms
+ ✓ test/lib/service-worker.test.ts (6 tests) 26ms
+ ✓ test/lib/route-platform.server.test.ts (6 tests) 24ms
+ ✓ test/routes/photos.test.ts (9 tests) 26ms
+ ✓ test/scripts/migration-0008-create.test.ts (9 tests) 26ms
+ ✓ test/scripts/migration-0008-backfill-and-drop.test.ts (3 tests) 25ms
+ ✓ test/components/navigation/quick-actions.test.tsx (14 tests) 25ms
+ ✓ test/lib/pwa-install.test.ts (11 tests) 23ms
+ ✓ test/routes/recipes-id-fork.test.ts (6 tests) 25ms
+ ✓ test/lib/canonical-host.server.test.ts (15 tests) 25ms
+ ✓ test/routes/oauth-cors.test.ts (3 tests) 26ms
+ ✓ test/lib/mcp/json-rpc-stdio.server.test.ts (7 tests) 24ms
+ ✓ test/routes/developer-docs-redirects.test.ts (12 tests) 24ms
+ ✓ test/scripts/migration-0016-api-idempotency-keys.test.ts (4 tests) 27ms
+ ✓ test/lib/client-storage-schema.test.ts (4 tests) 24ms
+ ✓ test/docs/developer-platform-docs.test.ts (6 tests) 25ms
+ ✓ test/lib/time.test.ts (14 tests) 25ms
+ ✓ test/lib/request-body-limit.server.test.ts (4 tests) 24ms
+ ✓ test/components/recipe/button-system-hygiene.test.ts (17 tests) 24ms
+ ✓ test/lib/d1-coerce.server.test.ts (4 tests) 23ms
+ ✓ test/lib/oauth-cors.server.test.ts (3 tests) 24ms
+ ✓ test/lib/security-headers.server.test.ts (4 tests) 26ms
+ ✓ test/scripts/production-readiness.test.ts (7 tests) 25ms
+ ✓ test/server-json.test.ts (3 tests) 24ms
+ ✓ test/routes/api.push.public-key.test.ts (5 tests) 26ms
+ ✓ test/scripts/migration-0017-oauth-access-audience.test.ts (3 tests) 24ms
+ ✓ test/routes/cookbooks-layout.test.ts (2 tests) 24ms
+ ✓ test/routes/manifest.webmanifest.test.ts (4 tests) 24ms
+ ✓ test/scripts/migration-0015-api-credential-scopes.test.ts (2 tests) 27ms
+ ✓ test/lib/ingredient-affordances.test.ts (11 tests) 25ms
+ ✓ test/lib/recipe-image.test.ts (2 tests) 23ms
+ ✓ test/lib/chef-avatar.test.ts (4 tests) 23ms
+ ✓ test/lib/openai-client.server.test.ts (1 test) 23ms
+ ✓ test/lib/health.server.test.ts (1 test) 22ms
+ ✓ test/lib/mcp/spoonjoy-remote-auth.server.test.ts (3 tests) 24ms
+ ✓ test/root.test.ts (2 tests) 23ms
+ ✓ test/react-router-config.test.ts (2 tests) 22ms
+ ✓ test/lib/mcp/spoonjoy-mcp-env.server.test.ts (2 tests) 24ms
+ ✓ test/config/api-v1-route-coverage.test.ts (1 test) 23ms
+
+ Test Files  290 passed (290)
+      Tests  5581 passed (5581)
+   Start at  00:00:41
+   Duration  314.30s (transform 11.28s, setup 13.29s, import 49.09s, tests 180.31s, environment 38.55s)
+
+ % Coverage report from istanbul
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   99.96 |    99.92 |     100 |   99.97 |
+ components        |     100 |      100 |     100 |     100 |
+  ...seDisplay.tsx |     100 |      100 |     100 |     100 |
+  ...on-dialog.tsx |     100 |      100 |     100 |     100 |
+  ...s-section.tsx |     100 |      100 |     100 |     100 |
+ ...onents/account |     100 |      100 |     100 |     100 |
+  ...toCropper.tsx |     100 |      100 |     100 |     100 |
+  ...hotoField.tsx |     100 |      100 |     100 |     100 |
+ components/auth   |     100 |      100 |     100 |     100 |
+  ...keyButton.tsx |     100 |      100 |     100 |     100 |
+  ...nInButton.tsx |     100 |      100 |     100 |     100 |
+ ...nents/cookbook |     100 |      100 |     100 |     100 |
+  ...kCoverArt.tsx |     100 |      100 |     100 |     100 |
+  page.tsx         |     100 |      100 |     100 |     100 |
+ ...nts/navigation |     100 |      100 |     100 |     100 |
+  dock-center.tsx  |     100 |      100 |     100 |     100 |
+  dock-context.tsx |     100 |      100 |     100 |     100 |
+  ...indicator.tsx |     100 |      100 |     100 |     100 |
+  dock-item.tsx    |     100 |      100 |     100 |     100 |
+  mobile-nav.tsx   |     100 |      100 |     100 |     100 |
+  ...k-actions.tsx |     100 |      100 |     100 |     100 |
+  spoon-dock.tsx   |     100 |      100 |     100 |     100 |
+  ...k-actions.tsx |     100 |      100 |     100 |     100 |
+ components/pantry |     100 |      100 |     100 |     100 |
+  BioCard.tsx      |     100 |      100 |     100 |     100 |
+  CookbookCard.tsx |     100 |      100 |     100 |     100 |
+  PantryPage.tsx   |     100 |      100 |     100 |     100 |
+  RecipeGrid.tsx   |     100 |      100 |     100 |     100 |
+ components/pwa    |     100 |      100 |     100 |     100 |
+  ...romptCard.tsx |     100 |      100 |     100 |     100 |
+ components/recipe |     100 |      100 |     100 |     100 |
+  ...ipeButton.tsx |     100 |      100 |     100 |     100 |
+  ...putToggle.tsx |     100 |      100 |     100 |     100 |
+  ...dientList.tsx |     100 |      100 |     100 |     100 |
+  ...arseInput.tsx |     100 |      100 |     100 |     100 |
+  ...ientInput.tsx |     100 |      100 |     100 |     100 |
+  ...dientList.tsx |     100 |      100 |     100 |     100 |
+  ...edientRow.tsx |     100 |      100 |     100 |     100 |
+  ...peBuilder.tsx |     100 |      100 |     100 |     100 |
+  RecipeHeader.tsx |     100 |      100 |     100 |     100 |
+  ...ageUpload.tsx |     100 |      100 |     100 |     100 |
+  ...rovenance.tsx |     100 |      100 |     100 |     100 |
+  ...kDropdown.tsx |     100 |      100 |     100 |     100 |
+  ...eSelector.tsx |     100 |      100 |     100 |     100 |
+  ...dQuantity.tsx |     100 |      100 |     100 |     100 |
+  SpoonDialog.tsx  |     100 |      100 |     100 |     100 |
+  SpoonsStrip.tsx  |     100 |      100 |     100 |     100 |
+  StepCard.tsx     |     100 |      100 |     100 |     100 |
+  ...ySelector.tsx |     100 |      100 |     100 |     100 |
+  ...ditorCard.tsx |     100 |      100 |     100 |     100 |
+  StepList.tsx     |     100 |      100 |     100 |     100 |
+  ...seCallout.tsx |     100 |      100 |     100 |     100 |
+ ...nents/shopping |     100 |      100 |     100 |     100 |
+  ...klist-row.tsx |     100 |      100 |     100 |     100 |
+ components/ui     |     100 |      100 |     100 |     100 |
+  alert.tsx        |     100 |      100 |     100 |     100 |
+  auth-layout.tsx  |     100 |      100 |     100 |     100 |
+  avatar.tsx       |     100 |      100 |     100 |     100 |
+  badge.tsx        |     100 |      100 |     100 |     100 |
+  button.tsx       |     100 |      100 |     100 |     100 |
+  checkbox.tsx     |     100 |      100 |     100 |     100 |
+  combobox.tsx     |     100 |      100 |     100 |     100 |
+  ...tion-list.tsx |     100 |      100 |     100 |     100 |
+  dialog.tsx       |     100 |      100 |     100 |     100 |
+  divider.tsx      |     100 |      100 |     100 |     100 |
+  dropdown.tsx     |     100 |      100 |     100 |     100 |
+  fieldset.tsx     |     100 |      100 |     100 |     100 |
+  heading.tsx      |     100 |      100 |     100 |     100 |
+  input.tsx        |     100 |      100 |     100 |     100 |
+  link.tsx         |     100 |      100 |     100 |     100 |
+  listbox.tsx      |     100 |      100 |     100 |     100 |
+  navbar.tsx       |     100 |      100 |     100 |     100 |
+  oauth.tsx        |     100 |      100 |     100 |     100 |
+  pagination.tsx   |     100 |      100 |     100 |     100 |
+  radio.tsx        |     100 |      100 |     100 |     100 |
+  select.tsx       |     100 |      100 |     100 |     100 |
+  ...ar-layout.tsx |     100 |      100 |     100 |     100 |
+  sidebar.tsx      |     100 |      100 |     100 |     100 |
+  ...njoy-logo.tsx |     100 |      100 |     100 |     100 |
+  ...ed-layout.tsx |     100 |      100 |     100 |     100 |
+  switch.tsx       |     100 |      100 |     100 |     100 |
+  table.tsx        |     100 |      100 |     100 |     100 |
+  text.tsx         |     100 |      100 |     100 |     100 |
+  textarea.tsx     |     100 |      100 |     100 |     100 |
+  ...-provider.tsx |     100 |      100 |     100 |     100 |
+  theme-toggle.tsx |     100 |      100 |     100 |     100 |
+  toast.tsx        |     100 |      100 |     100 |     100 |
+  ...ion-error.tsx |     100 |      100 |     100 |     100 |
+ components/users  |     100 |      100 |     100 |     100 |
+  ...wChefList.tsx |     100 |      100 |     100 |     100 |
+ hooks             |     100 |      100 |     100 |     100 |
+  ...ientParser.ts |     100 |      100 |     100 |     100 |
+ lib               |   99.98 |     99.9 |     100 |     100 |
+  ...ngs.server.ts |     100 |      100 |     100 |     100 |
+  ...ion.server.ts |     100 |      100 |     100 |     100 |
+  ...ver.server.ts |     100 |      100 |     100 |     100 |
+  ...ics-server.ts |     100 |      100 |     100 |     100 |
+  analytics.ts     |     100 |      100 |     100 |     100 |
+  ...uth.server.ts |     100 |      100 |     100 |     100 |
+  ...ncy.server.ts |     100 |      100 |     100 |     100 |
+  ...act.server.ts |     100 |      100 |     100 |     100 |
+  ...api.server.ts |     100 |      100 |     100 |     100 |
+  api-v1.server.ts |     100 |      100 |     100 |     100 |
+  ...ack.server.ts |     100 |      100 |     100 |     100 |
+  ...uth.server.ts |     100 |      100 |     100 |     100 |
+  auth.server.ts   |     100 |      100 |     100 |     100 |
+  ...ost.server.ts |     100 |      100 |     100 |     100 |
+  chef-avatar.ts   |     100 |      100 |     100 |     100 |
+  ...age-schema.ts |     100 |      100 |     100 |     100 |
+  ...rce.server.ts |     100 |      100 |     100 |     100 |
+  db.server.ts     |     100 |      100 |     100 |     100 |
+  env.server.ts    |     100 |      100 |     100 |     100 |
+  ...efs.server.ts |     100 |      100 |     100 |     100 |
+  ...ack.server.ts |     100 |      100 |     100 |     100 |
+  ...uth.server.ts |     100 |      100 |     100 |     100 |
+  ...ack.server.ts |     100 |      100 |     100 |     100 |
+  ...uth.server.ts |     100 |      100 |     100 |     100 |
+  health.server.ts |     100 |      100 |     100 |     100 |
+  image-crop.ts    |     100 |      100 |     100 |     100 |
+  ...ger.server.ts |     100 |      100 |     100 |     100 |
+  ...try.server.ts |     100 |      100 |     100 |     100 |
+  ...gen.server.ts |     100 |      100 |     100 |     100 |
+  ...age.server.ts |     100 |      100 |     100 |     100 |
+  ...ols.server.ts |     100 |      100 |     100 |     100 |
+  ...ffordances.ts |     100 |      100 |     100 |     100 |
+  ...rse.server.ts |     100 |      100 |     100 |     100 |
+  ...tch.server.ts |     100 |      100 |     100 |     100 |
+  ...out.server.ts |     100 |      100 |     100 |     100 |
+  ...ers.server.ts |     100 |      100 |     100 |     100 |
+  ...ute.server.ts |     100 |      100 |     100 |     100 |
+  ...ors.server.ts |     100 |      100 |     100 |     100 |
+  ...ata.server.ts |     100 |      100 |     100 |     100 |
+  ...ute.server.ts |     100 |      100 |     100 |     100 |
+  ...tes.server.ts |     100 |      100 |     100 |     100 |
+  ...ver.server.ts |     100 |      100 |     100 |     100 |
+  ...ser.server.ts |     100 |      100 |     100 |     100 |
+  ...ge.server.tsx |     100 |      100 |     100 |     100 |
+  og-metadata.ts   |     100 |      100 |     100 |     100 |
+  ...ent.server.ts |     100 |      100 |     100 |     100 |
+  push-client.ts   |     100 |      100 |     100 |     100 |
+  pwa-install.ts   |     100 |      100 |     100 |     100 |
+  quantity.ts      |     100 |      100 |     100 |     100 |
+  ...mit.server.ts |     100 |      100 |     100 |     100 |
+  ...ver.server.ts |     100 |      100 |     100 |     100 |
+  ...ate.server.ts |     100 |      100 |     100 |     100 |
+  ...ail.server.ts |     100 |      100 |     100 |     100 |
+  ...ork.server.ts |     100 |      100 |     100 |     100 |
+  ...ent.server.ts |     100 |      100 |     100 |     100 |
+  recipe-image.ts  |     100 |      100 |     100 |     100 |
+  ...tch.server.ts |     100 |      100 |     100 |     100 |
+  ...nld.server.ts |     100 |      100 |     100 |     100 |
+  ...llm.server.ts |     100 |      100 |     100 |     100 |
+  ...deo.server.ts |     100 |      100 |     100 |     100 |
+  ...ort.server.ts |     100 |      100 |     100 |     100 |
+  ...oon.server.ts |     100 |      100 |     100 |     100 |
+  ...ess.server.ts |     100 |      100 |     100 |     100 |
+  ...mit.server.ts |     100 |      100 |     100 |     100 |
+  ...orm.server.ts |     100 |      100 |     100 |     100 |
+  ...tch.server.ts |     100 |      100 |     100 |     100 |
+  search.server.ts |     100 |      100 |     100 |     100 |
+  ...ers.server.ts |     100 |      100 |     100 |     100 |
+  ...ion.server.ts |     100 |      100 |     100 |     100 |
+  ...ist-parser.ts |     100 |      100 |     100 |     100 |
+  ...ist.server.ts |     100 |      100 |     100 |     100 |
+  ...ion.server.ts |     100 |      100 |     100 |     100 |
+  ...est.server.ts |     100 |      100 |     100 |     100 |
+  ...api.server.ts |   99.84 |    99.04 |     100 |     100 | ...2532-2533,2555
+  ...ion.server.ts |     100 |      100 |     100 |     100 |
+  ...ons.server.ts |     100 |      100 |     100 |     100 |
+  ...ies.server.ts |     100 |      100 |     100 |     100 |
+  ...ion.server.ts |     100 |      100 |     100 |     100 |
+  time.ts          |     100 |      100 |     100 |     100 |
+  validation.ts    |     100 |      100 |     100 |     100 |
+  ...ush.server.ts |     100 |      100 |     100 |     100 |
+  ...thn-client.ts |     100 |      100 |     100 |     100 |
+  ...ute.server.ts |     100 |      100 |     100 |     100 |
+  ...thn.server.ts |     100 |      100 |     100 |     100 |
+ lib/generated     |     100 |      100 |     100 |     100 |
+  ...playground.ts |     100 |      100 |     100 |     100 |
+ lib/mcp           |   99.45 |    99.37 |     100 |   99.36 |
+  ...mcp.server.ts |   98.76 |    98.63 |     100 |   98.61 | 310
+  ...dio.server.ts |     100 |      100 |     100 |     100 |
+  ...rpc.server.ts |     100 |      100 |     100 |     100 |
+  ...env.server.ts |     100 |      100 |     100 |     100 |
+  ...uth.server.ts |     100 |      100 |     100 |     100 |
+  ...che.server.ts |     100 |      100 |     100 |     100 |
+  ...ols.server.ts |     100 |      100 |     100 |     100 |
+ routes            |   99.96 |    99.95 |     100 |   99.95 |
+  $.tsx            |     100 |      100 |     100 |     100 |
+  _index.tsx       |     100 |      100 |     100 |     100 |
+  ....settings.tsx |     100 |      100 |     100 |     100 |
+  ...requestId.tsx |     100 |      100 |     100 |     100 |
+  ...t.connect.tsx |     100 |      100 |     100 |     100 |
+  api.$.ts         |     100 |      100 |     100 |     100 |
+  api.docs.ts      |     100 |      100 |     100 |     100 |
+  api.openapi.ts   |     100 |      100 |     100 |     100 |
+  ...references.ts |     100 |      100 |     100 |     100 |
+  ...public-key.ts |     100 |      100 |     100 |     100 |
+  ...scriptions.ts |     100 |      100 |     100 |     100 |
+  api.v1.$.ts      |     100 |      100 |     100 |     100 |
+  ....callback.tsx |     100 |      100 |     100 |     100 |
+  auth.apple.tsx   |     100 |      100 |     100 |     100 |
+  ....callback.tsx |     100 |      100 |     100 |     100 |
+  auth.github.tsx  |     100 |      100 |     100 |     100 |
+  ....callback.tsx |     100 |      100 |     100 |     100 |
+  auth.google.tsx  |     100 |      100 |     100 |     100 |
+  ...te.options.ts |     100 |      100 |     100 |     100 |
+  ...ate.verify.ts |     100 |      100 |     100 |     100 |
+  ...er.options.ts |     100 |      100 |     100 |     100 |
+  ...ter.verify.ts |     100 |      100 |     100 |     100 |
+  ...books.$id.tsx |     100 |      100 |     100 |     100 |
+  ...ks._index.tsx |     100 |      100 |     100 |     100 |
+  ...books.new.tsx |     100 |      100 |     100 |     100 |
+  cookbooks.tsx    |     100 |      100 |     100 |     100 |
+  ...layground.tsx |     100 |      100 |     100 |     100 |
+  developers.tsx   |     100 |      100 |     100 |     100 |
+  ...ell-known.tsx |     100 |      100 |     100 |     100 |
+  health.ts        |     100 |      100 |     100 |     100 |
+  login.tsx        |     100 |      100 |     100 |     100 |
+  logout.tsx       |     100 |      100 |     100 |     100 |
+  mcp.ts           |     100 |      100 |     100 |     100 |
+  ...authorize.tsx |     100 |      100 |     100 |     100 |
+  ...h.register.ts |     100 |      100 |     100 |     100 |
+  oauth.revoke.ts  |     100 |      100 |     100 |     100 |
+  oauth.token.ts   |     100 |      100 |     100 |     100 |
+  ...s.$id.png.tsx |     100 |      100 |     100 |     100 |
+  ...$slug.png.tsx |     100 |      100 |     100 |     100 |
+  ...s.$id.png.tsx |     100 |      100 |     100 |     100 |
+  photos.$.tsx     |     100 |      100 |     100 |     100 |
+  privacy.tsx      |     100 |      100 |     100 |     100 |
+  ....$id.edit.tsx |   99.34 |    99.12 |     100 |   99.31 | 338
+  ....$id.fork.tsx |     100 |      100 |     100 |     100 |
+  ...epId.edit.tsx |     100 |      100 |     100 |     100 |
+  ...steps.new.tsx |     100 |      100 |     100 |     100 |
+  recipes.$id.tsx  |     100 |      100 |     100 |     100 |
+  ...es._index.tsx |     100 |      100 |     100 |     100 |
+  recipes.new.tsx  |     100 |      100 |     100 |     100 |
+  recipes.tsx      |     100 |      100 |     100 |     100 |
+  ...uth-oauth.tsx |     100 |      100 |     100 |     100 |
+  search.tsx       |     100 |      100 |     100 |     100 |
+  ...ping-list.tsx |     100 |      100 |     100 |     100 |
+  signup.tsx       |     100 |      100 |     100 |     100 |
+  terms.tsx        |     100 |      100 |     100 |     100 |
+  ...low-chefs.tsx |     100 |      100 |     100 |     100 |
+  ...-visitors.tsx |     100 |      100 |     100 |     100 |
+  ...dentifier.tsx |     100 |      100 |     100 |     100 |
+  ...ion-server.ts |     100 |      100 |     100 |     100 |
+  ...d-resource.ts |     100 |      100 |     100 |     100 |
+-------------------|---------|----------|---------|---------|-------------------
+ERROR: Coverage for lines (99.97%) does not meet global threshold (100%)
+ERROR: Coverage for statements (99.96%) does not meet global threshold (100%)
+ERROR: Coverage for branches (99.92%) does not meet global threshold (100%)
+ ELIFECYCLE  Command failed with exit code 1.

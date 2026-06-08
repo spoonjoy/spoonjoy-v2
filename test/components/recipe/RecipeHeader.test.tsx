@@ -128,6 +128,12 @@ describe('RecipeHeader', () => {
       expect(screen.getByTestId('recipe-image-placeholder')).toBeInTheDocument()
       expect(screen.queryByTestId('recipe-image')).toBeNull()
     })
+
+    it('renders placeholder when coverImageUrl is null', () => {
+      renderWithRouter(<RecipeHeader {...defaultProps} coverImageUrl={null} />)
+      expect(screen.getByTestId('recipe-image-placeholder')).toBeInTheDocument()
+      expect(screen.queryByTestId('recipe-image')).toBeNull()
+    })
   })
 
   describe('scaling', () => {

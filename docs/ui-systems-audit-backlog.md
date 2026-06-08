@@ -63,4 +63,4 @@ Current pass focus:
 
 Re-run `ui-systems-audit` when a PR changes shared UI primitives, navigation, recipe detail, recipe forms, shopping list, profile/kitchen surfaces, or cookbook/search layouts.
 
-For deployed/staging checks, do not rely on local seed IDs. Use `pnpm smoke:live -- --base-url <worker-url> --remote-cleanup` to create disposable data, prove the live workflow, and clean up the smoke account.
+For deployed/staging checks, do not rely on local seed IDs. Use `pnpm smoke:live -- --base-url <worker-url>` to create disposable data, prove the live workflow, and clean up the smoke account. Pass `--keep-smoke-data` only when the human explicitly wants temporary debugging data preserved.

@@ -48,6 +48,7 @@ describe("Recipes Index Route", () => {
       id: recipe.id,
       title: "Public Tomato Beans",
       chef: { username: chef.username },
+      coverImageUrl: null,
     });
   });
 

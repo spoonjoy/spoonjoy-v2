@@ -1,0 +1,9 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ✓ test/lib/image-gen.server.test.ts (34 tests) 84ms
+
+ Test Files  1 passed (1)
+      Tests  34 passed (34)
+   Start at  22:43:18
+   Duration  619ms (transform 98ms, setup 126ms, import 62ms, tests 84ms, environment 216ms)

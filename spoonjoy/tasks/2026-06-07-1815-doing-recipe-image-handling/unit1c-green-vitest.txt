@@ -1,0 +1,21 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ✓ test/routes/account-settings.test.tsx (148 tests) 14214ms
+ ✓ test/routes/recipes-id-edit.test.tsx (67 tests) 11188ms
+       ✓ should populate hidden form and submit when Save Recipe is clicked  355ms
+       ✓ should keep the mobile dock off edit forms and submit from the in-flow Save Recipe button  352ms
+ ✓ test/routes/recipes-new.test.tsx (50 tests) 5170ms
+       ✓ should populate hidden form and submit when RecipeBuilder saves  351ms
+ ✓ test/routes/recipes-id-spoons.test.tsx (20 tests) 3287ms
+ ✓ test/components/recipe/RecipeImageUpload.test.tsx (62 tests) 3032ms
+       ✓ revokes old preview URL when dropping new file  1924ms
+ ✓ test/components/recipe/SpoonDialog.test.tsx (16 tests) 743ms
+ ✓ test/lib/recipe-spoon.server.test.ts (46 tests) 434ms
+ ✓ test/components/account/ProfilePhotoField.test.tsx (12 tests) 153ms
+ ✓ test/lib/image-storage.server.test.ts (24 tests) 33ms
+
+ Test Files  9 passed (9)
+      Tests  445 passed (445)
+   Start at  21:23:12
+   Duration  45.25s (transform 722ms, setup 557ms, import 3.80s, tests 38.25s, environment 1.55s)

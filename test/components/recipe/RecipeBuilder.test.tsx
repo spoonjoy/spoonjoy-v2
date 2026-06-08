@@ -51,7 +51,7 @@ function createTestRecipe(
     title: string;
     description: string | null;
     servings: string | null;
-    coverImageUrl: string;
+    coverImageUrl: string | null;
     steps: StepData[];
   }> = {},
 ) {
@@ -648,6 +648,16 @@ describe("RecipeBuilder", () => {
   });
 
   describe("image upload", () => {
+    it("renders the upload placeholder for an existing recipe with null coverImageUrl", () => {
+      const Wrapper = createTestWrapper({
+        recipe: createTestRecipe({ coverImageUrl: null }),
+      });
+      render(<Wrapper initialEntries={["/recipes/recipe-1/edit"]} />);
+
+      expect(screen.getByText(/upload image/i)).toBeInTheDocument();
+      expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    });
+
     it("revokes previous preview URL when selecting a new image", async () => {
       const revokeObjectURL = vi.spyOn(URL, "revokeObjectURL");
       const Wrapper = createTestWrapper();

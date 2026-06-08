@@ -172,6 +172,30 @@ describe("OG image helpers", () => {
         "0 recipes",
       ).type,
     ).toBe("div");
+
+    expect(
+      createCookbookOgElement(
+        {
+          title: "Null Cover Book",
+          authorUsername: "ari",
+          recipeCount: 2,
+          coverImageUrls: [null, "", "https://cdn.example.com/real.jpg"],
+        },
+        "2 recipes",
+      ).type,
+    ).toBe("div");
+  });
+
+  it("creates page OG responses and elements for developer surfaces", async () => {
+    const input = pageOgInput("api-playground")!;
+    const response = await createPageOgImageResponse(input);
+
+    expect(await response.text()).toBe("PNG");
+    expect(response.headers.get("X-OG-Width")).toBe(String(OG_IMAGE_WIDTH));
+    expect(response.headers.get("X-OG-Height")).toBe(String(OG_IMAGE_HEIGHT));
+    expect(mocks.GoogleFont).toHaveBeenCalledTimes(3);
+    expect(createPageOgElement(input).type).toBe("div");
+    expect(createPageOgElement(pageOgInput("api")!).type).toBe("div");
   });
 
   it("creates page OG responses and elements for developer surfaces", async () => {

@@ -265,6 +265,101 @@ describe("search.server", () => {
     expect(staleMarkerResults).toEqual([]);
   });
 
+  it("refreshes recipe search image URLs when cover URL fields change in place", async () => {
+    const chef = await createChef("coverfreshchef");
+    const noCoverRecipe = await db.recipe.create({
+      data: {
+        title: "Bare Cover Freshness Salad",
+        description: "Search cover freshness for recipes without cover rows",
+        chefId: chef.id,
+      },
+    });
+    const maskedRecipe = await db.recipe.create({
+      data: {
+        title: "Masked Cover Freshness Gratin",
+        description: "Search cover freshness for latest empty covers",
+        chefId: chef.id,
+      },
+    });
+    await db.recipeCover.create({
+      data: {
+        recipeId: maskedRecipe.id,
+        imageUrl: "/photos/recipes/chef/older-gratin.jpg",
+        sourceType: "chef-upload",
+        createdAt: new Date("2026-01-01T00:00:00Z"),
+      },
+    });
+    await db.recipeCover.create({
+      data: {
+        recipeId: maskedRecipe.id,
+        imageUrl: "",
+        sourceType: "ai-placeholder",
+        createdAt: new Date("2026-01-02T00:00:00Z"),
+      },
+    });
+    const pendingRecipe = await db.recipe.create({
+      data: {
+        title: "Pending Cover Freshness Tart",
+        description: "Search cover freshness for generated placeholders",
+        chefId: chef.id,
+      },
+    });
+    const pendingCover = await db.recipeCover.create({
+      data: {
+        recipeId: pendingRecipe.id,
+        imageUrl: "",
+        sourceType: "ai-placeholder",
+      },
+    });
+    const stylizedRecipe = await db.recipe.create({
+      data: {
+        title: "Stylized Cover Freshness Toast",
+        description: "Search cover freshness for stylized uploads",
+        chefId: chef.id,
+      },
+    });
+    const stylizedCover = await db.recipeCover.create({
+      data: {
+        recipeId: stylizedRecipe.id,
+        imageUrl: "/photos/recipes/chef/raw-toast.jpg",
+        sourceType: "chef-upload",
+      },
+    });
+
+    await expect(rebuildSearchIndex(db)).resolves.toBe(5);
+
+    await expect(searchSpoonjoy(db, { query: "bare cover freshness", scope: "recipes" }))
+      .resolves.toMatchObject([{ id: noCoverRecipe.id, imageUrl: null }]);
+    await expect(searchSpoonjoy(db, { query: "masked cover freshness", scope: "recipes" }))
+      .resolves.toMatchObject([{ id: maskedRecipe.id, imageUrl: null }]);
+    await expect(searchSpoonjoy(db, { query: "pending cover freshness", scope: "recipes" }))
+      .resolves.toMatchObject([{ id: pendingRecipe.id, imageUrl: null }]);
+    await expect(searchSpoonjoy(db, { query: "stylized cover freshness", scope: "recipes" }))
+      .resolves.toMatchObject([{ id: stylizedRecipe.id, imageUrl: "/photos/recipes/chef/raw-toast.jpg" }]);
+
+    await db.recipeCover.update({
+      where: { id: pendingCover.id },
+      data: { imageUrl: "/photos/covers/generated-tart.png" },
+    });
+    await db.recipeCover.update({
+      where: { id: stylizedCover.id },
+      data: { stylizedImageUrl: "/photos/covers/stylized-toast.png" },
+    });
+
+    await expect(searchSpoonjoy(db, { query: "pending cover freshness", scope: "recipes" }))
+      .resolves.toMatchObject([{ id: pendingRecipe.id, imageUrl: "/photos/covers/generated-tart.png" }]);
+    await expect(searchSpoonjoy(db, { query: "stylized cover freshness", scope: "recipes" }))
+      .resolves.toMatchObject([{ id: stylizedRecipe.id, imageUrl: "/photos/covers/stylized-toast.png" }]);
+
+    const metadataRows = await db.$queryRawUnsafe<Array<{ sourceFingerprint: string }>>(
+      `SELECT "sourceFingerprint" FROM "SearchIndexMetadata" WHERE "id" = 'current' LIMIT 1`,
+    );
+    expect(metadataRows[0]!.sourceFingerprint).toContain("contentHash");
+    expect(metadataRows[0]!.sourceFingerprint).not.toContain("/photos/covers/generated-tart.png");
+    expect(metadataRows[0]!.sourceFingerprint).not.toContain("/photos/covers/stylized-toast.png");
+    expect(metadataRows[0]!.sourceFingerprint).not.toContain("/photos/recipes/chef/older-gratin.jpg");
+  });
+
   it("keeps shopping-list search private to the signed-in owner", async () => {
     const owner = await createChef("shopper");
     const otherOwner = await createChef("other_shopper");

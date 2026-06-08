@@ -58,6 +58,10 @@ describe("/mcp route", () => {
     const listResponse = await action(routeArgs(rpc({ jsonrpc: "2.0", id: 2, method: "tools/list" }, auth)));
     const listBody = await listResponse.json() as { result: { tools: { name: string }[] } };
     expect(listBody.result.tools.map((t) => t.name)).toContain("get_shopping_list");
+    expect(listBody.result.tools.map((t) => t.name)).toEqual(expect.arrayContaining([
+      "upload_recipe_image",
+      "upload_spoon_photo",
+    ]));
 
     const callResponse = await action(routeArgs(rpc(
       { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "get_shopping_list", arguments: {} } },

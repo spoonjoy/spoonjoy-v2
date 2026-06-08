@@ -1,0 +1,492 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ❯ test/lib/spoonjoy-api-spoons.test.ts (51 tests | 4 failed) 717ms
+       × lists the five new spoon operations 18ms
+       × requires kitchen:write for upload tools 13ms
+       × stores recipe and spoon upload bytes through the shared validator 9ms
+       × rejects GIF upload bytes and missing buckets without explicit local fallback 9ms
+       ✓ creates a spoon with note for the principal when not the recipe owner 15ms
+       ✓ rejects when ownerEmail is supplied with the documented 400 message 9ms
+       ✓ rejects unauthenticated callers with 401 8ms
+       ✓ forwards validation errors as 400 when content is empty 11ms
+       ✓ enforces origin-cook photo requirement with 400 11ms
+       ✓ accepts cookedAt as an ISO date string 10ms
+       ✓ rejects invalid cookedAt strings 9ms
+       ✓ requires recipeId 7ms
+       ✓ accepts photoUrl as a fallback when no upload bucket is wired 10ms
+       ✓ on origin-cook with photoUrl, inserts a RecipeCover row with sourceType='spoon' synchronously 103ms
+       ✓ does NOT insert a RecipeCover when chef is not the origin cook 16ms
+       ✓ schedules stylization via context.waitUntil; await fills stylizedImageUrl 18ms
+       ✓ when no waitUntil is provided, runs stylization inline and fills stylizedImageUrl 14ms
+       ✓ when stylization quota is exceeded, cover row is left with stylizedImageUrl=null and ledger does not exceed cap 18ms
+       ✓ when stylization throws, cover row stays with stylizedImageUrl=null and error is logged 15ms
+       ✓ writes a NotificationEvent for the recipe owner when the spooner is not the owner (with VAPID env) 14ms
+       ✓ does NOT write a NotificationEvent when the spooner IS the owner 12ms
+       ✓ does not write a NotificationEvent when VAPID env is absent (graceful skip) 11ms
+       ✓ fans out fellow_chef_origin_cook to each fellow chef on an origin-cook spoon 17ms
+       ✓ does NOT fan out fellow_chef_origin_cook on a non-origin spoon 11ms
+       ✓ allows the owning principal to update their spoon 10ms
+       ✓ rejects update from a non-owner with 403 10ms
+       ✓ rejects update on soft-deleted spoon with 404 11ms
+       ✓ rejects when ownerEmail is supplied 10ms
+       ✓ accepts nextTime/photoUrl/cookedAt patches 13ms
+       ✓ rejects updates that empty all content fields (note=null nulls the note) 11ms
+       ✓ rejects invalid cookedAt patches (malformed string) 10ms
+       ✓ rejects empty cookedAt patches (no usable date) 10ms
+       ✓ requires spoonId 7ms
+       ✓ returns spoons with chef relation and derived coverImageUrl per row 10ms
+       ✓ respects limit/offset 13ms
+       ✓ rejects ownerEmail 10ms
+       ✓ requires recipeId 7ms
+       ✓ excludes soft-deleted spoons 10ms
+       ✓ requires authentication 9ms
+       ✓ returns coverImageUrl=null when the recipe row is missing 7ms
+       ✓ returns spoons by chef id with recipe + coverImageUrl preloaded 10ms
+       ✓ resolves by username 10ms
+       ✓ returns 404 when chef is not found 8ms
+       ✓ rejects ownerEmail 8ms
+       ✓ requires chefIdOrUsername 8ms
+       ✓ excludes soft-deleted by default 9ms
+       ✓ requires authentication 6ms
+       ✓ respects limit/offset 13ms
+       ✓ soft-deletes the owning principal's spoon 10ms
+       ✓ rejects delete from a non-owner with 403 11ms
+       ✓ rejects when ownerEmail is supplied 10ms
+ ❯ test/lib/mcp/spoonjoy-tools.server.test.ts (39 tests | 6 failed) 740ms
+     × lists stable MCP tool metadata 17ms
+     ✓ annotates every tool with a title and behavioral hints (directory requirement) 11ms
+     × classifies reads, writes, deletes, and the open-world import correctly 9ms
+     × publishes upload schemas with required image fields and kitchen write scopes 18ms
+     × uploads recipe and spoon photos to owner-scoped R2 namespaces 13ms
+     × rejects invalid, GIF, and non-food upload payloads before storage 8ms
+     × rejects production-like missing image buckets unless local fallback is explicit 7ms
+     ✓ reports health and writable state 6ms
+     ✓ reports agent auth status without asking for user credentials 18ms
+     ✓ starts and polls delegated agent connections over MCP 17ms
+     ✓ creates, lists, revokes, and authorizes owner-scoped API tokens 22ms
+     ✓ creates, searches, and fetches recipes with steps and ingredients 42ms
+     ✓ creates minimal recipes and finds null for missing recipes 13ms
+     ✓ updates owner recipes with replacement steps and ingredients without interactive transactions 26ms
+     ✓ keeps untouched fields when updating only part of a recipe 24ms
+     ✓ rejects invalid or unauthorized recipe updates 16ms
+     ✓ soft-deletes owner recipes through MCP for agent cleanup 16ms
+     ✓ rejects invalid or unauthorized recipe deletes 12ms
+     ✓ handles unusual owner emails and ingredient-free steps 13ms
+     ✓ reuses existing owner usernames, units, and ingredient refs 17ms
+     ✓ adds recipe ingredients to a shopping list and merges duplicates 21ms
+     ✓ handles a recipe with no ingredients without touching the shopping list 13ms
+     ✓ aggregates duplicate (unit, ingredient) pairs within a single recipe into one item 18ms
+     ✓ rejects adding a soft-deleted recipe to a shopping list 16ms
+     ✓ creates, lists, and fetches cookbooks idempotently for the configured owner 17ms
+     ✓ lists cookbook summaries without loading deep recipe step payloads 7ms
+     ✓ adds and removes recipes from owner-scoped cookbooks idempotently 29ms
+     ✓ runs owner-scoped write tools without callback-style transactions 32ms
+     ✓ keeps cookbook MCP reads and writes scoped to the owning agent 17ms
+     ✓ groups multiple recipes per cookbook in list_cookbooks (batched-fetch regression) 25ms
+     ✓ excludes deleted recipes from cookbook MCP payloads 19ms
+     ✓ treats an existing null shopping-list quantity as zero when merging 20ms
+     ✓ gets shopping lists and filters deleted items including unitless items 12ms
+     ✓ manages direct shopping-list item adds, checks, removes, and restores 26ms
+     ✓ exposes unified full-text search and private shopping-list search to Ouroboros agents 35ms
+     ✓ supports unitless direct shopping-list items 15ms
+     ✓ scopes direct shopping-list item mutations to the owner 17ms
+     ✓ normalizes search limits 26ms
+     ✓ validates write tool inputs 18ms
+ ❯ test/lib/mcp/http-mcp.server.test.ts (23 tests | 2 failed) 331ms
+     ✓ rejects non-POST with 405 11ms
+     ✓ challenges an unauthenticated initialize with 401 + WWW-Authenticate 8ms
+     ✓ challenges any unauthenticated request (tools/list) 6ms
+     ✓ challenges a request carrying an invalid token 9ms
+     ✓ points the challenge at SPOONJOY_BASE_URL, not the worker's own host 7ms
+     ✓ negotiates protocol version on an authenticated initialize 13ms
+     ✓ lists tools for an authenticated request 13ms
+     ✓ acks an authenticated notification with 202 and no body 12ms
+     ✓ dispatches a protected tool/call with a valid bearer token 13ms
+     ✓ rejects OAuth tokens that are not audience-bound to the MCP resource 15ms
+     ✓ returns a JSON-RPC parse error for an invalid (authenticated) body 11ms
+     × rejects oversized Content-Length before JSON-RPC dispatch 17ms
+     × rejects oversized streaming bodies while reading before JSON-RPC dispatch 60ms
+     ✓ returns 429 when the rate limiter denies the request 6ms
+     ✓ rate-limits anonymous requests by IP 6ms
+     ✓ captures safe MCP telemetry for auth failures, wrong-resource tokens, and rate limits 14ms
+     ✓ captures safe MCP success metadata for tools/list and tools/call 21ms
+     ✓ captures safe MCP notification and JSON-RPC error telemetry while preserving exception capture 15ms
+     ✓ normalizes MCP JSON-RPC telemetry helper edge cases without leaking unknown values 7ms
+     ✓ returns a JSON-RPC failure and skips capture when waitUntil is missing 10ms
+     ✓ skips PostHog capture when cloudflareEnv is missing but waitUntil is set 11ms
+     ✓ skips PostHog capture when env is set but POSTHOG_KEY is not configured 10ms
+     ✓ captures the raw exception via waitUntil when PostHog is configured 11ms
+ ❯ test/routes/api.test.ts (12 tests | 2 failed) 310ms
+     ✓ serves discovery, health, tools, and CORS preflight 17ms
+     ✓ keeps public search from leaking private shopping-list data 24ms
+     ✓ rejects MCP audience-bound OAuth tokens on the legacy REST surface 14ms
+     × rejects oversized legacy tool Content-Length before operation dispatch 17ms
+     × rejects oversized legacy tool streaming bodies while reading before operation dispatch 63ms
+     ✓ coerces legacy REST query and body edge cases before dispatch 16ms
+     ✓ creates tokens from a session and then uses bearer auth for shopping-list REST calls 35ms
+     ✓ exposes generic tool calls without allowing unauthenticated ownerEmail writes 12ms
+     ✓ routes recipe and cookbook REST endpoints through the shared operation layer 52ms
+     ✓ returns structured REST errors 7ms
+     ✓ returns 429 with Retry-After when the rate limiter denies the request 6ms
+     ✓ captures safe legacy REST telemetry for public success, bearer success, auth errors, not-found, and rate limits 21ms
+ ❯ test/routes/mcp.test.ts (4 tests | 1 failed) 101ms
+     ✓ 405s on GET via the loader 14ms
+     ✓ challenges an unauthenticated request via the action 10ms
+     × handles initialize + tools/list + a tools/call end to end when authenticated 28ms
+     ✓ accepts OAuth tokens bound to /mcp and rejects tokens bound elsewhere 17ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 15 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/lib/spoonjoy-api-spoons.test.ts > spoonjoy-api spoon operations > operation registry > lists the five new spoon operations
+AssertionError: expected [ 'health', 'auth_status', …(29) ] to deeply equal ArrayContaining{…}
+
+- Expected
++ Received
+
+@@ -1,8 +1,32 @@
+- ArrayContaining [
+-   "upload_recipe_image",
+-   "upload_spoon_photo",
++ [
++   "health",
++   "auth_status",
++   "start_agent_connection",
++   "poll_agent_connection",
++   "create_api_token",
++   "list_api_tokens",
++   "revoke_api_token",
++   "search_spoonjoy",
++   "search_recipes",
++   "search_shopping_list",
++   "get_recipe",
++   "create_recipe",
++   "update_recipe",
++   "delete_recipe",
++   "import_recipe_from_url",
++   "fork_recipe",
++   "add_recipe_to_shopping_list",
++   "list_cookbooks",
++   "get_cookbook",
++   "create_cookbook",
++   "add_recipe_to_cookbook",
++   "remove_recipe_from_cookbook",
++   "add_shopping_list_item",
++   "set_shopping_list_item_checked",
++   "remove_shopping_list_item",
++   "get_shopping_list",
+    "create_spoon",
+    "update_spoon",
+    "delete_spoon",
+    "list_spoons_for_recipe",
+    "list_spoons_by_chef",
+
+ ❯ test/lib/spoonjoy-api-spoons.test.ts:80:21
+     78|     it("lists the five new spoon operations", () => {
+     79|       const names = listSpoonjoyApiOperations().map((op) => op.name);
+     80|       expect(names).toEqual(
+       |                     ^
+     81|         expect.arrayContaining([
+     82|           "upload_recipe_image",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/15]⎯
+
+ FAIL  test/lib/spoonjoy-api-spoons.test.ts > spoonjoy-api spoon operations > image upload operations > requires kitchen:write for upload tools
+AssertionError: expected Error: Unknown Spoonjoy operation: upload… to match object { status: 403, …(1) }
+
+- Expected
++ Received
+
+- {
+-   "message": "Missing required scope: kitchen:write",
+-   "status": 403,
++ Error {
++   "message": "Unknown Spoonjoy operation: upload_recipe_image",
+  }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/15]⎯
+
+ FAIL  test/lib/spoonjoy-api-spoons.test.ts > spoonjoy-api spoon operations > image upload operations > stores recipe and spoon upload bytes through the shared validator
+Error: Unknown Spoonjoy operation: upload_recipe_image
+ ❯ callSpoonjoyApiOperation app/lib/spoonjoy-api.server.ts:2321:20
+    2319| ): Promise<unknown> {
+    2320|   const tool = tools.find((candidate) => candidate.name === name);
+    2321|   if (!tool) throw new Error(`Unknown Spoonjoy operation: ${name}`);
+       |                    ^
+    2322|   assertToolScopes(tool, context);
+    2323|   return tool.handle(args, context);
+ ❯ test/lib/spoonjoy-api-spoons.test.ts:118:34
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/15]⎯
+
+ FAIL  test/lib/spoonjoy-api-spoons.test.ts > spoonjoy-api spoon operations > image upload operations > rejects GIF upload bytes and missing buckets without explicit local fallback
+AssertionError: expected [Function] to throw error including 'Photos must be JPG, PNG, or WebP.' but got 'Unknown Spoonjoy operation: upload_sp…'
+
+Expected: "Photos must be JPG, PNG, or WebP."
+Received: "Unknown Spoonjoy operation: upload_spoon_photo"
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/15]⎯
+
+ FAIL  test/routes/api.test.ts > Spoonjoy REST API route > rejects oversized legacy tool Content-Length before operation dispatch
+AssertionError: expected 404 to be 413 // Object.is equality
+
+- Expected
++ Received
+
+- 413
++ 404
+
+ ❯ test/routes/api.test.ts:203:29
+    201|     }), "tools/upload_recipe_image"));
+    202|
+    203|     expect(response.status).toBe(413);
+       |                             ^
+    204|     await expect(readJson(response)).resolves.toEqual({
+    205|       ok: false,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/15]⎯
+
+ FAIL  test/routes/api.test.ts > Spoonjoy REST API route > rejects oversized legacy tool streaming bodies while reading before operation dispatch
+AssertionError: expected 404 to be 413 // Object.is equality
+
+- Expected
++ Received
+
+- 413
++ 404
+
+ ❯ test/routes/api.test.ts:224:29
+    222|     ), "tools/upload_recipe_image"));
+    223|
+    224|     expect(response.status).toBe(413);
+       |                             ^
+    225|     await expect(readJson(response)).resolves.toEqual({
+    226|       ok: false,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/15]⎯
+
+ FAIL  test/routes/mcp.test.ts > /mcp route > handles initialize + tools/list + a tools/call end to end when authenticated
+AssertionError: expected [ 'health', 'auth_status', …(29) ] to deeply equal ArrayContaining{…}
+
+- Expected
++ Received
+
+- ArrayContaining [
+-   "upload_recipe_image",
+-   "upload_spoon_photo",
++ [
++   "health",
++   "auth_status",
++   "start_agent_connection",
++   "poll_agent_connection",
++   "create_api_token",
++   "list_api_tokens",
++   "revoke_api_token",
++   "search_spoonjoy",
++   "search_recipes",
++   "search_shopping_list",
++   "get_recipe",
++   "create_recipe",
++   "update_recipe",
++   "delete_recipe",
++   "import_recipe_from_url",
++   "fork_recipe",
++   "add_recipe_to_shopping_list",
++   "list_cookbooks",
++   "get_cookbook",
++   "create_cookbook",
++   "add_recipe_to_cookbook",
++   "remove_recipe_from_cookbook",
++   "add_shopping_list_item",
++   "set_shopping_list_item_checked",
++   "remove_shopping_list_item",
++   "get_shopping_list",
++   "create_spoon",
++   "update_spoon",
++   "delete_spoon",
++   "list_spoons_for_recipe",
++   "list_spoons_by_chef",
+  ]
+
+ ❯ test/routes/mcp.test.ts:61:54
+     59|     const listBody = await listResponse.json() as { result: { tools: {…
+     60|     expect(listBody.result.tools.map((t) => t.name)).toContain("get_sh…
+     61|     expect(listBody.result.tools.map((t) => t.name)).toEqual(expect.ar…
+       |                                                      ^
+     62|       "upload_recipe_image",
+     63|       "upload_spoon_photo",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/15]⎯
+
+ FAIL  test/lib/mcp/http-mcp.server.test.ts > handleMcpHttpRequest > rejects oversized Content-Length before JSON-RPC dispatch
+AssertionError: expected 200 to be 413 // Object.is equality
+
+- Expected
++ Received
+
+- 413
++ 200
+
+ ❯ test/lib/mcp/http-mcp.server.test.ts:290:29
+    288|       db,
+    289|     });
+    290|     expect(response.status).toBe(413);
+       |                             ^
+    291|     await expect(response.json()).resolves.toEqual({
+    292|       error: "request_too_large",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/15]⎯
+
+ FAIL  test/lib/mcp/http-mcp.server.test.ts > handleMcpHttpRequest > rejects oversized streaming bodies while reading before JSON-RPC dispatch
+AssertionError: expected 200 to be 413 // Object.is equality
+
+- Expected
++ Received
+
+- 413
++ 200
+
+ ❯ test/lib/mcp/http-mcp.server.test.ts:313:29
+    311|       db,
+    312|     });
+    313|     expect(response.status).toBe(413);
+       |                             ^
+    314|     await expect(response.json()).resolves.toEqual({
+    315|       error: "request_too_large",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/15]⎯
+
+ FAIL  test/lib/mcp/spoonjoy-tools.server.test.ts > spoonjoy MCP tools > lists stable MCP tool metadata
+AssertionError: expected [ 'health', 'auth_status', …(29) ] to deeply equal [ 'health', 'auth_status', …(31) ]
+
+- Expected
++ Received
+
+@@ -11,12 +11,10 @@
+    "search_shopping_list",
+    "get_recipe",
+    "create_recipe",
+    "update_recipe",
+    "delete_recipe",
+-   "upload_recipe_image",
+-   "upload_spoon_photo",
+    "import_recipe_from_url",
+    "fork_recipe",
+    "add_recipe_to_shopping_list",
+    "list_cookbooks",
+    "get_cookbook",
+
+ ❯ test/lib/mcp/spoonjoy-tools.server.test.ts:68:61
+     66|
+     67|   it("lists stable MCP tool metadata", () => {
+     68|     expect(listSpoonjoyMcpTools().map((tool) => tool.name)).toEqual([
+       |                                                             ^
+     69|       "health",
+     70|       "auth_status",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/15]⎯
+
+ FAIL  test/lib/mcp/spoonjoy-tools.server.test.ts > spoonjoy MCP tools > classifies reads, writes, deletes, and the open-world import correctly
+AssertionError: expected undefined to match object { readOnlyHint: false, …(1) }
+
+- Expected:
+{
+  "destructiveHint": false,
+  "readOnlyHint": false,
+}
+
++ Received:
+undefined
+
+ ❯ test/lib/mcp/spoonjoy-tools.server.test.ts:132:47
+    130|     expect(byName.get("update_recipe")).toMatchObject({ readOnlyHint: …
+    131|     expect(byName.get("delete_recipe")).toMatchObject({ readOnlyHint: …
+    132|     expect(byName.get("upload_recipe_image")).toMatchObject({ readOnly…
+       |                                               ^
+    133|     expect(byName.get("upload_spoon_photo")).toMatchObject({ readOnlyH…
+    134|     expect(byName.get("import_recipe_from_url")).toMatchObject({ readO…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/15]⎯
+
+ FAIL  test/lib/mcp/spoonjoy-tools.server.test.ts > spoonjoy MCP tools > publishes upload schemas with required image fields and kitchen write scopes
+AssertionError: expected undefined to deeply equal [ 'kitchen:write' ]
+
+- Expected:
+[
+  "kitchen:write",
+]
+
++ Received:
+undefined
+
+ ❯ test/lib/mcp/spoonjoy-tools.server.test.ts:143:36
+    141|     for (const toolName of ["upload_recipe_image", "upload_spoon_photo…
+    142|       const tool = byName.get(toolName);
+    143|       expect(tool?.requiredScopes).toEqual(["kitchen:write"]);
+       |                                    ^
+    144|       expect(tool?.inputSchema).toMatchObject({
+    145|         type: "object",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/15]⎯
+
+ FAIL  test/lib/mcp/spoonjoy-tools.server.test.ts > spoonjoy MCP tools > uploads recipe and spoon photos to owner-scoped R2 namespaces
+Error: Unknown Spoonjoy operation: upload_recipe_image
+ ❯ callSpoonjoyApiOperation app/lib/spoonjoy-api.server.ts:2321:20
+    2319| ): Promise<unknown> {
+    2320|   const tool = tools.find((candidate) => candidate.name === name);
+    2321|   if (!tool) throw new Error(`Unknown Spoonjoy operation: ${name}`);
+       |                    ^
+    2322|   assertToolScopes(tool, context);
+    2323|   return tool.handle(args, context);
+ ❯ callSpoonjoyMcpTool app/lib/mcp/spoonjoy-tools.server.ts:24:24
+ ❯ test/lib/mcp/spoonjoy-tools.server.test.ts:159:43
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/15]⎯
+
+ FAIL  test/lib/mcp/spoonjoy-tools.server.test.ts > spoonjoy MCP tools > rejects invalid, GIF, and non-food upload payloads before storage
+AssertionError: expected [Function] to throw error matching /base64/i but got 'Unknown Spoonjoy operation: upload_re…'
+
+- Expected:
+/base64/i
+
++ Received:
+"Unknown Spoonjoy operation: upload_recipe_image"
+
+ ❯ test/lib/mcp/spoonjoy-tools.server.test.ts:192:5
+    190|
+    191|   it("rejects invalid, GIF, and non-food upload payloads before storag…
+    192|     await expect(callSpoonjoyMcpTool("upload_recipe_image", {
+       |     ^
+    193|       imageBase64: "not valid base64!",
+    194|       mimeType: "image/png",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/15]⎯
+
+ FAIL  test/lib/mcp/spoonjoy-tools.server.test.ts > spoonjoy MCP tools > rejects production-like missing image buckets unless local fallback is explicit
+AssertionError: expected Error: Unknown Spoonjoy operation: upload… to match object { status: 503, …(1) }
+
+- Expected
++ Received
+
+- {
+-   "message": "Image uploads require the PHOTOS bucket.",
+-   "status": 503,
++ Error {
++   "message": "Unknown Spoonjoy operation: upload_recipe_image",
+  }
+
+ ❯ test/lib/mcp/spoonjoy-tools.server.test.ts:212:5
+    210|
+    211|   it("rejects production-like missing image buckets unless local fallb…
+    212|     await expect(callSpoonjoyMcpTool("upload_recipe_image", {
+       |     ^
+    213|       imageBase64: b64(VALID_PNG_BYTES),
+    214|       mimeType: "image/png",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/15]⎯
+
+
+ Test Files  5 failed (5)
+      Tests  15 failed | 114 passed (129)
+   Start at  23:07:13
+   Duration  5.61s (transform 566ms, setup 382ms, import 1.68s, tests 2.20s, environment 719ms)

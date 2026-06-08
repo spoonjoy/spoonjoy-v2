@@ -27,6 +27,20 @@ function extractResponseData(response: any): { data: any; status: number } {
   return { data: response, status: 200 };
 }
 
+function validImageBytes(type: "image/jpeg" | "image/png" | "image/webp"): Uint8Array {
+  if (type === "image/jpeg") {
+    return new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0xff, 0xda]);
+  }
+  if (type === "image/png") {
+    return new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
+  }
+  return new Uint8Array([0x52, 0x49, 0x46, 0x46, 0x10, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50]);
+}
+
+function validImageFile(name: string, type: "image/jpeg" | "image/png" | "image/webp"): File {
+  return new File([validImageBytes(type)], name, { type });
+}
+
 describe("Recipes New Route", () => {
   let testUserId: string;
 
@@ -173,7 +187,7 @@ describe("Recipes New Route", () => {
       const covers = await db.recipeCover.findMany({ where: { recipeId: recipes[0].id } });
       expect(covers).toHaveLength(1);
       expect(covers[0].sourceType).toBe("ai-placeholder");
-      expect(covers[0].imageUrl.startsWith("data:image/svg+xml;base64,")).toBe(true);
+      expect(covers[0].imageUrl).toBe("");
     });
 
     it("should parse ingredients for the unsaved new recipe builder", async () => {
@@ -283,6 +297,7 @@ describe("Recipes New Route", () => {
       const covers = await db.recipeCover.findMany({ where: { recipeId: recipes[0].id } });
       expect(covers).toHaveLength(1);
       expect(covers[0].sourceType).toBe("ai-placeholder");
+      expect(covers[0].imageUrl).toBe("");
     });
 
     it("should reject duplicate active recipe titles for the same chef", async () => {
@@ -478,7 +493,51 @@ describe("Recipes New Route", () => {
 
       const { data, status } = extractResponseData(response);
       expect(status).toBe(400);
-      expect(data.errors.image).toBe("Invalid image format");
+      expect(data.errors.image).toBe("Image must be JPG, PNG, or WebP.");
+    });
+
+    it("should return validation error for GIF recipe images", async () => {
+      const formData = new UndiciFormData();
+      formData.append("title", "Valid Title");
+      formData.append(
+        "image",
+        new Blob([new TextEncoder().encode("GIF89a")], { type: "image/gif" }),
+        "animated.gif",
+      );
+
+      const request = await createMultipartRequest(formData, testUserId);
+
+      const response = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+
+      const { data, status } = extractResponseData(response);
+      expect(status).toBe(400);
+      expect(data.errors.image).toBe("Image must be JPG, PNG, or WebP.");
+    });
+
+    it("should reject GIF bytes disguised as an accepted recipe image type", async () => {
+      const formData = new UndiciFormData();
+      formData.append("title", "Valid Title");
+      formData.append(
+        "image",
+        new Blob([new TextEncoder().encode("GIF89a")], { type: "image/jpeg" }),
+        "fake.jpg",
+      );
+
+      const request = await createMultipartRequest(formData, testUserId);
+
+      const response = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+
+      const { data, status } = extractResponseData(response);
+      expect(status).toBe(400);
+      expect(data.errors.image).toBe("Image must be JPG, PNG, or WebP.");
     });
 
     it("should return validation error for oversized image", async () => {
@@ -519,10 +578,9 @@ describe("Recipes New Route", () => {
       const formData = new UndiciFormData();
       formData.append("title", "Valid Title");
       // Valid image: correct type (image/jpeg) and under 5MB (1KB)
-      const smallImageBuffer = Buffer.alloc(1024);
       formData.append(
         "image",
-        new Blob([smallImageBuffer], { type: "image/jpeg" }),
+        new Blob([validImageBytes("image/jpeg")], { type: "image/jpeg" }),
         "valid.jpg"
       );
 
@@ -567,7 +625,7 @@ describe("Recipes New Route", () => {
       };
       const formData = new UndiciFormData();
       formData.append("title", "R2 Image Recipe");
-      formData.append("image", new File(["image"], "recipe.jpg", { type: "image/jpeg" }));
+      formData.append("image", validImageFile("recipe.jpg", "image/jpeg"));
 
       const request = await createMultipartRequest(formData, testUserId);
 
@@ -596,13 +654,53 @@ describe("Recipes New Route", () => {
       );
     });
 
+    it("schedules chef-upload cover stylization while keeping the raw upload visible", async () => {
+      const captured: Promise<unknown>[] = [];
+      const waitUntil = vi.fn((p: Promise<unknown>) => {
+        captured.push(p);
+      });
+      const mockR2Bucket = {
+        put: vi.fn().mockResolvedValue(undefined),
+      };
+      const formData = new UndiciFormData();
+      formData.append("title", "Chef Upload WaitUntil Recipe");
+      formData.append("image", validImageFile("recipe.jpg", "image/jpeg"));
+
+      const request = await createMultipartRequest(formData, testUserId);
+
+      const response = await action({
+        request,
+        context: { cloudflare: { env: { PHOTOS: mockR2Bucket }, ctx: { waitUntil } } },
+        params: {},
+      } as any);
+
+      expect(response).toBeInstanceOf(Response);
+      expect(response.status).toBe(302);
+      expect(waitUntil).toHaveBeenCalledTimes(1);
+
+      const recipe = await db.recipe.findFirstOrThrow({
+        where: { chefId: testUserId, title: "Chef Upload WaitUntil Recipe" },
+      });
+      const cover = await db.recipeCover.findFirstOrThrow({
+        where: { recipeId: recipe.id },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      });
+      expect(cover.sourceType).toBe("chef-upload");
+      expect(cover.imageUrl).toMatch(
+        new RegExp(`^/photos/recipes/${testUserId}/${recipe.id}/\\d+-[a-f0-9-]+\\.jpg$`),
+      );
+      expect(cover.stylizedImageUrl).toBeNull();
+
+      await Promise.all(captured);
+    });
+
     it("should return image error when recipe image upload fails", async () => {
       const mockR2Bucket = {
         put: vi.fn().mockRejectedValue(new Error("R2 unavailable")),
       };
       const formData = new UndiciFormData();
       formData.append("title", "Upload Failure Recipe");
-      formData.append("image", new File(["image"], "recipe.jpg", { type: "image/jpeg" }));
+      formData.append("image", validImageFile("recipe.jpg", "image/jpeg"));
 
       const request = await createMultipartRequest(formData, testUserId);
 
@@ -653,7 +751,7 @@ describe("Recipes New Route", () => {
       try {
         const formData = new UndiciFormData();
         formData.append("title", "Creation Failure Recipe");
-        formData.append("image", new File(["image"], "recipe.webp", { type: "image/webp" }));
+        formData.append("image", validImageFile("recipe.webp", "image/webp"));
 
         const request = await createMultipartRequest(formData, testUserId);
 
@@ -1062,6 +1160,8 @@ describe("Recipes New Route", () => {
 
       // Recipe Image is now a file upload via RecipeImageUpload
       expect(screen.getByRole("button", { name: /upload.*image/i })).toBeInTheDocument();
+      const submissionImageInput = document.querySelector('form input[name="image"]');
+      expect(submissionImageInput).toHaveAttribute("accept", "image/jpeg,image/png,image/webp");
     });
 
     it("should have correct placeholders", async () => {

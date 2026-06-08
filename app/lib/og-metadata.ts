@@ -13,7 +13,7 @@ export interface CookbookOgInput {
   title: string;
   authorUsername: string;
   recipeCount: number;
-  coverImageUrls: string[];
+  coverImageUrls: Array<string | null>;
 }
 
 export interface PageOgInput {

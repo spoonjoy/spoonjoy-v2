@@ -1,0 +1,258 @@
+test/routes/recipes-id-scaling.test.tsx:27:          coverImageUrl: "https://example.com/image.jpg",
+test/routes/recipes-id-scaling.test.tsx:79:          coverImageUrl: null,
+test/routes/recipes-id-scaling.test.tsx:123:          coverImageUrl: null,
+test/routes/recipes-id-scaling.test.tsx:199:          coverImageUrl: null,
+test/routes/recipes-id-scaling.test.tsx:276:        coverImageUrl: "https://example.com/delicious.jpg",
+test/routes/recipes-id-scaling.test.tsx:304:          coverImageUrl: null,
+test/routes/recipes-id-scaling.test.tsx:335:          coverImageUrl: null,
+test/routes/recipes-id-scaling.test.tsx:403:          coverImageUrl: null,
+test/routes/recipes-id-scaling.test.tsx:460:          coverImageUrl: null,
+test/routes/recipes-id-scaling.test.tsx:491:          coverImageUrl: null,
+test/routes/recipes-id-scaling.test.tsx:522:          coverImageUrl: null,
+app/routes/recipes.$id.edit.tsx:78:  const coverImageUrl = getRecipeCoverImageUrl(recipe, recipe.covers);
+app/routes/recipes.$id.edit.tsx:94:  return { recipe, coverImageUrl, formattedSteps };
+app/routes/recipes.$id.edit.tsx:339:  const { recipe, coverImageUrl, formattedSteps } = useLoaderData<typeof loader>();
+app/routes/recipes.$id.edit.tsx:429:            coverImageUrl,
+app/routes/og.cookbooks.$id.png.tsx:36:  const coverImageUrls = cookbook.recipes.map((item) =>
+app/routes/og.cookbooks.$id.png.tsx:54:      coverImageUrls,
+app/routes/_index.tsx:172:    coverImageUrl: getRecipeCoverImageUrl(rest, covers),
+app/routes/_index.tsx:181:        coverImageUrl: getRecipeCoverImageUrl({ id: item.recipeId, title: item.recipe.title }, item.recipe.covers),
+app/routes/_index.tsx:249:  const featuredRecipe = displayRecipes.find((recipe) => recipe.coverImageUrl) ?? displayRecipes[0] ?? null;
+app/routes/_index.tsx:324:  coverImageUrl: string | null;
+app/routes/_index.tsx:333:      coverImageUrl: string | null;
+app/routes/_index.tsx:377:  const displayImageUrl = recipe.coverImageUrl && recipe.coverImageUrl.length > 0 ? recipe.coverImageUrl : undefined;
+app/routes/_index.tsx:474:  const displayImageUrl = recipe.coverImageUrl && recipe.coverImageUrl.length > 0 ? recipe.coverImageUrl : undefined;
+app/routes/_index.tsx:564:    coverImageUrl: item.recipe.coverImageUrl,
+test/routes/users-identifier-spoons.test.tsx:72:  it("loader returns recentSpoons with recipe + coverImageUrl preloaded for the profile owner", async () => {
+test/routes/users-identifier-spoons.test.tsx:94:    expect(typeof data.recentSpoons[0].coverImageUrl).toBe("string");
+test/routes/users-identifier-spoons.test.tsx:144:          coverImageUrl: "/photos/cover.png",
+test/components/cookbook/CookbookCoverArt.test.tsx:6:  { coverImageUrl: "/a.jpg", title: "A" },
+test/components/cookbook/CookbookCoverArt.test.tsx:7:  { coverImageUrl: "/b.jpg", title: "B" },
+test/components/cookbook/CookbookCoverArt.test.tsx:8:  { coverImageUrl: "/c.jpg", title: "C" },
+test/components/cookbook/CookbookCoverArt.test.tsx:9:  { coverImageUrl: "/d.jpg", title: "D" },
+test/components/cookbook/CookbookCoverArt.test.tsx:10:  { coverImageUrl: "/e.jpg", title: "E" },
+test/components/cookbook/CookbookCoverArt.test.tsx:17:        { coverImageUrl: null, title: "Missing" },
+test/components/cookbook/CookbookCoverArt.test.tsx:18:        { coverImageUrl: "", title: "Empty" },
+app/routes/og.recipes.$id.png.tsx:33:      coverImageUrl: absoluteUrlFromRequest(
+test/routes/recipes-form-integration.test.tsx:313:            coverImageUrl: "https://example.com/test.jpg",
+test/routes/recipes-form-integration.test.tsx:344:            coverImageUrl: "https://example.com/test.jpg",
+test/routes/recipes-form-integration.test.tsx:380:            coverImageUrl: "https://example.com/existing.jpg",
+test/routes/recipes-form-integration.test.tsx:411:            coverImageUrl: "",
+test/routes/recipes-form-integration.test.tsx:446:            coverImageUrl: "https://example.com/existing.jpg",
+test/routes/recipes-form-integration.test.tsx:496:            coverImageUrl: "https://example.com/existing.jpg",
+test/routes/recipes-form-integration.test.tsx:555:            coverImageUrl: "",
+test/routes/recipes-form-integration.test.tsx:599:            coverImageUrl: "",
+test/routes/recipes-form-integration.test.tsx:647:            coverImageUrl: "",
+test/routes/recipes-form-integration.test.tsx:696:            coverImageUrl: "",
+test/routes/recipes-form-integration.test.tsx:729:            coverImageUrl: "",
+test/routes/recipes-form-integration.test.tsx:788:          coverImageUrl: "",
+app/routes/users.$identifier.tsx:31:  coverImageUrl: string;
+app/routes/users.$identifier.tsx:135:    coverImageUrl: getRecipeCoverImageUrl(rest, covers),
+app/routes/users.$identifier.tsx:144:        coverImageUrl: getRecipeCoverImageUrl(
+app/routes/users.$identifier.tsx:168:    coverImageUrl: getRecipeCoverImageUrl(
+app/routes/users.$identifier.tsx:255:                coverImageUrl: recipe.coverImageUrl,
+app/routes/users.$identifier.tsx:286:                      coverImageUrl: item.recipe.coverImageUrl,
+test/routes/users-identifier.test.tsx:232:                coverImageUrl: "https://example.com/miso.jpg",
+test/routes/users-identifier.test.tsx:239:                coverImageUrl: "",
+test/routes/users-identifier.test.tsx:251:                      coverImageUrl: "https://example.com/miso.jpg",
+test/routes/users-identifier.test.tsx:324:                coverImageUrl: "",
+test/routes/recipes-index.test.tsx:137:              coverImageUrl: null,
+test/routes/recipes-index.test.tsx:169:              coverImageUrl: "https://example.com/tomato.jpg",
+test/components/recipe/RecipeHeader.test.tsx:99:      renderWithRouter(<RecipeHeader {...defaultProps} coverImageUrl="https://example.com/recipe.jpg" />)
+test/components/recipe/RecipeHeader.test.tsx:113:      renderWithRouter(<RecipeHeader {...defaultProps} coverImageUrl="https://example.com/recipe.jpg" />)
+test/components/recipe/RecipeHeader.test.tsx:126:    it('renders placeholder when coverImageUrl is empty', () => {
+test/components/recipe/RecipeHeader.test.tsx:127:      renderWithRouter(<RecipeHeader {...defaultProps} coverImageUrl="" />)
+test/components/pantry/RecipeGrid.test.tsx:11:    coverImageUrl: 'https://images.example.com/lemon-pasta.jpg',
+test/components/pantry/CookbookCard.test.tsx:7:  { coverImageUrl: '/img/a.jpg', title: 'Recipe A' },
+test/components/pantry/CookbookCard.test.tsx:8:  { coverImageUrl: '/img/b.jpg', title: 'Recipe B' },
+test/components/pantry/CookbookCard.test.tsx:9:  { coverImageUrl: '/img/c.jpg', title: 'Recipe C' },
+test/components/pantry/CookbookCard.test.tsx:10:  { coverImageUrl: '/img/d.jpg', title: 'Recipe D' },
+test/components/pantry/CookbookCard.test.tsx:63:    const fiveImages = [...fourImages, { coverImageUrl: '/img/e.jpg', title: 'Recipe E' }]
+app/routes/recipes._index.tsx:22:  coverImageUrl: string | null;
+app/routes/recipes._index.tsx:75:      coverImageUrl: getRecipeCoverImageUrl(recipe, covers),
+app/routes/recipes._index.tsx:173:  const displayImageUrl = recipe.coverImageUrl && recipe.coverImageUrl.length > 0
+app/routes/recipes._index.tsx:174:    ? recipe.coverImageUrl
+app/routes/cookbooks.$id.tsx:161:        coverImageUrl: getRecipeCoverImageUrl(
+app/routes/cookbooks.$id.tsx:171:    coverImageUrls: cookbookWithCovers.recipes.map((item) => item.recipe.coverImageUrl),
+app/routes/cookbooks.$id.tsx:295:    coverImageUrl: item.recipe.coverImageUrl,
+app/routes/cookbooks.$id.tsx:394:                        {item.recipe.coverImageUrl ? (
+app/routes/cookbooks.$id.tsx:395:                          <img src={item.recipe.coverImageUrl} alt="" className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.025]" />
+test/components/recipe/RecipeBuilder.test.tsx:54:    coverImageUrl: string;
+test/components/recipe/RecipeBuilder.test.tsx:63:    coverImageUrl: "",
+test/routes/recipes-id-edit.test.tsx:1364:        coverImageUrl: "https://example.com/recipe.jpg",
+test/routes/recipes-id-edit.test.tsx:1398:          coverImageUrl: "",
+test/routes/recipes-id-edit.test.tsx:1443:          coverImageUrl: "",
+test/routes/recipes-id-edit.test.tsx:1492:          coverImageUrl: "",
+test/routes/recipes-id-edit.test.tsx:1537:          coverImageUrl: "",
+test/routes/recipes-id-edit.test.tsx:1587:          coverImageUrl: "",
+test/routes/recipes-id-edit.test.tsx:1633:          coverImageUrl: "",
+test/routes/recipes-id-edit.test.tsx:1664:          coverImageUrl: "",
+test/routes/recipes-id-edit.test.tsx:1689:          coverImageUrl: "",
+test/routes/recipes-id-edit.test.tsx:1737:          coverImageUrl: "",
+test/routes/recipes-id-edit.test.tsx:1797:          coverImageUrl: "",
+test/routes/recipes-id-edit.test.tsx:1848:          coverImageUrl: "",
+test/routes/recipes-id-edit.test.tsx:1906:              coverImageUrl: "",
+test/routes/recipes-id-edit.test.tsx:1964:          coverImageUrl: "",
+test/routes/recipes-id-edit.test.tsx:2035:              coverImageUrl: "",
+test/routes/recipes-id-edit.test.tsx:2083:              coverImageUrl: "",
+test/routes/recipes-id-edit.test.tsx:2119:            coverImageUrl: "https://example.com/existing.jpg",
+test/routes/recipes-id-edit.test.tsx:2159:          coverImageUrl: "",
+test/routes/recipes-id-edit.test.tsx:2195:          coverImageUrl: "",
+test/lib/spoonjoy-api-spoons.test.ts:694:    it("returns spoons with chef relation and derived coverImageUrl per row", async () => {
+test/lib/spoonjoy-api-spoons.test.ts:706:      )) as { spoons: Array<{ chef: { username: string }; coverImageUrl: string }> };
+test/lib/spoonjoy-api-spoons.test.ts:709:      expect(typeof result.spoons[0].coverImageUrl).toBe("string");
+test/lib/spoonjoy-api-spoons.test.ts:805:    it("returns coverImageUrl=null when the recipe row is missing", async () => {
+test/lib/spoonjoy-api-spoons.test.ts:818:    it("returns spoons by chef id with recipe + coverImageUrl preloaded", async () => {
+test/lib/spoonjoy-api-spoons.test.ts:834:      )) as { spoons: Array<{ recipe: { id: string; title: string }; coverImageUrl: string }> };
+test/lib/spoonjoy-api-spoons.test.ts:838:      expect(typeof result.spoons[0].coverImageUrl).toBe("string");
+test/routes/cookbooks-id.test.tsx:901:      expect(result.coverImageUrls).toEqual(["/photos/covered.jpg"]);
+test/routes/cookbooks-id.test.tsx:1056:                coverImageUrl: "https://example.com/spaghetti.jpg",
+test/routes/cookbooks-id.test.tsx:1067:                coverImageUrl: null,
+test/routes/cookbooks-id.test.tsx:1119:                coverImageUrl: null,
+test/routes/cookbooks-id.test.tsx:1190:                coverImageUrl: null,
+test/routes/cookbooks-id.test.tsx:1420:                coverImageUrl: null,
+test/routes/cookbooks-id.test.tsx:1473:                coverImageUrl: null,
+app/routes/recipes.$id.tsx:252:  const { recipe, coverImageUrl, isOwner, hasIngredientsInShoppingList = false } = loaderData;
+app/routes/recipes.$id.tsx:841:        coverImageUrl={coverImageUrl}
+test/components/recipe/SpoonsStrip.test.tsx:23:    coverImageUrl: null,
+test/components/recipe/SpoonsStrip.test.tsx:104:            coverImageUrl: "/photos/cover.png",
+test/components/recipe/SpoonsStrip.test.tsx:124:            coverImageUrl: null,
+test/components/recipe/SpoonsStrip.test.tsx:144:            coverImageUrl: "/photos/cover.png",
+test/components/recipe/SpoonsStrip.test.tsx:232:  it("renders the recipe link with no cover image when coverImageUrl is null", () => {
+test/components/recipe/SpoonsStrip.test.tsx:239:            coverImageUrl: null,
+test/components/recipe/SpoonsStrip.test.tsx:255:            coverImageUrl: "/photos/cover.png",
+test/components/recipe/RecipeImageUpload.test.tsx:91:          coverImageUrl="https://example.com/recipe.jpg"
+test/components/recipe/RecipeImageUpload.test.tsx:103:          coverImageUrl="https://example.com/recipe.jpg"
+test/components/recipe/RecipeImageUpload.test.tsx:115:          coverImageUrl="https://example.com/recipe.jpg"
+test/components/recipe/RecipeImageUpload.test.tsx:126:          coverImageUrl="https://example.com/recipe.jpg"
+test/components/recipe/RecipeImageUpload.test.tsx:241:          coverImageUrl="https://example.com/recipe.jpg"
+test/components/recipe/RecipeImageUpload.test.tsx:331:          coverImageUrl="https://example.com/recipe.jpg"
+test/components/recipe/RecipeImageUpload.test.tsx:345:          coverImageUrl="https://example.com/recipe.jpg"
+test/components/recipe/RecipeImageUpload.test.tsx:574:          coverImageUrl="https://example.com/recipe.jpg"
+test/components/recipe/RecipeImageUpload.test.tsx:587:          coverImageUrl="https://example.com/recipe.jpg"
+test/components/recipe/RecipeImageUpload.test.tsx:609:          coverImageUrl="https://example.com/recipe.jpg"
+test/components/recipe/RecipeImageUpload.test.tsx:641:          coverImageUrl="https://example.com/recipe.jpg"
+test/components/recipe/RecipeImageUpload.test.tsx:653:          coverImageUrl="https://example.com/recipe.jpg"
+test/routes/html5-validation-attributes.test.tsx:92:      coverImageUrl: "https://example.com/image.jpg",
+test/routes/recipes-id-spoons.test.tsx:87:  it("loader returns spoons (recent 10), isOriginCookCandidate, and coverImageUrl", async () => {
+test/routes/recipes-id-spoons.test.tsx:104:    expect(typeof data.coverImageUrl).toBe("string");
+test/routes/recipes-id-spoons.test.tsx:139:      coverImageUrl: "/p.png",
+test/routes/recipes-id-spoons.test.tsx:184:      coverImageUrl: "/p.png",
+test/routes/recipes-id-spoons.test.tsx:221:      coverImageUrl: "/p.png",
+test/routes/recipes-id-spoons.test.tsx:266:      coverImageUrl: "/p.png",
+test/routes/recipes-id-spoons.test.tsx:307:      coverImageUrl: "/p.png",
+test/routes/recipes-id.test.tsx:1096:          coverImageUrl: null,
+test/routes/recipes-id.test.tsx:1164:          coverImageUrl: null,
+test/routes/recipes-id.test.tsx:1209:          coverImageUrl: null,
+test/routes/recipes-id.test.tsx:1267:          coverImageUrl: null,
+test/routes/recipes-id.test.tsx:1309:          coverImageUrl: null,
+test/routes/recipes-id.test.tsx:1348:          coverImageUrl: null,
+test/routes/recipes-id.test.tsx:1425:            coverImageUrl: null,
+test/routes/recipes-id.test.tsx:1468:          coverImageUrl: null,
+test/routes/recipes-id.test.tsx:1567:          coverImageUrl: null,
+test/routes/recipes-id.test.tsx:1652:          coverImageUrl: null,
+test/routes/recipes-id.test.tsx:1705:          coverImageUrl: null,
+test/routes/recipes-id.test.tsx:1748:          coverImageUrl: null,
+test/routes/recipes-id.test.tsx:1807:          coverImageUrl: null,
+test/routes/recipes-id.test.tsx:1854:          coverImageUrl: null,
+test/routes/recipes-id.test.tsx:1896:          coverImageUrl: "https://example.com/recipe.jpg",
+test/routes/recipes-id.test.tsx:1965:          coverImageUrl: null,
+test/routes/recipes-id.test.tsx:1999:          coverImageUrl: "https://example.com/spaghetti.jpg",
+test/routes/recipes-id.test.tsx:2066:          coverImageUrl: null,
+test/routes/recipes-id.test.tsx:2098:          coverImageUrl: null,
+test/routes/recipes-id.test.tsx:2127:          coverImageUrl: null,
+test/routes/recipes-id.test.tsx:2157:          coverImageUrl: null,
+test/routes/recipes-id.test.tsx:2196:          coverImageUrl: null,
+test/routes/recipes-id.test.tsx:2267:          coverImageUrl: null,
+test/routes/recipes-id.test.tsx:2320:          coverImageUrl: null,
+test/routes/recipes-id.test.tsx:2358:          coverImageUrl: null,
+test/routes/recipes-id.test.tsx:2398:          coverImageUrl: null,
+test/routes/recipes-id.test.tsx:2448:          coverImageUrl: null,
+test/routes/recipes-id.test.tsx:2537:          coverImageUrl: null,
+test/routes/recipes-id.test.tsx:2573:          coverImageUrl: null,
+test/routes/recipes-id.test.tsx:2613:          coverImageUrl: null,
+test/routes/recipes-id.test.tsx:2653:          coverImageUrl: null,
+test/routes/recipes-id.test.tsx:2683:          coverImageUrl: null,
+test/routes/recipes-id.test.tsx:2716:          coverImageUrl: null,
+test/routes/recipes-id.test.tsx:2750:          coverImageUrl: null,
+test/routes/recipes-id.test.tsx:2824:          coverImageUrl: null,
+test/routes/recipes-id.test.tsx:2893:          coverImageUrl: null,
+test/routes/recipes-id.test.tsx:2960:          coverImageUrl: null,
+test/routes/recipes-id.test.tsx:3030:          coverImageUrl: null,
+test/routes/focused-step-editor-flow-e2e.test.tsx:22:            coverImageUrl: "",
+test/routes/focused-step-editor-flow-e2e.test.tsx:75:            coverImageUrl: "",
+test/lib/og-image.server.test.tsx:95:        coverImageUrl: "https://cdn.example.com/tomato.jpg",
+test/lib/og-image.server.test.tsx:122:        coverImageUrl: null,
+test/lib/og-image.server.test.tsx:135:      coverImageUrls: ["https://cdn.example.com/a.jpg", "https://cdn.example.com/b.jpg"],
+test/lib/og-image.server.test.tsx:152:          coverImageUrls: [
+test/lib/og-image.server.test.tsx:170:          coverImageUrls: [],
+app/lib/spoonjoy-api.server.ts:2021:    const coverImageUrl = recipe
+app/lib/spoonjoy-api.server.ts:2027:        coverImageUrl,
+app/lib/spoonjoy-api.server.ts:2065:        coverImageUrl: getRecipeCoverImageUrl(
+test/routes/api-v1-cookbooks.test.ts:124:          coverImageUrls: [],
+test/routes/api-v1-cookbooks.test.ts:254:          coverImageUrls: [],
+test/routes/api-v1-cookbooks.test.ts:269:            coverImageUrl: null,
+test/routes/index.test.tsx:315:                coverImageUrl: "https://example.com/fondue.jpg",
+test/routes/index.test.tsx:322:                coverImageUrl: "https://example.com/rosti.jpg",
+test/routes/index.test.tsx:329:                coverImageUrl: null,
+test/routes/index.test.tsx:436:                coverImageUrl: "https://example.com/dish.jpg",
+test/routes/index.test.tsx:490:            recipes: [{ id: "recipe-1", title: "Visible Recipe", description: null, servings: null, coverImageUrl: null }],
+test/routes/index.test.tsx:499:                      coverImageUrl: "https://example.com/cookbook-recipe.jpg",
+test/routes/index.test.tsx:512:                      coverImageUrl: null,
+test/routes/api-v1-recipes.test.ts:108:          coverImageUrl: null,
+test/routes/api-v1-recipes.test.ts:216:    expect(stylizedPayload.data.recipe.coverImageUrl).toBe("https://spoonjoy.app/photos/covers/stylized.png");
+test/routes/api-v1-recipes.test.ts:226:    expect(imagePayload.data.recipe.coverImageUrl).toBe("https://spoonjoy.app/photos/covers/original-only.png");
+test/routes/api-v1-recipes.test.ts:236:    expect(dataPayload.data.recipe.coverImageUrl).toBeNull();
+test/routes/api-v1-recipes.test.ts:250:    expect(emptyCoverPayload.data.recipe.coverImageUrl).toBeNull();
+test/routes/api-v1-recipes.test.ts:264:    expect(invalidAssetPayload.data.recipe.coverImageUrl).toBeNull();
+test/routes/api-v1-recipes.test.ts:341:          coverImageUrl: null,
+app/lib/og-image.server.tsx:127:      {MediaPanel({ imageUrl: input.coverImageUrl, title: input.title, fallbackLabel: "Recipe" })}
+app/lib/og-image.server.tsx:200:  const images = input.coverImageUrls.filter((url) => url.length > 0).slice(0, 4);
+app/lib/recipe-detail.server.ts:130:  const coverImageUrl = getRecipeCoverImageUrl(recipe, recipe.covers);
+app/lib/recipe-detail.server.ts:209:    coverImageUrl,
+app/lib/api-v1.server.ts:579:function coverImageUrl(covers: readonly CoverRow[]): string | null {
+app/lib/api-v1.server.ts:680:  coverImageUrl: string | null;
+app/lib/api-v1.server.ts:691:    coverImageUrl: publicAssetUrl(origin, recipe.coverImageUrl),
+app/lib/api-v1.server.ts:702:    ...recipeSummary({ ...recipe, coverImageUrl: coverImageUrl(recipe.covers) }, origin),
+app/lib/api-v1.server.ts:837:    recipes: page.map(({ covers, ...recipe }) => recipeSummary({ ...recipe, coverImageUrl: coverImageUrl(covers) }, origin)),
+app/lib/api-v1.server.ts:864:    coverImageUrls: activeEntries
+app/lib/api-v1.server.ts:865:      .map((entry) => publicAssetUrl(origin, coverImageUrl(entry.recipe.covers)))
+app/lib/api-v1.server.ts:884:      return recipeSummary({ ...recipe, coverImageUrl: coverImageUrl(covers) }, origin);
+app/lib/generated/api-v1-playground.ts:1108:          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"query\": \"pasta\",\n    \"limit\": 20,\n    \"cursor\": null,\n    \"nextCursor\": \"v1.eyJjcmVhdGVkQXQiOiIyMDI2LTA2LTAxVDAwOjAwOjAwLjAwMFoiLCJpZCI6InJlY2lwZV8xIn0\",\n    \"hasMore\": false,\n    \"recipes\": [\n      {\n        \"id\": \"recipe_1\",\n        \"title\": \"Pasta\",\n        \"description\": \"Weeknight pasta\",\n        \"servings\": \"4\",\n        \"chef\": {\n          \"id\": \"chef_1\",\n          \"username\": \"ari\"\n        },\n        \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n        \"href\": \"/recipes/recipe_1\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"attribution\": {\n          \"creditText\": \"Pasta by ari on Spoonjoy\",\n          \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n          \"sourceUrl\": \"https://example.com/original-pasta\",\n          \"sourceHost\": \"example.com\",\n          \"sourceRecipe\": null\n        },\n        \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n        \"updatedAt\": \"2026-06-01T00:00:00.000Z\"\n      }\n    ]\n  }\n}"
+app/lib/generated/api-v1-playground.ts:1283:          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    }\n  }\n}"
+app/lib/generated/api-v1-playground.ts:1500:          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"query\": \"weeknight\",\n    \"limit\": 20,\n    \"cursor\": null,\n    \"nextCursor\": \"v1.eyJjcmVhdGVkQXQiOiIyMDI2LTA2LTAxVDAwOjAwOjAwLjAwMFoiLCJpZCI6ImNvb2tib29rXzEifQ\",\n    \"hasMore\": false,\n    \"cookbooks\": [\n      {\n        \"id\": \"cookbook_1\",\n        \"title\": \"Weeknights\",\n        \"chef\": {\n          \"id\": \"chef_1\",\n          \"username\": \"ari\"\n        },\n        \"recipeCount\": 1,\n        \"coverImageUrls\": [\n          \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\"\n        ],\n        \"href\": \"/cookbooks/cookbook_1\",\n        \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\",\n        \"attribution\": {\n          \"creditText\": \"Weeknights by ari on Spoonjoy\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        },\n        \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n        \"updatedAt\": \"2026-06-01T00:00:00.000Z\"\n      }\n    ]\n  }\n}"
+app/lib/generated/api-v1-playground.ts:1675:          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"cookbook\": {\n      \"id\": \"cookbook_1\",\n      \"title\": \"Weeknights\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"recipeCount\": 1,\n      \"coverImageUrls\": [\n        \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\"\n      ],\n      \"href\": \"/cookbooks/cookbook_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\",\n      \"attribution\": {\n        \"creditText\": \"Weeknights by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"recipes\": [\n        {\n          \"id\": \"recipe_1\",\n          \"title\": \"Pasta\",\n          \"description\": \"Weeknight pasta\",\n          \"servings\": \"4\",\n          \"chef\": {\n            \"id\": \"chef_1\",\n            \"username\": \"ari\"\n          },\n          \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n          \"href\": \"/recipes/recipe_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n          \"attribution\": {\n            \"creditText\": \"Pasta by ari on Spoonjoy\",\n            \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n            \"sourceUrl\": \"https://example.com/original-pasta\",\n            \"sourceHost\": \"example.com\",\n            \"sourceRecipe\": null\n          },\n          \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n          \"updatedAt\": \"2026-06-01T00:00:00.000Z\"\n        }\n      ]\n    }\n  }\n}"
+app/lib/og-metadata.ts:9:  coverImageUrl: string | null;
+app/lib/og-metadata.ts:16:  coverImageUrls: string[];
+app/lib/api-v1-openapi.server.ts:349:  RecipeSummary: objectSchema(["id", "title", "description", "servings", "chef", "coverImageUrl", "href", "canonicalUrl", "attribution", "createdAt", "updatedAt"], {
+app/lib/api-v1-openapi.server.ts:355:    coverImageUrl: { ...nullableStringSchema, description: "Public cover image URL for transient display. API v1 does not provide image alt text or a license to copy/store photos outside Spoonjoy." },
+app/lib/api-v1-openapi.server.ts:362:  RecipeDetail: objectSchema(["id", "title", "description", "servings", "chef", "coverImageUrl", "href", "canonicalUrl", "attribution", "createdAt", "updatedAt", "steps", "cookbooks"], {
+app/lib/api-v1-openapi.server.ts:368:    coverImageUrl: { ...nullableStringSchema, description: "Public cover image URL for transient display. API v1 does not provide image alt text or a license to copy/store photos outside Spoonjoy." },
+app/lib/api-v1-openapi.server.ts:377:  CookbookSummary: objectSchema(["id", "title", "chef", "recipeCount", "coverImageUrls", "href", "canonicalUrl", "attribution", "createdAt", "updatedAt"], {
+app/lib/api-v1-openapi.server.ts:382:    coverImageUrls: { ...arrayOf({ type: "string" }), description: "Public recipe cover image URLs for transient display. API v1 does not provide image alt text or a license to copy/store photos outside Spoonjoy." },
+app/lib/api-v1-openapi.server.ts:389:  CookbookDetail: objectSchema(["id", "title", "chef", "recipeCount", "coverImageUrls", "href", "canonicalUrl", "attribution", "createdAt", "updatedAt", "recipes"], {
+app/lib/api-v1-openapi.server.ts:394:    coverImageUrls: { ...arrayOf({ type: "string" }), description: "Public recipe cover image URLs for transient display. API v1 does not provide image alt text or a license to copy/store photos outside Spoonjoy." },
+app/lib/api-v1-openapi.server.ts:649:  coverImageUrl: "https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg",
+app/lib/api-v1-openapi.server.ts:672:  coverImageUrls: ["https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg"],
+app/lib/api-v1-openapi.server.ts:1541:      photos: "Use coverImageUrl or coverImageUrls only for transient display in contexts where removals can be honored; API v1 does not provide alt text or a photo-copying license.",
+app/components/recipe/RecipeImageUpload.tsx:13:  coverImageUrl?: string
+app/components/recipe/RecipeImageUpload.tsx:24:  coverImageUrl,
+app/components/recipe/RecipeImageUpload.tsx:143:  const displayUrl = previewUrl || coverImageUrl
+app/components/recipe/SpoonsStrip.tsx:20:  coverImageUrl?: string | null;
+app/components/recipe/SpoonsStrip.tsx:70:  const imageUrl = spoon.photoUrl ?? spoon.coverImageUrl;
+app/components/cookbook/CookbookCoverArt.tsx:4:  coverImageUrl: string | null;
+app/components/cookbook/CookbookCoverArt.tsx:10:    .filter((image): image is { coverImageUrl: string; title: string } =>
+app/components/cookbook/CookbookCoverArt.tsx:11:      Boolean(image.coverImageUrl && image.coverImageUrl.length > 0),
+app/components/cookbook/CookbookCoverArt.tsx:62:  images: Array<{ coverImageUrl: string; title: string }>;
+app/components/cookbook/CookbookCoverArt.tsx:75:          key={`${image.coverImageUrl}-${image.title}`}
+app/components/cookbook/CookbookCoverArt.tsx:76:          src={image.coverImageUrl}
+app/components/recipe/RecipeBuilder.tsx:39:  coverImageUrl: string
+app/components/recipe/RecipeBuilder.tsx:119:      coverImageUrl: recipe?.coverImageUrl ?? '',
+app/components/recipe/RecipeBuilder.tsx:165:    return recipe?.coverImageUrl || ''
+app/components/recipe/RecipeBuilder.tsx:252:              coverImageUrl={displayImageUrl}
+app/components/recipe/RecipeHeader.tsx:23:  coverImageUrl?: string
+app/components/recipe/RecipeHeader.tsx:54:  coverImageUrl,
+app/components/recipe/RecipeHeader.tsx:64:  const displayImageUrl = coverImageUrl && coverImageUrl.length > 0 ? coverImageUrl : undefined
+app/components/pantry/RecipeGrid.tsx:13:  coverImageUrl?: string
+app/components/pantry/RecipeGrid.tsx:63:          const displayImageUrl = recipe.coverImageUrl && recipe.coverImageUrl.length > 0 ? recipe.coverImageUrl : undefined
+app/components/pantry/CookbookCard.tsx:7:  coverImageUrl: string

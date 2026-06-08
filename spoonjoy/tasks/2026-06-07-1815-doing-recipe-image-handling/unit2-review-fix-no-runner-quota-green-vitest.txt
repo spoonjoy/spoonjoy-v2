@@ -1,0 +1,10 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ✓ test/lib/spoon-cover-stylization.server.test.ts (7 tests) 1548ms
+     ✓ constructs a real OpenAI runner when no explicit runner is passed and the API key is set  1449ms
+
+ Test Files  1 passed (1)
+      Tests  7 passed (7)
+   Start at  22:27:05
+   Duration  2.16s (transform 61ms, setup 107ms, import 166ms, tests 1.55s, environment 214ms)

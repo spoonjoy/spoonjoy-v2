@@ -1,0 +1,7 @@
+
+ ⛅️ wrangler 4.90.0 (update available 4.98.0)
+─────────────────────────────────────────────
+Resource location: remote
+
+Downloading "tmp/codex-r2-write-probe-20260608T063245Z.txt" from "spoonjoy-photos".
+Download complete.

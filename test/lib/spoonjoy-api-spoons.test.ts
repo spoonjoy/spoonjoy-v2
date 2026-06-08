@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { faker } from "@faker-js/faker";
 import { getLocalDb } from "~/lib/db.server";
 import {
+  __internal__,
   callSpoonjoyApiOperation,
   listSpoonjoyApiOperations,
   type SpoonjoyApiContext,
@@ -10,6 +11,43 @@ import type { ApiPrincipal } from "~/lib/api-auth.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 
 type Database = Awaited<ReturnType<typeof getLocalDb>>;
+
+const GENERATED_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
+const VALID_PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+
+function mockR2(): R2Bucket {
+  const stored = new Map<string, { value: unknown; httpMetadata?: { contentType?: string } }>();
+  return {
+    put: vi.fn(async (key: string, _value: unknown, options?: { httpMetadata?: { contentType?: string } }) => {
+      stored.set(key, { value: _value, httpMetadata: options?.httpMetadata });
+      return {};
+    }),
+    delete: vi.fn(async (key: string) => {
+      stored.delete(key);
+    }),
+    get: vi.fn(async (key: string) => {
+      const entry = stored.get(key);
+      if (!entry) return null;
+      return {
+        httpMetadata: entry.httpMetadata,
+        arrayBuffer: async () => {
+          if (entry.value instanceof File) return entry.value.arrayBuffer();
+          if (entry.value instanceof Uint8Array) {
+            const bytes = entry.value;
+            return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+          }
+          return new ArrayBuffer(0);
+        },
+      };
+    }),
+    head: vi.fn(async (key: string) => stored.has(key)
+      ? ({ key, httpMetadata: stored.get(key)?.httpMetadata })
+      : null),
+    list: vi.fn(),
+    createMultipartUpload: vi.fn(),
+    resumeMultipartUpload: vi.fn(),
+  } as unknown as R2Bucket;
+}
 
 function uniqueEmail(prefix = "chef") {
   return `${prefix}-${faker.string.alphanumeric(8).toLowerCase()}@example.com`;
@@ -60,6 +98,8 @@ describe("spoonjoy-api spoon operations", () => {
       const names = listSpoonjoyApiOperations().map((op) => op.name);
       expect(names).toEqual(
         expect.arrayContaining([
+          "upload_recipe_image",
+          "upload_spoon_photo",
           "create_spoon",
           "update_spoon",
           "delete_spoon",
@@ -68,9 +108,141 @@ describe("spoonjoy-api spoon operations", () => {
         ]),
       );
     });
+
+    it("enforces defensive schema edges for unknown nested arguments", () => {
+      expect(() => __internal__.assertNoUnknownArguments(
+        { type: "object", additionalProperties: false },
+        { unexpected: true },
+        "test_tool",
+      )).toThrow("test_tool.unexpected is not allowed");
+
+      expect(() => __internal__.assertNoUnknownArguments(
+        {
+          type: "object",
+          properties: { allowed: { type: "string" } },
+        },
+        { allowed: "yes", ignoredBySchema: true },
+        "test_tool",
+      )).not.toThrow();
+
+      expect(() => __internal__.assertNoUnknownArguments(
+        { type: "array" },
+        [{ ignored: true }],
+        "test_tool.items",
+      )).not.toThrow();
+    });
+  });
+
+  describe("image upload operations", () => {
+    it("requires kitchen:write for upload tools", async () => {
+      const { principal } = await makeUser(db);
+      const context: SpoonjoyApiContext = {
+        db,
+        principal: { ...principal, scopes: ["kitchen:read"] },
+        bucket: mockR2(),
+      };
+
+      await expect(callSpoonjoyApiOperation("upload_recipe_image", {
+        imageBase64: Buffer.from(VALID_PNG_BYTES).toString("base64"),
+        mimeType: "image/png",
+        filename: "raw.png",
+      }, context)).rejects.toMatchObject({
+        status: 403,
+        message: "Missing required scope: kitchen:write",
+      });
+    });
+
+    it("stores recipe and spoon upload bytes through the shared validator", async () => {
+      const { principal } = await makeUser(db);
+      const bucket = mockR2();
+      const context: SpoonjoyApiContext = { db, principal, bucket };
+
+      const recipeUpload = await callSpoonjoyApiOperation("upload_recipe_image", {
+        imageBase64: Buffer.from(VALID_PNG_BYTES).toString("base64"),
+        mimeType: "image/png",
+        filename: "raw.png",
+      }, context) as { imageUrl: string; sizeBytes: number; mimeType: string };
+      expect(recipeUpload).toMatchObject({
+        imageUrl: expect.stringMatching(new RegExp(`^/photos/recipes/${principal.id}/uploads/\\d+-[a-f0-9-]+\\.png$`)),
+        mimeType: "image/png",
+        sizeBytes: VALID_PNG_BYTES.length,
+      });
+
+      const spoonUpload = await callSpoonjoyApiOperation("upload_spoon_photo", {
+        imageBase64: Buffer.from(VALID_PNG_BYTES).toString("base64"),
+        mimeType: "image/png",
+        filename: "raw.png",
+      }, context) as { imageUrl: string; sizeBytes: number; mimeType: string };
+      expect(spoonUpload.imageUrl).toMatch(new RegExp(`^/photos/spoons/${principal.id}/uploads/\\d+-[a-f0-9-]+\\.png$`));
+      expect(bucket.put).toHaveBeenCalledTimes(2);
+    });
+
+    it("rejects GIF upload bytes and missing buckets without explicit local fallback", async () => {
+      const { principal } = await makeUser(db);
+      await expect(callSpoonjoyApiOperation("upload_spoon_photo", {
+        imageBase64: Buffer.from([0x47, 0x49, 0x46, 0x38, 1, 2, 3]).toString("base64"),
+        mimeType: "image/png",
+        filename: "raw.png",
+      }, { db, principal, bucket: mockR2() })).rejects.toThrow("Photos must be JPG, PNG, or WebP.");
+
+      await expect(callSpoonjoyApiOperation("upload_recipe_image", {
+        imageBase64: Buffer.from(VALID_PNG_BYTES).toString("base64"),
+        mimeType: "image/png",
+        filename: "raw.png",
+      }, { db, principal })).rejects.toMatchObject({
+        status: 503,
+        message: "Image uploads require the PHOTOS bucket.",
+      });
+    });
   });
 
   describe("create_spoon", () => {
+    it("round-trips explicit local spoon photo data URLs through create and update stylization", async () => {
+      const { principal: chef } = await makeUser(db);
+      const recipe = await makeRecipe(db, chef.id);
+      const uploaded = await callSpoonjoyApiOperation("upload_spoon_photo", {
+        imageBase64: Buffer.from(VALID_PNG_BYTES).toString("base64"),
+        mimeType: "image/png",
+        filename: "raw.png",
+      }, { db, principal: chef, allowLocalImageFallback: true }) as { imageUrl: string };
+      const captured: Promise<unknown>[] = [];
+      const runner = {
+        textToImage: vi.fn(),
+        imageToImage: vi.fn().mockResolvedValue({ bytes: GENERATED_BYTES, contentType: "image/png" }),
+      };
+      const context: SpoonjoyApiContext = {
+        db,
+        principal: chef,
+        allowLocalImageFallback: true,
+        imageGenRunner: runner,
+        waitUntil: (p) => captured.push(p),
+      };
+
+      const created = await callSpoonjoyApiOperation("create_spoon", {
+        recipeId: recipe.id,
+        photoUrl: uploaded.imageUrl,
+      }, context) as { spoon: { id: string; photoUrl: string }; cover: { id: string; imageUrl: string } };
+
+      expect(created.spoon.photoUrl).toBe(`data:image/png;base64,${Buffer.from(VALID_PNG_BYTES).toString("base64")}`);
+      expect(created.cover.imageUrl).toBe(created.spoon.photoUrl);
+      expect(captured).toHaveLength(1);
+      await captured[0];
+      let cover = await db.recipeCover.findUniqueOrThrow({ where: { id: created.cover.id } });
+      expect(cover.stylizedImageUrl).toBe(`data:image/png;base64,${Buffer.from(GENERATED_BYTES).toString("base64")}`);
+
+      const updated = await callSpoonjoyApiOperation("update_spoon", {
+        spoonId: created.spoon.id,
+        photoUrl: uploaded.imageUrl,
+      }, context) as { cover: { id: string; imageUrl: string } };
+
+      expect(updated.cover.imageUrl).toBe(uploaded.imageUrl);
+      expect(captured).toHaveLength(2);
+      await captured[1];
+      cover = await db.recipeCover.findUniqueOrThrow({ where: { id: updated.cover.id } });
+      expect(cover.stylizedImageUrl).toBe(`data:image/png;base64,${Buffer.from(GENERATED_BYTES).toString("base64")}`);
+      expect(runner.imageToImage).toHaveBeenCalledTimes(2);
+    });
+
     it("creates a spoon with note for the principal when not the recipe owner", async () => {
       const { principal: chef } = await makeUser(db);
       const { principal: cook } = await makeUser(db);
@@ -249,24 +421,32 @@ describe("spoonjoy-api spoon operations", () => {
     it("schedules stylization via context.waitUntil; await fills stylizedImageUrl", async () => {
       const { principal: chef } = await makeUser(db);
       const recipe = await makeRecipe(db, chef.id);
+      const bucket = mockR2();
+      const uploaded = await callSpoonjoyApiOperation("upload_spoon_photo", {
+        imageBase64: Buffer.from(VALID_PNG_BYTES).toString("base64"),
+        mimeType: "image/png",
+        filename: "raw.png",
+      }, { db, principal: chef, bucket }) as { imageUrl: string };
+      const photoUrl = uploaded.imageUrl;
       const captured: Promise<unknown>[] = [];
       const waitUntil = vi.fn((promise: Promise<unknown>) => {
         captured.push(promise);
       });
       const runner = {
-        textToImage: vi.fn().mockResolvedValue({ url: "https://stub.test/stylized.png" }),
-        imageToImage: vi.fn().mockResolvedValue({ url: "https://stub.test/stylized.png" }),
+        textToImage: vi.fn().mockResolvedValue({ bytes: GENERATED_BYTES, contentType: "image/png" }),
+        imageToImage: vi.fn().mockResolvedValue({ bytes: GENERATED_BYTES, contentType: "image/png" }),
       };
       const context: SpoonjoyApiContext = {
         db,
         principal: chef,
         waitUntil,
+        bucket,
         imageGenRunner: runner,
       };
 
       const result = (await callSpoonjoyApiOperation(
         "create_spoon",
-        { recipeId: recipe.id, photoUrl: "https://stub.test/raw.png" },
+        { recipeId: recipe.id, photoUrl },
         context,
       )) as { cover: { id: string } };
 
@@ -277,33 +457,53 @@ describe("spoonjoy-api spoon operations", () => {
       const updatedCover = await db.recipeCover.findUniqueOrThrow({
         where: { id: result.cover.id },
       });
-      expect(updatedCover.stylizedImageUrl).toBe("https://stub.test/stylized.png");
+      expect(updatedCover.stylizedImageUrl).toMatch(/^\/photos\/covers\/\d+-[a-f0-9-]+\.png$/);
+      expect(bucket.put).toHaveBeenCalledWith(
+        updatedCover.stylizedImageUrl!.replace("/photos/", ""),
+        GENERATED_BYTES,
+        expect.objectContaining({ httpMetadata: { contentType: "image/png" } }),
+      );
       expect(runner.imageToImage).toHaveBeenCalledTimes(1);
+      const sourceFile = runner.imageToImage.mock.calls[0][0] as File;
+      expect(sourceFile.type).toBe("image/png");
     });
 
     it("when no waitUntil is provided, runs stylization inline and fills stylizedImageUrl", async () => {
       const { principal: chef } = await makeUser(db);
       const recipe = await makeRecipe(db, chef.id);
+      const bucket = mockR2();
+      const uploaded = await callSpoonjoyApiOperation("upload_spoon_photo", {
+        imageBase64: Buffer.from(VALID_PNG_BYTES).toString("base64"),
+        mimeType: "image/png",
+        filename: "raw.png",
+      }, { db, principal: chef, bucket }) as { imageUrl: string };
+      const photoUrl = uploaded.imageUrl;
       const runner = {
-        textToImage: vi.fn().mockResolvedValue({ url: "https://stub.test/inline.png" }),
-        imageToImage: vi.fn().mockResolvedValue({ url: "https://stub.test/inline.png" }),
+        textToImage: vi.fn().mockResolvedValue({ bytes: GENERATED_BYTES, contentType: "image/png" }),
+        imageToImage: vi.fn().mockResolvedValue({ bytes: GENERATED_BYTES, contentType: "image/png" }),
       };
       const context: SpoonjoyApiContext = {
         db,
         principal: chef,
+        bucket,
         imageGenRunner: runner,
       };
 
       const result = (await callSpoonjoyApiOperation(
         "create_spoon",
-        { recipeId: recipe.id, photoUrl: "https://stub.test/raw.png" },
+        { recipeId: recipe.id, photoUrl },
         context,
       )) as { cover: { id: string } };
 
       const updatedCover = await db.recipeCover.findUniqueOrThrow({
         where: { id: result.cover.id },
       });
-      expect(updatedCover.stylizedImageUrl).toBe("https://stub.test/inline.png");
+      expect(updatedCover.stylizedImageUrl).toMatch(/^\/photos\/covers\/\d+-[a-f0-9-]+\.png$/);
+      expect(bucket.put).toHaveBeenCalledWith(
+        updatedCover.stylizedImageUrl!.replace("/photos/", ""),
+        GENERATED_BYTES,
+        expect.objectContaining({ httpMetadata: { contentType: "image/png" } }),
+      );
     });
 
     it("when stylization quota is exceeded, cover row is left with stylizedImageUrl=null and ledger does not exceed cap", async () => {
@@ -353,6 +553,12 @@ describe("spoonjoy-api spoon operations", () => {
     it("when stylization throws, cover row stays with stylizedImageUrl=null and error is logged", async () => {
       const { principal: chef } = await makeUser(db);
       const recipe = await makeRecipe(db, chef.id);
+      const bucket = mockR2();
+      const uploaded = await callSpoonjoyApiOperation("upload_spoon_photo", {
+        imageBase64: Buffer.from(VALID_PNG_BYTES).toString("base64"),
+        mimeType: "image/png",
+        filename: "raw.png",
+      }, { db, principal: chef, bucket }) as { imageUrl: string };
       const runner = {
         textToImage: vi.fn().mockRejectedValue(new Error("openai down")),
         imageToImage: vi.fn().mockRejectedValue(new Error("openai down")),
@@ -361,13 +567,14 @@ describe("spoonjoy-api spoon operations", () => {
       const context: SpoonjoyApiContext = {
         db,
         principal: chef,
+        bucket,
         imageGenRunner: runner,
         logger,
       };
 
       const result = (await callSpoonjoyApiOperation(
         "create_spoon",
-        { recipeId: recipe.id, photoUrl: "https://stub.test/err.png" },
+        { recipeId: recipe.id, photoUrl: uploaded.imageUrl },
         context,
       )) as { cover: { id: string } };
 
@@ -620,14 +827,168 @@ describe("spoonjoy-api spoon operations", () => {
         {
           spoonId: created.id,
           nextTime: "salt more",
-          photoUrl: "/photos/new.png",
+          photoUrl: "https://stub.test/new.png",
           cookedAt: "2025-06-02T00:00:00.000Z",
         },
         context,
       )) as { spoon: { nextTime: string; photoUrl: string; cookedAt: string } };
       expect(result.spoon.nextTime).toBe("salt more");
-      expect(result.spoon.photoUrl).toBe("/photos/new.png");
+      expect(result.spoon.photoUrl).toBe("https://stub.test/new.png");
       expect(result.spoon.cookedAt).toBe("2025-06-02T00:00:00.000Z");
+    });
+
+    it("refreshes the active origin-cook cover when an uploaded spoon photo changes", async () => {
+      const { principal: chef } = await makeUser(db);
+      const recipe = await makeRecipe(db, chef.id);
+      const existing = await db.recipeSpoon.create({
+        data: {
+          chefId: chef.id,
+          recipeId: recipe.id,
+          photoUrl: "https://stub.test/old.png",
+        },
+      });
+      await db.recipeCover.create({
+        data: {
+          recipeId: recipe.id,
+          imageUrl: existing.photoUrl!,
+          sourceType: "spoon",
+          sourceSpoonId: existing.id,
+        },
+      });
+      const bucket = mockR2();
+      const uploaded = await callSpoonjoyApiOperation("upload_spoon_photo", {
+        imageBase64: Buffer.from(VALID_PNG_BYTES).toString("base64"),
+        mimeType: "image/png",
+        filename: "new.png",
+      }, { db, principal: chef, bucket }) as { imageUrl: string };
+      const captured: Promise<unknown>[] = [];
+      const runner = {
+        textToImage: vi.fn(),
+        imageToImage: vi.fn().mockResolvedValue({ bytes: GENERATED_BYTES, contentType: "image/png" }),
+      };
+
+      const result = (await callSpoonjoyApiOperation(
+        "update_spoon",
+        { spoonId: existing.id, photoUrl: uploaded.imageUrl },
+        {
+          db,
+          principal: chef,
+          bucket,
+          imageGenRunner: runner,
+          waitUntil: (p) => captured.push(p),
+        },
+      )) as { spoon: { photoUrl: string }; cover: { id: string; imageUrl: string } };
+
+      expect(result.spoon.photoUrl).toBe(uploaded.imageUrl);
+      expect(result.cover.imageUrl).toBe(uploaded.imageUrl);
+      const activeCover = await db.recipeCover.findUniqueOrThrow({ where: { id: result.cover.id } });
+      expect(activeCover).toMatchObject({
+        recipeId: recipe.id,
+        sourceType: "spoon",
+        sourceSpoonId: existing.id,
+        imageUrl: uploaded.imageUrl,
+        stylizedImageUrl: null,
+      });
+      expect(captured).toHaveLength(1);
+      await captured[0];
+      expect(runner.imageToImage).toHaveBeenCalledTimes(1);
+    });
+
+    it("refreshes an origin cover from an external spoon photo without stylization", async () => {
+      const { principal: chef } = await makeUser(db);
+      const recipe = await makeRecipe(db, chef.id);
+      const existing = await db.recipeSpoon.create({
+        data: {
+          chefId: chef.id,
+          recipeId: recipe.id,
+          photoUrl: "https://stub.test/old.png",
+        },
+      });
+      await db.recipeCover.create({
+        data: {
+          recipeId: recipe.id,
+          imageUrl: existing.photoUrl!,
+          sourceType: "spoon",
+          sourceSpoonId: existing.id,
+        },
+      });
+      const captured: Promise<unknown>[] = [];
+      const runner = {
+        textToImage: vi.fn(),
+        imageToImage: vi.fn().mockResolvedValue({ bytes: GENERATED_BYTES, contentType: "image/png" }),
+      };
+
+      const result = (await callSpoonjoyApiOperation(
+        "update_spoon",
+        { spoonId: existing.id, photoUrl: "https://stub.test/new-external.png" },
+        {
+          db,
+          principal: chef,
+          imageGenRunner: runner,
+          waitUntil: (p) => captured.push(p),
+        },
+      )) as { spoon: { photoUrl: string }; cover: { imageUrl: string } };
+
+      expect(result.spoon.photoUrl).toBe("https://stub.test/new-external.png");
+      expect(result.cover.imageUrl).toBe("https://stub.test/new-external.png");
+      expect(captured).toHaveLength(0);
+      expect(runner.imageToImage).not.toHaveBeenCalled();
+    });
+
+    it("does not let a non-origin owner spoon replace the recipe cover on photo update", async () => {
+      const { principal: chef } = await makeUser(db);
+      const recipe = await makeRecipe(db, chef.id);
+      const origin = await db.recipeSpoon.create({
+        data: {
+          chefId: chef.id,
+          recipeId: recipe.id,
+          photoUrl: "https://stub.test/origin.png",
+        },
+      });
+      await db.recipeCover.create({
+        data: {
+          recipeId: recipe.id,
+          imageUrl: origin.photoUrl!,
+          sourceType: "spoon",
+          sourceSpoonId: origin.id,
+        },
+      });
+      const later = await db.recipeSpoon.create({
+        data: {
+          chefId: chef.id,
+          recipeId: recipe.id,
+          note: "second cook",
+        },
+      });
+      const bucket = mockR2();
+      const uploaded = await callSpoonjoyApiOperation("upload_spoon_photo", {
+        imageBase64: Buffer.from(VALID_PNG_BYTES).toString("base64"),
+        mimeType: "image/png",
+        filename: "later.png",
+      }, { db, principal: chef, bucket }) as { imageUrl: string };
+      const captured: Promise<unknown>[] = [];
+      const runner = {
+        textToImage: vi.fn(),
+        imageToImage: vi.fn().mockResolvedValue({ bytes: GENERATED_BYTES, contentType: "image/png" }),
+      };
+
+      const result = (await callSpoonjoyApiOperation(
+        "update_spoon",
+        { spoonId: later.id, photoUrl: uploaded.imageUrl },
+        {
+          db,
+          principal: chef,
+          bucket,
+          imageGenRunner: runner,
+          waitUntil: (p) => captured.push(p),
+        },
+      )) as { spoon: { photoUrl: string }; cover: null };
+
+      expect(result.spoon.photoUrl).toBe(uploaded.imageUrl);
+      expect(result.cover).toBeNull();
+      await expect(db.recipeCover.count({ where: { sourceSpoonId: later.id } })).resolves.toBe(0);
+      expect(captured).toHaveLength(0);
+      expect(runner.imageToImage).not.toHaveBeenCalled();
     });
 
     it("rejects updates that empty all content fields (note=null nulls the note)", async () => {
@@ -703,10 +1064,10 @@ describe("spoonjoy-api spoon operations", () => {
         "list_spoons_for_recipe",
         { recipeId: recipe.id },
         context,
-      )) as { spoons: Array<{ chef: { username: string }; coverImageUrl: string }> };
+      )) as { spoons: Array<{ chef: { username: string }; coverImageUrl: string | null }> };
       expect(result.spoons).toHaveLength(1);
       expect(result.spoons[0].chef.username).toBe(cook.username);
-      expect(typeof result.spoons[0].coverImageUrl).toBe("string");
+      expect(result.spoons[0].coverImageUrl).toBeNull();
     });
 
     it("respects limit/offset", async () => {
@@ -831,11 +1192,11 @@ describe("spoonjoy-api spoon operations", () => {
         "list_spoons_by_chef",
         { chefIdOrUsername: chef.id },
         context,
-      )) as { spoons: Array<{ recipe: { id: string; title: string }; coverImageUrl: string }> };
+      )) as { spoons: Array<{ recipe: { id: string; title: string }; coverImageUrl: string | null }> };
       expect(result.spoons).toHaveLength(1);
       expect(result.spoons[0].recipe.id).toBe(recipe.id);
       expect(result.spoons[0].recipe.title).toBe(recipe.title);
-      expect(typeof result.spoons[0].coverImageUrl).toBe("string");
+      expect(result.spoons[0].coverImageUrl).toBeNull();
     });
 
     it("resolves by username", async () => {

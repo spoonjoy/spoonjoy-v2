@@ -1,0 +1,14 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ✓ test/lib/request-body-limit.server.test.ts (4 tests) 62ms
+ ✓ test/lib/mcp/spoonjoy-tools.server.test.ts (39 tests) 547ms
+ ✓ test/lib/spoonjoy-api-spoons.test.ts (51 tests) 471ms
+ ✓ test/lib/mcp/http-mcp.server.test.ts (23 tests) 261ms
+ ✓ test/routes/api.test.ts (12 tests) 245ms
+ ✓ test/routes/mcp.test.ts (4 tests) 81ms
+
+ Test Files  6 passed (6)
+      Tests  133 passed (133)
+   Start at  23:12:52
+   Duration  4.96s (transform 470ms, setup 386ms, import 1.43s, tests 1.67s, environment 790ms)

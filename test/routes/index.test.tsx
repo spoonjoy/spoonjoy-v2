@@ -124,8 +124,10 @@ describe("Kitchen Index Route", () => {
       expect(result.kitchenUser?.username).toBe(owner.username);
       expect(result.viewer?.id).toBe(owner.id);
       expect(result.recipes).toHaveLength(1);
+      expect(result.recipes[0].coverImageUrl).toBeNull();
       expect(result.cookbooks).toHaveLength(1);
       expect(result.cookbooks[0]._count.recipes).toBe(1);
+      expect(result.cookbooks[0].recipes[0].recipe.coverImageUrl).toBeNull();
     });
 
     it("returns visitor kitchen by username in read-only framing", async () => {

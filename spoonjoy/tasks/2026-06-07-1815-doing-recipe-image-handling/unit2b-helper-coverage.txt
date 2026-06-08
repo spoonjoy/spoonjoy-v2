@@ -1,0 +1,20 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+      Coverage enabled with istanbul
+
+ ✓ test/lib/recipe-cover.server.test.ts (19 tests) 122ms
+ ✓ test/lib/og-image.server.test.tsx (7 tests) 27ms
+
+ Test Files  2 passed (2)
+      Tests  26 passed (26)
+   Start at  22:04:44
+   Duration  1.03s (transform 194ms, setup 121ms, import 263ms, tests 149ms, environment 270ms)
+
+ % Coverage report from istanbul
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s
+-------------------|---------|----------|---------|---------|-------------------
+All files          |     100 |      100 |     100 |     100 |
+ ...age.server.tsx |     100 |      100 |     100 |     100 |
+ ...over.server.ts |     100 |      100 |     100 |     100 |
+-------------------|---------|----------|---------|---------|-------------------

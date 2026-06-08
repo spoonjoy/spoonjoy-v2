@@ -170,17 +170,40 @@ describe("recipe-cover.server", () => {
       expect(url).toBe("winner");
     });
 
-    it("returns SVG fallback when covers array is empty", () => {
+    it("returns null when covers array is empty", () => {
       const url = getRecipeCoverImageUrl(recipe, []);
-      expect(url.startsWith("data:image/svg+xml;base64,")).toBe(true);
+      expect(url).toBeNull();
     });
 
-    it("returns SVG fallback when every cover row is effectively empty", () => {
+    it("returns null when the latest cover row is empty", () => {
       const url = getRecipeCoverImageUrl(recipe, [
-        fakeCover({ id: "a", imageUrl: "", stylizedImageUrl: null }),
-        fakeCover({ id: "b", imageUrl: "", stylizedImageUrl: "" }),
+        fakeCover({
+          id: "old",
+          imageUrl: "older-real",
+          stylizedImageUrl: null,
+          createdAt: new Date("2026-01-01"),
+        }),
+        fakeCover({
+          id: "new",
+          imageUrl: "",
+          stylizedImageUrl: "",
+          createdAt: new Date("2026-03-01"),
+        }),
       ]);
-      expect(url.startsWith("data:image/svg+xml;base64,")).toBe(true);
+      expect(url).toBeNull();
+    });
+
+    it("returns an ai-placeholder image once generation has filled imageUrl", () => {
+      const url = getRecipeCoverImageUrl(recipe, [
+        fakeCover({
+          id: "placeholder",
+          imageUrl: "/photos/covers/generated.png",
+          stylizedImageUrl: null,
+          sourceType: "ai-placeholder",
+          createdAt: new Date("2026-03-01"),
+        }),
+      ]);
+      expect(url).toBe("/photos/covers/generated.png");
     });
 
     it("does not throw when recipe.title is an empty string", () => {

@@ -5,28 +5,96 @@ import {
   type ImageGenRunner,
 } from "~/lib/image-gen.server";
 import { tryConsumeImageGenQuota } from "~/lib/image-gen-ledger.server";
+import {
+  captureImageGenerationException,
+  captureImageGenerationSkipped,
+  type ImageGenerationSkipReason,
+} from "~/lib/image-gen-telemetry.server";
 import { createOpenAIClient } from "~/lib/openai-client.server";
+import type { PostHogServerConfig, PostHogServerEnv } from "~/lib/analytics-server";
+
+const PLACEHOLDER_MODEL = "dall-e-3";
+
+type ImageGenerationSchedulerEnv = { OPENAI_API_KEY?: string } & PostHogServerEnv;
+type OpenAIImageGenerationEnv = ImageGenerationSchedulerEnv & { OPENAI_API_KEY: string };
+type ImageGenRunnerFactory = (env: OpenAIImageGenerationEnv) => ImageGenRunner | null;
 
 export interface SchedulePlaceholderInput {
   db: PrismaClient;
   userId: string;
+  recipeId: string;
   coverId: string;
   title: string;
   description: string | null;
-  env?: { OPENAI_API_KEY?: string } | null;
+  env?: ImageGenerationSchedulerEnv | null;
   bucket?: R2Bucket;
   runner?: ImageGenRunner;
+  createRunner?: ImageGenRunnerFactory;
   fetchImpl?: typeof fetch;
+  postHogConfig?: PostHogServerConfig;
+  analyticsFetchImpl?: typeof fetch;
   now?: () => number;
   logger?: Pick<Console, "error">;
 }
 
-function createDefaultRunner(
-  env: { OPENAI_API_KEY?: string } | null | undefined,
-): ImageGenRunner | null {
-  if (!env?.OPENAI_API_KEY) return null;
+function hasOpenAIKey(
+  env: ImageGenerationSchedulerEnv | null | undefined,
+): env is OpenAIImageGenerationEnv {
+  return Boolean(env?.OPENAI_API_KEY);
+}
+
+function createDefaultRunner(env: OpenAIImageGenerationEnv): ImageGenRunner {
   const client = createOpenAIClient({ apiKey: env.OPENAI_API_KEY });
   return createOpenAIImageRunner(client as never);
+}
+
+function resolveRunner(
+  input: SchedulePlaceholderInput,
+): { runner: ImageGenRunner } | { reason: ImageGenerationSkipReason } {
+  if (input.runner) return { runner: input.runner };
+  if (!hasOpenAIKey(input.env)) return { reason: "missing_openai_key" };
+
+  const createRunner = input.createRunner ?? createDefaultRunner;
+  const runner = createRunner(input.env);
+  return runner ? { runner } : { reason: "missing_runner" };
+}
+
+async function captureSkipped(
+  input: SchedulePlaceholderInput,
+  reason: ImageGenerationSkipReason,
+): Promise<void> {
+  await captureImageGenerationSkipped({
+    env: input.env,
+    postHogConfig: input.postHogConfig,
+    fetchImpl: input.analyticsFetchImpl,
+    userId: input.userId,
+    recipeId: input.recipeId,
+    coverId: input.coverId,
+    operation: "placeholder_generate",
+    sourceType: "ai-placeholder",
+    quotaKind: "placeholder",
+    model: "none",
+    reason,
+  });
+}
+
+async function captureGenerationException(
+  input: SchedulePlaceholderInput,
+  error: unknown,
+): Promise<void> {
+  await captureImageGenerationException({
+    env: input.env,
+    postHogConfig: input.postHogConfig,
+    fetchImpl: input.analyticsFetchImpl,
+    userId: input.userId,
+    recipeId: input.recipeId,
+    coverId: input.coverId,
+    operation: "placeholder_generate",
+    sourceType: "ai-placeholder",
+    quotaKind: "placeholder",
+    model: PLACEHOLDER_MODEL,
+    error,
+  });
 }
 
 /**
@@ -39,20 +107,26 @@ export async function scheduleAiPlaceholderCover(
 ): Promise<void> {
   const logger = input.logger ?? console;
   try {
+    const runnerResolution = resolveRunner(input);
+    if ("reason" in runnerResolution) {
+      await captureSkipped(input, runnerResolution.reason);
+      return;
+    }
+
     const consumed = await tryConsumeImageGenQuota(
       input.db,
       input.userId,
       "placeholder",
       input.now ? { now: () => new Date(input.now!()) } : {},
     );
-    if (!consumed) return;
-
-    const runner = input.runner ?? createDefaultRunner(input.env);
-    if (!runner) return;
+    if (!consumed) {
+      await captureSkipped(input, "quota_exhausted");
+      return;
+    }
 
     const url = await generatePlaceholderImage(input.title, input.description, {
       env: input.env ?? {},
-      runner,
+      runner: runnerResolution.runner,
       fetchImpl: input.fetchImpl,
       bucket: input.bucket,
       now: input.now,
@@ -63,6 +137,7 @@ export async function scheduleAiPlaceholderCover(
       data: { imageUrl: url },
     });
   } catch (error) {
+    await captureGenerationException(input, error);
     logger.error("ai-placeholder cover generation failed", error);
   }
 }

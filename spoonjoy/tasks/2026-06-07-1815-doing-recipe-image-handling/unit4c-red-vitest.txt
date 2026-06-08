@@ -1,0 +1,195 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ❯ test/lib/mcp/spoonjoy-tools.server.test.ts (42 tests | 3 failed) 570ms
+     ✓ lists stable MCP tool metadata 8ms
+     ✓ annotates every tool with a title and behavioral hints (directory requirement) 6ms
+     ✓ classifies reads, writes, deletes, and the open-world import correctly 4ms
+     ✓ publishes upload schemas with required image fields and kitchen write scopes 4ms
+     ✓ uploads recipe and spoon photos to owner-scoped R2 namespaces 11ms
+     ✓ rejects invalid, GIF, and non-food upload payloads before storage 7ms
+     ✓ rejects production-like missing image buckets unless local fallback is explicit 5ms
+     ✓ reports health and writable state 4ms
+     ✓ reports agent auth status without asking for user credentials 12ms
+     ✓ starts and polls delegated agent connections over MCP 11ms
+     ✓ creates, lists, revokes, and authorizes owner-scoped API tokens 14ms
+     ✓ creates, searches, and fetches recipes with steps and ingredients 31ms
+     × creates and updates recipe covers from uploaded image URLs with stylization scheduled 12ms
+     × round-trips explicit local recipe image data URLs when no bucket is available 9ms
+     × rejects unsafe recipe cover image assignments 9ms
+     ✓ creates minimal recipes and finds null for missing recipes 10ms
+     ✓ updates owner recipes with replacement steps and ingredients without interactive transactions 18ms
+     ✓ keeps untouched fields when updating only part of a recipe 15ms
+     ✓ rejects invalid or unauthorized recipe updates 11ms
+     ✓ soft-deletes owner recipes through MCP for agent cleanup 12ms
+     ✓ rejects invalid or unauthorized recipe deletes 9ms
+     ✓ handles unusual owner emails and ingredient-free steps 10ms
+     ✓ reuses existing owner usernames, units, and ingredient refs 13ms
+     ✓ adds recipe ingredients to a shopping list and merges duplicates 15ms
+     ✓ handles a recipe with no ingredients without touching the shopping list 11ms
+     ✓ aggregates duplicate (unit, ingredient) pairs within a single recipe into one item 13ms
+     ✓ rejects adding a soft-deleted recipe to a shopping list 12ms
+     ✓ creates, lists, and fetches cookbooks idempotently for the configured owner 11ms
+     ✓ lists cookbook summaries without loading deep recipe step payloads 6ms
+     ✓ adds and removes recipes from owner-scoped cookbooks idempotently 20ms
+     ✓ runs owner-scoped write tools without callback-style transactions 23ms
+     ✓ keeps cookbook MCP reads and writes scoped to the owning agent 11ms
+     ✓ groups multiple recipes per cookbook in list_cookbooks (batched-fetch regression) 15ms
+     ✓ excludes deleted recipes from cookbook MCP payloads 14ms
+     ✓ treats an existing null shopping-list quantity as zero when merging 14ms
+     ✓ gets shopping lists and filters deleted items including unitless items 10ms
+     ✓ manages direct shopping-list item adds, checks, removes, and restores 18ms
+     ✓ exposes unified full-text search and private shopping-list search to Ouroboros agents 25ms
+     ✓ supports unitless direct shopping-list items 9ms
+     ✓ scopes direct shopping-list item mutations to the owner 11ms
+     ✓ normalizes search limits 19ms
+     ✓ validates write tool inputs 14ms
+ ❯ test/lib/spoonjoy-api-spoons.test.ts (52 tests | 1 failed) 385ms
+       ✓ lists the five new spoon operations 7ms
+       ✓ requires kitchen:write for upload tools 6ms
+       ✓ stores recipe and spoon upload bytes through the shared validator 7ms
+       ✓ rejects GIF upload bytes and missing buckets without explicit local fallback 6ms
+       ✓ creates a spoon with note for the principal when not the recipe owner 9ms
+       ✓ rejects when ownerEmail is supplied with the documented 400 message 6ms
+       ✓ rejects unauthenticated callers with 401 6ms
+       ✓ forwards validation errors as 400 when content is empty 7ms
+       ✓ enforces origin-cook photo requirement with 400 6ms
+       ✓ accepts cookedAt as an ISO date string 8ms
+       ✓ rejects invalid cookedAt strings 6ms
+       ✓ requires recipeId 5ms
+       ✓ accepts photoUrl as a fallback when no upload bucket is wired 8ms
+       ✓ on origin-cook with photoUrl, inserts a RecipeCover row with sourceType='spoon' synchronously 8ms
+       ✓ does NOT insert a RecipeCover when chef is not the origin cook 7ms
+       ✓ schedules stylization via context.waitUntil; await fills stylizedImageUrl 9ms
+       ✓ when no waitUntil is provided, runs stylization inline and fills stylizedImageUrl 9ms
+       ✓ when stylization quota is exceeded, cover row is left with stylizedImageUrl=null and ledger does not exceed cap 9ms
+       ✓ when stylization throws, cover row stays with stylizedImageUrl=null and error is logged 8ms
+       ✓ writes a NotificationEvent for the recipe owner when the spooner is not the owner (with VAPID env) 8ms
+       ✓ does NOT write a NotificationEvent when the spooner IS the owner 7ms
+       ✓ does not write a NotificationEvent when VAPID env is absent (graceful skip) 6ms
+       ✓ fans out fellow_chef_origin_cook to each fellow chef on an origin-cook spoon 13ms
+       ✓ does NOT fan out fellow_chef_origin_cook on a non-origin spoon 9ms
+       ✓ allows the owning principal to update their spoon 9ms
+       ✓ rejects update from a non-owner with 403 7ms
+       ✓ rejects update on soft-deleted spoon with 404 7ms
+       ✓ rejects when ownerEmail is supplied 7ms
+       ✓ accepts nextTime/photoUrl/cookedAt patches 8ms
+       × refreshes the active origin-cook cover when an uploaded spoon photo changes 11ms
+       ✓ rejects updates that empty all content fields (note=null nulls the note) 7ms
+       ✓ rejects invalid cookedAt patches (malformed string) 7ms
+       ✓ rejects empty cookedAt patches (no usable date) 6ms
+       ✓ requires spoonId 4ms
+       ✓ returns spoons with chef relation and derived coverImageUrl per row 7ms
+       ✓ respects limit/offset 8ms
+       ✓ rejects ownerEmail 5ms
+       ✓ requires recipeId 5ms
+       ✓ excludes soft-deleted spoons 7ms
+       ✓ requires authentication 5ms
+       ✓ returns coverImageUrl=null when the recipe row is missing 5ms
+       ✓ returns spoons by chef id with recipe + coverImageUrl preloaded 7ms
+       ✓ resolves by username 7ms
+       ✓ returns 404 when chef is not found 5ms
+       ✓ rejects ownerEmail 5ms
+       ✓ requires chefIdOrUsername 4ms
+       ✓ excludes soft-deleted by default 6ms
+       ✓ requires authentication 4ms
+       ✓ respects limit/offset 8ms
+       ✓ soft-deletes the owning principal's spoon 7ms
+       ✓ rejects delete from a non-owner with 403 7ms
+       ✓ rejects when ownerEmail is supplied 6ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/lib/spoonjoy-api-spoons.test.ts > spoonjoy-api spoon operations > update_spoon > refreshes the active origin-cook cover when an uploaded spoon photo changes
+TypeError: Cannot read properties of undefined (reading 'imageUrl')
+ ❯ test/lib/spoonjoy-api-spoons.test.ts:778:27
+    776|
+    777|       expect(result.spoon.photoUrl).toBe(uploaded.imageUrl);
+    778|       expect(result.cover.imageUrl).toBe(uploaded.imageUrl);
+       |                           ^
+    779|       const activeCover = await db.recipeCover.findUniqueOrThrow({ whe…
+    780|       expect(activeCover).toMatchObject({
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  test/lib/mcp/spoonjoy-tools.server.test.ts > spoonjoy MCP tools > creates and updates recipe covers from uploaded image URLs with stylization scheduled
+AssertionError: expected null to be '/photos/recipes/cmq4tirub00156vlkcwk7…' // Object.is equality
+
+- Expected:
+"/photos/recipes/cmq4tirub00156vlkcwk78bor/uploads/1780899400307-395b14b3-ba49-45f9-88e3-c9f6b510758a.png"
+
++ Received:
+null
+
+ ❯ test/lib/mcp/spoonjoy-tools.server.test.ts:523:37
+    521|     }, { ...context, bucket, waitUntil: (p) => captured.push(p), image…
+    522|
+    523|     expect(created.recipe.imageUrl).toBe(upload.imageUrl);
+       |                                     ^
+    524|     const firstCover = await context.db.recipeCover.findFirstOrThrow({
+    525|       where: { recipeId: created.recipe.id },
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  test/lib/mcp/spoonjoy-tools.server.test.ts > spoonjoy MCP tools > round-trips explicit local recipe image data URLs when no bucket is available
+AssertionError: expected null to be 'data:image/png;base64,iVBORw0KGgoBAgM=' // Object.is equality
+
+- Expected:
+"data:image/png;base64,iVBORw0KGgoBAgM="
+
++ Received:
+null
+
+ ❯ test/lib/mcp/spoonjoy-tools.server.test.ts:563:37
+    561|     }, { ...context, allowLocalImageFallback: true }));
+    562|
+    563|     expect(created.recipe.imageUrl).toBe(`data:image/png;base64,${b64(…
+       |                                     ^
+    564|     const cover = await context.db.recipeCover.findFirstOrThrow({ wher…
+    565|     expect(cover.imageUrl).toBe(created.recipe.imageUrl);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  test/lib/mcp/spoonjoy-tools.server.test.ts > spoonjoy MCP tools > rejects unsafe recipe cover image assignments
+AssertionError: promise resolved "'{\n  "recipe": {\n    "id": "cmq4tiru…'" instead of rejecting
+
+- Expected:
+Error {
+  "message": "rejected promise",
+}
+
++ Received:
+"{
+  \"recipe\": {
+    \"id\": \"cmq4tirux001d6vlkame9ygcn\",
+    \"title\": \"External Cover Soup\",
+    \"description\": null,
+    \"servings\": null,
+    \"sourceUrl\": null,
+    \"sourceRecipeId\": null,
+    \"imageUrl\": null,
+    \"chef\": {
+      \"id\": \"cmq4tiruw001b6vlksw7ggd9q\",
+      \"email\": \"agent-nig4lnnq@example.com\",
+      \"username\": \"agent-nig4lnnq\"
+    },
+    \"steps\": [],
+    \"ingredientCount\": 0
+  }
+}"
+
+ ❯ test/lib/mcp/spoonjoy-tools.server.test.ts:580:31
+    578|       title: "External Cover Soup",
+    579|       imageUrl: "https://photos.example/cover.png",
+    580|     }, { ...context, bucket })).rejects.toThrow("Recipe imageUrl must …
+       |                               ^
+    581|
+    582|     await expect(callSpoonjoyMcpTool("create_recipe", {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  4 failed | 90 passed (94)
+   Start at  23:16:39
+   Duration  2.25s (transform 246ms, setup 149ms, import 572ms, tests 956ms, environment 340ms)

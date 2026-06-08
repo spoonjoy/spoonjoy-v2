@@ -36,7 +36,7 @@ export interface RecipeBuilderData {
   title: string
   description: string | null
   servings: string | null
-  coverImageUrl: string
+  coverImageUrl: string | null
   imageFile?: File | null
   clearImage?: boolean
   steps: StepData[]

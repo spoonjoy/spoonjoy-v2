@@ -1,0 +1,18 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+      Coverage enabled with istanbul
+
+ ✓ test/lib/safe-image-fetch.server.test.ts (7 tests) 30ms
+
+ Test Files  1 passed (1)
+      Tests  7 passed (7)
+   Start at  21:42:07
+   Duration  474ms (transform 144ms, setup 77ms, import 119ms, tests 30ms, environment 134ms)
+
+ % Coverage report from istanbul
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s
+-------------------|---------|----------|---------|---------|-------------------
+All files          |     100 |      100 |     100 |     100 |
+ ...etch.server.ts |     100 |      100 |     100 |     100 |
+-------------------|---------|----------|---------|---------|-------------------

@@ -1,0 +1,159 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ❯ test/routes/recipes-id-edit.test.tsx (71 tests | 1 failed) 11489ms
+       ✓ should redirect when not logged in 162ms
+       ✓ should return recipe data when logged in as owner 146ms
+       ✓ should throw 403 when non-owner tries to access 143ms
+       ✓ should throw 404 for non-existent recipe 142ms
+       ✓ should throw 404 for soft-deleted recipe 146ms
+       ✓ should handle step with null stepTitle in loader 145ms
+       ✓ should include recipe steps with ingredients 148ms
+       ✓ should redirect when not logged in 143ms
+       ✓ should throw 403 when non-owner tries to update 151ms
+       ✓ should throw 404 for non-existent recipe 145ms
+       ✓ should return validation error when title is empty 145ms
+       ✓ should successfully update recipe and redirect 145ms
+       ✓ should allow saving a recipe without changing its own active title 145ms
+       ✓ should reject updates to another active recipe title for the same chef 144ms
+       ✓ should allow updates to a soft-deleted recipe title 146ms
+       ✓ should handle reorderStep intent - move step up 149ms
+       ✓ should handle reorderStep intent - move step down 147ms
+       ✓ should not reorder if step is already at boundary 146ms
+       ✓ should not reorder if stepId is missing 144ms
+       ✓ should not reorder if direction is invalid 145ms
+       ✓ should return reorder validation error when dependency would be broken 146ms
+       ✓ should not reorder if step belongs to different recipe 146ms
+       ✓ should delete a step for deleteStep intent 146ms
+       ✓ should return step deletion error when dependent steps exist 147ms
+       ✓ should return step deletion error when stepId is missing 145ms
+       ✓ should return step deletion error when step belongs to a different recipe 164ms
+       ✓ should throw 404 for soft-deleted recipe in action 146ms
+       ✓ should set empty description and servings to null 145ms
+       ✓ should return validation error for whitespace-only title 144ms
+       ✓ should return generic error for database errors 145ms
+       ✓ should clear image when clearImage is true 147ms
+       ✓ should return validation error for invalid image type 146ms
+       ✓ should return validation error for GIF replacement images 144ms
+       ✓ should reject GIF bytes disguised as a JPEG replacement image 145ms
+       ✓ should accept valid image file without errors 146ms
+       ✓ should return validation error for image exceeding 5MB 153ms
+       ✓ should upload replacement image to R2 and preserve the referenced old R2 image 155ms
+       × schedules replacement chef-upload cover stylization while keeping the raw upload visible 151ms
+       ✓ does not try old R2 cleanup after replacement while the old cover row still references it 150ms
+       ✓ preserves forked cover objects when replacing the source recipe cover 147ms
+       ✓ preserves stored objects referenced by a stylized cover URL 146ms
+       ✓ preserves origin-cook spoon photo objects when replacing a spoon-sourced cover 147ms
+       ✓ should return image error when replacement upload fails 145ms
+       ✓ should clear an R2 image without deleting the referenced stored object 147ms
+       ✓ should delete uploaded replacement image when database update fails 148ms
+         ✓ should return validation error when title exceeds max length 144ms
+         ✓ should accept title at exactly max length 146ms
+         ✓ should return validation error when description exceeds max length 145ms
+         ✓ should accept description at exactly max length 145ms
+         ✓ should return validation error when servings exceeds max length 144ms
+         ✓ should accept servings at exactly max length 148ms
+         ✓ should return multiple validation errors at once 153ms
+       ✓ should render edit recipe form with recipe data 206ms
+       ✓ should render empty steps state 170ms
+       ✓ should render recipe steps with title and description 174ms
+       ✓ should render singular ingredient count for single ingredient 174ms
+       ✓ should not show ingredient count when step has no ingredients 165ms
+       ✓ should render reorder buttons for multiple steps 175ms
+       ✓ should render form buttons correctly 163ms
+       ✓ should render null values as empty strings in form 162ms
+       ✓ should have correct edit link for each step 181ms
+       ✓ should cancel and confirm step deletion from the dialog 269ms
+       ✓ should close the step deletion dialog when dismissed by escape 191ms
+       ✓ should display step deletion errors returned after confirming deletion 207ms
+       ✓ should populate hidden form and submit when Save Recipe is clicked  337ms
+       ✓ should keep the mobile dock off edit forms and submit from the in-flow Save Recipe button  337ms
+       ✓ should handle image file in handleSave via DataTransfer 182ms
+       ✓ should navigate to recipe page when Cancel is clicked 169ms
+       ✓ should set clearImage to true when image is removed and Save is clicked 185ms
+       ✓ should display reorder validation error when present 177ms
+       ✓ should display general error message when present 157ms
+ ❯ test/routes/recipes-new.test.tsx (51 tests | 1 failed) 5149ms
+       ✓ should redirect when not logged in 84ms
+       ✓ should return null when logged in 76ms
+       ✓ should return validation error when title is missing 76ms
+       ✓ should create recipe and redirect on success 86ms
+       ✓ should parse ingredients for the unsaved new recipe builder 77ms
+       ✓ should return parser errors for the unsaved new recipe builder 78ms
+       ✓ should return a generic parse error for unexpected parser failures 76ms
+       ✓ should redirect when not logged in 75ms
+       ✓ should create recipe with only required fields 78ms
+       ✓ should reject duplicate active recipe titles for the same chef 77ms
+       ✓ should allow duplicate active recipe titles for different chefs 149ms
+       ✓ should allow title reuse after the prior recipe is soft-deleted 79ms
+       ✓ should return validation error for whitespace-only title 77ms
+       ✓ should trim title and other fields whitespace 81ms
+       ✓ should handle empty optional fields correctly 78ms
+       ✓ should return generic error for database errors 76ms
+       ✓ should return validation error for invalid image type 80ms
+       ✓ should return validation error for GIF recipe images 78ms
+       ✓ should reject GIF bytes disguised as an accepted recipe image type 78ms
+       ✓ should return validation error for oversized image 84ms
+       ✓ should accept valid image with valid type and size under 5MB 80ms
+       ✓ should upload valid recipe image to R2 when a bucket is available 81ms
+       × schedules chef-upload cover stylization while keeping the raw upload visible 84ms
+       ✓ should return image error when recipe image upload fails 78ms
+       ✓ schedules ai-placeholder cover generation via context.cloudflare.ctx.waitUntil when available 80ms
+       ✓ should delete uploaded recipe image when database creation fails 79ms
+       ✓ should create recipe with valid steps JSON and redirect 83ms
+       ✓ should return validation error for invalid steps JSON 78ms
+       ✓ should return validation error for invalid submitted step fields 78ms
+       ✓ should return validation error for invalid submitted ingredient fields 79ms
+       ✓ should persist submitted step ingredients and make them available to the shopping list 92ms
+         ✓ should return validation error when title exceeds max length 77ms
+         ✓ should accept title at exactly max length 80ms
+         ✓ should return validation error when description exceeds max length 78ms
+         ✓ should accept description at exactly max length 82ms
+         ✓ should return validation error when servings exceeds max length 77ms
+         ✓ should accept servings at exactly max length 81ms
+         ✓ should return multiple validation errors at once 78ms
+       ✓ should render create recipe form 135ms
+       ✓ should have correct form structure 97ms
+       ✓ should have correct placeholders 91ms
+       ✓ should navigate to /recipes when Cancel is clicked 111ms
+       ✓ should populate hidden form and submit when RecipeBuilder saves  337ms
+       ✓ should handle image upload in handleSave 282ms
+       ✓ should display general error message when present 90ms
+       ✓ should handle missing title input in handleSave 161ms
+       ✓ should handle missing description textarea in handleSave 157ms
+       ✓ should handle missing servings input in handleSave 154ms
+       ✓ should handle missing steps input in handleSave 150ms
+       ✓ should handle missing clearImage input in handleSave 125ms
+       ✓ should set clearImage value to 'true' when clearImage flag is true 146ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/routes/recipes-id-edit.test.tsx > Recipes $id Edit Route > action > schedules replacement chef-upload cover stylization while keeping the raw upload visible
+AssertionError: expected "vi.fn()" to be called 1 times, but got 0 times
+ ❯ test/routes/recipes-id-edit.test.tsx:1171:25
+    1169|       expect(response).toBeInstanceOf(Response);
+    1170|       expect(response.status).toBe(302);
+    1171|       expect(waitUntil).toHaveBeenCalledTimes(1);
+       |                         ^
+    1172|
+    1173|       const latest = await db.recipeCover.findFirstOrThrow({
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  test/routes/recipes-new.test.tsx > Recipes New Route > action > schedules chef-upload cover stylization while keeping the raw upload visible
+AssertionError: expected "vi.fn()" to be called 1 times, but got 0 times
+ ❯ test/routes/recipes-new.test.tsx:679:25
+    677|       expect(response).toBeInstanceOf(Response);
+    678|       expect(response.status).toBe(302);
+    679|       expect(waitUntil).toHaveBeenCalledTimes(1);
+       |                         ^
+    680|
+    681|       const recipe = await db.recipe.findFirstOrThrow({
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  2 failed | 120 passed (122)
+   Start at  22:20:15
+   Duration  18.76s (transform 340ms, setup 169ms, import 1.35s, tests 16.64s, environment 371ms)

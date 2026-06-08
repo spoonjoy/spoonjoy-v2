@@ -4,6 +4,7 @@ import { enforceRateLimit, rateLimitedResponse, type RateLimitScope } from "~/li
 import { getRequestDb } from "~/lib/route-platform.server";
 import { callSpoonjoyApiOperation, listSpoonjoyApiOperations } from "~/lib/spoonjoy-api.server";
 import { buildSpoonjoyApiContext, resolveApiPrincipal } from "~/lib/spoonjoy-api-request.server";
+import { RequestBodyTooLargeError, readLimitedTextBody } from "~/lib/request-body-limit.server";
 import {
   captureEvent,
   captureException,
@@ -169,12 +170,22 @@ function queryArgs(url: URL): Record<string, unknown> {
   return args;
 }
 
+function pickArgs(args: Record<string, unknown>, allowedKeys: readonly string[]): Record<string, unknown> {
+  const picked: Record<string, unknown> = {};
+  for (const key of allowedKeys) {
+    if (Object.prototype.hasOwnProperty.call(args, key)) {
+      picked[key] = args[key];
+    }
+  }
+  return picked;
+}
+
 async function bodyArgs(request: Request): Promise<Record<string, unknown>> {
   if (request.headers.get("Content-Length") === "0") return {};
 
   const contentType = request.headers.get("Content-Type") ?? "";
   if (!contentType.includes("application/json")) return {};
-  const text = await request.text();
+  const text = await readLimitedTextBody(request);
   if (!text.trim()) return {};
 
   try {
@@ -195,19 +206,19 @@ function notFound(path: string): never {
 function dispatchGet(path: string, segments: string[], url: URL): ApiDispatch {
   const args = queryArgs(url);
 
-  if (path === "health") return { operation: "health", args };
-  if (path === "search") return { operation: "search_spoonjoy", args };
-  if (path === "recipes") return { operation: "search_recipes", args };
+  if (path === "health") return { operation: "health", args: {} };
+  if (path === "search") return { operation: "search_spoonjoy", args: pickArgs(args, ["query", "scope", "ownerEmail", "limit"]) };
+  if (path === "recipes") return { operation: "search_recipes", args: pickArgs(args, ["query", "chefEmail", "limit"]) };
   if (segments[0] === "recipes" && segments.length === 2) {
-    return { operation: "get_recipe", args: { ...args, id: segments[1] } };
+    return { operation: "get_recipe", args: { id: segments[1] } };
   }
-  if (path === "cookbooks") return { operation: "list_cookbooks", args };
+  if (path === "cookbooks") return { operation: "list_cookbooks", args: pickArgs(args, ["ownerEmail", "query", "limit"]) };
   if (segments[0] === "cookbooks" && segments.length === 2) {
-    return { operation: "get_cookbook", args: { ...args, cookbookId: segments[1] } };
+    return { operation: "get_cookbook", args: { ...pickArgs(args, ["ownerEmail", "title", "cookbookTitle"]), cookbookId: segments[1] } };
   }
-  if (path === "shopping-list") return { operation: "get_shopping_list", args };
-  if (path === "shopping-list/search") return { operation: "search_shopping_list", args };
-  if (path === "tokens") return { operation: "list_api_tokens", args };
+  if (path === "shopping-list") return { operation: "get_shopping_list", args: pickArgs(args, ["ownerEmail"]) };
+  if (path === "shopping-list/search") return { operation: "search_shopping_list", args: pickArgs(args, ["ownerEmail", "query", "limit"]) };
+  if (path === "tokens") return { operation: "list_api_tokens", args: pickArgs(args, ["ownerEmail"]) };
 
   notFound(path);
 }
@@ -345,6 +356,18 @@ async function handleApiRequest({ request, context, params }: Route.LoaderArgs |
         principal,
         routeTemplate: error.status === 404 && !operation ? "/api/{unknown}" : undefined,
         errorCode: "api_auth_error",
+      });
+    }
+    if (error instanceof RequestBodyTooLargeError) {
+      const response = apiJson({ ok: false, error: { message: error.message, status: error.status } }, error.status);
+      return observeLegacyApiResponse({
+        request,
+        context,
+        response,
+        startedAt,
+        operation,
+        principal,
+        errorCode: "request_too_large",
       });
     }
     if (error instanceof Error && /not found/i.test(error.message)) {

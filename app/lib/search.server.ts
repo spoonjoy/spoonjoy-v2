@@ -79,6 +79,14 @@ interface SearchIndexCountRow {
   documentCount: number | bigint;
 }
 
+interface RecipeCoverFingerprintRow {
+  id: string;
+  recipeId: string;
+  createdAt: Date | string | number | bigint | null;
+  imageUrl: string;
+  stylizedImageUrl: string | null;
+}
+
 const DEFAULT_SEARCH_LIMIT = 20;
 const MAX_SEARCH_LIMIT = 50;
 const SEARCH_INSERT_COLUMN_COUNT = 11;
@@ -275,13 +283,65 @@ function aggregateDateString(value: Date | string | number | bigint | null): str
   return toDate(value).toISOString();
 }
 
+async function sha256Hex(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(value),
+  );
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function currentRecipeCoverContentHash(database: PrismaClient): Promise<string> {
+  const rows = await database.$queryRawUnsafe<RecipeCoverFingerprintRow[]>(
+    `SELECT
+        "id",
+        "recipeId",
+        "createdAt",
+        "imageUrl",
+        "stylizedImageUrl"
+      FROM (
+        SELECT
+          rc."id" AS "id",
+          rc."recipeId" AS "recipeId",
+          rc."createdAt" AS "createdAt",
+          rc."imageUrl" AS "imageUrl",
+          rc."stylizedImageUrl" AS "stylizedImageUrl",
+          ROW_NUMBER() OVER (
+            PARTITION BY rc."recipeId"
+            ORDER BY rc."createdAt" DESC, rc."id" DESC
+          ) AS rn
+        FROM "RecipeCover" rc
+        INNER JOIN "Recipe" r ON r."id" = rc."recipeId"
+        WHERE r."deletedAt" IS NULL
+      )
+      WHERE rn = 1
+      ORDER BY "recipeId" ASC`
+  );
+  const payload = JSON.stringify(
+    rows.map((row) => ({
+      id: row.id,
+      recipeId: row.recipeId,
+      createdAt: aggregateDateString(row.createdAt),
+      imageUrl: row.imageUrl,
+      stylizedImageUrl: row.stylizedImageUrl,
+    })),
+  );
+  return `sha256:${await sha256Hex(payload)}`;
+}
+
 async function searchSourceFingerprint(database: PrismaClient): Promise<string> {
-  const rows = await database.$queryRawUnsafe<SearchSourceFingerprintRow[]>(SEARCH_SOURCE_FINGERPRINT_SQL);
+  const [rows, recipeCoverContentHash] = await Promise.all([
+    database.$queryRawUnsafe<SearchSourceFingerprintRow[]>(SEARCH_SOURCE_FINGERPRINT_SQL),
+    currentRecipeCoverContentHash(database),
+  ]);
   const row = rows[0]!;
   const normalizedRows = SEARCH_SOURCE_TABLES.map((sourceTable) => ({
     tableName: sourceTable.tableName,
     rowCount: toNumber(row[sourceTable.countKey] as number | bigint),
     latestAt: aggregateDateString(row[sourceTable.latestKey] as Date | string | number | bigint | null),
+    contentHash: sourceTable.tableName === "RecipeCover" ? recipeCoverContentHash : null,
   }));
 
   return JSON.stringify(normalizedRows);

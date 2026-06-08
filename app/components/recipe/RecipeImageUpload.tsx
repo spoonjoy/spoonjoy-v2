@@ -2,15 +2,19 @@ import { useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { Upload, X, ImageIcon, Loader2 } from 'lucide-react'
 import { Button } from '~/components/ui/button'
-
-const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
-const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+import {
+  FOOD_IMAGE_ACCEPT,
+  FOOD_IMAGE_TYPE_MESSAGE,
+  IMAGE_MAX_FILE_SIZE,
+  RECIPE_IMAGE_SIZE_MESSAGE,
+  FOOD_IMAGE_TYPES,
+} from '~/lib/recipe-image'
 
 interface RecipeImageUploadProps {
   onFileSelect: (file: File) => void
   onClear?: () => void
   onValidationError?: (message: string) => void
-  coverImageUrl?: string
+  coverImageUrl?: string | null
   alt?: string
   disabled?: boolean
   loading?: boolean
@@ -46,17 +50,21 @@ export function RecipeImageUpload({
 
   const validateFile = (file: File): boolean => {
     if (!file.type.startsWith('image/')) {
-      onValidationError?.('Invalid file type. Please select an image file.')
+      onValidationError?.(`Invalid image type. ${FOOD_IMAGE_TYPE_MESSAGE}`)
       return false
     }
 
-    if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
-      onValidationError?.('Invalid file type. Please select an image file.')
+    if (!(FOOD_IMAGE_TYPES as readonly string[]).includes(file.type)) {
+      onValidationError?.(
+        file.type === 'image/gif'
+          ? FOOD_IMAGE_TYPE_MESSAGE
+          : `Invalid image type. ${FOOD_IMAGE_TYPE_MESSAGE}`
+      )
       return false
     }
 
-    if (file.size > MAX_FILE_SIZE) {
-      onValidationError?.('File too large. Maximum size is 5MB.')
+    if (file.size > IMAGE_MAX_FILE_SIZE) {
+      onValidationError?.(RECIPE_IMAGE_SIZE_MESSAGE)
       return false
     }
 
@@ -189,7 +197,7 @@ export function RecipeImageUpload({
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*"
+        accept={FOOD_IMAGE_ACCEPT}
         className="hidden"
         disabled={isDisabled}
         aria-label="Upload recipe image"
@@ -232,7 +240,7 @@ export function RecipeImageUpload({
       </div>
 
       <p className="text-sm text-[var(--sj-ink-soft)]">
-        JPG, PNG, GIF, or WebP. Max 5MB.
+        JPG, PNG, or WebP. Max 5MB.
       </p>
 
       {error && (

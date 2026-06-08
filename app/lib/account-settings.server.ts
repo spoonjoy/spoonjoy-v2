@@ -8,10 +8,10 @@ import { listUserPasskeys, removeUserPasskey, renameUserPasskey } from "~/lib/we
 import {
   deleteStoredImage,
   hasUploadedImageFile,
-  RECIPE_IMAGE_TYPES,
   storeImage,
   validateImageFile,
 } from "~/lib/image-storage.server";
+import { PROFILE_IMAGE_TYPES } from "~/lib/recipe-image";
 
 export interface NotificationPreferenceFlags {
   notifySpoonOnMyRecipe: boolean;
@@ -397,7 +397,7 @@ export async function handleAccountSettingsAction({
 
     // Check file type
     const imageError = validateImageFile(photo, {
-      allowedTypes: RECIPE_IMAGE_TYPES,
+      allowedTypes: PROFILE_IMAGE_TYPES,
       messages: {
         invalidType: "Please upload an image file",
         fileTooLarge: "Photo must be less than 5MB",

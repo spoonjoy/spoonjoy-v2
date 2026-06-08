@@ -1,0 +1,42 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+      Coverage enabled with istanbul
+
+ ✓ test/routes/account-settings.test.tsx (148 tests) 14149ms
+ ✓ test/routes/recipes-id-edit.test.tsx (67 tests) 11292ms
+       ✓ should populate hidden form and submit when Save Recipe is clicked  342ms
+       ✓ should keep the mobile dock off edit forms and submit from the in-flow Save Recipe button  331ms
+ ✓ test/routes/recipes-new.test.tsx (50 tests) 5057ms
+       ✓ should populate hidden form and submit when RecipeBuilder saves  321ms
+ ✓ test/routes/recipes-id-spoons.test.tsx (20 tests) 3284ms
+ ✓ test/components/recipe/RecipeImageUpload.test.tsx (62 tests) 2986ms
+       ✓ revokes old preview URL when dropping new file  1920ms
+ ✓ test/components/recipe/SpoonDialog.test.tsx (16 tests) 694ms
+ ✓ test/lib/recipe-spoon.server.test.ts (46 tests) 403ms
+ ✓ test/components/account/ProfilePhotoField.test.tsx (12 tests) 141ms
+ ✓ test/lib/image-storage.server.test.ts (26 tests) 32ms
+
+ Test Files  9 passed (9)
+      Tests  447 passed (447)
+   Start at  21:27:10
+   Duration  45.29s (transform 1.40s, setup 448ms, import 4.45s, tests 38.04s, environment 1.28s)
+
+ % Coverage report from istanbul
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s
+-------------------|---------|----------|---------|---------|-------------------
+All files          |     100 |      100 |     100 |     100 |
+ ...onents/account |     100 |      100 |     100 |     100 |
+  ...hotoField.tsx |     100 |      100 |     100 |     100 |
+ components/recipe |     100 |      100 |     100 |     100 |
+  ...ageUpload.tsx |     100 |      100 |     100 |     100 |
+  SpoonDialog.tsx  |     100 |      100 |     100 |     100 |
+ lib               |     100 |      100 |     100 |     100 |
+  ...ngs.server.ts |     100 |      100 |     100 |     100 |
+  ...age.server.ts |     100 |      100 |     100 |     100 |
+  recipe-image.ts  |     100 |      100 |     100 |     100 |
+  ...oon.server.ts |     100 |      100 |     100 |     100 |
+ routes            |     100 |      100 |     100 |     100 |
+  ....$id.edit.tsx |     100 |      100 |     100 |     100 |
+  recipes.new.tsx  |     100 |      100 |     100 |     100 |
+-------------------|---------|----------|---------|---------|-------------------

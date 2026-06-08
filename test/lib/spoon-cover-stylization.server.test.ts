@@ -7,11 +7,40 @@ import { cleanupDatabase } from "../helpers/cleanup";
 
 type Database = Awaited<ReturnType<typeof getLocalDb>>;
 
+const GENERATED_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
+const VALID_PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+
+function dataUrl(contentType: string, bytes: Uint8Array): string {
+  return `data:${contentType};base64,${Buffer.from(bytes).toString("base64")}`;
+}
+
 function makeRunner(): ImageGenRunner & { textToImage: ReturnType<typeof vi.fn>; imageToImage: ReturnType<typeof vi.fn> } {
   return {
-    textToImage: vi.fn().mockResolvedValue({ url: "https://stub.test/text.png" }),
-    imageToImage: vi.fn().mockResolvedValue({ url: "https://stub.test/img.png" }),
+    textToImage: vi.fn().mockResolvedValue({ bytes: GENERATED_BYTES, contentType: "image/png" }),
+    imageToImage: vi.fn().mockResolvedValue({ bytes: GENERATED_BYTES, contentType: "image/png" }),
   };
+}
+
+function mockR2(): R2Bucket {
+  return {
+    put: vi.fn(async () => ({})),
+    delete: vi.fn(async () => undefined),
+    get: vi.fn(),
+    head: vi.fn(),
+    list: vi.fn(),
+    createMultipartUpload: vi.fn(),
+    resumeMultipartUpload: vi.fn(),
+  } as unknown as R2Bucket;
+}
+
+function postHogFetchSpy() {
+  return vi.fn(async () => new Response("{}", { status: 200 })) as unknown as typeof fetch;
+}
+
+function postHogBodies(fetchImpl: typeof fetch): Array<{ event: string; distinct_id: string; properties: Record<string, unknown> }> {
+  return (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls.map(([, init]) =>
+    JSON.parse(init.body as string),
+  );
 }
 
 describe("scheduleSpoonCoverStylization", () => {
@@ -52,17 +81,26 @@ describe("scheduleSpoonCoverStylization", () => {
 
   it("writes stylizedImageUrl on success via the supplied runner", async () => {
     const runner = makeRunner();
+    const bucket = mockR2();
     await scheduleSpoonCoverStylization({
       db,
       userId,
+      recipeId,
       coverId,
-      rawPhotoUrl: "https://stub.test/raw.png",
+      rawPhotoUrl: dataUrl("image/png", VALID_PNG_BYTES),
       recipeTitle: "Stylize Me",
       runner,
+      bucket,
+      now: () => 1234,
       logger: errorSpy,
     });
     const cover = await db.recipeCover.findUniqueOrThrow({ where: { id: coverId } });
-    expect(cover.stylizedImageUrl).toBe("https://stub.test/img.png");
+    expect(cover.stylizedImageUrl).toMatch(/^\/photos\/covers\/1234-[a-f0-9-]+\.png$/);
+    expect(bucket.put).toHaveBeenCalledWith(
+      cover.stylizedImageUrl!.replace("/photos/", ""),
+      GENERATED_BYTES,
+      expect.objectContaining({ httpMetadata: { contentType: "image/png" } }),
+    );
     expect(runner.imageToImage).toHaveBeenCalledTimes(1);
   });
 
@@ -76,36 +114,119 @@ describe("scheduleSpoonCoverStylization", () => {
       data: { userId, kind: "stylization", bucketStart, count: 50 },
     });
     const runner = makeRunner();
+    const analyticsFetchImpl = postHogFetchSpy();
     await scheduleSpoonCoverStylization({
       db,
       userId,
+      recipeId,
       coverId,
-      rawPhotoUrl: "https://stub.test/raw.png",
+      rawPhotoUrl: dataUrl("image/png", VALID_PNG_BYTES),
       recipeTitle: "Stylize Me",
       runner,
       now: () => fixed.getTime(),
+      postHogConfig: { enabled: true, key: "ph_test", host: "https://posthog.example" },
+      analyticsFetchImpl,
       logger: errorSpy,
     });
     expect(runner.imageToImage).not.toHaveBeenCalled();
     const cover = await db.recipeCover.findUniqueOrThrow({ where: { id: coverId } });
     expect(cover.stylizedImageUrl).toBeNull();
+    expect(postHogBodies(analyticsFetchImpl)).toEqual([
+      expect.objectContaining({
+        event: "spoonjoy.image_generation.skipped",
+        distinct_id: userId,
+        properties: expect.objectContaining({
+          feature: "recipe_image_generation",
+          operation: "cover_stylize",
+          recipeId,
+          coverId,
+          sourceType: "spoon",
+          quotaKind: "stylization",
+          model: "none",
+          reason: "quota_exhausted",
+        }),
+      }),
+    ]);
   });
 
   it("returns silently when no runner is available and OPENAI_API_KEY is absent", async () => {
+    const analyticsFetchImpl = postHogFetchSpy();
     await scheduleSpoonCoverStylization({
       db,
       userId,
+      recipeId,
       coverId,
-      rawPhotoUrl: "https://stub.test/raw.png",
+      rawPhotoUrl: dataUrl("image/png", VALID_PNG_BYTES),
       recipeTitle: "Stylize Me",
       env: {},
+      sourceType: "chef-upload",
+      postHogConfig: { enabled: true, key: "ph_test", host: "https://posthog.example" },
+      analyticsFetchImpl,
       logger: errorSpy,
     });
     const cover = await db.recipeCover.findUniqueOrThrow({ where: { id: coverId } });
     expect(cover.stylizedImageUrl).toBeNull();
+    await expect(
+      db.imageGenLedger.count({ where: { userId, kind: "stylization" } }),
+    ).resolves.toBe(0);
+    expect(postHogBodies(analyticsFetchImpl)).toEqual([
+      expect.objectContaining({
+        event: "spoonjoy.image_generation.skipped",
+        distinct_id: userId,
+        properties: expect.objectContaining({
+          feature: "recipe_image_generation",
+          operation: "cover_stylize",
+          recipeId,
+          coverId,
+          sourceType: "chef-upload",
+          quotaKind: "stylization",
+          model: "none",
+          reason: "missing_openai_key",
+        }),
+      }),
+    ]);
+  });
+
+  it("returns silently when the OpenAI runner factory returns null", async () => {
+    const analyticsFetchImpl = postHogFetchSpy();
+    await scheduleSpoonCoverStylization({
+      db,
+      userId,
+      recipeId,
+      coverId,
+      rawPhotoUrl: dataUrl("image/png", VALID_PNG_BYTES),
+      recipeTitle: "Stylize Me",
+      env: { OPENAI_API_KEY: "sk-test" },
+      createRunner: () => null,
+      postHogConfig: { enabled: true, key: "ph_test", host: "https://posthog.example" },
+      analyticsFetchImpl,
+      logger: errorSpy,
+    });
+    const cover = await db.recipeCover.findUniqueOrThrow({ where: { id: coverId } });
+    expect(cover.stylizedImageUrl).toBeNull();
+    await expect(
+      db.imageGenLedger.count({ where: { userId, kind: "stylization" } }),
+    ).resolves.toBe(0);
+    expect(postHogBodies(analyticsFetchImpl)).toEqual([
+      expect.objectContaining({
+        event: "spoonjoy.image_generation.skipped",
+        distinct_id: userId,
+        properties: expect.objectContaining({
+          feature: "recipe_image_generation",
+          operation: "cover_stylize",
+          recipeId,
+          coverId,
+          sourceType: "spoon",
+          quotaKind: "stylization",
+          model: "none",
+          reason: "missing_runner",
+        }),
+      }),
+    ]);
   });
 
   it("logs errors and leaves stylizedImageUrl null when the runner throws", async () => {
+    const analyticsFetchImpl = postHogFetchSpy();
     const runner: ImageGenRunner = {
       textToImage: vi.fn().mockRejectedValue(new Error("text failed")),
       imageToImage: vi.fn().mockRejectedValue(new Error("img failed")),
@@ -113,15 +234,34 @@ describe("scheduleSpoonCoverStylization", () => {
     await scheduleSpoonCoverStylization({
       db,
       userId,
+      recipeId,
       coverId,
-      rawPhotoUrl: "https://stub.test/raw.png",
+      rawPhotoUrl: dataUrl("image/png", VALID_PNG_BYTES),
       recipeTitle: "Stylize Me",
       runner,
+      postHogConfig: { enabled: true, key: "ph_test", host: "https://posthog.example" },
+      analyticsFetchImpl,
       logger: errorSpy,
     });
     expect(errorSpy.error).toHaveBeenCalled();
     const cover = await db.recipeCover.findUniqueOrThrow({ where: { id: coverId } });
     expect(cover.stylizedImageUrl).toBeNull();
+    expect(postHogBodies(analyticsFetchImpl)).toEqual([
+      expect.objectContaining({
+        event: "$exception",
+        distinct_id: userId,
+        properties: expect.objectContaining({
+          $exception_message: "Stylization failed",
+          feature: "recipe_image_generation",
+          operation: "cover_stylize",
+          recipeId,
+          coverId,
+          sourceType: "spoon",
+          quotaKind: "stylization",
+          model: "gpt-image-1",
+        }),
+      }),
+    ]);
   });
 
   it("falls back to the default console logger when none is supplied", async () => {
@@ -136,8 +276,9 @@ describe("scheduleSpoonCoverStylization", () => {
       await scheduleSpoonCoverStylization({
         db,
         userId,
+        recipeId,
         coverId,
-        rawPhotoUrl: "https://stub.test/raw.png",
+        rawPhotoUrl: dataUrl("image/png", VALID_PNG_BYTES),
         recipeTitle: "Stylize Me",
         runner,
       });
@@ -152,8 +293,9 @@ describe("scheduleSpoonCoverStylization", () => {
     await scheduleSpoonCoverStylization({
       db,
       userId,
+      recipeId,
       coverId,
-      rawPhotoUrl: "https://stub.test/raw.png",
+      rawPhotoUrl: dataUrl("image/png", VALID_PNG_BYTES),
       recipeTitle: "Stylize Me",
       env: { OPENAI_API_KEY: "test" },
       runner,
@@ -172,6 +314,7 @@ describe("scheduleSpoonCoverStylization", () => {
       await scheduleSpoonCoverStylization({
         db,
         userId,
+        recipeId,
         coverId,
         rawPhotoUrl: "https://stub.test/raw.png",
         recipeTitle: "Stylize Me",

@@ -87,6 +87,14 @@ describe("ProfilePhotoField", () => {
     expect(clickSpy).toHaveBeenCalled();
   });
 
+  it("uses an explicit profile-photo allow-list that still includes GIF and WebP", async () => {
+    renderField(null);
+    await screen.findByRole("button", { name: /upload photo/i });
+
+    expect(getFileInput()).toHaveAttribute("accept", "image/jpeg,image/png,image/gif,image/webp");
+    expect(screen.getByText(/jpg, png, gif, or webp/i)).toBeInTheDocument();
+  });
+
   it("opens the cropper when a valid file is selected", async () => {
     renderField(null);
     await screen.findByRole("button", { name: /upload photo/i });

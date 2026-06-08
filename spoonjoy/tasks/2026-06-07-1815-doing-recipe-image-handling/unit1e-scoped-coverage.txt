@@ -1,0 +1,24 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+      Coverage enabled with istanbul
+
+ ✓ test/lib/recipe-import.test.ts (69 tests) 5727ms
+
+ Test Files  1 passed (1)
+      Tests  69 passed (69)
+   Start at  21:37:56
+   Duration  6.59s (transform 345ms, setup 95ms, import 492ms, tests 5.73s, environment 152ms)
+
+ % Coverage report from istanbul
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   80.11 |    68.33 |   90.47 |   82.79 |
+ ...etch.server.ts |    66.9 |    46.42 |   83.33 |   73.55 | ...38-139,203,260
+ ...port.server.ts |   88.11 |     88.5 |    91.3 |   87.31 | ...96-332,519,556
+ ...etch.server.ts |   92.98 |    85.36 |     100 |   92.45 | 24,123,126,132
+-------------------|---------|----------|---------|---------|-------------------
+ERROR: Coverage for lines (82.79%) does not meet global threshold (100%)
+ERROR: Coverage for functions (90.47%) does not meet global threshold (100%)
+ERROR: Coverage for statements (80.11%) does not meet global threshold (100%)
+ERROR: Coverage for branches (68.33%) does not meet global threshold (100%)

@@ -5,6 +5,8 @@ import path from "node:path";
 import { db } from "~/lib/db.server";
 import { createUser } from "~/lib/auth.server";
 import { cleanupDatabase } from "../helpers/cleanup";
+
+const GENERATED_IMAGE_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
 import {
   ImportRecipeError,
   importRecipeFromUrl,
@@ -50,6 +52,32 @@ function makeFetchImpl(fixtureHtml: string, finalUrl = "https://example.com/r"):
   return vi.fn(async () =>
     streamingResponse(fixtureHtml, { url: finalUrl }),
   ) as unknown as typeof fetch;
+}
+
+function importHtmlWithImage(imageUrl: string): string {
+  return `<html><head><script type="application/ld+json">${JSON.stringify({
+    "@type": "Recipe",
+    name: `Imported Cover ${faker.string.alphanumeric(8)}`,
+    recipeIngredient: ["1 cup flour"],
+    recipeInstructions: [{ "@type": "HowToStep", text: "Mix well." }],
+    image: imageUrl,
+  })}</script></head><body>Recipe</body></html>`;
+}
+
+function validJpegBytes(): Uint8Array {
+  return new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0xff, 0xda]);
+}
+
+function validPngBytes(): Uint8Array {
+  return new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
+}
+
+function validWebpBytes(): Uint8Array {
+  return new Uint8Array([0x52, 0x49, 0x46, 0x46, 0x10, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50]);
+}
+
+function gifBytes(): Uint8Array {
+  return new TextEncoder().encode("GIF89a");
 }
 
 function makeIngredientParser(): ImportRecipeDeps["ingredientParser"] {
@@ -767,27 +795,27 @@ describe("importRecipeFromUrl — extraction paths", () => {
       expect(covers).toHaveLength(0);
     });
 
-    it("image response with no content-type header defaults to image/jpeg", async () => {
+    it("image response with no content-type header is skipped", async () => {
       const fixture = await loadFixture("nyt-style-jsonld.html");
       const chef = await makeChef();
       const bucket = mockBucket();
       const waitUntil = vi.fn();
+      const logger = { error: vi.fn() };
       const fetchImpl = pageThen(fixture, {
         ok: true,
         status: 200,
-        // No headers attribute at all on the response — exercises the default.
-        arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+        arrayBuffer: async () => validJpegBytes().buffer,
       } as unknown as Response);
       const result = await importRecipeFromUrl(
         { url: "https://example.com/r", chefId: chef.id },
-        baseDeps({ fetchImpl, bucket, waitUntil }),
+        baseDeps({ fetchImpl, bucket, waitUntil, logger }),
       );
       await waitUntil.mock.calls[0][0];
+      expect(logger.error).toHaveBeenCalled();
       const covers = await db.recipeCover.findMany({
         where: { recipeId: result.recipeId! },
       });
-      expect(covers).toHaveLength(1);
-      expect(covers[0].imageUrl).toMatch(/\.jpg$/);
+      expect(covers).toHaveLength(0);
     });
 
     it("png content-type produces .png extension", async () => {
@@ -799,7 +827,7 @@ describe("importRecipeFromUrl — extraction paths", () => {
         ok: true,
         status: 200,
         headers: new Headers([["content-type", "image/png"]]),
-        arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+        arrayBuffer: async () => validPngBytes().buffer,
       } as unknown as Response);
       const result = await importRecipeFromUrl(
         { url: "https://example.com/r", chefId: chef.id },
@@ -821,7 +849,7 @@ describe("importRecipeFromUrl — extraction paths", () => {
         ok: true,
         status: 200,
         headers: new Headers([["content-type", "image/webp"]]),
-        arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+        arrayBuffer: async () => validWebpBytes().buffer,
       } as unknown as Response);
       const result = await importRecipeFromUrl(
         { url: "https://example.com/r", chefId: chef.id },
@@ -923,26 +951,172 @@ describe("importRecipeFromUrl — extraction paths", () => {
       }
     });
 
-    it("gif content-type produces .gif extension", async () => {
+    it("gif content-type is skipped without creating an imported cover", async () => {
       const fixture = await loadFixture("nyt-style-jsonld.html");
       const chef = await makeChef();
       const bucket = mockBucket();
       const waitUntil = vi.fn();
+      const logger = { error: vi.fn() };
       const fetchImpl = pageThen(fixture, {
         ok: true,
         status: 200,
         headers: new Headers([["content-type", "image/gif"]]),
-        arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+        arrayBuffer: async () => gifBytes().buffer,
       } as unknown as Response);
       const result = await importRecipeFromUrl(
         { url: "https://example.com/r", chefId: chef.id },
-        baseDeps({ fetchImpl, bucket, waitUntil }),
+        baseDeps({ fetchImpl, bucket, waitUntil, logger }),
       );
       await waitUntil.mock.calls[0][0];
+      expect(logger.error).toHaveBeenCalled();
       const covers = await db.recipeCover.findMany({
         where: { recipeId: result.recipeId! },
       });
-      expect(covers[0].imageUrl).toMatch(/\.gif$/);
+      expect(covers).toHaveLength(0);
+    });
+
+    it("gif file extension is skipped even when served as JPEG bytes", async () => {
+      const fixture = importHtmlWithImage("https://cdn.example.com/animated.gif");
+      const chef = await makeChef();
+      const bucket = mockBucket();
+      const waitUntil = vi.fn();
+      const logger = { error: vi.fn() };
+      const fetchImpl = pageThen(fixture, {
+        ok: true,
+        status: 200,
+        headers: new Headers([["content-type", "image/jpeg"]]),
+        arrayBuffer: async () => validJpegBytes().buffer,
+      } as unknown as Response);
+      const result = await importRecipeFromUrl(
+        { url: "https://example.com/r", chefId: chef.id },
+        baseDeps({ fetchImpl, bucket, waitUntil, logger }),
+      );
+      await waitUntil.mock.calls[0][0];
+      expect(logger.error).toHaveBeenCalled();
+      expect(bucket.put).not.toHaveBeenCalled();
+      const covers = await db.recipeCover.findMany({
+        where: { recipeId: result.recipeId! },
+      });
+      expect(covers).toHaveLength(0);
+    });
+
+    it("gif bytes disguised as PNG or JPEG are skipped without creating covers", async () => {
+      for (const [contentType, fileName] of [
+        ["image/png", "fake.png"],
+        ["image/jpeg", "fake.jpg"],
+      ] as const) {
+        const fixture = importHtmlWithImage(`https://cdn.example.com/${fileName}`);
+        const chef = await makeChef();
+        const bucket = mockBucket();
+        const waitUntil = vi.fn();
+        const logger = { error: vi.fn() };
+        const fetchImpl = pageThen(fixture, {
+          ok: true,
+          status: 200,
+          headers: new Headers([["content-type", contentType]]),
+          arrayBuffer: async () => gifBytes().buffer,
+        } as unknown as Response);
+        const result = await importRecipeFromUrl(
+          { url: `https://example.com/${fileName}`, chefId: chef.id },
+          baseDeps({ fetchImpl, bucket, waitUntil, logger }),
+        );
+        await waitUntil.mock.calls[0][0];
+        expect(logger.error).toHaveBeenCalled();
+        expect(bucket.put).not.toHaveBeenCalled();
+        const covers = await db.recipeCover.findMany({
+          where: { recipeId: result.recipeId! },
+        });
+        expect(covers).toHaveLength(0);
+      }
+    });
+
+    it("blocked-scheme import cover URLs are rejected before fetch", async () => {
+      const fixture = importHtmlWithImage("file:///etc/passwd");
+      const chef = await makeChef();
+      const bucket = mockBucket();
+      const waitUntil = vi.fn();
+      const logger = { error: vi.fn() };
+      const fetchImpl = vi.fn(async (input: unknown) => {
+        const url = String(input);
+        if (url === "https://example.com/r") {
+          return streamingResponse(fixture, { url: "https://example.com/r" });
+        }
+        throw new Error(`unexpected unsafe fetch: ${url}`);
+      }) as unknown as typeof fetch;
+
+      const result = await importRecipeFromUrl(
+        { url: "https://example.com/r", chefId: chef.id },
+        baseDeps({ fetchImpl, bucket, waitUntil, logger }),
+      );
+      await waitUntil.mock.calls[0][0];
+
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+      expect(logger.error).toHaveBeenCalled();
+      expect(bucket.put).not.toHaveBeenCalled();
+      await expect(db.recipeCover.count({ where: { recipeId: result.recipeId! } })).resolves.toBe(0);
+    });
+
+    it("localhost/private import cover hosts are rejected before fetch", async () => {
+      for (const coverUrl of ["http://localhost/cover.jpg", "http://192.168.1.10/cover.jpg"]) {
+        const fixture = importHtmlWithImage(coverUrl);
+        const chef = await makeChef();
+        const bucket = mockBucket();
+        const waitUntil = vi.fn();
+        const logger = { error: vi.fn() };
+        const fetchImpl = vi.fn(async (input: unknown) => {
+          const url = String(input);
+          if (url === "https://example.com/r") {
+            return streamingResponse(fixture, { url: "https://example.com/r" });
+          }
+          throw new Error(`unexpected private fetch: ${url}`);
+        }) as unknown as typeof fetch;
+
+        const result = await importRecipeFromUrl(
+          { url: "https://example.com/r", chefId: chef.id },
+          baseDeps({ fetchImpl, bucket, waitUntil, logger }),
+        );
+        await waitUntil.mock.calls[0][0];
+
+        expect(fetchImpl).toHaveBeenCalledTimes(1);
+        expect(logger.error).toHaveBeenCalled();
+        expect(bucket.put).not.toHaveBeenCalled();
+        await expect(db.recipeCover.count({ where: { recipeId: result.recipeId! } })).resolves.toBe(0);
+      }
+    });
+
+    it("public-to-private import cover redirects are rejected before fetching the private target", async () => {
+      const fixture = importHtmlWithImage("https://cdn.example.com/cover.jpg");
+      const chef = await makeChef();
+      const bucket = mockBucket();
+      const waitUntil = vi.fn();
+      const logger = { error: vi.fn() };
+      const fetchImpl = vi.fn(async (input: unknown) => {
+        const url = String(input);
+        if (url === "https://example.com/r") {
+          return streamingResponse(fixture, { url: "https://example.com/r" });
+        }
+        if (url === "https://cdn.example.com/cover.jpg") {
+          return {
+            ok: false,
+            status: 302,
+            headers: new Headers([["location", "http://127.0.0.1/private.jpg"]]),
+            arrayBuffer: async () => new ArrayBuffer(0),
+          } as unknown as Response;
+        }
+        throw new Error(`private target should not be fetched: ${url}`);
+      }) as unknown as typeof fetch;
+
+      const result = await importRecipeFromUrl(
+        { url: "https://example.com/r", chefId: chef.id },
+        baseDeps({ fetchImpl, bucket, waitUntil, logger }),
+      );
+      await waitUntil.mock.calls[0][0];
+
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+      const error = logger.error.mock.calls[0][1] as Error;
+      expect(error.message).toMatch(/blocked/i);
+      expect(bucket.put).not.toHaveBeenCalled();
+      await expect(db.recipeCover.count({ where: { recipeId: result.recipeId! } })).resolves.toBe(0);
     });
   });
 
@@ -999,7 +1173,7 @@ describe("importRecipeFromUrl — extraction paths", () => {
           ok: true,
           status: 200,
           headers: new Headers([["content-type", "image/jpeg"]]),
-          arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+          arrayBuffer: async () => validJpegBytes().buffer,
         } as unknown as Response;
       });
       const originalFetch = globalThis.fetch;
@@ -1045,7 +1219,7 @@ describe("importRecipeFromUrl — extraction paths", () => {
             ok: true,
             status: 200,
             headers: new Headers([["content-type", "image/jpeg"]]),
-            arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+            arrayBuffer: async () => validJpegBytes().buffer,
           } as unknown as Response;
         }) as unknown as typeof fetch;
         const result = await importRecipeFromUrl(
@@ -1168,7 +1342,7 @@ describe("importRecipeFromUrl — extraction paths", () => {
           ok: true,
           status: 200,
           headers: new Headers([["content-type", "image/jpeg"]]),
-          arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+          arrayBuffer: async () => validJpegBytes().buffer,
         }),
       });
       const result = await importRecipeFromUrl(
@@ -1189,7 +1363,7 @@ describe("importRecipeFromUrl — extraction paths", () => {
       const fixture = await loadFixture("nyt-style-jsonld.html");
       const chef = await makeChef();
       const bucket = mockBucket();
-      const bytes = new Uint8Array([10, 20, 30]);
+      const bytes = validPngBytes();
       const waitUntil = vi.fn();
       const fetchImpl = multiFetchImpl({
         page: () => streamingResponse(fixture, { url: "https://example.com/r" }),
@@ -1211,6 +1385,35 @@ describe("importRecipeFromUrl — extraction paths", () => {
       });
       expect(covers[0].sourceType).toBe("import");
       expect(covers[0].imageUrl).toContain("/photos/");
+    });
+
+    it("same-millisecond imported cover uploads use unique immutable keys", async () => {
+      const chef = await makeChef();
+      const bucket = mockBucket();
+      const now = () => new Date(1_780_000_000_000);
+
+      for (const suffix of ["a", "b"]) {
+        const fixture = importHtmlWithImage(`https://cdn.example.com/${suffix}.jpg`);
+        const fetchImpl = multiFetchImpl({
+          page: () => streamingResponse(fixture, { url: `https://example.com/${suffix}` }),
+          image: async () => ({
+            ok: true,
+            status: 200,
+            headers: new Headers([["content-type", "image/jpeg"]]),
+            arrayBuffer: async () => validJpegBytes().buffer,
+          }),
+        });
+
+        await importRecipeFromUrl(
+          { url: `https://example.com/${suffix}`, chefId: chef.id },
+          baseDeps({ fetchImpl, bucket, now }),
+        );
+      }
+
+      const keys = (bucket.put as ReturnType<typeof vi.fn>).mock.calls.map(([key]) => key);
+      expect(keys).toHaveLength(2);
+      expect(new Set(keys).size).toBe(2);
+      expect(keys.every((key) => String(key).startsWith("covers/import/1780000000000-"))).toBe(true);
     });
 
     it("oversized image is skipped, logger.error called, recipe still exists", async () => {
@@ -1283,7 +1486,7 @@ describe("importRecipeFromUrl — extraction paths", () => {
           ok: true,
           status: 200,
           headers: new Headers([["content-type", "image/jpeg"]]),
-          arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+          arrayBuffer: async () => validJpegBytes().buffer,
         }),
       });
       const result = await importRecipeFromUrl(
@@ -1301,8 +1504,8 @@ describe("importRecipeFromUrl — extraction paths", () => {
       const bucket = mockBucket();
       const waitUntil = vi.fn();
       const imageGenRunner = {
-        textToImage: vi.fn(async () => ({ url: "https://gen.example.com/p.png" })),
-        imageToImage: vi.fn(async () => ({ url: "" })),
+        textToImage: vi.fn(async () => ({ bytes: GENERATED_IMAGE_BYTES, contentType: "image/png" as const })),
+        imageToImage: vi.fn(async () => ({ bytes: GENERATED_IMAGE_BYTES, contentType: "image/png" as const })),
       };
       const llmRunner = makeLlmRunner({
         title: "Some Recipe",
@@ -1313,7 +1516,7 @@ describe("importRecipeFromUrl — extraction paths", () => {
       const fetchImpl = vi.fn(async (input: unknown) => {
         call++;
         if (call === 1) return streamingResponse(fixture, { url: "https://example.com/r" });
-        // Image gen runner output fetch
+        // Extra calls would indicate the generated bytes were fetched through a URL.
         return {
           ok: true,
           status: 200,
@@ -1405,7 +1608,7 @@ describe("importRecipeFromUrl — extraction paths", () => {
           ok: true,
           status: 200,
           headers: new Headers([["content-type", "image/png"]]),
-          arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+          arrayBuffer: async () => validPngBytes().buffer,
         }),
       });
       const result = await importRecipeFromUrl(
@@ -1438,7 +1641,7 @@ describe("importRecipeFromUrl — extraction paths", () => {
           ok: true,
           status: 200,
           headers: new Headers([["content-type", "image/jpeg"]]),
-          arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+          arrayBuffer: async () => validJpegBytes().buffer,
         } as unknown as Response;
       }) as unknown as typeof fetch;
       await importRecipeFromUrl(

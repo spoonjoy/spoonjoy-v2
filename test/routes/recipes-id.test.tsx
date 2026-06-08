@@ -298,6 +298,7 @@ describe("Recipes $id Route", () => {
       expect(result.hasIngredientsInShoppingList).toBe(false);
       expect(result.canonicalUrl).toBe(`http://localhost:3000/recipes/${recipeId}`);
       expect(result.ogImageUrl).toBe(`http://localhost:3000/og/recipes/${recipeId}.png`);
+      expect(result.coverImageUrl).toBeNull();
     });
 
     it("should return recipe data when logged in as owner", async () => {

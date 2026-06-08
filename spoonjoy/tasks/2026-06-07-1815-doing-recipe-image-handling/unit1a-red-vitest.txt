@@ -1,0 +1,1196 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ❯ test/routes/account-settings.test.tsx (148 tests | 1 failed) 14257ms
+       ✓ should redirect to login when user is not logged in 95ms
+       ✓ should return user data when logged in 84ms
+       ✓ should return user OAuth accounts when logged in 80ms
+       ✓ returns active API credentials and OAuth app connections 92ms
+       ✓ should indicate if user has a password set 78ms
+       ✓ returns default-true notification preferences when no row exists 80ms
+       ✓ returns persisted notification preferences when a row exists 80ms
+       ✓ should indicate if OAuth-only user has no password 79ms
+       ✓ should render account settings page with heading 131ms
+       ✓ renders API credential and OAuth app revocation controls 134ms
+       ✓ should render user info section 96ms
+       ✓ should render profile photo section 92ms
+       ✓ should render OAuth providers section 93ms
+       ✓ should render password section 92ms
+       ✓ should display linked OAuth accounts 89ms
+       ✓ should show option to link OAuth providers when not linked 95ms
+       ✓ should show option to unlink OAuth provider when linked 100ms
+       ✓ should show password change option when user has password 93ms
+       ✓ should show option to set password when OAuth-only user has no password 94ms
+       ✓ should show mixed link/unlink buttons when one provider is linked and one is not 91ms
+       ✓ should have accessible button labels for screen readers 95ms
+       ✓ should render all sections with proper semantic headings 93ms
+       ✓ should render edit button in user info section 91ms
+       ✓ should show edit form when edit button is clicked 126ms
+       ✓ should pre-fill edit form with current user data 109ms
+       ✓ should hide edit form when cancel button is clicked 122ms
+       ✓ should successfully update email 82ms
+       ✓ should successfully update username 85ms
+       ✓ should successfully update both email and username 81ms
+       ✓ should return error when email is already taken 152ms
+       ✓ should return error when username is already taken 151ms
+       ✓ should perform case-insensitive email uniqueness check 149ms
+       ✓ should allow updating to same email (no change) 78ms
+       ✓ should return error when email is empty 78ms
+       ✓ should return error when username is empty 79ms
+       ✓ should return error when email format is invalid 77ms
+       ✓ should redirect to login when not authenticated 77ms
+       ✓ should normalize email to lowercase 80ms
+       ✓ should return success false for unknown intent 77ms
+       ✓ revokes an active API credential owned by the signed-in chef 81ms
+       ✓ rejects missing, unknown, or already revoked API credential revocations 79ms
+       ✓ disconnects an OAuth app by revoking refresh and live access credentials 82ms
+       ✓ rejects missing or unknown OAuth app disconnects 76ms
+       ✓ renders bearer credentials and OAuth app connections with fallback labels 96ms
+         ✓ should return user photoUrl when user has a custom photo 79ms
+         ✓ should return null photoUrl when user has no custom photo 79ms
+         ✓ should display default avatar (chef RJ) when user has no photo 89ms
+         ✓ should display user's custom photo when they have one 90ms
+         ✓ should use Avatar component from UI library for displaying photo 91ms
+         ✓ should display upload button in profile photo section 93ms
+         ✓ should display change photo button when user already has a photo 92ms
+         ✓ should display remove photo button when user has a custom photo 93ms
+         ✓ should not display remove photo button when user has default avatar 95ms
+         × should have file input for photo upload (hidden, triggered by button) 98ms
+         ✓ should trigger hidden file input click when upload button is clicked 103ms
+         ✓ should open the cropper instead of auto-submitting when a file is selected 136ms
+         ✓ should not open the cropper when file selection is cancelled (no file selected) 101ms
+         ✓ should successfully upload a photo 88ms
+         ✓ should keep GIF profile photos on an explicit profile-photo allow-list 80ms
+         ✓ should return error when no photo file is provided 77ms
+         ✓ should return error when file is not an image 77ms
+         ✓ should reject SVG profile photos even though they are image files 76ms
+         ✓ should return error when file is too large 107ms
+         ✓ should update user photoUrl in database after successful upload 77ms
+         ✓ should successfully remove photo and reset to default 79ms
+         ✓ should return success even if user already has no photo 78ms
+         ✓ should successfully replace existing photo with new one 79ms
+         ✓ should upload photo to R2 when bucket is available 78ms
+         ✓ should extract correct extension from filename 77ms
+         ✓ should default to jpg when file extension is empty 79ms
+         ✓ should delete photo from R2 when removing an R2-stored photo 79ms
+         ✓ should not attempt R2 delete when photo URL is not an R2 path 78ms
+         ✓ should skip R2 delete when bucket is not available but photo URL is R2 path 78ms
+         ✓ should successfully unlink OAuth account when user has password 78ms
+         ✓ should successfully unlink OAuth account when user has another OAuth provider linked 82ms
+         ✓ should block unlink when OAuth is the only auth method (no password) 82ms
+         ✓ should return error when trying to unlink non-existent OAuth provider 78ms
+         ✓ should return error when provider name is invalid 79ms
+         ✓ should return error when provider is not specified 77ms
+         ✓ should redirect to OAuth provider for linking 78ms
+         ✓ should redirect to Apple OAuth for Apple provider 78ms
+         ✓ should redirect to GitHub OAuth for GitHub provider 77ms
+         ✓ should return error when trying to link already linked provider 78ms
+         ✓ should return error for invalid provider when linking 77ms
+         ✓ should show confirmation dialog when unlink button is clicked 114ms
+         ✓ should close confirmation dialog when cancel is clicked 121ms
+         ✓ should display warning when OAuth is the last auth method 95ms
+         ✓ should display warning message explaining why unlink is disabled 94ms
+         ✓ should display error message after failed unlink attempt 91ms
+         ✓ should show success message after successful unlink 93ms
+         ✓ should return list of available providers that can be linked 80ms
+         ✓ should indicate whether user can unlink each provider safely 80ms
+         ✓ should successfully change password with valid current and new password 288ms
+         ✓ should return error when current password is incorrect 149ms
+         ✓ should return error when new password confirmation does not match 78ms
+         ✓ should return error when new password is too short (less than 8 characters) 77ms
+         ✓ should return error when new password is empty 77ms
+         ✓ should return error when current password is empty 78ms
+         ✓ should return error when trying to change password for OAuth-only user (no password set) 79ms
+         ✓ should update hashed password in database after successful change 287ms
+         ✓ should return error when new password is the same as current password 218ms
+         ✓ should successfully set password for OAuth-only user 150ms
+         ✓ should return error when user already has a password set 77ms
+         ✓ should return error when password confirmation does not match 78ms
+         ✓ should return error when password is too short 79ms
+         ✓ should return error when password is empty 78ms
+         ✓ should successfully remove password when user has OAuth linked 80ms
+         ✓ should block password removal when password is the only auth method (no OAuth) 77ms
+         ✓ should allow password removal when a passkey remains (no OAuth) 78ms
+         ✓ should return error when user has no password to remove 79ms
+         ✓ should require current password confirmation before removing password 151ms
+         ✓ should show change password form when user has password 106ms
+         ✓ should show set password form when OAuth-only user clicks set password 104ms
+         ✓ should show remove password button when user has both password and OAuth 91ms
+         ✓ should not show remove password button when password is only auth method 91ms
+         ✓ should display password validation errors inline 96ms
+         ✓ should show success message after password change 89ms
+         ✓ should close password form when cancel is clicked 118ms
+         ✓ should show confirmation dialog before removing password 106ms
+         ✓ should close remove password confirmation when cancel is clicked 117ms
+         ✓ should close set password form when cancel is clicked (OAuth-only user) 117ms
+         ✓ should display password strength indicator for new password 104ms
+         ✓ should prevent both password removal and OAuth unlink if it would leave user with no auth 78ms
+         ✓ should allow password removal if user has multiple OAuth providers 149ms
+         ✓ should display appropriate UI warning when user has only one auth method 91ms
+         ✓ should display email field error when editing user info with validation error 121ms
+         ✓ should display username field error when editing user info with validation error 122ms
+         ✓ should display newPassword field error in change password form 99ms
+         ✓ should display newPassword field error in set password form (OAuth-only user) 97ms
+         ✓ should display photo upload error message in ProfilePhotoUpload 89ms
+         ✓ returns enrolled passkeys with ISO timestamps, newest first 80ms
+         ✓ returns an empty passkey list when none are enrolled 78ms
+         ✓ returns validation_error when no credential id is supplied 77ms
+         ✓ removes a passkey when the user keeps their password 79ms
+         ✓ removes a passkey when the user keeps a linked OAuth account 79ms
+         ✓ removes a passkey when the user keeps another passkey 79ms
+         ✓ refuses to remove the only remaining sign-in method 80ms
+         ✓ returns passkey_not_found for an unknown credential id 77ms
+         ✓ returns validation_error when no credential id is supplied 77ms
+         ✓ renames a passkey the user owns 78ms
+         ✓ clears the name when the label is left blank 79ms
+         ✓ returns passkey_not_found for an unknown credential id 78ms
+         ✓ renders enrolled passkeys with names and formatted dates 92ms
+         ✓ walks through the remove-confirm flow 117ms
+         ✓ disables removal and warns when a passkey is the only sign-in method 93ms
+         ✓ opens a prefilled rename form and cancels back 119ms
+         ✓ prefills an empty rename field for an unnamed passkey 104ms
+         ✓ submits a rename with the new name 164ms
+ ❯ test/routes/recipes-id-edit.test.tsx (67 tests | 4 failed) 11247ms
+       ✓ should redirect when not logged in 160ms
+       ✓ should return recipe data when logged in as owner 158ms
+       ✓ should throw 403 when non-owner tries to access 150ms
+       ✓ should throw 404 for non-existent recipe 148ms
+       ✓ should throw 404 for soft-deleted recipe 150ms
+       ✓ should handle step with null stepTitle in loader 149ms
+       ✓ should include recipe steps with ingredients 152ms
+       ✓ should redirect when not logged in 147ms
+       ✓ should throw 403 when non-owner tries to update 158ms
+       ✓ should throw 404 for non-existent recipe 151ms
+       ✓ should return validation error when title is empty 150ms
+       ✓ should successfully update recipe and redirect 153ms
+       ✓ should allow saving a recipe without changing its own active title 153ms
+       ✓ should reject updates to another active recipe title for the same chef 151ms
+       ✓ should allow updates to a soft-deleted recipe title 150ms
+       ✓ should handle reorderStep intent - move step up 153ms
+       ✓ should handle reorderStep intent - move step down 153ms
+       ✓ should not reorder if step is already at boundary 151ms
+       ✓ should not reorder if stepId is missing 150ms
+       ✓ should not reorder if direction is invalid 151ms
+       ✓ should return reorder validation error when dependency would be broken 152ms
+       ✓ should not reorder if step belongs to different recipe 151ms
+       ✓ should delete a step for deleteStep intent 151ms
+       ✓ should return step deletion error when dependent steps exist 153ms
+       ✓ should return step deletion error when stepId is missing 150ms
+       ✓ should return step deletion error when step belongs to a different recipe 150ms
+       ✓ should throw 404 for soft-deleted recipe in action 150ms
+       ✓ should set empty description and servings to null 150ms
+       ✓ should return validation error for whitespace-only title 150ms
+       ✓ should return generic error for database errors 152ms
+       ✓ should clear image when clearImage is true 154ms
+       × should return validation error for invalid image type 158ms
+       × should return validation error for GIF replacement images 154ms
+       × should reject GIF bytes disguised as a JPEG replacement image 162ms
+       ✓ should accept valid image file without errors 160ms
+       ✓ should return validation error for image exceeding 5MB 157ms
+       ✓ should upload replacement image to R2 and delete old R2 image 162ms
+       ✓ should keep replacement image when old R2 cleanup fails after update 153ms
+       ✓ should return image error when replacement upload fails 151ms
+       ✓ should return image error when clearing an R2 image fails 153ms
+       ✓ should delete uploaded replacement image when database update fails 149ms
+         ✓ should return validation error when title exceeds max length 148ms
+         ✓ should accept title at exactly max length 150ms
+         ✓ should return validation error when description exceeds max length 152ms
+         ✓ should accept description at exactly max length 154ms
+         ✓ should return validation error when servings exceeds max length 151ms
+         ✓ should accept servings at exactly max length 152ms
+         ✓ should return multiple validation errors at once 152ms
+       × should render edit recipe form with recipe data 211ms
+       ✓ should render empty steps state 173ms
+       ✓ should render recipe steps with title and description 172ms
+       ✓ should render singular ingredient count for single ingredient 164ms
+       ✓ should not show ingredient count when step has no ingredients 188ms
+       ✓ should render reorder buttons for multiple steps 177ms
+       ✓ should render form buttons correctly 167ms
+       ✓ should render null values as empty strings in form 162ms
+       ✓ should have correct edit link for each step 169ms
+       ✓ should cancel and confirm step deletion from the dialog 293ms
+       ✓ should close the step deletion dialog when dismissed by escape 199ms
+       ✓ should display step deletion errors returned after confirming deletion 218ms
+       ✓ should populate hidden form and submit when Save Recipe is clicked  364ms
+       ✓ should keep the mobile dock off edit forms and submit from the in-flow Save Recipe button  344ms
+       ✓ should handle image file in handleSave via DataTransfer 180ms
+       ✓ should navigate to recipe page when Cancel is clicked 180ms
+       ✓ should set clearImage to true when image is removed and Save is clicked 194ms
+       ✓ should display reorder validation error when present 181ms
+       ✓ should display general error message when present 163ms
+ ❯ test/routes/recipes-new.test.tsx (50 tests | 4 failed) 5322ms
+       ✓ should redirect when not logged in 93ms
+       ✓ should return null when logged in 80ms
+       ✓ should return validation error when title is missing 81ms
+       ✓ should create recipe and redirect on success 92ms
+       ✓ should parse ingredients for the unsaved new recipe builder 82ms
+       ✓ should return parser errors for the unsaved new recipe builder 80ms
+       ✓ should return a generic parse error for unexpected parser failures 80ms
+       ✓ should redirect when not logged in 80ms
+       ✓ should create recipe with only required fields 84ms
+       ✓ should reject duplicate active recipe titles for the same chef 81ms
+       ✓ should allow duplicate active recipe titles for different chefs 156ms
+       ✓ should allow title reuse after the prior recipe is soft-deleted 105ms
+       ✓ should return validation error for whitespace-only title 78ms
+       ✓ should trim title and other fields whitespace 82ms
+       ✓ should handle empty optional fields correctly 82ms
+       ✓ should return generic error for database errors 78ms
+       × should return validation error for invalid image type 87ms
+       × should return validation error for GIF recipe images 82ms
+       × should reject GIF bytes disguised as an accepted recipe image type 80ms
+       ✓ should return validation error for oversized image 85ms
+       ✓ should accept valid image with valid type and size under 5MB 82ms
+       ✓ should upload valid recipe image to R2 when a bucket is available 82ms
+       ✓ should return image error when recipe image upload fails 79ms
+       ✓ schedules ai-placeholder cover generation via context.cloudflare.ctx.waitUntil when available 82ms
+       ✓ should delete uploaded recipe image when database creation fails 80ms
+       ✓ should create recipe with valid steps JSON and redirect 85ms
+       ✓ should return validation error for invalid steps JSON 79ms
+       ✓ should return validation error for invalid submitted step fields 79ms
+       ✓ should return validation error for invalid submitted ingredient fields 80ms
+       ✓ should persist submitted step ingredients and make them available to the shopping list 97ms
+         ✓ should return validation error when title exceeds max length 80ms
+         ✓ should accept title at exactly max length 82ms
+         ✓ should return validation error when description exceeds max length 79ms
+         ✓ should accept description at exactly max length 82ms
+         ✓ should return validation error when servings exceeds max length 78ms
+         ✓ should accept servings at exactly max length 82ms
+         ✓ should return multiple validation errors at once 79ms
+       ✓ should render create recipe form 138ms
+       × should have correct form structure 100ms
+       ✓ should have correct placeholders 95ms
+       ✓ should navigate to /recipes when Cancel is clicked 111ms
+       ✓ should populate hidden form and submit when RecipeBuilder saves  361ms
+       ✓ should handle image upload in handleSave 291ms
+       ✓ should display general error message when present 94ms
+       ✓ should handle missing title input in handleSave 168ms
+       ✓ should handle missing description textarea in handleSave 168ms
+       ✓ should handle missing servings input in handleSave 160ms
+       ✓ should handle missing steps input in handleSave 158ms
+       ✓ should handle missing clearImage input in handleSave 138ms
+       ✓ should set clearImage value to 'true' when clearImage flag is true 179ms
+ ❯ test/routes/recipes-id-spoons.test.tsx (20 tests | 1 failed) 3335ms
+     ✓ loader returns spoons (recent 10), isOriginCookCandidate, and coverImageUrl 169ms
+     ✓ loader returns isOriginCookCandidate=false when the chef already has a spoon 156ms
+     ✓ renders RecipeProvenance when sourceUrl is set 202ms
+     ✓ renders RecipeProvenance in the header when sourceRecipe is set without sourceUrl 169ms
+     ✓ renders SpoonsStrip with non-deleted spoons from the loader 166ms
+     ✓ clicking 'Log cook' opens then closes the SpoonDialog via Cancel 230ms
+     ✓ clicking 'Log cook' opens the SpoonDialog 194ms
+     ✓ action with intent=createSpoon creates a RecipeSpoon as the requesting user 154ms
+     ✓ action with intent=createSpoon as the origin cook writes a RecipeCover row and schedules stylization 162ms
+     × action with intent=createSpoon rejects a GIF spoon photo with 400 161ms
+     ✓ action with intent=createSpoon rejects an empty payload with 400 152ms
+     ✓ action with intent=deleteSpoon soft-deletes a spoon owned by the requester 153ms
+     ✓ action with intent=createSpoon stores a nextTime field when supplied 152ms
+     ✓ action with intent=createSpoon accepts a valid cookedAt timestamp 154ms
+     ✓ action with intent=createSpoon rejects an invalid cookedAt with 400 157ms
+     ✓ action with intent=createSpoon as the origin cook runs stylization inline when no waitUntil is present 165ms
+     ✓ action with intent=deleteSpoon requires a spoonId (400) 153ms
+     ✓ action with intent=createSpoon rethrows non-spoon errors (e.g. missing recipe FK) 155ms
+     ✓ action with intent=deleteSpoon returns 404 for an unknown spoonId 151ms
+     ✓ action with intent=deleteSpoon refuses to delete another user's spoon 152ms
+ ❯ test/components/recipe/RecipeImageUpload.test.tsx (62 tests | 3 failed) 3098ms
+       ✓ renders upload button when no image is provided 22ms
+       ✓ renders hidden file input 3ms
+       × accepts only food-photo MIME types in the hidden file input 6ms
+       ✓ renders placeholder area when no image 3ms
+       × renders with helper text about accepted formats 5ms
+       ✓ renders with file size limit text 2ms
+       ✓ renders image preview when imageUrl is provided 3ms
+       ✓ renders alt text for existing image 3ms
+       ✓ shows "Change Image" button when image exists 4ms
+       ✓ shows "Clear" or "Remove" button when image exists 3ms
+       ✓ triggers file input click when upload button is clicked 17ms
+       ✓ calls onFileSelect with selected file 74ms
+       ✓ shows preview after file selection 23ms
+       ✓ cleans up object URL when new file is selected 50ms
+       ✓ does not call onFileSelect if no file selected (cancel) 9ms
+       ✓ calls onClear when clear button is clicked 10ms
+       ✓ removes preview when clear is clicked on newly selected file 33ms
+       ✓ revokes object URL when clearing preview 33ms
+       ✓ hides clear button when no image 2ms
+       ✓ disables upload button when disabled 3ms
+       ✓ disables file input when disabled 1ms
+       ✓ disables clear button when disabled 2ms
+       ✓ disables change button when disabled 3ms
+       ✓ shows loading indicator when loading 2ms
+       ✓ disables upload button when loading 3ms
+       ✓ shows aria-busy when loading 2ms
+       ✓ displays error message when provided 2ms
+       ✓ applies error styling to error message 2ms
+       ✓ clears error when new file is selected 22ms
+       ✓ validates file type - rejects non-image files 9ms
+       ✓ validates file size - rejects files over 5MB 76ms
+       ✓ accepts valid JPEG files 77ms
+       ✓ accepts valid PNG files 84ms
+       × rejects GIF files 13ms
+       ✓ accepts valid WebP files 34ms
+       ✓ rejects image types not in accepted list (e.g., BMP, TIFF) 25ms
+       ✓ renders preview with appropriate dimensions for recipe images 2ms
+       ✓ maintains aspect ratio in preview 1ms
+       ✓ has accessible name for upload button 2ms
+       ✓ has accessible name for clear button 2ms
+       ✓ has accessible label for file input 1ms
+       ✓ announces error to screen readers 2ms
+       ✓ describes preview image with alt text 2ms
+       ✓ uses default alt text when none provided 1ms
+       ✓ can trigger upload via keyboard on button 7ms
+       ✓ upload button is focusable 2ms
+       ✓ shows drop zone visual feedback on drag enter 2ms
+       ✓ removes visual feedback on drag leave 3ms
+       ✓ handles drag over event 1ms
+       ✓ accepts dropped image files 62ms
+       ✓ does not accept dropped files when disabled 12ms
+       ✓ does not accept dropped files when loading 11ms
+       ✓ does not show drag feedback when disabled 2ms
+       ✓ handles drop with no files gracefully 1ms
+       ✓ revokes old preview URL when dropping new file  1965ms
+       ✓ revokes object URL on unmount 23ms
+       ✓ handles rapid file selections 50ms
+       ✓ handles file with special characters in name 77ms
+       ✓ handles very long file names 86ms
+       ✓ handles zero-byte files 10ms
+       ✓ rejects dropped files with invalid type 12ms
+       ✓ rejects dropped files that exceed size limit 72ms
+ ❯ test/components/recipe/SpoonDialog.test.tsx (16 tests | 4 failed) 1741ms
+     ✓ renders fields for photo, note, nextTime, cookedAt 55ms
+     × renders a clear photo picker target instead of the native file text 23ms
+     ✓ shows the selected photo filename in the custom picker 34ms
+     ✓ returns the custom picker to its empty state when file selection is cancelled 33ms
+     ✓ disables submit until at least one of {photo, note, nextTime} is non-empty 92ms
+     ✓ enables submit when only nextTime is filled 64ms
+     ✓ updates the cookedAt input value on change 51ms
+     × clears the photo error when the user selects a valid file 26ms
+     ✓ when isOriginCookCandidate=true shows a photo-required hint and disables submit until photo is provided 130ms
+     × rejects MIME types not in the food-photo allow-list with an inline error 25ms
+     × rejects GIF photo files with an inline error 1026ms
+     ✓ rejects files >5MB with an inline error 44ms
+     ✓ submits a multipart form with intent=createSpoon and the entered fields 80ms
+     ✓ calls onClose when Cancel is clicked 21ms
+     ✓ renders nothing when isOpen=false 2ms
+     ✓ shows the server-error message when actionData.error is provided 12ms
+ ❯ test/lib/recipe-spoon.server.test.ts (46 tests | 1 failed) 470ms
+       ✓ creates a spoon with only a note for a non-owner cook 16ms
+       ✓ creates a spoon with only nextTime when chef is not recipe owner 9ms
+       ✓ uploads photo via storeImage when photoFile provided 9ms
+       ✓ falls back to data URL when no bucket provided 11ms
+       × rejects GIF photoFile uploads before storage 22ms
+       ✓ throws SpoonValidationError when all content fields empty 8ms
+       ✓ treats whitespace-only note and nextTime as empty (validation triggers) 8ms
+       ✓ trims note/nextTime; stores trimmed values 9ms
+       ✓ origin-cook with no photoFile throws SpoonValidationError 8ms
+       ✓ origin-cook with photoFile succeeds and reports isOriginCook=true 9ms
+       ✓ origin-cook flag is false on the chef's second cook of their own recipe 9ms
+       ✓ origin-cook flag re-applies after the first spoon is soft-deleted 11ms
+       ✓ respects an explicit cookedAt date 10ms
+       ✓ updates note/nextTime/cookedAt/photoUrl 11ms
+       ✓ rejects update from a non-owner with SpoonAuthError 10ms
+       ✓ rejects update on a soft-deleted spoon with SpoonNotFoundError 10ms
+       ✓ rejects update against missing spoon with SpoonNotFoundError 7ms
+       ✓ rejects an update that empties all content fields 11ms
+       ✓ leaves note alone when patch.note is undefined 11ms
+       ✓ leaves nextTime alone when patch.nextTime is undefined 10ms
+       ✓ trims string patches and treats empty strings as nulls 9ms
+       ✓ soft-deletes a spoon owned by requesting user 10ms
+       ✓ rejects delete from non-owner with SpoonAuthError 10ms
+       ✓ rejects re-delete on a soft-deleted spoon with SpoonNotFoundError 10ms
+       ✓ rejects delete against missing spoon with SpoonNotFoundError 8ms
+       ✓ returns non-deleted spoons ordered by cookedAt desc, id desc 12ms
+       ✓ excludes soft-deleted by default 12ms
+       ✓ includes soft-deleted when includeDeleted=true 11ms
+       ✓ respects limit and offset 15ms
+       ✓ clamps limit above the max 9ms
+       ✓ defaults limit when below 1 10ms
+       ✓ includes chef relation with id, username, photoUrl 10ms
+       ✓ resolves chef by id 10ms
+       ✓ resolves chef by username 10ms
+       ✓ throws SpoonNotFoundError when chef does not exist 5ms
+       ✓ excludes soft-deleted spoons by default 10ms
+       ✓ includes soft-deleted spoons when includeDeleted=true 10ms
+       ✓ respects limit and offset; orders by cookedAt desc 12ms
+       ✓ true when chef owns the recipe and has no prior non-deleted spoon 7ms
+       ✓ false when chef does not own the recipe 7ms
+       ✓ false when chef has a prior non-deleted spoon 8ms
+       ✓ true again after the prior spoon is soft-deleted 9ms
+       ✓ false when recipe does not exist 6ms
+       ✓ SpoonValidationError carries status 400 6ms
+       ✓ SpoonAuthError carries status 403 5ms
+       ✓ SpoonNotFoundError carries status 404 4ms
+ ❯ test/components/account/ProfilePhotoField.test.tsx (12 tests | 1 failed) 166ms
+     ✓ shows the Upload Photo button and no Remove Photo button without a photo 33ms
+     ✓ shows Change Photo and Remove Photo when a photo is present 9ms
+     ✓ renders the Remove Photo form with the removePhoto intent 6ms
+     ✓ clicking the upload button triggers the hidden file input 20ms
+     × uses an explicit profile-photo allow-list that still includes GIF and WebP 11ms
+     ✓ opens the cropper when a valid file is selected 8ms
+     ✓ submits a multipart FormData with the cropped blob on confirm 12ms
+     ✓ defaults the photo MIME type when the blob has none 9ms
+     ✓ closes the cropper and resets the input on cancel 13ms
+     ✓ rejects a file with an unsupported type and does not open the cropper 7ms
+     ✓ rejects an oversized file and does not open the cropper 9ms
+     ✓ displays the server action error message 4ms
+ ❯ test/lib/image-storage.server.test.ts (22 tests | 5 failed) 38ms
+       ✓ returns true only for non-empty File values 1ms
+       × uses a food-photo allow-list that does not include GIF 4ms
+       ✓ accepts allowed recipe image types 0ms
+       ✓ rejects files outside an explicit allow-list 0ms
+       ✓ uses image/* validation when no allow-list is provided 0ms
+       ✓ rejects files over the 5MB limit 1ms
+       × rejects GIF bytes disguised as accepted food-photo types 1ms
+       × rejects empty files before storage even when the MIME type is allowed 0ms
+       ✓ normalizes file extensions and falls back to jpg 0ms
+       ✓ uploads to R2 and returns a served photo URL when a bucket is available 0ms
+       ✓ strips JPEG APP1 metadata before uploading to R2 1ms
+       × preserves a sanitized EXIF Orientation tag while stripping private APP1 metadata before uploading to R2 1ms
+       ✓ strips JPEG APP1 metadata before falling back to a local data URL 0ms
+       × preserves sanitized EXIF Orientation metadata before falling back to a local data URL 0ms
+       ✓ leaves JPEG uploads unchanged when they have no APP1 metadata 0ms
+       ✓ leaves malformed JPEG uploads unchanged instead of corrupting them 0ms
+       ✓ does not strip APP1-like bytes once JPEG scan data has started 0ms
+       ✓ falls back to a data URL when no bucket is available 0ms
+       ✓ uses random ids so same-millisecond uploads do not overwrite each other 0ms
+       ✓ extracts keys from served photo URLs 0ms
+       ✓ deletes R2-backed images when a bucket and key are available 0ms
+       ✓ skips deletion when no bucket or R2 key is available 0ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 24 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/routes/account-settings.test.tsx > Account Settings Route > profile photo > component - photo upload UI > should have file input for photo upload (hidden, triggered by button)
+Error: expect(element).toHaveAttribute("accept", "image/jpeg,image/png,image/gif,image/webp") // element.getAttribute("accept") === "image/jpeg,image/png,image/gif,image/webp"
+
+Expected the element to have attribute:
+  accept="image/jpeg,image/png,image/gif,image/webp"
+Received:
+  accept="image/*"
+ ❯ test/routes/account-settings.test.tsx:1877:27
+    1875|         const fileInput = profilePhotoSection.querySelector('input[typ…
+    1876|         expect(fileInput).toBeInTheDocument();
+    1877|         expect(fileInput).toHaveAttribute("accept", "image/jpeg,image/…
+       |                           ^
+    1878|       });
+    1879|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/24]⎯
+
+ FAIL  test/routes/recipes-id-edit.test.tsx > Recipes $id Edit Route > action > should return validation error for invalid image type
+AssertionError: expected 'Invalid image format' to be 'Image must be JPG, PNG, or WebP.' // Object.is equality
+
+Expected: "Image must be JPG, PNG, or WebP."
+Received: "Invalid image format"
+
+ ❯ test/routes/recipes-id-edit.test.tsx:995:33
+    993|       const { data, status } = extractResponseData(response);
+    994|       expect(status).toBe(400);
+    995|       expect(data.errors.image).toBe("Image must be JPG, PNG, or WebP.…
+       |                                 ^
+    996|     });
+    997|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/24]⎯
+
+ FAIL  test/routes/recipes-id-edit.test.tsx > Recipes $id Edit Route > action > should return validation error for GIF replacement images
+AssertionError: expected 302 to be 400 // Object.is equality
+
+- Expected
++ Received
+
+- 400
++ 302
+
+ ❯ test/routes/recipes-id-edit.test.tsx:1012:22
+    1010|
+    1011|       const { data, status } = extractResponseData(response);
+    1012|       expect(status).toBe(400);
+       |                      ^
+    1013|       expect(data.errors.image).toBe("Image must be JPG, PNG, or WebP.…
+    1014|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/24]⎯
+
+ FAIL  test/routes/recipes-id-edit.test.tsx > Recipes $id Edit Route > action > should reject GIF bytes disguised as a JPEG replacement image
+AssertionError: expected 302 to be 400 // Object.is equality
+
+- Expected
++ Received
+
+- 400
++ 302
+
+ ❯ test/routes/recipes-id-edit.test.tsx:1030:22
+    1028|
+    1029|       const { data, status } = extractResponseData(response);
+    1030|       expect(status).toBe(400);
+       |                      ^
+    1031|       expect(data.errors.image).toBe("Image must be JPG, PNG, or WebP.…
+    1032|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/24]⎯
+
+ FAIL  test/routes/recipes-id-edit.test.tsx > Recipes $id Edit Route > component > should render edit recipe form with recipe data
+Error: expect(element).toHaveAttribute("accept", "image/jpeg,image/png,image/webp") // element.getAttribute("accept") === "image/jpeg,image/png,image/webp"
+
+Expected the element to have attribute:
+  accept="image/jpeg,image/png,image/webp"
+Received:
+  accept="image/*"
+ ❯ test/routes/recipes-id-edit.test.tsx:1438:36
+    1436|       expect(screen.getByRole("button", { name: /change.*image/i })).t…
+    1437|       const submissionImageInput = document.querySelector('form input[…
+    1438|       expect(submissionImageInput).toHaveAttribute("accept", "image/jp…
+       |                                    ^
+    1439|     });
+    1440|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/24]⎯
+
+ FAIL  test/routes/recipes-id-spoons.test.tsx > Recipes $id route — spoons + provenance > action with intent=createSpoon rejects a GIF spoon photo with 400
+AssertionError: expected null to be an instance of Response
+ ❯ test/routes/recipes-id-spoons.test.tsx:416:20
+    414|     }
+    415|
+    416|     expect(caught).toBeInstanceOf(Response);
+       |                    ^
+    417|     expect((caught as Response).status).toBe(400);
+    418|     expect(await (caught as Response).text()).toBe("Photos must be JPG…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/24]⎯
+
+ FAIL  test/routes/recipes-new.test.tsx > Recipes New Route > action > should return validation error for invalid image type
+AssertionError: expected 'Invalid image format' to be 'Image must be JPG, PNG, or WebP.' // Object.is equality
+
+Expected: "Image must be JPG, PNG, or WebP."
+Received: "Invalid image format"
+
+ ❯ test/routes/recipes-new.test.tsx:495:33
+    493|       const { data, status } = extractResponseData(response);
+    494|       expect(status).toBe(400);
+    495|       expect(data.errors.image).toBe("Image must be JPG, PNG, or WebP.…
+       |                                 ^
+    496|     });
+    497|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/24]⎯
+
+ FAIL  test/routes/recipes-new.test.tsx > Recipes New Route > action > should return validation error for GIF recipe images
+AssertionError: expected 302 to be 400 // Object.is equality
+
+- Expected
++ Received
+
+- 400
++ 302
+
+ ❯ test/routes/recipes-new.test.tsx:516:22
+    514|
+    515|       const { data, status } = extractResponseData(response);
+    516|       expect(status).toBe(400);
+       |                      ^
+    517|       expect(data.errors.image).toBe("Image must be JPG, PNG, or WebP.…
+    518|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/24]⎯
+
+ FAIL  test/routes/recipes-new.test.tsx > Recipes New Route > action > should reject GIF bytes disguised as an accepted recipe image type
+AssertionError: expected 302 to be 400 // Object.is equality
+
+- Expected
++ Received
+
+- 400
++ 302
+
+ ❯ test/routes/recipes-new.test.tsx:538:22
+    536|
+    537|       const { data, status } = extractResponseData(response);
+    538|       expect(status).toBe(400);
+       |                      ^
+    539|       expect(data.errors.image).toBe("Image must be JPG, PNG, or WebP.…
+    540|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/24]⎯
+
+ FAIL  test/routes/recipes-new.test.tsx > Recipes New Route > component > should have correct form structure
+Error: expect(element).toHaveAttribute("accept", "image/jpeg,image/png,image/webp") // element.getAttribute("accept") === "image/jpeg,image/png,image/webp"
+
+Expected the element to have attribute:
+  accept="image/jpeg,image/png,image/webp"
+Received:
+  accept="image/*"
+ ❯ test/routes/recipes-new.test.tsx:1123:36
+    1121|       expect(screen.getByRole("button", { name: /upload.*image/i })).t…
+    1122|       const submissionImageInput = document.querySelector('form input[…
+    1123|       expect(submissionImageInput).toHaveAttribute("accept", "image/jp…
+       |                                    ^
+    1124|     });
+    1125|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/24]⎯
+
+ FAIL  test/lib/image-storage.server.test.ts > image storage helpers > validateImageFile > uses a food-photo allow-list that does not include GIF
+AssertionError: expected [ 'image/jpeg', 'image/png', …(2) ] to deeply equal [ 'image/jpeg', 'image/png', …(1) ]
+
+- Expected
++ Received
+
+  [
+    "image/jpeg",
+    "image/png",
++   "image/gif",
+    "image/webp",
+  ]
+
+ ❯ test/lib/image-storage.server.test.ts:113:34
+    111|   describe("validateImageFile", () => {
+    112|     it("uses a food-photo allow-list that does not include GIF", () =>…
+    113|       expect(RECIPE_IMAGE_TYPES).toEqual(["image/jpeg", "image/png", "…
+       |                                  ^
+    114|       expect(RECIPE_IMAGE_TYPES).not.toContain("image/gif");
+    115|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/24]⎯
+
+ FAIL  test/lib/image-storage.server.test.ts > image storage helpers > validateImageFileForStorage > rejects GIF bytes disguised as accepted food-photo types
+AssertionError: expected { IMAGE_MAX_FILE_SIZE: 5242880, …(7), [Symbol(Symbol.toStringTag)]: '…' } to have property "validateImageFileForStorage"
+ ❯ test/lib/image-storage.server.test.ts:156:23
+    154|       const gifBytes = textEncoder.encode("GIF89a");
+    155|       const storage = await import("~/lib/image-storage.server");
+    156|       expect(storage).toHaveProperty("validateImageFileForStorage");
+       |                       ^
+    157|       const validateImageFileForStorage = (storage as unknown as {
+    158|         validateImageFileForStorage: (
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/24]⎯
+
+ FAIL  test/lib/image-storage.server.test.ts > image storage helpers > validateImageFileForStorage > rejects empty files before storage even when the MIME type is allowed
+AssertionError: expected { IMAGE_MAX_FILE_SIZE: 5242880, …(7), [Symbol(Symbol.toStringTag)]: '…' } to have property "validateImageFileForStorage"
+ ❯ test/lib/image-storage.server.test.ts:176:23
+    174|     it("rejects empty files before storage even when the MIME type is …
+    175|       const storage = await import("~/lib/image-storage.server");
+    176|       expect(storage).toHaveProperty("validateImageFileForStorage");
+       |                       ^
+    177|       const validateImageFileForStorage = (storage as unknown as {
+    178|         validateImageFileForStorage: (
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/24]⎯
+
+ FAIL  test/lib/image-storage.server.test.ts > image storage helpers > storeImage > preserves a sanitized EXIF Orientation tag while stripping private APP1 metadata before uploading to R2
+AssertionError: expected [] to have a length of 1 but got +0
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ test/lib/image-storage.server.test.ts:273:28
+    271|
+    272|       expect(uploadedFile).not.toBe(file);
+    273|       expect(app1Payloads).toHaveLength(1);
+       |                            ^
+    274|       expect(app1Payloads[0].subarray(0, 6)).toEqual(textEncoder.encod…
+    275|       expect(app1Payloads[0][25]).toBe(6);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/24]⎯
+
+ FAIL  test/lib/image-storage.server.test.ts > image storage helpers > storeImage > preserves sanitized EXIF Orientation metadata before falling back to a local data URL
+AssertionError: expected [] to have a length of 1 but got +0
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ test/lib/image-storage.server.test.ts:310:28
+    308|       const app1Payloads = getJpegApp1Payloads(decodedBytes);
+    309|
+    310|       expect(app1Payloads).toHaveLength(1);
+       |                            ^
+    311|       expect(app1Payloads[0][25]).toBe(6);
+    312|       expect(decodedText).not.toContain("CameraSerial");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/24]⎯
+
+ FAIL  test/lib/recipe-spoon.server.test.ts > recipe-spoon.server > createSpoon > rejects GIF photoFile uploads before storage
+AssertionError: promise resolved "{ spoon: { …(10) }, isOriginCook: true }" instead of rejecting
+
+- Expected
++ Received
+
+- Error {
+-   "message": "rejected promise",
++ {
++   "isOriginCook": true,
++   "spoon": {
++     "chefId": "cmq4p7jp7000m6vh296zcye3m",
++     "cookedAt": 2026-06-08T04:15:58.078Z,
++     "createdAt": 2026-06-08T04:15:58.078Z,
++     "deletedAt": null,
++     "id": "cmq4p7jp9000q6vh23plro8d1",
++     "nextTime": null,
++     "note": "cooked",
++     "photoUrl": "/photos/spoons/cmq4p7jp7000m6vh296zcye3m/cmq4p7jp7000o6vh2fhexhpsi/1234567-c2462c63-d8b0-44eb-8c42-9e757f22d74e.gif",
++     "recipeId": "cmq4p7jp7000o6vh2fhexhpsi",
++     "updatedAt": 2026-06-08T04:15:58.078Z,
++   },
+  }
+
+ ❯ test/lib/recipe-spoon.server.test.ts:139:8
+    137|         },
+    138|         { bucket: fakeBucket, now: () => 1234567 },
+    139|       )).rejects.toMatchObject({
+       |        ^
+    140|         name: "SpoonValidationError",
+    141|         message: "Photos must be JPG, PNG, or WebP.",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/24]⎯
+
+ FAIL  test/components/account/ProfilePhotoField.test.tsx > ProfilePhotoField > uses an explicit profile-photo allow-list that still includes GIF and WebP
+Error: expect(element).toHaveAttribute("accept", "image/jpeg,image/png,image/gif,image/webp") // element.getAttribute("accept") === "image/jpeg,image/png,image/gif,image/webp"
+
+Expected the element to have attribute:
+  accept="image/jpeg,image/png,image/gif,image/webp"
+Received:
+  accept="image/*"
+ ❯ test/components/account/ProfilePhotoField.test.tsx:94:28
+     92|     await screen.findByRole("button", { name: /upload photo/i });
+     93|
+     94|     expect(getFileInput()).toHaveAttribute("accept", "image/jpeg,image…
+       |                            ^
+     95|     expect(screen.getByText(/jpg, png, gif, or webp/i)).toBeInTheDocum…
+     96|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/24]⎯
+
+ FAIL  test/components/recipe/RecipeImageUpload.test.tsx > RecipeImageUpload > rendering > accepts only food-photo MIME types in the hidden file input
+Error: expect(element).toHaveAttribute("accept", "image/jpeg,image/png,image/webp") // element.getAttribute("accept") === "image/jpeg,image/png,image/webp"
+
+Expected the element to have attribute:
+  accept="image/jpeg,image/png,image/webp"
+Received:
+  accept="image/*"
+ ❯ test/components/recipe/RecipeImageUpload.test.tsx:61:25
+     59|
+     60|       const fileInput = container.querySelector('input[type="file"]')
+     61|       expect(fileInput).toHaveAttribute('accept', 'image/jpeg,image/pn…
+       |                         ^
+     62|     })
+     63|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/24]⎯
+
+ FAIL  test/components/recipe/RecipeImageUpload.test.tsx > RecipeImageUpload > rendering > renders with helper text about accepted formats
+TestingLibraryElementError: Unable to find an element with the text: /jpg, png, or webp/i. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"space-y-2"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"relative w-full aspect-video overflow-hidden rounded-[var(--sj-radius-surface)] border-2 border-dashed transition-colors border-[var(--sj-border-strong)] bg-[color-mix(in_srgb,var(--sj-flour)_46%,transparent)]"[39m
+        [33mdata-drop-zone[39m=[32m"true"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"absolute inset-0 flex flex-col items-center justify-center gap-3 text-center text-[var(--sj-ink-soft)]"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"rounded-[var(--sj-radius-surface)] border border-[var(--sj-border)] bg-[var(--sj-panel-solid)] p-4 shadow-[var(--sj-shadow-soft)]"[39m
+          [36m>[39m
+            [36m<svg[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"lucide lucide-image size-10"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"24"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"24"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<rect[39m
+                [33mheight[39m=[32m"18"[39m
+                [33mrx[39m=[32m"2"[39m
+                [33mry[39m=[32m"2"[39m
+                [33mwidth[39m=[32m"18"[39m
+                [33mx[39m=[32m"3"[39m
+                [33my[39m=[32m"3"[39m
+              [36m/>[39m
+              [36m<circle[39m
+                [33mcx[39m=[32m"9"[39m
+                [33mcy[39m=[32m"9"[39m
+                [33mr[39m=[32m"2"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+          [36m</div>[39m
+          [36m<p[39m
+            [33mclass[39m=[32m"font-sj-ui text-sm font-semibold uppercase tracking-[0.12em]"[39m
+          [36m>[39m
+            [0mDrag, drop, or upload a recipe photo[0m
+          [36m</p>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+      [36m<input[39m
+        [33maccept[39m=[32m"image/*"[39m
+        [33maria-label[39m=[32m"Upload recipe image"[39m
+        [33mclass[39m=[32m"hidden"[39m
+        [33mtype[39m=[32m"file"[39m
+      [36m/>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"flex gap-2"[39m
+      [36m>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"font-sj-ui relative isolate inline-flex min-h-11 items-center justify-center gap-x-2 rounded-[var(--sj-radius-control)] border text-base/6 font-semibold tracking-[0.01em] px-[calc(--spacing(4)-1px)] py-[calc(--spacing(2.75)-1px)] shadow-none transition sm:px-[calc(--spacing(3.5)-1px)] sm:py-[calc(--spacing(1.75)-1px)] sm:text-sm/6 focus:not-data-focus:outline-hidden data-focus:outline-2 data-focus:outline-offset-2 data-focus:outline-[var(--sj-brass)] data-disabled:opacity-50 *:data-[slot=icon]:-mx-0.5 *:data-[slot=icon]:my-0.5 *:data-[slot=icon]:size-5 *:data-[slot=icon]:shrink-0 *:data-[slot=icon]:self-center *:data-[slot=icon]:text-(--btn-icon) sm:*:data-[slot=icon]:my-1 sm:*:data-[slot=icon]:size-4 forced-colors:[--btn-icon:ButtonText] forced-colors:data-hover:[--btn-icon:ButtonText] border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_72%,transparent)] text-[var(--sj-ink)] data-active:bg-[var(--sj-flour)] data-hover:border-[var(--sj-border-strong)] data-hover:bg-[var(--sj-flour)] [--btn-icon:var(--sj-ink-soft)] data-active:[--btn-icon:var(--sj-ink)] data-hover:[--btn-icon:var(--sj-ink)] cursor-default"[39m
+          [33mdata-headlessui-state[39m=[32m""[39m
+          [33mtype[39m=[32m"button"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33maria-hidden[39m=[32m"true"[39m
+            [33mclass[39m=[32m"absolute top-1/2 left-1/2 size-[max(100%,2.75rem)] -translate-x-1/2 -translate-y-1/2 pointer-fine:hidden"[39m
+            [33mdata-slot[39m=[32m"touch-target"[39m
+          [36m/>[39m
+          [36m<svg[39m
+            [33maria-hidden[39m=[32m"true"[39m
+            [33mclass[39m=[32m"lucide lucide-upload"[39m
+            [33mdata-slot[39m=[32m"icon"[39m
+            [33mfill[39m=[32m"none"[39m
+            [33mheight[39m=[32m"24"[39m
+            [33mstroke[39m=[32m"currentColor"[39m
+            [33mstroke-linecap[39m=[32m"round"[39m
+            [33mstroke-linejoin[39m=[32m"round"[39m
+            [33mstroke-width[39m=[32m"2"[39m
+            [33mviewBox[39m=[32m"0 0 24 24"[39m
+            [33mwidth[39m=[32m"24"[39m
+            [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+          [36m>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M12 3v12"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33md[39m=[32m"m17 8-5-5-5 5"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"[39m
+            [36m/>[39m
+          [36m</svg>[39m
+          [0mUpload Image[0m
+        [36m</button>[39m
+      [36m</div>[39m
+      [36m<p[39m
+        [33mclass[39m=[32m"text-sm text-[var(--sj-ink-soft)]"[39m
+      [36m>[39m
+        [0mJPG, PNG, GIF, or WebP. Max 5MB.[0m
+      [36m</p>[39m
+    [36m</div>[39m
+  [36m</div>[39m
+[36m</body>[39m
+ ❯ Object.getElementError node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ test/components/recipe/RecipeImageUpload.test.tsx:76:33
+     74|       render(<RecipeImageUpload onFileSelect={vi.fn()} />)
+     75|
+     76|       const helperText = screen.getByText(/jpg, png, or webp/i)
+       |                                 ^
+     77|       expect(helperText).toBeInTheDocument()
+     78|       expect(helperText).not.toHaveTextContent(/gif/i)
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/24]⎯
+
+ FAIL  test/components/recipe/RecipeImageUpload.test.tsx > RecipeImageUpload > file validation > rejects GIF files
+AssertionError: expected "vi.fn()" to be called with arguments: [ 'Photos must be JPG, PNG, or WebP.' ]
+
+Number of calls: 0
+
+ ❯ test/components/recipe/RecipeImageUpload.test.tsx:528:23
+    526|       await user.upload(fileInput, gifFile)
+    527|
+    528|       expect(onError).toHaveBeenCalledWith('Photos must be JPG, PNG, o…
+       |                       ^
+    529|       expect(onFileSelect).not.toHaveBeenCalled()
+    530|     })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/24]⎯
+
+ FAIL  test/components/recipe/SpoonDialog.test.tsx > SpoonDialog > renders a clear photo picker target instead of the native file text
+Error: expect(element).toHaveAttribute("accept", "image/jpeg,image/png,image/webp") // element.getAttribute("accept") === "image/jpeg,image/png,image/webp"
+
+Expected the element to have attribute:
+  accept="image/jpeg,image/png,image/webp"
+Received:
+  accept="image/jpeg,image/png,image/gif,image/webp"
+ ❯ test/components/recipe/SpoonDialog.test.tsx:49:23
+     47|
+     48|     expect(fileInput).toHaveClass("sr-only");
+     49|     expect(fileInput).toHaveAttribute("accept", "image/jpeg,image/png,…
+       |                       ^
+     50|     expect(picker).toHaveTextContent(/add photo/i);
+     51|     expect(picker).toHaveTextContent(/no photo yet/i);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/24]⎯
+
+ FAIL  test/components/recipe/SpoonDialog.test.tsx > SpoonDialog > clears the photo error when the user selects a valid file
+Error: expect(element).toHaveTextContent()
+
+Expected element to have text content:
+  /jpg, png, or webp/i
+Received:
+  Photos must be jpg, png, gif, or webp.
+ ❯ test/components/recipe/SpoonDialog.test.tsx:107:46
+    105|     const user = userEvent.setup({ applyAccept: false });
+    106|     await user.upload(fileInput, makeFile("a.svg", "image/svg+xml"));
+    107|     expect(await screen.findByRole("alert")).toHaveTextContent(/jpg, p…
+       |                                              ^
+    108|     await user.upload(fileInput, makeFile("cook.png", "image/png"));
+    109|     await waitFor(() => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/24]⎯
+
+ FAIL  test/components/recipe/SpoonDialog.test.tsx > SpoonDialog > rejects MIME types not in the food-photo allow-list with an inline error
+Error: expect(element).toHaveTextContent()
+
+Expected element to have text content:
+  /jpg, png, or webp/i
+Received:
+  Photos must be jpg, png, gif, or webp.
+ ❯ test/components/recipe/SpoonDialog.test.tsx:133:46
+    131|     const user = userEvent.setup({ applyAccept: false });
+    132|     await user.upload(fileInput, makeFile("a.svg", "image/svg+xml"));
+    133|     expect(await screen.findByRole("alert")).toHaveTextContent(/jpg, p…
+       |                                              ^
+    134|   });
+    135|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/24]⎯
+
+ FAIL  test/components/recipe/SpoonDialog.test.tsx > SpoonDialog > rejects GIF photo files with an inline error
+TestingLibraryElementError: Unable to find role="alert"
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div />[39m
+  [36m<div[39m
+    [33mid[39m=[32m"headlessui-portal-root"[39m
+  [36m>[39m
+    [36m<div[39m
+      [33mdata-headlessui-portal[39m=[32m""[39m
+    [36m>[39m
+      [36m<button[39m
+        [33maria-hidden[39m=[32m"true"[39m
+        [33mdata-headlessui-focus-guard[39m=[32m"true"[39m
+        [33mstyle[39m=[32m"position: fixed; top: 1px; left: 1px; width: 1px; height: 0px; padding: 0px; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border-width: 0px;"[39m
+        [33mtype[39m=[32m"button"[39m
+      [36m/>[39m
+      [36m<div>[39m
+        [36m<div[39m
+          [33maria-labelledby[39m=[32m"headlessui-dialog-title-_r_8i_"[39m
+          [33maria-modal[39m=[32m"true"[39m
+          [33mdata-headlessui-state[39m=[32m"open"[39m
+          [33mdata-open[39m=[32m""[39m
+          [33mid[39m=[32m"headlessui-dialog-_r_8b_"[39m
+          [33mrole[39m=[32m"dialog"[39m
+          [33mtabindex[39m=[32m"-1"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33maria-hidden[39m=[32m"true"[39m
+            [33mclass[39m=[32m"fixed inset-0 z-[60] flex w-screen justify-center overflow-y-auto bg-[color-mix(in_srgb,var(--sj-charcoal)_38%,transparent)] px-2 py-2 backdrop-blur-sm transition data-enter:duration-300 data-enter:ease-out data-leave:duration-200 data-leave:ease-in data-closed:opacity-0 data-enter:data-closed:opacity-0 motion-reduce:transition-none focus:outline-0 sm:px-6 sm:py-8 lg:px-8 lg:py-16"[39m
+            [33mdata-headlessui-state[39m=[32m"open"[39m
+            [33mdata-open[39m=[32m""[39m
+            [33mdata-slot[39m=[32m"dialog-backdrop"[39m
+          [36m/>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"fixed inset-0 z-[60] w-screen overflow-y-auto pt-6 sm:pt-0"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"grid min-h-full grid-rows-[1fr_auto] justify-items-center sm:grid-rows-[1fr_auto_3fr] sm:p-4"[39m
+            [36m>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"sm:max-w-md row-start-2 w-full min-w-0 rounded-t-[var(--sj-radius-surface)] border border-[var(--sj-border)] bg-[var(--sj-panel-solid)] p-(--gutter) shadow-[var(--sj-shadow)] [--gutter:--spacing(8)] sm:mb-auto sm:rounded-[var(--sj-radius-surface)] forced-colors:outline transition will-change-transform data-enter:duration-300 data-enter:ease-out data-leave:duration-200 data-leave:ease-in data-closed:translate-y-8 data-closed:opacity-0 data-enter:data-closed:translate-y-8 data-enter:data-closed:opacity-0 sm:data-closed:translate-y-0 sm:data-closed:scale-95 sm:data-enter:data-closed:translate-y-0 sm:data-enter:data-closed:scale-95 motion-reduce:transition-none motion-reduce:data-closed:translate-y-0"[39m
+                [33mdata-headlessui-state[39m=[32m"open"[39m
+                [33mdata-open[39m=[32m""[39m
+                [33mdata-slot[39m=[32m"dialog-panel"[39m
+                [33mid[39m=[32m"headlessui-dialog-panel-_r_8h_"[39m
+              [36m>[39m
+                [36m<h2[39m
+                  [33mclass[39m=[32m"font-sj-display text-lg/6 font-semibold text-balance text-[var(--sj-ink)] sm:text-base/6"[39m
+                  [33mdata-headlessui-state[39m=[32m"open"[39m
+                  [33mdata-open[39m=[32m""[39m
+                  [33mid[39m=[32m"headlessui-dialog-title-_r_8i_"[39m
+                [36m>[39m
+                  [0mLog a cook[0m
+                [36m</h2>[39m
+                [36m<div[39m
+                  [33mclass[39m=[32m"mt-4 mt-6"[39m
+                [36m>[39m
+                  [36m<form[39m
+                    [33maction[39m=[32m"/recipes/r1"[39m
+                    [33mclass[39m=[32m"space-y-4"[39m
+                    [33mdata-discover[39m=[32m"true"[39m
+                    [33menctype[39m=[32m"multipart/form-data"[39m
+                    [33mmethod[39m=[32m"post"[39m
+                  [36m>[39m
+                    [36m<input[39m
+                      [33mname[39m=[32m"intent"[39m
+                      [33mtype[39m=[32m"hidden"[39m
+                      [33mvalue[39m=[32m"createSpoon"[39m
+                    [36m/>[39m
+                    [36m<div[39m
+                      [33mclass[39m=[32m"[&>[data-slot=label]+[data-slot=control]]:mt-3 [&>[data-slot=label]+[data-slot=description]]:mt-1 [&>[data-slot=description]+[data-slot=control]]:mt-3 [&>[data-slot=control]+[data-slot=description]]:mt-3 [&>[data-slot=control]+[data-slot=error]]:mt-3 *:data-[slot=label]:font-medium"[39m
+                      [33mdata-headlessui-state[39m=[32m""[39m
+                    [36m>[39m
+                      [36m<label[39m
+                        [33mclass[39m=[32m"font-sj-ui text-base/6 font-semibold tracking-[0.01em] text-[var(--sj-ink)] select-none data-disabled:opacity-50 sm:text-sm/6"[39m
+                        [33mdata-headlessui-state[39m=[32m""[39m
+                        [33mdata-slot[39m=[32m"label"[39m
+                        [33mfor[39m=[32m"_r_86_"[39m
+                        [33mid[39m=[32m"headlessui-label-_r_8k_"[39m
+                      [36m>[39m
+                        [0mPhoto[0m
+                      [36m</label>[39m
+                      [36m<label[39m
+                        [33mclass[39m=[32m"group flex min-h-24 cursor-pointer items-center gap-4 rounded-[var(--sj-radius-surface)] border border-[var(--sj-border-strong)] bg-[var(--sj-field)] px-4 py-4 transition hover:border-[var(--sj-ink)] hover:bg-[var(--sj-panel-solid)]"[39m
+                        [33mdata-slot[39m=[32m"control"[39m
+                        [33mdata-testid[39m=[32m"spoon-photo-picker"[39m
+                      [36m>[39m
+                        [36m<input[39m
+                          [33maccept[39m=[32m"image/jpeg,image/png,image/gif,image/webp"[39m
+                          [33maria-describedby[39m=[32m"_r_87_ _r_88_"[39m
+                          [33mclass[39m=[32m"peer sr-only"[39m
+                          [33mdata-max-size[39m=[32m"5242880"[39m
+                          [33mid[39m=[32m"_r_86_"[39m
+                          [33mname[39m=[32m"photo"[39m
+                          [33mtype[39m=[32m"file"[39m
+                        [36m/>[39m
+                        [36m<span[39m
+                          [33mclass[39m=[32m"grid size-12 shrink-0 place-items-center rounded-[var(--sj-radius-small)] bg-[var(--sj-ink)] text-[var(--sj-paper)] transition group-hover:bg-[var(--sj-action-deep)] peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-4 peer-focus-visible:outline-[var(--sj-brass)]"[39m
+                        [36m>[39m
+                          [36m<svg[39m
+                            [33maria-hidden[39m=[32m"true"[39m
+                            ...
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div />[39m
+  [36m<div[39m
+    [33mid[39m=[32m"headlessui-portal-root"[39m
+  [36m>[39m
+    [36m<div[39m
+      [33mdata-headlessui-portal[39m=[32m""[39m
+    [36m>[39m
+      [36m<button[39m
+        [33maria-hidden[39m=[32m"true"[39m
+        [33mdata-headlessui-focus-guard[39m=[32m"true"[39m
+        [33mstyle[39m=[32m"position: fixed; top: 1px; left: 1px; width: 1px; height: 0px; padding: 0px; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border-width: 0px;"[39m
+        [33mtype[39m=[32m"button"[39m
+      [36m/>[39m
+      [36m<div>[39m
+        [36m<div[39m
+          [33maria-labelledby[39m=[32m"headlessui-dialog-title-_r_8i_"[39m
+          [33maria-modal[39m=[32m"true"[39m
+          [33mdata-headlessui-state[39m=[32m"open"[39m
+          [33mdata-open[39m=[32m""[39m
+          [33mid[39m=[32m"headlessui-dialog-_r_8b_"[39m
+          [33mrole[39m=[32m"dialog"[39m
+          [33mtabindex[39m=[32m"-1"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33maria-hidden[39m=[32m"true"[39m
+            [33mclass[39m=[32m"fixed inset-0 z-[60] flex w-screen justify-center overflow-y-auto bg-[color-mix(in_srgb,var(--sj-charcoal)_38%,transparent)] px-2 py-2 backdrop-blur-sm transition data-enter:duration-300 data-enter:ease-out data-leave:duration-200 data-leave:ease-in data-closed:opacity-0 data-enter:data-closed:opacity-0 motion-reduce:transition-none focus:outline-0 sm:px-6 sm:py-8 lg:px-8 lg:py-16"[39m
+            [33mdata-headlessui-state[39m=[32m"open"[39m
+            [33mdata-open[39m=[32m""[39m
+            [33mdata-slot[39m=[32m"dialog-backdrop"[39m
+          [36m/>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"fixed inset-0 z-[60] w-screen overflow-y-auto pt-6 sm:pt-0"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"grid min-h-full grid-rows-[1fr_auto] justify-items-center sm:grid-rows-[1fr_auto_3fr] sm:p-4"[39m
+            [36m>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"sm:max-w-md row-start-2 w-full min-w-0 rounded-t-[var(--sj-radius-surface)] border border-[var(--sj-border)] bg-[var(--sj-panel-solid)] p-(--gutter) shadow-[var(--sj-shadow)] [--gutter:--spacing(8)] sm:mb-auto sm:rounded-[var(--sj-radius-surface)] forced-colors:outline transition will-change-transform data-enter:duration-300 data-enter:ease-out data-leave:duration-200 data-leave:ease-in data-closed:translate-y-8 data-closed:opacity-0 data-enter:data-closed:translate-y-8 data-enter:data-closed:opacity-0 sm:data-closed:translate-y-0 sm:data-closed:scale-95 sm:data-enter:data-closed:translate-y-0 sm:data-enter:data-closed:scale-95 motion-reduce:transition-none motion-reduce:data-closed:translate-y-0"[39m
+                [33mdata-headlessui-state[39m=[32m"open"[39m
+                [33mdata-open[39m=[32m""[39m
+                [33mdata-slot[39m=[32m"dialog-panel"[39m
+                [33mid[39m=[32m"headlessui-dialog-panel-_r_8h_"[39m
+              [36m>[39m
+                [36m<h2[39m
+                  [33mclass[39m=[32m"font-sj-display text-lg/6 font-semibold text-balance text-[var(--sj-ink)] sm:text-base/6"[39m
+                  [33mdata-headlessui-state[39m=[32m"open"[39m
+                  [33mdata-open[39m=[32m""[39m
+                  [33mid[39m=[32m"headlessui-dialog-title-_r_8i_"[39m
+                [36m>[39m
+                  [0mLog a cook[0m
+                [36m</h2>[39m
+                [36m<div[39m
+                  [33mclass[39m=[32m"mt-4 mt-6"[39m
+                [36m>[39m
+                  [36m<form[39m
+                    [33maction[39m=[32m"/recipes/r1"[39m
+                    [33mclass[39m=[32m"space-y-4"[39m
+                    [33mdata-discover[39m=[32m"true"[39m
+                    [33menctype[39m=[32m"multipart/form-data"[39m
+                    [33mmethod[39m=[32m"post"[39m
+                  [36m>[39m
+                    [36m<input[39m
+                      [33mname[39m=[32m"intent"[39m
+                      [33mtype[39m=[32m"hidden"[39m
+                      [33mvalue[39m=[32m"createSpoon"[39m
+                    [36m/>[39m
+                    [36m<div[39m
+                      [33mclass[39m=[32m"[&>[data-slot=label]+[data-slot=control]]:mt-3 [&>[data-slot=label]+[data-slot=description]]:mt-1 [&>[data-slot=description]+[data-slot=control]]:mt-3 [&>[data-slot=control]+[data-slot=description]]:mt-3 [&>[data-slot=control]+[data-slot=error]]:mt-3 *:data-[slot=label]:font-medium"[39m
+                      [33mdata-headlessui-state[39m=[32m""[39m
+                    [36m>[39m
+                      [36m<label[39m
+                        [33mclass[39m=[32m"font-sj-ui text-base/6 font-semibold tracking-[0.01em] text-[var(--sj-ink)] select-none data-disabled:opacity-50 sm:text-sm/6"[39m
+                        [33mdata-headlessui-state[39m=[32m""[39m
+                        [33mdata-slot[39m=[32m"label"[39m
+                        [33mfor[39m=[32m"_r_86_"[39m
+                        [33mid[39m=[32m"headlessui-label-_r_8k_"[39m
+                      [36m>[39m
+                        [0mPhoto[0m
+                      [36m</label>[39m
+                      [36m<label[39m
+                        [33mclass[39m=[32m"group flex min-h-24 cursor-pointer items-center gap-4 rounded-[var(--sj-radius-surface)] border border-[var(--sj-border-strong)] bg-[var(--sj-field)] px-4 py-4 transition hover:border-[var(--sj-ink)] hover:bg-[var(--sj-panel-solid)]"[39m
+                        [33mdata-slot[39m=[32m"control"[39m
+                        [33mdata-testid[39m=[32m"spoon-photo-picker"[39m
+                      [36m>[39m
+                        [36m<input[39m
+                          [33maccept[39m=[32m"image/jpeg,image/png,image/gif,image/webp"[39m
+                          [33maria-describedby[39m=[32m"_r_87_ _r_88_"[39m
+                          [33mclass[39m=[32m"peer sr-only"[39m
+                          [33mdata-max-size[39m=[32m"5242880"[39m
+                          [33mid[39m=[32m"_r_86_"[39m
+                          [33mname[39m=[32m"photo"[39m
+                          [33mtype[39m=[32m"file"[39m
+                        [36m/>[39m
+                        [36m<span[39m
+                          [33mclass[39m=[32m"grid size-12 shrink-0 place-items-center rounded-[var(--sj-radius-small)] bg-[var(--sj-ink)] text-[var(--sj-paper)] transition group-hover:bg-[var(--sj-action-deep)] peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-4 peer-focus-visible:outline-[var(--sj-brass)]"[39m
+                        [36m>[39m
+                          [36m<svg[39m
+                            [33maria-hidden[39m=[32m"true"[39m
+                            ...
+ ❯ waitForWrapper node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ test/components/recipe/SpoonDialog.test.tsx:142:25
+    140|     await user.upload(fileInput, makeFile("animated.gif", "image/gif")…
+    141|
+    142|     expect(await screen.findByRole("alert")).toHaveTextContent("Photos…
+       |                         ^
+    143|     expect(screen.getByTestId("spoon-photo-picker")).toHaveTextContent…
+    144|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/24]⎯
+
+
+ Test Files  9 failed (9)
+      Tests  24 failed | 419 passed (443)
+   Start at  21:15:12
+   Duration  46.83s (transform 770ms, setup 575ms, import 3.93s, tests 39.67s, environment 1.54s)

@@ -22,8 +22,28 @@ async function makeRecipe(chefId: string) {
   return db.recipe.create({ data: { ...createTestRecipe(chefId), chefId } });
 }
 
+function validImageBytes(type: string, size: number): Uint8Array {
+  const signature =
+    type === "image/png"
+      ? [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
+      : type === "image/jpeg"
+        ? [0xff, 0xd8, 0xff, 0xe0]
+        : type === "image/webp"
+          ? [0x52, 0x49, 0x46, 0x46, 0x10, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50]
+          : [];
+  const bytes = new Uint8Array(Math.max(size, signature.length));
+  if (type === "image/png") {
+    bytes.set(signature);
+  } else if (type === "image/jpeg") {
+    bytes.set(signature);
+  } else if (type === "image/webp") {
+    bytes.set(signature);
+  }
+  return bytes;
+}
+
 function makePhotoFile(name = "photo.png", size = 1024, type = "image/png"): File {
-  return new File([new Uint8Array(size)], name, { type });
+  return new File([validImageBytes(type, size)], name, { type });
 }
 
 describe("recipe-spoon.server", () => {
@@ -98,6 +118,29 @@ describe("recipe-spoon.server", () => {
         photoFile: makePhotoFile("a.png", 2, "image/png"),
       });
       expect(result.spoon.photoUrl?.startsWith("data:image/png;base64,")).toBe(true);
+    });
+
+    it("rejects GIF photoFile uploads before storage", async () => {
+      const chef = await makeUser();
+      const recipe = await makeRecipe(chef.id);
+      const fakeBucket = {
+        put: vi.fn().mockResolvedValue(undefined),
+      } as unknown as R2Bucket;
+
+      await expect(createSpoon(
+        db,
+        {
+          chefId: chef.id,
+          recipeId: recipe.id,
+          photoFile: new File([new TextEncoder().encode("GIF89a")], "animated.gif", { type: "image/gif" }),
+          note: "cooked",
+        },
+        { bucket: fakeBucket, now: () => 1234567 },
+      )).rejects.toMatchObject({
+        name: "SpoonValidationError",
+        message: "Photos must be JPG, PNG, or WebP.",
+      });
+      expect(fakeBucket.put).not.toHaveBeenCalled();
     });
 
     it("throws SpoonValidationError when all content fields empty", async () => {

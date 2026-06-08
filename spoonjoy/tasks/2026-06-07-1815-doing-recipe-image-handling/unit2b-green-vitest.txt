@@ -1,0 +1,30 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ✓ test/routes/recipes-id.test.tsx (83 tests) 13581ms
+       ✓ keeps save modal open after creating a cookbook and marks it saved  300ms
+ ✓ test/routes/recipes-id-edit.test.tsx (70 tests) 11195ms
+       ✓ should populate hidden form and submit when Save Recipe is clicked  336ms
+       ✓ should keep the mobile dock off edit forms and submit from the in-flow Save Recipe button  339ms
+ ✓ test/routes/cookbooks-id.test.tsx (47 tests) 7189ms
+ ✓ test/routes/recipes-new.test.tsx (50 tests) 4973ms
+       ✓ should populate hidden form and submit when RecipeBuilder saves  313ms
+ ✓ test/routes/recipes-id-spoons.test.tsx (20 tests) 3129ms
+ ✓ test/routes/index.test.tsx (16 tests) 575ms
+ ✓ test/routes/users-identifier.test.tsx (14 tests) 548ms
+ ✓ test/routes/users-identifier-spoons.test.tsx (3 tests) 523ms
+ ✓ test/lib/spoonjoy-api-spoons.test.ts (48 tests) 360ms
+ ✓ test/routes/recipes-index.test.tsx (7 tests) 339ms
+ ✓ test/lib/recipe-cover.server.test.ts (19 tests) 120ms
+ ✓ test/lib/og-image.server.test.tsx (7 tests) 28ms
+ ✓ test/components/recipe/RecipeImageUpload.test.tsx (63 tests) 2860ms
+       ✓ revokes old preview URL when dropping new file  1823ms
+ ✓ test/lib/ai-placeholder-cover.server.test.ts (8 tests) 1490ms
+     ✓ constructs a real OpenAI runner when no explicit runner is passed and the API key is set  1404ms
+ ✓ test/components/recipe/RecipeBuilder.test.tsx (37 tests) 1355ms
+ ✓ test/components/recipe/RecipeHeader.test.tsx (24 tests) 121ms
+
+ Test Files  16 passed (16)
+      Tests  516 passed (516)
+   Start at  22:02:55
+   Duration  57.62s (transform 805ms, setup 727ms, import 4.64s, tests 48.39s, environment 2.16s)

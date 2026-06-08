@@ -6,18 +6,20 @@ import { Field, Label } from "../ui/fieldset";
 import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
 import { Button } from "../ui/button";
-
-const IMAGE_MAX_FILE_SIZE = 5 * 1024 * 1024;
-const RECIPE_IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
-const PHOTO_TYPE_MESSAGE = "Photos must be jpg, png, gif, or webp.";
-const PHOTO_SIZE_MESSAGE = "Photos must be 5 MB or smaller.";
+import {
+  FOOD_IMAGE_ACCEPT,
+  FOOD_IMAGE_SIZE_MESSAGE,
+  FOOD_IMAGE_TYPE_MESSAGE,
+  FOOD_IMAGE_TYPES,
+  IMAGE_MAX_FILE_SIZE,
+} from "~/lib/recipe-image";
 
 function validateClientFile(file: File): string | null {
-  if (!(RECIPE_IMAGE_TYPES as readonly string[]).includes(file.type)) {
-    return PHOTO_TYPE_MESSAGE;
+  if (!(FOOD_IMAGE_TYPES as readonly string[]).includes(file.type)) {
+    return FOOD_IMAGE_TYPE_MESSAGE;
   }
   if (file.size > IMAGE_MAX_FILE_SIZE) {
-    return PHOTO_SIZE_MESSAGE;
+    return FOOD_IMAGE_SIZE_MESSAGE;
   }
   return null;
 }
@@ -116,7 +118,7 @@ export function SpoonDialog({
                 id={photoId}
                 name="photo"
                 type="file"
-                accept={RECIPE_IMAGE_TYPES.join(",")}
+                accept={FOOD_IMAGE_ACCEPT}
                 data-max-size={IMAGE_MAX_FILE_SIZE}
                 aria-describedby={`${photoHintId} ${photoStatusId}${photoError ? ` ${photoErrorId}` : ""}`}
                 onChange={handleFileChange}
@@ -133,7 +135,7 @@ export function SpoonDialog({
                   {photoFile ? photoFile.name : "No photo yet"}
                 </span>
                 <span id={photoHintId} className="block font-sj-ui text-sm leading-6 text-[var(--sj-ink-soft)]">
-                  JPG, PNG, GIF, or WebP. 5 MB max.
+                  JPG, PNG, or WebP. 5 MB max.
                 </span>
               </span>
             </label>

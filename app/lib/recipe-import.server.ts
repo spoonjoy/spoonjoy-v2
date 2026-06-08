@@ -49,6 +49,7 @@ import {
   OEmbedError,
   type OEmbedMetadata,
 } from "~/lib/recipe-import-video.server";
+import { fetchSafeImageBytes } from "~/lib/safe-image-fetch.server";
 
 type Database = PrismaClient | Prisma.TransactionClient;
 
@@ -447,45 +448,6 @@ async function persistRecipe(
   return { id: created.id, recipe: full, title };
 }
 
-const COVER_FETCH_TIMEOUT_MS = 15_000;
-const COVER_MAX_BYTES = 5 * 1024 * 1024;
-
-async function fetchImageBytes(
-  url: string,
-  fetchImpl: typeof fetch,
-): Promise<{ bytes: Uint8Array; contentType: string }> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), COVER_FETCH_TIMEOUT_MS);
-  let response: Response;
-  try {
-    response = await fetchImpl(url, { signal: controller.signal });
-  } finally {
-    clearTimeout(timeout);
-  }
-  if (!response.ok) {
-    throw new Error(`Image fetch failed: ${response.status}`);
-  }
-  const headers = (response as { headers?: Headers }).headers;
-  const contentType = headers?.get("content-type") ?? "image/jpeg";
-  if (!contentType.toLowerCase().startsWith("image/")) {
-    throw new Error(`Image content-type rejected: ${contentType}`);
-  }
-  const buffer = await response.arrayBuffer();
-  const bytes = new Uint8Array(buffer);
-  if (bytes.byteLength > COVER_MAX_BYTES) {
-    throw new Error("Image exceeds 5MB cap");
-  }
-  return { bytes, contentType };
-}
-
-function extensionFor(contentType: string): string {
-  const lower = contentType.toLowerCase();
-  if (lower.includes("png")) return "png";
-  if (lower.includes("webp")) return "webp";
-  if (lower.includes("gif")) return "gif";
-  return "jpg";
-}
-
 async function uploadImportCover(
   db: PrismaClient,
   bucket: R2Bucket,
@@ -496,9 +458,9 @@ async function uploadImportCover(
   now: () => Date,
 ): Promise<void> {
   try {
-    const { bytes, contentType } = await fetchImageBytes(coverSourceUrl, fetchImpl);
+    const { bytes, contentType, extension } = await fetchSafeImageBytes(coverSourceUrl, { fetchImpl });
     const stamp = now().getTime();
-    const key = `covers/import/${stamp}.${extensionFor(contentType)}`;
+    const key = `covers/import/${stamp}-${crypto.randomUUID()}.${extension}`;
     await bucket.put(key, bytes, {
       httpMetadata: { contentType },
     });

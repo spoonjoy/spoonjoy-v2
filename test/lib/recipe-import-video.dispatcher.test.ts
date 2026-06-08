@@ -14,6 +14,9 @@ import path from "node:path";
 import { db } from "~/lib/db.server";
 import { createUser } from "~/lib/auth.server";
 import { cleanupDatabase } from "../helpers/cleanup";
+
+const GENERATED_IMAGE_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
+const VALID_JPEG_BYTES = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]);
 import {
   importRecipeFromUrl,
   type ImportRecipeDeps,
@@ -155,7 +158,7 @@ function videoFetchSequence(
       ok: true,
       status: 200,
       headers: new Headers([["content-type", imageContentType]]),
-      arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+      arrayBuffer: async () => VALID_JPEG_BYTES.buffer,
     } as unknown as Response;
   }) as unknown as typeof fetch;
   return { fetchImpl, calls };
@@ -532,7 +535,7 @@ describe("importRecipeFromUrl — I2 video dispatcher", () => {
         return {
           ok: true,
           status: 200,
-          arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+          arrayBuffer: async () => VALID_JPEG_BYTES.buffer,
         } as unknown as Response;
       }) as unknown as typeof fetch;
       const llmRunner = makeLlmRunner({
@@ -541,8 +544,8 @@ describe("importRecipeFromUrl — I2 video dispatcher", () => {
         steps: ["Fold"],
       });
       const imageGenRunner = {
-        textToImage: vi.fn(async () => ({ url: "https://gen.example.com/p.png" })),
-        imageToImage: vi.fn(async () => ({ url: "" })),
+        textToImage: vi.fn(async () => ({ bytes: GENERATED_IMAGE_BYTES, contentType: "image/png" as const })),
+        imageToImage: vi.fn(async () => ({ bytes: GENERATED_IMAGE_BYTES, contentType: "image/png" as const })),
       };
       const waitUntil = vi.fn();
       const result = await importRecipeFromUrl(

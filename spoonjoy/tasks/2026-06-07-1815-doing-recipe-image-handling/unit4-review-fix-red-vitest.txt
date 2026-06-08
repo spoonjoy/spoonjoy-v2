@@ -1,0 +1,201 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ❯ test/lib/mcp/spoonjoy-tools.server.test.ts (42 tests | 1 failed) 593ms
+     ✓ lists stable MCP tool metadata 11ms
+     ✓ annotates every tool with a title and behavioral hints (directory requirement) 6ms
+     ✓ classifies reads, writes, deletes, and the open-world import correctly 4ms
+     ✓ publishes upload schemas with required image fields and kitchen write scopes 4ms
+     ✓ uploads recipe and spoon photos to owner-scoped R2 namespaces 12ms
+     ✓ rejects invalid, GIF, and non-food upload payloads before storage 7ms
+     ✓ rejects production-like missing image buckets unless local fallback is explicit 5ms
+     ✓ reports health and writable state 4ms
+     ✓ reports agent auth status without asking for user credentials 13ms
+     ✓ starts and polls delegated agent connections over MCP 11ms
+     ✓ creates, lists, revokes, and authorizes owner-scoped API tokens 15ms
+     ✓ creates, searches, and fetches recipes with steps and ingredients 33ms
+     ✓ creates and updates recipe covers from uploaded image URLs with stylization scheduled 13ms
+     ✓ round-trips explicit local recipe image data URLs when no bucket is available 12ms
+     ✓ rejects unsafe recipe cover image assignments 11ms
+     ✓ creates minimal recipes and finds null for missing recipes 8ms
+     ✓ updates owner recipes with replacement steps and ingredients without interactive transactions 19ms
+     ✓ keeps untouched fields when updating only part of a recipe 14ms
+     ✓ rejects invalid or unauthorized recipe updates 11ms
+     ✓ soft-deletes owner recipes through MCP for agent cleanup 13ms
+     ✓ rejects invalid or unauthorized recipe deletes 9ms
+     ✓ handles unusual owner emails and ingredient-free steps 10ms
+     ✓ reuses existing owner usernames, units, and ingredient refs 14ms
+     ✓ adds recipe ingredients to a shopping list and merges duplicates 15ms
+     ✓ handles a recipe with no ingredients without touching the shopping list 9ms
+     ✓ aggregates duplicate (unit, ingredient) pairs within a single recipe into one item 14ms
+     ✓ rejects adding a soft-deleted recipe to a shopping list 11ms
+     ✓ creates, lists, and fetches cookbooks idempotently for the configured owner 12ms
+     ✓ lists cookbook summaries without loading deep recipe step payloads 6ms
+     ✓ adds and removes recipes from owner-scoped cookbooks idempotently 18ms
+     ✓ runs owner-scoped write tools without callback-style transactions 23ms
+     ✓ keeps cookbook MCP reads and writes scoped to the owning agent 12ms
+     ✓ groups multiple recipes per cookbook in list_cookbooks (batched-fetch regression) 15ms
+     ✓ excludes deleted recipes from cookbook MCP payloads 15ms
+     ✓ treats an existing null shopping-list quantity as zero when merging 15ms
+     ✓ gets shopping lists and filters deleted items including unitless items 11ms
+     ✓ manages direct shopping-list item adds, checks, removes, and restores 17ms
+     ✓ exposes unified full-text search and private shopping-list search to Ouroboros agents 26ms
+     ✓ supports unitless direct shopping-list items 9ms
+     ✓ scopes direct shopping-list item mutations to the owner 10ms
+     ✓ normalizes search limits 20ms
+     × validates write tool inputs 15ms
+ ❯ test/lib/spoonjoy-api-spoons.test.ts (54 tests | 1 failed) 456ms
+       ✓ lists the five new spoon operations 8ms
+       ✓ requires kitchen:write for upload tools 8ms
+       ✓ stores recipe and spoon upload bytes through the shared validator 8ms
+       ✓ rejects GIF upload bytes and missing buckets without explicit local fallback 8ms
+       ✓ round-trips explicit local spoon photo data URLs through create and update stylization 15ms
+       ✓ creates a spoon with note for the principal when not the recipe owner 7ms
+       ✓ rejects when ownerEmail is supplied with the documented 400 message 6ms
+       ✓ rejects unauthenticated callers with 401 6ms
+       ✓ forwards validation errors as 400 when content is empty 7ms
+       ✓ enforces origin-cook photo requirement with 400 7ms
+       ✓ accepts cookedAt as an ISO date string 8ms
+       ✓ rejects invalid cookedAt strings 7ms
+       ✓ requires recipeId 5ms
+       ✓ accepts photoUrl as a fallback when no upload bucket is wired 7ms
+       ✓ on origin-cook with photoUrl, inserts a RecipeCover row with sourceType='spoon' synchronously 7ms
+       ✓ does NOT insert a RecipeCover when chef is not the origin cook 9ms
+       ✓ schedules stylization via context.waitUntil; await fills stylizedImageUrl 12ms
+       ✓ when no waitUntil is provided, runs stylization inline and fills stylizedImageUrl 10ms
+       ✓ when stylization quota is exceeded, cover row is left with stylizedImageUrl=null and ledger does not exceed cap 9ms
+       ✓ when stylization throws, cover row stays with stylizedImageUrl=null and error is logged 11ms
+       ✓ writes a NotificationEvent for the recipe owner when the spooner is not the owner (with VAPID env) 9ms
+       ✓ does NOT write a NotificationEvent when the spooner IS the owner 8ms
+       ✓ does not write a NotificationEvent when VAPID env is absent (graceful skip) 8ms
+       ✓ fans out fellow_chef_origin_cook to each fellow chef on an origin-cook spoon 13ms
+       ✓ does NOT fan out fellow_chef_origin_cook on a non-origin spoon 9ms
+       ✓ allows the owning principal to update their spoon 9ms
+       ✓ rejects update from a non-owner with 403 8ms
+       ✓ rejects update on soft-deleted spoon with 404 7ms
+       ✓ rejects when ownerEmail is supplied 8ms
+       ✓ accepts nextTime/photoUrl/cookedAt patches 7ms
+       ✓ refreshes the active origin-cook cover when an uploaded spoon photo changes 9ms
+       × does not let a non-origin owner spoon replace the recipe cover on photo update 14ms
+       ✓ rejects updates that empty all content fields (note=null nulls the note) 8ms
+       ✓ rejects invalid cookedAt patches (malformed string) 8ms
+       ✓ rejects empty cookedAt patches (no usable date) 7ms
+       ✓ requires spoonId 6ms
+       ✓ returns spoons with chef relation and derived coverImageUrl per row 8ms
+       ✓ respects limit/offset 9ms
+       ✓ rejects ownerEmail 6ms
+       ✓ requires recipeId 5ms
+       ✓ excludes soft-deleted spoons 8ms
+       ✓ requires authentication 7ms
+       ✓ returns coverImageUrl=null when the recipe row is missing 6ms
+       ✓ returns spoons by chef id with recipe + coverImageUrl preloaded 8ms
+       ✓ resolves by username 8ms
+       ✓ returns 404 when chef is not found 5ms
+       ✓ rejects ownerEmail 5ms
+       ✓ requires chefIdOrUsername 6ms
+       ✓ excludes soft-deleted by default 8ms
+       ✓ requires authentication 4ms
+       ✓ respects limit/offset 10ms
+       ✓ soft-deletes the owning principal's spoon 8ms
+       ✓ rejects delete from a non-owner with 403 9ms
+       ✓ rejects when ownerEmail is supplied 9ms
+ ❯ test/lib/recipe-image-assignment.server.test.ts (5 tests | 1 failed) 29ms
+     ✓ validates explicit local/test data URLs through the shared food-photo validator 2ms
+     × accepts assignment data URLs only when bucket-backed storage is absent 3ms
+     ✓ rejects unclean uploaded recipe image URLs before storage lookup 1ms
+     ✓ requires stored recipe assignment URLs to be owner-scoped and present in R2 1ms
+     ✓ rejects unsafe spoon photo assignments while keeping external URLs backward-compatible 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/lib/recipe-image-assignment.server.test.ts > recipe image assignment validation > accepts assignment data URLs only when bucket-backed storage is absent
+AssertionError: promise resolved "undefined" instead of rejecting
+
+- Expected:
+Error {
+  "message": "rejected promise",
+}
+
++ Received:
+undefined
+
+ ❯ test/lib/recipe-image-assignment.server.test.ts:44:7
+     42|       bucket,
+     43|       allowLocalImageFallback: true,
+     44|     })).rejects.toThrow("Data URL recipe images require missing bucket…
+       |       ^
+     45|     await expect(validateSpoonPhotoAssignment({
+     46|       photoUrl: dataUrl("image/png", VALID_PNG_BYTES),
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  test/lib/spoonjoy-api-spoons.test.ts > spoonjoy-api spoon operations > update_spoon > does not let a non-origin owner spoon replace the recipe cover on photo update
+AssertionError: expected { …(7) } to be null
+
+- Expected:
+null
+
++ Received:
+{
+  "createdAt": "2026-06-08T06:39:17.084Z",
+  "id": "cmq4ubuqj005o6vzviaiuah8a",
+  "imageUrl": "/photos/spoons/cmq4ubuqg005e6vzvy258ofhg/uploads/1780900757082-3063e459-69a3-40a7-833d-4e7efb583d38.png",
+  "recipeId": "cmq4ubuqg005g6vzve2sj4jio",
+  "sourceSpoonId": "cmq4ubuqh005m6vzv9q2j7bdo",
+  "sourceType": "spoon",
+  "stylizedImageUrl": null,
+}
+
+ ❯ test/lib/spoonjoy-api-spoons.test.ts:923:28
+    921|
+    922|       expect(result.spoon.photoUrl).toBe(uploaded.imageUrl);
+    923|       expect(result.cover).toBeNull();
+       |                            ^
+    924|       await expect(db.recipeCover.count({ where: { sourceSpoonId: late…
+    925|       expect(captured).toHaveLength(0);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  test/lib/mcp/spoonjoy-tools.server.test.ts > spoonjoy MCP tools > validates write tool inputs
+AssertionError: promise resolved "'{\n  "recipe": {\n    "id": "cmq4ubu5…'" instead of rejecting
+
+- Expected:
+Error {
+  "message": "rejected promise",
+}
+
++ Received:
+"{
+  \"recipe\": {
+    \"id\": \"cmq4ubu58009d6vvqj730d19m\",
+    \"title\": \"Unknown Image Payload Recipe\",
+    \"description\": null,
+    \"servings\": null,
+    \"sourceUrl\": null,
+    \"sourceRecipeId\": null,
+    \"imageUrl\": null,
+    \"chef\": {
+      \"id\": \"cmq4ubu5600996vvqgcrq937x\",
+      \"email\": \"agent-926676x3@example.com\",
+      \"username\": \"agent-926676x3\"
+    },
+    \"steps\": [],
+    \"ingredientCount\": 0
+  }
+}"
+
+ ❯ test/lib/mcp/spoonjoy-tools.server.test.ts:1537:16
+    1535|       title: "Unknown Image Payload Recipe",
+    1536|       imageBase64: b64(VALID_PNG_BYTES),
+    1537|     }, context)).rejects.toThrow("create_recipe.imageBase64 is not all…
+       |                ^
+    1538|     await expect(context.db.recipe.count({ where: { title: "Unknown Im…
+    1539|     await expect(callSpoonjoyMcpTool("create_recipe", { title: "No own…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  3 failed | 98 passed (101)
+   Start at  23:39:14
+   Duration  2.76s (transform 254ms, setup 217ms, import 621ms, tests 1.08s, environment 499ms)

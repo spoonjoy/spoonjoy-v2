@@ -1,0 +1,191 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ❯ test/lib/recipe-import.test.ts (69 tests | 8 failed) 5629ms
+       ✓ returns confidence=high and source=json-ld for pure JSON-LD page 105ms
+       ✓ persists Recipe with sourceUrl set to input URL 83ms
+       ✓ persists title, description, servings from JSON-LD 82ms
+       ✓ persists RecipeStep + Ingredient rows from JSON-LD 84ms
+       ✓ persists without callback-style transactions 82ms
+       ✓ returns formatted recipe + recipeId on success 83ms
+       ✓ jsonld-howtosection fixture flattens nested instructions, confidence stays high 83ms
+       ✓ multi-Recipe JSON-LD page → first wins, confidence=medium, source=json-ld 81ms
+       ✓ no JSON-LD + readable body → calls llmRunner, confidence=low, source=llm 82ms
+       ✓ thin/empty body + LLM returns empty → throws ImportRecipeError no-content 74ms
+       ✓ malformed JSON-LD falls through to LLM (does not throw) 81ms
+       ✓ partial JSON-LD + LLM gap-fill → confidence=medium, source=mixed 82ms
+       ✓ surfaces existingRecipeId when chef has a non-deleted Recipe with same sourceUrl 83ms
+       ✓ existingRecipeId=null when only match is soft-deleted 83ms
+       ✓ existingRecipeId is scoped per chef 155ms
+       ✓ throws ImportRecipeError code=rate-limited (429) when quota exhausted 74ms
+       ✓ returns draft with recipeId=null and does not persist 73ms
+       ✓ does not consume rate-limit quota 72ms
+       ✓ does not enqueue cover upload (waitUntil not called) 72ms
+       ✓ dryRun still surfaces existingRecipeId hint 75ms
+       ✓ SafeFetchError(blocked-host) → ImportRecipeError fetch-blocked (400) 73ms
+       ✓ SafeFetchError(bad-scheme) → bad-url (400) 72ms
+       ✓ SafeFetchError(non-2xx) → fetch-failed (502) 73ms
+       ✓ SafeFetchError(not-html) → not-html (415) 73ms
+       ✓ SafeFetchError(too-large) → fetch-too-large (413) 73ms
+       ✓ SafeFetchError(timeout) → fetch-timeout (504) 74ms
+       ✓ RecipeLlmError → llm-failed (502) 73ms
+       ✓ throws llm-failed when LLM runner is required but not provided 73ms
+       ✓ creates a default LLM runner from env when one is not injected 74ms
+       ✓ re-throws non-RecipeLlmError from llmRunner.extract 74ms
+       ✓ uses JSON-LD ingredients when present and LLM only fills steps 80ms
+       ✓ uses JSON-LD steps when present and LLM only fills ingredients 78ms
+       ✓ image fetch returns non-2xx → logger.error, recipe still exists 82ms
+       ✓ image fetch returns non-image content-type → logger.error, no cover 82ms
+       × image response with no content-type header is skipped 92ms
+       ✓ png content-type produces .png extension 87ms
+       ✓ webp content-type produces .webp extension 89ms
+       ✓ image fetch timeout (AbortError on signal) → logger.error 81ms
+       ✓ image fetch 15s setTimeout callback aborts the request 81ms
+       × gif content-type is skipped without creating an imported cover 82ms
+       × gif file extension is skipped even when served as JPEG bytes 79ms
+       × gif bytes disguised as PNG or JPEG are skipped without creating covers 79ms
+       × blocked-scheme import cover URLs are rejected before fetch 79ms
+       × localhost/private import cover hosts are rejected before fetch 79ms
+       × public-to-private import cover redirects are rejected before fetching the private target 80ms
+       ✓ re-throws non-SafeFetchError raised by fetchImpl 74ms
+       ✓ default fetchImpl is used when deps.fetchImpl is undefined (bad-scheme exits early) 78ms
+       ✓ default fetchImpl falls back to global fetch when deps.fetchImpl is undefined 83ms
+       ✓ default logger is console when deps.logger is undefined 82ms
+       ✓ default now is wall-clock when deps.now is undefined 81ms
+       ✓ default ingredient parser is parseIngredients (env propagated) 74ms
+       ✓ default ingredient parser works when env is null 74ms
+       ✓ is an Error with code and status fields 4ms
+       ✓ og:image present → schedules upload via waitUntil; coverPending=true 82ms
+       ✓ scheduled upload calls bucket.put and createCover sourceType=import 81ms
+       × same-millisecond imported cover uploads use unique immutable keys 83ms
+       ✓ oversized image is skipped, logger.error called, recipe still exists 82ms
+       ✓ network failure during image fetch is swallowed and logged 80ms
+       ✓ bucket.put failure is swallowed and logged 82ms
+       ✓ og:image absent + imageGenRunner present → schedules ai-placeholder 79ms
+       ✓ og:image absent + imageGenRunner generation fails → recipe still exists, no cover 79ms
+       ✓ og:image absent + imageGenRunner absent → no cover scheduled, coverPending=false 78ms
+       ✓ bucket undefined → no cover scheduled even if og:image present, coverPending=false 82ms
+       ✓ waitUntil undefined → cover task is awaited inline 82ms
+       ✓ JSON-LD path uses jsonLd.imageUrl over ogImageUrl 81ms
+       ✓ first-collision appends ' (imported)' suffix 81ms
+       ✓ second-collision appends ' (imported HH:MM)' suffix with zero-padded UTC time 83ms
+       ✓ ingredient-ref cache hit (reuse existing ingredient row across imports) 153ms
+       ✓ third-collision throws title-conflict (409) 75ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/lib/recipe-import.test.ts > importRecipeFromUrl — extraction paths > cover scheduling edge cases > image response with no content-type header is skipped
+AssertionError: expected "vi.fn()" to be called at least once
+ ❯ test/lib/recipe-import.test.ts:812:28
+    810|       );
+    811|       await waitUntil.mock.calls[0][0];
+    812|       expect(logger.error).toHaveBeenCalled();
+       |                            ^
+    813|       const covers = await db.recipeCover.findMany({
+    814|         where: { recipeId: result.recipeId! },
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  test/lib/recipe-import.test.ts > importRecipeFromUrl — extraction paths > cover scheduling edge cases > gif content-type is skipped without creating an imported cover
+AssertionError: expected "vi.fn()" to be called at least once
+ ❯ test/lib/recipe-import.test.ts:969:28
+    967|       );
+    968|       await waitUntil.mock.calls[0][0];
+    969|       expect(logger.error).toHaveBeenCalled();
+       |                            ^
+    970|       const covers = await db.recipeCover.findMany({
+    971|         where: { recipeId: result.recipeId! },
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  test/lib/recipe-import.test.ts > importRecipeFromUrl — extraction paths > cover scheduling edge cases > gif file extension is skipped even when served as JPEG bytes
+AssertionError: expected "vi.fn()" to be called at least once
+ ❯ test/lib/recipe-import.test.ts:993:28
+    991|       );
+    992|       await waitUntil.mock.calls[0][0];
+    993|       expect(logger.error).toHaveBeenCalled();
+       |                            ^
+    994|       expect(bucket.put).not.toHaveBeenCalled();
+    995|       const covers = await db.recipeCover.findMany({
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+ FAIL  test/lib/recipe-import.test.ts > importRecipeFromUrl — extraction paths > cover scheduling edge cases > gif bytes disguised as PNG or JPEG are skipped without creating covers
+AssertionError: expected "vi.fn()" to be called at least once
+ ❯ test/lib/recipe-import.test.ts:1022:30
+    1020|         );
+    1021|         await waitUntil.mock.calls[0][0];
+    1022|         expect(logger.error).toHaveBeenCalled();
+       |                              ^
+    1023|         expect(bucket.put).not.toHaveBeenCalled();
+    1024|         const covers = await db.recipeCover.findMany({
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+
+ FAIL  test/lib/recipe-import.test.ts > importRecipeFromUrl — extraction paths > cover scheduling edge cases > blocked-scheme import cover URLs are rejected before fetch
+AssertionError: expected "vi.fn()" to be called 1 times, but got 2 times
+ ❯ test/lib/recipe-import.test.ts:1051:25
+    1049|       await waitUntil.mock.calls[0][0];
+    1050|
+    1051|       expect(fetchImpl).toHaveBeenCalledTimes(1);
+       |                         ^
+    1052|       expect(logger.error).toHaveBeenCalled();
+    1053|       expect(bucket.put).not.toHaveBeenCalled();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/8]⎯
+
+ FAIL  test/lib/recipe-import.test.ts > importRecipeFromUrl — extraction paths > cover scheduling edge cases > localhost/private import cover hosts are rejected before fetch
+AssertionError: expected "vi.fn()" to be called 1 times, but got 2 times
+ ❯ test/lib/recipe-import.test.ts:1078:27
+    1076|         await waitUntil.mock.calls[0][0];
+    1077|
+    1078|         expect(fetchImpl).toHaveBeenCalledTimes(1);
+       |                           ^
+    1079|         expect(logger.error).toHaveBeenCalled();
+    1080|         expect(bucket.put).not.toHaveBeenCalled();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/8]⎯
+
+ FAIL  test/lib/recipe-import.test.ts > importRecipeFromUrl — extraction paths > cover scheduling edge cases > public-to-private import cover redirects are rejected before fetching the private target
+AssertionError: expected 'Image fetch failed: 302' to match /blocked/i
+
+- Expected:
+/blocked/i
+
++ Received:
+"Image fetch failed: 302"
+
+ ❯ test/lib/recipe-import.test.ts:1115:29
+    1113|       expect(fetchImpl).toHaveBeenCalledTimes(2);
+    1114|       const error = logger.error.mock.calls[0][1] as Error;
+    1115|       expect(error.message).toMatch(/blocked/i);
+       |                             ^
+    1116|       expect(bucket.put).not.toHaveBeenCalled();
+    1117|       await expect(db.recipeCover.count({ where: { recipeId: result.re…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/8]⎯
+
+ FAIL  test/lib/recipe-import.test.ts > importRecipeFromUrl — extraction paths > cover scheduling > same-millisecond imported cover uploads use unique immutable keys
+AssertionError: expected 1 to be 2 // Object.is equality
+
+- Expected
++ Received
+
+- 2
++ 1
+
+ ❯ test/lib/recipe-import.test.ts:1413:34
+    1411|       const keys = (bucket.put as ReturnType<typeof vi.fn>).mock.calls…
+    1412|       expect(keys).toHaveLength(2);
+    1413|       expect(new Set(keys).size).toBe(2);
+       |                                  ^
+    1414|       expect(keys.every((key) => String(key).startsWith("covers/import…
+    1415|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/8]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  8 failed | 61 passed (69)
+   Start at  21:36:08
+   Duration  6.36s (transform 135ms, setup 115ms, import 286ms, tests 5.63s, environment 207ms)

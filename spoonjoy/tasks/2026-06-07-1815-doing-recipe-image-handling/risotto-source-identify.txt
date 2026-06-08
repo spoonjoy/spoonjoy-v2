@@ -1,0 +1,13 @@
+2:  Filename: spoonjoy/tasks/2026-06-07-1815-doing-recipe-image-handling/risotto-source.jpeg
+4:  Format: JPEG (Joint Photographic Experts Group JFIF format)
+5:  Mime type: image/jpeg
+7:  Geometry: 4032x3024+0+0
+74:  Page geometry: 4032x3024+0+0
+77:  Compression: JPEG
+79:  Orientation: Undefined
+80:  Profiles:
+81:    Profile-icc: 536 bytes
+82:    Profile-mpf: 74 bytes
+89:    jpeg:colorspace: 2
+90:    jpeg:sampling-factor: 2x2,1x1,1x1
+95:  Filesize: 2.78117MiB

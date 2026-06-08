@@ -1,0 +1,56 @@
+
+ ⛅️ wrangler 4.90.0 (update available 4.98.0)
+─────────────────────────────────────────────
+Resource location: remote
+
+🌀 Executing on remote database DB (32cb0e04-c45b-4cd2-a798-556556ae288d):
+🌀 To execute on your local development database, remove the --remote flag from your wrangler command.
+🚣 Executed 2 commands in 0.27ms
+[
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "WNAM",
+      "served_by_colo": "SEA",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.2034
+      },
+      "duration": 0.2034,
+      "changes": 1,
+      "last_row_id": 0,
+      "changed_db": true,
+      "size_after": 4071424,
+      "rows_read": 1,
+      "rows_written": 1,
+      "total_attempts": 1
+    }
+  },
+  {
+    "results": [
+      {
+        "changed": 1
+      }
+    ],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "WNAM",
+      "served_by_colo": "SEA",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.0703
+      },
+      "duration": 0.0703,
+      "changes": 0,
+      "last_row_id": 0,
+      "changed_db": false,
+      "size_after": 4071424,
+      "rows_read": 0,
+      "rows_written": 0,
+      "total_attempts": 1
+    }
+  }
+]

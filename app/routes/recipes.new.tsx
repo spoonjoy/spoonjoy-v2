@@ -17,11 +17,13 @@ import {
   hasUploadedImageFile,
   RECIPE_IMAGE_TYPES,
   storeImage,
-  validateImageFile,
+  validateImageFileForStorage,
 } from "~/lib/image-storage.server";
+import { FOOD_IMAGE_ACCEPT, RECIPE_IMAGE_SIZE_MESSAGE, RECIPE_IMAGE_TYPE_MESSAGE } from "~/lib/recipe-image";
 import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
-import { createCover, makeFallbackPlaceholderSvg } from "~/lib/recipe-cover.server";
+import { createCover } from "~/lib/recipe-cover.server";
 import { scheduleAiPlaceholderCover } from "~/lib/ai-placeholder-cover.server";
+import { scheduleSpoonCoverStylization } from "~/lib/spoon-cover-stylization.server";
 import {
   IngredientParseError,
   parseIngredients,
@@ -99,11 +101,11 @@ export async function action({ request, context }: Route.ActionArgs) {
 
   // Validate image file if provided
   if (imageFile) {
-    const imageError = validateImageFile(imageFile, {
+    const imageError = await validateImageFileForStorage(imageFile, {
       allowedTypes: RECIPE_IMAGE_TYPES,
       messages: {
-        invalidType: "Invalid image format",
-        fileTooLarge: "Image must be less than 5MB",
+        invalidType: RECIPE_IMAGE_TYPE_MESSAGE,
+        fileTooLarge: RECIPE_IMAGE_SIZE_MESSAGE,
       },
     });
 
@@ -164,22 +166,39 @@ export async function action({ request, context }: Route.ActionArgs) {
     });
 
     if (uploadedImageUrl) {
-      await createCover(database, {
+      const uploadedCover = await createCover(database, {
         recipeId: recipe.id,
         imageUrl: uploadedImageUrl,
         sourceType: "chef-upload",
       });
+      const waitUntil = context.cloudflare?.ctx?.waitUntil;
+      const task = scheduleSpoonCoverStylization({
+        db: database,
+        userId,
+        recipeId: recipe.id,
+        coverId: uploadedCover.id,
+        rawPhotoUrl: uploadedImageUrl,
+        recipeTitle: trimmedTitle,
+        env: cloudflareEnv,
+        bucket: photosBucket,
+        sourceType: "chef-upload",
+      });
+      if (waitUntil) {
+        waitUntil.call(context.cloudflare!.ctx!, task);
+      } else {
+        await task;
+      }
     } else {
-      const fallback = makeFallbackPlaceholderSvg(trimmedTitle);
       const placeholderCover = await createCover(database, {
         recipeId: recipe.id,
-        imageUrl: fallback.url,
+        imageUrl: "",
         sourceType: "ai-placeholder",
       });
       const waitUntil = context.cloudflare?.ctx?.waitUntil;
       const task = scheduleAiPlaceholderCover({
         db: database,
         userId,
+        recipeId: recipe.id,
         coverId: placeholderCover.id,
         title: trimmedTitle,
         description: trimmedDescription,
@@ -264,7 +283,7 @@ export default function NewRecipe() {
         <input type="hidden" name="servings" />
         <input type="hidden" name="steps" />
         <input type="hidden" name="clearImage" />
-        <input ref={fileInputRef} type="file" name="image" accept="image/*" />
+        <input ref={fileInputRef} type="file" name="image" accept={FOOD_IMAGE_ACCEPT} />
       </Form>
 
       <div className="mt-8 max-w-5xl">

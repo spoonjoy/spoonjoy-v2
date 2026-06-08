@@ -1,0 +1,13 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ✓ test/routes/recipes-id-edit.test.tsx (71 tests) 11750ms
+       ✓ should populate hidden form and submit when Save Recipe is clicked  333ms
+       ✓ should keep the mobile dock off edit forms and submit from the in-flow Save Recipe button  340ms
+ ✓ test/routes/recipes-new.test.tsx (51 tests) 4988ms
+       ✓ should populate hidden form and submit when RecipeBuilder saves  317ms
+
+ Test Files  2 passed (2)
+      Tests  122 passed (122)
+   Start at  22:21:04
+   Duration  18.82s (transform 334ms, setup 153ms, import 1.34s, tests 16.74s, environment 365ms)

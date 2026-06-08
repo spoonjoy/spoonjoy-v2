@@ -1,0 +1,13 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ✓ test/lib/spoonjoy-api-spoons.test.ts (56 tests) 538ms
+ ✓ test/lib/mcp/http-mcp.server.test.ts (24 tests) 242ms
+ ✓ test/routes/api-v1-recipes.test.ts (7 tests) 170ms
+ ✓ test/routes/api.test.ts (12 tests) 218ms
+ ✓ test/lib/og-image.server.test.tsx (8 tests) 27ms
+
+ Test Files  5 passed (5)
+      Tests  107 passed (107)
+   Start at  00:21:02
+   Duration  3.86s (transform 375ms, setup 297ms, import 1.09s, tests 1.20s, environment 740ms)

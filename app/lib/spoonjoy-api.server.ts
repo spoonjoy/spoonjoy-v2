@@ -14,6 +14,12 @@ import {
 } from "~/lib/agent-connection.server";
 import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
 import { createCover, getRecipeCoverImageUrl } from "~/lib/recipe-cover.server";
+import { uploadFoodImage } from "~/lib/image-upload-tools.server";
+import { FOOD_IMAGE_TYPES } from "~/lib/recipe-image";
+import {
+  validateRecipeImageAssignment,
+  validateSpoonPhotoAssignment,
+} from "~/lib/recipe-image-assignment.server";
 import { normalizeSearchScope, searchSpoonjoy } from "~/lib/search.server";
 import {
   createSpoon as createRecipeSpoon,
@@ -28,6 +34,7 @@ import {
 } from "~/lib/recipe-spoon.server";
 import { scheduleSpoonCoverStylization } from "~/lib/spoon-cover-stylization.server";
 import type { ImageGenRunner } from "~/lib/image-gen.server";
+import type { PostHogServerEnv } from "~/lib/analytics-server";
 import * as recipeImport from "~/lib/recipe-import.server";
 import {
   forkRecipe,
@@ -48,9 +55,10 @@ export interface SpoonjoyApiContext {
   defaultOwnerEmail?: string;
   allowOwnerEmailFallback?: boolean;
   waitUntil?: (promise: Promise<unknown>) => void;
-  env?: ({ OPENAI_API_KEY?: string; SPOONJOY_BASE_URL?: string } & VapidEnv) | null;
+  env?: ({ OPENAI_API_KEY?: string; SPOONJOY_BASE_URL?: string } & VapidEnv & PostHogServerEnv) | null;
   bucket?: R2Bucket;
   imageGenRunner?: ImageGenRunner;
+  allowLocalImageFallback?: boolean;
   logger?: Pick<Console, "error">;
 }
 
@@ -280,6 +288,34 @@ function runOrSchedule(
     return Promise.resolve();
   }
   return task;
+}
+
+async function scheduleCoverStylization(
+  context: SpoonjoyApiContext,
+  input: {
+    userId: string;
+    recipeId: string;
+    coverId: string;
+    rawPhotoUrl: string;
+    recipeTitle: string;
+    sourceType: "chef-upload" | "spoon";
+  },
+): Promise<void> {
+  const task = scheduleSpoonCoverStylization({
+    db: context.db,
+    userId: input.userId,
+    recipeId: input.recipeId,
+    coverId: input.coverId,
+    rawPhotoUrl: input.rawPhotoUrl,
+    recipeTitle: input.recipeTitle,
+    env: context.env ?? null,
+    bucket: context.bucket,
+    runner: context.imageGenRunner,
+    allowLocalImageFallback: context.allowLocalImageFallback,
+    sourceType: input.sourceType,
+    logger: context.logger,
+  });
+  await runOrSchedule(context, task);
 }
 
 function formatSpoon(spoon: {
@@ -1064,6 +1100,7 @@ const createRecipeTool: SpoonjoyApiOperation = {
       description: { type: "string" },
       servings: { type: "string" },
       sourceUrl: { type: "string" },
+      imageUrl: { type: "string" },
       steps: {
         type: "array",
         items: {
@@ -1097,6 +1134,7 @@ const createRecipeTool: SpoonjoyApiOperation = {
   async handle(args, context) {
     const email = requireOwnerEmail(args, context);
     const title = requiredString(args, "title");
+    const imageUrl = optionalString(args.imageUrl);
     const steps = parseSteps(args.steps);
 
     const owner = await getOrCreateOwner(context.db, email);
@@ -1105,6 +1143,14 @@ const createRecipeTool: SpoonjoyApiOperation = {
       title,
     });
     if (!titleUniqueness.valid) throw new Error(titleUniqueness.error);
+    if (imageUrl) {
+      await validateRecipeImageAssignment({
+        imageUrl,
+        ownerId: owner.id,
+        bucket: context.bucket,
+        allowLocalImageFallback: context.allowLocalImageFallback,
+      });
+    }
 
     const created = await context.db.recipe.create({
       data: {
@@ -1117,6 +1163,21 @@ const createRecipeTool: SpoonjoyApiOperation = {
     });
 
     await replaceRecipeSteps(context.db, created.id, steps);
+    if (imageUrl) {
+      const cover = await createCover(context.db, {
+        recipeId: created.id,
+        imageUrl,
+        sourceType: "chef-upload",
+      });
+      await scheduleCoverStylization(context, {
+        userId: owner.id,
+        recipeId: created.id,
+        coverId: cover.id,
+        rawPhotoUrl: imageUrl,
+        recipeTitle: title,
+        sourceType: "chef-upload",
+      });
+    }
 
     const recipe = await context.db.recipe.findUniqueOrThrow({
       where: { id: created.id },
@@ -1144,6 +1205,7 @@ const updateRecipeTool: SpoonjoyApiOperation = {
       description: { anyOf: [{ type: "string" }, { type: "null" }] },
       servings: { anyOf: [{ type: "string" }, { type: "null" }] },
       sourceUrl: { anyOf: [{ type: "string" }, { type: "null" }] },
+      imageUrl: { anyOf: [{ type: "string" }, { type: "null" }] },
       steps: {
         type: "array",
         items: {
@@ -1181,13 +1243,14 @@ const updateRecipeTool: SpoonjoyApiOperation = {
     const description = optionalNullableStringArgument(args, "description");
     const servings = optionalNullableStringArgument(args, "servings");
     const sourceUrl = optionalNullableStringArgument(args, "sourceUrl");
+    const imageUrl = optionalNullableStringArgument(args, "imageUrl");
     const shouldReplaceSteps = hasArgument(args, "steps");
     const steps = shouldReplaceSteps ? parseSteps(args.steps) : undefined;
 
     const owner = await getOrCreateOwner(context.db, email);
     const existing = await context.db.recipe.findFirst({
       where: { id, chefId: owner.id, deletedAt: null },
-      select: { id: true },
+      select: { id: true, title: true },
     });
     if (!existing) throw new Error("Recipe not found");
 
@@ -1205,6 +1268,15 @@ const updateRecipeTool: SpoonjoyApiOperation = {
     if (servings !== undefined) data.servings = servings;
     if (sourceUrl !== undefined) data.sourceUrl = sourceUrl;
 
+    if (imageUrl) {
+      await validateRecipeImageAssignment({
+        imageUrl,
+        ownerId: owner.id,
+        bucket: context.bucket,
+        allowLocalImageFallback: context.allowLocalImageFallback,
+      });
+    }
+
     if (Object.keys(data).length > 0) {
       await context.db.recipe.update({ where: { id: existing.id }, data });
     }
@@ -1212,6 +1284,21 @@ const updateRecipeTool: SpoonjoyApiOperation = {
     if (steps) {
       await replaceRecipeSteps(context.db, existing.id, steps);
       await context.db.recipe.update({ where: { id: existing.id }, data: { updatedAt: new Date() } });
+    }
+    if (imageUrl) {
+      const cover = await createCover(context.db, {
+        recipeId: existing.id,
+        imageUrl,
+        sourceType: "chef-upload",
+      });
+      await scheduleCoverStylization(context, {
+        userId: owner.id,
+        recipeId: existing.id,
+        coverId: cover.id,
+        rawPhotoUrl: imageUrl,
+        recipeTitle: title ?? existing.title,
+        sourceType: "chef-upload",
+      });
     }
 
     const recipe = await context.db.recipe.findUniqueOrThrow({
@@ -1265,6 +1352,64 @@ const deleteRecipeTool: SpoonjoyApiOperation = {
     });
 
     return json({ deleted: true, recipe: formatDeletedRecipe({ ...recipe, deletedAt }) });
+  },
+};
+
+async function uploadFoodImageForOwner(
+  args: Record<string, unknown>,
+  context: SpoonjoyApiContext,
+  namespace: "recipes" | "spoons",
+){
+  const email = requireOwnerEmail(args, context);
+  const owner = await getOrCreateOwner(context.db, email);
+  return uploadFoodImage({
+    imageBase64: requiredString(args, "imageBase64"),
+    mimeType: requiredString(args, "mimeType"),
+    filename: requiredString(args, "filename"),
+    ownerId: owner.id,
+    namespace,
+    bucket: context.bucket,
+    allowLocalImageFallback: context.allowLocalImageFallback,
+  });
+}
+
+const uploadRecipeImageTool: SpoonjoyApiOperation = {
+  name: "upload_recipe_image",
+  description: "Upload a recipe photo from base64 bytes and return a Spoonjoy image URL for recipe cover assignment.",
+  requiredScopes: ["kitchen:write"],
+  inputSchema: {
+    type: "object",
+    properties: {
+      ownerEmail: { type: "string" },
+      imageBase64: { type: "string" },
+      mimeType: { type: "string", enum: [...FOOD_IMAGE_TYPES] },
+      filename: { type: "string" },
+    },
+    required: ["imageBase64", "mimeType", "filename"],
+    additionalProperties: false,
+  },
+  async handle(args, context) {
+    return json(await uploadFoodImageForOwner(args, context, "recipes"));
+  },
+};
+
+const uploadSpoonPhotoTool: SpoonjoyApiOperation = {
+  name: "upload_spoon_photo",
+  description: "Upload a spoon/cook photo from base64 bytes and return a Spoonjoy image URL for spoon assignment.",
+  requiredScopes: ["kitchen:write"],
+  inputSchema: {
+    type: "object",
+    properties: {
+      ownerEmail: { type: "string" },
+      imageBase64: { type: "string" },
+      mimeType: { type: "string", enum: [...FOOD_IMAGE_TYPES] },
+      filename: { type: "string" },
+    },
+    required: ["imageBase64", "mimeType", "filename"],
+    additionalProperties: false,
+  },
+  async handle(args, context) {
+    return json(await uploadFoodImageForOwner(args, context, "spoons"));
   },
 };
 
@@ -1832,6 +1977,15 @@ const createSpoonTool: SpoonjoyApiOperation = {
     rejectOwnerEmail(args);
     const principal = requireApiPrincipal(context.principal);
     const recipeId = requiredString(args, "recipeId");
+    const photoUrl = optionalString(args.photoUrl) ?? null;
+    const photoAssignment = photoUrl
+      ? await validateSpoonPhotoAssignment({
+          photoUrl,
+          ownerId: principal.id,
+          bucket: context.bucket,
+          allowLocalImageFallback: context.allowLocalImageFallback,
+        })
+      : { stylizable: false };
     const cookedAtRaw = optionalString(args.cookedAt);
     const cookedAt = cookedAtRaw ? new Date(cookedAtRaw) : undefined;
     if (cookedAt && Number.isNaN(cookedAt.getTime())) {
@@ -1841,7 +1995,7 @@ const createSpoonTool: SpoonjoyApiOperation = {
     const result = await createRecipeSpoon(context.db, {
       chefId: principal.id,
       recipeId,
-      photoUrl: optionalString(args.photoUrl) ?? null,
+      photoUrl,
       note: optionalString(args.note) ?? null,
       nextTime: optionalString(args.nextTime) ?? null,
       cookedAt,
@@ -1873,18 +2027,16 @@ const createSpoonTool: SpoonjoyApiOperation = {
         sourceSpoonId: result.spoon.id,
       });
       coverPayload = formatCover(cover);
-      const task = scheduleSpoonCoverStylization({
-        db: context.db,
-        userId: principal.id,
-        coverId: cover.id,
-        rawPhotoUrl: result.spoon.photoUrl,
-        recipeTitle: recipe.title,
-        env: context.env ?? null,
-        bucket: context.bucket,
-        runner: context.imageGenRunner,
-        logger: context.logger,
-      });
-      await runOrSchedule(context, task);
+      if (photoAssignment.stylizable) {
+        await scheduleCoverStylization(context, {
+          userId: principal.id,
+          recipeId,
+          coverId: cover.id,
+          rawPhotoUrl: result.spoon.photoUrl,
+          recipeTitle: recipe.title,
+          sourceType: "spoon",
+        });
+      }
     }
 
     // Fan-out fellow_chef_origin_cook to every chef the spooner has previously
@@ -1964,8 +2116,52 @@ const updateSpoonTool: SpoonjoyApiOperation = {
       patch.cookedAt = cookedAt;
     }
 
+    const photoAssignment = typeof patch.photoUrl === "string" && patch.photoUrl
+      ? await validateSpoonPhotoAssignment({
+          photoUrl: patch.photoUrl,
+          ownerId: principal.id,
+          bucket: context.bucket,
+          allowLocalImageFallback: context.allowLocalImageFallback,
+        })
+      : { stylizable: false };
+
     const spoon = await updateRecipeSpoon(context.db, spoonId, principal.id, patch);
-    return json({ spoon: formatSpoon(spoon) });
+    let coverPayload: ReturnType<typeof formatCover> | null = null;
+    if (patch.photoUrl !== undefined && spoon.photoUrl) {
+      const recipe = await context.db.recipe.findUniqueOrThrow({
+        where: { id: spoon.recipeId },
+        select: { id: true, title: true, chefId: true },
+      });
+      const existingOriginCover = recipe.chefId === principal.id
+        ? await context.db.recipeCover.findFirst({
+            where: {
+              recipeId: spoon.recipeId,
+              sourceSpoonId: spoon.id,
+            },
+            select: { id: true },
+          })
+        : null;
+      if (existingOriginCover) {
+        const cover = await createCover(context.db, {
+          recipeId: spoon.recipeId,
+          imageUrl: spoon.photoUrl,
+          sourceType: "spoon",
+          sourceSpoonId: spoon.id,
+        });
+        coverPayload = formatCover(cover);
+        if (photoAssignment.stylizable) {
+          await scheduleCoverStylization(context, {
+            userId: principal.id,
+            recipeId: spoon.recipeId,
+            coverId: cover.id,
+            rawPhotoUrl: spoon.photoUrl,
+            recipeTitle: recipe.title,
+            sourceType: "spoon",
+          });
+        }
+      }
+    }
+    return json({ spoon: formatSpoon(spoon), cover: coverPayload });
   },
 };
 
@@ -2234,6 +2430,8 @@ const tools: SpoonjoyApiOperation[] = [
   createRecipeTool,
   updateRecipeTool,
   deleteRecipeTool,
+  uploadRecipeImageTool,
+  uploadSpoonPhotoTool,
   importRecipeFromUrlTool,
   forkRecipeTool,
   addRecipeToShoppingListTool,
@@ -2274,6 +2472,8 @@ const TOOL_ANNOTATIONS = {
   create_recipe: { title: "Create recipe", readOnlyHint: false, destructiveHint: false },
   update_recipe: { title: "Update recipe", readOnlyHint: false, destructiveHint: true },
   delete_recipe: { title: "Delete recipe", readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+  upload_recipe_image: { title: "Upload recipe image", readOnlyHint: false, destructiveHint: false },
+  upload_spoon_photo: { title: "Upload spoon photo", readOnlyHint: false, destructiveHint: false },
   import_recipe_from_url: { title: "Import recipe from URL", readOnlyHint: false, destructiveHint: false, openWorldHint: true },
   fork_recipe: { title: "Fork recipe", readOnlyHint: false, destructiveHint: false },
   add_recipe_to_shopping_list: { title: "Add recipe to shopping list", readOnlyHint: false, destructiveHint: false },
@@ -2309,6 +2509,60 @@ function assertToolScopes(tool: SpoonjoyApiOperation, context: SpoonjoyApiContex
   }
 }
 
+function schemaObject(value: unknown): Record<string, unknown> | null {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function schemaHasType(schema: Record<string, unknown>, type: string): boolean {
+  const schemaType = schema.type;
+  return schemaType === type || (Array.isArray(schemaType) && schemaType.includes(type));
+}
+
+function assertNoUnknownArguments(
+  schema: Record<string, unknown>,
+  value: unknown,
+  path: string,
+): void {
+  const objectSchema = schemaHasType(schema, "object") || schemaObject(schema.properties) !== null;
+  if (objectSchema) {
+    const objectValue = schemaObject(value);
+    if (!objectValue) return;
+    const properties = schemaObject(schema.properties) ?? {};
+    if (schema.additionalProperties === false) {
+      for (const key of Object.keys(objectValue)) {
+        const topLevelOwnerEmail = path === "create_spoon" || path === "update_spoon" ||
+          path === "list_spoons_for_recipe" || path === "list_spoons_by_chef" ||
+          path === "delete_spoon" || path === "import_recipe_from_url" ||
+          path === "fork_recipe";
+        if (!(key in properties) && !(topLevelOwnerEmail && key === "ownerEmail")) {
+          throw new ApiAuthError(`${path}.${key} is not allowed`, 400);
+        }
+      }
+    }
+    for (const [key, propertySchema] of Object.entries(properties)) {
+      const childSchema = schemaObject(propertySchema);
+      if (childSchema && Object.prototype.hasOwnProperty.call(objectValue, key)) {
+        assertNoUnknownArguments(childSchema, objectValue[key], `${path}.${key}`);
+      }
+    }
+    return;
+  }
+
+  if (schemaHasType(schema, "array") && Array.isArray(value)) {
+    const itemSchema = schemaObject(schema.items);
+    if (!itemSchema) return;
+    value.forEach((item, index) => {
+      assertNoUnknownArguments(itemSchema, item, `${path}[${index}]`);
+    });
+  }
+}
+
+export const __internal__ = {
+  assertNoUnknownArguments,
+};
+
 export async function callSpoonjoyApiOperation(
   name: string,
   args: Record<string, unknown>,
@@ -2317,5 +2571,6 @@ export async function callSpoonjoyApiOperation(
   const tool = tools.find((candidate) => candidate.name === name);
   if (!tool) throw new Error(`Unknown Spoonjoy operation: ${name}`);
   assertToolScopes(tool, context);
+  assertNoUnknownArguments(tool.inputSchema, args, name);
   return tool.handle(args, context);
 }

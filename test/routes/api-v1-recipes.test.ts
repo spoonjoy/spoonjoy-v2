@@ -249,6 +249,30 @@ describe("API v1 public recipe reads", () => {
     expect(emptyCoverDetail.status).toBe(200);
     expect(emptyCoverPayload.data.recipe.coverImageUrl).toBeNull();
 
+    const clearedCover = await createRecipeFixture(db, "Api V1 Cleared Cover");
+    await db.recipeCover.create({
+      data: {
+        recipeId: clearedCover.recipe.id,
+        imageUrl: "/photos/covers/old-visible.png",
+        sourceType: "chef-upload",
+        createdAt: new Date("2026-01-01T00:00:00Z"),
+      },
+    });
+    await db.recipeCover.create({
+      data: {
+        recipeId: clearedCover.recipe.id,
+        imageUrl: "",
+        sourceType: "ai-placeholder",
+        createdAt: new Date("2026-01-02T00:00:00Z"),
+      },
+    });
+    const clearedCoverDetail = await loader(routeArgs(new UndiciRequest(`http://localhost/api/v1/recipes/${clearedCover.recipe.id}`, {
+      headers: { "X-Request-Id": "req_recipe_cleared_cover" },
+    }) as unknown as Request, `recipes/${clearedCover.recipe.id}`));
+    const clearedCoverPayload = await readJson(clearedCoverDetail);
+    expect(clearedCoverDetail.status).toBe(200);
+    expect(clearedCoverPayload.data.recipe.coverImageUrl).toBeNull();
+
     await db.recipeCover.create({
       data: {
         recipeId: dataCover.recipe.id,

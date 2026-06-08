@@ -1,0 +1,7 @@
+
+ ⛅️ wrangler 4.90.0 (update available 4.98.0)
+─────────────────────────────────────────────
+Resource location: remote
+
+Creating object "tmp/risotto-repair-big-probe.jpeg" in bucket "spoonjoy-photos".
+Upload complete.

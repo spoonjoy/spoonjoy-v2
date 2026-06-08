@@ -577,10 +577,9 @@ function listCursorWhere(cursor: ListCursor | null) {
 }
 
 function coverImageUrl(covers: readonly CoverRow[]): string | null {
-  for (const cover of covers) {
-    if (cover.stylizedImageUrl) return cover.stylizedImageUrl;
-    if (cover.imageUrl) return cover.imageUrl;
-  }
+  const cover = covers[0];
+  if (cover?.stylizedImageUrl) return cover.stylizedImageUrl;
+  if (cover?.imageUrl) return cover.imageUrl;
   return null;
 }
 

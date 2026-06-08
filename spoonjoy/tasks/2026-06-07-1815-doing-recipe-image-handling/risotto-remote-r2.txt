@@ -1,0 +1,17 @@
+Command:
+
+pnpm exec wrangler r2 object get spoonjoy-photos/spoons/cl9rpod09000508la48fmmrbs/cmq35k4c10001zn0npvsmw05z/1780815863103-232ecc1f-2bda-43ce-86ea-c91a10f6e008.jpeg --remote --file /tmp/spoonjoy-risotto-r2-read-check.jpeg
+
+Stdout/stderr:
+
+ ⛅️ wrangler 4.90.0 (update available 4.98.0)
+─────────────────────────────────────────────
+Resource location: remote
+
+Downloading "spoons/cl9rpod09000508la48fmmrbs/cmq35k4c10001zn0npvsmw05z/1780815863103-232ecc1f-2bda-43ce-86ea-c91a10f6e008.jpeg" from "spoonjoy-photos".
+Download complete.
+
+Read-only note:
+
+- This command used `r2 object get` with `--remote`.
+- No `put`, `delete`, or metadata mutation command was run in Unit 0.

@@ -1,0 +1,25 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+      Coverage enabled with istanbul
+
+ ✓ test/lib/mcp/spoonjoy-tools.server.test.ts (42 tests) 576ms
+ ✓ test/lib/spoonjoy-api-spoons.test.ts (54 tests) 461ms
+ ✓ test/lib/spoon-cover-stylization.server.test.ts (8 tests) 112ms
+ ✓ test/lib/recipe-image-assignment.server.test.ts (5 tests) 27ms
+ ✓ test/lib/request-body-limit.server.test.ts (4 tests) 24ms
+
+ Test Files  5 passed (5)
+      Tests  113 passed (113)
+   Start at  23:41:21
+   Duration  3.61s (transform 414ms, setup 271ms, import 835ms, tests 1.20s, environment 729ms)
+
+ % Coverage report from istanbul
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s
+-------------------|---------|----------|---------|---------|-------------------
+All files          |     100 |      100 |     100 |     100 |
+ ...ools.server.ts |     100 |      100 |     100 |     100 |
+ ...ment.server.ts |     100 |      100 |     100 |     100 |
+ ...imit.server.ts |     100 |      100 |     100 |     100 |
+ ...tion.server.ts |     100 |      100 |     100 |     100 |
+-------------------|---------|----------|---------|---------|-------------------

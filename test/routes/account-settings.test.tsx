@@ -1874,7 +1874,7 @@ describe("Account Settings Route", () => {
         // File input should exist (may be hidden)
         const fileInput = profilePhotoSection.querySelector('input[type="file"]');
         expect(fileInput).toBeInTheDocument();
-        expect(fileInput).toHaveAttribute("accept", expect.stringMatching(/image/i));
+        expect(fileInput).toHaveAttribute("accept", "image/jpeg,image/png,image/gif,image/webp");
       });
 
       it("should trigger hidden file input click when upload button is clicked", async () => {
@@ -2062,6 +2062,36 @@ describe("Account Settings Route", () => {
         expect(result.success).toBe(true);
         expect(result.photoUrl).toBeDefined();
         expect(typeof result.photoUrl).toBe("string");
+      });
+
+      it("should keep GIF profile photos on an explicit profile-photo allow-list", async () => {
+        const session = await sessionStorage.getSession();
+        session.set("userId", testUserId);
+        const setCookieHeader = await sessionStorage.commitSession(session);
+        const cookieValue = setCookieHeader.split(";")[0];
+
+        const formData = new UndiciFormData();
+        formData.append("intent", "uploadPhoto");
+        formData.append("photo", new File([new TextEncoder().encode("GIF89a")], "profile.gif", { type: "image/gif" }));
+
+        const headers = new Headers();
+        headers.set("Cookie", cookieValue);
+
+        const request = new UndiciRequest("http://localhost:3000/account/settings", {
+          method: "POST",
+          headers,
+          body: formData,
+          duplex: "half",
+        });
+
+        const result = await action({
+          request,
+          context: { cloudflare: { env: null } },
+          params: {},
+        } as any);
+
+        expect(result.success).toBe(true);
+        expect(result.photoUrl).toMatch(/^data:image\/gif;base64,/);
       });
 
       it("should return error when no photo file is provided", async () => {

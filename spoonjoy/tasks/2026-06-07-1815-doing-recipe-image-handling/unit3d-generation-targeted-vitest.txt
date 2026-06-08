@@ -1,0 +1,14 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ✓ test/lib/recipe-import.test.ts (69 tests) 7154ms
+ ✓ test/lib/recipe-import-video.dispatcher.test.ts (27 tests) 2423ms
+ ✓ test/lib/ai-placeholder-cover.server.test.ts (8 tests) 1357ms
+     ✓ constructs a real OpenAI runner when no explicit runner is passed and the API key is set  1249ms
+ ✓ test/lib/spoon-cover-stylization.server.test.ts (7 tests) 97ms
+ ✓ test/lib/image-gen.server.test.ts (40 tests) 37ms
+
+ Test Files  5 passed (5)
+      Tests  151 passed (151)
+   Start at  22:46:06
+   Duration  13.66s (transform 238ms, setup 368ms, import 833ms, tests 11.07s, environment 784ms)

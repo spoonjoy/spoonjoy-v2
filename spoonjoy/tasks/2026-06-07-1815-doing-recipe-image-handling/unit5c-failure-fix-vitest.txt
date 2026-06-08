@@ -1,0 +1,11 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ✓ test/lib/recipe-import.integration.test.ts (7 tests) 607ms
+ ✓ test/routes/api.test.ts (12 tests) 204ms
+ ✓ test/lib/recipe-image.test.ts (2 tests) 23ms
+
+ Test Files  3 passed (3)
+      Tests  21 passed (21)
+   Start at  23:54:51
+   Duration  2.24s (transform 233ms, setup 163ms, import 522ms, tests 834ms, environment 404ms)

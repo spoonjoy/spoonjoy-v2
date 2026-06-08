@@ -1,0 +1,16 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ❯ test/routes/api-v1-recipes.test.ts (7 tests | 1 failed) 220ms
+     ✓ searches public recipes anonymously with query alias and limit behavior 37ms
+     ✓ defaults blank recipe queries and validates list limit boundaries 14ms
+     × validates list cursors and normalizes cover/source URLs 34ms
+     ✓ returns recipe detail with steps, ingredients, cookbook links, and scoped bearer success 26ms
+     ✓ excludes deleted recipes and returns missing/deleted recipes as not_found 16ms
+     ✓ redacts deleted source recipe attribution 13ms
+     ✓ validates limit and rejects bearer tokens without recipes:read 14ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 6 passed (7)
+   Start at  22:13:24
+   Duration  937ms (transform 151ms, setup 111ms, import 290ms, tests 220ms, environment 197ms)

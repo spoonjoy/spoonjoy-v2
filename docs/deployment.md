@@ -59,6 +59,11 @@ To enable server lifecycle telemetry and error capture:
 wrangler secret put POSTHOG_KEY
 ```
 
+Configure image-generation email alerts in PostHog, not in Spoonjoy code. Recommended filters:
+
+- `$exception` where `feature = recipe_image_generation`
+- `spoonjoy.image_generation.skipped` where `reason` is `missing_openai_key` or `missing_runner`
+
 To enable client analytics in the production bundle, provide these public build-time values to the deploy environment without committing the key:
 
 ```bash

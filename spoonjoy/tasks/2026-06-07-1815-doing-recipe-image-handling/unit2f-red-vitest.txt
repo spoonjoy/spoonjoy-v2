@@ -1,0 +1,44 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ❯ test/lib/search.server.test.ts (7 tests | 1 failed) 194ms
+     ✓ normalizes search inputs for UI and MCP callers 8ms
+     ✓ indexes recipes, cookbooks, chefs, and active cookbook recipes for full-text search 36ms
+     ✓ uses recent public results, owner filters, and safe empty-query handling 27ms
+     ✓ rebuilds recipe documents in small D1-safe batches 15ms
+     ✓ reuses a fresh search index and rebuilds after source data changes 20ms
+     × refreshes recipe search image URLs when cover URL fields change in place 18ms
+     ✓ keeps shopping-list search private to the signed-in owner 18ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/lib/search.server.test.ts > search.server > refreshes recipe search image URLs when cover URL fields change in place
+AssertionError: expected [ { type: 'recipe', …(10) } ] to match object [ { …(2) } ]
+(14 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  [
+    {
+      "id": "cmq4rmuw6002a6vrbf2c9sxwr",
+-     "imageUrl": "/photos/covers/generated-tart.png",
++     "imageUrl": null,
+    },
+  ]
+
+ ❯ test/lib/search.server.test.ts:315:5
+    313|     });
+    314|
+    315|     await expect(searchSpoonjoy(db, { query: "pending cover freshness"…
+       |     ^
+    316|       .resolves.toMatchObject([{ id: pendingRecipe.id, imageUrl: "/pho…
+    317|     await expect(searchSpoonjoy(db, { query: "stylized cover freshness…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 6 passed (7)
+   Start at  22:23:50
+   Duration  740ms (transform 75ms, setup 99ms, import 148ms, tests 194ms, environment 184ms)

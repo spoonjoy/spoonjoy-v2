@@ -1,0 +1,322 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ✓ test/routes/recipes-id-steps-id-edit.test.tsx (99 tests) 18541ms
+         ✓ should update parsed ingredient when edited  1211ms
+         ✓ should switch to manual mode when clicking Add Manually button on parse error  1207ms
+         ✓ should remove parsed ingredient when remove button is clicked  1209ms
+ ✓ test/routes/recipes-id-steps-id-edit-ingredient-integration.test.tsx (37 tests) 17049ms
+       ✓ shows ParsedIngredientList when AI parsing returns results  1174ms
+       ✓ shows ingredient count in ParsedIngredientList header  1179ms
+       ✓ shows Add All button when ingredients are parsed  1160ms
+       ✓ shows loading indicator while parsing  1144ms
+       ✓ displays parse error when AI parsing fails  1169ms
+       ✓ clears error when user types new text  1173ms
+       ✓ calls onParsed callback when parsing succeeds  1163ms
+       ✓ manual input and AI input do not interfere with each other  1167ms
+       ✓ parsed ingredients can be edited individually  1154ms
+       ✓ Add All from ParsedIngredientList adds all ingredients  1193ms
+       ✓ removes parsed ingredient when remove button is clicked  1183ms
+       ✓ clears parsed ingredients when text is cleared  1145ms
+ ✓ test/routes/recipes-id.test.tsx (83 tests) 13852ms
+       ✓ keeps save modal open after creating a cookbook and marks it saved  307ms
+ ✓ test/routes/account-settings.test.tsx (148 tests) 13640ms
+ ✓ test/routes/recipes-id-edit.test.tsx (71 tests) 11416ms
+       ✓ should populate hidden form and submit when Save Recipe is clicked  343ms
+       ✓ should keep the mobile dock off edit forms and submit from the in-flow Save Recipe button  338ms
+ ✓ test/routes/recipes-id-steps-new.test.tsx (58 tests) 8920ms
+ ✓ test/routes/cookbooks-id.test.tsx (47 tests) 7228ms
+ ✓ test/lib/recipe-import.test.ts (69 tests) 5805ms
+ ✓ test/routes/recipes-new.test.tsx (51 tests) 4975ms
+       ✓ should populate hidden form and submit when RecipeBuilder saves  315ms
+ ✓ test/routes/developers-playground.test.tsx (36 tests) 3608ms
+     ✓ copies generated playground values and reports clipboard failures  1738ms
+     ✓ supports keyboard roving for surface and auth mode radio groups  336ms
+ ✓ test/routes/shopping-list-route.test.ts (42 tests) 3417ms
+ ✓ test/routes/recipes-id-spoons.test.tsx (20 tests) 3142ms
+ ✓ test/routes/recipe-creation-flow-e2e.test.tsx (28 tests) 2786ms
+       ✓ should handle API connection failure gracefully  507ms
+ ✓ test/components/recipe/RecipeImageUpload.test.tsx (63 tests) 2832ms
+       ✓ revokes old preview URL when dropping new file  1790ms
+ ✓ test/routes/step-reorder-protection-e2e.test.tsx (26 tests) 2247ms
+ ✓ test/routes/recipes-form-integration.test.tsx (21 tests) 2285ms
+ ✓ test/lib/recipe-import-video.dispatcher.test.ts (27 tests) 2125ms
+ ✓ test/routes/edit-dependencies-e2e.test.tsx (23 tests) 2005ms
+ ✓ test/routes/step-deletion-protection-e2e.test.tsx (20 tests) 1725ms
+ ✓ test/lib/ai-placeholder-cover.server.test.ts (10 tests) 1607ms
+     ✓ constructs a real OpenAI runner when no explicit runner is passed and the API key is set  1498ms
+ ✓ test/lib/auth.server.test.ts (17 tests) 1445ms
+ ✓ test/components/recipe/RecipeBuilder.test.tsx (37 tests) 1376ms
+ ✓ test/lib/step-output-use-mutations.test.ts (16 tests) 1271ms
+ ✓ test/components/recipe/StepEditorCard.test.tsx (75 tests) 1288ms
+ ✓ test/routes/cookbooks-new.test.tsx (14 tests) 1163ms
+ ✓ test/routes/login.test.tsx (34 tests) 1157ms
+ ✓ test/routes/recipe-with-dependencies-e2e.test.tsx (12 tests) 1102ms
+ ✓ test/components/recipe/StepList.test.tsx (45 tests) 1107ms
+ ✓ test/components/recipe/ManualIngredientInput.test.tsx (41 tests) 973ms
+ ✓ test/lib/spoonjoy-api-import.test.ts (19 tests) 937ms
+ ✓ test/lib/recipe-create.server.test.ts (11 tests) 853ms
+ ✓ test/routes/cookbooks-id-notification.test.ts (5 tests) 783ms
+ ✓ test/routes/users-identifier-fellow-chefs.test.tsx (15 tests) 766ms
+ ✓ test/components/recipe/ParsedIngredientRow.test.tsx (46 tests) 777ms
+ ✓ test/components/recipe/SaveToCookbookDropdown.test.tsx (28 tests) 705ms
+ ✓ test/routes/recipes-id-fanout-notification.test.ts (3 tests) 701ms
+ ✓ test/components/recipe/SpoonDialog.test.tsx (16 tests) 651ms
+ ✓ test/lib/recipe-import-video.integration.test.ts (8 tests) 662ms
+ ✓ test/routes/signup.test.tsx (35 tests) 622ms
+ ✓ test/lib/mcp/spoonjoy-tools.server.test.ts (42 tests) 542ms
+ ✓ test/routes/recipes-id-spoon-notification.test.ts (4 tests) 634ms
+ ✓ test/routes/recipes-id-fork-notification.test.ts (4 tests) 646ms
+ ✓ test/lib/recipe-import.integration.test.ts (7 tests) 626ms
+ ✓ test/routes/shopping-list-openai-coverage.test.ts (7 tests) 598ms
+ ✓ test/routes/index.test.tsx (16 tests) 582ms
+ ✓ test/routes/users-identifier-kitchen-visitors.test.tsx (14 tests) 568ms
+ ✓ test/routes/users-identifier.test.tsx (14 tests) 551ms
+ ✓ test/components/ui/listbox.test.tsx (49 tests) 536ms
+ ✓ test/routes/users-identifier-spoons.test.tsx (3 tests) 524ms
+ ✓ test/lib/fellow-chefs.server.test.ts (33 tests) 508ms
+ ✓ test/routes/html5-validation-attributes.test.tsx (21 tests) 545ms
+ ✓ test/routes/shopping-list.test.tsx (34 tests) 502ms
+ ✓ test/routes/og-routes.test.ts (6 tests) 492ms
+ ✓ test/components/ui/combobox.test.tsx (34 tests) 451ms
+ ✓ test/components/ui/stacked-layout.test.tsx (44 tests) 423ms
+ ✓ test/lib/spoonjoy-api-spoons.test.ts (54 tests) 426ms
+ ✓ test/components/ui/dropdown.test.tsx (32 tests) 427ms
+ ✓ test/routes/route-shell-coverage.test.ts (12 tests) 385ms
+ ✓ test/lib/recipe-spoon.server.test.ts (46 tests) 368ms
+ ✓ test/components/recipe/IngredientParseInput.test.tsx (41 tests) 358ms
+ ✓ test/components/ui/sidebar-layout.test.tsx (37 tests) 348ms
+ ✓ test/lib/step-reorder-validation.server.test.ts (39 tests) 313ms
+ ✓ test/routes/recipes-index.test.tsx (7 tests) 347ms
+ ✓ test/routes/shopping-list-ux.test.tsx (16 tests) 367ms
+ ✓ test/lib/oauth-routes.server.test.ts (43 tests) 292ms
+ ✓ test/components/ui/radio.test.tsx (43 tests) 323ms
+ ✓ test/components/confirmation-dialog.test.tsx (23 tests) 294ms
+ ✓ test/components/notifications-section.test.tsx (19 tests) 293ms
+ ✓ test/routes/recipes-id-scaling.test.tsx (11 tests) 308ms
+ ✓ test/routes/developers.test.tsx (8 tests) 263ms
+ ✓ test/components/recipe/ParsedIngredientList.test.tsx (35 tests) 279ms
+ ✓ test/routes/recipes-layout.test.tsx (3 tests) 271ms
+ ✓ test/lib/oauth-user.server.test.ts (42 tests) 258ms
+ ✓ test/hooks/useIngredientParser.test.tsx (30 tests) 259ms
+ ✓ test/lib/recipe-fork.server.test.ts (17 tests) 241ms
+ ✓ test/components/recipe/IngredientInputToggle.test.tsx (32 tests) 249ms
+ ✓ test/components/ui/switch.test.tsx (42 tests) 235ms
+ ✓ test/routes/api-v1-telemetry.test.ts (15 tests) 205ms
+ ✓ test/lib/webauthn-route.server.test.ts (36 tests) 246ms
+ ✓ test/lib/mcp/http-mcp.server.test.ts (23 tests) 234ms
+ ✓ test/routes/oauth-authorize.test.tsx (9 tests) 167ms
+ ✓ test/lib/spoonjoy-api-fork.test.ts (16 tests) 224ms
+ ✓ test/components/recipe/StepDependencySelector.test.tsx (22 tests) 214ms
+ ✓ test/components/ui/checkbox.test.tsx (34 tests) 208ms
+ ✓ test/routes/api.test.ts (12 tests) 200ms
+ ✓ test/components/ui/alert.test.tsx (15 tests) 207ms
+ ✓ test/components/ui/textarea.test.tsx (49 tests) 195ms
+ ✓ test/components/recipe/ForkRecipeButton.test.tsx (9 tests) 192ms
+ ✓ test/lib/step-output-use-queries.server.test.ts (23 tests) 208ms
+ ✓ test/routes/focused-step-editor-flow-e2e.test.tsx (4 tests) 204ms
+ ✓ test/components/ui/dialog.test.tsx (15 tests) 201ms
+ ✓ test/routes/api-v1-recipes.test.ts (7 tests) 170ms
+ ✓ test/components/account/ProfilePhotoCropper.test.tsx (11 tests) 193ms
+ ✓ test/routes/api-v1-shopping-mutations.test.ts (6 tests) 184ms
+ ✓ test/routes/search.test.tsx (10 tests) 192ms
+ ✓ test/routes/auth-webauthn.test.ts (22 tests) 159ms
+ ✓ test/routes/api-v1-shopping-sync.test.ts (6 tests) 165ms
+ ✓ test/components/ui/select.test.tsx (47 tests) 166ms
+ ✓ test/routes/agent-connect.test.tsx (9 tests) 161ms
+ ✓ test/lib/search.server.test.ts (7 tests) 162ms
+ ✓ test/routes/api-v1-scopes.test.ts (4 tests) 157ms
+ ✓ test/lib/oauth-server.server.test.ts (34 tests) 167ms
+ ✓ test/components/recipe/ScaleSelector.test.tsx (29 tests) 170ms
+ ✓ test/components/auth/AddPasskeyButton.test.tsx (7 tests) 155ms
+ ✓ test/routes/recipes-step-edit-parse-action.test.ts (19 tests) 138ms
+ ✓ test/components/ui/sidebar.test.tsx (80 tests) 141ms
+ ✓ test/components/ui/theme-toggle.test.tsx (11 tests) 140ms
+ ✓ test/components/pwa/InstallPromptCard.test.tsx (17 tests) 132ms
+ ✓ test/models/recipe-step.test.ts (15 tests) 129ms
+ ✓ test/lib/db.server.test.ts (5 tests) 126ms
+ ✓ test/components/account/ProfilePhotoField.test.tsx (12 tests) 139ms
+ ✓ test/components/ui/input.test.tsx (38 tests) 138ms
+ ✓ test/routes/recipes-id-steps-new-callbacks.test.tsx (2 tests) 135ms
+ ✓ test/routes/api-v1-scopes-public-tokens.test.ts (5 tests) 127ms
+ ✓ test/components/auth/PasskeySignInButton.test.tsx (9 tests) 141ms
+ ✓ test/routes/cookbooks-index.test.tsx (3 tests) 130ms
+ ✓ test/components/ui/theme-provider.test.tsx (13 tests) 130ms
+ ✓ test/components/navigation/mobile-nav.test.tsx (19 tests) 128ms
+ ✓ test/lib/image-gen-ledger.server.test.ts (18 tests) 128ms
+ ✓ test/components/ui/navbar.test.tsx (54 tests) 126ms
+ ✓ test/components/recipe/IngredientList.test.tsx (26 tests) 127ms
+ ✓ test/components/recipe/RecipeHeader.test.tsx (24 tests) 120ms
+ ✓ test/lib/recipe-cover.server.test.ts (19 tests) 115ms
+ ✓ test/lib/api-idempotency.server.test.ts (11 tests) 109ms
+ ✓ test/lib/step-deletion-validation.server.test.ts (10 tests) 112ms
+ ✓ test/components/recipe/StepOutputUseCallout.test.tsx (28 tests) 105ms
+ ✓ test/components/ui/toast.test.tsx (7 tests) 109ms
+ ✓ test/routes/api-v1-cookbooks.test.ts (5 tests) 121ms
+ ✓ test/routes/api-v1-tokens.test.ts (5 tests) 106ms
+ ✓ test/routes/cookbooks.test.ts (14 tests) 104ms
+ ✓ test/lib/notification-dispatch.server.test.ts (16 tests) 173ms
+ ✓ test/lib/spoon-cover-stylization.server.test.ts (8 tests) 102ms
+ ✓ test/routes/api-v1-shell.test.ts (19 tests) 105ms
+ ✓ test/components/ui/pagination.test.tsx (63 tests) 102ms
+ ✓ test/repo-hygiene.test.ts (6 tests) 103ms
+ ✓ test/docs/developer-platform-guide.test.ts (2 tests) 98ms
+ ✓ test/routes/recipes.test.ts (11 tests) 106ms
+ ✓ test/components/ui/link.test.tsx (29 tests) 104ms
+ ✓ test/lib/apple-oauth-callback.server.test.ts (28 tests) 103ms
+ ✓ test/lib/agent-connection.server.test.ts (7 tests) 94ms
+ ✓ test/lib/google-oauth-callback.server.test.ts (28 tests) 92ms
+ ✓ test/routes/api-v1-shopping-conflicts.test.ts (3 tests) 100ms
+ ✓ test/components/pantry/RecipeGrid.test.tsx (24 tests) 95ms
+ ✓ app/__tests__/root.test.tsx (12 tests) 99ms
+ ✓ test/components/navigation/layout-integration.test.tsx (10 tests) 83ms
+ ✓ test/components/ui/fieldset.test.tsx (35 tests) 86ms
+ ✓ test/models/cookbook.test.ts (10 tests) 85ms
+ ✓ test/components/recipe/SpoonsStrip.test.tsx (17 tests) 83ms
+ ✓ test/lib/api-auth.server.test.ts (6 tests) 83ms
+ ✓ test/lib/notification-fanout.server.test.ts (5 tests) 80ms
+ ✓ test/lib/notification-triggers.server.test.ts (14 tests) 82ms
+ ✓ test/routes/api.push.subscriptions.test.ts (17 tests) 83ms
+ ✓ test/components/ui/table.test.tsx (48 tests) 87ms
+ ✓ test/components/pantry/CookbookCard.test.tsx (16 tests) 80ms
+ ✓ test/lib/spoonjoy-api-cookbook-notification.test.ts (4 tests) 69ms
+ ✓ test/lib/spoonjoy-api-request.server.test.ts (10 tests) 78ms
+ ✓ test/models/recipe-cover.test.ts (9 tests) 80ms
+ ✓ test/models/shopping-list.test.ts (8 tests) 81ms
+ ✓ test/components/navigation/dock-item.test.tsx (18 tests) 74ms
+ ✓ test/scripts/deployment-preflight.test.ts (54 tests) 72ms
+ ✓ test/routes/logout.test.tsx (6 tests) 78ms
+ ✓ test/components/ui/badge.test.tsx (22 tests) 68ms
+ ✓ test/components/navigation/dock-center.test.tsx (14 tests) 68ms
+ ✓ test/routes/oauth-authorize-telemetry.test.tsx (3 tests) 66ms
+ ✓ test/lib/recipe-detail.server.test.ts (4 tests) 66ms
+ ✓ test/root-navbar.test.tsx (3 tests) 70ms
+ ✓ test/components/pantry/BioCard.test.tsx (5 tests) 65ms
+ ✓ test/models/recipe-spoon.test.ts (6 tests) 55ms
+ ✓ test/routes/mcp.test.ts (4 tests) 65ms
+ ✓ test/models/recipe.test.ts (8 tests) 62ms
+ ✓ test/routes/oauth-token-telemetry.test.ts (2 tests) 67ms
+ ✓ test/components/ui/avatar.test.tsx (26 tests) 70ms
+ ✓ test/routes/oauth-revoke-telemetry.test.ts (2 tests) 63ms
+ ✓ test/components/users/FellowChefList.test.tsx (10 tests) 60ms
+ ✓ test/components/ui/auth-layout.test.tsx (12 tests) 62ms
+ ✓ test/components/navigation/dock-context.test.tsx (20 tests) 58ms
+ ✓ test/routes/api-v1-openapi.test.ts (2 tests) 55ms
+ ✓ test/routes/api.push.preferences.test.ts (10 tests) 63ms
+ ✓ test/components/navigation/recipe-dock-actions.test.tsx (11 tests) 58ms
+ ✓ test/components/ui/button.test.tsx (10 tests) 51ms
+ ✓ test/components/cookbook/page.test.tsx (3 tests) 62ms
+ ✓ test/routes/privacy.test.tsx (2 tests) 55ms
+ ✓ test/components/navigation/dock-indicator.test.tsx (16 tests) 61ms
+ ✓ test/routes/api-v1-shopping-d1.test.ts (1 test) 51ms
+ ✓ test/components/recipe/RecipeProvenance.test.tsx (11 tests) 55ms
+ ✓ test/components/pantry/PantryPage.test.tsx (2 tests) 52ms
+ ✓ test/routes/terms.test.tsx (2 tests) 53ms
+ ✓ test/lib/recipe-title-uniqueness.server.test.ts (4 tests) 55ms
+ ✓ test/routes/auth-apple.test.ts (25 tests) 49ms
+ ✓ test/routes/catch-all.test.tsx (4 tests) 53ms
+ ✓ test/components/ui/validation-error.test.tsx (19 tests) 51ms
+ ✓ test/components/navigation/spoon-dock.test.tsx (20 tests) 51ms
+ ✓ test/models/image-gen-ledger.test.ts (6 tests) 50ms
+ ✓ test/lib/api-v1-openapi.server.test.ts (8 tests) 50ms
+ ✓ test/components/ui/heading.test.tsx (10 tests) 51ms
+ ✓ test/routes/recipe-dock-integration.test.tsx (5 tests) 47ms
+ ✓ test/components/ui/text.test.tsx (11 tests) 49ms
+ ✓ test/components/cookbook/CookbookCoverArt.test.tsx (6 tests) 47ms
+ ✓ test/components/recipe/ScaledQuantity.test.tsx (21 tests) 44ms
+ ✓ test/routes/oauth-register-telemetry.test.ts (2 tests) 43ms
+ ✓ test/components/ui/description-list.test.tsx (17 tests) 48ms
+ ✓ test/components/ui/oauth.test.tsx (4 tests) 49ms
+ ✓ test/components/StepOutputUseDisplay.test.tsx (8 tests) 47ms
+ ✓ test/lib/oauth-routes-defensive-coverage.test.ts (3 tests) 45ms
+ ✓ test/components/ui/spoonjoy-logo.test.tsx (12 tests) 46ms
+ ✓ test/routes/devtools-well-known.test.tsx (2 tests) 42ms
+ ✓ test/lib/github-oauth-callback.server.test.ts (7 tests) 42ms
+ ✓ test/components/recipe/StepCard.test.tsx (4 tests) 42ms
+ ✓ test/scripts/generate-api-playground.test.ts (2 tests) 41ms
+ ✓ test/components/ui/design-system-hygiene.test.ts (11 tests) 37ms
+ ✓ test/lib/web-push.server.test.ts (14 tests) 44ms
+ ✓ test/routes/auth-github.test.ts (17 tests) 37ms
+ ✓ test/routes/auth-google.test.ts (18 tests) 37ms
+ ✓ test/lib/image-gen.server.test.ts (41 tests) 41ms
+ ✓ test/components/ui/divider.test.tsx (7 tests) 45ms
+ ✓ test/entry-client-analytics.test.tsx (3 tests) 41ms
+ ✓ test/lib/session.server.test.ts (15 tests) 35ms
+ ✓ test/lib/recipe-import-video.test.ts (51 tests) 37ms
+ ✓ test/lib/oauth-route.server.test.ts (28 tests) 34ms
+ ✓ test/lib/recipe-import-fetch.test.ts (59 tests) 34ms
+ ✓ test/lib/ingredient-parse.server.test.ts (68 tests) 32ms
+ ✓ test/lib/google-oauth.server.test.ts (40 tests) 31ms
+ ✓ test/lib/analytics-server.test.ts (33 tests) 32ms
+ ✓ test/lib/recipe-import-llm.test.ts (32 tests) 31ms
+ ✓ test/lib/safe-image-fetch.server.test.ts (9 tests) 30ms
+ ✓ test/lib/image-storage.server.test.ts (26 tests) 31ms
+ ✓ test/build-output-hygiene.test.ts (2 tests) 29ms
+ ✓ test/lib/webauthn.server.test.ts (20 tests) 28ms
+ ✓ test/lib/push-client.test.ts (35 tests) 29ms
+ ✓ app/lib/quantity.test.ts (83 tests) 32ms
+ ✓ test/lib/apple-oauth.server.test.ts (39 tests) 30ms
+ ✓ test/routes/recipes-ui-css.test.ts (40 tests) 28ms
+ ✓ test/lib/api-v1-recipe-list-query.test.ts (1 test) 28ms
+ ✓ test/scripts/migration-0008-backfill-and-drop.test.ts (3 tests) 25ms
+ ✓ test/scripts/generate-vapid-keys.test.ts (19 tests) 27ms
+ ✓ test/lib/rate-limit.server.test.ts (23 tests) 28ms
+ ✓ test/lib/webauthn-client.test.ts (19 tests) 27ms
+ ✓ test/lib/validation.test.ts (91 tests) 27ms
+ ✓ test/lib/og-image.server.test.tsx (7 tests) 28ms
+ ✓ test/lib/pwa-install.test.ts (11 tests) 25ms
+ ✓ test/lib/recipe-image-assignment.server.test.ts (5 tests) 26ms
+ ✓ test/lib/github-oauth.server.test.ts (10 tests) 26ms
+ ✓ test/lib/mcp/json-rpc.server.test.ts (17 tests) 28ms
+ ✓ test/lib/env.server.test.ts (38 tests) 26ms
+ ✓ test/lib/mcp/spoonjoy-token-cache.server.test.ts (9 tests) 27ms
+ ✓ test/routes/redwood-functions-auth-oauth.test.ts (6 tests) 27ms
+ ✓ test/lib/image-crop.test.ts (18 tests) 26ms
+ ✓ test/storybook-sync.test.ts (8 tests) 26ms
+ ✓ test/lib/route-platform.server.test.ts (6 tests) 26ms
+ ✓ test/lib/analytics.test.ts (11 tests) 26ms
+ ✓ test/scripts/migration-0009-create.test.ts (13 tests) 27ms
+ ✓ test/workers/app.test.ts (3 tests) 27ms
+ ✓ test/lib/recipe-import-jsonld.test.ts (43 tests) 26ms
+ ✓ test/routes/photos.test.ts (9 tests) 26ms
+ ✓ test/lib/service-worker.test.ts (6 tests) 26ms
+ ✓ test/components/navigation/quick-actions.test.tsx (14 tests) 25ms
+ ✓ test/scripts/migration-0008-create.test.ts (9 tests) 25ms
+ ✓ test/routes/recipes-id-fork.test.ts (6 tests) 25ms
+ ✓ test/lib/canonical-host.server.test.ts (15 tests) 25ms
+ ✓ test/lib/oauth-cors.server.test.ts (3 tests) 24ms
+ ✓ test/lib/ingredient-affordances.test.ts (11 tests) 23ms
+ ✓ test/lib/chef-avatar.test.ts (4 tests) 23ms
+ ✓ test/routes/developer-docs-redirects.test.ts (12 tests) 24ms
+ ✓ test/scripts/migration-0016-api-idempotency-keys.test.ts (4 tests) 24ms
+ ✓ test/scripts/migration-0011-agent-connection-requests.test.ts (3 tests) 27ms
+ ✓ test/docs/developer-platform-docs.test.ts (6 tests) 24ms
+ ✓ test/lib/time.test.ts (14 tests) 24ms
+ ✓ test/routes/oauth-cors.test.ts (3 tests) 25ms
+ ✓ test/components/recipe/button-system-hygiene.test.ts (17 tests) 24ms
+ ✓ test/lib/client-storage-schema.test.ts (4 tests) 24ms
+ ✓ test/routes/manifest.webmanifest.test.ts (4 tests) 23ms
+ ✓ test/scripts/migration-0015-api-credential-scopes.test.ts (2 tests) 23ms
+ ✓ test/lib/mcp/json-rpc-stdio.server.test.ts (7 tests) 25ms
+ ✓ test/lib/oauth-metadata.server.test.ts (6 tests) 26ms
+ ✓ test/scripts/migration-0017-oauth-access-audience.test.ts (3 tests) 23ms
+ ✓ test/lib/security-headers.server.test.ts (4 tests) 24ms
+ ✓ test/routes/api.push.public-key.test.ts (5 tests) 24ms
+ ✓ test/lib/request-body-limit.server.test.ts (4 tests) 24ms
+ ✓ test/routes/cookbooks-layout.test.ts (2 tests) 23ms
+ ✓ test/scripts/production-readiness.test.ts (7 tests) 24ms
+ ✓ test/lib/d1-coerce.server.test.ts (4 tests) 24ms
+ ✓ test/server-json.test.ts (3 tests) 24ms
+ ✓ test/lib/recipe-image.test.ts (2 tests) 23ms
+ ✓ test/lib/openai-client.server.test.ts (1 test) 23ms
+ ✓ test/lib/mcp/spoonjoy-mcp-env.server.test.ts (2 tests) 22ms
+ ✓ test/root.test.ts (2 tests) 23ms
+ ✓ test/config/api-v1-route-coverage.test.ts (1 test) 22ms
+ ✓ test/react-router-config.test.ts (2 tests) 23ms
+ ✓ test/lib/mcp/spoonjoy-remote-auth.server.test.ts (3 tests) 23ms
+ ✓ test/lib/health.server.test.ts (1 test) 23ms
+
+ Test Files  290 passed (290)
+      Tests  5581 passed (5581)
+   Start at  23:55:24
+   Duration  300.41s (transform 3.87s, setup 13.09s, import 39.17s, tests 179.23s, environment 38.16s)

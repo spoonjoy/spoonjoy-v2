@@ -17,11 +17,12 @@ import { notifySpoonOnMyRecipe } from "~/lib/notification-triggers.server";
 import { fanoutFellowChefOriginCook } from "~/lib/notification-fanout.server";
 import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
 import { absoluteUrlFromRequest, recipeOgPath } from "~/lib/og-image.server";
+import type { PostHogServerEnv } from "~/lib/analytics-server";
 
 interface CloudflareContextLike {
   cloudflare?: {
     env?:
-      | ({ OPENAI_API_KEY?: string; PHOTOS?: R2Bucket } & VapidEnv)
+      | ({ OPENAI_API_KEY?: string; PHOTOS?: R2Bucket } & VapidEnv & PostHogServerEnv)
       | null;
     ctx?: { waitUntil?: (promise: Promise<unknown>) => void };
   };
@@ -42,7 +43,7 @@ function spoonErrorToResponse(error: unknown): never {
 
 function getCloudflareCtx(context: AppLoadContext): {
   bucket?: R2Bucket;
-  env: { OPENAI_API_KEY?: string } | null;
+  env: ({ OPENAI_API_KEY?: string } & PostHogServerEnv) | null;
   vapidEnv: VapidEnv;
   waitUntil?: (promise: Promise<unknown>) => void;
 } {
@@ -50,7 +51,14 @@ function getCloudflareCtx(context: AppLoadContext): {
   const envSource = cf?.env ?? null;
   return {
     bucket: cf?.env?.PHOTOS,
-    env: envSource ? { OPENAI_API_KEY: envSource.OPENAI_API_KEY } : null,
+    env: envSource
+      ? {
+          OPENAI_API_KEY: envSource.OPENAI_API_KEY,
+          POSTHOG_KEY: envSource.POSTHOG_KEY,
+          POSTHOG_HOST: envSource.POSTHOG_HOST,
+          POSTHOG_DISABLED: envSource.POSTHOG_DISABLED,
+        }
+      : null,
     vapidEnv: {
       VAPID_PUBLIC_KEY: envSource?.VAPID_PUBLIC_KEY,
       VAPID_PRIVATE_KEY: envSource?.VAPID_PRIVATE_KEY,
@@ -281,6 +289,7 @@ async function handleCreateSpoon(
     const task = scheduleSpoonCoverStylization({
       db: database,
       userId,
+      recipeId,
       coverId: cover.id,
       rawPhotoUrl: result.spoon.photoUrl,
       recipeTitle: recipe.title,

@@ -1,0 +1,67 @@
+
+> spoonjoy-v2@1.0.0 test:e2e /Users/arimendelow/Projects/spoonjoy-v2
+> env -u FORCE_COLOR -u NO_COLOR playwright test
+
+
+Running 59 tests using 5 workers
+
+[1A[2K[1/59] [chromium-no-auth] › e2e/example.spec.ts:3:1 › homepage loads with Spoonjoy branding and Login button
+[1A[2K[2/59] [chromium-no-auth] › e2e/flows/auth.spec.ts:6:3 › Auth Flow › landing page has login and signup buttons
+[1A[2K[3/59] [chromium-no-auth] › e2e/flows/auth.spec.ts:18:3 › Auth Flow › login with valid credentials redirects to public recipe index
+[1A[2K[4/59] [setup] › e2e/auth.setup.ts:6:1 › authenticate
+[1A[2K[5/59] [chromium-no-auth] › e2e/flows/auth.spec.ts:28:3 › Auth Flow › login with invalid credentials shows error
+[1A[2K[6/59] [chromium-no-auth] › e2e/flows/auth.spec.ts:39:3 › Auth Flow › logout redirects to landing page
+[1A[2K[7/59] [chromium-no-auth] › e2e/flows/auth.spec.ts:54:3 › Auth Flow › unauthenticated recipes access stays public
+[1A[2K[8/59] [chromium-no-auth] › e2e/flows/auth.spec.ts:61:3 › Auth Flow › signup page loads
+[1A[2K[9/59] [webauthn] › e2e/flows/passkey.spec.ts:14:3 › Passkey lifecycle › enroll, rename, sign in, and remove a passkey
+[1A[2K[10/59] [oauth] › e2e/flows/oauth-authorize.spec.ts:81:3 › OAuth authorize + consent flow › unauthenticated authorize gates to login, then consent grants a code
+[1A[2K[11/59] [oauth] › e2e/flows/oauth-authorize.spec.ts:110:3 › OAuth authorize + consent flow › denying consent redirects back with access_denied
+[1A[2K[12/59] [chromium] › e2e/flows/cookbooks.spec.ts:36:3 › Cookbook Flow › cookbook detail shows recipes
+[1A[2K[13/59] [chromium] › e2e/flows/cookbooks.spec.ts:12:3 › Cookbook Flow › cookbooks page shows cookbook cards
+[1A[2K[14/59] [chromium] › e2e/flows/cookbooks.spec.ts:52:3 › Cookbook Flow › can create new cookbook
+[1A[2K[15/59] [chromium] › e2e/flows/cookbooks.spec.ts:20:3 › Cookbook Flow › clicking cookbook shows recipes in cookbook
+[1A[2K[16/59] [chromium] › e2e/flows/cookbooks.spec.ts:4:3 › Cookbook Flow › cookbooks page loads
+[1A[2K[17/59] [chromium] › e2e/flows/create-recipe.spec.ts:15:3 › Create recipe flow › demo user can create a minimal recipe from the new-recipe form
+[1A[2K[18/59] [chromium] › e2e/flows/create-recipe.spec.ts:64:3 › Create recipe flow › demo user can reorder draft recipe steps by dragging the step handle
+[1A[2K[19/59] [chromium] › e2e/flows/fellow-chefs.spec.ts:7:3 › Fellow chefs + Kitchen visitors flow › demo_chef spoons a chef_julia recipe and both appear on the derived-graph pages
+[1A[2K[20/59] [chromium] › e2e/flows/fellow-chefs.spec.ts:62:3 › Fellow chefs + Kitchen visitors flow › profile page exposes Fellow chefs and Kitchen visitors entry links
+[1A[2K[21/59] [chromium] › e2e/flows/fork-recipe.spec.ts:4:3 › Fork recipe flow › viewer (demo) forks a recipe owned by chef_julia and lands on the fork
+[1A[2K[22/59] [chromium] › e2e/flows/mobile-recipebuilder-spoondock.spec.ts:80:3 › Mobile RecipeBuilder and SpoonDock audit › create flow keeps RecipeBuilder controls reachable without the fixed dock
+[1A[2K[23/59] [chromium] › e2e/flows/recipe-image-handling.spec.ts:46:3 › Recipe image handling › uploaded EXIF-oriented recipe photos remain upright after save and reload
+[1A[2K[24/59] [chromium] › e2e/flows/mobile-recipebuilder-spoondock.spec.ts:105:3 › Mobile RecipeBuilder and SpoonDock audit › edit flow keeps save controls usable without the fixed dock
+[1A[2K[25/59] [chromium] › e2e/flows/recipes.spec.ts:8:3 › Recipe Flow › recipes page shows recipe cards
+[1A[2K[26/59] [chromium] › e2e/flows/recipes.spec.ts:20:3 › Recipe Flow › clicking recipe card navigates to recipe detail
+[1A[2K[27/59] [chromium] › e2e/flows/recipes.spec.ts:44:3 › Recipe Flow › recipe detail shows steps and ingredients
+[1A[2K[28/59] [chromium] › e2e/flows/shopping-list.spec.ts:4:3 › Shopping List Flow › shopping list page loads
+[1A[2K[29/59] [chromium] › e2e/flows/shopping-list.spec.ts:12:3 › Shopping List Flow › shopping list shows items or empty state
+[1A[2K[30/59] [chromium] › e2e/flows/shopping-list.spec.ts:20:3 › Shopping List Flow › can add item to shopping list
+[1A[2K[31/59] [chromium] › e2e/flows/shopping-list.spec.ts:37:3 › Shopping List Flow › can check/uncheck shopping list item
+[1A[2K[32/59] [chromium] › e2e/flows/shopping-list.spec.ts:64:3 › Shopping List Flow › shopping list accessible from navigation
+[1A[2K[33/59] [chromium] › e2e/flows/mobile-recipebuilder-spoondock.spec.ts:123:3 › Mobile RecipeBuilder and SpoonDock audit › recipe detail masthead actions fit with the fixed dock
+[1A[2K[34/59] [chromium] › e2e/flows/spoon-a-recipe.spec.ts:7:3 › Spoon a recipe flow › user can log a cook and see it appear in the spoons strip
+[1A[2K[35/59] [chromium] › e2e/flows/spoondock-responsive.spec.ts:74:7 › SpoonDock @ 320px › kitchen (default) dock fits
+[1A[2K[36/59] [chromium] › e2e/flows/spoondock-responsive.spec.ts:74:7 › SpoonDock @ 320px › search dock fits
+[1A[2K[37/59] [chromium] › e2e/flows/spoondock-responsive.spec.ts:74:7 › SpoonDock @ 320px › shopping list dock fits
+[1A[2K[38/59] [chromium] › e2e/flows/spoondock-responsive.spec.ts:74:7 › SpoonDock @ 320px › account dock fits
+[1A[2K[39/59] [chromium] › e2e/flows/mobile-recipebuilder-spoondock.spec.ts:159:3 › Mobile RecipeBuilder and SpoonDock audit › shopping-list mobile controls have touch targets and dock clearance
+[1A[2K[40/59] [chromium] › e2e/flows/spoondock-responsive.spec.ts:74:7 › SpoonDock @ 320px › cookbooks dock fits
+[1A[2K[41/59] [chromium] › e2e/flows/spoondock-responsive.spec.ts:74:7 › SpoonDock @ 320px › users/profile dock fits
+[1A[2K[42/59] [chromium] › e2e/flows/spoondock-responsive.spec.ts:81:5 › SpoonDock @ 320px › recipe detail dock fits (worst case: place + primary + 3 tools)
+[1A[2K[43/59] [chromium] › e2e/flows/spoondock-responsive.spec.ts:74:7 › SpoonDock @ 375px › kitchen (default) dock fits
+[1A[2K[44/59] [chromium] › e2e/flows/spoondock-responsive.spec.ts:74:7 › SpoonDock @ 375px › search dock fits
+[1A[2K[45/59] [chromium] › e2e/flows/spoondock-responsive.spec.ts:74:7 › SpoonDock @ 375px › shopping list dock fits
+[1A[2K[46/59] [chromium] › e2e/flows/spoondock-responsive.spec.ts:74:7 › SpoonDock @ 375px › account dock fits
+[1A[2K[47/59] [chromium] › e2e/flows/spoondock-responsive.spec.ts:74:7 › SpoonDock @ 375px › cookbooks dock fits
+[1A[2K[48/59] [chromium] › e2e/flows/spoondock-responsive.spec.ts:74:7 › SpoonDock @ 375px › users/profile dock fits
+[1A[2K[49/59] [chromium] › e2e/flows/spoondock-responsive.spec.ts:81:5 › SpoonDock @ 375px › recipe detail dock fits (worst case: place + primary + 3 tools)
+[1A[2K[50/59] [chromium] › e2e/flows/spoondock-responsive.spec.ts:74:7 › SpoonDock @ 390px › kitchen (default) dock fits
+[1A[2K[51/59] [chromium] › e2e/flows/spoondock-responsive.spec.ts:74:7 › SpoonDock @ 390px › search dock fits
+[1A[2K[52/59] [chromium] › e2e/flows/spoondock-responsive.spec.ts:74:7 › SpoonDock @ 390px › shopping list dock fits
+[1A[2K[53/59] [chromium] › e2e/flows/spoondock-responsive.spec.ts:74:7 › SpoonDock @ 390px › account dock fits
+[1A[2K[54/59] [chromium] › e2e/flows/spoondock-responsive.spec.ts:74:7 › SpoonDock @ 390px › cookbooks dock fits
+[1A[2K[55/59] [chromium] › e2e/flows/spoondock-responsive.spec.ts:74:7 › SpoonDock @ 390px › users/profile dock fits
+[1A[2K[56/59] [chromium] › e2e/flows/spoondock-responsive.spec.ts:81:5 › SpoonDock @ 390px › recipe detail dock fits (worst case: place + primary + 3 tools)
+[1A[2K[57/59] [chromium] › e2e/push-subscribe.spec.ts:20:3 › Push subscribe flow › account settings renders the Notifications section
+[1A[2K[58/59] [chromium] › e2e/push-subscribe.spec.ts:28:3 › Push subscribe flow › the public-key endpoint responds
+[1A[2K[59/59] [chromium] › e2e/push-subscribe.spec.ts:34:3 › Push subscribe flow › the manifest is served and the icons resolve
+[1A[2K  59 passed (25.0s)

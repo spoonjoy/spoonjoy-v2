@@ -1,0 +1,35 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ❯ test/lib/search.server.test.ts (7 tests | 1 failed) 238ms
+     ✓ normalizes search inputs for UI and MCP callers 14ms
+     ✓ indexes recipes, cookbooks, chefs, and active cookbook recipes for full-text search 44ms
+     ✓ uses recent public results, owner filters, and safe empty-query handling 28ms
+     ✓ rebuilds recipe documents in small D1-safe batches 17ms
+     ✓ reuses a fresh search index and rebuilds after source data changes 24ms
+     × refreshes recipe search image URLs when cover URL fields change in place 27ms
+     ✓ keeps shopping-list search private to the signed-in owner 21ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/lib/search.server.test.ts > search.server > refreshes recipe search image URLs when cover URL fields change in place
+AssertionError: expected '[{"tableName":"User","rowCount":1,"la…' to contain 'contentHash'
+
+Expected: "contentHash"
+Received: "[{"tableName":"User","rowCount":1,"latestAt":"2026-06-08T05:29:16.191Z","content":null},{"tableName":"Recipe","rowCount":4,"latestAt":"2026-06-08T05:29:16.194Z","content":null},{"tableName":"RecipeCover","rowCount":4,"latestAt":"2026-06-08T05:29:16.195Z","content":[{"id":"cmq4rttb4002e6vl2qscd6qci","imageUrl":"/photos/recipes/chef/older-gratin.jpg","stylizedImageUrl":null},{"id":"cmq4rttb4002g6vl266nvidys","imageUrl":"","stylizedImageUrl":null},{"id":"cmq4rttb5002k6vl2an21at0e","imageUrl":"/photos/covers/generated-tart.png","stylizedImageUrl":null},{"id":"cmq4rttb6002o6vl25rdpwk5v","imageUrl":"/photos/recipes/chef/raw-toast.jpg","stylizedImageUrl":"/photos/covers/stylized-toast.png"}]},{"tableName":"RecipeStep","rowCount":0,"latestAt":null,"content":null},{"tableName":"Ingredient","rowCount":0,"latestAt":null,"content":null},{"tableName":"IngredientRef","rowCount":0,"latestAt":null,"content":null},{"tableName":"Unit","rowCount":0,"latestAt":null,"content":null},{"tableName":"Cookbook","rowCount":0,"latestAt":null,"content":null},{"tableName":"RecipeInCookbook","rowCount":0,"latestAt":null,"content":null},{"tableName":"ShoppingListItem","rowCount":0,"latestAt":null,"content":null}]"
+
+ ❯ test/lib/search.server.test.ts:357:48
+    355|       `SELECT "sourceFingerprint" FROM "SearchIndexMetadata" WHERE "id…
+    356|     );
+    357|     expect(metadataRows[0]!.sourceFingerprint).toContain("contentHash"…
+       |                                                ^
+    358|     expect(metadataRows[0]!.sourceFingerprint).not.toContain("/photos/…
+    359|     expect(metadataRows[0]!.sourceFingerprint).not.toContain("/photos/…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 6 passed (7)
+   Start at  22:29:15
+   Duration  870ms (transform 84ms, setup 122ms, import 169ms, tests 238ms, environment 217ms)

@@ -1,0 +1,275 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+      Coverage enabled with istanbul
+
+ ✓ test/routes/account-settings.test.tsx (148 tests) 14449ms
+ ✓ test/routes/recipes-id-edit.test.tsx (67 tests) 11198ms
+       ✓ should populate hidden form and submit when Save Recipe is clicked  353ms
+       ✓ should keep the mobile dock off edit forms and submit from the in-flow Save Recipe button  345ms
+ ✓ test/routes/recipes-new.test.tsx (50 tests) 5146ms
+       ✓ should populate hidden form and submit when RecipeBuilder saves  349ms
+ ✓ test/routes/recipes-id-spoons.test.tsx (20 tests) 3259ms
+ ✓ test/components/recipe/RecipeImageUpload.test.tsx (62 tests) 3063ms
+       ✓ revokes old preview URL when dropping new file  1956ms
+ ✓ test/components/recipe/SpoonDialog.test.tsx (16 tests) 738ms
+ ✓ test/lib/recipe-spoon.server.test.ts (46 tests) 431ms
+ ✓ test/components/account/ProfilePhotoField.test.tsx (12 tests) 153ms
+ ✓ test/lib/image-storage.server.test.ts (22 tests) 34ms
+
+ Test Files  9 passed (9)
+      Tests  443 passed (443)
+   Start at  21:21:22
+   Duration  49.69s (transform 2.71s, setup 581ms, import 5.57s, tests 38.47s, environment 1.43s)
+
+ % Coverage report from istanbul
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   18.88 |    16.86 |   15.56 |   19.68 |
+ components        |   28.84 |    18.51 |   23.07 |      30 |
+  ...seDisplay.tsx |       0 |        0 |       0 |       0 | 17-28
+  ...on-dialog.tsx |       0 |        0 |       0 |       0 | 41
+  ...s-section.tsx |   31.91 |    31.25 |      30 |   33.33 | 89-141,175-189
+ ...onents/account |      75 |    75.67 |   53.33 |   77.27 |
+  ...toCropper.tsx |   54.05 |    47.05 |      30 |   57.14 | ...54-60,64,68-73
+  ...hotoField.tsx |     100 |      100 |     100 |     100 |
+ components/auth   |   23.25 |    17.64 |      25 |    22.5 |
+  ...keyButton.tsx |   47.61 |    33.33 |      50 |      45 | 53-76
+  ...nInButton.tsx |       0 |        0 |       0 |       0 | 41-73
+ ...nents/cookbook |   26.31 |    22.85 |   38.46 |   27.77 |
+  ...kCoverArt.tsx |       0 |        0 |       0 |       0 | 9-92
+  page.tsx         |      50 |    33.33 |   71.42 |   55.55 | 87-111,149
+ ...nts/navigation |   14.51 |      6.2 |   10.63 |   15.38 |
+  dock-center.tsx  |       0 |        0 |       0 |       0 | 35-49
+  dock-context.tsx |      25 |        0 |   13.63 |    28.2 | ...00-101,125-156
+  ...indicator.tsx |       0 |        0 |       0 |       0 | 30-44
+  dock-item.tsx    |       0 |        0 |       0 |       0 | 34-110
+  mobile-nav.tsx   |   21.87 |     17.3 |      25 |   21.87 | ...48-165,195-229
+  ...k-actions.tsx |       0 |        0 |       0 |       0 | 28-117
+  spoon-dock.tsx   |       0 |        0 |       0 |       0 | 25
+  ...k-actions.tsx |       0 |        0 |       0 |       0 | 18-121
+ components/pantry |       0 |        0 |       0 |       0 |
+  BioCard.tsx      |       0 |        0 |       0 |       0 | 32-40
+  CookbookCard.tsx |       0 |        0 |       0 |       0 | 29-49
+  PantryPage.tsx   |       0 |        0 |       0 |       0 | 19
+  RecipeGrid.tsx   |       0 |        0 |       0 |       0 | 38-125
+ components/pwa    |       0 |        0 |       0 |       0 |
+  ...romptCard.tsx |       0 |        0 |       0 |       0 | 53-135
+ components/recipe |   35.48 |    34.35 |   23.75 |   35.79 |
+  ...ipeButton.tsx |   66.66 |    45.45 |      25 |   66.66 | 43-64
+  ...putToggle.tsx |       4 |        0 |       0 |       4 | 26-100
+  ...dientList.tsx |       0 |        0 |       0 |       0 | 42-188
+  ...arseInput.tsx |       0 |        0 |       0 |       0 | 22-137
+  ...ientInput.tsx |       0 |        0 |       0 |       0 | 22-106
+  ...dientList.tsx |       0 |        0 |       0 |       0 | 23-52
+  ...edientRow.tsx |    5.71 |        0 |       0 |    5.71 | 43-280
+  ...peBuilder.tsx |   92.59 |    79.26 |    92.3 |   92.15 | 129-130,138,146
+  RecipeHeader.tsx |     100 |    59.09 |     100 |     100 | 63-130,146
+  ...ageUpload.tsx |     100 |      100 |     100 |     100 |
+  ...rovenance.tsx |      80 |    78.26 |     100 |   84.61 | 31,37
+  ...kDropdown.tsx |       0 |        0 |       0 |       0 | 50-168
+  ...eSelector.tsx |    90.9 |    77.77 |      50 |    90.9 | 63
+  ...dQuantity.tsx |       0 |        0 |       0 |       0 | 32-53
+  SpoonDialog.tsx  |     100 |      100 |     100 |     100 |
+  SpoonsStrip.tsx  |   35.89 |    23.25 |   44.44 |   39.39 | 36-45,53-101,155
+  StepCard.tsx     |       0 |        0 |       0 |       0 | 59
+  ...ySelector.tsx |       0 |        0 |       0 |       0 | 31-171
+  ...ditorCard.tsx |       0 |        0 |       0 |       0 | 69-205
+  StepList.tsx     |   26.02 |    17.85 |     7.4 |   27.94 | ...20-226,245-257
+  ...seCallout.tsx |       0 |        0 |       0 |       0 | 44-84
+ ...nents/shopping |       0 |        0 |       0 |       0 |
+  ...klist-row.tsx |       0 |        0 |       0 |       0 | 25-145
+ components/ui     |   24.52 |    21.48 |   18.83 |      25 |
+  alert.tsx        |       0 |        0 |       0 |       0 | 6-86
+  auth-layout.tsx  |       0 |        0 |       0 |       0 | 26
+  avatar.tsx       |      50 |       50 |      50 |      50 | 68-74
+  badge.tsx        |       0 |        0 |       0 |       0 | 7-65
+  button.tsx       |     100 |      100 |     100 |     100 |
+  checkbox.tsx     |       0 |        0 |       0 |       0 | 6-115
+  combobox.tsx     |       0 |        0 |       0 |       0 | 10-193
+  ...tion-list.tsx |       0 |      100 |       0 |       0 | 4-28
+  dialog.tsx       |     100 |      100 |     100 |     100 |
+  divider.tsx      |       0 |        0 |       0 |       0 | 8
+  dropdown.tsx     |       0 |        0 |       0 |       0 | 8-168
+  fieldset.tsx     |   57.14 |      100 |   57.14 |   57.14 | 21-34,71
+  heading.tsx      |      50 |        0 |      50 |      50 | 19-21
+  input.tsx        |   83.33 |      100 |      50 |   83.33 | 6
+  link.tsx         |   66.66 |       50 |     100 |   93.33 | 82
+  listbox.tsx      |       0 |        0 |       0 |       0 | 25-170
+  navbar.tsx       |       0 |        0 |       0 |       0 | 9-89
+  oauth.tsx        |   21.42 |    11.11 |      20 |   16.66 | 31-74,88-103
+  pagination.tsx   |       0 |        0 |       0 |       0 | 10-89
+  radio.tsx        |       0 |        0 |       0 |       0 | 8-115
+  select.tsx       |      50 |        0 |       0 |      50 | 9
+  ...ar-layout.tsx |       0 |      100 |       0 |       0 | 6-65
+  sidebar.tsx      |       0 |        0 |       0 |       0 | 9-134
+  ...njoy-logo.tsx |       0 |        0 |       0 |       0 | 24-30
+  ...ed-layout.tsx |       0 |      100 |       0 |       0 | 6-62
+  switch.tsx       |     100 |      100 |     100 |     100 |
+  table.tsx        |       0 |        0 |       0 |       0 | 6-96
+  text.tsx         |      25 |      100 |      25 |      25 | 15-31
+  textarea.tsx     |     100 |    83.33 |     100 |     100 | 51
+  ...-provider.tsx |       0 |        0 |       0 |       0 | 11-100
+  theme-toggle.tsx |       0 |        0 |       0 |       0 | 7-78
+  toast.tsx        |   53.57 |    28.57 |   45.45 |   51.85 | ...8-60,68,99-100
+  ...ion-error.tsx |      50 |    58.33 |   33.33 |   57.14 | 13,21,38
+ components/users  |       0 |        0 |       0 |       0 |
+  ...wChefList.tsx |       0 |        0 |       0 |       0 | 18-43
+ hooks             |    1.96 |        0 |       0 |    1.96 |
+  ...ientParser.ts |    1.96 |        0 |       0 |    1.96 | 20-125
+ lib               |   17.78 |    15.17 |   16.07 |   18.61 |
+  ...ngs.server.ts |     100 |      100 |     100 |     100 |
+  ...ion.server.ts |       0 |        0 |       0 |       0 | 7-311
+  ...ver.server.ts |   56.25 |    57.14 |   66.66 |   53.84 | 28-29,46,53-66
+  ...ics-server.ts |       0 |        0 |       0 |       0 | 31-321
+  analytics.ts     |       0 |        0 |       0 |       0 | 1-140
+  ...uth.server.ts |   40.27 |    17.64 |      50 |   38.23 | ...22-187,215-268
+  ...ncy.server.ts |       0 |        0 |       0 |       0 | 4-194
+  ...act.server.ts |       0 |      100 |     100 |       0 | 1-57
+  ...api.server.ts |       0 |        0 |       0 |       0 | 32-2161
+  api-v1.server.ts |       0 |        0 |       0 |       0 | 41-1740
+  ...ack.server.ts |       0 |        0 |       0 |       0 | 73-154
+  ...uth.server.ts |       0 |        0 |       0 |       0 | 65-293
+  auth.server.ts   |      40 |        0 |   42.85 |      40 | 45-95
+  ...ost.server.ts |    6.25 |        0 |       0 |    6.45 | 6-45,53-77
+  chef-avatar.ts   |   81.81 |     87.5 |     100 |   81.81 | 5,12
+  ...age-schema.ts |       0 |        0 |       0 |       0 | 1-69
+  ...rce.server.ts |       0 |        0 |       0 |       0 | 2-14
+  db.server.ts     |   47.61 |       50 |      60 |   47.61 | 8-10,19-20,34-44
+  env.server.ts    |      30 |     8.33 |   33.33 |      30 | ...88-118,143-182
+  ...efs.server.ts |    6.06 |        0 |       0 |    6.45 | 60-244
+  ...ack.server.ts |       0 |        0 |       0 |       0 | 37-91
+  ...uth.server.ts |       0 |        0 |       0 |       0 | 52-178
+  ...ack.server.ts |       0 |        0 |       0 |       0 | 73-154
+  ...uth.server.ts |       0 |        0 |       0 |       0 | 67-247
+  health.server.ts |       0 |      100 |       0 |       0 | 9
+  image-crop.ts    |       0 |        0 |       0 |       0 | 23-85
+  ...ger.server.ts |      80 |     62.5 |     100 |   83.33 | 26,62-66
+  ...gen.server.ts |    1.81 |        0 |       0 |    1.92 | 39-192
+  ...age.server.ts |   95.09 |    88.78 |     100 |   96.15 | ...71,177,184,196
+  ...ffordances.ts |     100 |       50 |     100 |     100 | 119-140
+  ...rse.server.ts |   14.86 |        0 |      10 |   14.86 | 131-313
+  ...tch.server.ts |       0 |        0 |       0 |       0 | 63-186
+  ...out.server.ts |      10 |        0 |       0 |   11.11 | 55-80
+  ...ers.server.ts |       0 |        0 |       0 |       0 | 30-131
+  ...ute.server.ts |       0 |        0 |       0 |       0 | 22-237
+  ...ors.server.ts |       0 |        0 |       0 |       0 | 1-28
+  ...ata.server.ts |       0 |        0 |       0 |       0 | 24-53
+  ...ute.server.ts |       0 |        0 |       0 |       0 | 21-242
+  ...tes.server.ts |       0 |        0 |       0 |       0 | 42-908
+  ...ver.server.ts |       0 |        0 |       0 |       0 | 22-378
+  ...ser.server.ts |   21.81 |     25.8 |      20 |   21.81 | 68-290,315
+  ...ge.server.tsx |    9.09 |        0 |       0 |    9.37 | 39-526
+  og-metadata.ts   |      50 |     12.5 |   33.33 |   53.84 | 51-67,75-83
+  ...ent.server.ts |       0 |      100 |       0 |       0 | 10
+  push-client.ts   |    5.68 |     6.15 |      20 |    7.24 | 53-189
+  pwa-install.ts   |       0 |        0 |       0 |       0 | 11-50
+  quantity.ts      |    1.75 |        0 |       0 |    1.75 | 28-201
+  ...mit.server.ts |       0 |        0 |       0 |       0 | 48-141
+  ...ver.server.ts |      48 |       25 |    62.5 |   52.17 | 35-45,53-57,67-71
+  ...ate.server.ts |   82.47 |    61.29 |     100 |   84.26 | ...35,139,154,193
+  ...ail.server.ts |   56.15 |    54.83 |   41.17 |   57.14 | ...10-323,362-460
+  ...ork.server.ts |       0 |        0 |       0 |       0 | 5-174
+  recipe-image.ts  |     100 |      100 |     100 |     100 |
+  ...tch.server.ts |       0 |        0 |       0 |       0 | 14-264
+  ...nld.server.ts |       0 |        0 |       0 |       0 | 33-175
+  ...llm.server.ts |       0 |        0 |       0 |       0 | 11-221
+  ...deo.server.ts |       0 |        0 |       0 |       0 | 15-256
+  ...ort.server.ts |       0 |        0 |       0 |       0 | 73-695
+  ...oon.server.ts |     100 |      100 |     100 |     100 |
+  ...ess.server.ts |     100 |      100 |     100 |     100 |
+  ...orm.server.ts |   85.71 |    92.85 |     100 |   85.71 | 30
+  search.server.ts |       0 |        0 |       0 |       0 | 17-668
+  ...ers.server.ts |       0 |      100 |       0 |       0 | 23-44
+  ...ion.server.ts |   56.36 |    33.33 |      50 |   56.86 | ...00,107,156-197
+  ...ist-parser.ts |    3.12 |        0 |       0 |    3.12 | 18-35,41-99
+  ...ist.server.ts |   24.07 |    13.26 |      40 |   24.07 | ...48-353,386-457
+  ...ion.server.ts |   56.25 |    57.14 |   66.66 |   53.84 | 28-29,47,54-67
+  ...est.server.ts |       0 |        0 |       0 |       0 | 27-80
+  ...api.server.ts |       0 |        0 |       0 |       0 | 152-2320
+  ...ion.server.ts |    62.5 |       50 |      75 |    62.5 | 27,50-57
+  ...ons.server.ts |       0 |        0 |       0 |       0 | 17-59
+  ...ies.server.ts |   71.42 |      100 |      60 |      80 | 14
+  ...ion.server.ts |   46.29 |       50 |   58.33 |   46.29 | ...25-167,191-198
+  time.ts          |       0 |        0 |       0 |       0 | 13-51
+  validation.ts    |   64.86 |       50 |      80 |   64.86 | ...42,145,156-207
+  ...ush.server.ts |    6.25 |        0 |       0 |    7.14 | 52-108
+  ...thn-client.ts |     5.4 |      3.7 |      20 |     5.4 | 39-138
+  ...ute.server.ts |   14.03 |    20.51 |   36.36 |    13.2 | 34-224,295-296
+  ...thn.server.ts |    5.26 |        0 |       0 |    5.88 | 50-51,79-173
+ lib/generated     |       0 |      100 |     100 |       0 |
+  ...playground.ts |       0 |      100 |     100 |       0 | 97
+ lib/mcp           |       0 |        0 |       0 |       0 |
+  ...mcp.server.ts |       0 |        0 |       0 |       0 | 65-319
+  ...dio.server.ts |       0 |        0 |       0 |       0 | 9-41
+  ...rpc.server.ts |       0 |        0 |       0 |       0 | 30-148
+  ...env.server.ts |       0 |        0 |       0 |       0 | 12-15
+  ...uth.server.ts |       0 |        0 |       0 |       0 | 1-13
+  ...che.server.ts |       0 |        0 |       0 |       0 | 5-54
+  ...ols.server.ts |       0 |      100 |       0 |       0 | 16-25
+ routes            |   16.95 |    16.45 |   12.01 |   17.66 |
+  $.tsx            |       0 |      100 |       0 |       0 | 8-19
+  _index.tsx       |       0 |        0 |       0 |       0 | 18-581
+  ....settings.tsx |     100 |      100 |     100 |     100 |
+  ...requestId.tsx |       0 |        0 |       0 |       0 | 24-164
+  ...t.connect.tsx |       0 |        0 |       0 |       0 | 14-50
+  api.$.ts         |       0 |        0 |       0 |       0 | 16-393
+  api.docs.ts      |       0 |      100 |       0 |       0 | 4-14
+  api.openapi.ts   |       0 |      100 |       0 |       0 | 4-12
+  ...references.ts |       0 |        0 |       0 |       0 | 5-61
+  ...public-key.ts |       0 |        0 |       0 |       0 | 5-16
+  ...scriptions.ts |       0 |        0 |       0 |       0 | 6-90
+  api.v1.$.ts      |       0 |      100 |       0 |       0 | 5-9
+  ....callback.tsx |       0 |        0 |       0 |       0 | 6-16
+  auth.apple.tsx   |       0 |        0 |       0 |       0 | 17-58
+  ....callback.tsx |       0 |      100 |       0 |       0 | 5-9
+  auth.github.tsx  |       0 |        0 |       0 |       0 | 17-47
+  ....callback.tsx |       0 |      100 |       0 |       0 | 5-9
+  auth.google.tsx  |       0 |        0 |       0 |       0 | 17-48
+  ...te.options.ts |       0 |        0 |       0 |       0 | 7-30
+  ...ate.verify.ts |       0 |        0 |       0 |       0 | 9-50
+  ...er.options.ts |       0 |        0 |       0 |       0 | 7-20
+  ...ter.verify.ts |       0 |        0 |       0 |       0 | 8-31
+  ...books.$id.tsx |       0 |        0 |       0 |       0 | 23-543
+  ...ks._index.tsx |       0 |      100 |       0 |       0 | 6-11
+  ...books.new.tsx |       0 |        0 |       0 |       0 | 21-71
+  cookbooks.tsx    |       0 |      100 |       0 |       0 | 4
+  ...layground.tsx |       0 |        0 |       0 |       0 | 34-1464
+  developers.tsx   |       0 |        0 |       0 |       0 | 25-795
+  ...ell-known.tsx |       0 |      100 |       0 |       0 | 4-8
+  health.ts        |       0 |      100 |       0 |       0 | 7
+  login.tsx        |       0 |        0 |       0 |       0 | 35-139
+  logout.tsx       |       0 |      100 |       0 |       0 | 5-13
+  mcp.ts           |       0 |        0 |       0 |       0 | 13-34
+  ...authorize.tsx |       0 |        0 |       0 |       0 | 30-224
+  ...h.register.ts |       0 |        0 |       0 |       0 | 23-82
+  oauth.revoke.ts  |       0 |        0 |       0 |       0 | 27-85
+  oauth.token.ts   |       0 |        0 |       0 |       0 | 27-92
+  ...s.$id.png.tsx |       0 |        0 |       0 |       0 | 7-49
+  ...$slug.png.tsx |       0 |        0 |       0 |       0 | 6-11
+  ...s.$id.png.tsx |       0 |        0 |       0 |       0 | 8-27
+  photos.$.tsx     |       0 |        0 |       0 |       0 | 9-32
+  privacy.tsx      |       0 |      100 |       0 |       0 | 7-27
+  ....$id.edit.tsx |     100 |      100 |     100 |     100 |
+  ....$id.fork.tsx |       0 |        0 |       0 |       0 | 23-78
+  ...epId.edit.tsx |       0 |        0 |       0 |       0 | 59-628
+  ...steps.new.tsx |       0 |        0 |       0 |       0 | 51-496
+  recipes.$id.tsx  |   45.75 |    35.86 |   31.25 |   46.91 | ...9-881,917-1364
+  ...es._index.tsx |       0 |        0 |       0 |       0 | 25-177
+  recipes.new.tsx  |     100 |      100 |     100 |     100 |
+  recipes.tsx      |       0 |      100 |       0 |       0 | 8-12
+  ...uth-oauth.tsx |       0 |        0 |       0 |       0 | 9-47
+  search.tsx       |       0 |        0 |       0 |       0 | 19-251
+  ...ping-list.tsx |    5.71 |        0 |    2.56 |    6.12 | 28,57-397
+  signup.tsx       |       0 |        0 |       0 |       0 | 35-124
+  terms.tsx        |       0 |      100 |       0 |       0 | 7-27
+  ...low-chefs.tsx |       0 |        0 |       0 |       0 | 30-128
+  ...-visitors.tsx |       0 |        0 |       0 |       0 | 30-128
+  ...dentifier.tsx |       0 |        0 |       0 |       0 | 34-285
+  ...ion-server.ts |       0 |      100 |       0 |       0 | 6-7
+  ...d-resource.ts |       0 |      100 |       0 |       0 | 6-7
+-------------------|---------|----------|---------|---------|-------------------
+ERROR: Coverage for lines (19.68%) does not meet global threshold (100%)
+ERROR: Coverage for functions (15.56%) does not meet global threshold (100%)
+ERROR: Coverage for statements (18.88%) does not meet global threshold (100%)
+ERROR: Coverage for branches (16.86%) does not meet global threshold (100%)

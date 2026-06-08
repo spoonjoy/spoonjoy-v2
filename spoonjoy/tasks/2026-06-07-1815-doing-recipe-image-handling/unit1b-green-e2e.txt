@@ -1,0 +1,6 @@
+
+Running 2 tests using 1 worker
+
+[1A[2K[1/2] [setup] › e2e/auth.setup.ts:6:1 › authenticate
+[1A[2K[2/2] [chromium] › e2e/flows/recipe-image-handling.spec.ts:46:3 › Recipe image handling › uploaded EXIF-oriented recipe photos remain upright after save and reload
+[1A[2K  2 passed (12.3s)

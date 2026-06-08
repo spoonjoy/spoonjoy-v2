@@ -1,0 +1,410 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ❯ test/routes/recipes-id.test.tsx (83 tests | 1 failed) 13460ms
+       ✓ prefers the rendered steps container when a zero-size snapshot exists first 157ms
+       ✓ falls back to the first steps container when no rendered candidate has dimensions 142ms
+       ✓ returns null when no steps container exists 143ms
+       ✓ builds the recipe-specific cook progress storage key 142ms
+       ✓ parses, clamps, and filters stored cook progress 143ms
+       ✓ defaults malformed cook progress values 144ms
+       ✓ treats unavailable cook progress storage as empty 143ms
+       ✓ treats missing window storage as empty 142ms
+       ✓ ignores invalid stored cook progress payloads 141ms
+       ✓ formats timer seconds as cookbook timer text 142ms
+       ✓ returns recipe share metadata with on-demand OG image 142ms
+       ✓ falls back to chef attribution and placeholder metadata 141ms
+       × should return public recipe data when not logged in 153ms
+       ✓ should return recipe data when logged in as owner 145ms
+       ✓ should return isOwner false when logged in as non-owner 143ms
+       ✓ should throw 404 for non-existent recipe 143ms
+       ✓ should throw 404 for soft-deleted recipe 144ms
+       ✓ should include recipe steps and ingredients 148ms
+       ✓ should include step output uses (usingSteps) in recipe data 145ms
+       ✓ should include multiple step output uses when a step depends on multiple previous steps 146ms
+       ✓ should include usingSteps with null stepTitle 149ms
+       ✓ should handle single-step recipe with empty usingSteps array 144ms
+       ✓ should return savedInCookbookIds when recipe is saved in cookbooks 146ms
+       ✓ should mark hasIngredientsInShoppingList true when all recipe ingredients exist in list 148ms
+       ✓ should mark hasIngredientsInShoppingList false when recipe ingredients are missing from list 149ms
+       ✓ should not match shopping list ingredients when only the list item has a null unit 148ms
+       ✓ should redirect when not logged in 143ms
+       ✓ should throw 403 when non-owner tries to delete 151ms
+       ✓ should soft delete recipe and redirect 147ms
+       ✓ should throw 404 for non-existent recipe 145ms
+       ✓ should return null for unknown intent 144ms
+       ✓ should throw 404 for soft-deleted recipe in action 145ms
+       ✓ creates cookbook, saves recipe, and returns created cookbook for immediate UI reflection 146ms
+       ✓ throws 400 when creating a cookbook with a blank title 144ms
+       ✓ adds new cookbook and marks it as saved immediately in local UI state 153ms
+       ✓ does not duplicate an existing cookbook when reflecting created state 143ms
+       ✓ uses shared dialog/input components for save modal, keeps modal above dock z-index, and preserves scroll on open 210ms
+       ✓ keeps save modal open after creating a cookbook and marks it saved  301ms
+       ✓ optimistically toggles cookbook saves from the save modal 225ms
+       ✓ prevents blank cookbook creation submissions in the save modal 172ms
+       ✓ shares from the registered dock action 158ms
+       ✓ shows add-to-list toast from the recipe header action 201ms
+       ✓ redirects guest recipe mutations to login from header and dock actions 165ms
+       ✓ enters a focused cook mode with one active step and shared checklist progress 245ms
+       ✓ persists focused cook-mode progress across reloads 229ms
+       ✓ shows a step timer in focused cook mode when a step has duration 208ms
+       ✓ does not show a focused cook-mode timer for a non-positive duration 172ms
+       ✓ lets a focused cook-mode timer finish and restart 179ms
+       ✓ opens focused cook mode from a cook hash and leaves it on browser back 164ms
+       ✓ lets the registered dock cook action enter focused cook mode 168ms
+       ✓ should render recipe with no steps (empty state) as owner 213ms
+       ✓ should render recipe with no steps (empty state) as non-owner 158ms
+       ✓ should render recipe with steps and ingredients 161ms
+       ✓ should show delete button for owners 164ms
+       ✓ should not render description when null 157ms
+       ✓ should not render servings when null 158ms
+       ✓ should render step without title 156ms
+       ✓ should render step output uses when present 161ms
+       ✓ should render step output use without title when stepTitle is null 158ms
+       ✓ should not render using outputs section when usingSteps is empty 156ms
+       ✓ should handle step with undefined usingSteps (nullish coalescing) 157ms
+       ✓ should render single-step recipe as owner with edit controls 158ms
+       ✓ should render step output uses BEFORE description (display order test) 161ms
+       ✓ should open delete confirmation dialog for owners 187ms
+       ✓ should cancel recipe deletion from the dialog without submitting 198ms
+       ✓ should confirm recipe deletion from the dialog 207ms
+       ✓ should render a visible share button on the recipe page 156ms
+       ✓ should not render owner-only controls for non-owner while keeping save/share available 159ms
+       ✓ should render a visible save button on the recipe page 154ms
+       ✓ should toggle step output checkbox when clicked 180ms
+       ✓ should toggle ingredient checkbox when clicked 178ms
+       ✓ should change scale factor when scale buttons are clicked 177ms
+       ✓ should clear ingredient and step-output progress when clicking Clear progress 190ms
+       ✓ should keep cookbook-save controls out of the recipe page 156ms
+       ✓ should add recipe to cookbook successfully 146ms
+       ✓ should return success even if recipe already in cookbook 147ms
+       ✓ should reject direct addToCookbook submissions for a soft-deleted recipe 149ms
+       ✓ should throw 403 when trying to add to someone elses cookbook 146ms
+       ✓ should throw 403 when cookbook does not exist 145ms
+       ✓ should allow non-owner to add recipe to their own cookbook 146ms
+       ✓ should do nothing when cookbookId is not provided 147ms
+       ✓ should remove recipe from cookbook successfully 146ms
+       ✓ should throw 403 when removing from someone else's cookbook 146ms
+ ❯ test/routes/recipes-id-edit.test.tsx (70 tests | 8 failed) 11221ms
+       ✓ should redirect when not logged in 153ms
+       × should return recipe data when logged in as owner 151ms
+       ✓ should throw 403 when non-owner tries to access 145ms
+       ✓ should throw 404 for non-existent recipe 143ms
+       ✓ should throw 404 for soft-deleted recipe 144ms
+       ✓ should handle step with null stepTitle in loader 144ms
+       ✓ should include recipe steps with ingredients 145ms
+       ✓ should redirect when not logged in 143ms
+       ✓ should throw 403 when non-owner tries to update 154ms
+       ✓ should throw 404 for non-existent recipe 153ms
+       ✓ should return validation error when title is empty 151ms
+       ✓ should successfully update recipe and redirect 148ms
+       ✓ should allow saving a recipe without changing its own active title 146ms
+       ✓ should reject updates to another active recipe title for the same chef 147ms
+       ✓ should allow updates to a soft-deleted recipe title 146ms
+       ✓ should handle reorderStep intent - move step up 148ms
+       ✓ should handle reorderStep intent - move step down 149ms
+       ✓ should not reorder if step is already at boundary 146ms
+       ✓ should not reorder if stepId is missing 143ms
+       ✓ should not reorder if direction is invalid 145ms
+       ✓ should return reorder validation error when dependency would be broken 149ms
+       ✓ should not reorder if step belongs to different recipe 146ms
+       ✓ should delete a step for deleteStep intent 146ms
+       ✓ should return step deletion error when dependent steps exist 148ms
+       ✓ should return step deletion error when stepId is missing 144ms
+       ✓ should return step deletion error when step belongs to a different recipe 145ms
+       ✓ should throw 404 for soft-deleted recipe in action 146ms
+       ✓ should set empty description and servings to null 145ms
+       ✓ should return validation error for whitespace-only title 144ms
+       ✓ should return generic error for database errors 145ms
+       × should clear image when clearImage is true 147ms
+       ✓ should return validation error for invalid image type 147ms
+       ✓ should return validation error for GIF replacement images 145ms
+       ✓ should reject GIF bytes disguised as a JPEG replacement image 145ms
+       ✓ should accept valid image file without errors 145ms
+       ✓ should return validation error for image exceeding 5MB 148ms
+       × should upload replacement image to R2 and preserve the referenced old R2 image 156ms
+       × does not try old R2 cleanup after replacement while the old cover row still references it 147ms
+       × preserves forked cover objects when replacing the source recipe cover 148ms
+       × preserves stored objects referenced by a stylized cover URL 148ms
+       × preserves origin-cook spoon photo objects when replacing a spoon-sourced cover 146ms
+       ✓ should return image error when replacement upload fails 145ms
+       × should clear an R2 image without deleting the referenced stored object 146ms
+       ✓ should delete uploaded replacement image when database update fails 145ms
+         ✓ should return validation error when title exceeds max length 144ms
+         ✓ should accept title at exactly max length 146ms
+         ✓ should return validation error when description exceeds max length 145ms
+         ✓ should accept description at exactly max length 145ms
+         ✓ should return validation error when servings exceeds max length 144ms
+         ✓ should accept servings at exactly max length 144ms
+         ✓ should return multiple validation errors at once 144ms
+       ✓ should render edit recipe form with recipe data 197ms
+       ✓ should render empty steps state 163ms
+       ✓ should render recipe steps with title and description 167ms
+       ✓ should render singular ingredient count for single ingredient 162ms
+       ✓ should not show ingredient count when step has no ingredients 168ms
+       ✓ should render reorder buttons for multiple steps 167ms
+       ✓ should render form buttons correctly 163ms
+       ✓ should render null values as empty strings in form 157ms
+       ✓ should have correct edit link for each step 168ms
+       ✓ should cancel and confirm step deletion from the dialog 275ms
+       ✓ should close the step deletion dialog when dismissed by escape 187ms
+       ✓ should display step deletion errors returned after confirming deletion 206ms
+       ✓ should populate hidden form and submit when Save Recipe is clicked  330ms
+       ✓ should keep the mobile dock off edit forms and submit from the in-flow Save Recipe button  340ms
+       ✓ should handle image file in handleSave via DataTransfer 182ms
+       ✓ should navigate to recipe page when Cancel is clicked 172ms
+       ✓ should set clearImage to true when image is removed and Save is clicked 187ms
+       ✓ should display reorder validation error when present 177ms
+       ✓ should display general error message when present 158ms
+ ❯ test/routes/cookbooks-id.test.tsx (47 tests | 1 failed) 7280ms
+       ✓ should return public cookbook data when not logged in 159ms
+       ✓ should return cookbook data when logged in as owner 158ms
+       ✓ should not return soft-deleted recipes saved in the cookbook 152ms
+       ✓ should return isOwner false when logged in as non-owner 147ms
+       ✓ should throw 404 for non-existent cookbook 150ms
+       ✓ should redirect when not logged in 145ms
+       ✓ should throw 403 when non-owner tries to modify 150ms
+       ✓ should update title successfully 154ms
+       ✓ should return error for empty title 145ms
+       ✓ should return error when updating to duplicate title 145ms
+       ✓ should delete cookbook and redirect 147ms
+       ✓ should add recipe to cookbook 147ms
+       ✓ should reject direct attempts to add a soft-deleted recipe 147ms
+       ✓ should remove recipe from cookbook 146ms
+       ✓ should throw 404 for non-existent cookbook in action 145ms
+       ✓ should return success when adding duplicate recipe to cookbook 157ms
+       ✓ should do nothing when addRecipe without recipeId 160ms
+       ✓ should do nothing when removeRecipe without recipeInCookbookId 161ms
+       ✓ should treat repeated removeRecipe submissions as idempotent 155ms
+       ✓ should not remove a relation that belongs to another user's cookbook 146ms
+       ✓ should not remove a relation from a different cookbook owned by the same user 147ms
+       ✓ should return null for unknown intent 145ms
+       ✓ should return error for whitespace-only title 145ms
+       ✓ should re-throw non-P2002 errors when updating title 144ms
+       ✓ should re-throw non-P2002 errors when adding recipe 146ms
+       ✓ should return available recipes when owner has recipes not in cookbook 145ms
+       ✓ should not include deleted recipes in available recipes 146ms
+       ✓ should not include recipes already in cookbook 153ms
+       ✓ should return empty availableRecipes for non-owner 145ms
+       ✓ should include cookbook recipes in response 147ms
+       × should include cover image urls for cookbook art and OG metadata 152ms
+       ✓ returns cookbook share metadata with on-demand OG image 144ms
+       ✓ uses plural recipe copy in cookbook share metadata 151ms
+       ✓ returns fallback metadata before loader data is available 144ms
+       ✓ should render cookbook with no recipes (empty state) as owner 192ms
+       ✓ should render cookbook with no recipes (empty state) as non-owner 154ms
+       ✓ should render cookbook with recipes 157ms
+       ✓ should render singular recipe count 158ms
+       ✓ should show add recipe form when owner has available recipes 163ms
+       ✓ should show owner controls (edit title, delete cookbook, remove recipe) 159ms
+       ✓ should show edit title form when clicking edit title button 164ms
+       ✓ should cancel edit title and return to view mode 164ms
+       ✓ should not show edit title form when not editing as owner 154ms
+       ✓ should open delete cookbook dialog and allow confirmation 182ms
+       ✓ should close delete dialog when clicking cancel 180ms
+       ✓ should open remove recipe dialog and allow confirmation 185ms
+       ✓ should close remove recipe dialog when clicking cancel 176ms
+ ❯ test/routes/recipes-new.test.tsx (50 tests | 2 failed) 4966ms
+       ✓ should redirect when not logged in 83ms
+       ✓ should return null when logged in 75ms
+       ✓ should return validation error when title is missing 75ms
+       × should create recipe and redirect on success 89ms
+       ✓ should parse ingredients for the unsaved new recipe builder 76ms
+       ✓ should return parser errors for the unsaved new recipe builder 74ms
+       ✓ should return a generic parse error for unexpected parser failures 75ms
+       ✓ should redirect when not logged in 75ms
+       × should create recipe with only required fields 78ms
+       ✓ should reject duplicate active recipe titles for the same chef 76ms
+       ✓ should allow duplicate active recipe titles for different chefs 147ms
+       ✓ should allow title reuse after the prior recipe is soft-deleted 77ms
+       ✓ should return validation error for whitespace-only title 75ms
+       ✓ should trim title and other fields whitespace 77ms
+       ✓ should handle empty optional fields correctly 77ms
+       ✓ should return generic error for database errors 74ms
+       ✓ should return validation error for invalid image type 112ms
+       ✓ should return validation error for GIF recipe images 103ms
+       ✓ should reject GIF bytes disguised as an accepted recipe image type 76ms
+       ✓ should return validation error for oversized image 81ms
+       ✓ should accept valid image with valid type and size under 5MB 77ms
+       ✓ should upload valid recipe image to R2 when a bucket is available 76ms
+       ✓ should return image error when recipe image upload fails 75ms
+       ✓ schedules ai-placeholder cover generation via context.cloudflare.ctx.waitUntil when available 76ms
+       ✓ should delete uploaded recipe image when database creation fails 74ms
+       ✓ should create recipe with valid steps JSON and redirect 79ms
+       ✓ should return validation error for invalid steps JSON 74ms
+       ✓ should return validation error for invalid submitted step fields 74ms
+       ✓ should return validation error for invalid submitted ingredient fields 74ms
+       ✓ should persist submitted step ingredients and make them available to the shopping list 87ms
+         ✓ should return validation error when title exceeds max length 74ms
+         ✓ should accept title at exactly max length 77ms
+         ✓ should return validation error when description exceeds max length 74ms
+         ✓ should accept description at exactly max length 78ms
+         ✓ should return validation error when servings exceeds max length 73ms
+         ✓ should accept servings at exactly max length 76ms
+         ✓ should return multiple validation errors at once 74ms
+       ✓ should render create recipe form 125ms
+       ✓ should have correct form structure 92ms
+       ✓ should have correct placeholders 88ms
+       ✓ should navigate to /recipes when Cancel is clicked 104ms
+       ✓ should populate hidden form and submit when RecipeBuilder saves  319ms
+       ✓ should handle image upload in handleSave 279ms
+       ✓ should display general error message when present 91ms
+       ✓ should handle missing title input in handleSave 154ms
+       ✓ should handle missing description textarea in handleSave 150ms
+       ✓ should handle missing servings input in handleSave 146ms
+       ✓ should handle missing steps input in handleSave 143ms
+       ✓ should handle missing clearImage input in handleSave 139ms
+       ✓ should set clearImage value to 'true' when clearImage flag is true 151ms
+ ❯ test/routes/recipes-id-spoons.test.tsx (20 tests | 1 failed) 3135ms
+     × loader returns spoons (recent 10), isOriginCookCandidate, and coverImageUrl 162ms
+     ✓ loader returns isOriginCookCandidate=false when the chef already has a spoon 145ms
+     ✓ renders RecipeProvenance when sourceUrl is set 188ms
+     ✓ renders RecipeProvenance in the header when sourceRecipe is set without sourceUrl 157ms
+     ✓ renders SpoonsStrip with non-deleted spoons from the loader 158ms
+     ✓ clicking 'Log cook' opens then closes the SpoonDialog via Cancel 212ms
+     ✓ clicking 'Log cook' opens the SpoonDialog 183ms
+     ✓ action with intent=createSpoon creates a RecipeSpoon as the requesting user 148ms
+     ✓ action with intent=createSpoon as the origin cook writes a RecipeCover row and schedules stylization 158ms
+     ✓ action with intent=createSpoon rejects a GIF spoon photo with 400 147ms
+     ✓ action with intent=createSpoon rejects an empty payload with 400 144ms
+     ✓ action with intent=deleteSpoon soft-deletes a spoon owned by the requester 146ms
+     ✓ action with intent=createSpoon stores a nextTime field when supplied 145ms
+     ✓ action with intent=createSpoon accepts a valid cookedAt timestamp 146ms
+     ✓ action with intent=createSpoon rejects an invalid cookedAt with 400 147ms
+     ✓ action with intent=createSpoon as the origin cook runs stylization inline when no waitUntil is present 148ms
+     ✓ action with intent=deleteSpoon requires a spoonId (400) 144ms
+     ✓ action with intent=createSpoon rethrows non-spoon errors (e.g. missing recipe FK) 145ms
+     ✓ action with intent=deleteSpoon returns 404 for an unknown spoonId 144ms
+     ✓ action with intent=deleteSpoon refuses to delete another user's spoon 146ms
+ ✓ test/components/recipe/RecipeImageUpload.test.tsx (63 tests) 2850ms
+       ✓ revokes old preview URL when dropping new file  1817ms
+ ✓ test/components/recipe/RecipeBuilder.test.tsx (37 tests) 1386ms
+ ✓ test/lib/ai-placeholder-cover.server.test.ts (8 tests) 1400ms
+     ✓ constructs a real OpenAI runner when no explicit runner is passed and the API key is set  1313ms
+ ❯ test/routes/index.test.tsx (16 tests | 1 failed) 584ms
+       ✓ returns guest payload when no session and no requested kitchen 8ms
+       ✓ falls back to recipes tab for unknown tab query 84ms
+       × returns owner kitchen with recipes and cookbooks 82ms
+       ✓ returns visitor kitchen by username in read-only framing 143ms
+       ✓ supports unauthenticated visitor kitchen by chefId 74ms
+       ✓ throws 404 when explicit chef target is not found 5ms
+       ✓ returns empty kitchen payload when session user no longer exists 6ms
+       ✓ returns kitchen metadata 4ms
+       ✓ returns the relative path when no browser origin exists 4ms
+       ✓ renders guest landing page with product framing and auth actions 39ms
+       ✓ renders owner kitchen as a cookbook spread with settings and admin controls 42ms
+       ✓ renders owner empty states and recipe image fallback branches 15ms
+       ✓ renders recipe images when recipes have displayable image URLs 12ms
+       ✓ renders visitor kitchen with read-only controls hidden 12ms
+       ✓ renders recipes and cookbooks together instead of hiding content behind tabs 22ms
+       ✓ does not render tab navigation for visitor kitchens 10ms
+ ❯ test/routes/users-identifier.test.tsx (14 tests | 1 failed) 555ms
+       × returns profile data by username for an unauthenticated visitor 107ms
+       ✓ computes fellowChefsCount and kitchenVisitorsCount via the new helpers 148ms
+       ✓ marks the profile as owned when the session user matches 75ms
+       ✓ redirects id aliases to the canonical username route 73ms
+       ✓ throws 404 when the identifier is missing 5ms
+       ✓ throws 404 when no username or id matches 6ms
+       ✓ uses the loaded profile username 4ms
+       ✓ falls back when loader data is unavailable 4ms
+       ✓ renders a visitor profile with recipes, cookbooks, and canonical links 45ms
+       ✓ renders owner actions, default avatar fallback, and empty states 18ms
+       ✓ renders the singular recipe count when a profile has exactly one recipe 12ms
+       ✓ renders Fellow chefs and Kitchen visitors entry-point links with counts (owner view) 13ms
+       ✓ renders Fellow chefs and Kitchen visitors entry-point links with counts (visitor view) 12ms
+       ✓ renders visitor empty states without owner calls to action 11ms
+ ❯ test/routes/users-identifier-spoons.test.tsx (3 tests | 1 failed) 524ms
+     × loader returns recentSpoons with recipe + coverImageUrl preloaded for the profile owner 172ms
+     ✓ loader returns at most 10 recent spoons 155ms
+     ✓ renders a 'Recent cooks' section with recipe title and link 175ms
+ ❯ test/lib/spoonjoy-api-spoons.test.ts (48 tests | 2 failed) 371ms
+       ✓ lists the five new spoon operations 7ms
+       ✓ creates a spoon with note for the principal when not the recipe owner 10ms
+       ✓ rejects when ownerEmail is supplied with the documented 400 message 6ms
+       ✓ rejects unauthenticated callers with 401 6ms
+       ✓ forwards validation errors as 400 when content is empty 6ms
+       ✓ enforces origin-cook photo requirement with 400 6ms
+       ✓ accepts cookedAt as an ISO date string 7ms
+       ✓ rejects invalid cookedAt strings 7ms
+       ✓ requires recipeId 5ms
+       ✓ accepts photoUrl as a fallback when no upload bucket is wired 8ms
+       ✓ on origin-cook with photoUrl, inserts a RecipeCover row with sourceType='spoon' synchronously 8ms
+       ✓ does NOT insert a RecipeCover when chef is not the origin cook 9ms
+       ✓ schedules stylization via context.waitUntil; await fills stylizedImageUrl 9ms
+       ✓ when no waitUntil is provided, runs stylization inline and fills stylizedImageUrl 9ms
+       ✓ when stylization quota is exceeded, cover row is left with stylizedImageUrl=null and ledger does not exceed cap 10ms
+       ✓ when stylization throws, cover row stays with stylizedImageUrl=null and error is logged 8ms
+       ✓ writes a NotificationEvent for the recipe owner when the spooner is not the owner (with VAPID env) 8ms
+       ✓ does NOT write a NotificationEvent when the spooner IS the owner 7ms
+       ✓ does not write a NotificationEvent when VAPID env is absent (graceful skip) 7ms
+       ✓ fans out fellow_chef_origin_cook to each fellow chef on an origin-cook spoon 12ms
+       ✓ does NOT fan out fellow_chef_origin_cook on a non-origin spoon 8ms
+       ✓ allows the owning principal to update their spoon 8ms
+       ✓ rejects update from a non-owner with 403 9ms
+       ✓ rejects update on soft-deleted spoon with 404 9ms
+       ✓ rejects when ownerEmail is supplied 7ms
+       ✓ accepts nextTime/photoUrl/cookedAt patches 7ms
+       ✓ rejects updates that empty all content fields (note=null nulls the note) 7ms
+       ✓ rejects invalid cookedAt patches (malformed string) 7ms
+       ✓ rejects empty cookedAt patches (no usable date) 7ms
+       ✓ requires spoonId 5ms
+       × returns spoons with chef relation and derived coverImageUrl per row 12ms
+       ✓ respects limit/offset 9ms
+       ✓ rejects ownerEmail 6ms
+       ✓ requires recipeId 5ms
+       ✓ excludes soft-deleted spoons 7ms
+       ✓ requires authentication 6ms
+       ✓ returns coverImageUrl=null when the recipe row is missing 6ms
+       × returns spoons by chef id with recipe + coverImageUrl preloaded 8ms
+       ✓ resolves by username 7ms
+       ✓ returns 404 when chef is not found 5ms
+       ✓ rejects ownerEmail 5ms
+       ✓ requires chefIdOrUsername 6ms
+       ✓ excludes soft-deleted by default 7ms
+       ✓ requires authentication 4ms
+       ✓ respects limit/offset 8ms
+       ✓ soft-deletes the owning principal's spoon 7ms
+       ✓ rejects delete from a non-owner with 403 7ms
+       ✓ rejects when ownerEmail is supplied 7ms
+ ❯ test/routes/recipes-index.test.tsx (7 tests | 1 failed) 344ms
+     × lists public recipes for unauthenticated visitors 92ms
+     ✓ includes create affordance state for authenticated visitors 76ms
+     ✓ searches public recipes with the shared search index 82ms
+     ✓ renders a cookbook-style public browse page 40ms
+     ✓ renders guest search results with clear affordance and photo rows 14ms
+     ✓ renders empty public and empty search states 16ms
+     ✓ returns public recipe metadata 4ms
+ ✓ test/components/recipe/RecipeHeader.test.tsx (24 tests) 116ms
+ ❯ test/lib/recipe-cover.server.test.ts (19 tests | 2 failed) 121ms
+       ✓ inserts a cover with the supplied fields 8ms
+       ✓ stores optional stylizedImageUrl and sourceSpoonId 5ms
+       ✓ returns covers ordered by createdAt desc, id desc 7ms
+       ✓ returns [] when the recipe has no covers 4ms
+       ✓ returns the latest cover by (createdAt desc, id desc) 5ms
+       ✓ returns null when no covers exist 4ms
+       ✓ returns stylizedImageUrl when present on the latest cover 4ms
+       ✓ returns imageUrl when stylizedImageUrl is null 6ms
+       ✓ breaks createdAt ties by id desc 11ms
+       ✓ picks the newer cover when createdAt differs 4ms
+       ✓ treats identical (createdAt, id) pairs as equal in the comparator 4ms
+       ✓ exercises both arms of the id-desc tiebreak comparator 4ms
+       × returns null when covers array is empty 7ms
+       × returns null when the latest cover row is empty 4ms
+       ✓ returns an ai-placeholder image once generation has filled imageUrl 4ms
+       ✓ does not throw when recipe.title is an empty string 5ms
+       ✓ returns a data URL and matching byte buffer 4ms
+       ✓ escapes special characters in the title 4ms
+       ✓ renders an empty title without throwing 4ms
+ ❯ test/lib/og-image.server.test.tsx (7 tests | 1 failed) 29ms
+     ✓ builds absolute image and card URLs from the current request 1ms
+     ✓ formats recipe and cookbook copy for share cards 1ms
+     ✓ creates recipe OG responses with recipe photos and Workers font caching 3ms
+     ✓ creates recipe OG elements without photos or serving labels 0ms
+     ✓ creates cookbook OG responses and exercises fallback execution context 1ms
+     × creates cookbook OG elements with and without cover photos 3ms
+     ✓ creates page OG responses and elements for developer surfaces 1ms
+
+ Test Files  12 failed | 4 passed (16)
+      Tests  22 failed | 494 passed (516)
+   Start at  21:58:44
+   Duration  57.63s (transform 781ms, setup 740ms, import 4.64s, tests 48.34s, environment 2.20s)

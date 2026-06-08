@@ -19,8 +19,8 @@ export interface RecipeHeaderProps {
   chefProfileHref?: string
   /** Chef's photo URL (optional) */
   chefPhotoUrl?: string
-  /** Cover image URL derived via getRecipeCoverImageUrl. May be a data URL (SVG fallback). */
-  coverImageUrl?: string
+  /** Cover image URL derived via getRecipeCoverImageUrl. Null means no photo. */
+  coverImageUrl?: string | null
   /** Servings text (e.g., "Serves 4") */
   servings?: string
   /** Current scale factor */

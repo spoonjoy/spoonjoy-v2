@@ -64,6 +64,9 @@ interface CloudflareEnvLike {
   VAPID_PRIVATE_KEY?: string;
   VAPID_SUBJECT?: string;
   PHOTOS?: R2Bucket;
+  POSTHOG_KEY?: string;
+  POSTHOG_HOST?: string;
+  POSTHOG_DISABLED?: string;
 }
 
 /**
@@ -89,6 +92,9 @@ export function buildSpoonjoyApiContext(params: {
           VAPID_PUBLIC_KEY: cloudflareEnv.VAPID_PUBLIC_KEY,
           VAPID_PRIVATE_KEY: cloudflareEnv.VAPID_PRIVATE_KEY,
           VAPID_SUBJECT: cloudflareEnv.VAPID_SUBJECT,
+          POSTHOG_KEY: cloudflareEnv.POSTHOG_KEY,
+          POSTHOG_HOST: cloudflareEnv.POSTHOG_HOST,
+          POSTHOG_DISABLED: cloudflareEnv.POSTHOG_DISABLED,
         }
       : null,
     bucket: cloudflareEnv?.PHOTOS ?? undefined,

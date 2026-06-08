@@ -59,19 +59,20 @@ function sortCoversDesc(covers: RecipeCover[]): RecipeCover[] {
 }
 
 export function getRecipeCoverImageUrl(
-  recipe: RecipeIdentity,
+  _recipe: RecipeIdentity,
   covers: RecipeCover[],
-): string {
-  const sorted = sortCoversDesc(covers);
-  for (const cover of sorted) {
-    if (cover.stylizedImageUrl && cover.stylizedImageUrl.length > 0) {
-      return cover.stylizedImageUrl;
-    }
-    if (cover.imageUrl && cover.imageUrl.length > 0) {
-      return cover.imageUrl;
-    }
+): string | null {
+  const currentCover = sortCoversDesc(covers)[0];
+  if (!currentCover) {
+    return null;
   }
-  return makeFallbackPlaceholderSvg(recipe.title).url;
+  if (currentCover.stylizedImageUrl && currentCover.stylizedImageUrl.length > 0) {
+    return currentCover.stylizedImageUrl;
+  }
+  if (currentCover.imageUrl && currentCover.imageUrl.length > 0) {
+    return currentCover.imageUrl;
+  }
+  return null;
 }
 
 function xmlEscape(value: string): string {

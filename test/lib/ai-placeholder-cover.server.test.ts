@@ -9,11 +9,35 @@ import {
 import { createTestUser, createTestRecipe } from "../utils";
 import { cleanupDatabase } from "../helpers/cleanup";
 
+const GENERATED_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
+
 function makeRunner(): ImageGenRunner {
   return {
-    textToImage: vi.fn(async () => ({ url: "https://openai.test/p.png" })),
-    imageToImage: vi.fn(async () => ({ url: "https://openai.test/e.png" })),
+    textToImage: vi.fn(async () => ({ bytes: GENERATED_BYTES, contentType: "image/png" })),
+    imageToImage: vi.fn(async () => ({ bytes: GENERATED_BYTES, contentType: "image/png" })),
   };
+}
+
+function mockR2(): R2Bucket {
+  return {
+    put: vi.fn(async () => ({})),
+    delete: vi.fn(async () => undefined),
+    get: vi.fn(),
+    head: vi.fn(),
+    list: vi.fn(),
+    createMultipartUpload: vi.fn(),
+    resumeMultipartUpload: vi.fn(),
+  } as unknown as R2Bucket;
+}
+
+function postHogFetchSpy() {
+  return vi.fn(async () => new Response("{}", { status: 200 })) as unknown as typeof fetch;
+}
+
+function postHogBodies(fetchImpl: typeof fetch): Array<{ event: string; distinct_id: string; properties: Record<string, unknown> }> {
+  return (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls.map(([, init]) =>
+    JSON.parse(init.body as string),
+  );
 }
 
 describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
@@ -32,7 +56,7 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
     const cover = await db.recipeCover.create({
       data: {
         recipeId,
-        imageUrl: "data:image/svg+xml;base64,initial",
+        imageUrl: "",
         sourceType: "ai-placeholder",
       },
     });
@@ -46,17 +70,26 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
 
   it("replaces the cover imageUrl with the generated URL on success", async () => {
     const runner = makeRunner();
+    const bucket = mockR2();
     await scheduleAiPlaceholderCover({
       db,
       userId,
+      recipeId,
       coverId,
       title: "Pasta",
       description: null,
       runner,
+      bucket,
+      now: () => 1234,
       logger: errorSpy,
     });
     const cover = await db.recipeCover.findUniqueOrThrow({ where: { id: coverId } });
-    expect(cover.imageUrl).toBe("https://openai.test/p.png");
+    expect(cover.imageUrl).toMatch(/^\/photos\/covers\/1234-[a-f0-9-]+\.png$/);
+    expect(bucket.put).toHaveBeenCalledWith(
+      cover.imageUrl.replace("/photos/", ""),
+      GENERATED_BYTES,
+      expect.objectContaining({ httpMetadata: { contentType: "image/png" } }),
+    );
     expect(runner.textToImage).toHaveBeenCalledTimes(1);
     expect(errorSpy.error).not.toHaveBeenCalled();
   });
@@ -70,6 +103,7 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
     await scheduleAiPlaceholderCover({
       db,
       userId,
+      recipeId,
       coverId,
       title: "Pasta",
       description: null,
@@ -79,28 +113,90 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
     });
     expect(runner.textToImage).not.toHaveBeenCalled();
     const cover = await db.recipeCover.findUniqueOrThrow({ where: { id: coverId } });
-    expect(cover.imageUrl.startsWith("data:image/svg+xml")).toBe(true);
+    expect(cover.imageUrl).toBe("");
   });
 
   it("returns silently when no runner is available and OPENAI_API_KEY is absent", async () => {
+    const analyticsFetchImpl = postHogFetchSpy();
     await scheduleAiPlaceholderCover({
       db,
       userId,
+      recipeId,
       coverId,
       title: "Pasta",
       description: null,
       env: {},
+      postHogConfig: { enabled: true, key: "ph_test", host: "https://posthog.example" },
+      analyticsFetchImpl,
       logger: errorSpy,
     });
     const cover = await db.recipeCover.findUniqueOrThrow({ where: { id: coverId } });
-    expect(cover.imageUrl.startsWith("data:image/svg+xml")).toBe(true);
+    expect(cover.imageUrl).toBe("");
     expect(errorSpy.error).not.toHaveBeenCalled();
+    await expect(
+      db.imageGenLedger.count({ where: { userId, kind: "placeholder" } }),
+    ).resolves.toBe(0);
+    expect(postHogBodies(analyticsFetchImpl)).toEqual([
+      expect.objectContaining({
+        event: "spoonjoy.image_generation.skipped",
+        distinct_id: userId,
+        properties: expect.objectContaining({
+          feature: "recipe_image_generation",
+          operation: "placeholder_generate",
+          recipeId,
+          coverId,
+          sourceType: "ai-placeholder",
+          quotaKind: "placeholder",
+          model: "none",
+          reason: "missing_openai_key",
+        }),
+      }),
+    ]);
+  });
+
+  it("returns silently when the OpenAI runner factory returns null", async () => {
+    const analyticsFetchImpl = postHogFetchSpy();
+    await scheduleAiPlaceholderCover({
+      db,
+      userId,
+      recipeId,
+      coverId,
+      title: "Pasta",
+      description: null,
+      env: { OPENAI_API_KEY: "sk-test" },
+      createRunner: () => null,
+      postHogConfig: { enabled: true, key: "ph_test", host: "https://posthog.example" },
+      analyticsFetchImpl,
+      logger: errorSpy,
+    });
+    const cover = await db.recipeCover.findUniqueOrThrow({ where: { id: coverId } });
+    expect(cover.imageUrl).toBe("");
+    await expect(
+      db.imageGenLedger.count({ where: { userId, kind: "placeholder" } }),
+    ).resolves.toBe(0);
+    expect(postHogBodies(analyticsFetchImpl)).toEqual([
+      expect.objectContaining({
+        event: "spoonjoy.image_generation.skipped",
+        distinct_id: userId,
+        properties: expect.objectContaining({
+          feature: "recipe_image_generation",
+          operation: "placeholder_generate",
+          recipeId,
+          coverId,
+          sourceType: "ai-placeholder",
+          quotaKind: "placeholder",
+          model: "none",
+          reason: "missing_runner",
+        }),
+      }),
+    ]);
   });
 
   it("returns silently when env is null", async () => {
     await scheduleAiPlaceholderCover({
       db,
       userId,
+      recipeId,
       coverId,
       title: "Pasta",
       description: null,
@@ -121,6 +217,7 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
       scheduleAiPlaceholderCover({
         db,
         userId,
+        recipeId,
         coverId,
         title: "Pasta",
         description: null,
@@ -129,6 +226,8 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
       }),
     ).resolves.toBeUndefined();
     expect(errorSpy.error).toHaveBeenCalledTimes(1);
+    const cover = await db.recipeCover.findUniqueOrThrow({ where: { id: coverId } });
+    expect(cover.imageUrl).toBe("");
   });
 
   it("defaults logger to console when none provided and the runner fails", async () => {
@@ -145,6 +244,7 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
       await scheduleAiPlaceholderCover({
         db,
         userId,
+        recipeId,
         coverId,
         title: "Pasta",
         description: null,
@@ -164,6 +264,7 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
     await scheduleAiPlaceholderCover({
       db,
       userId,
+      recipeId,
       coverId,
       title: "Pasta",
       description: "warm",
@@ -185,6 +286,7 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
       await scheduleAiPlaceholderCover({
         db,
         userId,
+        recipeId,
         coverId,
         title: "Pasta",
         description: null,
@@ -198,5 +300,44 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
     // (500), so generatePlaceholderImage threw and we landed in the catch block.
     expect(errorSpy.error).toHaveBeenCalled();
     expect(stubFetch).toHaveBeenCalled();
+  });
+
+  it("captures generation exceptions with image-generation metadata", async () => {
+    const analyticsFetchImpl = postHogFetchSpy();
+    const error = new Error("openai down");
+    const runner: ImageGenRunner = {
+      textToImage: vi.fn(async () => {
+        throw error;
+      }),
+      imageToImage: vi.fn(),
+    };
+    await scheduleAiPlaceholderCover({
+      db,
+      userId,
+      recipeId,
+      coverId,
+      title: "Pasta",
+      description: null,
+      runner,
+      postHogConfig: { enabled: true, key: "ph_test", host: "https://posthog.example" },
+      analyticsFetchImpl,
+      logger: errorSpy,
+    });
+    expect(postHogBodies(analyticsFetchImpl)).toEqual([
+      expect.objectContaining({
+        event: "$exception",
+        distinct_id: userId,
+        properties: expect.objectContaining({
+          $exception_message: "Placeholder image generation failed",
+          feature: "recipe_image_generation",
+          operation: "placeholder_generate",
+          recipeId,
+          coverId,
+          sourceType: "ai-placeholder",
+          quotaKind: "placeholder",
+          model: "dall-e-3",
+        }),
+      }),
+    ]);
   });
 });

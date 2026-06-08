@@ -80,9 +80,11 @@ describe("Users $identifier Route", () => {
       expect(result.isOwner).toBe(false);
       expect(result.recipes).toHaveLength(1);
       expect(result.recipes[0]).toMatchObject({ title: recipe.title, servings: "4" });
+      expect(result.recipes[0].coverImageUrl).toBeNull();
       expect(result.cookbooks).toHaveLength(1);
       expect(result.cookbooks[0]._count.recipes).toBe(1);
       expect(result.cookbooks[0].recipes[0].recipe.title).toBe(recipe.title);
+      expect(result.cookbooks[0].recipes[0].recipe.coverImageUrl).toBeNull();
       expect(result.fellowChefsCount).toBe(0);
       expect(result.kitchenVisitorsCount).toBe(0);
     });

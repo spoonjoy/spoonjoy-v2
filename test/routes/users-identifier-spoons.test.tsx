@@ -91,7 +91,7 @@ describe("Users $identifier route — recent spoons section", () => {
     expect(Array.isArray(data.recentSpoons)).toBe(true);
     expect(data.recentSpoons).toHaveLength(1);
     expect(data.recentSpoons[0].recipe.id).toBe(recipeId);
-    expect(typeof data.recentSpoons[0].coverImageUrl).toBe("string");
+    expect(data.recentSpoons[0].coverImageUrl).toBeNull();
   });
 
   it("loader returns at most 10 recent spoons", async () => {

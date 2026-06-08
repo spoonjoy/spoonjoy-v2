@@ -1,0 +1,52 @@
+[1A[2K[2m[WebServer] [22m(node:16469) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+
+[1A[2K[2m[WebServer] [22m(node:16480) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+
+[1A[2K[2m[WebServer] [22m(node:16480) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+Running 2 tests using 1 worker
+
+[1A[2K(node:16496) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1A[2K(node:16496) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1A[2K[1/2] [setup] › e2e/auth.setup.ts:6:1 › authenticate
+[1A[2K(node:16543) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1A[2K(node:16543) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1A[2K[2/2] [chromium] › e2e/flows/recipe-image-handling.spec.ts:46:3 › Recipe image handling › uploaded EXIF-oriented recipe photos remain upright after save and reload
+[1A[2K  1) [chromium] › e2e/flows/recipe-image-handling.spec.ts:46:3 › Recipe image handling › uploaded EXIF-oriented recipe photos remain upright after save and reload
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m80[39m
+    Received: [31m120[39m
+
+      64 |       const samples = await decodedImageSamples(page, title);
+      65 |
+    > 66 |       expect(samples.width).toBe(80);
+         |                             ^
+      67 |       expect(samples.height).toBe(120);
+      68 |       expect(isNearColor(samples.topLeft, [24, 165, 87])).toBe(true);
+      69 |       expect(isNearColor(samples.topRight, [24, 165, 87])).toBe(true);
+        at /Users/arimendelow/Projects/spoonjoy-v2/e2e/flows/recipe-image-handling.spec.ts:66:29
+
+    Error Context: test-results/flows-recipe-image-handlin-60567-right-after-save-and-reload-chromium/error-context.md
+
+
+[1A[2K  1 failed
+    [chromium] › e2e/flows/recipe-image-handling.spec.ts:46:3 › Recipe image handling › uploaded EXIF-oriented recipe photos remain upright after save and reload
+  1 passed (12.6s)

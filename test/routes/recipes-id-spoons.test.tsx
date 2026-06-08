@@ -38,6 +38,16 @@ function uniqueEmail(prefix = "spoon") {
   return `${prefix}-${faker.string.alphanumeric(8).toLowerCase()}@example.com`;
 }
 
+function validImageFile(name: string, type: "image/png" | "image/jpeg" | "image/webp" = "image/png"): File {
+  const bytes =
+    type === "image/png"
+      ? new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00])
+      : type === "image/jpeg"
+        ? new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0xff, 0xda])
+        : new Uint8Array([0x52, 0x49, 0x46, 0x46, 0x10, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50]);
+  return new File([bytes], name, { type });
+}
+
 async function createSessionCookie(userId: string): Promise<string> {
   const session = await sessionStorage.getSession();
   session.set("userId", userId);
@@ -101,7 +111,7 @@ describe("Recipes $id route — spoons + provenance", () => {
     expect(data.spoons).toHaveLength(1);
     expect(data.spoons[0].note).toBe("first");
     expect(data.isOriginCookCandidate).toBe(true);
-    expect(typeof data.coverImageUrl).toBe("string");
+    expect(data.coverImageUrl).toBeNull();
   });
 
   it("loader returns isOriginCookCandidate=false when the chef already has a spoon", async () => {
@@ -356,10 +366,7 @@ describe("Recipes $id route — spoons + provenance", () => {
   it("action with intent=createSpoon as the origin cook writes a RecipeCover row and schedules stylization", async () => {
     const fd = new UndiciFormData();
     fd.append("intent", "createSpoon");
-    fd.append(
-      "photo",
-      new File([new Uint8Array(8)], "spoon.png", { type: "image/png" }),
-    );
+    fd.append("photo", validImageFile("spoon.png"));
     const captured: Promise<unknown>[] = [];
     const waitUntil = vi.fn((promise: Promise<unknown>) => {
       captured.push(promise);
@@ -383,6 +390,32 @@ describe("Recipes $id route — spoons + provenance", () => {
     expect(covers[0].sourceType).toBe("spoon");
     expect(covers[0].sourceSpoonId).not.toBeNull();
     expect(waitUntil).toHaveBeenCalledTimes(1);
+  });
+
+  it("action with intent=createSpoon rejects a GIF spoon photo with 400", async () => {
+    const fd = new UndiciFormData();
+    fd.append("intent", "createSpoon");
+    fd.append("photo", new File([new TextEncoder().encode("GIF89a")], "animated.gif", { type: "image/gif" }));
+    const request = new UndiciRequest("http://localhost/recipes/x", {
+      method: "POST",
+      headers: { cookie: chefSessionCookie },
+      body: fd,
+    }) as unknown as Request;
+
+    let caught: unknown = null;
+    try {
+      await action({
+        request,
+        params: { id: recipeId },
+        context: { cloudflare: { env: null } } as any,
+      });
+    } catch (e) {
+      caught = e;
+    }
+
+    expect(caught).toBeInstanceOf(Response);
+    expect((caught as Response).status).toBe(400);
+    expect(await (caught as Response).text()).toBe("Photos must be JPG, PNG, or WebP.");
   });
 
   it("action with intent=createSpoon rejects an empty payload with 400", async () => {
@@ -507,10 +540,7 @@ describe("Recipes $id route — spoons + provenance", () => {
   it("action with intent=createSpoon as the origin cook runs stylization inline when no waitUntil is present", async () => {
     const fd = new UndiciFormData();
     fd.append("intent", "createSpoon");
-    fd.append(
-      "photo",
-      new File([new Uint8Array(8)], "spoon.png", { type: "image/png" }),
-    );
+    fd.append("photo", validImageFile("spoon.png"));
     const request = new UndiciRequest("http://localhost/recipes/x", {
       method: "POST",
       headers: { cookie: chefSessionCookie },

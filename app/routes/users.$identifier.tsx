@@ -28,7 +28,7 @@ type RecentSpoonItem = {
   nextTime: string | null;
   chef: { id: string; username: string; photoUrl: string | null };
   recipe: { id: string; title: string; chefId: string };
-  coverImageUrl: string;
+  coverImageUrl: string | null;
 };
 
 const EMPTY_SPOONS: RecentSpoonItem[] = [];

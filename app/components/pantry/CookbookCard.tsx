@@ -4,7 +4,7 @@ import { Link } from '../ui/link'
 import { CookbookCoverArt } from '../cookbook/CookbookCoverArt'
 
 export interface CookbookCardRecipeImage {
-  coverImageUrl: string
+  coverImageUrl: string | null
   title: string
 }
 

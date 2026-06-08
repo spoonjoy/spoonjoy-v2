@@ -54,11 +54,11 @@ describe('RecipeImageUpload', () => {
       expect(fileInput).toHaveClass('hidden')
     })
 
-    it('accepts image files only', () => {
+    it('accepts only food-photo MIME types in the hidden file input', () => {
       const { container } = render(<RecipeImageUpload onFileSelect={vi.fn()} />)
 
       const fileInput = container.querySelector('input[type="file"]')
-      expect(fileInput).toHaveAttribute('accept', 'image/*')
+      expect(fileInput).toHaveAttribute('accept', 'image/jpeg,image/png,image/webp')
     })
 
     it('renders placeholder area when no image', () => {
@@ -70,10 +70,19 @@ describe('RecipeImageUpload', () => {
       expect(placeholderElements.length).toBeGreaterThanOrEqual(1)
     })
 
+    it('renders placeholder area when coverImageUrl is null', () => {
+      render(<RecipeImageUpload onFileSelect={vi.fn()} coverImageUrl={null} />)
+
+      expect(screen.getAllByText(/drag.*drop|upload.*image/i).length).toBeGreaterThanOrEqual(1)
+      expect(screen.queryByRole('img')).not.toBeInTheDocument()
+    })
+
     it('renders with helper text about accepted formats', () => {
       render(<RecipeImageUpload onFileSelect={vi.fn()} />)
 
-      expect(screen.getByText(/jpg|png|gif/i)).toBeInTheDocument()
+      const helperText = screen.getByText(/jpg, png, or webp/i)
+      expect(helperText).toBeInTheDocument()
+      expect(helperText).not.toHaveTextContent(/gif/i)
     })
 
     it('renders with file size limit text', () => {
@@ -505,11 +514,15 @@ describe('RecipeImageUpload', () => {
       expect(onFileSelect).toHaveBeenCalledWith(pngFile)
     })
 
-    it('accepts valid GIF files', async () => {
-      const user = userEvent.setup()
+    it('rejects GIF files', async () => {
+      const user = userEvent.setup({ applyAccept: false })
       const onFileSelect = vi.fn()
+      const onError = vi.fn()
       const { container } = render(
-        <RecipeImageUpload onFileSelect={onFileSelect} />
+        <RecipeImageUpload
+          onFileSelect={onFileSelect}
+          onValidationError={onError}
+        />
       )
 
       const gifFile = createMockFile('image.gif', 'image/gif', 512 * 1024)
@@ -519,7 +532,8 @@ describe('RecipeImageUpload', () => {
 
       await user.upload(fileInput, gifFile)
 
-      expect(onFileSelect).toHaveBeenCalledWith(gifFile)
+      expect(onError).toHaveBeenCalledWith('Photos must be JPG, PNG, or WebP.')
+      expect(onFileSelect).not.toHaveBeenCalled()
     })
 
     it('accepts valid WebP files', async () => {

@@ -875,6 +875,12 @@ describe("Cookbooks $id Route", () => {
           chefId: testUserId,
         },
       });
+      const noCoverRecipe = await db.recipe.create({
+        data: {
+          title: "No Cover Recipe " + faker.string.alphanumeric(6),
+          chefId: testUserId,
+        },
+      });
       await db.recipeCover.create({
         data: {
           recipeId: recipe.id,
@@ -889,6 +895,13 @@ describe("Cookbooks $id Route", () => {
           addedById: testUserId,
         },
       });
+      await db.recipeInCookbook.create({
+        data: {
+          cookbookId,
+          recipeId: noCoverRecipe.id,
+          addedById: testUserId,
+        },
+      });
 
       const request = new UndiciRequest(`http://localhost:3000/cookbooks/${cookbookId}`);
 
@@ -898,7 +911,8 @@ describe("Cookbooks $id Route", () => {
         params: { id: cookbookId },
       } as any);
 
-      expect(result.coverImageUrls).toEqual(["/photos/covered.jpg"]);
+      expect(result.coverImageUrls).toContain("/photos/covered.jpg");
+      expect(result.coverImageUrls).toContain(null);
       expect(result.canonicalUrl).toBe(`http://localhost:3000/cookbooks/${cookbookId}`);
       expect(result.ogImageUrl).toBe(`http://localhost:3000/og/cookbooks/${cookbookId}.png`);
     });

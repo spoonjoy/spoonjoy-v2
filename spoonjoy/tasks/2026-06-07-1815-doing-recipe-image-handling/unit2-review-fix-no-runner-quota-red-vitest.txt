@@ -1,0 +1,38 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ❯ test/lib/spoon-cover-stylization.server.test.ts (7 tests | 1 failed) 1475ms
+     ✓ writes stylizedImageUrl on success via the supplied runner 25ms
+     ✓ does nothing when stylization quota is exhausted 16ms
+     × returns silently when no runner is available and OPENAI_API_KEY is absent 12ms
+     ✓ logs errors and leaves stylizedImageUrl null when the runner throws 8ms
+     ✓ falls back to the default console logger when none is supplied 7ms
+     ✓ uses the OpenAI runner factory when OPENAI_API_KEY is provided 8ms
+     ✓ constructs a real OpenAI runner when no explicit runner is passed and the API key is set  1333ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/lib/spoon-cover-stylization.server.test.ts > scheduleSpoonCoverStylization > returns silently when no runner is available and OPENAI_API_KEY is absent
+AssertionError: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ test/lib/spoon-cover-stylization.server.test.ts:106:5
+    104|     const cover = await db.recipeCover.findUniqueOrThrow({ where: { id…
+    105|     expect(cover.stylizedImageUrl).toBeNull();
+    106|     await expect(
+       |     ^
+    107|       db.imageGenLedger.count({ where: { userId, kind: "stylization" }…
+    108|     ).resolves.toBe(0);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 6 passed (7)
+   Start at  22:26:40
+   Duration  2.11s (transform 65ms, setup 120ms, import 172ms, tests 1.47s, environment 221ms)

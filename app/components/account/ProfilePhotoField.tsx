@@ -6,9 +6,7 @@ import { Text } from "~/components/ui/text";
 import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
 import { ProfilePhotoCropper } from "~/components/account/ProfilePhotoCropper";
 import type { AccountSettingsActionResult } from "~/lib/account-settings.server";
-
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
-const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+import { IMAGE_MAX_FILE_SIZE, PROFILE_IMAGE_ACCEPT, PROFILE_IMAGE_TYPES } from "~/lib/recipe-image";
 
 export function ProfilePhotoField({ photoUrl }: { photoUrl: string | null }) {
   const actionData = useActionData<AccountSettingsActionResult>();
@@ -29,13 +27,13 @@ export function ProfilePhotoField({ photoUrl }: { photoUrl: string | null }) {
     /* istanbul ignore next -- @preserve native file input onChange only fires with a selected file */
     if (!file) return;
 
-    if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
+    if (!(PROFILE_IMAGE_TYPES as readonly string[]).includes(file.type)) {
       setValidationError("Please upload an image file");
       event.target.value = "";
       return;
     }
 
-    if (file.size > MAX_FILE_SIZE) {
+    if (file.size > IMAGE_MAX_FILE_SIZE) {
       setValidationError("Photo must be less than 5MB");
       event.target.value = "";
       return;
@@ -76,7 +74,7 @@ export function ProfilePhotoField({ photoUrl }: { photoUrl: string | null }) {
             ref={fileInputRef}
             type="file"
             name="photo"
-            accept="image/*"
+            accept={PROFILE_IMAGE_ACCEPT}
             className="hidden"
             onChange={handleFileChange}
           />
@@ -93,7 +91,7 @@ export function ProfilePhotoField({ photoUrl }: { photoUrl: string | null }) {
           )}
         </div>
         {errorMessage && <Text className="text-sm text-[var(--sj-tomato)]">{errorMessage}</Text>}
-        <Text className="text-sm">JPG, PNG, or GIF. Max 5MB.</Text>
+        <Text className="text-sm">JPG, PNG, GIF, or WebP. Max 5MB.</Text>
       </div>
 
       {cropFile && <ProfilePhotoCropper file={cropFile} onConfirm={handleConfirm} onCancel={handleCancel} />}

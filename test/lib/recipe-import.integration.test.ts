@@ -81,7 +81,9 @@ async function makeChef() {
   return createUser(db, email, username, "test-password-1234");
 }
 
-function makeFetchSequence(fixture: string, imageContentType = "image/jpeg") {
+const VALID_PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+
+function makeFetchSequence(fixture: string, imageContentType = "image/png") {
   let call = 0;
   return vi.fn(async () => {
     call++;
@@ -90,7 +92,7 @@ function makeFetchSequence(fixture: string, imageContentType = "image/jpeg") {
       ok: true,
       status: 200,
       headers: new Headers([["content-type", imageContentType]]),
-      arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+      arrayBuffer: async () => VALID_PNG_BYTES.buffer,
     } as unknown as Response;
   }) as unknown as typeof fetch;
 }

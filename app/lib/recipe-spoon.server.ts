@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient, RecipeSpoon } from "@prisma/client";
-import { storeImage } from "~/lib/image-storage.server";
+import { RECIPE_IMAGE_TYPES, storeImage, validateImageFileForStorage } from "~/lib/image-storage.server";
+import { FOOD_IMAGE_SIZE_MESSAGE, FOOD_IMAGE_TYPE_MESSAGE } from "~/lib/recipe-image";
 
 export class SpoonValidationError extends Error {
   status = 400;
@@ -119,6 +120,17 @@ export async function createSpoon(
 
   let photoUrl: string | null = input.photoUrl ?? null;
   if (input.photoFile) {
+    const photoError = await validateImageFileForStorage(input.photoFile, {
+      allowedTypes: RECIPE_IMAGE_TYPES,
+      messages: {
+        invalidType: FOOD_IMAGE_TYPE_MESSAGE,
+        fileTooLarge: FOOD_IMAGE_SIZE_MESSAGE,
+      },
+    });
+    if (photoError) {
+      throw new SpoonValidationError(photoError);
+    }
+
     photoUrl = await storeImage({
       bucket: deps.bucket,
       file: input.photoFile,

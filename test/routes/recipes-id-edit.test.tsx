@@ -24,6 +24,20 @@ function extractResponseData(response: any): { data: any; status: number } {
   return { data: response, status: 200 };
 }
 
+function validImageBytes(type: "image/jpeg" | "image/png" | "image/webp"): Uint8Array {
+  if (type === "image/jpeg") {
+    return new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0xff, 0xda]);
+  }
+  if (type === "image/png") {
+    return new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
+  }
+  return new Uint8Array([0x52, 0x49, 0x46, 0x46, 0x10, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50]);
+}
+
+function validImageFile(name: string, type: "image/jpeg" | "image/png" | "image/webp"): File {
+  return new File([validImageBytes(type)], name, { type });
+}
+
 describe("Recipes $id Edit Route", () => {
   let testUserId: string;
   let otherUserId: string;
@@ -95,6 +109,7 @@ describe("Recipes $id Edit Route", () => {
 
       expect(result.recipe).toBeDefined();
       expect(result.recipe.id).toBe(recipeId);
+      expect(result.coverImageUrl).toBeNull();
     });
 
     it("should throw 403 when non-owner tries to access", async () => {
@@ -941,13 +956,45 @@ describe("Recipes $id Edit Route", () => {
       expect(response.status).toBe(302);
       expect(response.headers.get("Location")).toBe(`/recipes/${recipeId}`);
 
-      // Latest cover should now be an empty chef-upload row representing the clear
+      // Latest cover should now be an empty ai-placeholder row representing the clear
       const latest = await db.recipeCover.findFirst({
         where: { recipeId },
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       });
       expect(latest?.imageUrl).toBe("");
-      expect(latest?.sourceType).toBe("chef-upload");
+      expect(latest?.sourceType).toBe("ai-placeholder");
+    });
+
+    it("should schedule placeholder generation with waitUntil when clearing an image", async () => {
+      await db.recipeCover.create({
+        data: {
+          recipeId,
+          imageUrl: "https://example.com/old-image.jpg",
+          sourceType: "chef-upload",
+        },
+      });
+      const captured: Promise<unknown>[] = [];
+      const waitUntil = vi.fn((promise: Promise<unknown>) => {
+        captured.push(promise);
+      });
+      const request = await createFormRequest(
+        {
+          title: "Updated Title",
+          clearImage: "true",
+        },
+        testUserId
+      );
+
+      const response = await action({
+        request,
+        context: { cloudflare: { env: null, ctx: { waitUntil } } },
+        params: { id: recipeId },
+      } as any);
+
+      expect(response).toBeInstanceOf(Response);
+      expect(response.status).toBe(302);
+      expect(waitUntil).toHaveBeenCalledTimes(1);
+      await Promise.all(captured);
     });
 
     it("should return validation error for invalid image type", async () => {
@@ -978,13 +1025,49 @@ describe("Recipes $id Edit Route", () => {
 
       const { data, status } = extractResponseData(response);
       expect(status).toBe(400);
-      expect(data.errors.image).toBe("Invalid image format");
+      expect(data.errors.image).toBe("Image must be JPG, PNG, or WebP.");
+    });
+
+    it("should return validation error for GIF replacement images", async () => {
+      const formData = new UndiciFormData();
+      formData.append("title", "Valid Title");
+      formData.append("image", new File([new TextEncoder().encode("GIF89a")], "animated.gif", { type: "image/gif" }));
+
+      const request = await createMultipartRequest(formData, testUserId);
+
+      const response = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any);
+
+      const { data, status } = extractResponseData(response);
+      expect(status).toBe(400);
+      expect(data.errors.image).toBe("Image must be JPG, PNG, or WebP.");
+    });
+
+    it("should reject GIF bytes disguised as a JPEG replacement image", async () => {
+      const formData = new UndiciFormData();
+      formData.append("title", "Valid Title");
+      formData.append("image", new File([new TextEncoder().encode("GIF89a")], "fake.jpg", { type: "image/jpeg" }));
+
+      const request = await createMultipartRequest(formData, testUserId);
+
+      const response = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any);
+
+      const { data, status } = extractResponseData(response);
+      expect(status).toBe(400);
+      expect(data.errors.image).toBe("Image must be JPG, PNG, or WebP.");
     });
 
     it("should accept valid image file without errors", async () => {
       const formData = new UndiciFormData();
       formData.append("title", "Valid Title");
-      const validFile = new File(["image-data"], "photo.jpg", { type: "image/jpeg" });
+      const validFile = validImageFile("photo.jpg", "image/jpeg");
       formData.append("image", validFile);
 
       const session = await sessionStorage.getSession();
@@ -1052,7 +1135,7 @@ describe("Recipes $id Edit Route", () => {
       expect(data.errors.image).toBe("Image must be less than 5MB");
     });
 
-    it("should upload replacement image to R2 and delete old R2 image", async () => {
+    it("should upload replacement image to R2 and preserve the referenced old R2 image", async () => {
       await db.recipeCover.create({
         data: {
           recipeId,
@@ -1066,7 +1149,7 @@ describe("Recipes $id Edit Route", () => {
       };
       const formData = new UndiciFormData();
       formData.append("title", "Valid Title");
-      formData.append("image", new File(["new-image"], "new-image.png", { type: "image/png" }));
+      formData.append("image", validImageFile("new-image.png", "image/png"));
 
       const request = await createMultipartRequest(formData, testUserId);
 
@@ -1091,10 +1174,49 @@ describe("Recipes $id Edit Route", () => {
         expect.any(File),
         { httpMetadata: { contentType: "image/png" } }
       );
-      expect(mockR2Bucket.delete).toHaveBeenCalledWith("recipes/user-old/recipe-old/111.jpg");
+      expect(mockR2Bucket.delete).not.toHaveBeenCalled();
     });
 
-    it("should keep replacement image when old R2 cleanup fails after update", async () => {
+    it("schedules replacement chef-upload cover stylization while keeping the raw upload visible", async () => {
+      const captured: Promise<unknown>[] = [];
+      const waitUntil = vi.fn((p: Promise<unknown>) => {
+        captured.push(p);
+      });
+      const mockR2Bucket = {
+        put: vi.fn().mockResolvedValue(undefined),
+        delete: vi.fn().mockResolvedValue(undefined),
+      };
+      const formData = new UndiciFormData();
+      formData.append("title", "Valid Title");
+      formData.append("image", validImageFile("new-image.png", "image/png"));
+
+      const request = await createMultipartRequest(formData, testUserId);
+
+      const response = await action({
+        request,
+        context: { cloudflare: { env: { PHOTOS: mockR2Bucket }, ctx: { waitUntil } } },
+        params: { id: recipeId },
+      } as any);
+
+      expect(response).toBeInstanceOf(Response);
+      expect(response.status).toBe(302);
+      expect(waitUntil).toHaveBeenCalledTimes(1);
+
+      const latest = await db.recipeCover.findFirstOrThrow({
+        where: { recipeId },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      });
+      expect(latest.sourceType).toBe("chef-upload");
+      expect(latest.imageUrl).toMatch(
+        new RegExp(`^/photos/recipes/${testUserId}/${recipeId}/\\d+-[a-f0-9-]+\\.png$`),
+      );
+      expect(latest.stylizedImageUrl).toBeNull();
+      expect(mockR2Bucket.delete).not.toHaveBeenCalled();
+
+      await Promise.all(captured);
+    });
+
+    it("does not try old R2 cleanup after replacement while the old cover row still references it", async () => {
       await db.recipeCover.create({
         data: {
           recipeId,
@@ -1108,7 +1230,7 @@ describe("Recipes $id Edit Route", () => {
       };
       const formData = new UndiciFormData();
       formData.append("title", "Valid Title");
-      formData.append("image", new File(["new-image"], "new-image.webp", { type: "image/webp" }));
+      formData.append("image", validImageFile("new-image.webp", "image/webp"));
 
       const request = await createMultipartRequest(formData, testUserId);
 
@@ -1128,7 +1250,133 @@ describe("Recipes $id Edit Route", () => {
       expect(latest?.imageUrl).toMatch(
         new RegExp(`^/photos/recipes/${testUserId}/${recipeId}/\\d+-[a-f0-9-]+\\.webp$`),
       );
-      expect(mockR2Bucket.delete).toHaveBeenCalledWith("recipes/user-old/recipe-old/111.jpg");
+      expect(mockR2Bucket.delete).not.toHaveBeenCalled();
+    });
+
+    it("preserves forked cover objects when replacing the source recipe cover", async () => {
+      const sharedUrl = "/photos/recipes/source/recipe/111.jpg";
+      await db.recipeCover.create({
+        data: {
+          recipeId,
+          imageUrl: sharedUrl,
+          sourceType: "chef-upload",
+        },
+      });
+      const fork = await db.recipe.create({
+        data: {
+          title: "Forked Cover " + faker.string.alphanumeric(6),
+          chefId: otherUserId,
+          sourceRecipeId: recipeId,
+        },
+      });
+      await db.recipeCover.create({
+        data: {
+          recipeId: fork.id,
+          imageUrl: sharedUrl,
+          sourceType: "chef-upload",
+        },
+      });
+      const mockR2Bucket = {
+        put: vi.fn().mockResolvedValue(undefined),
+        delete: vi.fn().mockResolvedValue(undefined),
+      };
+      const formData = new UndiciFormData();
+      formData.append("title", "Valid Title");
+      formData.append("image", validImageFile("new-image.png", "image/png"));
+
+      const request = await createMultipartRequest(formData, testUserId);
+
+      const response = await action({
+        request,
+        context: { cloudflare: { env: { PHOTOS: mockR2Bucket } } },
+        params: { id: recipeId },
+      } as any);
+
+      expect(response).toBeInstanceOf(Response);
+      expect(response.status).toBe(302);
+      expect(mockR2Bucket.delete).not.toHaveBeenCalledWith("recipes/source/recipe/111.jpg");
+      await expect(
+        db.recipeCover.findFirstOrThrow({ where: { recipeId: fork.id } }),
+      ).resolves.toMatchObject({ imageUrl: sharedUrl });
+    });
+
+    it("preserves stored objects referenced by a stylized cover URL", async () => {
+      const sharedUrl = "/photos/covers/stylized/shared.png";
+      await db.recipeCover.create({
+        data: {
+          recipeId,
+          imageUrl: sharedUrl,
+          sourceType: "chef-upload",
+        },
+      });
+      await db.recipeCover.create({
+        data: {
+          recipeId,
+          imageUrl: "/photos/recipes/other/raw.jpg",
+          stylizedImageUrl: sharedUrl,
+          sourceType: "spoon",
+          createdAt: new Date("2020-01-01T00:00:00Z"),
+        },
+      });
+      const mockR2Bucket = {
+        put: vi.fn().mockResolvedValue(undefined),
+        delete: vi.fn().mockResolvedValue(undefined),
+      };
+      const formData = new UndiciFormData();
+      formData.append("title", "Valid Title");
+      formData.append("image", validImageFile("new-image.png", "image/png"));
+
+      const request = await createMultipartRequest(formData, testUserId);
+
+      const response = await action({
+        request,
+        context: { cloudflare: { env: { PHOTOS: mockR2Bucket } } },
+        params: { id: recipeId },
+      } as any);
+
+      expect(response).toBeInstanceOf(Response);
+      expect(response.status).toBe(302);
+      expect(mockR2Bucket.delete).not.toHaveBeenCalledWith("covers/stylized/shared.png");
+    });
+
+    it("preserves origin-cook spoon photo objects when replacing a spoon-sourced cover", async () => {
+      const sharedUrl = "/photos/spoons/source/recipe/111.jpg";
+      const spoon = await db.recipeSpoon.create({
+        data: {
+          chefId: testUserId,
+          recipeId,
+          photoUrl: sharedUrl,
+        },
+      });
+      await db.recipeCover.create({
+        data: {
+          recipeId,
+          imageUrl: sharedUrl,
+          sourceType: "spoon",
+          sourceSpoonId: spoon.id,
+        },
+      });
+      const mockR2Bucket = {
+        put: vi.fn().mockResolvedValue(undefined),
+        delete: vi.fn().mockResolvedValue(undefined),
+      };
+      const formData = new UndiciFormData();
+      formData.append("title", "Valid Title");
+      formData.append("image", validImageFile("new-image.webp", "image/webp"));
+
+      const request = await createMultipartRequest(formData, testUserId);
+
+      const response = await action({
+        request,
+        context: { cloudflare: { env: { PHOTOS: mockR2Bucket } } },
+        params: { id: recipeId },
+      } as any);
+
+      expect(response).toBeInstanceOf(Response);
+      expect(response.status).toBe(302);
+      expect(mockR2Bucket.delete).not.toHaveBeenCalledWith("spoons/source/recipe/111.jpg");
+      await expect(db.recipeSpoon.findUniqueOrThrow({ where: { id: spoon.id } }))
+        .resolves.toMatchObject({ photoUrl: sharedUrl });
     });
 
     it("should return image error when replacement upload fails", async () => {
@@ -1137,7 +1385,7 @@ describe("Recipes $id Edit Route", () => {
       };
       const formData = new UndiciFormData();
       formData.append("title", "Valid Title");
-      formData.append("image", new File(["new-image"], "new-image.jpg", { type: "image/jpeg" }));
+      formData.append("image", validImageFile("new-image.jpg", "image/jpeg"));
 
       const request = await createMultipartRequest(formData, testUserId);
 
@@ -1156,7 +1404,7 @@ describe("Recipes $id Edit Route", () => {
       expect(covers).toEqual([]);
     });
 
-    it("should return image error when clearing an R2 image fails", async () => {
+    it("should clear an R2 image without deleting the referenced stored object", async () => {
       await db.recipeCover.create({
         data: {
           recipeId,
@@ -1181,15 +1429,16 @@ describe("Recipes $id Edit Route", () => {
         params: { id: recipeId },
       } as any);
 
-      const { data, status } = extractResponseData(response);
-      expect(status).toBe(500);
-      expect(data.errors.image).toBe("Failed to delete image. Please try again.");
+      expect(response).toBeInstanceOf(Response);
+      expect(response.status).toBe(302);
+      expect(mockR2Bucket.delete).not.toHaveBeenCalled();
 
       const latest = await db.recipeCover.findFirst({
         where: { recipeId },
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       });
-      expect(latest?.imageUrl).toBe("/photos/recipes/user-old/recipe-old/111.jpg");
+      expect(latest?.imageUrl).toBe("");
+      expect(latest?.sourceType).toBe("ai-placeholder");
     });
 
     it("should delete uploaded replacement image when database update fails", async () => {
@@ -1203,7 +1452,7 @@ describe("Recipes $id Edit Route", () => {
       try {
         const formData = new UndiciFormData();
         formData.append("title", "Valid Title");
-        formData.append("image", new File(["new-image"], "new-image.gif", { type: "image/gif" }));
+        formData.append("image", validImageFile("new-image.jpg", "image/jpeg"));
 
         const request = await createMultipartRequest(formData, testUserId);
 
@@ -1384,6 +1633,8 @@ describe("Recipes $id Edit Route", () => {
       // Recipe Image is now displayed as an image upload preview via RecipeImageUpload
       // When there's an image, it shows "Change Image" button instead of "Upload Image"
       expect(screen.getByRole("button", { name: /change.*image/i })).toBeInTheDocument();
+      const submissionImageInput = document.querySelector('form input[name="image"]');
+      expect(submissionImageInput).toHaveAttribute("accept", "image/jpeg,image/png,image/webp");
     });
 
     it("should render empty steps state", async () => {

@@ -1,0 +1,96 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ❯ test/lib/mcp/spoonjoy-tools.server.test.ts (42 tests | 1 failed) 678ms
+     ✓ lists stable MCP tool metadata 11ms
+     ✓ annotates every tool with a title and behavioral hints (directory requirement) 7ms
+     ✓ classifies reads, writes, deletes, and the open-world import correctly 5ms
+     ✓ publishes upload schemas with required image fields and kitchen write scopes 5ms
+     ✓ uploads recipe and spoon photos to owner-scoped R2 namespaces 15ms
+     ✓ rejects invalid, GIF, and non-food upload payloads before storage 11ms
+     ✓ rejects production-like missing image buckets unless local fallback is explicit 7ms
+     ✓ reports health and writable state 5ms
+     ✓ reports agent auth status without asking for user credentials 17ms
+     ✓ starts and polls delegated agent connections over MCP 14ms
+     ✓ creates, lists, revokes, and authorizes owner-scoped API tokens 16ms
+     ✓ creates, searches, and fetches recipes with steps and ingredients 37ms
+     ✓ creates and updates recipe covers from uploaded image URLs with stylization scheduled 14ms
+     ✓ round-trips explicit local recipe image data URLs when no bucket is available 13ms
+     ✓ rejects unsafe recipe cover image assignments 14ms
+     ✓ creates minimal recipes and finds null for missing recipes 10ms
+     ✓ updates owner recipes with replacement steps and ingredients without interactive transactions 20ms
+     ✓ keeps untouched fields when updating only part of a recipe 19ms
+     ✓ rejects invalid or unauthorized recipe updates 13ms
+     ✓ soft-deletes owner recipes through MCP for agent cleanup 13ms
+     ✓ rejects invalid or unauthorized recipe deletes 10ms
+     ✓ handles unusual owner emails and ingredient-free steps 10ms
+     ✓ reuses existing owner usernames, units, and ingredient refs 15ms
+     ✓ adds recipe ingredients to a shopping list and merges duplicates 16ms
+     ✓ handles a recipe with no ingredients without touching the shopping list 11ms
+     ✓ aggregates duplicate (unit, ingredient) pairs within a single recipe into one item 14ms
+     ✓ rejects adding a soft-deleted recipe to a shopping list 12ms
+     ✓ creates, lists, and fetches cookbooks idempotently for the configured owner 12ms
+     ✓ lists cookbook summaries without loading deep recipe step payloads 8ms
+     ✓ adds and removes recipes from owner-scoped cookbooks idempotently 24ms
+     ✓ runs owner-scoped write tools without callback-style transactions 27ms
+     ✓ keeps cookbook MCP reads and writes scoped to the owning agent 14ms
+     ✓ groups multiple recipes per cookbook in list_cookbooks (batched-fetch regression) 18ms
+     ✓ excludes deleted recipes from cookbook MCP payloads 17ms
+     ✓ treats an existing null shopping-list quantity as zero when merging 15ms
+     ✓ gets shopping lists and filters deleted items including unitless items 12ms
+     ✓ manages direct shopping-list item adds, checks, removes, and restores 21ms
+     ✓ exposes unified full-text search and private shopping-list search to Ouroboros agents 28ms
+     ✓ supports unitless direct shopping-list items 10ms
+     ✓ scopes direct shopping-list item mutations to the owner 15ms
+     ✓ normalizes search limits 22ms
+     × validates write tool inputs 18ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/lib/mcp/spoonjoy-tools.server.test.ts > spoonjoy MCP tools > validates write tool inputs
+AssertionError: promise resolved "'{\n  "recipe": {\n    "id": "cmq4uk0p…'" instead of rejecting
+
+- Expected:
+Error {
+  "message": "rejected promise",
+}
+
++ Received:
+"{
+  \"recipe\": {
+    \"id\": \"cmq4uk0p0009d6v1eiy1rwbwk\",
+    \"title\": \"Bad Nested Owner Email\",
+    \"description\": null,
+    \"servings\": null,
+    \"sourceUrl\": null,
+    \"sourceRecipeId\": null,
+    \"imageUrl\": null,
+    \"chef\": {
+      \"id\": \"cmq4uk0ox00996v1etbi7yr92\",
+      \"email\": \"agent-cwkzwerb@example.com\",
+      \"username\": \"agent-cwkzwerb\"
+    },
+    \"steps\": [
+      {
+        \"id\": \"cmq4uk0p1009f6v1elssstosj\",
+        \"stepNum\": 1,
+        \"title\": null,
+        \"description\": \"x\",
+        \"duration\": null,
+        \"ingredients\": []
+      }
+    ],
+    \"ingredientCount\": 0
+  }
+}"
+
+ ❯ test/lib/mcp/spoonjoy-tools.server.test.ts:1550:16
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 41 passed (42)
+   Start at  23:45:36
+   Duration  1.60s (transform 262ms, setup 126ms, import 435ms, tests 678ms, environment 233ms)

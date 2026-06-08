@@ -26,6 +26,41 @@ function rpcRequest(body: unknown, headers: Record<string, string> = {}) {
   }) as unknown as Request;
 }
 
+function streamRequest(body: string, headers: Record<string, string> = {}) {
+  const encoder = new TextEncoder();
+  const chunks = [body.slice(0, Math.ceil(body.length / 2)), body.slice(Math.ceil(body.length / 2))];
+  const stream = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      const next = chunks.shift();
+      if (next === undefined) {
+        controller.close();
+        return;
+      }
+      controller.enqueue(encoder.encode(next));
+    },
+  });
+  return new Request("https://spoonjoy.app/mcp", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...headers },
+    body: stream,
+    duplex: "half",
+  } as RequestInit & { duplex: "half" });
+}
+
+function failingStreamRequest(headers: Record<string, string> = {}) {
+  const stream = new ReadableStream<Uint8Array>({
+    pull() {
+      throw new Error("body stream failed");
+    },
+  });
+  return new Request("https://spoonjoy.app/mcp", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...headers },
+    body: stream,
+    duplex: "half",
+  } as RequestInit & { duplex: "half" });
+}
+
 const init = (id: number, method: string, params?: unknown) => ({
   jsonrpc: "2.0",
   id,
@@ -255,6 +290,53 @@ describe("handleMcpHttpRequest", () => {
     expect(response.status).toBe(200);
     const body = await response.json() as { error: { code: number; message: string } };
     expect(body.error.code).toBe(-32700);
+  });
+
+  it("rejects oversized Content-Length before JSON-RPC dispatch", async () => {
+    const token = await mintToken();
+    const response = await handleMcpHttpRequest({
+      request: rpcRequest(init(50, "tools/list"), {
+        ...bearer(token),
+        "Content-Length": String(8 * 1024 * 1024),
+      }),
+      db,
+    });
+    expect(response.status).toBe(413);
+    await expect(response.json()).resolves.toEqual({
+      error: "request_too_large",
+      message: "Request body is too large.",
+    });
+  });
+
+  it("rejects oversized streaming bodies while reading before JSON-RPC dispatch", async () => {
+    const token = await mintToken();
+    const oversizedImage = "a".repeat(8 * 1024 * 1024);
+    const body = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 51,
+      method: "tools/call",
+      params: {
+        name: "upload_recipe_image",
+        arguments: { imageBase64: oversizedImage, mimeType: "image/png", filename: "big.png" },
+      },
+    });
+    const response = await handleMcpHttpRequest({
+      request: streamRequest(body, bearer(token)),
+      db,
+    });
+    expect(response.status).toBe(413);
+    await expect(response.json()).resolves.toEqual({
+      error: "request_too_large",
+      message: "Request body is too large.",
+    });
+  });
+
+  it("rethrows non-size body stream read failures", async () => {
+    const token = await mintToken();
+    await expect(handleMcpHttpRequest({
+      request: failingStreamRequest(bearer(token)),
+      db,
+    })).rejects.toThrow("body stream failed");
   });
 
   it("returns 429 when the rate limiter denies the request", async () => {

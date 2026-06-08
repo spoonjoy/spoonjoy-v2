@@ -395,7 +395,12 @@ async function cleanupLocalQaRecipes() {
       deletedAt: null,
       OR: [
         { title: { startsWith: "e2e " } },
+        { title: { startsWith: "Codex " } },
+        { title: { startsWith: "codex " } },
+        { title: { startsWith: "Agent " } },
         { title: { startsWith: "Mobile Dock Save" } },
+        { title: { contains: "Codex smoke" } },
+        { title: { contains: "codex smoke" } },
         { title: { contains: "(variation " } },
       ],
     },
@@ -412,9 +417,14 @@ async function cleanupLocalQaCookbooks() {
     where: {
       OR: [
         { title: { startsWith: "e2e " } },
+        { title: { startsWith: "Codex " } },
+        { title: { startsWith: "codex " } },
+        { title: { startsWith: "Agent " } },
         { title: { startsWith: "Mobile Dock" } },
         { title: { startsWith: "Shape MCP" } },
         { title: { startsWith: "Slugger MCP" } },
+        { title: { contains: "Codex smoke" } },
+        { title: { contains: "codex smoke" } },
       ],
     },
   });

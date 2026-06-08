@@ -70,20 +70,30 @@ async function checkAppleOAuth(page, report) {
   expect(body.includes('Sign in to Apple')).toBe(true)
 }
 
-async function cleanupRemoteD1(email) {
+function usesLocalD1(baseUrl) {
+  const hostname = new URL(baseUrl).hostname
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
+}
+
+async function cleanupD1(email, { remote }) {
   const command = `DELETE FROM "User" WHERE email = ${sqlString(email)};`
+  const args = ['exec', 'wrangler', 'd1', 'execute', 'DB']
+  if (remote) {
+    args.push('--remote')
+  }
+  args.push('--command', command)
   const { stdout, stderr } = await execFileAsync(
     'pnpm',
-    ['exec', 'wrangler', 'd1', 'execute', 'DB', '--remote', '--command', command],
+    args,
     { encoding: 'utf8', maxBuffer: 1024 * 1024 * 4 }
   )
-  return { stdout, stderr }
+  return { target: remote ? 'remote D1' : 'local D1', stdout, stderr }
 }
 
 async function main() {
   const baseUrl = arg('--base-url', process.env.SPOONJOY_SMOKE_BASE_URL ?? 'https://spoonjoy-v2.mendelow-studio.workers.dev')
   const outDir = arg('--out', 'live-smoke-artifacts')
-  const shouldCleanupRemote = process.argv.includes('--remote-cleanup')
+  const shouldCleanup = !process.argv.includes('--keep-smoke-data')
   const stamp = Date.now().toString(36)
   const email = `codex-smoke-${stamp}@example.com`
   const username = `codex_smoke_${stamp}`
@@ -194,14 +204,16 @@ async function main() {
     await context.close()
     await browser.close()
 
-    if (shouldCleanupRemote) {
+    if (shouldCleanup) {
       try {
-        report.cleanup = await cleanupRemoteD1(email)
+        report.cleanup = await cleanupD1(email, { remote: !usesLocalD1(baseUrl) })
       } catch (error) {
         report.cleanup = {
           error: error instanceof Error ? error.message : String(error),
         }
       }
+    } else {
+      report.cleanup = { skipped: true, reason: '--keep-smoke-data' }
     }
 
     writeFileSync(join(outDir, 'smoke-results.json'), JSON.stringify(report, null, 2))
@@ -213,8 +225,8 @@ async function main() {
     return
   }
 
-  if (shouldCleanupRemote && report.cleanup?.error) {
-    console.error(`Live smoke passed, but remote cleanup failed: ${report.cleanup.error}`)
+  if (shouldCleanup && report.cleanup?.error) {
+    console.error(`Live smoke passed, but cleanup failed: ${report.cleanup.error}`)
     process.exitCode = 1
     return
   }

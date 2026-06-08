@@ -197,7 +197,9 @@ export function createRecipeOgElement(input: RecipeOgInput, description: string)
 }
 
 export function createCookbookOgElement(input: CookbookOgInput, recipeLabel: string) {
-  const images = input.coverImageUrls.filter((url) => url.length > 0).slice(0, 4);
+  const images = input.coverImageUrls
+    .filter((url): url is string => Boolean(url && url.length > 0))
+    .slice(0, 4);
 
   return (
     <div

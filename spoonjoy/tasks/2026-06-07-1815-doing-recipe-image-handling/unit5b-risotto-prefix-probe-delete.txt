@@ -1,0 +1,7 @@
+
+ ⛅️ wrangler 4.90.0 (update available 4.98.0)
+─────────────────────────────────────────────
+Resource location: remote
+
+Deleting object "spoons/cl9rpod09000508la48fmmrbs/cmq35k4c10001zn0npvsmw05z/repair-probe.txt" from bucket "spoonjoy-photos".
+Delete complete.

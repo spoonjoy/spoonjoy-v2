@@ -1,0 +1,9 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ✓ test/lib/search.server.test.ts (7 tests) 181ms
+
+ Test Files  1 passed (1)
+      Tests  7 passed (7)
+   Start at  22:30:00
+   Duration  802ms (transform 79ms, setup 118ms, import 162ms, tests 181ms, environment 219ms)

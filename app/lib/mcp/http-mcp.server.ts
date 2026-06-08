@@ -48,6 +48,7 @@ import {
   safeHeaderHost,
   userAgentFamily,
 } from "~/lib/analytics-server";
+import { RequestBodyTooLargeError, readLimitedTextBody } from "~/lib/request-body-limit.server";
 
 interface CloudflareEnvLike {
   SESSION_SECRET?: string;
@@ -290,7 +291,24 @@ export async function handleMcpHttpRequest(params: HandleMcpHttpRequestParams): 
     );
   };
 
-  const body = await request.text();
+  let body: string;
+  try {
+    body = await readLimitedTextBody(request);
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) {
+      const response = jsonResponse(
+        { error: "request_too_large", message: error.message },
+        error.status,
+      );
+      return observeMcpResponse(params, {
+        response,
+        startedAt,
+        principal,
+        errorCode: "request_too_large",
+      });
+    }
+    throw error;
+  }
   const jsonRpcTelemetry = mcpJsonRpcTelemetry(body);
   const response = await handleJsonRpcLine(body, router, { onError });
 

@@ -1,0 +1,21 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+      Coverage enabled with istanbul
+
+ ✓ test/lib/spoon-cover-stylization.server.test.ts (7 tests) 1335ms
+     ✓ constructs a real OpenAI runner when no explicit runner is passed and the API key is set  1236ms
+ ✓ test/lib/search.server.test.ts (7 tests) 226ms
+
+ Test Files  2 passed (2)
+      Tests  14 passed (14)
+   Start at  22:30:10
+   Duration  2.97s (transform 319ms, setup 186ms, import 571ms, tests 1.56s, environment 384ms)
+
+ % Coverage report from istanbul
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s
+-------------------|---------|----------|---------|---------|-------------------
+All files          |     100 |      100 |     100 |     100 |
+ search.server.ts  |     100 |      100 |     100 |     100 |
+ ...tion.server.ts |     100 |      100 |     100 |     100 |
+-------------------|---------|----------|---------|---------|-------------------

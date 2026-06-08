@@ -18,10 +18,13 @@ import {
   hasUploadedImageFile,
   RECIPE_IMAGE_TYPES,
   storeImage,
-  validateImageFile,
+  validateImageFileForStorage,
 } from "~/lib/image-storage.server";
+import { FOOD_IMAGE_ACCEPT, RECIPE_IMAGE_SIZE_MESSAGE, RECIPE_IMAGE_TYPE_MESSAGE } from "~/lib/recipe-image";
 import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
 import { createCover, getRecipeCoverImageUrl } from "~/lib/recipe-cover.server";
+import { scheduleAiPlaceholderCover } from "~/lib/ai-placeholder-cover.server";
+import { scheduleSpoonCoverStylization } from "~/lib/spoon-cover-stylization.server";
 import { Button } from "~/components/ui/button";
 import { Dialog, DialogActions, DialogDescription, DialogTitle } from "~/components/ui/dialog";
 import { useRef, useState } from "react";
@@ -235,11 +238,11 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 
   // Validate image file if provided
   if (imageFile) {
-    const imageError = validateImageFile(imageFile, {
+    const imageError = await validateImageFileForStorage(imageFile, {
       allowedTypes: RECIPE_IMAGE_TYPES,
       messages: {
-        invalidType: "Invalid image format",
-        fileTooLarge: "Image must be less than 5MB",
+        invalidType: RECIPE_IMAGE_TYPE_MESSAGE,
+        fileTooLarge: RECIPE_IMAGE_SIZE_MESSAGE,
       },
     });
 
@@ -261,7 +264,8 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     return data({ errors: { title: titleUniquenessResult.error } }, { status: 400 });
   }
 
-  const photosBucket = getCloudflareEnv(context)?.PHOTOS;
+  const cloudflareEnv = getCloudflareEnv(context);
+  const photosBucket = cloudflareEnv?.PHOTOS;
   const updateData: { title: string; description: string | null; servings: string | null } = {
     title: title.trim(),
     description: description.trim() || null,
@@ -282,15 +286,6 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         { status: 500 }
       );
     }
-  } else if (clearImage && currentCover) {
-    try {
-      await deleteStoredImage({ bucket: photosBucket, imageUrl: currentCover.imageUrl });
-    } catch {
-      return data(
-        { errors: { image: "Failed to delete image. Please try again." } },
-        { status: 500 }
-      );
-    }
   }
 
   try {
@@ -300,26 +295,50 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     });
 
     if (uploadedImageUrl) {
-      await createCover(database, {
+      const uploadedCover = await createCover(database, {
         recipeId: id,
         imageUrl: uploadedImageUrl,
         sourceType: "chef-upload",
       });
-      if (currentCover) {
-        try {
-          await deleteStoredImage({ bucket: photosBucket, imageUrl: currentCover.imageUrl });
-        } catch {
-          // Keep the successful replacement visible even if old-object cleanup fails.
-        }
-      }
-    } else if (clearImage && currentCover) {
-      // Clearing replaces the visible cover with an empty placeholder cover so the
-      // SVG fallback renders until the chef uploads or AI generation kicks in.
-      await createCover(database, {
+      const waitUntil = context.cloudflare?.ctx?.waitUntil;
+      const task = scheduleSpoonCoverStylization({
+        db: database,
+        userId,
         recipeId: id,
-        imageUrl: "",
+        coverId: uploadedCover.id,
+        rawPhotoUrl: uploadedImageUrl,
+        recipeTitle: updateData.title,
+        env: cloudflareEnv,
+        bucket: photosBucket,
         sourceType: "chef-upload",
       });
+      if (waitUntil) {
+        waitUntil.call(context.cloudflare!.ctx!, task);
+      } else {
+        await task;
+      }
+    } else if (clearImage && currentCover) {
+      const placeholderCover = await createCover(database, {
+        recipeId: id,
+        imageUrl: "",
+        sourceType: "ai-placeholder",
+      });
+      const waitUntil = context.cloudflare?.ctx?.waitUntil;
+      const task = scheduleAiPlaceholderCover({
+        db: database,
+        userId,
+        recipeId: id,
+        coverId: placeholderCover.id,
+        title: updateData.title,
+        description: updateData.description,
+        env: cloudflareEnv,
+        bucket: photosBucket,
+      });
+      if (waitUntil) {
+        waitUntil.call(context.cloudflare!.ctx!, task);
+      } else {
+        await task;
+      }
     }
 
     return redirect(`/recipes/${id}`);
@@ -408,7 +427,7 @@ export default function EditRecipe() {
           <input type="hidden" name="servings" />
           <input type="hidden" name="steps" />
           <input type="hidden" name="clearImage" />
-          <input ref={fileInputRef} type="file" name="image" accept="image/*" />
+          <input ref={fileInputRef} type="file" name="image" accept={FOOD_IMAGE_ACCEPT} />
           <button type="submit">Save Recipe</button>
         </Form>
 

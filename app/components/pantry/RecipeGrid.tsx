@@ -10,7 +10,7 @@ export interface PantryRecipeCard {
   id: string
   title: string
   description?: string
-  coverImageUrl?: string
+  coverImageUrl?: string | null
   cookTimeMinutes?: number
   difficulty?: 'Easy' | 'Medium' | 'Hard'
   servings?: string

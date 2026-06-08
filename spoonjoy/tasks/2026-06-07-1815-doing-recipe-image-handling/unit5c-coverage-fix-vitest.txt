@@ -1,0 +1,13 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ✓ test/routes/recipes-id-edit.test.tsx (72 tests) 11833ms
+       ✓ should populate hidden form and submit when Save Recipe is clicked  346ms
+       ✓ should keep the mobile dock off edit forms and submit from the in-flow Save Recipe button  346ms
+ ✓ test/lib/spoonjoy-api-spoons.test.ts (56 tests) 426ms
+ ✓ test/lib/mcp/http-mcp.server.test.ts (24 tests) 244ms
+
+ Test Files  3 passed (3)
+      Tests  152 passed (152)
+   Start at  00:09:14
+   Duration  15.01s (transform 458ms, setup 224ms, import 1.40s, tests 12.50s, environment 535ms)

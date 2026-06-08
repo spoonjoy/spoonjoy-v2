@@ -1,0 +1,16 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ✓ test/lib/mcp/spoonjoy-tools.server.test.ts (42 tests) 562ms
+ ✓ test/lib/spoonjoy-api-spoons.test.ts (53 tests) 424ms
+ ✓ test/lib/mcp/http-mcp.server.test.ts (23 tests) 234ms
+ ✓ test/routes/api.test.ts (12 tests) 202ms
+ ✓ test/lib/spoonjoy-api-request.server.test.ts (10 tests) 80ms
+ ✓ test/routes/mcp.test.ts (4 tests) 63ms
+ ✓ test/lib/recipe-image-assignment.server.test.ts (4 tests) 26ms
+ ✓ test/lib/request-body-limit.server.test.ts (4 tests) 25ms
+
+ Test Files  8 passed (8)
+      Tests  152 passed (152)
+   Start at  23:28:53
+   Duration  5.37s (transform 461ms, setup 423ms, import 1.52s, tests 1.62s, environment 954ms)

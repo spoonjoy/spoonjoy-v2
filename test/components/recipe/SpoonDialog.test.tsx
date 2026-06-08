@@ -46,9 +46,11 @@ describe("SpoonDialog", () => {
     const picker = screen.getByTestId("spoon-photo-picker");
 
     expect(fileInput).toHaveClass("sr-only");
+    expect(fileInput).toHaveAttribute("accept", "image/jpeg,image/png,image/webp");
     expect(picker).toHaveTextContent(/add photo/i);
     expect(picker).toHaveTextContent(/no photo yet/i);
-    expect(picker).toHaveTextContent(/jpg, png, gif, or webp/i);
+    expect(picker).toHaveTextContent(/jpg, png, or webp/i);
+    expect(picker).not.toHaveTextContent(/gif/i);
     expect(screen.queryByText(/no file selected/i)).toBeNull();
   });
 
@@ -102,7 +104,7 @@ describe("SpoonDialog", () => {
     const fileInput = (await screen.findByLabelText(/photo/i)) as HTMLInputElement;
     const user = userEvent.setup({ applyAccept: false });
     await user.upload(fileInput, makeFile("a.svg", "image/svg+xml"));
-    expect(await screen.findByRole("alert")).toHaveTextContent(/jpg, png, gif, or webp/i);
+    expect(await screen.findByRole("alert")).toHaveTextContent(/jpg, png, or webp/i);
     await user.upload(fileInput, makeFile("cook.png", "image/png"));
     await waitFor(() => {
       expect(screen.queryByRole("alert")).toBeNull();
@@ -123,12 +125,22 @@ describe("SpoonDialog", () => {
     expect(submit).not.toBeDisabled();
   });
 
-  it("rejects MIME types not in RECIPE_IMAGE_TYPES with an inline error", async () => {
+  it("rejects MIME types not in the food-photo allow-list with an inline error", async () => {
     renderDialog();
     const fileInput = (await screen.findByLabelText(/photo/i)) as HTMLInputElement;
     const user = userEvent.setup({ applyAccept: false });
     await user.upload(fileInput, makeFile("a.svg", "image/svg+xml"));
-    expect(await screen.findByRole("alert")).toHaveTextContent(/jpg, png, gif, or webp/i);
+    expect(await screen.findByRole("alert")).toHaveTextContent(/jpg, png, or webp/i);
+  });
+
+  it("rejects GIF photo files with an inline error", async () => {
+    renderDialog();
+    const fileInput = (await screen.findByLabelText(/photo/i)) as HTMLInputElement;
+    const user = userEvent.setup({ applyAccept: false });
+    await user.upload(fileInput, makeFile("animated.gif", "image/gif"));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Photos must be JPG, PNG, or WebP.");
+    expect(screen.getByTestId("spoon-photo-picker")).toHaveTextContent(/no photo yet/i);
   });
 
   it("rejects files >5MB with an inline error", async () => {

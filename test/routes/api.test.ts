@@ -31,6 +31,27 @@ function routeArgs(request: Request, splat: string, env: Record<string, unknown>
   } as any;
 }
 
+function streamRequest(url: string, body: string, headers: Record<string, string> = {}) {
+  const encoder = new TextEncoder();
+  const chunks = [body.slice(0, Math.ceil(body.length / 2)), body.slice(Math.ceil(body.length / 2))];
+  const stream = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      const next = chunks.shift();
+      if (next === undefined) {
+        controller.close();
+        return;
+      }
+      controller.enqueue(encoder.encode(next));
+    },
+  });
+  return new Request(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...headers },
+    body: stream,
+    duplex: "half",
+  } as RequestInit & { duplex: "half" });
+}
+
 async function readJson(response: Response) {
   return await response.json() as any;
 }
@@ -163,6 +184,47 @@ describe("Spoonjoy REST API route", () => {
         status: 403,
         message: "OAuth access token is bound to a protected resource and cannot call legacy /api routes.",
       },
+    });
+  });
+
+  it("rejects oversized legacy tool Content-Length before operation dispatch", async () => {
+    const user = await db.user.create({ data: { email: uniqueEmail(), username: faker.internet.username() } });
+    const { token } = await createApiCredential(db, user.id, "Legacy upload token", { scopes: ["kitchen:write"] });
+    const response = await action(routeArgs(new UndiciRequest("http://localhost/api/tools/upload_recipe_image", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        "Content-Length": String(8 * 1024 * 1024),
+      },
+      body: JSON.stringify({ imageBase64: "", mimeType: "image/png", filename: "big.png" }),
+    }), "tools/upload_recipe_image"));
+
+    expect(response.status).toBe(413);
+    await expect(readJson(response)).resolves.toEqual({
+      ok: false,
+      error: { message: "Request body is too large.", status: 413 },
+    });
+  });
+
+  it("rejects oversized legacy tool streaming bodies while reading before operation dispatch", async () => {
+    const user = await db.user.create({ data: { email: uniqueEmail(), username: faker.internet.username() } });
+    const { token } = await createApiCredential(db, user.id, "Legacy upload token", { scopes: ["kitchen:write"] });
+    const body = JSON.stringify({
+      imageBase64: "a".repeat(8 * 1024 * 1024),
+      mimeType: "image/png",
+      filename: "big.png",
+    });
+    const response = await action(routeArgs(streamRequest(
+      "http://localhost/api/tools/upload_recipe_image",
+      body,
+      { Authorization: `Bearer ${token}` },
+    ), "tools/upload_recipe_image"));
+
+    expect(response.status).toBe(413);
+    await expect(readJson(response)).resolves.toEqual({
+      ok: false,
+      error: { message: "Request body is too large.", status: 413 },
     });
   });
 

@@ -1,0 +1,9 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ✓ test/lib/safe-image-fetch.server.test.ts (7 tests) 66ms
+
+ Test Files  1 passed (1)
+      Tests  7 passed (7)
+   Start at  21:41:51
+   Duration  443ms (transform 57ms, setup 97ms, import 28ms, tests 66ms, environment 143ms)

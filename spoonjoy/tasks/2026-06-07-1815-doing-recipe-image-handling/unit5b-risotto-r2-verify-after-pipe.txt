@@ -1,0 +1,11 @@
+
+ ⛅️ wrangler 4.90.0 (update available 4.98.0)
+─────────────────────────────────────────────
+Resource location: remote
+
+Downloading "spoons/cl9rpod09000508la48fmmrbs/cmq35k4c10001zn0npvsmw05z/repair-20260608T063245Z-cw-upright.jpeg" from "spoonjoy-photos".
+
+[31m✘ [41;31m[[41;97mERROR[41;31m][0m [1mThe specified key does not exist.[0m
+
+
+🪵  Logs were written to "/Users/arimendelow/.wrangler/logs/wrangler-2026-06-08_06-36-46_802.log"

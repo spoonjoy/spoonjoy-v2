@@ -1,0 +1,17 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ❯ test/lib/safe-image-fetch.server.test.ts (8 tests | 1 failed) 72ms
+     ✓ accepts JPEG, PNG, and WebP responses with matching magic bytes 4ms
+     ✓ uses global fetch and default max size when deps are omitted 0ms
+     ✓ rejects malformed, non-http, blocked-host, and GIF-extension URLs before fetch 1ms
+     ✓ rejects non-2xx, missing content-type, unsupported content-type, oversized, and byte-mismatch responses 1ms
+     × streams image bytes and cancels the response body as soon as the size cap is exceeded 3ms
+     ✓ maps AbortError to timeout and rethrows other fetch failures 0ms
+     ✓ aborts an in-flight fetch when the image fetch timeout fires 1ms
+     ✓ follows public redirects, rejects missing Location and private redirect targets, and caps redirect count 1ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 7 passed (8)
+   Start at  21:47:55
+   Duration  538ms (transform 57ms, setup 113ms, import 27ms, tests 72ms, environment 202ms)

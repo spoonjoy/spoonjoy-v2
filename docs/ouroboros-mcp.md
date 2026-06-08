@@ -25,6 +25,8 @@ When registered under the server name `spoonjoy`, the harness exposes these firs
 | `create_recipe` | Create a recipe for the configured owner, including steps and ingredients. |
 | `update_recipe` | Update an owner-scoped recipe's title, optional metadata, and optionally replace its steps and ingredients. |
 | `delete_recipe` | Soft-delete an owner-scoped recipe so agent-created drafts and test recipes can be cleaned up. |
+| `upload_recipe_image` | Upload JPG/PNG/WebP base64 bytes and receive a Spoonjoy image URL for recipe cover assignment. |
+| `upload_spoon_photo` | Upload JPG/PNG/WebP base64 bytes and receive a Spoonjoy image URL for spoon photo assignment. |
 | `add_recipe_to_shopping_list` | Add all recipe ingredients to the owner shopping list, merging duplicates. |
 | `list_cookbooks` | List cookbooks owned by the configured owner, with active recipe counts and cover recipes. |
 | `get_cookbook` | Fetch one owner-scoped cookbook by `cookbookId`, `title`, or `cookbookTitle`. |
@@ -41,6 +43,19 @@ Search is backed by the same self-hosted SQLite/D1 FTS5 index as the UI and rank
 Cookbook tools are deliberately owner-scoped: agents can only list, fetch, create, and mutate cookbooks owned by `SPOONJOY_MCP_USER_EMAIL` or an explicit `ownerEmail`. Recipe membership adds require an active `recipeId`; deleted recipes are excluded from cookbook payloads and cannot be newly added.
 
 Recipe cleanup is owner-scoped too. `delete_recipe` sets `deletedAt` on the target recipe, hides it from normal `get_recipe`/search/cookbook payloads, and returns `deleted: false` if the same owner repeats cleanup for an already-deleted recipe.
+
+## Image Uploads
+
+Agents should upload image bytes first, then assign the returned URL:
+
+1. Call `upload_recipe_image` or `upload_spoon_photo` with `{ imageBase64, mimeType, filename }`.
+2. Use the returned `imageUrl` as `create_recipe.imageUrl`, `update_recipe.imageUrl`, `create_spoon.photoUrl`, or `update_spoon.photoUrl`.
+
+Accepted image MIME types are exactly `image/jpeg`, `image/png`, and `image/webp`; GIF bytes are rejected even if mislabeled. Upload tools store production images under owner-scoped `/photos/recipes/<ownerId>/uploads/...` or `/photos/spoons/<ownerId>/uploads/...` keys. Local/test data URL fallbacks are available only when the server is explicitly configured for local image fallback; production-like missing R2 buckets reject image uploads.
+
+Recipe image assignment is intentionally narrow: `create_recipe.imageUrl` and `update_recipe.imageUrl` accept only owner-scoped Spoonjoy upload URLs from `/photos/recipes/<ownerId>/...` or `/photos/spoons/<ownerId>/...`, verified to exist in R2. External URLs, generated cover URLs, profile/import URLs, malformed `/photos` paths, and inline data URLs in bucket-backed contexts are rejected before recipe mutation. Spoon `photoUrl` keeps backward compatibility with existing external URLs, but automatic AI cover stylization runs only for stored Spoonjoy uploads or explicit local/test food-photo data URLs.
+
+The MCP and legacy `/api/tools/*` transports enforce a request body cap sized for the 5 MB decoded image limit plus JSON/base64 overhead before tool dispatch.
 
 ## Authentication And Authorization
 

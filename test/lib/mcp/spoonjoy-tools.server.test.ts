@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach, afterEach } from "vitest";
+import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import { faker } from "@faker-js/faker";
 import { getLocalDb } from "~/lib/db.server";
 import { authenticateApiToken, createApiCredential } from "~/lib/api-auth.server";
@@ -8,6 +8,47 @@ import { cleanupDatabase } from "../../helpers/cleanup";
 
 function parseJson(text: string) {
   return JSON.parse(text) as Record<string, any>;
+}
+
+const VALID_PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+const GIF_BYTES = new Uint8Array([0x47, 0x49, 0x46, 0x38, 1, 2, 3]);
+
+function b64(bytes: Uint8Array): string {
+  return Buffer.from(bytes).toString("base64");
+}
+
+function mockR2(): R2Bucket {
+  const stored = new Map<string, { value: unknown; httpMetadata?: { contentType?: string } }>();
+  return {
+    put: vi.fn(async (key: string, _value: unknown, options?: { httpMetadata?: { contentType?: string } }) => {
+      stored.set(key, { value: _value, httpMetadata: options?.httpMetadata });
+      return {};
+    }),
+    delete: vi.fn(async (key: string) => {
+      stored.delete(key);
+    }),
+    get: vi.fn(async (key: string) => {
+      const entry = stored.get(key);
+      if (!entry) return null;
+      return {
+        httpMetadata: entry.httpMetadata,
+        arrayBuffer: async () => {
+          if (entry.value instanceof File) return entry.value.arrayBuffer();
+          if (entry.value instanceof Uint8Array) {
+            const bytes = entry.value;
+            return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+          }
+          return new ArrayBuffer(0);
+        },
+      };
+    }),
+    head: vi.fn(async (key: string) => stored.has(key)
+      ? ({ key, httpMetadata: stored.get(key)?.httpMetadata })
+      : null),
+    list: vi.fn(),
+    createMultipartUpload: vi.fn(),
+    resumeMultipartUpload: vi.fn(),
+  } as unknown as R2Bucket;
 }
 
 function uniqueEmail(prefix = "chef") {
@@ -61,6 +102,8 @@ describe("spoonjoy MCP tools", () => {
       "create_recipe",
       "update_recipe",
       "delete_recipe",
+      "upload_recipe_image",
+      "upload_spoon_photo",
       "import_recipe_from_url",
       "fork_recipe",
       "add_recipe_to_shopping_list",
@@ -108,8 +151,101 @@ describe("spoonjoy MCP tools", () => {
     expect(byName.get("create_recipe")).toMatchObject({ readOnlyHint: false, destructiveHint: false });
     expect(byName.get("update_recipe")).toMatchObject({ readOnlyHint: false, destructiveHint: true });
     expect(byName.get("delete_recipe")).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true });
+    expect(byName.get("upload_recipe_image")).toMatchObject({ readOnlyHint: false, destructiveHint: false });
+    expect(byName.get("upload_spoon_photo")).toMatchObject({ readOnlyHint: false, destructiveHint: false });
     expect(byName.get("import_recipe_from_url")).toMatchObject({ readOnlyHint: false, openWorldHint: true });
     expect(byName.get("add_recipe_to_cookbook")).toMatchObject({ idempotentHint: true });
+  });
+
+  it("publishes upload schemas with required image fields and kitchen write scopes", () => {
+    const byName = new Map(listSpoonjoyMcpTools().map((tool) => [tool.name, tool]));
+
+    for (const toolName of ["upload_recipe_image", "upload_spoon_photo"]) {
+      const tool = byName.get(toolName);
+      expect(tool?.requiredScopes).toEqual(["kitchen:write"]);
+      expect(tool?.inputSchema).toMatchObject({
+        type: "object",
+        required: ["imageBase64", "mimeType", "filename"],
+        properties: {
+          imageBase64: { type: "string" },
+          mimeType: { type: "string", enum: ["image/jpeg", "image/png", "image/webp"] },
+          filename: { type: "string" },
+        },
+        additionalProperties: false,
+      });
+    }
+  });
+
+  it("uploads recipe and spoon photos to owner-scoped R2 namespaces", async () => {
+    const bucket = mockR2();
+    const recipePayload = parseJson(await callSpoonjoyMcpTool("upload_recipe_image", {
+      imageBase64: b64(VALID_PNG_BYTES),
+      mimeType: "image/png",
+      filename: "raw.png",
+    }, { ...context, bucket }));
+    const owner = await context.db.user.findUniqueOrThrow({ where: { email: context.defaultOwnerEmail! } });
+
+    expect(recipePayload).toMatchObject({
+      imageUrl: expect.stringMatching(new RegExp(`^/photos/recipes/${owner.id}/uploads/\\d+-[a-f0-9-]+\\.png$`)),
+      mimeType: "image/png",
+      sizeBytes: VALID_PNG_BYTES.length,
+    });
+
+    const spoonPayload = parseJson(await callSpoonjoyMcpTool("upload_spoon_photo", {
+      imageBase64: b64(VALID_PNG_BYTES),
+      mimeType: "image/png",
+      filename: "spoon.png",
+    }, { ...context, bucket }));
+
+    expect(spoonPayload).toMatchObject({
+      imageUrl: expect.stringMatching(new RegExp(`^/photos/spoons/${owner.id}/uploads/\\d+-[a-f0-9-]+\\.png$`)),
+      mimeType: "image/png",
+      sizeBytes: VALID_PNG_BYTES.length,
+    });
+    expect(bucket.put).toHaveBeenCalledTimes(2);
+    expect(bucket.put).toHaveBeenCalledWith(
+      expect.stringMatching(new RegExp(`^recipes/${owner.id}/uploads/\\d+-[a-f0-9-]+\\.png$`)),
+      expect.any(File),
+      expect.objectContaining({ httpMetadata: { contentType: "image/png" } }),
+    );
+  });
+
+  it("rejects invalid, GIF, and non-food upload payloads before storage", async () => {
+    await expect(callSpoonjoyMcpTool("upload_recipe_image", {
+      imageBase64: "not valid base64!",
+      mimeType: "image/png",
+      filename: "raw.png",
+    }, { ...context, bucket: mockR2() })).rejects.toThrow(/base64/i);
+
+    await expect(callSpoonjoyMcpTool("upload_recipe_image", {
+      imageBase64: b64(GIF_BYTES),
+      mimeType: "image/png",
+      filename: "raw.png",
+    }, { ...context, bucket: mockR2() })).rejects.toThrow("Photos must be JPG, PNG, or WebP.");
+
+    await expect(callSpoonjoyMcpTool("upload_spoon_photo", {
+      imageBase64: b64(GIF_BYTES),
+      mimeType: "image/gif",
+      filename: "raw.gif",
+    }, { ...context, bucket: mockR2() })).rejects.toThrow("Photos must be JPG, PNG, or WebP.");
+  });
+
+  it("rejects production-like missing image buckets unless local fallback is explicit", async () => {
+    await expect(callSpoonjoyMcpTool("upload_recipe_image", {
+      imageBase64: b64(VALID_PNG_BYTES),
+      mimeType: "image/png",
+      filename: "raw.png",
+    }, context)).rejects.toMatchObject({
+      status: 503,
+      message: "Image uploads require the PHOTOS bucket.",
+    });
+
+    const fallback = parseJson(await callSpoonjoyMcpTool("upload_recipe_image", {
+      imageBase64: b64(VALID_PNG_BYTES),
+      mimeType: "image/png",
+      filename: "raw.png",
+    }, { ...context, allowLocalImageFallback: true }));
+    expect(fallback.imageUrl).toBe(`data:image/png;base64,${b64(VALID_PNG_BYTES)}`);
   });
 
   it("reports health and writable state", async () => {
@@ -378,6 +514,158 @@ describe("spoonjoy MCP tools", () => {
       chefEmail: uniqueEmail("missing-chef"),
     }, context));
     expect(missingChefSearch.recipes).toEqual([]);
+  });
+
+  it("creates and updates recipe covers from uploaded image URLs with stylization scheduled", async () => {
+    const bucket = mockR2();
+    const captured: Promise<unknown>[] = [];
+    const runner = {
+      textToImage: vi.fn(),
+      imageToImage: vi.fn().mockResolvedValue({ bytes: VALID_PNG_BYTES, contentType: "image/png" }),
+    };
+    const upload = parseJson(await callSpoonjoyMcpTool("upload_recipe_image", {
+      imageBase64: b64(VALID_PNG_BYTES),
+      mimeType: "image/png",
+      filename: "cover.png",
+    }, { ...context, bucket }));
+
+    const created = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+      title: "Uploaded Cover Soup",
+      imageUrl: upload.imageUrl,
+    }, { ...context, bucket, waitUntil: (p) => captured.push(p), imageGenRunner: runner }));
+
+    expect(created.recipe.imageUrl).toBe(upload.imageUrl);
+    const firstCover = await context.db.recipeCover.findFirstOrThrow({
+      where: { recipeId: created.recipe.id },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(firstCover).toMatchObject({
+      imageUrl: upload.imageUrl,
+      sourceType: "chef-upload",
+    });
+    expect(captured).toHaveLength(1);
+    await captured[0];
+    expect(runner.imageToImage).toHaveBeenCalledTimes(1);
+
+    const secondUpload = parseJson(await callSpoonjoyMcpTool("upload_recipe_image", {
+      imageBase64: b64(VALID_PNG_BYTES),
+      mimeType: "image/png",
+      filename: "replacement.png",
+    }, { ...context, bucket }));
+    const updated = parseJson(await callSpoonjoyMcpTool("update_recipe", {
+      id: created.recipe.id,
+      imageUrl: secondUpload.imageUrl,
+    }, { ...context, bucket, waitUntil: (p) => captured.push(p), imageGenRunner: runner }));
+
+    expect(updated.recipe.imageUrl).toBe(secondUpload.imageUrl);
+    await expect(context.db.recipeCover.count({ where: { recipeId: created.recipe.id } })).resolves.toBe(2);
+    expect(captured).toHaveLength(2);
+    await captured[1];
+    expect(runner.imageToImage).toHaveBeenCalledTimes(2);
+  });
+
+  it("round-trips explicit local recipe image data URLs when no bucket is available", async () => {
+    const captured: Promise<unknown>[] = [];
+    const runner = {
+      textToImage: vi.fn(),
+      imageToImage: vi.fn().mockResolvedValue({ bytes: VALID_PNG_BYTES, contentType: "image/png" }),
+    };
+    const upload = parseJson(await callSpoonjoyMcpTool("upload_recipe_image", {
+      imageBase64: b64(VALID_PNG_BYTES),
+      mimeType: "image/png",
+      filename: "cover.png",
+    }, { ...context, allowLocalImageFallback: true }));
+
+    const created = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+      title: "Local Data Cover Soup",
+      imageUrl: upload.imageUrl,
+    }, {
+      ...context,
+      allowLocalImageFallback: true,
+      waitUntil: (p) => captured.push(p),
+      imageGenRunner: runner,
+    }));
+
+    expect(created.recipe.imageUrl).toBe(`data:image/png;base64,${b64(VALID_PNG_BYTES)}`);
+    let cover = await context.db.recipeCover.findFirstOrThrow({ where: { recipeId: created.recipe.id } });
+    expect(cover.imageUrl).toBe(created.recipe.imageUrl);
+    expect(captured).toHaveLength(1);
+    await captured[0];
+    cover = await context.db.recipeCover.findUniqueOrThrow({ where: { id: cover.id } });
+    expect(cover.stylizedImageUrl).toBe(`data:image/png;base64,${b64(VALID_PNG_BYTES)}`);
+
+    const updated = parseJson(await callSpoonjoyMcpTool("update_recipe", {
+      id: created.recipe.id,
+      imageUrl: upload.imageUrl,
+    }, {
+      ...context,
+      allowLocalImageFallback: true,
+      waitUntil: (p) => captured.push(p),
+      imageGenRunner: runner,
+    }));
+
+    expect(updated.recipe.imageUrl).toBe(upload.imageUrl);
+    await expect(context.db.recipeCover.count({ where: { recipeId: created.recipe.id } })).resolves.toBe(2);
+    expect(captured).toHaveLength(2);
+    await captured[1];
+    expect(runner.imageToImage).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects unsafe recipe cover image assignments", async () => {
+    const bucket = mockR2();
+    const upload = parseJson(await callSpoonjoyMcpTool("upload_recipe_image", {
+      imageBase64: b64(VALID_PNG_BYTES),
+      mimeType: "image/png",
+      filename: "cover.png",
+    }, { ...context, bucket }));
+    const owner = await context.db.user.findUniqueOrThrow({ where: { email: context.defaultOwnerEmail! } });
+    const invalidTitles = [
+      "External Cover Soup",
+      "Foreign Cover Soup",
+      "Missing Cover Soup",
+      "Generated Cover Soup",
+      "Bucket Data Cover Soup",
+    ];
+
+    await expect(callSpoonjoyMcpTool("create_recipe", {
+      title: invalidTitles[0],
+      imageUrl: "https://photos.example/cover.png",
+    }, { ...context, bucket })).rejects.toThrow("Recipe imageUrl must be a Spoonjoy uploaded image URL.");
+
+    await expect(callSpoonjoyMcpTool("create_recipe", {
+      title: invalidTitles[1],
+      imageUrl: upload.imageUrl.replace(`/recipes/${owner.id}/`, "/recipes/other-user/"),
+    }, { ...context, bucket })).rejects.toThrow("Recipe imageUrl must belong to the recipe owner.");
+
+    await expect(callSpoonjoyMcpTool("create_recipe", {
+      title: invalidTitles[2],
+      imageUrl: `/photos/recipes/${owner.id}/uploads/missing.png`,
+    }, { ...context, bucket })).rejects.toThrow("Recipe imageUrl does not exist in storage.");
+
+    await expect(callSpoonjoyMcpTool("create_recipe", {
+      title: invalidTitles[3],
+      imageUrl: "/photos/covers/generated.png",
+    }, { ...context, bucket })).rejects.toThrow("Recipe imageUrl must belong to the recipe owner.");
+
+    await expect(callSpoonjoyMcpTool("create_recipe", {
+      title: invalidTitles[4],
+      imageUrl: `data:image/png;base64,${b64(VALID_PNG_BYTES)}`,
+    }, { ...context, bucket })).rejects.toThrow("Data URL recipe images require missing bucket storage and explicit local image fallback.");
+    await expect(context.db.recipe.count({ where: { title: { in: invalidTitles } } })).resolves.toBe(0);
+
+    const stable = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+      title: "Stable Image Assignment Recipe",
+    }, { ...context, bucket }));
+    await expect(callSpoonjoyMcpTool("update_recipe", {
+      id: stable.recipe.id,
+      title: "Should Not Stick",
+      imageUrl: "https://photos.example/replacement.png",
+    }, { ...context, bucket })).rejects.toThrow("Recipe imageUrl must be a Spoonjoy uploaded image URL.");
+    await expect(context.db.recipe.findUniqueOrThrow({
+      where: { id: stable.recipe.id },
+      select: { title: true },
+    })).resolves.toEqual({ title: "Stable Image Assignment Recipe" });
+    await expect(context.db.recipeCover.count({ where: { recipeId: stable.recipe.id } })).resolves.toBe(0);
   });
 
   it("creates minimal recipes and finds null for missing recipes", async () => {
@@ -1243,10 +1531,23 @@ describe("spoonjoy MCP tools", () => {
   it("validates write tool inputs", async () => {
     await callSpoonjoyMcpTool("create_recipe", { title: "Duplicate MCP Recipe" }, context);
     await expect(callSpoonjoyMcpTool("create_recipe", { title: "Duplicate MCP Recipe" }, context)).rejects.toThrow(ACTIVE_RECIPE_TITLE_CONFLICT_ERROR);
+    await expect(callSpoonjoyMcpTool("create_recipe", {
+      title: "Unknown Image Payload Recipe",
+      imageBase64: b64(VALID_PNG_BYTES),
+    }, context)).rejects.toThrow("create_recipe.imageBase64 is not allowed");
+    await expect(context.db.recipe.count({ where: { title: "Unknown Image Payload Recipe" } })).resolves.toBe(0);
     await expect(callSpoonjoyMcpTool("create_recipe", { title: "No owner" }, { db: context.db })).rejects.toThrow("ownerEmail is required");
     await expect(callSpoonjoyMcpTool("create_recipe", { title: "Bad steps", steps: {} }, context)).rejects.toThrow("steps must be an array");
     await expect(callSpoonjoyMcpTool("create_recipe", { title: "Bad step", steps: [null] }, context)).rejects.toThrow("steps[0] must be an object");
     await expect(callSpoonjoyMcpTool("create_recipe", { title: "Bad ingredient", steps: [{ description: "x", ingredients: [null] }] }, context)).rejects.toThrow("steps.ingredients[0] must be an object");
+    await expect(callSpoonjoyMcpTool("create_recipe", {
+      title: "Bad Nested Shape",
+      steps: [{ description: "x", unexpected: true }],
+    }, context)).rejects.toThrow("create_recipe.steps[0].unexpected is not allowed");
+    await expect(callSpoonjoyMcpTool("create_recipe", {
+      title: "Bad Nested Owner Email",
+      steps: [{ description: "x", ownerEmail: "nested@example.com" }],
+    }, context)).rejects.toThrow("create_recipe.steps[0].ownerEmail is not allowed");
     await expect(callSpoonjoyMcpTool("create_recipe", { title: "Bad quantity", steps: [{ description: "x", ingredients: [{ name: "x", quantity: 0, unit: "cup" }] }] }, context)).rejects.toThrow("quantity must be a positive number");
     await expect(callSpoonjoyMcpTool("create_recipe", { title: "Bad unit", steps: [{ description: "x", ingredients: [{ name: "x", quantity: 1, unit: "" }] }] }, context)).rejects.toThrow("unit is required");
     await expect(callSpoonjoyMcpTool("update_recipe", { id: "recipe", title: "No owner" }, { db: context.db })).rejects.toThrow("ownerEmail is required");
