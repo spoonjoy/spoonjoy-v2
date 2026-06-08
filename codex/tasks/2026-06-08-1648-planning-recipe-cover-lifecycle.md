@@ -76,7 +76,7 @@ Make Spoonjoy recipe imagery explicit, provenance-aware, and controllable across
 - `app/lib/spoonjoy-api.server.ts` currently supports `upload_recipe_image`, `upload_spoon_photo`, `create_spoon`, `update_spoon`, `list_spoons_for_recipe`, and `list_spoons_by_chef`, but has no explicit cover listing or active-cover mutation tools.
 - `app/components/recipe/RecipeHeader.tsx` currently renders "No image available" when no cover image URL is present.
 - `app/components/recipe/SpoonDialog.tsx` currently communicates "Photo required for your own cook" and has no cover opt-in control.
-- `app/lib/search.server.ts`, `app/routes/api.v1.recipes.$id.ts`, recipe index/profile/cookbook routes, and Open Graph helpers should be checked for direct cover ordering assumptions during implementation.
+- `app/lib/search.server.ts`, `app/lib/api-v1.server.ts`, recipe index/profile/cookbook routes, and Open Graph helpers should be checked for direct cover ordering assumptions during implementation.
 - `app/lib/recipe-fork.server.ts` and `app/lib/recipe-import.server.ts` create or copy cover rows and must preserve provenance and active-cover semantics.
 
 ## Notes
