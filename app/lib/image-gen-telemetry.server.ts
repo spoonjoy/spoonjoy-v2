@@ -61,14 +61,17 @@ export async function captureImageGenerationSkipped(
 }
 
 export async function captureImageGenerationException(
-  input: ImageGenerationTelemetryBase & { error: unknown },
+  input: ImageGenerationTelemetryBase & { error: unknown; errorDetails?: string },
 ): Promise<void> {
   await captureException(
     resolveImageGenerationPostHogConfig(input),
     {
       error: input.error,
       distinctId: input.userId,
-      extras: imageGenerationProperties(input),
+      extras: {
+        ...imageGenerationProperties(input),
+        ...(input.errorDetails ? { errorDetails: input.errorDetails } : {}),
+      },
     },
     input.fetchImpl,
   );

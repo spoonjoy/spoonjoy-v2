@@ -36,7 +36,7 @@ export interface ImageGenDeps {
 
 export interface StylizationResult {
   url: string;
-  usedModel: "gpt-image-1" | "dall-e-3";
+  usedModel: ImageEditModel | "dall-e-3";
 }
 
 export const IMAGE_FALLBACK_ERROR_CODES = [
@@ -44,6 +44,14 @@ export const IMAGE_FALLBACK_ERROR_CODES = [
   "model_unsupported",
   "404",
 ] as const;
+
+const IMAGE_EDIT_MODELS = [
+  "gpt-image-1.5",
+  "gpt-image-1",
+  "gpt-image-1-mini",
+] as const;
+
+type ImageEditModel = (typeof IMAGE_EDIT_MODELS)[number];
 
 export class ImageGenError extends Error {
   constructor(message: string, options?: { cause?: unknown }) {
@@ -53,6 +61,39 @@ export class ImageGenError extends Error {
       (this as { cause?: unknown }).cause = options.cause;
     }
   }
+}
+
+function errorCode(cause: unknown): string | null {
+  if (typeof cause !== "object" || cause === null) return null;
+  if ("code" in cause && typeof cause.code === "string") return cause.code;
+  if (
+    "error" in cause &&
+    typeof cause.error === "object" &&
+    cause.error !== null &&
+    "code" in cause.error &&
+    typeof cause.error.code === "string"
+  ) {
+    return cause.error.code;
+  }
+  return null;
+}
+
+function errorStatus(cause: unknown): number | null {
+  return typeof cause === "object" &&
+    cause !== null &&
+    "status" in cause &&
+    typeof cause.status === "number"
+    ? cause.status
+    : null;
+}
+
+function isImageEditModelFallbackError(cause: unknown): boolean {
+  const code = errorCode(cause);
+  if (code !== null && IMAGE_FALLBACK_ERROR_CODES.includes(code as (typeof IMAGE_FALLBACK_ERROR_CODES)[number])) {
+    return true;
+  }
+  const status = errorStatus(cause);
+  return status !== null && IMAGE_FALLBACK_ERROR_CODES.includes(String(status) as (typeof IMAGE_FALLBACK_ERROR_CODES)[number]);
 }
 
 export function composePlaceholderPrompt(
@@ -306,11 +347,20 @@ export async function stylizeSpoonPhoto(
   const prompt = composeStylizationPrompt();
   try {
     const sourceFile = await resolveEditSourceFile(rawPhotoUrl, deps);
-    const primary = await deps.runner.imageToImage(sourceFile, prompt, {
-      model: "gpt-image-1",
-    });
-    const url = await persistGeneratedImage(primary, deps);
-    return { url, usedModel: "gpt-image-1" };
+    const failures: unknown[] = [];
+    for (const model of IMAGE_EDIT_MODELS) {
+      try {
+        const result = await deps.runner.imageToImage(sourceFile, prompt, { model });
+        const url = await persistGeneratedImage(result, deps);
+        return { url, usedModel: model };
+      } catch (cause) {
+        failures.push(cause);
+        if (!isImageEditModelFallbackError(cause)) {
+          throw cause;
+        }
+      }
+    }
+    throw new AggregateError(failures, "All GPT Image edit models failed");
   } catch (cause) {
     throw new ImageGenError("Stylization failed", { cause });
   }

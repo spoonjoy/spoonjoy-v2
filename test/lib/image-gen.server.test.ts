@@ -301,7 +301,7 @@ describe("stylizeSpoonPhoto", () => {
     expect(runner.imageToImage).toHaveBeenCalledWith(
       expect.any(File),
       composeStylizationPrompt(),
-      { model: "gpt-image-1" },
+      { model: "gpt-image-1.5" },
     );
     const sourceFile = (runner.imageToImage as ReturnType<typeof vi.fn>).mock.calls[0][0] as File;
     expect(sourceFile.type).toBe("image/png");
@@ -407,9 +407,10 @@ describe("stylizeSpoonPhoto", () => {
       }),
     ).rejects.toBeInstanceOf(ImageGenError);
     expect(runner.textToImage).not.toHaveBeenCalled();
+    expect(runner.imageToImage).toHaveBeenCalledTimes(3);
   });
 
-  it("returns usedModel=gpt-image-1 when the primary call succeeds", async () => {
+  it("returns usedModel=gpt-image-1.5 when the primary call succeeds", async () => {
     const runner = mockRunner({
       imageToImage: vi.fn(async () => ({ bytes: GENERATED_BYTES, contentType: "image/png" })),
     });
@@ -420,7 +421,68 @@ describe("stylizeSpoonPhoto", () => {
       now: () => 8,
       randomId: () => "primary-id",
     });
+    expect(result.usedModel).toBe("gpt-image-1.5");
+    expect(runner.imageToImage).toHaveBeenCalledWith(
+      expect.any(File),
+      composeStylizationPrompt(),
+      { model: "gpt-image-1.5" },
+    );
+  });
+
+  it("falls back to the next GPT Image edit model for model access failures", async () => {
+    const runner = mockRunner({
+      imageToImage: vi.fn()
+        .mockRejectedValueOnce(Object.assign(new Error("missing"), { code: "model_not_found" }))
+        .mockResolvedValueOnce({ bytes: GENERATED_BYTES, contentType: "image/png" }),
+    });
+    const result = await stylizeSpoonPhoto(dataUrl("image/png", VALID_PNG_BYTES), "X", {
+      env: {},
+      runner,
+      bucket: mockR2(),
+      now: () => 9,
+      randomId: () => "fallback-id",
+    });
     expect(result.usedModel).toBe("gpt-image-1");
+    expect((runner.imageToImage as ReturnType<typeof vi.fn>).mock.calls.map(([, , opts]) => opts.model))
+      .toEqual(["gpt-image-1.5", "gpt-image-1"]);
+  });
+
+  it("falls back when OpenAI reports a status-only 404 model error", async () => {
+    const runner = mockRunner({
+      imageToImage: vi.fn()
+        .mockRejectedValueOnce(Object.assign(new Error("not found"), { status: 404 }))
+        .mockResolvedValueOnce({ bytes: GENERATED_BYTES, contentType: "image/png" }),
+    });
+    const result = await stylizeSpoonPhoto(dataUrl("image/png", VALID_PNG_BYTES), "X", {
+      env: {},
+      runner,
+      bucket: mockR2(),
+      now: () => 10,
+      randomId: () => "status-fallback-id",
+    });
+    expect(result.usedModel).toBe("gpt-image-1");
+    expect((runner.imageToImage as ReturnType<typeof vi.fn>).mock.calls.map(([, , opts]) => opts.model))
+      .toEqual(["gpt-image-1.5", "gpt-image-1"]);
+  });
+
+  it("falls back when OpenAI nests a model error code in the response payload", async () => {
+    const runner = mockRunner({
+      imageToImage: vi.fn()
+        .mockRejectedValueOnce(Object.assign(new Error("payload"), {
+          error: { code: "model_unsupported" },
+        }))
+        .mockResolvedValueOnce({ bytes: GENERATED_BYTES, contentType: "image/png" }),
+    });
+    const result = await stylizeSpoonPhoto(dataUrl("image/png", VALID_PNG_BYTES), "X", {
+      env: {},
+      runner,
+      bucket: mockR2(),
+      now: () => 11,
+      randomId: () => "payload-fallback-id",
+    });
+    expect(result.usedModel).toBe("gpt-image-1");
+    expect((runner.imageToImage as ReturnType<typeof vi.fn>).mock.calls.map(([, , opts]) => opts.model))
+      .toEqual(["gpt-image-1.5", "gpt-image-1"]);
   });
 
   it("rethrows as ImageGenError on a non-fallback error", async () => {
