@@ -654,7 +654,7 @@ describe("Recipes New Route", () => {
       );
     });
 
-    it("schedules chef-upload cover stylization while keeping the raw upload visible", async () => {
+    it("attempts chef-upload cover stylization inline while keeping the raw upload visible", async () => {
       const captured: Promise<unknown>[] = [];
       const waitUntil = vi.fn((p: Promise<unknown>) => {
         captured.push(p);
@@ -676,7 +676,7 @@ describe("Recipes New Route", () => {
 
       expect(response).toBeInstanceOf(Response);
       expect(response.status).toBe(302);
-      expect(waitUntil).toHaveBeenCalledTimes(1);
+      expect(waitUntil).not.toHaveBeenCalled();
 
       const recipe = await db.recipe.findFirstOrThrow({
         where: { chefId: testUserId, title: "Chef Upload WaitUntil Recipe" },
@@ -690,8 +690,7 @@ describe("Recipes New Route", () => {
         new RegExp(`^/photos/recipes/${testUserId}/${recipe.id}/\\d+-[a-f0-9-]+\\.jpg$`),
       );
       expect(cover.stylizedImageUrl).toBeNull();
-
-      await Promise.all(captured);
+      expect(captured).toHaveLength(0);
     });
 
     it("should return image error when recipe image upload fails", async () => {

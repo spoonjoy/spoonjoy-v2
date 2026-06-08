@@ -315,7 +315,7 @@ async function scheduleCoverStylization(
     sourceType: input.sourceType,
     logger: context.logger,
   });
-  await runOrSchedule(context, task);
+  await task;
 }
 
 function formatSpoon(spoon: {
@@ -2026,7 +2026,6 @@ const createSpoonTool: SpoonjoyApiOperation = {
         sourceType: "spoon",
         sourceSpoonId: result.spoon.id,
       });
-      coverPayload = formatCover(cover);
       if (photoAssignment.stylizable) {
         await scheduleCoverStylization(context, {
           userId: principal.id,
@@ -2037,6 +2036,9 @@ const createSpoonTool: SpoonjoyApiOperation = {
           sourceType: "spoon",
         });
       }
+      coverPayload = formatCover(
+        await context.db.recipeCover.findUniqueOrThrow({ where: { id: cover.id } }),
+      );
     }
 
     // Fan-out fellow_chef_origin_cook to every chef the spooner has previously
@@ -2148,7 +2150,6 @@ const updateSpoonTool: SpoonjoyApiOperation = {
           sourceType: "spoon",
           sourceSpoonId: spoon.id,
         });
-        coverPayload = formatCover(cover);
         if (photoAssignment.stylizable) {
           await scheduleCoverStylization(context, {
             userId: principal.id,
@@ -2159,6 +2160,9 @@ const updateSpoonTool: SpoonjoyApiOperation = {
             sourceType: "spoon",
           });
         }
+        coverPayload = formatCover(
+          await context.db.recipeCover.findUniqueOrThrow({ where: { id: cover.id } }),
+        );
       }
     }
     return json({ spoon: formatSpoon(spoon), cover: coverPayload });

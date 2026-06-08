@@ -1177,7 +1177,7 @@ describe("Recipes $id Edit Route", () => {
       expect(mockR2Bucket.delete).not.toHaveBeenCalled();
     });
 
-    it("schedules replacement chef-upload cover stylization while keeping the raw upload visible", async () => {
+    it("attempts replacement chef-upload cover stylization inline while keeping the raw upload visible", async () => {
       const captured: Promise<unknown>[] = [];
       const waitUntil = vi.fn((p: Promise<unknown>) => {
         captured.push(p);
@@ -1200,7 +1200,7 @@ describe("Recipes $id Edit Route", () => {
 
       expect(response).toBeInstanceOf(Response);
       expect(response.status).toBe(302);
-      expect(waitUntil).toHaveBeenCalledTimes(1);
+      expect(waitUntil).not.toHaveBeenCalled();
 
       const latest = await db.recipeCover.findFirstOrThrow({
         where: { recipeId },
@@ -1212,8 +1212,7 @@ describe("Recipes $id Edit Route", () => {
       );
       expect(latest.stylizedImageUrl).toBeNull();
       expect(mockR2Bucket.delete).not.toHaveBeenCalled();
-
-      await Promise.all(captured);
+      expect(captured).toHaveLength(0);
     });
 
     it("does not try old R2 cleanup after replacement while the old cover row still references it", async () => {

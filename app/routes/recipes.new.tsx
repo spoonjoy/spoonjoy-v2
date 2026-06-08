@@ -171,8 +171,7 @@ export async function action({ request, context }: Route.ActionArgs) {
         imageUrl: uploadedImageUrl,
         sourceType: "chef-upload",
       });
-      const waitUntil = context.cloudflare?.ctx?.waitUntil;
-      const task = scheduleSpoonCoverStylization({
+      await scheduleSpoonCoverStylization({
         db: database,
         userId,
         recipeId: recipe.id,
@@ -183,11 +182,6 @@ export async function action({ request, context }: Route.ActionArgs) {
         bucket: photosBucket,
         sourceType: "chef-upload",
       });
-      if (waitUntil) {
-        waitUntil.call(context.cloudflare!.ctx!, task);
-      } else {
-        await task;
-      }
     } else {
       const placeholderCover = await createCover(database, {
         recipeId: recipe.id,

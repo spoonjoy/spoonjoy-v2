@@ -16,6 +16,7 @@ import {
 const GENERATED_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
 const VALID_PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
 const VALID_JPEG_BYTES = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]);
+const VALID_WEBP_BYTES = new Uint8Array([0x52, 0x49, 0x46, 0x46, 1, 2, 3, 4, 0x57, 0x45, 0x42, 0x50, 5]);
 const GIF_BYTES = new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x39, 0x61]);
 
 function b64(bytes: Uint8Array): string {
@@ -463,15 +464,41 @@ describe("stylizeSpoonPhoto", () => {
     expect(runner.imageToImage).not.toHaveBeenCalled();
   });
 
-  it("rejects stored /photos sources when content type metadata is missing", async () => {
+  it.each([
+    ["image/png", VALID_PNG_BYTES, "raw.png"],
+    ["image/jpeg", VALID_JPEG_BYTES, "raw.jpg"],
+    ["image/webp", VALID_WEBP_BYTES, "raw.webp"],
+  ] as const)("infers stored /photos source content type %s when metadata is missing", async (
+    expectedType,
+    bytes,
+    filename,
+  ) => {
     const runner = mockRunner();
     const bucket = mockR2();
     bucket.get = vi.fn(async () => ({
-      arrayBuffer: async () => VALID_PNG_BYTES.buffer,
+      arrayBuffer: async () => bytes.buffer,
+      httpMetadata: {},
+    })) as unknown as R2Bucket["get"];
+    await stylizeSpoonPhoto(`/photos/recipes/u/r/${filename}`, "X", {
+      env: {},
+      runner,
+      bucket,
+      now: () => 42,
+      randomId: () => "metadata-less",
+    });
+    const sourceFile = (runner.imageToImage as ReturnType<typeof vi.fn>).mock.calls[0][0] as File;
+    expect(sourceFile.type).toBe(expectedType);
+  });
+
+  it("rejects stored /photos sources with missing metadata and unknown bytes", async () => {
+    const runner = mockRunner();
+    const bucket = mockR2();
+    bucket.get = vi.fn(async () => ({
+      arrayBuffer: async () => GIF_BYTES.buffer,
       httpMetadata: {},
     })) as unknown as R2Bucket["get"];
     await expect(
-      stylizeSpoonPhoto("/photos/recipes/u/r/raw.png", "X", { env: {}, runner, bucket }),
+      stylizeSpoonPhoto("/photos/recipes/u/r/raw.gif", "X", { env: {}, runner, bucket }),
     ).rejects.toBeInstanceOf(ImageGenError);
     expect(runner.imageToImage).not.toHaveBeenCalled();
   });

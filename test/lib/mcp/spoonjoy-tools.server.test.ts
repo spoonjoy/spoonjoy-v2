@@ -534,7 +534,7 @@ describe("spoonjoy MCP tools", () => {
       imageUrl: upload.imageUrl,
     }, { ...context, bucket, waitUntil: (p) => captured.push(p), imageGenRunner: runner }));
 
-    expect(created.recipe.imageUrl).toBe(upload.imageUrl);
+    expect(created.recipe.imageUrl).toMatch(/^\/photos\/covers\/\d+-[a-f0-9-]+\.png$/);
     const firstCover = await context.db.recipeCover.findFirstOrThrow({
       where: { recipeId: created.recipe.id },
       orderBy: { createdAt: "desc" },
@@ -543,8 +543,7 @@ describe("spoonjoy MCP tools", () => {
       imageUrl: upload.imageUrl,
       sourceType: "chef-upload",
     });
-    expect(captured).toHaveLength(1);
-    await captured[0];
+    expect(captured).toHaveLength(0);
     expect(runner.imageToImage).toHaveBeenCalledTimes(1);
 
     const secondUpload = parseJson(await callSpoonjoyMcpTool("upload_recipe_image", {
@@ -557,10 +556,9 @@ describe("spoonjoy MCP tools", () => {
       imageUrl: secondUpload.imageUrl,
     }, { ...context, bucket, waitUntil: (p) => captured.push(p), imageGenRunner: runner }));
 
-    expect(updated.recipe.imageUrl).toBe(secondUpload.imageUrl);
+    expect(updated.recipe.imageUrl).toMatch(/^\/photos\/covers\/\d+-[a-f0-9-]+\.png$/);
     await expect(context.db.recipeCover.count({ where: { recipeId: created.recipe.id } })).resolves.toBe(2);
-    expect(captured).toHaveLength(2);
-    await captured[1];
+    expect(captured).toHaveLength(0);
     expect(runner.imageToImage).toHaveBeenCalledTimes(2);
   });
 
@@ -589,8 +587,7 @@ describe("spoonjoy MCP tools", () => {
     expect(created.recipe.imageUrl).toBe(`data:image/png;base64,${b64(VALID_PNG_BYTES)}`);
     let cover = await context.db.recipeCover.findFirstOrThrow({ where: { recipeId: created.recipe.id } });
     expect(cover.imageUrl).toBe(created.recipe.imageUrl);
-    expect(captured).toHaveLength(1);
-    await captured[0];
+    expect(captured).toHaveLength(0);
     cover = await context.db.recipeCover.findUniqueOrThrow({ where: { id: cover.id } });
     expect(cover.stylizedImageUrl).toBe(`data:image/png;base64,${b64(VALID_PNG_BYTES)}`);
 
@@ -606,8 +603,7 @@ describe("spoonjoy MCP tools", () => {
 
     expect(updated.recipe.imageUrl).toBe(upload.imageUrl);
     await expect(context.db.recipeCover.count({ where: { recipeId: created.recipe.id } })).resolves.toBe(2);
-    expect(captured).toHaveLength(2);
-    await captured[1];
+    expect(captured).toHaveLength(0);
     expect(runner.imageToImage).toHaveBeenCalledTimes(2);
   });
 

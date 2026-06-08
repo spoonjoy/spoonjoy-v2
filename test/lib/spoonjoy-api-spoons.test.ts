@@ -221,25 +221,28 @@ describe("spoonjoy-api spoon operations", () => {
       const created = await callSpoonjoyApiOperation("create_spoon", {
         recipeId: recipe.id,
         photoUrl: uploaded.imageUrl,
-      }, context) as { spoon: { id: string; photoUrl: string }; cover: { id: string; imageUrl: string } };
+      }, context) as {
+        spoon: { id: string; photoUrl: string };
+        cover: { id: string; imageUrl: string; stylizedImageUrl: string | null };
+      };
 
       expect(created.spoon.photoUrl).toBe(`data:image/png;base64,${Buffer.from(VALID_PNG_BYTES).toString("base64")}`);
       expect(created.cover.imageUrl).toBe(created.spoon.photoUrl);
-      expect(captured).toHaveLength(1);
-      await captured[0];
+      expect(captured).toHaveLength(0);
       let cover = await db.recipeCover.findUniqueOrThrow({ where: { id: created.cover.id } });
       expect(cover.stylizedImageUrl).toBe(`data:image/png;base64,${Buffer.from(GENERATED_BYTES).toString("base64")}`);
+      expect(created.cover.stylizedImageUrl).toBe(cover.stylizedImageUrl);
 
       const updated = await callSpoonjoyApiOperation("update_spoon", {
         spoonId: created.spoon.id,
         photoUrl: uploaded.imageUrl,
-      }, context) as { cover: { id: string; imageUrl: string } };
+      }, context) as { cover: { id: string; imageUrl: string; stylizedImageUrl: string | null } };
 
       expect(updated.cover.imageUrl).toBe(uploaded.imageUrl);
-      expect(captured).toHaveLength(2);
-      await captured[1];
+      expect(captured).toHaveLength(0);
       cover = await db.recipeCover.findUniqueOrThrow({ where: { id: updated.cover.id } });
       expect(cover.stylizedImageUrl).toBe(`data:image/png;base64,${Buffer.from(GENERATED_BYTES).toString("base64")}`);
+      expect(updated.cover.stylizedImageUrl).toBe(cover.stylizedImageUrl);
       expect(runner.imageToImage).toHaveBeenCalledTimes(2);
     });
 
@@ -418,7 +421,7 @@ describe("spoonjoy-api spoon operations", () => {
       expect(result.cover).toBeNull();
     });
 
-    it("schedules stylization via context.waitUntil; await fills stylizedImageUrl", async () => {
+    it("runs stylization inline even when context.waitUntil is available", async () => {
       const { principal: chef } = await makeUser(db);
       const recipe = await makeRecipe(db, chef.id);
       const bucket = mockR2();
@@ -448,16 +451,16 @@ describe("spoonjoy-api spoon operations", () => {
         "create_spoon",
         { recipeId: recipe.id, photoUrl },
         context,
-      )) as { cover: { id: string } };
+      )) as { cover: { id: string; stylizedImageUrl: string | null } };
 
-      expect(waitUntil).toHaveBeenCalledTimes(1);
-      expect(captured).toHaveLength(1);
-      await captured[0];
+      expect(waitUntil).not.toHaveBeenCalled();
+      expect(captured).toHaveLength(0);
 
       const updatedCover = await db.recipeCover.findUniqueOrThrow({
         where: { id: result.cover.id },
       });
       expect(updatedCover.stylizedImageUrl).toMatch(/^\/photos\/covers\/\d+-[a-f0-9-]+\.png$/);
+      expect(result.cover.stylizedImageUrl).toBe(updatedCover.stylizedImageUrl);
       expect(bucket.put).toHaveBeenCalledWith(
         updatedCover.stylizedImageUrl!.replace("/photos/", ""),
         GENERATED_BYTES,
@@ -493,12 +496,13 @@ describe("spoonjoy-api spoon operations", () => {
         "create_spoon",
         { recipeId: recipe.id, photoUrl },
         context,
-      )) as { cover: { id: string } };
+      )) as { cover: { id: string; stylizedImageUrl: string | null } };
 
       const updatedCover = await db.recipeCover.findUniqueOrThrow({
         where: { id: result.cover.id },
       });
       expect(updatedCover.stylizedImageUrl).toMatch(/^\/photos\/covers\/\d+-[a-f0-9-]+\.png$/);
+      expect(result.cover.stylizedImageUrl).toBe(updatedCover.stylizedImageUrl);
       expect(bucket.put).toHaveBeenCalledWith(
         updatedCover.stylizedImageUrl!.replace("/photos/", ""),
         GENERATED_BYTES,
@@ -606,6 +610,31 @@ describe("spoonjoy-api spoon operations", () => {
         context,
       );
       await Promise.all(captured);
+      const events = await db.notificationEvent.findMany({
+        where: { recipientId: chef.id, kind: "spoon_on_my_recipe" },
+      });
+      expect(events).toHaveLength(1);
+    });
+
+    it("awaits the owner NotificationEvent inline when waitUntil is unavailable", async () => {
+      const { principal: chef } = await makeUser(db);
+      const { principal: cook } = await makeUser(db);
+      const recipe = await makeRecipe(db, chef.id);
+
+      await callSpoonjoyApiOperation(
+        "create_spoon",
+        { recipeId: recipe.id, note: "yum" },
+        {
+          db,
+          principal: cook,
+          env: {
+            VAPID_PUBLIC_KEY: "pub",
+            VAPID_PRIVATE_KEY: "priv",
+            VAPID_SUBJECT: "mailto:test@example.com",
+          },
+        },
+      );
+
       const events = await db.notificationEvent.findMany({
         where: { recipientId: chef.id, kind: "spoon_on_my_recipe" },
       });
@@ -877,7 +906,10 @@ describe("spoonjoy-api spoon operations", () => {
           imageGenRunner: runner,
           waitUntil: (p) => captured.push(p),
         },
-      )) as { spoon: { photoUrl: string }; cover: { id: string; imageUrl: string } };
+      )) as {
+        spoon: { photoUrl: string };
+        cover: { id: string; imageUrl: string; stylizedImageUrl: string | null };
+      };
 
       expect(result.spoon.photoUrl).toBe(uploaded.imageUrl);
       expect(result.cover.imageUrl).toBe(uploaded.imageUrl);
@@ -887,10 +919,10 @@ describe("spoonjoy-api spoon operations", () => {
         sourceType: "spoon",
         sourceSpoonId: existing.id,
         imageUrl: uploaded.imageUrl,
-        stylizedImageUrl: null,
       });
-      expect(captured).toHaveLength(1);
-      await captured[0];
+      expect(activeCover.stylizedImageUrl).toMatch(/^\/photos\/covers\/\d+-[a-f0-9-]+\.png$/);
+      expect(result.cover.stylizedImageUrl).toBe(activeCover.stylizedImageUrl);
+      expect(captured).toHaveLength(0);
       expect(runner.imageToImage).toHaveBeenCalledTimes(1);
     });
 

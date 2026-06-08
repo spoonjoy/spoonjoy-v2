@@ -412,7 +412,7 @@ describe("Recipes $id route — spoons + provenance", () => {
     expect(stored[0].note).toBe("delicious");
   });
 
-  it("action with intent=createSpoon as the origin cook writes a RecipeCover row and schedules stylization", async () => {
+  it("action with intent=createSpoon as the origin cook writes a RecipeCover row and attempts stylization inline", async () => {
     const fd = new UndiciFormData();
     fd.append("intent", "createSpoon");
     fd.append("photo", validImageFile("spoon.png"));
@@ -438,7 +438,8 @@ describe("Recipes $id route — spoons + provenance", () => {
     expect(covers).toHaveLength(1);
     expect(covers[0].sourceType).toBe("spoon");
     expect(covers[0].sourceSpoonId).not.toBeNull();
-    expect(waitUntil).toHaveBeenCalledTimes(1);
+    expect(waitUntil).not.toHaveBeenCalled();
+    expect(captured).toHaveLength(0);
   });
 
   it("action with intent=createSpoon rejects a GIF spoon photo with 400", async () => {

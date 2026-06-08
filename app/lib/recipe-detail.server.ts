@@ -296,11 +296,7 @@ async function handleCreateSpoon(
       env,
       bucket,
     });
-    if (waitUntil) {
-      waitUntil(task);
-    } else {
-      await task;
-    }
+    await task;
   }
 
   // Fan-out fellow_chef_origin_cook to every chef the spooner has previously
