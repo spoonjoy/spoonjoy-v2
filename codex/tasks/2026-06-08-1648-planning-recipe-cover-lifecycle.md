@@ -84,4 +84,4 @@ Implementation should prefer a single `RecipeCover` history model with explicit 
 
 ## Progress Log
 - 2026-06-08 16:48 Created
-- pending commit Tightened scope after tinfoil pass
+- 2026-06-08 16:50 Tightened scope after tinfoil pass
