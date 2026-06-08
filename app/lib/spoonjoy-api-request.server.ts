@@ -18,6 +18,7 @@ import {
   type ApiPrincipal,
 } from "~/lib/api-auth.server";
 import type { SpoonjoyApiContext } from "~/lib/spoonjoy-api.server";
+import type { ImageGenEnv } from "~/lib/image-gen.server";
 
 /**
  * Operations callable without authentication. These are the discovery /
@@ -57,8 +58,7 @@ export async function resolveApiPrincipal(
   }
 }
 
-interface CloudflareEnvLike {
-  OPENAI_API_KEY?: string;
+interface CloudflareEnvLike extends ImageGenEnv {
   SPOONJOY_BASE_URL?: string;
   VAPID_PUBLIC_KEY?: string;
   VAPID_PRIVATE_KEY?: string;
@@ -88,6 +88,12 @@ export function buildSpoonjoyApiContext(params: {
     env: cloudflareEnv
       ? {
           OPENAI_API_KEY: cloudflareEnv.OPENAI_API_KEY,
+          GOOGLE_API_KEY: cloudflareEnv.GOOGLE_API_KEY,
+          GEMINI_API_KEY: cloudflareEnv.GEMINI_API_KEY,
+          GEMINI_IMAGE_MODEL: cloudflareEnv.GEMINI_IMAGE_MODEL,
+          GEMINI_IMAGE_TIMEOUT_MS: cloudflareEnv.GEMINI_IMAGE_TIMEOUT_MS,
+          IMAGE_PROVIDER_PRIMARY: cloudflareEnv.IMAGE_PROVIDER_PRIMARY,
+          IMAGE_PROVIDER_FALLBACKS: cloudflareEnv.IMAGE_PROVIDER_FALLBACKS,
           SPOONJOY_BASE_URL: cloudflareEnv.SPOONJOY_BASE_URL,
           VAPID_PUBLIC_KEY: cloudflareEnv.VAPID_PUBLIC_KEY,
           VAPID_PRIVATE_KEY: cloudflareEnv.VAPID_PRIVATE_KEY,

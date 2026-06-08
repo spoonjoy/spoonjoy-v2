@@ -103,6 +103,7 @@ npm run test:coverage # With coverage
 ### Manual/Smoke Data Hygiene
 - Never leave Codex-created smoke, manual QA, or browser-test recipes/users/cookbooks in local, staging, or production Spoonjoy data.
 - Prefer automated tests with `cleanupDatabase()` over manual app flows. When a live/manual flow is necessary, use clearly disposable names such as `codex-smoke-*` or `e2e *` and clean them in the same run before reporting completion.
+- Run `pnpm cleanup:qa` before and after manual/e2e cleanup work to inspect local disposable residue; use `pnpm cleanup:qa -- --apply` only for local D1 cleanup. Never use this cleanup path against remote D1.
 - `scripts/smoke-live.mjs` cleans its disposable user by default; pass `--keep-smoke-data` only when the human explicitly asks to preserve debugging data, and remove that data before the task is done.
 
 ## Git Workflow

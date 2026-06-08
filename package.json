@@ -18,6 +18,7 @@
     "deploy:auto": "SPOONJOY_PREFLIGHT_SKIP_REMOTE=1 pnpm run deploy:preflight && pnpm run build && pnpm exec wrangler d1 migrations apply DB --remote && pnpm run deploy:preflight && pnpm exec wrangler deploy",
     "deploy:preflight": "tsx scripts/deployment-preflight.ts",
     "production:readiness": "tsx scripts/production-readiness.ts",
+    "cleanup:qa": "node scripts/cleanup-local-qa-data.mjs",
     "typecheck": "pnpm run api:playground:generate && react-router typegen && tsc",
     "test": "pnpm run api:playground:generate && vitest",
     "test:ui": "vitest --ui",

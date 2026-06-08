@@ -35,6 +35,7 @@ For the current recipe-image work, the durable task anchor is:
 - Use sub-agents for unbiased review gates, then summarize their findings into the durable file.
 - If context exhaustion happens twice in the same task, stop trying to continue from the same chat and resume from the durable file in a new thread.
 - For Spoonjoy data cleanup, record created test data and cleanup status in the durable file before declaring done.
+- For local Spoonjoy QA residue, run `pnpm cleanup:qa` before cleanup and `pnpm cleanup:qa -- --apply` only against local D1; record the dry-run/apply output or the remaining counts.
 
 ## Recommended durable-file locations
 

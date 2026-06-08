@@ -33,6 +33,7 @@ describe("UI audit tooling", () => {
     expect(existsSync("scripts/inventory-ui.mjs")).toBe(true);
     expect(existsSync("scripts/crawl-ui.mjs")).toBe(true);
     expect(existsSync("scripts/smoke-live.mjs")).toBe(true);
+    expect(existsSync("scripts/cleanup-local-qa-data.mjs")).toBe(true);
   });
 
   it("documents repo-local UI audit commands instead of local skill paths", () => {

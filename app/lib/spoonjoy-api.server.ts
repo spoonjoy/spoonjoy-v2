@@ -48,6 +48,7 @@ import {
 } from "~/lib/notification-triggers.server";
 import { fanoutFellowChefOriginCook } from "~/lib/notification-fanout.server";
 import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
+import type { ImageGenEnv } from "~/lib/image-gen.server";
 
 export interface SpoonjoyApiContext {
   db: PrismaClientType;
@@ -55,7 +56,7 @@ export interface SpoonjoyApiContext {
   defaultOwnerEmail?: string;
   allowOwnerEmailFallback?: boolean;
   waitUntil?: (promise: Promise<unknown>) => void;
-  env?: ({ OPENAI_API_KEY?: string; SPOONJOY_BASE_URL?: string } & VapidEnv & PostHogServerEnv) | null;
+  env?: (ImageGenEnv & { SPOONJOY_BASE_URL?: string } & VapidEnv & PostHogServerEnv) | null;
   bucket?: R2Bucket;
   imageGenRunner?: ImageGenRunner;
   allowLocalImageFallback?: boolean;

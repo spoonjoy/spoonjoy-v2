@@ -56,6 +56,15 @@ const TELEMETRY_CLIENT_ENV_NAMES = [
   "VITE_POSTHOG_DISABLED",
 ] as const;
 
+const IMAGE_PROVIDER_ENV_NAMES = [
+  "GOOGLE_API_KEY",
+  "GEMINI_API_KEY",
+  "GEMINI_IMAGE_MODEL",
+  "GEMINI_IMAGE_TIMEOUT_MS",
+  "IMAGE_PROVIDER_PRIMARY",
+  "IMAGE_PROVIDER_FALLBACKS",
+] as const;
+
 const REQUIRED_PACKAGE_SCRIPTS = [
   "build",
   "deploy",
@@ -154,7 +163,7 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
     ),
     check(
       "Cloudflare Env typing",
-      ["DB", "PHOTOS", ...REQUIRED_SECRET_NAMES].every((name) => inputs.cloudflareEnvDts.includes(`${name}?`)),
+      ["DB", "PHOTOS", ...REQUIRED_SECRET_NAMES, ...IMAGE_PROVIDER_ENV_NAMES].every((name) => inputs.cloudflareEnvDts.includes(`${name}?`)),
       "app/cloudflare-env.d.ts must type all Cloudflare bindings and documented secrets."
     ),
     check(
@@ -195,6 +204,16 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
         "POSTHOG_DISABLED",
       ].every((item) => readmeAndDeploymentDoc.includes(item)),
       "Deployment docs must show how to enable or intentionally disable PostHog without printing secret values."
+    ),
+    check(
+      "image provider documentation",
+      [
+        ...IMAGE_PROVIDER_ENV_NAMES,
+        "IMAGE_PROVIDER_PRIMARY",
+        "IMAGE_PROVIDER_FALLBACKS",
+        "gemini-3.1-flash-image",
+      ].every((item) => readmeAndDeploymentDoc.includes(item)),
+      "README/deployment docs must explain image provider fallback env and Gemini setup."
     ),
     check(
       "migration files",

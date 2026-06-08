@@ -11,6 +11,7 @@ export type ImageGenerationSourceType = "ai-placeholder" | "chef-upload" | "spoo
 export type ImageGenerationQuotaKind = "placeholder" | "stylization";
 export type ImageGenerationSkipReason =
   | "missing_openai_key"
+  | "missing_image_provider_config"
   | "missing_runner"
   | "quota_exhausted";
 
@@ -25,6 +26,21 @@ export interface ImageGenerationTelemetryBase {
   sourceType: ImageGenerationSourceType;
   quotaKind: ImageGenerationQuotaKind;
   model: string;
+  provider?: string;
+  errorStatus?: number | null;
+  errorCode?: string | null;
+  errorType?: string | null;
+  requestId?: string | null;
+  retryable?: boolean;
+  fallbackAttempted?: boolean;
+  fallbackProvider?: string;
+  fallbackModel?: string;
+  primaryProvider?: string;
+  primaryModel?: string;
+  primaryErrorStatus?: number | null;
+  primaryErrorCode?: string | null;
+  primaryErrorType?: string | null;
+  primaryRequestId?: string | null;
 }
 
 function resolveImageGenerationPostHogConfig(input: ImageGenerationTelemetryBase) {
@@ -40,6 +56,23 @@ function imageGenerationProperties(input: ImageGenerationTelemetryBase) {
     sourceType: input.sourceType,
     quotaKind: input.quotaKind,
     model: input.model,
+    ...(input.provider ? { provider: input.provider } : {}),
+    ...(input.errorStatus !== undefined && input.errorStatus !== null ? { errorStatus: input.errorStatus } : {}),
+    ...(input.errorCode ? { errorCode: input.errorCode } : {}),
+    ...(input.errorType ? { errorType: input.errorType } : {}),
+    ...(input.requestId ? { requestId: input.requestId } : {}),
+    ...(input.retryable !== undefined ? { retryable: input.retryable } : {}),
+    ...(input.fallbackAttempted !== undefined ? { fallbackAttempted: input.fallbackAttempted } : {}),
+    ...(input.fallbackProvider ? { fallbackProvider: input.fallbackProvider } : {}),
+    ...(input.fallbackModel ? { fallbackModel: input.fallbackModel } : {}),
+    ...(input.primaryProvider ? { primaryProvider: input.primaryProvider } : {}),
+    ...(input.primaryModel ? { primaryModel: input.primaryModel } : {}),
+    ...(input.primaryErrorStatus !== undefined && input.primaryErrorStatus !== null
+      ? { primaryErrorStatus: input.primaryErrorStatus }
+      : {}),
+    ...(input.primaryErrorCode ? { primaryErrorCode: input.primaryErrorCode } : {}),
+    ...(input.primaryErrorType ? { primaryErrorType: input.primaryErrorType } : {}),
+    ...(input.primaryRequestId ? { primaryRequestId: input.primaryRequestId } : {}),
   };
 }
 
@@ -72,6 +105,20 @@ export async function captureImageGenerationException(
         ...imageGenerationProperties(input),
         ...(input.errorDetails ? { errorDetails: input.errorDetails } : {}),
       },
+    },
+    input.fetchImpl,
+  );
+}
+
+export async function captureImageGenerationProviderFallback(
+  input: ImageGenerationTelemetryBase,
+): Promise<void> {
+  await captureEvent(
+    resolveImageGenerationPostHogConfig(input),
+    {
+      event: "spoonjoy.image_generation.provider_fallback",
+      distinctId: input.userId,
+      properties: imageGenerationProperties(input),
     },
     input.fetchImpl,
   );

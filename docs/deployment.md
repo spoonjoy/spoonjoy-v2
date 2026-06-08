@@ -36,6 +36,7 @@ wrangler secret put APPLE_TEAM_ID
 wrangler secret put APPLE_KEY_ID
 wrangler secret put APPLE_PRIVATE_KEY
 wrangler secret put OPENAI_API_KEY
+wrangler secret put GOOGLE_API_KEY
 wrangler secret put VAPID_PUBLIC_KEY
 wrangler secret put VAPID_PRIVATE_KEY
 wrangler secret put VAPID_SUBJECT
@@ -45,11 +46,13 @@ Notes:
 
 - `SESSION_SECRET` protects auth sessions and must be high entropy in production.
 - Google, GitHub, and Apple OAuth secrets are required for the corresponding OAuth login/account-linking provider.
-- `OPENAI_API_KEY` enables ingredient parsing. Missing local keys fall back to deterministic parsing paths where supported, but production should set the secret before enabling AI-assisted flows.
+- `OPENAI_API_KEY` enables ingredient parsing and the OpenAI recipe-image provider. Missing local keys fall back to deterministic parsing paths where supported, but production should set the secret before enabling AI-assisted flows.
+- `GOOGLE_API_KEY` or `GEMINI_API_KEY` enables Gemini recipe-image fallback. Prefer `GOOGLE_API_KEY` for production unless a provider-specific alias is needed.
 - `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` are required for `/api/push/public-key` and web-push subscription flows.
 - `POSTHOG_KEY` is optional. When set, it enables server lifecycle telemetry for API v1, legacy API, MCP, OAuth, and Worker error capture. Leave it unset, or set `POSTHOG_DISABLED=true`, to keep server telemetry off.
 - Client analytics is built into the Vite bundle only when `VITE_POSTHOG_KEY` is present during `pnpm run build`. Use `VITE_POSTHOG_HOST` for the ingestion host and `VITE_POSTHOG_DISABLED=true` for an explicit client kill switch. These `VITE_` values are public build-time configuration, not secrets.
 - Optional ingredient parsing runtime knobs are `INGREDIENT_PARSE_PROVIDER`, `INGREDIENT_PARSE_MODEL`, `INGREDIENT_PARSE_TIMEOUT_MS`, and `INGREDIENT_PARSE_MAX_RETRIES`. The safe default is OpenAI with `gpt-4o-mini`, an 8000ms timeout, and 1 retry.
+- Optional recipe-image provider runtime knobs are `IMAGE_PROVIDER_PRIMARY`, `IMAGE_PROVIDER_FALLBACKS`, `GEMINI_IMAGE_MODEL`, and `GEMINI_IMAGE_TIMEOUT_MS`. The safe default is configured providers in `openai,gemini` order with a 30000ms Gemini request timeout; set `IMAGE_PROVIDER_PRIMARY=gemini`, `IMAGE_PROVIDER_FALLBACKS=openai`, and `GEMINI_IMAGE_MODEL=gemini-3.1-flash-image` to route image stylization through Gemini first.
 
 ### Optional PostHog Telemetry
 
@@ -62,7 +65,9 @@ wrangler secret put POSTHOG_KEY
 Configure image-generation email alerts in PostHog, not in Spoonjoy code. Recommended filters:
 
 - `$exception` where `feature = recipe_image_generation`
-- `spoonjoy.image_generation.skipped` where `reason` is `missing_openai_key` or `missing_runner`
+- `$exception` where `feature = recipe_image_generation` and `provider`, `model`, `errorCode`, `requestId`, or `fallbackAttempted` match the provider failure you want to page on
+- `spoonjoy.image_generation.provider_fallback` where `provider`, `model`, `errorCode`, `fallbackProvider`, or `fallbackModel` match recovered provider failures that should still alert
+- `spoonjoy.image_generation.skipped` where `reason` is `missing_image_provider_config`, `missing_runner`, or `quota_exhausted`
 
 To enable client analytics in the production bundle, provide these public build-time values to the deploy environment without committing the key:
 
@@ -87,6 +92,12 @@ APPLE_TEAM_ID=your-apple-team-id
 APPLE_KEY_ID=your-apple-key-id
 APPLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----..."
 OPENAI_API_KEY=sk-...
+GOOGLE_API_KEY=...
+GEMINI_API_KEY=
+GEMINI_IMAGE_MODEL=gemini-3.1-flash-image
+GEMINI_IMAGE_TIMEOUT_MS=30000
+IMAGE_PROVIDER_PRIMARY=gemini
+IMAGE_PROVIDER_FALLBACKS=openai
 VAPID_PUBLIC_KEY=...
 VAPID_PRIVATE_KEY=...
 VAPID_SUBJECT=mailto:you@example.com

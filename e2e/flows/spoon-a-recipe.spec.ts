@@ -29,6 +29,13 @@ test.describe('Spoon a recipe flow', () => {
         break;
       }
     }
+    if (!(await dialogHeading.isVisible({ timeout: 500 }).catch(() => false))) {
+      const firstCookButton = page.getByRole('button', { name: /log the first cook/i });
+      if (await firstCookButton.isVisible({ timeout: 1_000 }).catch(() => false)) {
+        await firstCookButton.scrollIntoViewIfNeeded();
+        await firstCookButton.click();
+      }
+    }
     await expect(dialogHeading).toBeVisible();
 
     // Demo viewer is not the recipe owner here, so a note alone satisfies

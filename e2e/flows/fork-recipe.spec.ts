@@ -14,9 +14,10 @@ test.describe('Fork recipe flow', () => {
     await expect(page).toHaveURL(/\/recipes\/[^/]+$/, { timeout: 10_000 });
 
     // The page should now show a "Fork" button (demo is not the owner).
-    const forkButton = page.getByRole('button', { name: /^fork$/i }).first();
+    const forkButton = page.getByTestId('recipe-header-fork-action');
     await expect(forkButton).toBeVisible({ timeout: 10_000 });
-    await forkButton.click();
+    await expect(forkButton).toBeEnabled();
+    await forkButton.scrollIntoViewIfNeeded();
 
     // The confirmation dialog opens. The submit-form Fork button is in the dialog
     // alongside Cancel. Submit by clicking the second Fork button (the form one).
@@ -25,6 +26,12 @@ test.describe('Fork recipe flow', () => {
     const dialogForkSubmit = page
       .locator('form[action$="/fork"] button[type="submit"]')
       .first();
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await forkButton.click();
+      if (await dialogForkSubmit.isVisible({ timeout: 1_000 }).catch(() => false)) {
+        break;
+      }
+    }
     await expect(dialogForkSubmit).toBeVisible({ timeout: 5_000 });
     await dialogForkSubmit.click();
 

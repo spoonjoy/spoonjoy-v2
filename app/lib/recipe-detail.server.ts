@@ -18,11 +18,12 @@ import { fanoutFellowChefOriginCook } from "~/lib/notification-fanout.server";
 import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
 import { absoluteUrlFromRequest, recipeOgPath } from "~/lib/og-image.server";
 import type { PostHogServerEnv } from "~/lib/analytics-server";
+import type { ImageGenEnv } from "~/lib/image-gen.server";
 
 interface CloudflareContextLike {
   cloudflare?: {
     env?:
-      | ({ OPENAI_API_KEY?: string; PHOTOS?: R2Bucket } & VapidEnv & PostHogServerEnv)
+      | (ImageGenEnv & { PHOTOS?: R2Bucket } & VapidEnv & PostHogServerEnv)
       | null;
     ctx?: { waitUntil?: (promise: Promise<unknown>) => void };
   };
@@ -43,7 +44,7 @@ function spoonErrorToResponse(error: unknown): never {
 
 function getCloudflareCtx(context: AppLoadContext): {
   bucket?: R2Bucket;
-  env: ({ OPENAI_API_KEY?: string } & PostHogServerEnv) | null;
+  env: (ImageGenEnv & PostHogServerEnv) | null;
   vapidEnv: VapidEnv;
   waitUntil?: (promise: Promise<unknown>) => void;
 } {
@@ -54,6 +55,12 @@ function getCloudflareCtx(context: AppLoadContext): {
     env: envSource
       ? {
           OPENAI_API_KEY: envSource.OPENAI_API_KEY,
+          GOOGLE_API_KEY: envSource.GOOGLE_API_KEY,
+          GEMINI_API_KEY: envSource.GEMINI_API_KEY,
+          GEMINI_IMAGE_MODEL: envSource.GEMINI_IMAGE_MODEL,
+          GEMINI_IMAGE_TIMEOUT_MS: envSource.GEMINI_IMAGE_TIMEOUT_MS,
+          IMAGE_PROVIDER_PRIMARY: envSource.IMAGE_PROVIDER_PRIMARY,
+          IMAGE_PROVIDER_FALLBACKS: envSource.IMAGE_PROVIDER_FALLBACKS,
           POSTHOG_KEY: envSource.POSTHOG_KEY,
           POSTHOG_HOST: envSource.POSTHOG_HOST,
           POSTHOG_DISABLED: envSource.POSTHOG_DISABLED,

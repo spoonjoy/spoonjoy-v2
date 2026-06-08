@@ -59,6 +59,12 @@ declare global {
     SESSION_SECRET?: string;
     SPOONJOY_BASE_URL?: string;
     OPENAI_API_KEY?: string;
+    GOOGLE_API_KEY?: string;
+    GEMINI_API_KEY?: string;
+    GEMINI_IMAGE_MODEL?: string;
+    GEMINI_IMAGE_TIMEOUT_MS?: string;
+    IMAGE_PROVIDER_PRIMARY?: string;
+    IMAGE_PROVIDER_FALLBACKS?: string;
     INGREDIENT_PARSE_PROVIDER?: string;
     INGREDIENT_PARSE_MODEL?: string;
     INGREDIENT_PARSE_TIMEOUT_MS?: string;

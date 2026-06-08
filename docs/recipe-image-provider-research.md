@@ -67,17 +67,19 @@ Lower-cost fallback candidate: Stability image-to-image
 
 ### Phase 1: provider registry and fallback
 
-Add a small provider registry around the existing image generation runner:
+Add a small sync provider registry around the existing image generation runner. The first implementation should support OpenAI and Gemini because both can return image bytes/URLs within the current request/background-task shape:
 
 ```text
-IMAGE_PROVIDER_PRIMARY=openai|gemini|bfl|fal|stability
-IMAGE_PROVIDER_FALLBACKS=gemini,bfl,openai
+IMAGE_PROVIDER_PRIMARY=openai|gemini
+IMAGE_PROVIDER_FALLBACKS=gemini,openai
 OPENAI_API_KEY=...
 GOOGLE_API_KEY=...
-BFL_API_KEY=...
-FAL_KEY=...
-STABILITY_API_KEY=...
+GEMINI_API_KEY=...
+GEMINI_IMAGE_MODEL=gemini-3.1-flash-image
+GEMINI_IMAGE_TIMEOUT_MS=30000
 ```
+
+BFL, fal, and Stability remain benchmark/future provider candidates. BFL in particular should not be treated as a simple synchronous fallback because its API uses request creation, polling, and expiring signed result URLs; it needs durable async job state before production use.
 
 Fallback rules:
 

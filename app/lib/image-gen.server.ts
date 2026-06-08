@@ -7,6 +7,12 @@ export { makeFallbackPlaceholderSvg };
 
 export interface ImageGenEnv {
   OPENAI_API_KEY?: string;
+  GOOGLE_API_KEY?: string;
+  GEMINI_API_KEY?: string;
+  GEMINI_IMAGE_MODEL?: string;
+  GEMINI_IMAGE_TIMEOUT_MS?: string;
+  IMAGE_PROVIDER_PRIMARY?: string;
+  IMAGE_PROVIDER_FALLBACKS?: string;
 }
 
 export interface GeneratedImageOutput {
@@ -34,24 +40,53 @@ export interface ImageGenDeps {
   allowLocalImageFallback?: boolean;
 }
 
+type ImageAssetDeps = Pick<
+  ImageGenDeps,
+  "fetchImpl" | "bucket" | "now" | "randomId" | "allowLocalImageFallback"
+>;
+
+export interface ImageEditAttempt {
+  provider: string;
+  model: string;
+  runner: ImageGenRunner;
+}
+
+export interface StylizeImageGenDeps extends Omit<ImageGenDeps, "runner"> {
+  runner?: ImageGenRunner;
+  imageEditAttempts?: ImageEditAttempt[];
+}
+
 export interface StylizationResult {
   url: string;
-  usedModel: ImageEditModel | "dall-e-3";
+  usedModel: string;
+  usedProvider: string;
+  attemptFailures?: ImageProviderAttemptError[];
 }
 
 export const IMAGE_FALLBACK_ERROR_CODES = [
   "model_not_found",
   "model_unsupported",
+  "billing_hard_limit_reached",
+  "insufficient_quota",
+  "quota_exceeded",
+  "rate_limit",
+  "rate_limit_exceeded",
+  "resource_exhausted",
+  "unauthenticated",
+  "permission_denied",
+  "billing_limit_user_error",
   "404",
 ] as const;
 
-const IMAGE_EDIT_MODELS = [
+export const OPENAI_IMAGE_EDIT_MODELS = [
+  "gpt-image-2",
   "gpt-image-1.5",
   "gpt-image-1",
   "gpt-image-1-mini",
 ] as const;
 
-type ImageEditModel = (typeof IMAGE_EDIT_MODELS)[number];
+export const DEFAULT_GEMINI_IMAGE_MODEL = "gemini-3.1-flash-image";
+export const DEFAULT_GEMINI_IMAGE_TIMEOUT_MS = 30_000;
 
 export class ImageGenError extends Error {
   constructor(message: string, options?: { cause?: unknown }) {
@@ -63,37 +98,98 @@ export class ImageGenError extends Error {
   }
 }
 
-function errorCode(cause: unknown): string | null {
+export class ImageProviderAttemptError extends Error {
+  provider: string;
+  model: string;
+  retryable: boolean;
+  code: string | null;
+  status: number | null;
+  type: string | null;
+  requestID: string | null;
+
+  constructor(input: {
+    provider: string;
+    model: string;
+    retryable: boolean;
+    cause: unknown;
+  }) {
+    super(`${input.provider}:${input.model} image edit failed`);
+    this.name = "ImageProviderAttemptError";
+    (this as { cause?: unknown }).cause = input.cause;
+    this.provider = input.provider;
+    this.model = input.model;
+    this.retryable = input.retryable;
+    this.code = errorCode(input.cause);
+    this.status = errorStatus(input.cause);
+    this.type = errorType(input.cause);
+    this.requestID = errorRequestId(input.cause);
+  }
+}
+
+function stringErrorField(cause: unknown, key: string): string | null {
   if (typeof cause !== "object" || cause === null) return null;
-  if ("code" in cause && typeof cause.code === "string") return cause.code;
+  if (key in cause && typeof (cause as Record<string, unknown>)[key] === "string") {
+    return (cause as Record<string, string>)[key];
+  }
+  if (
+    "error" in cause &&
+    typeof cause.error === "object" &&
+    cause.error !== null &&
+    key in cause.error &&
+    typeof (cause.error as Record<string, unknown>)[key] === "string"
+  ) {
+    return (cause.error as Record<string, string>)[key];
+  }
+  return null;
+}
+
+function errorCode(cause: unknown): string | null {
+  return stringErrorField(cause, "code");
+}
+
+function errorType(cause: unknown): string | null {
+  return stringErrorField(cause, "type") ?? stringErrorField(cause, "status");
+}
+
+function errorRequestId(cause: unknown): string | null {
+  return stringErrorField(cause, "requestID") ?? stringErrorField(cause, "request_id");
+}
+
+function errorStatus(cause: unknown): number | null {
+  if (typeof cause !== "object" || cause === null) return null;
+  if ("status" in cause && typeof cause.status === "number") return cause.status;
   if (
     "error" in cause &&
     typeof cause.error === "object" &&
     cause.error !== null &&
     "code" in cause.error &&
-    typeof cause.error.code === "string"
+    typeof cause.error.code === "number"
   ) {
     return cause.error.code;
   }
   return null;
 }
 
-function errorStatus(cause: unknown): number | null {
-  return typeof cause === "object" &&
-    cause !== null &&
-    "status" in cause &&
-    typeof cause.status === "number"
-    ? cause.status
-    : null;
+function normalizedSignal(value: string | number | null): string | null {
+  if (value === null) return null;
+  return String(value).trim().toLowerCase();
 }
 
-function isImageEditModelFallbackError(cause: unknown): boolean {
-  const code = errorCode(cause);
+export function isImageProviderFallbackError(cause: unknown): boolean {
+  const code = normalizedSignal(errorCode(cause));
+  const type = normalizedSignal(errorType(cause));
   if (code !== null && IMAGE_FALLBACK_ERROR_CODES.includes(code as (typeof IMAGE_FALLBACK_ERROR_CODES)[number])) {
     return true;
   }
+  if (type !== null && IMAGE_FALLBACK_ERROR_CODES.includes(type as (typeof IMAGE_FALLBACK_ERROR_CODES)[number])) {
+    return true;
+  }
   const status = errorStatus(cause);
-  return status !== null && IMAGE_FALLBACK_ERROR_CODES.includes(String(status) as (typeof IMAGE_FALLBACK_ERROR_CODES)[number]);
+  if (status === null) return false;
+  if (IMAGE_FALLBACK_ERROR_CODES.includes(String(status) as (typeof IMAGE_FALLBACK_ERROR_CODES)[number])) {
+    return true;
+  }
+  return status === 401 || status === 403 || status === 408 || status === 429 || status >= 500;
 }
 
 export function composePlaceholderPrompt(
@@ -111,10 +207,11 @@ export function composePlaceholderPrompt(
 
 export function composeStylizationPrompt(): string {
   return (
-    `Restyle this photograph as warm editorial cookbook photography. ` +
-    `Preserve the dish, plating, and composition exactly. ` +
-    `Shift lighting to soft golden afternoon tones; palette becomes cream, terracotta, sage, brass. ` +
-    `Do not add or remove dish elements; this is a stylistic transformation.`
+    `Create an appetizing editorial food photograph based on the provided dish image. ` +
+    `Preserve the actual dish, ingredients, plating, orientation, and overall composition. ` +
+    `Improve lighting, color, texture, and background polish so it feels natural, warm, and realistic for a recipe app. ` +
+    `Do not add text, logos, utensils, hands, new ingredients, or fantasy elements. ` +
+    `Do not crop out the main dish.`
   );
 }
 
@@ -144,6 +241,10 @@ function base64ToBytes(value: string): Uint8Array {
     bytes[index] = binary.charCodeAt(index);
   }
   return bytes;
+}
+
+async function fileToBase64(file: File): Promise<string> {
+  return bytesToBase64(new Uint8Array(await file.arrayBuffer()));
 }
 
 function extensionForContentType(contentType: GeneratedImageOutput["contentType"]): string {
@@ -204,7 +305,7 @@ function normalizedStoredContentType(
 
 async function fetchGeneratedImageUrl(
   url: string,
-  deps: ImageGenDeps,
+  deps: ImageAssetDeps,
 ): Promise<{ bytes: Uint8Array; contentType: GeneratedImageOutput["contentType"] }> {
   const fetchImpl = deps.fetchImpl ?? fetch;
   const response = await fetchImpl(url);
@@ -247,7 +348,7 @@ function parseDataImageUrl(rawPhotoUrl: string): { contentType: string; bytes: U
   return { contentType: match[1].toLowerCase(), bytes: base64ToBytes(match[2]) };
 }
 
-async function resolveEditSourceFile(rawPhotoUrl: string, deps: ImageGenDeps): Promise<File> {
+async function resolveEditSourceFile(rawPhotoUrl: string, deps: ImageAssetDeps): Promise<File> {
   const dataImage = parseDataImageUrl(rawPhotoUrl);
   if (dataImage) {
     return validatedEditSourceFile(dataImage.bytes, dataImage.contentType, "source-image");
@@ -295,7 +396,7 @@ async function resolveEditSourceFile(rawPhotoUrl: string, deps: ImageGenDeps): P
 
 async function persistGeneratedImage(
   output: GeneratedImageOutput,
-  deps: ImageGenDeps,
+  deps: ImageAssetDeps,
 ): Promise<string> {
   const hasBytes = output.bytes && output.bytes.length > 0;
   const hasUrl = output.url && output.url.length > 0;
@@ -342,28 +443,54 @@ export async function generatePlaceholderImage(
 export async function stylizeSpoonPhoto(
   rawPhotoUrl: string,
   _title: string,
-  deps: ImageGenDeps,
+  deps: StylizeImageGenDeps,
 ): Promise<StylizationResult> {
   const prompt = composeStylizationPrompt();
   try {
     const sourceFile = await resolveEditSourceFile(rawPhotoUrl, deps);
-    const failures: unknown[] = [];
-    for (const model of IMAGE_EDIT_MODELS) {
+    const failures: ImageProviderAttemptError[] = [];
+    for (const attempt of resolveImageEditAttempts(deps)) {
       try {
-        const result = await deps.runner.imageToImage(sourceFile, prompt, { model });
+        const result = await attempt.runner.imageToImage(sourceFile, prompt, { model: attempt.model });
         const url = await persistGeneratedImage(result, deps);
-        return { url, usedModel: model };
+        return {
+          url,
+          usedModel: attempt.model,
+          usedProvider: attempt.provider,
+          ...(failures.length > 0 ? { attemptFailures: failures as ImageProviderAttemptError[] } : {}),
+        };
       } catch (cause) {
-        failures.push(cause);
-        if (!isImageEditModelFallbackError(cause)) {
-          throw cause;
+        const retryable = isImageProviderFallbackError(cause);
+        const attemptError = new ImageProviderAttemptError({
+          provider: attempt.provider,
+          model: attempt.model,
+          retryable,
+          cause,
+        });
+        failures.push(attemptError);
+        if (!retryable) {
+          throw attemptError;
         }
       }
     }
-    throw new AggregateError(failures, "All GPT Image edit models failed");
+    throw new AggregateError(failures, "All image edit providers failed");
   } catch (cause) {
     throw new ImageGenError("Stylization failed", { cause });
   }
+}
+
+function resolveImageEditAttempts(deps: StylizeImageGenDeps): ImageEditAttempt[] {
+  if (deps.imageEditAttempts && deps.imageEditAttempts.length > 0) {
+    return deps.imageEditAttempts;
+  }
+  if (deps.runner) {
+    return OPENAI_IMAGE_EDIT_MODELS.map((model) => ({
+      provider: "openai",
+      model,
+      runner: deps.runner!,
+    }));
+  }
+  throw new ImageGenError("Image edit runner is required");
 }
 
 export interface OpenAIImageClient {
@@ -426,4 +553,160 @@ export function createOpenAIImageRunner(
       return imageOutputFromOpenAI(response, "imageToImage");
     },
   };
+}
+
+export interface GeminiImageRunnerInput {
+  apiKey: string;
+  fetchImpl?: typeof fetch;
+  timeoutMs?: number;
+}
+
+type GeminiInlineData = {
+  data?: string;
+  mimeType?: string;
+  mime_type?: string;
+};
+
+type GeminiPart = {
+  text?: string;
+  inlineData?: GeminiInlineData;
+  inline_data?: GeminiInlineData;
+};
+
+type GeminiGenerateContentResponse = {
+  candidates?: Array<{
+    content?: {
+      parts?: GeminiPart[];
+    };
+  }>;
+};
+
+function geminiContentType(value: string | undefined): GeneratedImageOutput["contentType"] {
+  const normalized = value?.split(";")[0]?.trim().toLowerCase();
+  if (normalized === "image/jpeg" || normalized === "image/png" || normalized === "image/webp") {
+    return normalized;
+  }
+  return "image/png";
+}
+
+function imageOutputFromGemini(
+  response: GeminiGenerateContentResponse,
+  operation: "textToImage" | "imageToImage",
+): GeneratedImageOutput {
+  for (const candidate of response.candidates ?? []) {
+    for (const part of candidate.content?.parts ?? []) {
+      const inlineData = part.inlineData ?? part.inline_data;
+      if (inlineData?.data) {
+        return {
+          bytes: base64ToBytes(inlineData.data),
+          contentType: geminiContentType(inlineData.mimeType ?? inlineData.mime_type),
+        };
+      }
+    }
+  }
+  throw new ImageGenError(`Gemini returned no image data for ${operation}`);
+}
+
+async function geminiApiError(response: Response): Promise<Error> {
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+
+  const googleError = typeof payload === "object" && payload !== null && "error" in payload
+    ? (payload as { error?: { message?: string; status?: string; code?: number } }).error
+    : undefined;
+  const message = googleError?.message ?? response.statusText;
+  const error = new Error(`Gemini image generation failed with status ${response.status}: ${message}`) as Error & {
+    status?: number;
+    code?: string;
+    type?: string;
+    error?: unknown;
+  };
+  error.status = response.status;
+  error.code = googleError?.status ?? String(response.status);
+  error.type = googleError?.status;
+  if (googleError) error.error = googleError;
+  return error;
+}
+
+export function createGeminiImageRunner({
+  apiKey,
+  fetchImpl = fetch,
+  timeoutMs = DEFAULT_GEMINI_IMAGE_TIMEOUT_MS,
+}: GeminiImageRunnerInput): ImageGenRunner {
+  async function generateContent(
+    model: string,
+    parts: GeminiPart[],
+    operation: "textToImage" | "imageToImage",
+  ): Promise<GeneratedImageOutput> {
+    const response = await fetchWithTimeout(
+      fetchImpl,
+      `https://generativelanguage.googleapis.com/v1/models/${encodeURIComponent(model)}:generateContent`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-goog-api-key": apiKey,
+        },
+        body: JSON.stringify({
+          contents: [{ parts }],
+          generationConfig: { responseModalities: ["IMAGE"] },
+        }),
+      },
+      timeoutMs,
+    );
+    if (!response.ok) {
+      throw await geminiApiError(response);
+    }
+    return imageOutputFromGemini(await response.json() as GeminiGenerateContentResponse, operation);
+  }
+
+  return {
+    async textToImage(prompt, opts) {
+      return generateContent(opts.model, [{ text: prompt }], "textToImage");
+    },
+    async imageToImage(srcImage, prompt, opts) {
+      return generateContent(
+        opts.model,
+        [
+          { text: prompt },
+          {
+            inline_data: {
+              mime_type: srcImage.type || "image/png",
+              data: await fileToBase64(srcImage),
+            },
+          },
+        ],
+        "imageToImage",
+      );
+    },
+  };
+}
+
+async function fetchWithTimeout(
+  fetchImpl: typeof fetch,
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetchImpl(url, { ...init, signal: controller.signal });
+  } catch (cause) {
+    if (controller.signal.aborted) {
+      throw Object.assign(new Error(`Gemini image generation timed out after ${timeoutMs}ms`), {
+        status: 408,
+        code: "timeout",
+        type: "timeout",
+        cause,
+      });
+    }
+    throw cause;
+  } finally {
+    clearTimeout(timeout);
+  }
 }

@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 
 function recipeDetailLinks(page: Page) {
-  return page.locator('a[href^="/recipes/"]:not([href="/recipes/new"])');
+  return page.locator('main a[href^="/recipes/"]:not([href="/recipes"]):not([href="/recipes/new"]):not([href*="#"])');
 }
 
 test.describe('Recipe Flow', () => {
@@ -42,8 +42,9 @@ test.describe('Recipe Flow', () => {
   });
 
   test('recipe detail shows steps and ingredients', async ({ page }) => {
-    // First, navigate to recipes page to get a real recipe ID
-    await page.goto('/recipes');
+    // Use a seeded chef_julia recipe so this flow is not affected by parallel
+    // e2e-created recipes appearing at the top of the global recipe index.
+    await page.goto('/?tab=recipes&chef=chef_julia');
     
     // Get the first recipe card link
     const recipeLink = recipeDetailLinks(page).first();
@@ -67,12 +68,7 @@ test.describe('Recipe Flow', () => {
     const title = page.getByRole('heading').first();
     await expect(title).toBeVisible({ timeout: 15000 });
     
-    // Wait a bit for hydration since React Router streams content
-    await page.waitForTimeout(2000);
-    
-    // Should show step content - just verify there's some content about steps/ingredients
-    // The exact text will depend on which recipe is loaded
-    const content = page.locator('[class*="step"], [class*="ingredient"], h2, h3').first();
-    await expect(content).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: /^steps$/i })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(/ingredients/i).first()).toBeVisible({ timeout: 10000 });
   });
 });

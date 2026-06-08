@@ -72,6 +72,8 @@ For production, use `wrangler secret put` for sensitive values.
 
 For optional PostHog analytics and server lifecycle telemetry, see [`docs/analytics-privacy.md`](docs/analytics-privacy.md). Client analytics stays disabled when `VITE_POSTHOG_KEY` is absent or `VITE_POSTHOG_DISABLED` is true-ish. Worker API/OAuth/MCP telemetry stays disabled when `POSTHOG_KEY` is absent or `POSTHOG_DISABLED` is true-ish.
 
+For AI-assisted flows, `OPENAI_API_KEY` enables ingredient parsing and the OpenAI recipe-image provider. Recipe-image fallback can use Gemini by setting `GOOGLE_API_KEY` or `GEMINI_API_KEY`; control provider order with `IMAGE_PROVIDER_PRIMARY` and `IMAGE_PROVIDER_FALLBACKS`, use `GEMINI_IMAGE_MODEL=gemini-3.1-flash-image` for the current default Gemini image model, and optionally tune the Gemini request circuit breaker with `GEMINI_IMAGE_TIMEOUT_MS`.
+
 For Ouroboros agent integration, see [`docs/ouroboros-mcp.md`](docs/ouroboros-mcp.md).
 
 ## Development Commands
@@ -126,6 +128,15 @@ pnpm test:e2e --headed
 
 **Note:** Tests run against `http://localhost:5173`. Start the dev server first with `pnpm dev`.
 
+Before reporting manual/e2e work complete, inspect disposable local QA residue:
+
+```bash
+pnpm cleanup:qa
+pnpm cleanup:qa -- --apply
+```
+
+The cleanup command is dry-run by default and uses local D1 only. It is for Codex/e2e residue such as `codex-*`, `codex-smoke-*`, `e2e *`, passkey test users, and `E2E OAuth Client` rows; do not use it for remote/prod cleanup.
+
 ## Database Management
 
 Local development uses D1 via the Cloudflare Vite plugin (stored in `.wrangler/`).
@@ -177,10 +188,13 @@ pnpm exec prisma migrate diff --from-empty --to-schema-datamodel=./prisma/schema
    wrangler secret put APPLE_KEY_ID
    wrangler secret put APPLE_PRIVATE_KEY
    wrangler secret put OPENAI_API_KEY
+   wrangler secret put GOOGLE_API_KEY
    wrangler secret put VAPID_PUBLIC_KEY
    wrangler secret put VAPID_PRIVATE_KEY
    wrangler secret put VAPID_SUBJECT
    ```
+
+   Recipe image fallback is configured with `IMAGE_PROVIDER_PRIMARY`, `IMAGE_PROVIDER_FALLBACKS`, `GOOGLE_API_KEY` or `GEMINI_API_KEY`, `GEMINI_IMAGE_MODEL=gemini-3.1-flash-image`, and optionally `GEMINI_IMAGE_TIMEOUT_MS`.
 
    Optional telemetry: set `POSTHOG_KEY` with `wrangler secret put POSTHOG_KEY` only when you want server lifecycle telemetry/error capture. Build-time client analytics also needs `VITE_POSTHOG_KEY`, `VITE_POSTHOG_HOST`, and optionally `VITE_POSTHOG_DISABLED` in the deploy build environment; do not set those with secret values in source files.
 

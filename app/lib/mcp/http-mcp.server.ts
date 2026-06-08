@@ -49,10 +49,10 @@ import {
   userAgentFamily,
 } from "~/lib/analytics-server";
 import { RequestBodyTooLargeError, readLimitedTextBody } from "~/lib/request-body-limit.server";
+import type { ImageGenEnv } from "~/lib/image-gen.server";
 
-interface CloudflareEnvLike {
+interface CloudflareEnvLike extends ImageGenEnv {
   SESSION_SECRET?: string;
-  OPENAI_API_KEY?: string;
   SPOONJOY_BASE_URL?: string;
   VAPID_PUBLIC_KEY?: string;
   VAPID_PRIVATE_KEY?: string;
