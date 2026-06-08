@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { redirect } from "react-router";
 import { createTestRoutesStub } from "../utils";
@@ -1299,6 +1299,53 @@ describe("Recipes New Route", () => {
       // Click Create Recipe
       const submitButton = screen.getByRole("button", { name: "Create Recipe" });
       await user.click(submitButton);
+    });
+
+    it("shows image upload progress and ignores duplicate create clicks", async () => {
+      const user = userEvent.setup();
+      let actionCalls = 0;
+      let resolveAction!: () => void;
+      const actionPromise = new Promise<void>((resolve) => {
+        resolveAction = resolve;
+      });
+
+      const Stub = createTestRoutesStub([
+        {
+          path: "/recipes/new",
+          Component: NewRecipe,
+          loader: () => null,
+          action: async ({ request }: { request: Request }) => {
+            actionCalls += 1;
+            await request.formData();
+            await actionPromise;
+            return redirect("/recipes/test-id");
+          },
+        },
+        {
+          path: "/recipes/:id",
+          Component: () => <div>Recipe Detail</div>,
+        },
+      ]);
+
+      render(<Stub initialEntries={["/recipes/new"]} />);
+
+      await user.type(await screen.findByLabelText(/Title/), "Recipe with Image");
+      await user.upload(
+        await screen.findByLabelText("Upload recipe image"),
+        new File(["test image"], "test.jpg", { type: "image/jpeg" }),
+      );
+
+      const submitButton = screen.getByRole("button", { name: "Create Recipe" });
+      fireEvent.click(submitButton);
+      fireEvent.click(submitButton);
+
+      await waitFor(() => {
+        expect(actionCalls).toBe(1);
+      });
+      expect(screen.getByRole("status")).toHaveTextContent(/uploading image/i);
+      expect(submitButton).toBeDisabled();
+
+      resolveAction();
     });
 
     it("should display general error message when present", async () => {

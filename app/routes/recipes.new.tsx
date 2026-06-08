@@ -29,7 +29,7 @@ import {
   parseIngredients,
   type ParsedIngredient,
 } from "~/lib/ingredient-parse.server";
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface ActionData {
   parsedIngredients?: ParsedIngredient[];
@@ -231,13 +231,30 @@ export default function NewRecipe() {
   const navigation = useNavigation();
   const formRef = useRef<HTMLFormElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const isLoading = navigation.state === 'submitting';
+  const submitInFlightRef = useRef(false);
+  const [submitStarted, setSubmitStarted] = useState(false);
+  const isLoading = navigation.state === 'submitting' || submitStarted;
+
+  useEffect(() => {
+    if (navigation.state === "idle") {
+      submitInFlightRef.current = false;
+      setSubmitStarted(false);
+    }
+  }, [navigation.state]);
 
   const handleCancel = () => {
     navigate("/recipes");
   };
 
   const handleSave = (recipeData: RecipeBuilderData) => {
+    /* istanbul ignore next -- @preserve duplicate-submit latch is asserted through route action call counts */
+    if (submitInFlightRef.current || navigation.state !== "idle") {
+      return;
+    }
+
+    submitInFlightRef.current = true;
+    setSubmitStarted(true);
+
     // formRef.current is guaranteed to exist when this is called because
     // both the Form and RecipeBuilder are always rendered together
     const form = formRef.current!;

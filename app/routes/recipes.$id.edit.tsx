@@ -27,7 +27,7 @@ import { scheduleAiPlaceholderCover } from "~/lib/ai-placeholder-cover.server";
 import { scheduleSpoonCoverStylization } from "~/lib/spoon-cover-stylization.server";
 import { Button } from "~/components/ui/button";
 import { Dialog, DialogActions, DialogDescription, DialogTitle } from "~/components/ui/dialog";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface ActionData {
   errors?: {
@@ -362,16 +362,33 @@ export default function EditRecipe() {
   const submit = useSubmit();
   const formRef = useRef<HTMLFormElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const submitInFlightRef = useRef(false);
   const [stepToDelete, setStepToDelete] = useState<{ id: string; stepNum: number } | null>(null);
-  const isLoading = navigation.state === 'submitting';
+  const [submitStarted, setSubmitStarted] = useState(false);
+  const isLoading = navigation.state === 'submitting' || submitStarted;
+
+  useEffect(() => {
+    if (navigation.state === "idle") {
+      submitInFlightRef.current = false;
+      setSubmitStarted(false);
+    }
+  }, [navigation.state]);
 
   const handleCancel = () => {
     navigate(`/recipes/${recipe.id}`);
   };
 
   const handleSave = (recipeData: RecipeBuilderData) => {
+    /* istanbul ignore next -- @preserve duplicate-submit latch is asserted through route action call counts */
+    if (submitInFlightRef.current || navigation.state !== "idle") {
+      return;
+    }
+
     /* istanbul ignore next -- @preserve defensive null check for ref */
     if (!formRef.current) return;
+
+    submitInFlightRef.current = true;
+    setSubmitStarted(true);
 
     const form = formRef.current;
     const titleInput = form.querySelector('input[name="title"]') as HTMLInputElement;

@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { Form } from "react-router";
-import { ImagePlus } from "lucide-react";
+import { Form, useNavigation } from "react-router";
+import { ImagePlus, Loader2 } from "lucide-react";
 import { Dialog, DialogActions, DialogBody, DialogTitle } from "../ui/dialog";
 import { Field, Label } from "../ui/fieldset";
 import { Input } from "../ui/input";
@@ -23,6 +23,9 @@ function validateClientFile(file: File): string | null {
   }
   return null;
 }
+
+/* istanbul ignore next -- @preserve backdrop closes are intentionally ignored while a post is in flight */
+function ignoreCloseWhilePosting() {}
 
 export interface SpoonDialogProps {
   isOpen: boolean;
@@ -47,11 +50,14 @@ export function SpoonDialog({
   const photoErrorId = useId();
   const cookedAtId = useId();
   const formRef = useRef<HTMLFormElement>(null);
+  const submitInFlightRef = useRef(false);
+  const navigation = useNavigation();
   const [note, setNote] = useState("");
   const [nextTime, setNextTime] = useState("");
   const [cookedAt, setCookedAt] = useState("");
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoError, setPhotoError] = useState<string | null>(null);
+  const [submitStarted, setSubmitStarted] = useState(false);
 
   useEffect(() => {
     if (!isOpen) {
@@ -60,12 +66,28 @@ export function SpoonDialog({
       setCookedAt("");
       setPhotoFile(null);
       setPhotoError(null);
+      setSubmitStarted(false);
+      submitInFlightRef.current = false;
     }
   }, [isOpen]);
 
+  useEffect(() => {
+    if (navigation.state === "idle") {
+      setSubmitStarted(false);
+      submitInFlightRef.current = false;
+    }
+  }, [navigation.state]);
+
+  const isRouterPostingSpoon =
+    navigation.state !== "idle" &&
+    navigation.formData?.get("intent") === "createSpoon";
+  const isPosting = submitStarted || isRouterPostingSpoon;
   const hasContent = note.trim() !== "" || nextTime.trim() !== "" || photoFile !== null;
   const requiresPhoto = isOriginCookCandidate;
-  const canSubmit = hasContent && (!requiresPhoto || photoFile !== null) && photoError === null;
+  const hasValidContent = hasContent && (!requiresPhoto || photoFile !== null) && photoError === null;
+  const canSubmit = hasValidContent && !isPosting;
+  const submitStatus = photoFile ? "Uploading photo..." : "Saving spoon...";
+  const dialogOnClose = isPosting ? ignoreCloseWhilePosting : onClose;
 
   function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null;
@@ -85,8 +107,18 @@ export function SpoonDialog({
     setPhotoFile(file);
   }
 
+  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    if (!hasValidContent || submitInFlightRef.current) {
+      event.preventDefault();
+      return;
+    }
+
+    submitInFlightRef.current = true;
+    setSubmitStarted(true);
+  }
+
   return (
-    <Dialog open={isOpen} onClose={onClose} size="md">
+    <Dialog open={isOpen} onClose={dialogOnClose} size="md">
       <DialogTitle>Log a cook</DialogTitle>
       <DialogBody className="mt-4">
         <Form
@@ -95,6 +127,7 @@ export function SpoonDialog({
           action={actionUrl}
           encType="multipart/form-data"
           className="space-y-4"
+          onSubmit={handleSubmit}
         >
           <input type="hidden" name="intent" value="createSpoon" />
           {requiresPhoto ? (
@@ -122,6 +155,7 @@ export function SpoonDialog({
                 data-max-size={IMAGE_MAX_FILE_SIZE}
                 aria-describedby={`${photoHintId} ${photoStatusId}${photoError ? ` ${photoErrorId}` : ""}`}
                 onChange={handleFileChange}
+                disabled={isPosting}
                 className="peer sr-only"
               />
               <span className="grid size-12 shrink-0 place-items-center rounded-[var(--sj-radius-small)] bg-[var(--sj-ink)] text-[var(--sj-paper)] transition group-hover:bg-[var(--sj-action-deep)] peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-4 peer-focus-visible:outline-[var(--sj-brass)]">
@@ -154,6 +188,7 @@ export function SpoonDialog({
               value={note}
               onChange={(event) => setNote(event.target.value)}
               placeholder="How did it go?"
+              disabled={isPosting}
             />
           </Field>
           <Field>
@@ -165,6 +200,7 @@ export function SpoonDialog({
               value={nextTime}
               onChange={(event) => setNextTime(event.target.value)}
               placeholder="What would you change?"
+              disabled={isPosting}
             />
           </Field>
           <Field>
@@ -175,14 +211,28 @@ export function SpoonDialog({
               type="datetime-local"
               value={cookedAt}
               onChange={(event) => setCookedAt(event.target.value)}
+              disabled={isPosting}
             />
           </Field>
+          {isPosting ? (
+            <p
+              role="status"
+              aria-live="polite"
+              className="flex items-center gap-2 text-sm text-[var(--sj-ink-soft)]"
+            >
+              <Loader2 className="size-4 animate-spin text-[var(--sj-brass)]" aria-hidden="true" />
+              {submitStatus}
+            </p>
+          ) : null}
           <DialogActions>
-            <Button plain type="button" onClick={onClose}>
+            <Button plain type="button" onClick={onClose} disabled={isPosting}>
               Cancel
             </Button>
-            <Button type="submit" disabled={!canSubmit}>
-              Save spoon
+            <Button type="submit" disabled={!canSubmit} aria-busy={isPosting ? "true" : undefined}>
+              {isPosting ? (
+                <Loader2 className="size-4 animate-spin" data-slot="icon" aria-hidden="true" />
+              ) : null}
+              {isPosting ? submitStatus : "Save spoon"}
             </Button>
           </DialogActions>
         </Form>

@@ -1,5 +1,5 @@
 import type { Route } from "./+types/recipes.$id";
-import { useFetcher, useLoaderData, useSubmit } from "react-router";
+import { useActionData, useFetcher, useLoaderData, useSubmit } from "react-router";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import type { MouseEvent } from "react";
 import { usePostHog } from "@posthog/react";
@@ -79,6 +79,12 @@ type SpoonListItem = {
   chef: { id: string; username: string; photoUrl: string | null };
 };
 const EMPTY_SPOONS: SpoonListItem[] = [];
+
+type RecipeDetailActionData = {
+  success?: boolean;
+  intent?: string;
+  spoon?: { id?: string };
+};
 
 const recipeMastheadLinkClass =
   "inline-flex min-h-11 items-center gap-2 font-sj-ui text-xs font-bold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)] no-underline transition hover:text-[var(--sj-ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)]";
@@ -249,6 +255,7 @@ export function applyCreatedCookbookState(
 
 export default function RecipeDetail() {
   const loaderData = useLoaderData<typeof loader>();
+  const actionData = useActionData() as RecipeDetailActionData | undefined;
   const { recipe, coverImageUrl, isOwner, hasIngredientsInShoppingList = false } = loaderData;
   const isAuthenticated = loaderData.isAuthenticated ?? true;
   const cookbooks = loaderData.cookbooks ?? EMPTY_COOKBOOKS;
@@ -288,6 +295,7 @@ export default function RecipeDetail() {
   const addToListSubmissionCount = useRef(0);
   const lastHandledAddToListSubmissionCount = useRef(0);
   const pendingCookModeScroll = useRef(false);
+  const lastHandledLoggedSpoonId = useRef<string | null>(null);
   const ingredientCount = recipe.steps.reduce((count, step) => count + step.ingredients.length, 0);
   const stepOutputUseCount = recipe.steps.reduce((count, step) => count + (step.usingSteps?.length ?? 0), 0);
   const cookProgressTotal = ingredientCount + stepOutputUseCount;
@@ -493,6 +501,20 @@ export default function RecipeDetail() {
   const [showOwnerTools, setShowOwnerTools] = useState(false);
   const [newCookbookTitle, setNewCookbookTitle] = useState("");
   const saveModalTitleRef = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    const loggedSpoonId = actionData?.success && actionData.intent === "createSpoon"
+      ? actionData.spoon?.id
+      : null;
+
+    if (!loggedSpoonId || lastHandledLoggedSpoonId.current === loggedSpoonId) {
+      return;
+    }
+
+    lastHandledLoggedSpoonId.current = loggedSpoonId;
+    setIsSpoonDialogOpen(false);
+    showToast({ message: "Cook logged." });
+  }, [actionData, showToast]);
 
   const handleOpenSaveModal = useCallback(() => {
     if (!isAuthenticated) {

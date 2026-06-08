@@ -336,7 +336,12 @@ async function handleCreateSpoon(
     }
   }
 
-  return { success: true, spoon: { id: result.spoon.id }, isOriginCook: result.isOriginCook };
+  return {
+    success: true,
+    intent: "createSpoon",
+    spoon: { id: result.spoon.id },
+    isOriginCook: result.isOriginCook,
+  };
 }
 
 async function handleDeleteSpoon(

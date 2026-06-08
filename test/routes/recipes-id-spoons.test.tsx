@@ -340,6 +340,55 @@ describe("Recipes $id route — spoons + provenance", () => {
     expect(screen.getByLabelText(/^note/i)).toBeInTheDocument();
   });
 
+  it("closes the SpoonDialog and shows a status toast after a successful cook log", async () => {
+    const mockData = {
+      recipe: {
+        id: "r1",
+        title: "Mock Recipe",
+        description: null,
+        servings: null,
+        sourceUrl: null,
+        chef: { id: "c1", username: "testchef", photoUrl: null },
+        steps: [],
+      },
+      coverImageUrl: "/p.png",
+      isOwner: false,
+      cookbooks: [],
+      savedInCookbookIds: [],
+      hasIngredientsInShoppingList: false,
+      spoons: [],
+      isOriginCookCandidate: false,
+    };
+    let actionCalls = 0;
+    const Stub = createTestRoutesStub([
+      {
+        path: "/recipes/:id",
+        Component: () => (
+          <ToastProvider>
+            <RecipeDetail />
+          </ToastProvider>
+        ),
+        loader: () => mockData,
+        action: async ({ request }: { request: Request }) => {
+          actionCalls += 1;
+          await request.formData();
+          return { success: true, intent: "createSpoon", spoon: { id: "spoon-1" } };
+        },
+      },
+    ]);
+
+    render(<Stub initialEntries={["/recipes/r1"]} />);
+    await userEvent.click(await screen.findByRole("button", { name: /log cook/i }));
+    await userEvent.type(await screen.findByLabelText(/^note/i), "saved once");
+    await userEvent.click(screen.getByRole("button", { name: /save spoon/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("heading", { name: /log a cook/i })).toBeNull();
+    });
+    expect(actionCalls).toBe(1);
+    expect(screen.getByRole("status")).toHaveTextContent("Cook logged.");
+  });
+
   it("action with intent=createSpoon creates a RecipeSpoon as the requesting user", async () => {
     const fd = new UndiciFormData();
     fd.append("intent", "createSpoon");
