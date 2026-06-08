@@ -1,7 +1,7 @@
 # Planning: Recipe Cover Lifecycle
 
 **Status**: drafting
-**Created**: pending initial commit
+**Created**: 2026-06-08 16:48
 
 ## Goal
 Make Spoonjoy recipe imagery explicit, provenance-aware, and controllable across web UI and MCP. Recipes should distinguish pure AI placeholders, uploaded photos, imported photos, and editorialized chef photos while letting chefs browse, choose, and retain cover history.
@@ -77,4 +77,4 @@ Make Spoonjoy recipe imagery explicit, provenance-aware, and controllable across
 Implementation should prefer a single `RecipeCover` history model with explicit status/provenance over a separate candidate model unless code inspection shows a separate model is materially simpler. Backfill should choose the currently displayed newest non-empty cover as active while preserving older rows.
 
 ## Progress Log
-- pending initial commit Created
+- 2026-06-08 16:48 Created
