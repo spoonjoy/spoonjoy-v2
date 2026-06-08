@@ -48,11 +48,17 @@ For the current recipe-image work, the durable task anchor is:
 
 The current durable image-work summary is in `docs/recipe-image-provider-research.md`.
 
-Key state at the time this protocol was written:
+Current state as of 2026-06-08:
 
-- upload progress, duplicate spoon prevention, recipe form submit locking, placeholder cleanup, and risotto duplicate cleanup were already merged and deployed before this doc;
-- AI variant generation remained blocked by OpenAI `billing_hard_limit_reached`;
-- next concrete engineering step is adding a provider registry/fallback, with Gemini 3.1 Flash Image as the recommended immediate secondary provider and BFL FLUX.2 / Gemini 3 Pro Image as visual-quality benchmark candidates.
+- upload progress, duplicate spoon prevention, recipe form submit locking, placeholder cleanup, and risotto duplicate cleanup are merged and deployed;
+- Gemini is configured as the production primary image provider with OpenAI as fallback;
+- the Gemini v1beta image endpoint fix was merged in `e787493 fix: use Gemini v1beta image endpoint (#167)`;
+- the risotto recipe now has an upright original spoon image and an editorial stylized cover attached;
+- old production `codex-smoke-*` users and recipes have been hard-deleted after read-first verification;
+- local disposable E2E residue was cleaned with `pnpm cleanup:qa -- --apply`;
+- PostHog has an hourly email alert for recipe image-generation exceptions, alert id `019ea967-875c-0000-95df-2322feb0d67f`.
+
+Optional follow-up is visual benchmarking of BFL FLUX.2 / Gemini 3 Pro Image against the current Gemini Flash output. It is not required to unblock production image handling.
 
 ## Config follow-up
 

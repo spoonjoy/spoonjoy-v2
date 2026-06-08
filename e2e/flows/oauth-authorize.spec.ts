@@ -91,7 +91,7 @@ test.describe('OAuth authorize + consent flow', () => {
     expect(decodeURIComponent(page.url())).toContain('/oauth/authorize');
 
     // Log in as the seed user; the preserved redirectTo lands us on consent.
-    await loginAsSeedUser(page);
+    await loginAsSeedUser(page, /\/oauth\/authorize\?/);
 
     await expect(page).toHaveURL(/\/oauth\/authorize/);
     await expect(page.getByRole('heading', { name: /authorize/i })).toBeVisible();
@@ -116,7 +116,7 @@ test.describe('OAuth authorize + consent flow', () => {
     await page.goto(authorize);
     await expect(page).toHaveURL(/\/login\?redirectTo=/);
 
-    await loginAsSeedUser(page);
+    await loginAsSeedUser(page, /\/oauth\/authorize\?/);
     await expect(page).toHaveURL(/\/oauth\/authorize/);
 
     const deny = page.getByRole('button', { name: /^deny$/i });

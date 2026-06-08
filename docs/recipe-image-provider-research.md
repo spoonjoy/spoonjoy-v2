@@ -10,11 +10,34 @@ Spoonjoy recipe and spoon image handling had three linked issues:
 - assigned recipe/spoon images were not reliably generating AI variants;
 - recipe placeholders with no uploaded photo could fall back to a corrupted Chef RJ-derived asset.
 
-The upload and duplicate-posting defects have been fixed and merged. Production risotto cleanup is complete: the two duplicate spoons were soft-deleted, the remaining risotto spoon now points at an upright JPEG, temporary repair credentials were revoked, and the recipe has one active cover row.
+## Current state after implementation
 
-The remaining blocker is AI stylized variant generation. This is not currently blocked by the recipe/spoon write path; original uploaded images should continue to be usable even when stylization fails.
+Status: fixed, merged, deployed, and production-validated on 2026-06-08.
 
-## Current production blocker
+- Merged commit: `e787493 fix: use Gemini v1beta image endpoint (#167)`.
+- Deployed Worker version: `d1a53c4d-84a5-4f09-accb-fc930486e460`.
+- Production provider configuration: `IMAGE_PROVIDER_PRIMARY=gemini`, `IMAGE_PROVIDER_FALLBACKS=openai`, `GEMINI_IMAGE_TIMEOUT_MS=30000`, `GOOGLE_API_KEY` set in Cloudflare.
+- Gemini endpoint fix: Spoonjoy uses the `v1beta` image endpoint with image response modalities.
+- Risotto recipe id: `cmq35k4c10001zn0npvsmw05z`.
+- Active risotto spoon id: `cmq3fsai90001060no6ad14db`.
+- Duplicate risotto spoon ids soft-deleted: `cmq3fsq85000f060n3afbayhs`, `cmq3fsnj9000d060nct5c34k3`.
+- Upright risotto original URL: `/photos/spoons/cl9rpod09000508la48fmmrbs/cmq35k4c10001zn0npvsmw05z/repair-20260608T063245Z-cw-upright.jpeg`.
+- Editorial risotto cover URL: `/photos/covers/1780957883085-286f117d-fc69-4515-8853-d3ca6789bb23.jpg`.
+- Public recipe API returns the editorial cover as `coverImageUrl` for `https://spoonjoy.app/api/v1/recipes/cmq35k4c10001zn0npvsmw05z`.
+- Production D1 now has one active risotto spoon and two deleted duplicate spoon tombstones.
+- Production cleanup removed the five old `codex-smoke-*` users and their five soft-deleted smoke recipes; follow-up counters show zero active suspicious recipes, zero suspicious recipe rows, zero disposable users, zero disposable spoons, zero e2e OAuth clients, and zero smoke placeholder covers.
+- Local cleanup via `pnpm cleanup:qa -- --apply` removed fresh disposable E2E residue; follow-up dry-run shows zero active suspicious recipes, zero disposable users, zero disposable spoons, and zero e2e OAuth clients.
+- PostHog insight: `https://us.posthog.com/project/263242/insights/QjjLDvgL`.
+- PostHog alert id: `019ea967-875c-0000-95df-2322feb0d67f`.
+- PostHog alert name: `Spoonjoy image generation exception alert`.
+- Alert threshold: `$exception` count has value more than `0` for `feature = recipe_image_generation`, evaluated hourly over the last day.
+- Alert recipient: Ari Mendelow, email notification in PostHog.
+
+The implementation keeps originals usable when stylization fails, normalizes upload orientation, rejects GIFs, prevents duplicate spoon/form submits while uploads are in flight, and avoids the corrupted Chef RJ placeholder path for recipes with no photo.
+
+Optional future work is provider visual benchmarking, not production unblocking. The immediate production blocker described below is historical.
+
+## Historical production blocker
 
 Production Worker diagnostics after the latest image fallback deploy show OpenAI rejecting image generation with:
 
@@ -23,7 +46,7 @@ Production Worker diagnostics after the latest image fallback deploy show OpenAI
 - `type`: `billing_limit_user_error`
 - example request id: `req_c5d4a653c8084578a60c597b8a8c14d3`
 
-This means the current OpenAI-only stylization path cannot produce variants until billing is unblocked or a second provider is added. Retrying the same code path will not fix it.
+This meant the old OpenAI-only stylization path could not produce variants until billing was unblocked or a second provider was added. Gemini has now been added and set as production primary, so this is no longer the active blocker.
 
 ## Recommendation
 

@@ -32,6 +32,9 @@ export async function submitPasswordLogin(page: Page, emailAddress: string, pass
   }
 }
 
-export async function loginAsSeedUser(page: Page) {
-  await submitPasswordLogin(page, 'demo@spoonjoy.com', 'demo1234');
+export async function loginAsSeedUser(page: Page, expectedUrl: string | RegExp = /\/recipes(?:[?#].*)?$/) {
+  await Promise.all([
+    page.waitForURL(expectedUrl, { timeout: 15_000 }),
+    submitPasswordLogin(page, 'demo@spoonjoy.com', 'demo1234'),
+  ]);
 }

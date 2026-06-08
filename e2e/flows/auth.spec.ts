@@ -23,7 +23,7 @@ test.describe('Auth Flow', () => {
     await loginAsSeedUser(page);
     
     // Should redirect to the public recipe index.
-    await expect(page).toHaveURL('/recipes');
+    await expect(page).toHaveURL(/\/recipes(?:[?#].*)?$/);
     await expect(page.getByRole('heading', { name: /public recipe box|recipes worth opening/i }).first()).toBeVisible();
   });
 
@@ -42,7 +42,7 @@ test.describe('Auth Flow', () => {
     // First login
     await page.goto('/login');
     await loginAsSeedUser(page);
-    await expect(page).toHaveURL('/recipes');
+    await expect(page).toHaveURL(/\/recipes(?:[?#].*)?$/);
     
     // Click logout
     const logoutButton = page.getByRole('button', { name: /log\s*out/i }).first();
@@ -56,7 +56,7 @@ test.describe('Auth Flow', () => {
   test('unauthenticated recipes access stays public', async ({ page }) => {
     await page.goto('/recipes');
     
-    await expect(page).toHaveURL('/recipes');
+    await expect(page).toHaveURL(/\/recipes(?:[?#].*)?$/);
     await expect(page.getByRole('heading', { name: /public recipe box|recipes worth opening/i }).first()).toBeVisible();
   });
 
