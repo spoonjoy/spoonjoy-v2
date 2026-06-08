@@ -85,3 +85,4 @@ Implementation should prefer a single `RecipeCover` history model with explicit 
 ## Progress Log
 - 2026-06-08 16:48 Created
 - 2026-06-08 16:50 Tightened scope after tinfoil pass
+- 2026-06-08 16:51 Fixed API v1 cover reference after source-fidelity check
