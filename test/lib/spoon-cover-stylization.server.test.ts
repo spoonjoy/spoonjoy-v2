@@ -252,16 +252,93 @@ describe("scheduleSpoonCoverStylization", () => {
         distinct_id: userId,
         properties: expect.objectContaining({
           $exception_message: "Stylization failed",
+          errorDetails: expect.stringContaining("img failed"),
           feature: "recipe_image_generation",
           operation: "cover_stylize",
           recipeId,
           coverId,
           sourceType: "spoon",
           quotaKind: "stylization",
-          model: "gpt-image-1",
+          model: "gpt-image-1.5",
         }),
       }),
     ]);
+  });
+
+  it("logs nested aggregate errors in serializable form", async () => {
+    const analyticsFetchImpl = postHogFetchSpy();
+    function nestedCause(depth: number): Error {
+      const error = new Error(`level-${depth}`);
+      if (depth > 0) {
+        (error as Error & { cause?: unknown }).cause = nestedCause(depth - 1);
+      }
+      return error;
+    }
+    const aggregate = new AggregateError([
+      Object.assign(new Error("inner"), {
+        code: "model_not_found",
+        status: 404,
+        requestID: "req_inner",
+        request_id: "req_legacy",
+        error: {
+          message: "bad model",
+          code: "model_not_found",
+          type: "invalid_request_error",
+        },
+        body: { error: { message: "bad model" } },
+      }),
+      "plain child",
+      nestedCause(5),
+    ], "aggregate failure");
+    const runner: ImageGenRunner = {
+      textToImage: vi.fn(),
+      imageToImage: vi.fn().mockRejectedValue(aggregate),
+    };
+
+    await scheduleSpoonCoverStylization({
+      db,
+      userId,
+      recipeId,
+      coverId,
+      rawPhotoUrl: dataUrl("image/png", VALID_PNG_BYTES),
+      recipeTitle: "Stylize Me",
+      runner,
+      postHogConfig: { enabled: true, key: "ph_test", host: "https://posthog.example" },
+      analyticsFetchImpl,
+      logger: errorSpy,
+    });
+
+    const [, payload] = errorSpy.error.mock.calls[0];
+    expect(payload).toMatchObject({
+      name: "ImageGenError",
+      message: "Stylization failed",
+      cause: {
+        name: "AggregateError",
+        message: "aggregate failure",
+        errors: [
+          expect.objectContaining({
+            name: "Error",
+            message: "inner",
+            code: "model_not_found",
+            status: 404,
+            requestID: "req_inner",
+            request_id: "req_legacy",
+            error: {
+              message: "bad model",
+              code: "model_not_found",
+              type: "invalid_request_error",
+            },
+            body: { error: { message: "bad model" } },
+          }),
+          { value: "plain child" },
+          expect.objectContaining({ name: "Error", message: "level-5" }),
+        ],
+      },
+    });
+    expect(JSON.stringify(payload)).toContain('"truncated":true');
+    const [{ properties }] = postHogBodies(analyticsFetchImpl);
+    const errorDetails = JSON.parse(properties.errorDetails as string);
+    expect(errorDetails).toMatchObject(payload);
   });
 
   it("falls back to the default console logger when none is supplied", async () => {

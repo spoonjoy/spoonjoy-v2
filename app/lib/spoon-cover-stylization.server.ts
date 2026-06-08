@@ -14,7 +14,7 @@ import {
 import { createOpenAIClient } from "~/lib/openai-client.server";
 import type { PostHogServerConfig, PostHogServerEnv } from "~/lib/analytics-server";
 
-const STYLIZATION_MODEL = "gpt-image-1";
+const STYLIZATION_MODEL = "gpt-image-1.5";
 
 type ImageGenerationSchedulerEnv = { OPENAI_API_KEY?: string } & PostHogServerEnv;
 type OpenAIImageGenerationEnv = ImageGenerationSchedulerEnv & { OPENAI_API_KEY: string };
@@ -55,6 +55,41 @@ function sourceTypeFor(input: ScheduleSpoonStylizationInput) {
   return input.sourceType ?? "spoon";
 }
 
+function serializeError(error: unknown, depth = 0): Record<string, unknown> {
+  if (depth > 4) return { truncated: true };
+  if (!(error instanceof Error)) {
+    return { value: String(error) };
+  }
+
+  const withDetails = error as Error & {
+    cause?: unknown;
+    code?: unknown;
+    status?: unknown;
+    type?: unknown;
+    param?: unknown;
+    request_id?: unknown;
+    requestID?: unknown;
+    body?: unknown;
+    error?: unknown;
+    errors?: unknown;
+  };
+  const details: Record<string, unknown> = {
+    name: error.name,
+    message: error.message,
+  };
+
+  for (const key of ["code", "status", "type", "param", "request_id", "requestID"] as const) {
+    if (withDetails[key] !== undefined) details[key] = withDetails[key];
+  }
+  if (withDetails.body !== undefined) details.body = withDetails.body;
+  if (withDetails.error !== undefined) details.error = withDetails.error;
+  if (withDetails.cause !== undefined) details.cause = serializeError(withDetails.cause, depth + 1);
+  if (Array.isArray(withDetails.errors)) {
+    details.errors = withDetails.errors.map((item) => serializeError(item, depth + 1));
+  }
+  return details;
+}
+
 function resolveRunner(
   input: ScheduleSpoonStylizationInput,
 ): { runner: ImageGenRunner } | { reason: ImageGenerationSkipReason } {
@@ -88,6 +123,7 @@ async function captureSkipped(
 async function captureGenerationException(
   input: ScheduleSpoonStylizationInput,
   error: unknown,
+  serializedError: Record<string, unknown>,
 ): Promise<void> {
   await captureImageGenerationException({
     env: input.env,
@@ -101,11 +137,12 @@ async function captureGenerationException(
     quotaKind: "stylization",
     model: STYLIZATION_MODEL,
     error,
+    errorDetails: JSON.stringify(serializedError),
   });
 }
 
 /**
- * Background task: consumes one stylization quota unit, runs gpt-image-1 against
+ * Background task: consumes one stylization quota unit, runs GPT Image edits against
  * `rawPhotoUrl`, and writes the resulting URL to the cover row's `stylizedImageUrl`.
  * Failures leave `stylizedImageUrl` null and are logged. This function never throws.
  */
@@ -145,7 +182,8 @@ export async function scheduleSpoonCoverStylization(
       data: { stylizedImageUrl: result.url },
     });
   } catch (error) {
-    await captureGenerationException(input, error);
-    logger.error("spoon cover stylization failed", error);
+    const serializedError = serializeError(error);
+    await captureGenerationException(input, error, serializedError);
+    logger.error("spoon cover stylization failed", serializedError);
   }
 }
