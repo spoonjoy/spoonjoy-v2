@@ -168,6 +168,7 @@ export function RecipeBuilder({
   const displayImageUrl = getDisplayImageUrl()
 
   const isSaveDisabled = isDisabled || !title.trim()
+  const imageUploadStatus = imageFile ? 'Uploading image...' : 'Saving recipe...'
 
   return (
     <div className="space-y-8">
@@ -254,6 +255,7 @@ export function RecipeBuilder({
               onClear={handleImageClear}
               disabled={isDisabled}
               loading={loading}
+              loadingLabel={imageUploadStatus}
               error={errors?.image}
             />
           </Field>

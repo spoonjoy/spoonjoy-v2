@@ -18,6 +18,7 @@ interface RecipeImageUploadProps {
   alt?: string
   disabled?: boolean
   loading?: boolean
+  loadingLabel?: string
   error?: string
 }
 
@@ -29,6 +30,7 @@ export function RecipeImageUpload({
   alt,
   disabled = false,
   loading = false,
+  loadingLabel = 'Uploading image...',
   error,
 }: RecipeImageUploadProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -187,9 +189,12 @@ export function RecipeImageUpload({
           <div
             role="status"
             aria-busy="true"
-            className="absolute inset-0 flex items-center justify-center rounded-[var(--sj-radius-surface)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_78%,transparent)]"
+            className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-[var(--sj-radius-surface)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_78%,transparent)] px-4 text-center"
           >
             <Loader2 className="size-8 animate-spin text-[var(--sj-brass)]" />
+            <span className="font-sj-ui text-sm font-semibold text-[var(--sj-ink)]">
+              {loadingLabel}
+            </span>
           </div>
         )}
       </div>

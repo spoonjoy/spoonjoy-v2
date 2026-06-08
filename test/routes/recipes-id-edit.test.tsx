@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
@@ -2314,6 +2314,59 @@ describe("Recipes $id Edit Route", () => {
       });
 
       expect(submittedData.title).toBe("Test Recipe");
+    });
+
+    it("shows image upload progress and ignores duplicate save clicks", async () => {
+      const user = userEvent.setup();
+      let actionCalls = 0;
+      let resolveAction!: () => void;
+      const actionPromise = new Promise<void>((resolve) => {
+        resolveAction = resolve;
+      });
+
+      const Stub = createTestRoutesStub([
+        {
+          path: "/recipes/:id/edit",
+          Component: EditRecipe,
+          loader: () => ({
+            recipe: {
+              id: "recipe-1",
+              title: "Test Recipe",
+              description: null,
+              servings: null,
+              steps: [],
+            },
+            coverImageUrl: "",
+            formattedSteps: [],
+          }),
+          action: async ({ request }: { request: Request }) => {
+            actionCalls += 1;
+            await request.formData();
+            await actionPromise;
+            return { success: true };
+          },
+        },
+      ]);
+
+      render(<Stub initialEntries={["/recipes/recipe-1/edit"]} />);
+
+      await screen.findByRole("button", { name: "Save Recipe" });
+      await user.upload(
+        screen.getByLabelText("Upload recipe image"),
+        new File(["image-data"], "test.jpg", { type: "image/jpeg" }),
+      );
+
+      const submitButton = screen.getByRole("button", { name: "Save Recipe" });
+      fireEvent.click(submitButton);
+      fireEvent.click(submitButton);
+
+      await waitFor(() => {
+        expect(actionCalls).toBe(1);
+      });
+      expect(screen.getByRole("status")).toHaveTextContent(/uploading image/i);
+      expect(submitButton).toBeDisabled();
+
+      resolveAction();
     });
 
     it("should navigate to recipe page when Cancel is clicked", async () => {

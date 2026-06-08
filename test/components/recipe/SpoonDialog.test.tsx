@@ -186,6 +186,60 @@ describe("SpoonDialog", () => {
     expect(captured!.get("note")).toBe("tasted ok");
   });
 
+  it("locks the form and ignores duplicate submits while a photo is uploading", async () => {
+    let submissions = 0;
+    let resolveAction!: () => void;
+    const actionPromise = new Promise<void>((resolve) => {
+      resolveAction = resolve;
+    });
+
+    const Stub = createTestRoutesStub([
+      {
+        path: "/",
+        Component: () => (
+          <SpoonDialog
+            isOpen={true}
+            onClose={vi.fn()}
+            actionUrl="/recipes/r1"
+            isOriginCookCandidate={false}
+          />
+        ),
+      },
+      {
+        path: "/recipes/r1",
+        async action({ request }) {
+          submissions += 1;
+          await request.formData();
+          await actionPromise;
+          return null;
+        },
+        Component: () => <div data-testid="spoon-submit-complete" />,
+      },
+    ]);
+
+    render(<Stub initialEntries={["/"]} />);
+    const fileInput = (await screen.findByLabelText(/photo/i)) as HTMLInputElement;
+    await userEvent.upload(fileInput, makeFile("cook.png", "image/png"));
+
+    const submit = screen.getByRole("button", { name: /save spoon/i });
+    const form = submit.closest("form");
+    await userEvent.click(submit);
+
+    await waitFor(() => {
+      expect(submissions).toBe(1);
+    });
+    expect(screen.getByRole("button", { name: /uploading photo/i })).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent(/uploading photo/i);
+
+    fireEvent.submit(form!);
+    expect(submissions).toBe(1);
+
+    resolveAction();
+    await waitFor(() => {
+      expect(screen.getByTestId("spoon-submit-complete")).toBeInTheDocument();
+    });
+  });
+
   it("calls onClose when Cancel is clicked", async () => {
     const onClose = vi.fn();
     renderDialog({ onClose });
