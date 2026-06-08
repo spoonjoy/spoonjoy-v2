@@ -90,4 +90,4 @@ Implementation should prefer a single `RecipeCover` history model with explicit 
 - 2026-06-08 16:48 Created
 - 2026-06-08 16:50 Tightened scope after tinfoil pass
 - 2026-06-08 16:51 Fixed API v1 cover reference after source-fidelity check
-- pending commit Addressed planning reviewer findings on backfill and archive semantics
+- 2026-06-08 16:55 Addressed planning reviewer findings on backfill and archive semantics
