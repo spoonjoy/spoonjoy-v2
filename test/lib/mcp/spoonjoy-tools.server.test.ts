@@ -422,6 +422,48 @@ describe("spoonjoy MCP tools", () => {
     });
   });
 
+  it("replays no-key recipe cover creation over MCP JSON", async () => {
+    const chef = await context.db.user.create({
+      data: {
+        email: uniqueEmail("cover-replay-chef"),
+        username: `cover_replay_chef_${faker.string.alphanumeric(6).toLowerCase()}`,
+      },
+    });
+    const principal = {
+      id: chef.id,
+      email: chef.email,
+      username: chef.username,
+      source: "bearer" as const,
+      scopes: ["recipes:read", "kitchen:write"],
+    };
+    const recipe = await context.db.recipe.create({
+      data: {
+        title: `MCP Cover Replay ${faker.string.alphanumeric(6)}`,
+        chefId: chef.id,
+      },
+    });
+    const args = {
+      recipeId: recipe.id,
+      imageUrl: `data:image/png;base64,${b64(VALID_PNG_BYTES)}`,
+      generateEditorial: false,
+    };
+
+    const first = parseJson(await callSpoonjoyMcpTool(
+      "create_recipe_cover_from_upload",
+      args,
+      { db: context.db, principal, allowLocalImageFallback: true },
+    ));
+    const replay = parseJson(await callSpoonjoyMcpTool(
+      "create_recipe_cover_from_upload",
+      args,
+      { db: context.db, principal, allowLocalImageFallback: true },
+    ));
+
+    expect(replay.createdCover.id).toBe(first.createdCover.id);
+    expect(replay.mutation).toEqual({ idempotencyKey: null, replayed: true });
+    await expect(context.db.recipeCover.count({ where: { recipeId: recipe.id } })).resolves.toBe(1);
+  });
+
   it("uploads recipe and spoon photos to owner-scoped R2 namespaces", async () => {
     const bucket = mockR2();
     const recipePayload = parseJson(await callSpoonjoyMcpTool("upload_recipe_image", {

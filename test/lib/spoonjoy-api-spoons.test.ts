@@ -989,6 +989,63 @@ describe("spoonjoy-api spoon operations", () => {
       });
     });
 
+    it("replays no-key cover create and regenerate mutations without duplicate work", async () => {
+      const { principal: chef } = await makeUser(db);
+      const recipe = await makeRecipe(db, chef.id);
+      const createArgs = {
+        recipeId: recipe.id,
+        imageUrl: dataUrl(),
+        generateEditorial: false,
+      };
+
+      const firstCreate = await callSpoonjoyApiOperation(
+        "create_recipe_cover_from_upload",
+        createArgs,
+        { db, principal: chef, allowLocalImageFallback: true },
+      ) as { createdCover: { id: string }; mutation: { idempotencyKey: string | null; replayed: boolean } };
+      const replayCreate = await callSpoonjoyApiOperation(
+        "create_recipe_cover_from_upload",
+        createArgs,
+        { db, principal: chef, allowLocalImageFallback: true },
+      ) as { createdCover: { id: string }; mutation: { idempotencyKey: string | null; replayed: boolean } };
+
+      expect(replayCreate.createdCover.id).toBe(firstCreate.createdCover.id);
+      expect(replayCreate.mutation).toEqual({ idempotencyKey: null, replayed: true });
+      await expect(db.recipeCover.count({ where: { recipeId: recipe.id } })).resolves.toBe(1);
+
+      const regenerateRecipe = await makeRecipe(db, chef.id);
+      const cover = await db.recipeCover.create({
+        data: {
+          recipeId: regenerateRecipe.id,
+          imageUrl: dataUrl(),
+          sourceType: "chef-upload",
+          sourceImageUrl: dataUrl(),
+          status: "ready",
+        },
+      });
+      const runner = imageRunner();
+      const regenerateArgs = {
+        recipeId: regenerateRecipe.id,
+        coverId: cover.id,
+        activateWhenReady: true,
+      };
+
+      const firstRegenerate = await callSpoonjoyApiOperation(
+        "regenerate_recipe_cover",
+        regenerateArgs,
+        { db, principal: chef, allowLocalImageFallback: true, imageGenRunner: runner },
+      ) as { createdCover: { id: string }; mutation: { idempotencyKey: string | null; replayed: boolean } };
+      const replayRegenerate = await callSpoonjoyApiOperation(
+        "regenerate_recipe_cover",
+        regenerateArgs,
+        { db, principal: chef, allowLocalImageFallback: true, imageGenRunner: runner },
+      ) as { createdCover: { id: string }; mutation: { idempotencyKey: string | null; replayed: boolean } };
+
+      expect(replayRegenerate.createdCover.id).toBe(firstRegenerate.createdCover.id);
+      expect(replayRegenerate.mutation).toEqual({ idempotencyKey: null, replayed: true });
+      expect(runner.imageToImage).toHaveBeenCalledTimes(1);
+    });
+
     it("rejects in-flight idempotent cover mutations without creating duplicate work", async () => {
       const { principal: chef } = await makeUser(db);
       const recipe = await makeRecipe(db, chef.id);

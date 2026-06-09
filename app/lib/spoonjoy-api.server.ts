@@ -657,7 +657,11 @@ async function mcpMutationRequestHash(
   });
 }
 
-function markMcpReplay(body: unknown, idempotencyKey: string): unknown {
+function internalMcpCoverIdempotencyKey(operation: string, requestHash: string): string {
+  return `spoonjoy:mcp-cover:${operation}:${requestHash}`;
+}
+
+function markMcpReplay(body: unknown, idempotencyKey: string | null): unknown {
   if (!body || typeof body !== "object" || Array.isArray(body)) return body;
   const record = body as { mutation?: { idempotencyKey?: string | null; replayed?: boolean } };
   record.mutation = { ...(record.mutation ?? {}), idempotencyKey, replayed: true };
@@ -676,21 +680,24 @@ async function runIdempotentMcpCoverMutation(
     write: (idempotencyKey: string | null) => Promise<CoverMutationResult>;
   },
 ): Promise<unknown> {
-  if (input.dryRun || !input.idempotencyKey) {
+  if (input.dryRun) {
     return input.write(input.idempotencyKey ?? null);
   }
 
+  const requestHash = await mcpMutationRequestHash(input.operation, input.recipeId, input.args);
+  const publicIdempotencyKey = input.idempotencyKey ?? null;
+  const reservationKey = input.idempotencyKey ?? internalMcpCoverIdempotencyKey(input.operation, requestHash);
   const reservation = await reserveIdempotencyKey(context.db, {
     userId: principal.id,
     credentialId: principal.source === "bearer" ? principal.credentialId : null,
     clientKey: idempotencyClientKey(principal),
-    key: input.idempotencyKey,
+    key: reservationKey,
     operation: input.operation,
-    requestHash: await mcpMutationRequestHash(input.operation, input.recipeId, input.args),
+    requestHash,
   });
 
   if (reservation.status === "replay") {
-    return markMcpReplay(JSON.parse(reservation.record.responseBody as string), input.idempotencyKey);
+    return markMcpReplay(JSON.parse(reservation.record.responseBody as string), publicIdempotencyKey);
   }
   if (reservation.status === "in_flight") {
     throw new ApiAuthError("idempotencyKey is already in progress; retry shortly", 409);
@@ -701,7 +708,7 @@ async function runIdempotentMcpCoverMutation(
 
   let result: CoverMutationResult;
   try {
-    result = await input.write(input.idempotencyKey);
+    result = await input.write(publicIdempotencyKey);
   } catch (error) {
     await context.db.apiIdempotencyKey.deleteMany({ where: { id: reservation.record.id } });
     throw error;
