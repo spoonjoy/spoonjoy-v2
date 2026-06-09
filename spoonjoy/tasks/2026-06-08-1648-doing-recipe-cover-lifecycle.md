@@ -1,6 +1,6 @@
 # Doing: Recipe Cover Lifecycle
 
-**Status**: drafting
+**Status**: READY_FOR_EXECUTION
 **Execution Mode**: direct
 **Created**: 2026-06-08 17:00
 **Planning**: ./2026-06-08-1648-planning-recipe-cover-lifecycle.md
@@ -236,3 +236,4 @@ Make Spoonjoy recipe imagery explicit, provenance-aware, and controllable across
 - 2026-06-08 17:38 Added recipe new/edit route, seed, import MCP, and fork MCP coverage after Tinfoil confirmation
 - 2026-06-08 17:42 Tinfoil scrutiny converged
 - 2026-06-08 17:49 Moved docs to spoonjoy/tasks, renamed branch, and addressed Stranger With Candy findings
+- 2026-06-08 17:52 Stranger With Candy scrutiny converged; doing doc ready for execution
