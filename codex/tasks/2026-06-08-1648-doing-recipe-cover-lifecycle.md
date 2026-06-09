@@ -227,3 +227,4 @@ Make Spoonjoy recipe imagery explicit, provenance-aware, and controllable across
 - 2026-06-08 17:04 Granularity pass converged
 - 2026-06-08 17:11 Added Open Graph route and API v1 OpenAPI targets after validation review
 - 2026-06-08 17:13 Validation pass converged
+- 2026-06-08 17:17 Pinned schema, UI, automation, and MCP contracts after ambiguity review
