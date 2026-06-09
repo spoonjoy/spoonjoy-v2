@@ -453,6 +453,7 @@ async function uploadImportCover(
   bucket: R2Bucket,
   fetchImpl: typeof fetch,
   recipeId: string,
+  chefId: string,
   coverSourceUrl: string,
   logger: Pick<Console, "error">,
   now: () => Date,
@@ -468,7 +469,11 @@ async function uploadImportCover(
       recipeId,
       imageUrl: `/photos/${key}`,
       sourceType: "import",
-    });
+      status: "ready",
+      createdById: chefId,
+      sourceImageUrl: coverSourceUrl,
+      generationStatus: "none",
+    }).then((cover) => activateImportedCoverIfStillAutomatic(db, recipeId, cover.id));
   } catch (err) {
     logger.error("recipe-import cover upload failed", err);
   }
@@ -477,6 +482,7 @@ async function uploadImportCover(
 async function uploadPlaceholderCover(
   db: PrismaClient,
   recipeId: string,
+  chefId: string,
   title: string,
   description: string | null,
   deps: {
@@ -498,10 +504,32 @@ async function uploadPlaceholderCover(
       recipeId,
       imageUrl,
       sourceType: "ai-placeholder",
-    });
+      status: "ready",
+      createdById: chefId,
+      generationStatus: "succeeded",
+    }).then((cover) => activateImportedCoverIfStillAutomatic(db, recipeId, cover.id));
   } catch (err) {
     deps.logger.error("recipe-import placeholder cover failed", err);
   }
+}
+
+async function activateImportedCoverIfStillAutomatic(
+  db: PrismaClient,
+  recipeId: string,
+  coverId: string,
+): Promise<void> {
+  await db.recipe.updateMany({
+    where: {
+      id: recipeId,
+      coverMode: "auto",
+      activeCoverId: null,
+    },
+    data: {
+      activeCoverId: coverId,
+      activeCoverVariant: "image",
+      coverMode: "auto",
+    },
+  });
 }
 
 export async function importRecipeFromUrl(
@@ -595,6 +623,7 @@ export async function importRecipeFromUrl(
     logger: deps.logger ?? console,
     now: now ?? (() => new Date()),
     recipeId: persisted.id,
+    chefId,
     title: persisted.title,
     description: extraction.draft.description,
     coverSourceUrl: extraction.draft.imageUrl,
@@ -620,6 +649,7 @@ interface ScheduleCoverArgs {
   logger: Pick<Console, "error">;
   now: () => Date;
   recipeId: string;
+  chefId: string;
   title: string;
   description: string | null;
   coverSourceUrl: string | null;
@@ -635,12 +665,13 @@ async function scheduleCover(args: ScheduleCoverArgs): Promise<boolean> {
       bucket,
       args.fetchImpl,
       args.recipeId,
+      args.chefId,
       args.coverSourceUrl,
       args.logger,
       args.now,
     );
   } else if (args.imageGenRunner) {
-    task = uploadPlaceholderCover(args.db, args.recipeId, args.title, args.description, {
+    task = uploadPlaceholderCover(args.db, args.recipeId, args.chefId, args.title, args.description, {
       env: args.env,
       runner: args.imageGenRunner,
       bucket,

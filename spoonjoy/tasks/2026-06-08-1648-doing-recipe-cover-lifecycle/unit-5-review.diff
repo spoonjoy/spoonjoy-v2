@@ -1,0 +1,595 @@
+diff --git a/app/lib/recipe-fork.server.ts b/app/lib/recipe-fork.server.ts
+index f966fd40..8ce6a4bf 100644
+--- a/app/lib/recipe-fork.server.ts
++++ b/app/lib/recipe-fork.server.ts
+@@ -1,4 +1,11 @@
+ import type { Prisma, PrismaClient as PrismaClientType } from "@prisma/client";
++import {
++  createCover,
++  type RecipeCoverGenerationStatus,
++  type RecipeCoverSourceType,
++  type RecipeCoverStatus,
++  type RecipeCoverVariant,
++} from "~/lib/recipe-cover.server";
+ 
+ export class ForkSourceNotFoundError extends Error {
+   constructor(sourceRecipeId: string) {
+@@ -26,16 +33,13 @@ export interface ForkRecipeInput {
+ 
+ const sourceInclude = {
+   chef: { select: { id: true, username: true } },
++  activeCover: true,
+   steps: {
+     orderBy: { stepNum: "asc" as const },
+     include: {
+       ingredients: true,
+     },
+   },
+-  covers: {
+-    orderBy: [{ createdAt: "desc" as const }, { id: "desc" as const }],
+-    take: 1,
+-  },
+ } satisfies Prisma.RecipeInclude;
+ 
+ const detailInclude = {
+@@ -65,6 +69,25 @@ function variationTitle(base: string, n: number): string {
+   return n <= 1 ? base : `${base} (variation ${n})`;
+ }
+ 
++function nonEmpty(value: string | null | undefined): value is string {
++  return typeof value === "string" && value.length > 0;
++}
++
++function copyableActiveVariant(
++  source: Prisma.RecipeGetPayload<{ include: typeof sourceInclude }>,
++): RecipeCoverVariant | null {
++  const cover = source.activeCover;
++  if (!cover || source.coverMode === "none") return null;
++  if (cover.recipeId !== source.id) return null;
++  if (cover.status !== "ready" || cover.archivedAt) return null;
++
++  if (source.activeCoverVariant === "stylized" && nonEmpty(cover.stylizedImageUrl)) return "stylized";
++  if (source.activeCoverVariant === "image" && nonEmpty(cover.imageUrl)) return "image";
++  if (nonEmpty(cover.stylizedImageUrl)) return "stylized";
++  if (nonEmpty(cover.imageUrl)) return "image";
++  return null;
++}
++
+ async function resolveTitle(
+   db: PrismaClientType,
+   chefId: string,
+@@ -153,17 +176,41 @@ export async function forkRecipe(
+     });
+   }
+ 
+-  const latestCover = source.covers[0];
+-  if (latestCover) {
+-    await db.recipeCover.create({
++  if (source.coverMode === "none") {
++    await db.recipe.update({
++      where: { id: created.id },
+       data: {
+-        recipeId: created.id,
+-        imageUrl: latestCover.imageUrl,
+-        stylizedImageUrl: null,
+-        sourceType: "chef-upload",
+-        sourceSpoonId: null,
++        activeCoverId: null,
++        activeCoverVariant: null,
++        coverMode: "none",
+       },
+     });
++  } else {
++    const activeVariant = copyableActiveVariant(source);
++    if (source.activeCover && activeVariant) {
++      const copiedCover = await createCover(db, {
++        recipeId: created.id,
++        imageUrl: source.activeCover.imageUrl,
++        stylizedImageUrl: source.activeCover.stylizedImageUrl,
++        sourceType: source.activeCover.sourceType as RecipeCoverSourceType,
++        sourceSpoonId: null,
++        status: source.activeCover.status as RecipeCoverStatus,
++        createdById: source.activeCover.createdById,
++        sourceImageUrl: source.activeCover.sourceImageUrl,
++        generationStatus: source.activeCover.generationStatus as RecipeCoverGenerationStatus,
++        failureReason: source.activeCover.failureReason,
++        promptVersion: source.activeCover.promptVersion,
++        styleVersion: source.activeCover.styleVersion,
++      });
++      await db.recipe.update({
++        where: { id: created.id },
++        data: {
++          activeCoverId: copiedCover.id,
++          activeCoverVariant: activeVariant,
++          coverMode: source.coverMode,
++        },
++      });
++    }
+   }
+ 
+   const recipe = await db.recipe.findUniqueOrThrow({
+diff --git a/app/lib/recipe-import.server.ts b/app/lib/recipe-import.server.ts
+index a90793d9..7633d715 100644
+--- a/app/lib/recipe-import.server.ts
++++ b/app/lib/recipe-import.server.ts
+@@ -453,6 +453,7 @@ async function uploadImportCover(
+   bucket: R2Bucket,
+   fetchImpl: typeof fetch,
+   recipeId: string,
++  chefId: string,
+   coverSourceUrl: string,
+   logger: Pick<Console, "error">,
+   now: () => Date,
+@@ -468,7 +469,11 @@ async function uploadImportCover(
+       recipeId,
+       imageUrl: `/photos/${key}`,
+       sourceType: "import",
+-    });
++      status: "ready",
++      createdById: chefId,
++      sourceImageUrl: coverSourceUrl,
++      generationStatus: "none",
++    }).then((cover) => activateImportedCoverIfStillAutomatic(db, recipeId, cover.id));
+   } catch (err) {
+     logger.error("recipe-import cover upload failed", err);
+   }
+@@ -477,6 +482,7 @@ async function uploadImportCover(
+ async function uploadPlaceholderCover(
+   db: PrismaClient,
+   recipeId: string,
++  chefId: string,
+   title: string,
+   description: string | null,
+   deps: {
+@@ -498,12 +504,34 @@ async function uploadPlaceholderCover(
+       recipeId,
+       imageUrl,
+       sourceType: "ai-placeholder",
+-    });
++      status: "ready",
++      createdById: chefId,
++      generationStatus: "succeeded",
++    }).then((cover) => activateImportedCoverIfStillAutomatic(db, recipeId, cover.id));
+   } catch (err) {
+     deps.logger.error("recipe-import placeholder cover failed", err);
+   }
+ }
+ 
++async function activateImportedCoverIfStillAutomatic(
++  db: PrismaClient,
++  recipeId: string,
++  coverId: string,
++): Promise<void> {
++  await db.recipe.updateMany({
++    where: {
++      id: recipeId,
++      coverMode: "auto",
++      activeCoverId: null,
++    },
++    data: {
++      activeCoverId: coverId,
++      activeCoverVariant: "image",
++      coverMode: "auto",
++    },
++  });
++}
++
+ export async function importRecipeFromUrl(
+   options: ImportRecipeOptions,
+   deps: ImportRecipeDeps,
+@@ -595,6 +623,7 @@ export async function importRecipeFromUrl(
+     logger: deps.logger ?? console,
+     now: now ?? (() => new Date()),
+     recipeId: persisted.id,
++    chefId,
+     title: persisted.title,
+     description: extraction.draft.description,
+     coverSourceUrl: extraction.draft.imageUrl,
+@@ -620,6 +649,7 @@ interface ScheduleCoverArgs {
+   logger: Pick<Console, "error">;
+   now: () => Date;
+   recipeId: string;
++  chefId: string;
+   title: string;
+   description: string | null;
+   coverSourceUrl: string | null;
+@@ -635,12 +665,13 @@ async function scheduleCover(args: ScheduleCoverArgs): Promise<boolean> {
+       bucket,
+       args.fetchImpl,
+       args.recipeId,
++      args.chefId,
+       args.coverSourceUrl,
+       args.logger,
+       args.now,
+     );
+   } else if (args.imageGenRunner) {
+-    task = uploadPlaceholderCover(args.db, args.recipeId, args.title, args.description, {
++    task = uploadPlaceholderCover(args.db, args.recipeId, args.chefId, args.title, args.description, {
+       env: args.env,
+       runner: args.imageGenRunner,
+       bucket,
+diff --git a/spoonjoy/tasks/2026-06-08-1648-doing-recipe-cover-lifecycle.md b/spoonjoy/tasks/2026-06-08-1648-doing-recipe-cover-lifecycle.md
+index 1921b7da..67584ead 100644
+--- a/spoonjoy/tasks/2026-06-08-1648-doing-recipe-cover-lifecycle.md
++++ b/spoonjoy/tasks/2026-06-08-1648-doing-recipe-cover-lifecycle.md
+@@ -119,15 +119,15 @@ Make Spoonjoy recipe imagery explicit, provenance-aware, and controllable across
+ **What**: Refactor duplicate upload/placeholder activation logic and cover error paths for missing bucket, failed generation, empty image URL, and no-cover state.
+ **Acceptance**: Affected mutation/job tests pass with 100% coverage on new branches and no warnings.
+ 
+-### ⬜ Unit 5a: Import And Fork Cover Flows — Tests
++### ✅ Unit 5a: Import And Fork Cover Flows — Tests
+ **What**: Add failing tests for recipe import cover rows, imported provenance, fork cover copying, fork active-cover selection, and preservation of manual/no-cover semantics on copied recipes.
+ **Acceptance**: Tests fail because import/fork paths do not preserve explicit active-cover state or detailed provenance.
+ 
+-### ⬜ Unit 5b: Import And Fork Cover Flows — Implementation
++### ✅ Unit 5b: Import And Fork Cover Flows — Implementation
+ **What**: Update `app/lib/recipe-import.server.ts` and `app/lib/recipe-fork.server.ts` to create/copy cover status, provenance, active variant, and active-cover state through helpers.
+ **Acceptance**: Unit 5a tests pass and fork/import flows cannot reintroduce newest-row selection.
+ 
+-### ⬜ Unit 5c: Import And Fork Cover Flows — Coverage & Refactor
++### ✅ Unit 5c: Import And Fork Cover Flows — Coverage & Refactor
+ **What**: Cover import/fork edge cases for missing source cover, empty source cover, archived source cover, pure AI placeholder, and imported image fallback.
+ **Acceptance**: Import/fork tests pass with 100% coverage on new branches and no warnings.
+ 
+@@ -265,3 +265,5 @@ Make Spoonjoy recipe imagery explicit, provenance-aware, and controllable across
+ - 2026-06-08 19:48 Fixed Unit 3 review findings: API provenance now nulls when the active image URL is not publicly displayable, API/OG loaders fetch only the scoped active cover candidate through shared cover helpers, and dynamic OG responses emit active-cover-derived freshness headers; targeted tests, coverage, and build passed (`unit-3-review-fix-green.log`, `unit-3-review-fix-coverage.log`, `unit-3-review-fix-build.log`).
+ - 2026-06-08 20:01 Fixed Unit 3 Round 2 review findings: updated the API recipe-list query mock for active-cover selects and preserved legacy MCP `create_recipe`/`update_recipe` upload behavior by activating the uploaded cover after stylization; focused and targeted suites plus build passed (`unit-3-round2-fix-green.log`, `unit-3-round2-fix-targeted.log`, `unit-3-round2-fix-build.log`).
+ - 2026-06-08 20:01 Unit 3 review converged after Round 3
++- 2026-06-08 20:35 Unit 5a/5b/5c complete: added red tests for import cover provenance/activation and fork active-cover/manual/no-cover semantics (`unit-5a-red.log`); implemented import cover status/provenance plus guarded auto-activation, and fork copying from the explicit active cover rather than newest history; targeted tests/build passed (`unit-5b-green.log`, `unit-5b-build.log`, `unit-5c-green.log`, `unit-5c-build.log`) and changed import/fork files reached 100% statements/branches/functions/lines (`unit-5c-coverage.log`).
++- 2026-06-08 20:40 Fixed Unit 5 review finding: fork now rejects cross-recipe active-cover pointers before copying cover history; regression red/green, coverage, and build passed (`unit-5-review-fix-red.log`, `unit-5-review-fix-green.log`, `unit-5-review-fix-coverage.log`, `unit-5-review-fix-build.log`).
+diff --git a/test/lib/recipe-fork.server.test.ts b/test/lib/recipe-fork.server.test.ts
+index d8b6bbcd..22cf1a38 100644
+--- a/test/lib/recipe-fork.server.test.ts
++++ b/test/lib/recipe-fork.server.test.ts
+@@ -38,8 +38,19 @@ async function seedSourceRecipe(
+       stylizedImageUrl?: string | null;
+       sourceType?: string;
+       sourceSpoonId?: string | null;
++      status?: string;
++      createdById?: string | null;
++      sourceImageUrl?: string | null;
++      generationStatus?: string;
++      failureReason?: string | null;
++      promptVersion?: string | null;
++      styleVersion?: string | null;
++      archivedAt?: Date | null;
+       createdAt?: Date;
+     }>;
++    coverMode?: "auto" | "manual" | "none";
++    activeCoverIndex?: number | null;
++    activeCoverVariant?: "image" | "stylized" | null;
+     deletedAt?: Date | null;
+   } = {},
+ ) {
+@@ -90,17 +101,46 @@ async function seedSourceRecipe(
+     });
+   }
+ 
++  const createdCovers = [];
+   for (const cover of options.covers ?? []) {
+-    await db.recipeCover.create({
++    const createdCover = await db.recipeCover.create({
+       data: {
+         recipeId: recipe.id,
+         imageUrl: cover.imageUrl,
+         stylizedImageUrl: cover.stylizedImageUrl ?? null,
+         sourceType: cover.sourceType ?? "chef-upload",
+         sourceSpoonId: cover.sourceSpoonId ?? null,
++        status: cover.status ?? "ready",
++        createdById: cover.createdById ?? null,
++        sourceImageUrl: cover.sourceImageUrl ?? null,
++        generationStatus: cover.generationStatus ?? "none",
++        failureReason: cover.failureReason ?? null,
++        promptVersion: cover.promptVersion ?? null,
++        styleVersion: cover.styleVersion ?? null,
++        archivedAt: cover.archivedAt ?? null,
+         ...(cover.createdAt ? { createdAt: cover.createdAt } : {}),
+       },
+     });
++    createdCovers.push(createdCover);
++  }
++
++  if (options.coverMode === "none") {
++    await db.recipe.update({
++      where: { id: recipe.id },
++      data: { activeCoverId: null, activeCoverVariant: null, coverMode: "none" },
++    });
++  } else if (options.activeCoverIndex != null) {
++    const active = createdCovers[options.activeCoverIndex];
++    if (active) {
++      await db.recipe.update({
++        where: { id: recipe.id },
++        data: {
++          activeCoverId: active.id,
++          activeCoverVariant: options.activeCoverVariant === undefined ? "image" : options.activeCoverVariant,
++          coverMode: options.coverMode ?? "manual",
++        },
++      });
++    }
+   }
+ 
+   return recipe;
+@@ -297,7 +337,7 @@ describe("recipe-fork.server", () => {
+     ).rejects.toBeInstanceOf(ForkSourceNotFoundError);
+   });
+ 
+-  it("snapshots the single source cover with sourceType chef-upload and null stylizedImageUrl", async () => {
++  it("copies the source active cover with provenance and active variant", async () => {
+     const chefA = await makeUser();
+     const chefB = await makeUser();
+     const source = await seedSourceRecipe(chefA.id, {
+@@ -306,9 +346,16 @@ describe("recipe-fork.server", () => {
+         {
+           imageUrl: "https://r2/cover.jpg",
+           stylizedImageUrl: "https://r2/stylized.jpg",
+-          sourceType: "spoon",
++          sourceType: "import",
++          sourceImageUrl: "https://source.example.com/cover.jpg",
++          generationStatus: "succeeded",
++          promptVersion: "import-v1",
++          styleVersion: "editorial-v2",
+         },
+       ],
++      activeCoverIndex: 0,
++      activeCoverVariant: "stylized",
++      coverMode: "manual",
+     });
+ 
+     const result = await forkRecipe(db, { sourceRecipeId: source.id, viewerId: chefB.id });
+@@ -316,12 +363,19 @@ describe("recipe-fork.server", () => {
+     expect(result.recipe.covers).toHaveLength(1);
+     const cover = result.recipe.covers[0];
+     expect(cover.imageUrl).toBe("https://r2/cover.jpg");
+-    expect(cover.stylizedImageUrl).toBeNull();
+-    expect(cover.sourceType).toBe("chef-upload");
++    expect(cover.stylizedImageUrl).toBe("https://r2/stylized.jpg");
++    expect(cover.sourceType).toBe("import");
+     expect(cover.sourceSpoonId).toBeNull();
++    expect(cover.sourceImageUrl).toBe("https://source.example.com/cover.jpg");
++    expect(cover.generationStatus).toBe("succeeded");
++    expect(cover.promptVersion).toBe("import-v1");
++    expect(cover.styleVersion).toBe("editorial-v2");
++    expect(result.recipe.activeCoverId).toBe(cover.id);
++    expect(result.recipe.activeCoverVariant).toBe("stylized");
++    expect(result.recipe.coverMode).toBe("manual");
+   });
+ 
+-  it("picks the latest source cover when multiple exist", async () => {
++  it("copies the explicit active cover instead of the latest source cover", async () => {
+     const chefA = await makeUser();
+     const chefB = await makeUser();
+     const older = new Date("2026-01-01T00:00:00Z");
+@@ -332,12 +386,136 @@ describe("recipe-fork.server", () => {
+         { imageUrl: "https://r2/old.jpg", createdAt: older },
+         { imageUrl: "https://r2/new.jpg", createdAt: newer },
+       ],
++      activeCoverIndex: 0,
++      activeCoverVariant: "image",
++      coverMode: "auto",
++    });
++
++    const result = await forkRecipe(db, { sourceRecipeId: source.id, viewerId: chefB.id });
++
++    expect(result.recipe.covers).toHaveLength(1);
++    expect(result.recipe.covers[0].imageUrl).toBe("https://r2/old.jpg");
++    expect(result.recipe.activeCoverId).toBe(result.recipe.covers[0].id);
++    expect(result.recipe.activeCoverVariant).toBe("image");
++    expect(result.recipe.coverMode).toBe("auto");
++  });
++
++  it("preserves an intentional no-cover source state", async () => {
++    const chefA = await makeUser();
++    const chefB = await makeUser();
++    const source = await seedSourceRecipe(chefA.id, {
++      title: "NoCoverMode",
++      covers: [{ imageUrl: "https://r2/history.jpg" }],
++      coverMode: "none",
++    });
++
++    const result = await forkRecipe(db, { sourceRecipeId: source.id, viewerId: chefB.id });
++
++    expect(result.recipe.covers).toHaveLength(0);
++    expect(result.recipe.activeCoverId).toBeNull();
++    expect(result.recipe.activeCoverVariant).toBeNull();
++    expect(result.recipe.coverMode).toBe("none");
++    expect(result.attribution.sourceRecipeId).toBe(source.id);
++  });
++
++  it("falls back to a displayable stylized variant when the source active variant is missing", async () => {
++    const chefA = await makeUser();
++    const chefB = await makeUser();
++    const source = await seedSourceRecipe(chefA.id, {
++      title: "StylizedFallback",
++      covers: [
++        {
++          imageUrl: "",
++          stylizedImageUrl: "https://r2/editorial.jpg",
++          sourceType: "chef-upload",
++        },
++      ],
++      activeCoverIndex: 0,
++      activeCoverVariant: null,
++      coverMode: "auto",
+     });
+ 
+     const result = await forkRecipe(db, { sourceRecipeId: source.id, viewerId: chefB.id });
+ 
+     expect(result.recipe.covers).toHaveLength(1);
+-    expect(result.recipe.covers[0].imageUrl).toBe("https://r2/new.jpg");
++    expect(result.recipe.covers[0].stylizedImageUrl).toBe("https://r2/editorial.jpg");
++    expect(result.recipe.activeCoverId).toBe(result.recipe.covers[0].id);
++    expect(result.recipe.activeCoverVariant).toBe("stylized");
++    expect(result.recipe.coverMode).toBe("auto");
++  });
++
++  it("falls back to the raw image variant when stylized is unavailable", async () => {
++    const chefA = await makeUser();
++    const chefB = await makeUser();
++    const source = await seedSourceRecipe(chefA.id, {
++      title: "RawFallback",
++      covers: [{ imageUrl: "https://r2/raw.jpg" }],
++      activeCoverIndex: 0,
++      activeCoverVariant: null,
++      coverMode: "auto",
++    });
++
++    const result = await forkRecipe(db, { sourceRecipeId: source.id, viewerId: chefB.id });
++
++    expect(result.recipe.covers).toHaveLength(1);
++    expect(result.recipe.covers[0].imageUrl).toBe("https://r2/raw.jpg");
++    expect(result.recipe.activeCoverVariant).toBe("image");
++  });
++
++  it("does not copy failed archived or empty active covers", async () => {
++    const chefA = await makeUser();
++    const chefB = await makeUser();
++
++    for (const cover of [
++      { title: "FailedCover", status: "failed", imageUrl: "https://r2/failed.jpg" },
++      { title: "ArchivedCover", status: "ready", imageUrl: "https://r2/archived.jpg", archivedAt: new Date() },
++      { title: "EmptyCover", status: "ready", imageUrl: "" },
++    ]) {
++      const source = await seedSourceRecipe(chefA.id, {
++        title: cover.title,
++        covers: [cover],
++        activeCoverIndex: 0,
++        activeCoverVariant: "image",
++        coverMode: "manual",
++      });
++
++      const result = await forkRecipe(db, { sourceRecipeId: source.id, viewerId: chefB.id });
++
++      expect(result.recipe.covers).toHaveLength(0);
++      expect(result.recipe.activeCoverId).toBeNull();
++      expect(result.recipe.activeCoverVariant).toBeNull();
++      expect(result.recipe.coverMode).toBe("auto");
++    }
++  });
++
++  it("does not copy a cross-recipe active cover pointer", async () => {
++    const chefA = await makeUser();
++    const chefB = await makeUser();
++    const foreign = await seedSourceRecipe(chefA.id, {
++      title: "ForeignCoverOwner",
++      covers: [{ imageUrl: "https://r2/foreign.jpg" }],
++      activeCoverIndex: 0,
++      activeCoverVariant: "image",
++    });
++    const foreignCover = await db.recipeCover.findFirstOrThrow({
++      where: { recipeId: foreign.id },
++    });
++    const source = await seedSourceRecipe(chefA.id, { title: "CorruptActiveCover" });
++    await db.recipe.update({
++      where: { id: source.id },
++      data: {
++        activeCoverId: foreignCover.id,
++        activeCoverVariant: "image",
++        coverMode: "manual",
++      },
++    });
++
++    const result = await forkRecipe(db, { sourceRecipeId: source.id, viewerId: chefB.id });
++
++    expect(result.recipe.covers).toHaveLength(0);
++    expect(result.recipe.activeCoverId).toBeNull();
++    expect(result.recipe.activeCoverVariant).toBeNull();
++    expect(result.recipe.coverMode).toBe("auto");
+   });
+ 
+   it("produces no covers when the source has none", async () => {
+diff --git a/test/lib/recipe-import.test.ts b/test/lib/recipe-import.test.ts
+index 370e1ac5..a8e4277f 100644
+--- a/test/lib/recipe-import.test.ts
++++ b/test/lib/recipe-import.test.ts
+@@ -1356,7 +1356,23 @@ describe("importRecipeFromUrl — extraction paths", () => {
+         where: { recipeId: result.recipeId! },
+       });
+       expect(covers).toHaveLength(1);
+-      expect(covers[0].sourceType).toBe("import");
++      expect(covers[0]).toMatchObject({
++        sourceType: "import",
++        status: "ready",
++        generationStatus: "none",
++        createdById: chef.id,
++        sourceImageUrl: "https://cdn.example.com/pasta-hero.jpg",
++      });
++      await expect(
++        db.recipe.findUniqueOrThrow({
++          where: { id: result.recipeId! },
++          select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
++        }),
++      ).resolves.toEqual({
++        activeCoverId: covers[0].id,
++        activeCoverVariant: "image",
++        coverMode: "auto",
++      });
+     });
+ 
+     it("scheduled upload calls bucket.put and createCover sourceType=import", async () => {
+@@ -1383,8 +1399,24 @@ describe("importRecipeFromUrl — extraction paths", () => {
+       const covers = await db.recipeCover.findMany({
+         where: { recipeId: result.recipeId! },
+       });
+-      expect(covers[0].sourceType).toBe("import");
++      expect(covers[0]).toMatchObject({
++        sourceType: "import",
++        status: "ready",
++        generationStatus: "none",
++        createdById: chef.id,
++        sourceImageUrl: "https://cdn.example.com/pasta-hero.jpg",
++      });
+       expect(covers[0].imageUrl).toContain("/photos/");
++      await expect(
++        db.recipe.findUniqueOrThrow({
++          where: { id: result.recipeId! },
++          select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
++        }),
++      ).resolves.toEqual({
++        activeCoverId: covers[0].id,
++        activeCoverVariant: "image",
++        coverMode: "auto",
++      });
+     });
+ 
+     it("same-millisecond imported cover uploads use unique immutable keys", async () => {
+@@ -1533,7 +1565,22 @@ describe("importRecipeFromUrl — extraction paths", () => {
+         where: { recipeId: result.recipeId! },
+       });
+       expect(covers).toHaveLength(1);
+-      expect(covers[0].sourceType).toBe("ai-placeholder");
++      expect(covers[0]).toMatchObject({
++        sourceType: "ai-placeholder",
++        status: "ready",
++        generationStatus: "succeeded",
++        createdById: chef.id,
++      });
++      await expect(
++        db.recipe.findUniqueOrThrow({
++          where: { id: result.recipeId! },
++          select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
++        }),
++      ).resolves.toEqual({
++        activeCoverId: covers[0].id,
++        activeCoverVariant: "image",
++        coverMode: "auto",
++      });
+     });
+ 
+     it("og:image absent + imageGenRunner generation fails → recipe still exists, no cover", async () => {
+@@ -1583,6 +1630,16 @@ describe("importRecipeFromUrl — extraction paths", () => {
+       );
+       expect(result.coverPending).toBe(false);
+       expect(waitUntil).not.toHaveBeenCalled();
++      await expect(
++        db.recipe.findUniqueOrThrow({
++          where: { id: result.recipeId! },
++          select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
++        }),
++      ).resolves.toEqual({
++        activeCoverId: null,
++        activeCoverVariant: null,
++        coverMode: "auto",
++      });
+     });
+ 
+     it("bucket undefined → no cover scheduled even if og:image present, coverPending=false", async () => {

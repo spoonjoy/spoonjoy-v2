@@ -1,0 +1,54 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ❯ test/lib/recipe-fork.server.test.ts (22 tests | 1 failed) 425ms
+     ✓ clones a simple 2-step recipe with ingredients into the viewer's kitchen 55ms
+     ✓ clones the step-output-use graph 19ms
+     ✓ appends '(variation 2)' on a single title collision 19ms
+     ✓ appends '(variation 4)' when several variations already exist 12ms
+     ✓ uses titleOverride when supplied and no collision exists 9ms
+     ✓ suffixes titleOverride when it collides 9ms
+     ✓ throws ForkTitleExhaustedError when 100 variations are taken 75ms
+     ✓ throws ForkSourceNotFoundError when the source recipe does not exist 6ms
+     ✓ throws ForkSourceNotFoundError when the source recipe is soft-deleted 9ms
+     ✓ copies the source active cover with provenance and active variant 23ms
+     ✓ copies the explicit active cover instead of the latest source cover 12ms
+     ✓ preserves an intentional no-cover source state 11ms
+     ✓ falls back to a displayable stylized variant when the source active variant is missing 11ms
+     ✓ falls back to the raw image variant when stylized is unavailable 11ms
+     ✓ does not copy failed archived or empty active covers 17ms
+     × does not copy a cross-recipe active cover pointer 16ms
+     ✓ produces no covers when the source has none 8ms
+     ✓ supports forking a chef's own recipe and applies a variation suffix 8ms
+     ✓ does not propagate sourceUrl from the source recipe 8ms
+     ✓ handles a source recipe with zero steps 9ms
+     ✓ handles a step with zero ingredients 10ms
+     ✓ preserves description and servings from the source 9ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/lib/recipe-fork.server.test.ts > recipe-fork.server > does not copy a cross-recipe active cover pointer
+AssertionError: expected [ { …(15) } ] to have a length of +0 but got 1
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ test/lib/recipe-fork.server.test.ts:515:34
+    513|     const result = await forkRecipe(db, { sourceRecipeId: source.id, v…
+    514| 
+    515|     expect(result.recipe.covers).toHaveLength(0);
+       |                                  ^
+    516|     expect(result.recipe.activeCoverId).toBeNull();
+    517|     expect(result.recipe.activeCoverVariant).toBeNull();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 21 passed (22)
+   Start at  20:39:01
+   Duration  987ms (transform 75ms, setup 100ms, import 155ms, tests 425ms, environment 189ms)
+

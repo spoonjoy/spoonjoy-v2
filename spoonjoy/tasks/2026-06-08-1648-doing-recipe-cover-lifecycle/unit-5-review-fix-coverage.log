@@ -1,0 +1,22 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+      Coverage enabled with istanbul
+
+ ✓ test/lib/recipe-import.test.ts (69 tests) 5907ms
+ ✓ test/lib/recipe-import-video.dispatcher.test.ts (27 tests) 2167ms
+ ✓ test/lib/recipe-import-video.integration.test.ts (8 tests) 682ms
+ ✓ test/lib/recipe-fork.server.test.ts (22 tests) 367ms
+
+ Test Files  4 passed (4)
+      Tests  126 passed (126)
+   Start at  20:39:34
+   Duration  11.27s (transform 403ms, setup 217ms, import 866ms, tests 9.12s, environment 577ms)
+
+ % Coverage report from istanbul
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |     100 |      100 |     100 |     100 |                   
+ ...fork.server.ts |     100 |      100 |     100 |     100 |                   
+ ...port.server.ts |     100 |      100 |     100 |     100 |                   
+-------------------|---------|----------|---------|---------|-------------------

@@ -1356,7 +1356,23 @@ describe("importRecipeFromUrl — extraction paths", () => {
         where: { recipeId: result.recipeId! },
       });
       expect(covers).toHaveLength(1);
-      expect(covers[0].sourceType).toBe("import");
+      expect(covers[0]).toMatchObject({
+        sourceType: "import",
+        status: "ready",
+        generationStatus: "none",
+        createdById: chef.id,
+        sourceImageUrl: "https://cdn.example.com/pasta-hero.jpg",
+      });
+      await expect(
+        db.recipe.findUniqueOrThrow({
+          where: { id: result.recipeId! },
+          select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
+        }),
+      ).resolves.toEqual({
+        activeCoverId: covers[0].id,
+        activeCoverVariant: "image",
+        coverMode: "auto",
+      });
     });
 
     it("scheduled upload calls bucket.put and createCover sourceType=import", async () => {
@@ -1383,8 +1399,24 @@ describe("importRecipeFromUrl — extraction paths", () => {
       const covers = await db.recipeCover.findMany({
         where: { recipeId: result.recipeId! },
       });
-      expect(covers[0].sourceType).toBe("import");
+      expect(covers[0]).toMatchObject({
+        sourceType: "import",
+        status: "ready",
+        generationStatus: "none",
+        createdById: chef.id,
+        sourceImageUrl: "https://cdn.example.com/pasta-hero.jpg",
+      });
       expect(covers[0].imageUrl).toContain("/photos/");
+      await expect(
+        db.recipe.findUniqueOrThrow({
+          where: { id: result.recipeId! },
+          select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
+        }),
+      ).resolves.toEqual({
+        activeCoverId: covers[0].id,
+        activeCoverVariant: "image",
+        coverMode: "auto",
+      });
     });
 
     it("same-millisecond imported cover uploads use unique immutable keys", async () => {
@@ -1533,7 +1565,22 @@ describe("importRecipeFromUrl — extraction paths", () => {
         where: { recipeId: result.recipeId! },
       });
       expect(covers).toHaveLength(1);
-      expect(covers[0].sourceType).toBe("ai-placeholder");
+      expect(covers[0]).toMatchObject({
+        sourceType: "ai-placeholder",
+        status: "ready",
+        generationStatus: "succeeded",
+        createdById: chef.id,
+      });
+      await expect(
+        db.recipe.findUniqueOrThrow({
+          where: { id: result.recipeId! },
+          select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
+        }),
+      ).resolves.toEqual({
+        activeCoverId: covers[0].id,
+        activeCoverVariant: "image",
+        coverMode: "auto",
+      });
     });
 
     it("og:image absent + imageGenRunner generation fails → recipe still exists, no cover", async () => {
@@ -1583,6 +1630,16 @@ describe("importRecipeFromUrl — extraction paths", () => {
       );
       expect(result.coverPending).toBe(false);
       expect(waitUntil).not.toHaveBeenCalled();
+      await expect(
+        db.recipe.findUniqueOrThrow({
+          where: { id: result.recipeId! },
+          select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
+        }),
+      ).resolves.toEqual({
+        activeCoverId: null,
+        activeCoverVariant: null,
+        coverMode: "auto",
+      });
     });
 
     it("bucket undefined → no cover scheduled even if og:image present, coverPending=false", async () => {

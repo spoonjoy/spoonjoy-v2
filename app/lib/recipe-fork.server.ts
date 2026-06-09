@@ -1,4 +1,11 @@
 import type { Prisma, PrismaClient as PrismaClientType } from "@prisma/client";
+import {
+  createCover,
+  type RecipeCoverGenerationStatus,
+  type RecipeCoverSourceType,
+  type RecipeCoverStatus,
+  type RecipeCoverVariant,
+} from "~/lib/recipe-cover.server";
 
 export class ForkSourceNotFoundError extends Error {
   constructor(sourceRecipeId: string) {
@@ -26,15 +33,12 @@ export interface ForkRecipeInput {
 
 const sourceInclude = {
   chef: { select: { id: true, username: true } },
+  activeCover: true,
   steps: {
     orderBy: { stepNum: "asc" as const },
     include: {
       ingredients: true,
     },
-  },
-  covers: {
-    orderBy: [{ createdAt: "desc" as const }, { id: "desc" as const }],
-    take: 1,
   },
 } satisfies Prisma.RecipeInclude;
 
@@ -63,6 +67,25 @@ export interface ForkedRecipeResult {
 
 function variationTitle(base: string, n: number): string {
   return n <= 1 ? base : `${base} (variation ${n})`;
+}
+
+function nonEmpty(value: string | null | undefined): value is string {
+  return typeof value === "string" && value.length > 0;
+}
+
+function copyableActiveVariant(
+  source: Prisma.RecipeGetPayload<{ include: typeof sourceInclude }>,
+): RecipeCoverVariant | null {
+  const cover = source.activeCover;
+  if (!cover || source.coverMode === "none") return null;
+  if (cover.recipeId !== source.id) return null;
+  if (cover.status !== "ready" || cover.archivedAt) return null;
+
+  if (source.activeCoverVariant === "stylized" && nonEmpty(cover.stylizedImageUrl)) return "stylized";
+  if (source.activeCoverVariant === "image" && nonEmpty(cover.imageUrl)) return "image";
+  if (nonEmpty(cover.stylizedImageUrl)) return "stylized";
+  if (nonEmpty(cover.imageUrl)) return "image";
+  return null;
 }
 
 async function resolveTitle(
@@ -153,17 +176,41 @@ export async function forkRecipe(
     });
   }
 
-  const latestCover = source.covers[0];
-  if (latestCover) {
-    await db.recipeCover.create({
+  if (source.coverMode === "none") {
+    await db.recipe.update({
+      where: { id: created.id },
       data: {
-        recipeId: created.id,
-        imageUrl: latestCover.imageUrl,
-        stylizedImageUrl: null,
-        sourceType: "chef-upload",
-        sourceSpoonId: null,
+        activeCoverId: null,
+        activeCoverVariant: null,
+        coverMode: "none",
       },
     });
+  } else {
+    const activeVariant = copyableActiveVariant(source);
+    if (source.activeCover && activeVariant) {
+      const copiedCover = await createCover(db, {
+        recipeId: created.id,
+        imageUrl: source.activeCover.imageUrl,
+        stylizedImageUrl: source.activeCover.stylizedImageUrl,
+        sourceType: source.activeCover.sourceType as RecipeCoverSourceType,
+        sourceSpoonId: null,
+        status: source.activeCover.status as RecipeCoverStatus,
+        createdById: source.activeCover.createdById,
+        sourceImageUrl: source.activeCover.sourceImageUrl,
+        generationStatus: source.activeCover.generationStatus as RecipeCoverGenerationStatus,
+        failureReason: source.activeCover.failureReason,
+        promptVersion: source.activeCover.promptVersion,
+        styleVersion: source.activeCover.styleVersion,
+      });
+      await db.recipe.update({
+        where: { id: created.id },
+        data: {
+          activeCoverId: copiedCover.id,
+          activeCoverVariant: activeVariant,
+          coverMode: source.coverMode,
+        },
+      });
+    }
   }
 
   const recipe = await db.recipe.findUniqueOrThrow({

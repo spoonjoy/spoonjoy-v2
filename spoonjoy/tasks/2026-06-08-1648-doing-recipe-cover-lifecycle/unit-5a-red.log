@@ -1,0 +1,235 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ❯ test/lib/recipe-import.test.ts (69 tests | 3 failed) 6502ms
+       ✓ returns confidence=high and source=json-ld for pure JSON-LD page 126ms
+       ✓ persists Recipe with sourceUrl set to input URL 100ms
+       ✓ persists title, description, servings from JSON-LD 96ms
+       ✓ persists RecipeStep + Ingredient rows from JSON-LD 101ms
+       ✓ persists without callback-style transactions 95ms
+       ✓ returns formatted recipe + recipeId on success 92ms
+       ✓ jsonld-howtosection fixture flattens nested instructions, confidence stays high 91ms
+       ✓ multi-Recipe JSON-LD page → first wins, confidence=medium, source=json-ld 87ms
+       ✓ no JSON-LD + readable body → calls llmRunner, confidence=low, source=llm 96ms
+       ✓ thin/empty body + LLM returns empty → throws ImportRecipeError no-content 79ms
+       ✓ malformed JSON-LD falls through to LLM (does not throw) 84ms
+       ✓ partial JSON-LD + LLM gap-fill → confidence=medium, source=mixed 87ms
+       ✓ surfaces existingRecipeId when chef has a non-deleted Recipe with same sourceUrl 89ms
+       ✓ existingRecipeId=null when only match is soft-deleted 93ms
+       ✓ existingRecipeId is scoped per chef 157ms
+       ✓ throws ImportRecipeError code=rate-limited (429) when quota exhausted 78ms
+       ✓ returns draft with recipeId=null and does not persist 76ms
+       ✓ does not consume rate-limit quota 76ms
+       ✓ does not enqueue cover upload (waitUntil not called) 76ms
+       ✓ dryRun still surfaces existingRecipeId hint 79ms
+       ✓ SafeFetchError(blocked-host) → ImportRecipeError fetch-blocked (400) 78ms
+       ✓ SafeFetchError(bad-scheme) → bad-url (400) 80ms
+       ✓ SafeFetchError(non-2xx) → fetch-failed (502) 78ms
+       ✓ SafeFetchError(not-html) → not-html (415) 80ms
+       ✓ SafeFetchError(too-large) → fetch-too-large (413) 79ms
+       ✓ SafeFetchError(timeout) → fetch-timeout (504) 80ms
+       ✓ RecipeLlmError → llm-failed (502) 79ms
+       ✓ throws llm-failed when LLM runner is required but not provided 77ms
+       ✓ creates a default LLM runner from env when one is not injected 77ms
+       ✓ re-throws non-RecipeLlmError from llmRunner.extract 79ms
+       ✓ uses JSON-LD ingredients when present and LLM only fills steps 86ms
+       ✓ uses JSON-LD steps when present and LLM only fills ingredients 89ms
+       ✓ image fetch returns non-2xx → logger.error, recipe still exists 102ms
+       ✓ image fetch returns non-image content-type → logger.error, no cover 99ms
+       ✓ image response with no content-type header is skipped 101ms
+       ✓ png content-type produces .png extension 100ms
+       ✓ webp content-type produces .webp extension 104ms
+       ✓ image fetch timeout (AbortError on signal) → logger.error 101ms
+       ✓ image fetch 15s setTimeout callback aborts the request 100ms
+       ✓ gif content-type is skipped without creating an imported cover 102ms
+       ✓ gif file extension is skipped even when served as JPEG bytes 92ms
+       ✓ gif bytes disguised as PNG or JPEG are skipped without creating covers 179ms
+       ✓ blocked-scheme import cover URLs are rejected before fetch 94ms
+       ✓ localhost/private import cover hosts are rejected before fetch 171ms
+       ✓ public-to-private import cover redirects are rejected before fetching the private target 86ms
+       ✓ re-throws non-SafeFetchError raised by fetchImpl 78ms
+       ✓ default fetchImpl is used when deps.fetchImpl is undefined (bad-scheme exits early) 79ms
+       ✓ default fetchImpl falls back to global fetch when deps.fetchImpl is undefined 102ms
+       ✓ default logger is console when deps.logger is undefined 95ms
+       ✓ default now is wall-clock when deps.now is undefined 99ms
+       ✓ default ingredient parser is parseIngredients (env propagated) 80ms
+       ✓ default ingredient parser works when env is null 79ms
+       ✓ is an Error with code and status fields 5ms
+       × og:image present → schedules upload via waitUntil; coverPending=true 100ms
+       × scheduled upload calls bucket.put and createCover sourceType=import 92ms
+       ✓ same-millisecond imported cover uploads use unique immutable keys 96ms
+       ✓ oversized image is skipped, logger.error called, recipe still exists 89ms
+       ✓ network failure during image fetch is swallowed and logged 98ms
+       ✓ bucket.put failure is swallowed and logged 91ms
+       × og:image absent + imageGenRunner present → schedules ai-placeholder 89ms
+       ✓ og:image absent + imageGenRunner generation fails → recipe still exists, no cover 90ms
+       ✓ og:image absent + imageGenRunner absent → no cover scheduled, coverPending=false 90ms
+       ✓ bucket undefined → no cover scheduled even if og:image present, coverPending=false 101ms
+       ✓ waitUntil undefined → cover task is awaited inline 95ms
+       ✓ JSON-LD path uses jsonLd.imageUrl over ogImageUrl 88ms
+       ✓ first-collision appends ' (imported)' suffix 96ms
+       ✓ second-collision appends ' (imported HH:MM)' suffix with zero-padded UTC time 95ms
+       ✓ ingredient-ref cache hit (reuse existing ingredient row across imports) 174ms
+       ✓ third-collision throws title-conflict (409) 81ms
+ ❯ test/lib/recipe-fork.server.test.ts (18 tests | 3 failed) 475ms
+     ✓ clones a simple 2-step recipe with ingredients into the viewer's kitchen 32ms
+     ✓ clones the step-output-use graph 32ms
+     ✓ appends '(variation 2)' on a single title collision 20ms
+     ✓ appends '(variation 4)' when several variations already exist 13ms
+     ✓ uses titleOverride when supplied and no collision exists 16ms
+     ✓ suffixes titleOverride when it collides 16ms
+     ✓ throws ForkTitleExhaustedError when 100 variations are taken 144ms
+     ✓ throws ForkSourceNotFoundError when the source recipe does not exist 7ms
+     ✓ throws ForkSourceNotFoundError when the source recipe is soft-deleted 11ms
+     × copies the source active cover with provenance and active variant 27ms
+     × copies the explicit active cover instead of the latest source cover 26ms
+     × preserves an intentional no-cover source state 19ms
+     ✓ produces no covers when the source has none 17ms
+     ✓ supports forking a chef's own recipe and applies a variation suffix 14ms
+     ✓ does not propagate sourceUrl from the source recipe 16ms
+     ✓ handles a source recipe with zero steps 11ms
+     ✓ handles a step with zero ingredients 15ms
+     ✓ preserves description and servings from the source 14ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/lib/recipe-fork.server.test.ts > recipe-fork.server > copies the source active cover with provenance and active variant
+AssertionError: expected null to be 'https://r2/stylized.jpg' // Object.is equality
+
+- Expected: 
+"https://r2/stylized.jpg"
+
++ Received: 
+null
+
+ ❯ test/lib/recipe-fork.server.test.ts:366:36
+    364|     const cover = result.recipe.covers[0];
+    365|     expect(cover.imageUrl).toBe("https://r2/cover.jpg");
+    366|     expect(cover.stylizedImageUrl).toBe("https://r2/stylized.jpg");
+       |                                    ^
+    367|     expect(cover.sourceType).toBe("import");
+    368|     expect(cover.sourceSpoonId).toBeNull();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  test/lib/recipe-fork.server.test.ts > recipe-fork.server > copies the explicit active cover instead of the latest source cover
+AssertionError: expected 'https://r2/new.jpg' to be 'https://r2/old.jpg' // Object.is equality
+
+Expected: "https://r2/old.jpg"
+Received: "https://r2/new.jpg"
+
+ ❯ test/lib/recipe-fork.server.test.ts:397:46
+    395| 
+    396|     expect(result.recipe.covers).toHaveLength(1);
+    397|     expect(result.recipe.covers[0].imageUrl).toBe("https://r2/old.jpg"…
+       |                                              ^
+    398|     expect(result.recipe.activeCoverId).toBe(result.recipe.covers[0].i…
+    399|     expect(result.recipe.activeCoverVariant).toBe("image");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  test/lib/recipe-fork.server.test.ts > recipe-fork.server > preserves an intentional no-cover source state
+AssertionError: expected [ { …(15) } ] to have a length of +0 but got 1
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ test/lib/recipe-fork.server.test.ts:414:34
+    412|     const result = await forkRecipe(db, { sourceRecipeId: source.id, v…
+    413| 
+    414|     expect(result.recipe.covers).toHaveLength(0);
+       |                                  ^
+    415|     expect(result.recipe.activeCoverId).toBeNull();
+    416|     expect(result.recipe.activeCoverVariant).toBeNull();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  test/lib/recipe-import.test.ts > importRecipeFromUrl — extraction paths > cover scheduling > og:image present → schedules upload via waitUntil; coverPending=true
+AssertionError: expected { …(15) } to match object { sourceType: 'import', …(4) }
+(10 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "createdById": "cmq62yj2300ip6vebhyvsec66",
++   "createdById": null,
+    "generationStatus": "none",
+-   "sourceImageUrl": "https://cdn.example.com/pasta-hero.jpg",
++   "sourceImageUrl": null,
+    "sourceType": "import",
+    "status": "ready",
+  }
+
+ ❯ test/lib/recipe-import.test.ts:1359:25
+    1357|       });
+    1358|       expect(covers).toHaveLength(1);
+    1359|       expect(covers[0]).toMatchObject({
+       |                         ^
+    1360|         sourceType: "import",
+    1361|         status: "ready",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  test/lib/recipe-import.test.ts > importRecipeFromUrl — extraction paths > cover scheduling > scheduled upload calls bucket.put and createCover sourceType=import
+AssertionError: expected { …(15) } to match object { sourceType: 'import', …(4) }
+(10 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "createdById": "cmq62yj4w00jc6vebld37e6bn",
++   "createdById": null,
+    "generationStatus": "none",
+-   "sourceImageUrl": "https://cdn.example.com/pasta-hero.jpg",
++   "sourceImageUrl": null,
+    "sourceType": "import",
+    "status": "ready",
+  }
+
+ ❯ test/lib/recipe-import.test.ts:1402:25
+    1400|         where: { recipeId: result.recipeId! },
+    1401|       });
+    1402|       expect(covers[0]).toMatchObject({
+       |                         ^
+    1403|         sourceType: "import",
+    1404|         status: "ready",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+ FAIL  test/lib/recipe-import.test.ts > importRecipeFromUrl — extraction paths > cover scheduling > og:image absent + imageGenRunner present → schedules ai-placeholder
+AssertionError: expected { …(15) } to match object { sourceType: 'ai-placeholder', …(3) }
+(11 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "createdById": "cmq62yjht00mb6vebgj1llp43",
+-   "generationStatus": "succeeded",
++   "createdById": null,
++   "generationStatus": "none",
+    "sourceType": "ai-placeholder",
+    "status": "ready",
+  }
+
+ ❯ test/lib/recipe-import.test.ts:1568:25
+    1566|       });
+    1567|       expect(covers).toHaveLength(1);
+    1568|       expect(covers[0]).toMatchObject({
+       |                         ^
+    1569|         sourceType: "ai-placeholder",
+    1570|         status: "ready",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  6 failed | 81 passed (87)
+   Start at  20:28:32
+   Duration  8.34s (transform 185ms, setup 188ms, import 477ms, tests 6.98s, environment 439ms)
+

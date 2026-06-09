@@ -38,8 +38,19 @@ async function seedSourceRecipe(
       stylizedImageUrl?: string | null;
       sourceType?: string;
       sourceSpoonId?: string | null;
+      status?: string;
+      createdById?: string | null;
+      sourceImageUrl?: string | null;
+      generationStatus?: string;
+      failureReason?: string | null;
+      promptVersion?: string | null;
+      styleVersion?: string | null;
+      archivedAt?: Date | null;
       createdAt?: Date;
     }>;
+    coverMode?: "auto" | "manual" | "none";
+    activeCoverIndex?: number | null;
+    activeCoverVariant?: "image" | "stylized" | null;
     deletedAt?: Date | null;
   } = {},
 ) {
@@ -90,17 +101,46 @@ async function seedSourceRecipe(
     });
   }
 
+  const createdCovers = [];
   for (const cover of options.covers ?? []) {
-    await db.recipeCover.create({
+    const createdCover = await db.recipeCover.create({
       data: {
         recipeId: recipe.id,
         imageUrl: cover.imageUrl,
         stylizedImageUrl: cover.stylizedImageUrl ?? null,
         sourceType: cover.sourceType ?? "chef-upload",
         sourceSpoonId: cover.sourceSpoonId ?? null,
+        status: cover.status ?? "ready",
+        createdById: cover.createdById ?? null,
+        sourceImageUrl: cover.sourceImageUrl ?? null,
+        generationStatus: cover.generationStatus ?? "none",
+        failureReason: cover.failureReason ?? null,
+        promptVersion: cover.promptVersion ?? null,
+        styleVersion: cover.styleVersion ?? null,
+        archivedAt: cover.archivedAt ?? null,
         ...(cover.createdAt ? { createdAt: cover.createdAt } : {}),
       },
     });
+    createdCovers.push(createdCover);
+  }
+
+  if (options.coverMode === "none") {
+    await db.recipe.update({
+      where: { id: recipe.id },
+      data: { activeCoverId: null, activeCoverVariant: null, coverMode: "none" },
+    });
+  } else if (options.activeCoverIndex != null) {
+    const active = createdCovers[options.activeCoverIndex];
+    if (active) {
+      await db.recipe.update({
+        where: { id: recipe.id },
+        data: {
+          activeCoverId: active.id,
+          activeCoverVariant: options.activeCoverVariant === undefined ? "image" : options.activeCoverVariant,
+          coverMode: options.coverMode ?? "manual",
+        },
+      });
+    }
   }
 
   return recipe;
@@ -297,7 +337,7 @@ describe("recipe-fork.server", () => {
     ).rejects.toBeInstanceOf(ForkSourceNotFoundError);
   });
 
-  it("snapshots the single source cover with sourceType chef-upload and null stylizedImageUrl", async () => {
+  it("copies the source active cover with provenance and active variant", async () => {
     const chefA = await makeUser();
     const chefB = await makeUser();
     const source = await seedSourceRecipe(chefA.id, {
@@ -306,9 +346,16 @@ describe("recipe-fork.server", () => {
         {
           imageUrl: "https://r2/cover.jpg",
           stylizedImageUrl: "https://r2/stylized.jpg",
-          sourceType: "spoon",
+          sourceType: "import",
+          sourceImageUrl: "https://source.example.com/cover.jpg",
+          generationStatus: "succeeded",
+          promptVersion: "import-v1",
+          styleVersion: "editorial-v2",
         },
       ],
+      activeCoverIndex: 0,
+      activeCoverVariant: "stylized",
+      coverMode: "manual",
     });
 
     const result = await forkRecipe(db, { sourceRecipeId: source.id, viewerId: chefB.id });
@@ -316,12 +363,19 @@ describe("recipe-fork.server", () => {
     expect(result.recipe.covers).toHaveLength(1);
     const cover = result.recipe.covers[0];
     expect(cover.imageUrl).toBe("https://r2/cover.jpg");
-    expect(cover.stylizedImageUrl).toBeNull();
-    expect(cover.sourceType).toBe("chef-upload");
+    expect(cover.stylizedImageUrl).toBe("https://r2/stylized.jpg");
+    expect(cover.sourceType).toBe("import");
     expect(cover.sourceSpoonId).toBeNull();
+    expect(cover.sourceImageUrl).toBe("https://source.example.com/cover.jpg");
+    expect(cover.generationStatus).toBe("succeeded");
+    expect(cover.promptVersion).toBe("import-v1");
+    expect(cover.styleVersion).toBe("editorial-v2");
+    expect(result.recipe.activeCoverId).toBe(cover.id);
+    expect(result.recipe.activeCoverVariant).toBe("stylized");
+    expect(result.recipe.coverMode).toBe("manual");
   });
 
-  it("picks the latest source cover when multiple exist", async () => {
+  it("copies the explicit active cover instead of the latest source cover", async () => {
     const chefA = await makeUser();
     const chefB = await makeUser();
     const older = new Date("2026-01-01T00:00:00Z");
@@ -332,12 +386,136 @@ describe("recipe-fork.server", () => {
         { imageUrl: "https://r2/old.jpg", createdAt: older },
         { imageUrl: "https://r2/new.jpg", createdAt: newer },
       ],
+      activeCoverIndex: 0,
+      activeCoverVariant: "image",
+      coverMode: "auto",
     });
 
     const result = await forkRecipe(db, { sourceRecipeId: source.id, viewerId: chefB.id });
 
     expect(result.recipe.covers).toHaveLength(1);
-    expect(result.recipe.covers[0].imageUrl).toBe("https://r2/new.jpg");
+    expect(result.recipe.covers[0].imageUrl).toBe("https://r2/old.jpg");
+    expect(result.recipe.activeCoverId).toBe(result.recipe.covers[0].id);
+    expect(result.recipe.activeCoverVariant).toBe("image");
+    expect(result.recipe.coverMode).toBe("auto");
+  });
+
+  it("preserves an intentional no-cover source state", async () => {
+    const chefA = await makeUser();
+    const chefB = await makeUser();
+    const source = await seedSourceRecipe(chefA.id, {
+      title: "NoCoverMode",
+      covers: [{ imageUrl: "https://r2/history.jpg" }],
+      coverMode: "none",
+    });
+
+    const result = await forkRecipe(db, { sourceRecipeId: source.id, viewerId: chefB.id });
+
+    expect(result.recipe.covers).toHaveLength(0);
+    expect(result.recipe.activeCoverId).toBeNull();
+    expect(result.recipe.activeCoverVariant).toBeNull();
+    expect(result.recipe.coverMode).toBe("none");
+    expect(result.attribution.sourceRecipeId).toBe(source.id);
+  });
+
+  it("falls back to a displayable stylized variant when the source active variant is missing", async () => {
+    const chefA = await makeUser();
+    const chefB = await makeUser();
+    const source = await seedSourceRecipe(chefA.id, {
+      title: "StylizedFallback",
+      covers: [
+        {
+          imageUrl: "",
+          stylizedImageUrl: "https://r2/editorial.jpg",
+          sourceType: "chef-upload",
+        },
+      ],
+      activeCoverIndex: 0,
+      activeCoverVariant: null,
+      coverMode: "auto",
+    });
+
+    const result = await forkRecipe(db, { sourceRecipeId: source.id, viewerId: chefB.id });
+
+    expect(result.recipe.covers).toHaveLength(1);
+    expect(result.recipe.covers[0].stylizedImageUrl).toBe("https://r2/editorial.jpg");
+    expect(result.recipe.activeCoverId).toBe(result.recipe.covers[0].id);
+    expect(result.recipe.activeCoverVariant).toBe("stylized");
+    expect(result.recipe.coverMode).toBe("auto");
+  });
+
+  it("falls back to the raw image variant when stylized is unavailable", async () => {
+    const chefA = await makeUser();
+    const chefB = await makeUser();
+    const source = await seedSourceRecipe(chefA.id, {
+      title: "RawFallback",
+      covers: [{ imageUrl: "https://r2/raw.jpg" }],
+      activeCoverIndex: 0,
+      activeCoverVariant: null,
+      coverMode: "auto",
+    });
+
+    const result = await forkRecipe(db, { sourceRecipeId: source.id, viewerId: chefB.id });
+
+    expect(result.recipe.covers).toHaveLength(1);
+    expect(result.recipe.covers[0].imageUrl).toBe("https://r2/raw.jpg");
+    expect(result.recipe.activeCoverVariant).toBe("image");
+  });
+
+  it("does not copy failed archived or empty active covers", async () => {
+    const chefA = await makeUser();
+    const chefB = await makeUser();
+
+    for (const cover of [
+      { title: "FailedCover", status: "failed", imageUrl: "https://r2/failed.jpg" },
+      { title: "ArchivedCover", status: "ready", imageUrl: "https://r2/archived.jpg", archivedAt: new Date() },
+      { title: "EmptyCover", status: "ready", imageUrl: "" },
+    ]) {
+      const source = await seedSourceRecipe(chefA.id, {
+        title: cover.title,
+        covers: [cover],
+        activeCoverIndex: 0,
+        activeCoverVariant: "image",
+        coverMode: "manual",
+      });
+
+      const result = await forkRecipe(db, { sourceRecipeId: source.id, viewerId: chefB.id });
+
+      expect(result.recipe.covers).toHaveLength(0);
+      expect(result.recipe.activeCoverId).toBeNull();
+      expect(result.recipe.activeCoverVariant).toBeNull();
+      expect(result.recipe.coverMode).toBe("auto");
+    }
+  });
+
+  it("does not copy a cross-recipe active cover pointer", async () => {
+    const chefA = await makeUser();
+    const chefB = await makeUser();
+    const foreign = await seedSourceRecipe(chefA.id, {
+      title: "ForeignCoverOwner",
+      covers: [{ imageUrl: "https://r2/foreign.jpg" }],
+      activeCoverIndex: 0,
+      activeCoverVariant: "image",
+    });
+    const foreignCover = await db.recipeCover.findFirstOrThrow({
+      where: { recipeId: foreign.id },
+    });
+    const source = await seedSourceRecipe(chefA.id, { title: "CorruptActiveCover" });
+    await db.recipe.update({
+      where: { id: source.id },
+      data: {
+        activeCoverId: foreignCover.id,
+        activeCoverVariant: "image",
+        coverMode: "manual",
+      },
+    });
+
+    const result = await forkRecipe(db, { sourceRecipeId: source.id, viewerId: chefB.id });
+
+    expect(result.recipe.covers).toHaveLength(0);
+    expect(result.recipe.activeCoverId).toBeNull();
+    expect(result.recipe.activeCoverVariant).toBeNull();
+    expect(result.recipe.coverMode).toBe("auto");
   });
 
   it("produces no covers when the source has none", async () => {

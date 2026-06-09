@@ -1,0 +1,11 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ✓ test/lib/recipe-import.test.ts (69 tests) 6185ms
+ ✓ test/lib/recipe-fork.server.test.ts (21 tests) 429ms
+
+ Test Files  2 passed (2)
+      Tests  90 passed (90)
+   Start at  20:32:45
+   Duration  7.94s (transform 181ms, setup 187ms, import 468ms, tests 6.61s, environment 405ms)
+

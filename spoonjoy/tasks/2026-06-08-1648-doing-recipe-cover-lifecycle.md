@@ -119,15 +119,15 @@ Make Spoonjoy recipe imagery explicit, provenance-aware, and controllable across
 **What**: Refactor duplicate upload/placeholder activation logic and cover error paths for missing bucket, failed generation, empty image URL, and no-cover state.
 **Acceptance**: Affected mutation/job tests pass with 100% coverage on new branches and no warnings.
 
-### ⬜ Unit 5a: Import And Fork Cover Flows — Tests
+### ✅ Unit 5a: Import And Fork Cover Flows — Tests
 **What**: Add failing tests for recipe import cover rows, imported provenance, fork cover copying, fork active-cover selection, and preservation of manual/no-cover semantics on copied recipes.
 **Acceptance**: Tests fail because import/fork paths do not preserve explicit active-cover state or detailed provenance.
 
-### ⬜ Unit 5b: Import And Fork Cover Flows — Implementation
+### ✅ Unit 5b: Import And Fork Cover Flows — Implementation
 **What**: Update `app/lib/recipe-import.server.ts` and `app/lib/recipe-fork.server.ts` to create/copy cover status, provenance, active variant, and active-cover state through helpers.
 **Acceptance**: Unit 5a tests pass and fork/import flows cannot reintroduce newest-row selection.
 
-### ⬜ Unit 5c: Import And Fork Cover Flows — Coverage & Refactor
+### ✅ Unit 5c: Import And Fork Cover Flows — Coverage & Refactor
 **What**: Cover import/fork edge cases for missing source cover, empty source cover, archived source cover, pure AI placeholder, and imported image fallback.
 **Acceptance**: Import/fork tests pass with 100% coverage on new branches and no warnings.
 
@@ -265,3 +265,6 @@ Make Spoonjoy recipe imagery explicit, provenance-aware, and controllable across
 - 2026-06-08 19:48 Fixed Unit 3 review findings: API provenance now nulls when the active image URL is not publicly displayable, API/OG loaders fetch only the scoped active cover candidate through shared cover helpers, and dynamic OG responses emit active-cover-derived freshness headers; targeted tests, coverage, and build passed (`unit-3-review-fix-green.log`, `unit-3-review-fix-coverage.log`, `unit-3-review-fix-build.log`).
 - 2026-06-08 20:01 Fixed Unit 3 Round 2 review findings: updated the API recipe-list query mock for active-cover selects and preserved legacy MCP `create_recipe`/`update_recipe` upload behavior by activating the uploaded cover after stylization; focused and targeted suites plus build passed (`unit-3-round2-fix-green.log`, `unit-3-round2-fix-targeted.log`, `unit-3-round2-fix-build.log`).
 - 2026-06-08 20:01 Unit 3 review converged after Round 3
+- 2026-06-08 20:35 Unit 5a/5b/5c complete: added red tests for import cover provenance/activation and fork active-cover/manual/no-cover semantics (`unit-5a-red.log`); implemented import cover status/provenance plus guarded auto-activation, and fork copying from the explicit active cover rather than newest history; targeted tests/build passed (`unit-5b-green.log`, `unit-5b-build.log`, `unit-5c-green.log`, `unit-5c-build.log`) and changed import/fork files reached 100% statements/branches/functions/lines (`unit-5c-coverage.log`).
+- 2026-06-08 20:40 Fixed Unit 5 review finding: fork now rejects cross-recipe active-cover pointers before copying cover history; regression red/green, coverage, and build passed (`unit-5-review-fix-red.log`, `unit-5-review-fix-green.log`, `unit-5-review-fix-coverage.log`, `unit-5-review-fix-build.log`).
+- 2026-06-08 20:43 Unit 5 review converged after Round 2: fresh reviewer Herschel verified import/fork lifecycle semantics, the cross-recipe guard, targeted coverage, and build evidence.
