@@ -16,12 +16,15 @@ Fix:
 - Canonical tracked evidence: `final-validation-evidence.md`.
 - Raw command logs were saved locally as ignored `.log` artifacts; the tracked evidence file contains the durable command, exit-code, timestamp, and key pass-line record.
 
+- `pnpm exec vitest --run test/components/recipe/RecipeCoverHistory.test.tsx test/routes/recipes-id.test.tsx`
+  - Evidence: `final-validation-evidence.md`
+  - Result: 108/108 focused history-loader tests passed after the archived-row invariant fix.
 - `pnpm run test:coverage`
   - Evidence: `final-validation-evidence.md`
   - Result: 296 files passed, 5815 tests passed, 100% statements/branches/functions/lines.
 - `pnpm run test:e2e`
   - Evidence: `final-validation-evidence.md`
-  - Result: 59/59 Playwright tests passed, including uploaded EXIF-oriented recipe photos remaining upright.
+  - Result: 59/59 Playwright tests passed after a full rerun, including uploaded EXIF-oriented recipe photos remaining upright.
 - Browser smoke
   - Screenshots: `browser-smoke/01-awaiting-first-chef-photo.png` through `browser-smoke/06-verbatim-cover-reselected.png`
   - Result: verified no-photo placeholder, first text-only chef cook leaves placeholder, first chef photo auto-seeds cover with upload progress and disabled submit, later chef photo explicit opt-in, cover history, manual no-cover, and verbatim chef-photo reselect.
@@ -37,7 +40,7 @@ Fix:
 
 ## Cleanup Evidence
 
-- `final-validation-evidence.md`: 0 active suspicious recipes, 0 disposable users, 0 disposable spoons, 0 e2e OAuth clients after the settled final browser smoke cleanup.
+- `final-validation-evidence.md`: 0 active suspicious recipes, 0 disposable users, 0 disposable spoons, 0 e2e OAuth clients after the final post-validation cleanup.
 
 ## Provider/Operational Notes
 

@@ -88,6 +88,41 @@ describe("RecipeCoverHistory", () => {
         ],
       },
       {
+        id: "archived-at-cover",
+        status: "ready",
+        generationStatus: "succeeded",
+        sourceType: "spoon",
+        archivedAt: "2026-01-04T00:00:00.000Z",
+        createdAt: "2026-01-04T00:00:00.000Z",
+        isActive: false,
+        activeVariant: null,
+        variants: [
+          {
+            variant: "image",
+            imageUrl: "/photos/archived-at-raw.jpg",
+            provenanceLabel: "Chef photo",
+            isActive: false,
+          },
+        ],
+      },
+      {
+        id: "invalid-status-cover",
+        status: "queued",
+        generationStatus: "none",
+        sourceType: "import",
+        createdAt: "2026-01-05T00:00:00.000Z",
+        isActive: false,
+        activeVariant: null,
+        variants: [
+          {
+            variant: "image",
+            imageUrl: "/photos/invalid-status.jpg",
+            provenanceLabel: "Imported photo",
+            isActive: false,
+          },
+        ],
+      },
+      {
         id: "failed-cover-row",
         status: "failed",
         generationStatus: "failed",
@@ -109,12 +144,12 @@ describe("RecipeCoverHistory", () => {
     expect(await screen.findByText("Processing")).toBeInTheDocument();
     expect(screen.getByText("Failed")).toBeInTheDocument();
     expect(screen.getByText("Editorial failed")).toBeInTheDocument();
-    expect(screen.getByText("Archived")).toBeInTheDocument();
+    expect(screen.getAllByText("Archived")).toHaveLength(2);
     expect(screen.getByText("Saved cover")).toBeInTheDocument();
-    expect(screen.getAllByText("Unavailable")).toHaveLength(2);
+    expect(screen.getAllByText("Unavailable")).toHaveLength(5);
     expect(screen.getByText("No usable image variants.")).toBeInTheDocument();
     expect(screen.getByText("No image")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Use Chef photo cover" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Use Chef photo cover" })).toHaveLength(1);
     expect(screen.queryByRole("button", { name: "Use Imported photo cover" })).toBeNull();
     expect(screen.getAllByRole("button", { name: "Regenerate cover" })).toHaveLength(3);
     expect(screen.getAllByRole("button", { name: "Archive cover" })).toHaveLength(3);

@@ -4,6 +4,29 @@ Date: 2026-06-09
 
 This file is the tracked evidence record for final validation. Raw command logs were also saved locally under this task artifact directory, but `*.log` is ignored by repo policy, so the durable proof lines are copied here.
 
+## History Invariant Focused Tests
+
+Command:
+```bash
+pnpm exec vitest --run test/components/recipe/RecipeCoverHistory.test.tsx test/routes/recipes-id.test.tsx
+```
+
+Completed: 2026-06-09 02:01 America/Los_Angeles
+Exit code: 0
+
+Key output:
+```text
+test/components/recipe/RecipeCoverHistory.test.tsx (3 tests)
+test/routes/recipes-id.test.tsx (105 tests)
+Test Files  2 passed (2)
+Tests  108 passed (108)
+```
+
+Verified behavior:
+- Cover history serializes `archivedAt` so the client can enforce server mutability rules.
+- `status="ready"` rows with `archivedAt` are shown as archived and cannot be used, regenerated, or archived again.
+- Unknown/non-ready statuses are labeled unavailable and cannot be activated.
+
 ## Strict Coverage
 
 Command:
@@ -11,7 +34,7 @@ Command:
 pnpm run test:coverage
 ```
 
-Completed: 2026-06-09 01:26 America/Los_Angeles
+Completed: 2026-06-09 01:54 America/Los_Angeles
 Exit code: 0
 
 Key output:
@@ -28,14 +51,16 @@ Command:
 pnpm run test:e2e
 ```
 
-Completed: 2026-06-09 01:26 America/Los_Angeles
+Completed: 2026-06-09 01:58 America/Los_Angeles
 Exit code: 0
 
 Key output:
 ```text
 [chromium] ... Recipe image handling ... uploaded EXIF-oriented recipe photos remain upright after save and reload
-59 passed (17.8s)
+59 passed (24.9s)
 ```
+
+Note: an immediately prior full e2e attempt had one transient auth URL-assertion timeout while already showing the expected `/recipes` page in the Playwright snapshot. The focused auth rerun passed `6/6`, and the subsequent full rerun passed `59/59`.
 
 ## Browser Smoke
 
@@ -76,6 +101,8 @@ Verified behavior:
 - Owner can browse cover history and spoon photos.
 - Owner can set no cover, then reselect a verbatim `Chef photo` original after editorial failure.
 
+The browser smoke artifacts predate the final archived-row client guard by a few minutes. That guard is covered by the focused history tests above, strict coverage, and the full Playwright rerun.
+
 ## Deploy Preflight
 
 Command:
@@ -83,13 +110,13 @@ Command:
 pnpm run deploy:preflight
 ```
 
-Completed: 2026-06-09 01:26 America/Los_Angeles
+Completed: 2026-06-09 01:58 America/Los_Angeles
 Exit code: 0
 
 Key output:
 ```text
 PASS image provider documentation: README/deployment docs must explain image provider fallback env and Gemini setup.
-PASS remote D1 migrations: Remote D1 is up to date — no pending migrations.
+PASS remote D1 migrations: Remote D1 is up to date -- no pending migrations.
 Deployment preflight passed.
 ```
 
@@ -100,7 +127,7 @@ Command:
 pnpm exec vitest --run test/lib/mcp/spoonjoy-tools.server.test.ts test/lib/spoonjoy-api-spoons.test.ts
 ```
 
-Completed: 2026-06-09 01:27 America/Los_Angeles
+Completed: 2026-06-09 01:58 America/Los_Angeles
 Exit code: 0
 
 Key output:
@@ -118,27 +145,27 @@ Command:
 pnpm run build
 ```
 
-Completed: 2026-06-09 01:28 America/Los_Angeles
+Completed: 2026-06-09 01:58 America/Los_Angeles
 Exit code: 0
 
 Key output:
 ```text
 Generated app/lib/generated/api-v1-playground.ts
 vite v7.3.1 building client environment for production...
-built in 3.38s
+built in 3.51s
 vite v7.3.1 building ssr environment for production...
-built in 4.49s
+built in 4.28s
 ```
 
 ## Cleanup
 
 Commands:
 ```bash
-node scripts/cleanup-local-qa-data.mjs --apply
-node scripts/cleanup-local-qa-data.mjs
+pnpm run cleanup:qa -- --apply
+pnpm run cleanup:qa -- --dry-run
 ```
 
-Completed: 2026-06-09 01:50 America/Los_Angeles
+Completed: 2026-06-09 01:59 America/Los_Angeles
 Exit code: 0
 
 Key dry-run output:

@@ -14,6 +14,7 @@ export type RecipeCoverHistoryItem = {
   generationStatus: string;
   sourceType: string;
   sourceImageUrl?: string | null;
+  archivedAt?: string | null;
   createdAt: string;
   isActive: boolean;
   activeVariant: string | null;
@@ -27,11 +28,12 @@ export type RecipeCoverSpoonImage = {
   chef: { username: string };
 };
 
-function statusLabel(status: string, generationStatus: string) {
-  if (status === "archived") return "Archived";
+function statusLabel(status: string, generationStatus: string, archivedAt?: string | null) {
+  if (status === "archived" || archivedAt) return "Archived";
   if (status === "failed") return "Failed";
   if (status === "processing" || generationStatus === "processing") return "Processing";
   if (generationStatus === "failed") return "Editorial failed";
+  if (status !== "ready") return "Unavailable";
   return "Ready";
 }
 
@@ -41,9 +43,17 @@ function variantName(variant: "image" | "stylized") {
 
 function coverCanActivate(cover: RecipeCoverHistoryItem) {
   return (
-    cover.status !== "failed" &&
-    cover.status !== "archived"
+    (cover.status === "ready" || cover.status === "processing") &&
+    !cover.archivedAt
   );
+}
+
+function coverCanMutate(cover: RecipeCoverHistoryItem) {
+  return (
+    cover.status === "ready" ||
+    cover.status === "processing" ||
+    cover.status === "failed"
+  ) && !cover.archivedAt;
 }
 
 function createdDateLabel(value: string) {
@@ -103,8 +113,8 @@ export function RecipeCoverHistory({
         <div className="divide-y divide-[var(--sj-border)] border-y border-[var(--sj-border)]">
           {covers.map((cover) => {
             const thumbnail = cover.variants[0]?.imageUrl;
-            const canQueueGeneration = cover.status !== "archived";
-            const canArchive = cover.status !== "archived";
+            const canQueueGeneration = coverCanMutate(cover);
+            const canArchive = coverCanMutate(cover);
             const canActivate = coverCanActivate(cover);
             const replacementOptions = covers
               .filter((candidate) => candidate.id !== cover.id && coverCanActivate(candidate))
@@ -141,7 +151,7 @@ export function RecipeCoverHistory({
                       </span>
                     ) : null}
                     <span className="font-sj-ui text-xs uppercase tracking-[0.14em] text-[var(--sj-ink-soft)]">
-                      {statusLabel(cover.status, cover.generationStatus)}
+                      {statusLabel(cover.status, cover.generationStatus, cover.archivedAt)}
                     </span>
                     <span className="font-sj-ui text-xs text-[var(--sj-ink-soft)]">
                       {createdDateLabel(cover.createdAt)}

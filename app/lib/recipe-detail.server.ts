@@ -135,6 +135,7 @@ function recipeCoverHistoryFor(recipe: {
       generationStatus: cover.generationStatus,
       sourceType: cover.sourceType,
       sourceImageUrl: cover.sourceImageUrl,
+      archivedAt: cover.archivedAt?.toISOString() ?? null,
       createdAt: cover.createdAt.toISOString(),
       isActive: recipe.activeCoverId === cover.id,
       activeVariant: recipe.activeCoverId === cover.id ? recipe.activeCoverVariant : null,

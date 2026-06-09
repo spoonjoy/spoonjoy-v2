@@ -363,6 +363,16 @@ describe("Recipes $id Route", () => {
           createdAt: new Date("2026-02-01T00:00:00.000Z"),
         },
       });
+      const archivedByTimestampCover = await db.recipeCover.create({
+        data: {
+          recipeId,
+          imageUrl: "/photos/archived-by-timestamp.jpg",
+          sourceType: "spoon",
+          status: "ready",
+          archivedAt: new Date("2026-03-01T00:00:00.000Z"),
+          createdAt: new Date("2026-03-01T00:00:00.000Z"),
+        },
+      });
       await db.recipe.update({
         where: { id: recipeId },
         data: {
@@ -382,7 +392,20 @@ describe("Recipes $id Route", () => {
       expect(ownerResult.recipe.activeCover).toBeUndefined();
       expect(ownerResult.coverHistory).toEqual([
         expect.objectContaining({
+          id: archivedByTimestampCover.id,
+          archivedAt: "2026-03-01T00:00:00.000Z",
+          variants: [
+            expect.objectContaining({
+              variant: "image",
+              imageUrl: "/photos/archived-by-timestamp.jpg",
+              provenanceLabel: "Chef photo",
+              isActive: false,
+            }),
+          ],
+        }),
+        expect.objectContaining({
           id: importedCover.id,
+          archivedAt: null,
           isActive: false,
           variants: [
             expect.objectContaining({
@@ -395,6 +418,7 @@ describe("Recipes $id Route", () => {
         }),
         expect.objectContaining({
           id: activeCover.id,
+          archivedAt: null,
           isActive: true,
           activeVariant: "stylized",
           variants: [
