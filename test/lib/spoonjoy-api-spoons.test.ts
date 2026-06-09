@@ -1249,6 +1249,49 @@ describe("spoonjoy-api spoon operations", () => {
       });
     });
 
+    it("keeps legacy recipe image uploads active as verbatim covers when no stylized URL is available at activation", async () => {
+      const { principal: chef } = await makeUser(db);
+      const apiRecipeCover = Object.assign(Object.create(db.recipeCover), {
+        findUnique: vi.fn(async () => ({ stylizedImageUrl: null })),
+      }) as Database["recipeCover"];
+      const apiDb = Object.assign(Object.create(db), { recipeCover: apiRecipeCover }) as Database;
+      const runner = imageRunner();
+      const created = await callSpoonjoyApiOperation(
+        "create_recipe",
+        {
+          title: `Verbatim Legacy Cover ${faker.string.alphanumeric(6)}`,
+          imageUrl: dataUrl(),
+        },
+        { db: apiDb, principal: chef, allowLocalImageFallback: true, imageGenRunner: runner },
+      ) as { recipe: { id: string; imageUrl: string | null; coverVariant: string | null } };
+      const cover = await db.recipeCover.findFirstOrThrow({
+        where: { recipeId: created.recipe.id },
+      });
+
+      expect(created.recipe).toMatchObject({
+        imageUrl: dataUrl(),
+        coverVariant: "image",
+      });
+      expect(cover).toMatchObject({
+        imageUrl: dataUrl(),
+        stylizedImageUrl: `data:image/png;base64,${Buffer.from(GENERATED_BYTES).toString("base64")}`,
+        generationStatus: "succeeded",
+        failureReason: null,
+      });
+      expect(apiRecipeCover.findUnique).toHaveBeenCalledWith({
+        where: { id: cover.id },
+        select: { stylizedImageUrl: true },
+      });
+      await expect(db.recipe.findUniqueOrThrow({
+        where: { id: created.recipe.id },
+        select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
+      })).resolves.toEqual({
+        activeCoverId: cover.id,
+        activeCoverVariant: "image",
+        coverMode: "manual",
+      });
+    });
+
     it("validates spoon cover dry-runs, missing sources, and editorial candidates", async () => {
       const { principal: chef } = await makeUser(db);
       const recipe = await makeRecipe(db, chef.id);

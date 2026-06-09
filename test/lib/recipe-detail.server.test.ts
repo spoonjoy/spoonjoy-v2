@@ -16,6 +16,20 @@ async function makeAuthedRequest(userId: string, recipeId: string) {
   return new UndiciRequest(`http://localhost/recipes/${recipeId}`, { headers });
 }
 
+async function makeAuthedPostRequest(userId: string, recipeId: string, formData: UndiciFormData) {
+  const session = await sessionStorage.getSession();
+  session.set("userId", userId);
+  const setCookie = await sessionStorage.commitSession(session);
+  const cookie = setCookie.split(";")[0];
+  const headers = new Headers();
+  headers.set("Cookie", cookie);
+  return new UndiciRequest(`http://localhost/recipes/${recipeId}`, {
+    method: "POST",
+    headers,
+    body: formData,
+  });
+}
+
 async function makeUser() {
   return db.user.create({
     data: {
@@ -105,6 +119,145 @@ describe("loadRecipeDetail sourceRecipe", () => {
     expect(sourceRecipe).not.toBeNull();
     expect(sourceRecipe!.deletedAt).not.toBeNull();
     expect(sourceRecipe!.chef.username).toBe(chefA.username);
+  });
+});
+
+describe("handleRecipeDetailAction cover generation actions", () => {
+  beforeEach(async () => { await cleanupDatabase(); });
+  afterEach(async () => { await cleanupDatabase(); });
+
+  it("queues spoon-photo cover creation with an activation guard when requested", async () => {
+    const chef = await makeUser();
+    const recipe = await db.recipe.create({
+      data: { title: "Guarded Spoon Cover", chefId: chef.id },
+    });
+    const spoon = await db.recipeSpoon.create({
+      data: {
+        recipeId: recipe.id,
+        chefId: chef.id,
+        photoUrl: "/photos/spoons/guarded.jpg",
+      },
+    });
+    const formData = new UndiciFormData();
+    formData.append("intent", "createCoverFromSpoon");
+    formData.append("spoonId", spoon.id);
+    formData.append("activateWhenReady", "true");
+    const captured: Promise<unknown>[] = [];
+
+    const result = await handleRecipeDetailAction({
+      request: await makeAuthedPostRequest(chef.id, recipe.id, formData) as unknown as Request,
+      params: { id: recipe.id },
+      context: {
+        cloudflare: {
+          env: null,
+          ctx: { waitUntil: (promise: Promise<unknown>) => captured.push(promise) },
+        },
+      } as any,
+    });
+
+    expect(result).toMatchObject({ success: true, intent: "createCoverFromSpoon" });
+    expect(captured).toHaveLength(1);
+    const cover = await db.recipeCover.findFirstOrThrow({
+      where: { recipeId: recipe.id, sourceSpoonId: spoon.id },
+    });
+    expect(cover).toMatchObject({
+      imageUrl: spoon.photoUrl,
+      sourceImageUrl: spoon.photoUrl,
+      sourceType: "spoon",
+      generationStatus: "processing",
+    });
+    await Promise.all(captured);
+  });
+
+  it("preserves an existing source image while queuing guarded cover regeneration", async () => {
+    const chef = await makeUser();
+    const recipe = await db.recipe.create({
+      data: { title: "Guarded Regeneration", chefId: chef.id },
+    });
+    const cover = await db.recipeCover.create({
+      data: {
+        recipeId: recipe.id,
+        imageUrl: "/photos/covers/display.jpg",
+        sourceImageUrl: "/photos/covers/original-source.jpg",
+        sourceType: "chef-upload",
+        status: "ready",
+      },
+    });
+    await db.recipe.update({
+      where: { id: recipe.id },
+      data: {
+        activeCoverId: cover.id,
+        activeCoverVariant: "image",
+        coverMode: "manual",
+      },
+    });
+    const formData = new UndiciFormData();
+    formData.append("intent", "regenerateRecipeCover");
+    formData.append("coverId", cover.id);
+    formData.append("activateWhenReady", "true");
+    const captured: Promise<unknown>[] = [];
+
+    const result = await handleRecipeDetailAction({
+      request: await makeAuthedPostRequest(chef.id, recipe.id, formData) as unknown as Request,
+      params: { id: recipe.id },
+      context: {
+        cloudflare: {
+          env: null,
+          ctx: { waitUntil: (promise: Promise<unknown>) => captured.push(promise) },
+        },
+      } as any,
+    });
+
+    expect(result).toEqual({ success: true, intent: "regenerateRecipeCover", coverId: cover.id });
+    expect(captured).toHaveLength(1);
+    await expect(db.recipeCover.findUniqueOrThrow({
+      where: { id: cover.id },
+      select: { sourceImageUrl: true, generationStatus: true },
+    })).resolves.toEqual({
+      sourceImageUrl: "/photos/covers/original-source.jpg",
+      generationStatus: "processing",
+    });
+    await Promise.all(captured);
+  });
+
+  it("uses the display image as the regeneration source when no source image is stored", async () => {
+    const chef = await makeUser();
+    const recipe = await db.recipe.create({
+      data: { title: "Fallback Regeneration", chefId: chef.id },
+    });
+    const cover = await db.recipeCover.create({
+      data: {
+        recipeId: recipe.id,
+        imageUrl: "/photos/covers/display-only.jpg",
+        sourceType: "chef-upload",
+        status: "ready",
+      },
+    });
+    const formData = new UndiciFormData();
+    formData.append("intent", "regenerateRecipeCover");
+    formData.append("coverId", cover.id);
+    const captured: Promise<unknown>[] = [];
+
+    await handleRecipeDetailAction({
+      request: await makeAuthedPostRequest(chef.id, recipe.id, formData) as unknown as Request,
+      params: { id: recipe.id },
+      context: {
+        cloudflare: {
+          env: null,
+          ctx: { waitUntil: (promise: Promise<unknown>) => captured.push(promise) },
+        },
+      } as any,
+    });
+
+    expect(captured).toHaveLength(1);
+    await expect(db.recipeCover.findUniqueOrThrow({
+      where: { id: cover.id },
+      select: { sourceImageUrl: true, generationStatus: true },
+    })).resolves.toEqual({
+      sourceImageUrl: "/photos/covers/display-only.jpg",
+      generationStatus: "processing",
+    });
+    await Promise.all(captured);
   });
 });
 
