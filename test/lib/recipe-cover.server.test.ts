@@ -5,6 +5,7 @@ import {
   backfillActiveCoverForRecipe,
   createCover,
   getActiveRecipeCover,
+  getCurrentCover,
   getRecipeCoverDisplay,
   getRecipeCoverImageUrl,
   listCoversForRecipe,
@@ -92,6 +93,32 @@ describe("recipe-cover.server", () => {
         styleVersion: "mendelow-phone-to-editorial-v1",
       });
     });
+
+    it("rejects an invalid source type", async () => {
+      await expect(createCover(db, {
+        recipeId,
+        imageUrl: "https://example.com/raw.png",
+        sourceType: "unknown-source" as never,
+      })).rejects.toThrow("Invalid cover source type");
+    });
+
+    it("rejects an invalid lifecycle status", async () => {
+      await expect(createCover(db, {
+        recipeId,
+        imageUrl: "https://example.com/raw.png",
+        sourceType: "chef-upload",
+        status: "queued" as never,
+      })).rejects.toThrow("Invalid cover status");
+    });
+
+    it("rejects an invalid generation status", async () => {
+      await expect(createCover(db, {
+        recipeId,
+        imageUrl: "https://example.com/raw.png",
+        sourceType: "chef-upload",
+        generationStatus: "queued" as never,
+      })).rejects.toThrow("Invalid cover generation status");
+    });
   });
 
   describe("listCoversForRecipe", () => {
@@ -142,6 +169,19 @@ describe("recipe-cover.server", () => {
 
       const current = await getActiveRecipeCover(db, recipeId);
       expect(current).toBeNull();
+    });
+
+    it("keeps getCurrentCover as an explicit-active compatibility alias", async () => {
+      const active = await db.recipeCover.create({
+        data: { recipeId, imageUrl: "u1", sourceType: "chef-upload" },
+      });
+      await db.recipe.update({
+        where: { id: recipeId },
+        data: { activeCoverId: active.id, activeCoverVariant: "image", coverMode: "manual" },
+      });
+
+      const current = await getCurrentCover(db, recipeId);
+      expect(current?.id).toBe(active.id);
     });
   });
 
@@ -230,10 +270,75 @@ describe("recipe-cover.server", () => {
       expect(url).toBe("raw");
     });
 
+    it("falls back to the preferred variant when a ready active cover has no selected variant", () => {
+      const url = getRecipeCoverImageUrl(
+        { ...recipe, activeCoverVariant: null },
+        [fakeCover({ id: "active", imageUrl: "raw", stylizedImageUrl: "stylized" })],
+      );
+      expect(url).toBe("stylized");
+    });
+
+    it("treats a missing coverMode as auto for compatibility", () => {
+      const url = getRecipeCoverImageUrl(
+        { id: "r", title: "Tomato Soup", activeCoverId: "active", activeCoverVariant: "image" },
+        [fakeCover({ id: "active", imageUrl: "raw", stylizedImageUrl: "stylized" })],
+      );
+      expect(url).toBe("raw");
+    });
+
+    it("returns null when no variant is selected and the ready cover has no displayable URL", () => {
+      const url = getRecipeCoverImageUrl(
+        { ...recipe, activeCoverVariant: null },
+        [fakeCover({ id: "active", imageUrl: "", stylizedImageUrl: "" })],
+      );
+      expect(url).toBeNull();
+    });
+
     it("returns null when the selected variant URL is empty", () => {
       const url = getRecipeCoverImageUrl(recipe, [
         fakeCover({ id: "active", imageUrl: "raw", stylizedImageUrl: "" }),
       ]);
+      expect(url).toBeNull();
+    });
+
+    it("returns null for an invalid override variant", () => {
+      const url = getRecipeCoverImageUrl(
+        recipe,
+        [fakeCover({ id: "active", imageUrl: "raw", stylizedImageUrl: "stylized" })],
+        "poster" as never,
+      );
+      expect(url).toBeNull();
+    });
+
+    it("returns null for an invalid active cover variant", () => {
+      const url = getRecipeCoverImageUrl(
+        { ...recipe, activeCoverVariant: "poster" },
+        [fakeCover({ id: "active", imageUrl: "raw", stylizedImageUrl: "stylized" })],
+      );
+      expect(url).toBeNull();
+    });
+
+    it("returns null for an invalid cover mode", () => {
+      const url = getRecipeCoverImageUrl(
+        { ...recipe, coverMode: "surprise" },
+        [fakeCover({ id: "active", imageUrl: "raw", stylizedImageUrl: "stylized" })],
+      );
+      expect(url).toBeNull();
+    });
+
+    it("returns null for a failed active cover", () => {
+      const url = getRecipeCoverImageUrl(
+        { ...recipe, activeCoverVariant: "image" },
+        [fakeCover({ id: "active", imageUrl: "raw", status: "failed", generationStatus: "failed" })],
+      );
+      expect(url).toBeNull();
+    });
+
+    it("returns null for an invalid active cover status", () => {
+      const url = getRecipeCoverImageUrl(
+        { ...recipe, activeCoverVariant: "image" },
+        [fakeCover({ id: "active", imageUrl: "raw", status: "queued" })],
+      );
       expect(url).toBeNull();
     });
 
@@ -260,6 +365,14 @@ describe("recipe-cover.server", () => {
         activeVariant: variant,
         provenanceLabel,
       });
+    });
+
+    it("does not mislabel an unknown source type as AI generated", () => {
+      const display = getRecipeCoverDisplay(
+        { id: "r", title: "Tomato Soup", activeCoverId: "active", activeCoverVariant: "image", coverMode: "manual" },
+        [fakeCover({ id: "active", sourceType: "legacy-random", imageUrl: "raw" })],
+      );
+      expect(display?.provenanceLabel).toBe("Unknown source");
     });
   });
 
@@ -307,6 +420,59 @@ describe("recipe-cover.server", () => {
       await expect(setActiveRecipeCover(db, { recipeId, coverId: cover.id, variant: "stylized" }))
         .rejects.toThrow("Selected cover variant is unavailable");
     });
+
+    it("rejects a missing cover", async () => {
+      await expect(setActiveRecipeCover(db, {
+        recipeId,
+        coverId: "missing-cover",
+        variant: "image",
+      })).rejects.toThrow("Selected cover was not found");
+    });
+
+    it("rejects an invalid requested variant", async () => {
+      const cover = await db.recipeCover.create({
+        data: {
+          recipeId,
+          imageUrl: "raw",
+          sourceType: "chef-upload",
+        },
+      });
+
+      await expect(setActiveRecipeCover(db, {
+        recipeId,
+        coverId: cover.id,
+        variant: "poster" as never,
+      })).rejects.toThrow("Invalid cover variant");
+    });
+
+    it("rejects a failed cover", async () => {
+      const cover = await db.recipeCover.create({
+        data: {
+          recipeId,
+          imageUrl: "raw",
+          sourceType: "chef-upload",
+          status: "failed",
+          generationStatus: "failed",
+        },
+      });
+
+      await expect(setActiveRecipeCover(db, { recipeId, coverId: cover.id, variant: "image" }))
+        .rejects.toThrow("Cannot activate a failed cover");
+    });
+
+    it("rejects a cover with an invalid status", async () => {
+      const cover = await db.recipeCover.create({
+        data: {
+          recipeId,
+          imageUrl: "raw",
+          sourceType: "chef-upload",
+          status: "queued",
+        },
+      });
+
+      await expect(setActiveRecipeCover(db, { recipeId, coverId: cover.id, variant: "image" }))
+        .rejects.toThrow("Cannot activate a cover with invalid status");
+    });
   });
 
   describe("archiveRecipeCover", () => {
@@ -318,6 +484,13 @@ describe("recipe-cover.server", () => {
       const result = await archiveRecipeCover(db, { recipeId, coverId: cover.id });
       expect(result.archivedCover.status).toBe("archived");
       expect(result.archivedCover.archivedAt).toBeInstanceOf(Date);
+    });
+
+    it("rejects a missing cover", async () => {
+      await expect(archiveRecipeCover(db, {
+        recipeId,
+        coverId: "missing-cover",
+      })).rejects.toThrow("Cover was not found");
     });
 
     it("requires a replacement or explicit no-cover state for the active cover", async () => {
@@ -350,6 +523,25 @@ describe("recipe-cover.server", () => {
       })).rejects.toThrow("Replacement cover must be different from the archived cover");
     });
 
+    it("requires a replacement variant when replacing the active cover", async () => {
+      const active = await db.recipeCover.create({
+        data: { recipeId, imageUrl: "raw", sourceType: "chef-upload" },
+      });
+      const replacement = await db.recipeCover.create({
+        data: { recipeId, imageUrl: "replacement", sourceType: "chef-upload" },
+      });
+      await db.recipe.update({
+        where: { id: recipeId },
+        data: { activeCoverId: active.id, activeCoverVariant: "image", coverMode: "manual" },
+      });
+
+      await expect(archiveRecipeCover(db, {
+        recipeId,
+        coverId: active.id,
+        replacementCoverId: replacement.id,
+      })).rejects.toThrow("Replacement variant is required");
+    });
+
     it("sets coverMode none when archiving the active cover with confirmation", async () => {
       const cover = await db.recipeCover.create({
         data: { recipeId, imageUrl: "raw", sourceType: "chef-upload" },
@@ -364,6 +556,33 @@ describe("recipe-cover.server", () => {
         activeCoverId: null,
         activeCoverVariant: null,
         coverMode: "none",
+      });
+    });
+
+    it("switches active cover before archiving the previous active cover", async () => {
+      const active = await db.recipeCover.create({
+        data: { recipeId, imageUrl: "raw", sourceType: "chef-upload" },
+      });
+      const replacement = await db.recipeCover.create({
+        data: { recipeId, imageUrl: "replacement", sourceType: "chef-upload" },
+      });
+      await db.recipe.update({
+        where: { id: recipeId },
+        data: { activeCoverId: active.id, activeCoverVariant: "image", coverMode: "manual" },
+      });
+
+      const result = await archiveRecipeCover(db, {
+        recipeId,
+        coverId: active.id,
+        replacementCoverId: replacement.id,
+        replacementVariant: "image",
+      });
+
+      expect(result.archivedCover.status).toBe("archived");
+      expect(result.recipe).toMatchObject({
+        activeCoverId: replacement.id,
+        activeCoverVariant: "image",
+        coverMode: "manual",
       });
     });
   });
@@ -419,6 +638,59 @@ describe("recipe-cover.server", () => {
       expect(recipe.activeCoverId).toBeNull();
       expect(recipe.activeCoverVariant).toBeNull();
       expect(recipe.coverMode).toBe("auto");
+    });
+
+    it("ignores failed, processing, archived, and invalid-status covers", async () => {
+      const ready = await db.recipeCover.create({
+        data: {
+          id: "ready-cover",
+          recipeId,
+          imageUrl: "ready",
+          sourceType: "chef-upload",
+          createdAt: new Date("2026-01-01"),
+        },
+      });
+      await db.recipeCover.createMany({
+        data: [
+          {
+            id: "failed-cover",
+            recipeId,
+            imageUrl: "failed",
+            sourceType: "chef-upload",
+            status: "failed",
+            createdAt: new Date("2026-02-01"),
+          },
+          {
+            id: "processing-cover",
+            recipeId,
+            imageUrl: "processing",
+            sourceType: "chef-upload",
+            status: "processing",
+            createdAt: new Date("2026-03-01"),
+          },
+          {
+            id: "archived-cover",
+            recipeId,
+            imageUrl: "archived",
+            sourceType: "chef-upload",
+            status: "archived",
+            archivedAt: new Date("2026-04-01"),
+            createdAt: new Date("2026-04-01"),
+          },
+          {
+            id: "invalid-cover",
+            recipeId,
+            imageUrl: "invalid",
+            sourceType: "chef-upload",
+            status: "queued",
+            createdAt: new Date("2026-05-01"),
+          },
+        ],
+      });
+
+      const recipe = await backfillActiveCoverForRecipe(db, recipeId);
+      expect(recipe.activeCoverId).toBe(ready.id);
+      expect(recipe.activeCoverVariant).toBe("image");
     });
   });
 

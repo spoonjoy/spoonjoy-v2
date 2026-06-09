@@ -6,6 +6,12 @@ export type RecipeCoverMode = "auto" | "manual" | "none";
 export type RecipeCoverStatus = "processing" | "ready" | "failed" | "archived";
 export type RecipeCoverGenerationStatus = "none" | "processing" | "succeeded" | "failed";
 
+const COVER_SOURCE_TYPES = ["ai-placeholder", "import", "chef-upload", "spoon"] as const;
+const COVER_VARIANTS = ["image", "stylized"] as const;
+const COVER_MODES = ["auto", "manual", "none"] as const;
+const COVER_STATUSES = ["processing", "ready", "failed", "archived"] as const;
+const COVER_GENERATION_STATUSES = ["none", "processing", "succeeded", "failed"] as const;
+
 export interface CreateCoverInput {
   recipeId: string;
   imageUrl: string;
@@ -60,6 +66,12 @@ export async function createCover(
   db: PrismaClient,
   input: CreateCoverInput,
 ): Promise<RecipeCover> {
+  assertSourceType(input.sourceType);
+  const status = input.status ?? "ready";
+  assertCoverStatus(status);
+  const generationStatus = input.generationStatus ?? "none";
+  assertGenerationStatus(generationStatus);
+
   return db.recipeCover.create({
     data: {
       recipeId: input.recipeId,
@@ -67,10 +79,10 @@ export async function createCover(
       stylizedImageUrl: input.stylizedImageUrl ?? null,
       sourceType: input.sourceType,
       sourceSpoonId: input.sourceSpoonId ?? null,
-      status: input.status ?? "ready",
+      status,
       createdById: input.createdById ?? null,
       sourceImageUrl: input.sourceImageUrl ?? null,
-      generationStatus: input.generationStatus ?? "none",
+      generationStatus,
       failureReason: input.failureReason ?? null,
       promptVersion: input.promptVersion ?? null,
       styleVersion: input.styleVersion ?? null,
@@ -115,16 +127,6 @@ export async function getActiveRecipeCover(
   });
 }
 
-function sortCoversDesc(covers: RecipeCover[]): RecipeCover[] {
-  return [...covers].sort((a, b) => {
-    const aTime = a.createdAt.getTime();
-    const bTime = b.createdAt.getTime();
-    if (aTime !== bTime) return bTime - aTime;
-    if (a.id === b.id) return 0;
-    return a.id < b.id ? 1 : -1;
-  });
-}
-
 export function getRecipeCoverImageUrl(
   recipe: RecipeIdentity,
   covers: RecipeCover[],
@@ -138,9 +140,19 @@ export function getRecipeCoverDisplay(
   covers: RecipeCover[],
   overrideVariant?: RecipeCoverVariant,
 ): RecipeCoverDisplay | null {
-  if (recipe.coverMode === "none" || !recipe.activeCoverId) return null;
+  const coverMode = normalizeCoverMode(recipe.coverMode);
+  if ((recipe.coverMode != null && !coverMode) || coverMode === "none" || !recipe.activeCoverId) {
+    return null;
+  }
   const cover = covers.find((item) => item.id === recipe.activeCoverId);
-  if (!cover || cover.status === "archived" || cover.archivedAt) return null;
+  if (!cover || cover.archivedAt) return null;
+  const status = normalizeCoverStatus(cover.status);
+  if (!status || status === "archived" || status === "failed") return null;
+
+  if (overrideVariant != null && !normalizeVariant(overrideVariant)) return null;
+  if (overrideVariant == null && recipe.activeCoverVariant != null && !normalizeVariant(recipe.activeCoverVariant)) {
+    return null;
+  }
 
   const selectedVariant = normalizeVariant(overrideVariant ?? recipe.activeCoverVariant);
   if (selectedVariant) {
@@ -157,6 +169,7 @@ export async function setActiveRecipeCover(
   db: PrismaClient,
   input: ActiveCoverInput,
 ) {
+  assertCoverVariant(input.variant);
   const cover = await db.recipeCover.findFirst({
     where: { id: input.coverId, recipeId: input.recipeId },
   });
@@ -248,7 +261,23 @@ export async function backfillActiveCoverForRecipe(
 }
 
 function normalizeVariant(value: string | null | undefined): RecipeCoverVariant | null {
-  return value === "image" || value === "stylized" ? value : null;
+  return isOneOf(value, COVER_VARIANTS) ? value : null;
+}
+
+function normalizeCoverMode(value: string | null | undefined): RecipeCoverMode | null {
+  if (value == null) return "auto";
+  return isOneOf(value, COVER_MODES) ? value : null;
+}
+
+function normalizeCoverStatus(value: string | null | undefined): RecipeCoverStatus | null {
+  return isOneOf(value, COVER_STATUSES) ? value : null;
+}
+
+function isOneOf<T extends string>(
+  value: string | null | undefined,
+  options: readonly T[],
+): value is T {
+  return options.includes(value as T);
 }
 
 function hasNonEmptyUrl(value: string | null | undefined): value is string {
@@ -294,18 +323,50 @@ function provenanceLabel(sourceType: string, variant: RecipeCoverVariant): strin
   }
   if (sourceType === "chef-upload" || sourceType === "spoon") return "Chef photo";
   if (sourceType === "import") return "Imported photo";
-  return "AI generated";
+  if (sourceType === "ai-placeholder") return "AI generated";
+  return "Unknown source";
 }
 
 function assertActivatableCover(cover: RecipeCover): void {
+  const status = normalizeCoverStatus(cover.status);
+  if (!status) {
+    throw new Error("Cannot activate a cover with invalid status");
+  }
   if (cover.status === "archived" || cover.archivedAt) {
     throw new Error("Cannot activate an archived cover");
+  }
+  if (cover.status === "failed") {
+    throw new Error("Cannot activate a failed cover");
   }
 }
 
 function assertVariantAvailable(cover: RecipeCover, variant: RecipeCoverVariant): void {
   if (!displayForVariant(cover, variant)) {
     throw new Error("Selected cover variant is unavailable");
+  }
+}
+
+function assertSourceType(sourceType: string): asserts sourceType is RecipeCoverSourceType {
+  if (!isOneOf(sourceType, COVER_SOURCE_TYPES)) {
+    throw new Error("Invalid cover source type");
+  }
+}
+
+function assertCoverStatus(status: string): asserts status is RecipeCoverStatus {
+  if (!isOneOf(status, COVER_STATUSES)) {
+    throw new Error("Invalid cover status");
+  }
+}
+
+function assertGenerationStatus(status: string): asserts status is RecipeCoverGenerationStatus {
+  if (!isOneOf(status, COVER_GENERATION_STATUSES)) {
+    throw new Error("Invalid cover generation status");
+  }
+}
+
+function assertCoverVariant(variant: string): asserts variant is RecipeCoverVariant {
+  if (!isOneOf(variant, COVER_VARIANTS)) {
+    throw new Error("Invalid cover variant");
   }
 }
 
