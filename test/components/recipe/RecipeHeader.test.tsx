@@ -117,10 +117,28 @@ describe('RecipeHeader', () => {
       expect(img).toHaveAttribute('src', 'https://example.com/recipe.jpg')
     })
 
+    it('renders cover provenance badge when provided', () => {
+      renderWithRouter(
+        <RecipeHeader
+          {...defaultProps}
+          coverImageUrl="https://example.com/recipe.jpg"
+          coverProvenanceLabel="Editorialized chef photo"
+        />
+      )
+
+      expect(screen.getByText('Editorialized chef photo')).toBeInTheDocument()
+    })
+
     it('renders placeholder when imageUrl is not provided', () => {
       renderWithRouter(<RecipeHeader {...defaultProps} />)
       expect(screen.getByTestId('recipe-image-placeholder')).toBeInTheDocument()
-      expect(screen.getByText('No image available')).toBeInTheDocument()
+      expect(screen.getByText('Cover coming soon')).toBeInTheDocument()
+    })
+
+    it('renders explicit awaiting-chef-photo placeholder copy for owners', () => {
+      renderWithRouter(<RecipeHeader {...defaultProps} coverPlaceholderLabel="Awaiting first chef photo" />)
+      expect(screen.getByTestId('recipe-image-placeholder')).toBeInTheDocument()
+      expect(screen.getByText('Awaiting first chef photo')).toBeInTheDocument()
     })
 
     it('renders placeholder when coverImageUrl is empty', () => {

@@ -301,6 +301,43 @@ describe("Recipes $id Route", () => {
       expect(result.coverImageUrl).toBeNull();
     });
 
+    it("returns explicit active cover display data with provenance", async () => {
+      const activeCover = await db.recipeCover.create({
+        data: {
+          recipeId,
+          imageUrl: "/photos/detail-raw.jpg",
+          stylizedImageUrl: "/photos/detail-editorial.jpg",
+          sourceType: "spoon",
+          createdAt: new Date("2026-01-01T00:00:00.000Z"),
+        },
+      });
+      await db.recipeCover.create({
+        data: {
+          recipeId,
+          imageUrl: "/photos/detail-newer.jpg",
+          sourceType: "chef-upload",
+          createdAt: new Date("2026-02-01T00:00:00.000Z"),
+        },
+      });
+      await db.recipe.update({
+        where: { id: recipeId },
+        data: {
+          activeCoverId: activeCover.id,
+          activeCoverVariant: "stylized",
+          coverMode: "manual",
+        },
+      });
+
+      const result = await loader({
+        request: new UndiciRequest(`http://localhost:3000/recipes/${recipeId}`),
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any);
+
+      expect(result.coverImageUrl).toBe("/photos/detail-editorial.jpg");
+      expect(result.coverProvenanceLabel).toBe("Editorialized chef photo");
+    });
+
     it("should return recipe data when logged in as owner", async () => {
       const session = await sessionStorage.getSession();
       session.set("userId", testUserId);
@@ -1895,6 +1932,7 @@ describe("Recipes $id Route", () => {
           description: "A delicious test dish",
           servings: "4",
           coverImageUrl: "https://example.com/recipe.jpg",
+          coverProvenanceLabel: "Editorialized chef photo",
           chef: { id: "user-1", username: "testchef" },
           steps: [],
         },
@@ -1916,6 +1954,7 @@ describe("Recipes $id Route", () => {
       // Chef name in link (Avatar also has it as title, so use link role to be specific)
       expect(screen.getByRole("link", { name: "testchef" })).toBeInTheDocument();
       expect(screen.getByText("A delicious test dish")).toBeInTheDocument();
+      expect(screen.getByText("Editorialized chef photo")).toBeInTheDocument();
       // Servings display with new component format
       expect(screen.getByText("4")).toBeInTheDocument();
       expect(screen.getByText("No steps added yet")).toBeInTheDocument();

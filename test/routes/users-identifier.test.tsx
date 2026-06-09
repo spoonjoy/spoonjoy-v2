@@ -89,6 +89,84 @@ describe("Users $identifier Route", () => {
       expect(result.kitchenVisitorsCount).toBe(0);
     });
 
+    it("uses explicit active cover display data for profile recipes, cookbook previews, and recent spoons", async () => {
+      const user = await createProfileUser();
+      const recipe = await db.recipe.create({
+        data: {
+          title: `Profile Active Cover ${faker.string.alphanumeric(8)}`,
+          description: "A profile active cover fixture",
+          servings: "4",
+          chefId: user.id,
+        },
+      });
+      const activeCover = await db.recipeCover.create({
+        data: {
+          recipeId: recipe.id,
+          imageUrl: "/photos/profile-raw.jpg",
+          stylizedImageUrl: "/photos/profile-editorial.jpg",
+          sourceType: "spoon",
+          createdAt: new Date("2026-01-01T00:00:00.000Z"),
+        },
+      });
+      await db.recipeCover.create({
+        data: {
+          recipeId: recipe.id,
+          imageUrl: "/photos/profile-newer.jpg",
+          sourceType: "chef-upload",
+          createdAt: new Date("2026-02-01T00:00:00.000Z"),
+        },
+      });
+      await db.recipe.update({
+        where: { id: recipe.id },
+        data: {
+          activeCoverId: activeCover.id,
+          activeCoverVariant: "stylized",
+          coverMode: "manual",
+        },
+      });
+      const cookbook = await db.cookbook.create({
+        data: {
+          title: `Profile Active Book ${faker.string.alphanumeric(8)}`,
+          authorId: user.id,
+        },
+      });
+      await db.recipeInCookbook.create({
+        data: {
+          cookbookId: cookbook.id,
+          recipeId: recipe.id,
+          addedById: user.id,
+        },
+      });
+      await db.recipeSpoon.create({
+        data: {
+          chefId: user.id,
+          recipeId: recipe.id,
+          note: "profile active cover spoon",
+        },
+      });
+
+      const result = await loader({
+        request: new UndiciRequest(`http://localhost:3000/users/${user.username}`),
+        context: { cloudflare: { env: null } },
+        params: { identifier: user.username },
+      } as any);
+
+      expect(result.recipes[0]).toMatchObject({
+        id: recipe.id,
+        coverImageUrl: "/photos/profile-editorial.jpg",
+        coverProvenanceLabel: "Editorialized chef photo",
+      });
+      expect(result.cookbooks[0].recipes[0].recipe).toMatchObject({
+        title: recipe.title,
+        coverImageUrl: "/photos/profile-editorial.jpg",
+        coverProvenanceLabel: "Editorialized chef photo",
+      });
+      expect(result.recentSpoons[0]).toMatchObject({
+        coverImageUrl: "/photos/profile-editorial.jpg",
+        coverProvenanceLabel: "Editorialized chef photo",
+      });
+    });
+
     it("computes fellowChefsCount and kitchenVisitorsCount via the new helpers", async () => {
       const owner = await createProfileUser();
       const other = await createProfileUser();
@@ -232,6 +310,7 @@ describe("Users $identifier Route", () => {
                 title: "Miso Soup",
                 description: "Comfort in a bowl",
                 coverImageUrl: "https://example.com/miso.jpg",
+                coverProvenanceLabel: "Chef photo",
                 servings: "4",
               },
               {
@@ -251,6 +330,7 @@ describe("Users $identifier Route", () => {
                   {
                     recipe: {
                       coverImageUrl: "https://example.com/miso.jpg",
+                      coverProvenanceLabel: "Chef photo",
                       title: "Miso Soup",
                     },
                   },
@@ -264,6 +344,7 @@ describe("Users $identifier Route", () => {
       render(<Stub initialEntries={["/users/chef-rowan"]} />);
 
       expect(await screen.findByRole("heading", { name: "chef-rowan" })).toBeInTheDocument();
+      expect(screen.getAllByText("Chef photo").length).toBeGreaterThan(0);
       expect(screen.getByText("Joined May 2026 • 2 recipes • 1 cookbook")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Open kitchen view" })).toHaveAttribute("href", "/?chef=chef-rowan");
       expect(screen.queryByText("Canonical profile: /users/chef-rowan")).toBeNull();

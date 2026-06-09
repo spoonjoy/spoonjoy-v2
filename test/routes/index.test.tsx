@@ -130,6 +130,83 @@ describe("Kitchen Index Route", () => {
       expect(result.cookbooks[0].recipes[0].recipe.coverImageUrl).toBeNull();
     });
 
+    it("uses explicit active cover display data for kitchen recipes and cookbook previews", async () => {
+      const owner = await createUser(
+        db,
+        faker.internet.email(),
+        faker.internet.username() + "_" + faker.string.alphanumeric(8),
+        "testPassword123"
+      );
+      const recipe = await db.recipe.create({
+        data: {
+          title: "Kitchen Active Cover",
+          description: "Active cover fixture",
+          servings: "2",
+          chefId: owner.id,
+        },
+      });
+      const activeCover = await db.recipeCover.create({
+        data: {
+          recipeId: recipe.id,
+          imageUrl: "/photos/kitchen-raw.jpg",
+          stylizedImageUrl: "/photos/kitchen-editorial.jpg",
+          sourceType: "spoon",
+          createdAt: new Date("2026-01-01T00:00:00.000Z"),
+        },
+      });
+      await db.recipeCover.create({
+        data: {
+          recipeId: recipe.id,
+          imageUrl: "/photos/kitchen-newer.jpg",
+          sourceType: "chef-upload",
+          createdAt: new Date("2026-02-01T00:00:00.000Z"),
+        },
+      });
+      await db.recipe.update({
+        where: { id: recipe.id },
+        data: {
+          activeCoverId: activeCover.id,
+          activeCoverVariant: "stylized",
+          coverMode: "manual",
+        },
+      });
+      const cookbook = await db.cookbook.create({
+        data: {
+          title: "Active Cover Book",
+          authorId: owner.id,
+        },
+      });
+      await db.recipeInCookbook.create({
+        data: {
+          cookbookId: cookbook.id,
+          recipeId: recipe.id,
+          addedById: owner.id,
+        },
+      });
+      const headers = new Headers({ Cookie: await (async () => {
+        const session = await sessionStorage.getSession();
+        session.set("userId", owner.id);
+        return (await sessionStorage.commitSession(session)).split(";")[0];
+      })() });
+
+      const result = await loader({
+        request: new UndiciRequest("http://localhost:3000/", { headers }),
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+
+      expect(result.recipes[0]).toMatchObject({
+        id: recipe.id,
+        coverImageUrl: "/photos/kitchen-editorial.jpg",
+        coverProvenanceLabel: "Editorialized chef photo",
+      });
+      expect(result.cookbooks[0].recipes[0].recipe).toMatchObject({
+        title: recipe.title,
+        coverImageUrl: "/photos/kitchen-editorial.jpg",
+        coverProvenanceLabel: "Editorialized chef photo",
+      });
+    });
+
     it("returns visitor kitchen by username in read-only framing", async () => {
       const viewer = await createUser(
         db,
@@ -315,6 +392,7 @@ describe("Kitchen Index Route", () => {
                 description: "Cheese and wine",
                 servings: "4",
                 coverImageUrl: "https://example.com/fondue.jpg",
+                coverProvenanceLabel: "Chef photo",
               },
               {
                 id: "recipe-2",
@@ -356,6 +434,7 @@ describe("Kitchen Index Route", () => {
       expect(screen.getByRole("region", { name: "Cookbook shelf" })).toBeInTheDocument();
       expect(screen.getByText("3 recipes and 1 cookbook")).toBeInTheDocument();
       expect(screen.getAllByText("Cheese Night").length).toBeGreaterThan(0);
+      expect(screen.getByText("Chef photo")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Open Recipe" })).toHaveAttribute("href", "/recipes/recipe-1");
       expect(screen.getByText("Fondue")).toBeInTheDocument();
       expect(screen.getAllByRole("link", { name: "Fondue" }).some((link) => link.classList.contains("min-h-11"))).toBe(true);

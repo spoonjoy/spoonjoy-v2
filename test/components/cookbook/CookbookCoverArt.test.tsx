@@ -3,11 +3,11 @@ import { describe, expect, it } from "vitest";
 import { CookbookCoverArt, cookbookCoverImages } from "~/components/cookbook/CookbookCoverArt";
 
 const images = [
-  { coverImageUrl: "/a.jpg", title: "A" },
-  { coverImageUrl: "/b.jpg", title: "B" },
-  { coverImageUrl: "/c.jpg", title: "C" },
-  { coverImageUrl: "/d.jpg", title: "D" },
-  { coverImageUrl: "/e.jpg", title: "E" },
+  { coverImageUrl: "/a.jpg", title: "A", coverProvenanceLabel: "Chef photo" },
+  { coverImageUrl: "/b.jpg", title: "B", coverProvenanceLabel: "Editorialized chef photo" },
+  { coverImageUrl: "/c.jpg", title: "C", coverProvenanceLabel: "Imported photo" },
+  { coverImageUrl: "/d.jpg", title: "D", coverProvenanceLabel: "AI generated" },
+  { coverImageUrl: "/e.jpg", title: "E", coverProvenanceLabel: "Chef photo" },
 ];
 
 describe("CookbookCoverArt", () => {
@@ -40,6 +40,7 @@ describe("CookbookCoverArt", () => {
     render(<CookbookCoverArt title="One Dish" recipeCount={1} recipeImages={[images[0]]} />);
 
     expect(screen.getByRole("img", { name: "A" })).toHaveAttribute("src", "/a.jpg");
+    expect(screen.getByText("Chef photo")).toBeInTheDocument();
     expect(screen.getAllByText("1 recipe").length).toBeGreaterThan(0);
   });
 

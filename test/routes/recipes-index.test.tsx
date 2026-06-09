@@ -52,6 +52,61 @@ describe("Recipes Index Route", () => {
     });
   });
 
+  it("uses explicit active covers and exposes provenance labels", async () => {
+    const chef = await createUser(
+      db,
+      faker.internet.email(),
+      faker.internet.username() + "_" + faker.string.alphanumeric(8),
+      "testPassword123"
+    );
+    const recipe = await db.recipe.create({
+      data: {
+        title: "Explicit Cover Beans",
+        description: "A simple dinner",
+        servings: "4",
+        chefId: chef.id,
+      },
+    });
+    const activeCover = await db.recipeCover.create({
+      data: {
+        recipeId: recipe.id,
+        imageUrl: "/photos/active-raw.jpg",
+        stylizedImageUrl: "/photos/active-editorial.jpg",
+        sourceType: "spoon",
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      },
+    });
+    await db.recipeCover.create({
+      data: {
+        recipeId: recipe.id,
+        imageUrl: "/photos/newer-raw.jpg",
+        stylizedImageUrl: "/photos/newer-editorial.jpg",
+        sourceType: "chef-upload",
+        createdAt: new Date("2026-02-01T00:00:00.000Z"),
+      },
+    });
+    await db.recipe.update({
+      where: { id: recipe.id },
+      data: {
+        activeCoverId: activeCover.id,
+        activeCoverVariant: "stylized",
+        coverMode: "manual",
+      },
+    });
+
+    const result = await loader({
+      request: new UndiciRequest("http://localhost:3000/recipes"),
+      context: { cloudflare: { env: null } },
+      params: {},
+    } as any);
+
+    expect(result.recipes[0]).toMatchObject({
+      id: recipe.id,
+      coverImageUrl: "/photos/active-editorial.jpg",
+      coverProvenanceLabel: "Editorialized chef photo",
+    });
+  });
+
   it("includes create affordance state for authenticated visitors", async () => {
     const user = await createUser(
       db,
@@ -168,6 +223,7 @@ describe("Recipes Index Route", () => {
               servings: null,
               chef: { username: "rowan" },
               coverImageUrl: "https://example.com/tomato.jpg",
+              coverProvenanceLabel: "Imported photo",
             },
           ],
         }),
@@ -182,6 +238,7 @@ describe("Recipes Index Route", () => {
     expect(screen.getByRole("link", { name: "Clear" })).toHaveAttribute("href", "/recipes");
     expect(screen.queryByRole("link", { name: /create recipe/i })).not.toBeInTheDocument();
     expect(screen.getAllByText("By rowan").length).toBeGreaterThan(0);
+    expect(screen.getByText("Imported photo")).toBeInTheDocument();
     expect(container.querySelector('img[src="https://example.com/tomato.jpg"]')).toBeInTheDocument();
   });
 

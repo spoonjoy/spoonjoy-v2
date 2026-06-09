@@ -13,6 +13,7 @@ const recipes: PantryRecipeCard[] = [
     cookTimeMinutes: 20,
     servings: '4',
     chefName: 'Chef Mario',
+    coverProvenanceLabel: 'Chef photo',
     href: '/recipes/r-1',
   },
   {
@@ -47,7 +48,13 @@ describe('RecipeGrid', () => {
   it('renders placeholder when image is missing', () => {
     renderWithRouter(<RecipeGrid recipes={recipes} />)
 
-    expect(screen.getByText('No photo')).toBeInTheDocument()
+    expect(screen.getByText('Cover coming soon')).toBeInTheDocument()
+  })
+
+  it('renders cover provenance badges', () => {
+    renderWithRouter(<RecipeGrid recipes={recipes} />)
+
+    expect(screen.getByText('Chef photo')).toBeInTheDocument()
   })
 
   it('renders servings and chef name metadata', () => {

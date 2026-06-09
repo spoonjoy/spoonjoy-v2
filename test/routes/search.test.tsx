@@ -192,7 +192,7 @@ describe("Search Route", () => {
                 href: "/recipes/recipe-1",
                 imageUrl: "https://example.com/tomato.jpg",
                 score: -1,
-                metadata: {},
+                metadata: { coverProvenanceLabel: "Editorialized chef photo" },
               },
               {
                 type: "cookbook",
@@ -242,6 +242,7 @@ describe("Search Route", () => {
 
       expect(await screen.findByText('Results for "tomato"')).toBeInTheDocument();
       expect(screen.getByText("4 results")).toBeInTheDocument();
+      expect(screen.getByText("Editorialized chef photo")).toBeInTheDocument();
       expect(container.querySelector('img[src="https://example.com/tomato.jpg"]')).toBeInTheDocument();
       expect(screen.getByRole("link", { name: /Recipe Tomato Sauce/i })).toHaveAttribute("href", "/recipes/recipe-1");
       expect(screen.getByRole("link", { name: /Cookbook Sunday Sauces/i })).toHaveAttribute("href", "/cookbooks/cookbook-1");
