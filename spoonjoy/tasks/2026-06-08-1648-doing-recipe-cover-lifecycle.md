@@ -75,7 +75,7 @@ Make Spoonjoy recipe imagery explicit, provenance-aware, and controllable across
 **What**: Refactor helper names/types for clarity, add edge-case coverage for empty URLs, archived covers, failed covers, missing active cover rows, inactive editorial variants, invalid `activeCoverVariant`, invalid `coverMode`, invalid `status`, invalid `sourceType`, and D1-compatible non-interactive write sequences. Backfill rules: for each recipe, choose newest `ready` non-archived cover with a non-empty `stylizedImageUrl` or `imageUrl`; set `activeCoverVariant` to `stylized` when `stylizedImageUrl` is non-empty, otherwise `image`; if no ready non-empty cover exists, leave `activeCoverId` and `activeCoverVariant` null with `coverMode="auto"`.
 **Acceptance**: Cover helper/model/migration tests pass with 100% coverage on new helper branches and no warnings.
 
-### ⬜ Unit 2a: Recipe Page And Listing Read Surfaces — Tests
+### ✅ Unit 2a: Recipe Page And Listing Read Surfaces — Tests
 **What**: Add failing tests proving recipe detail, recipe index, home, profile, cookbook pages, search page, `RecipeHeader`, `RecipeGrid`, and `CookbookCoverArt` use explicit active covers and render provenance badges. Include newest empty row, archived newest row, active older cover, and intentional no-cover cases.
 **Acceptance**: Tests fail because these surfaces still use ordered covers or lack provenance badges.
 
@@ -245,3 +245,4 @@ Make Spoonjoy recipe imagery explicit, provenance-aware, and controllable across
 - 2026-06-08 18:25 Unit 1 review converged after Round 2
 - 2026-06-08 18:31 Unit 1c complete: added runtime validation and edge coverage for invalid cover lifecycle strings, failed/archived states, replacement archive sequencing, unknown provenance labels, and D1-safe helper writes; targeted tests passed (`unit-1c-green.log`), build passed (`unit-1c-build.log`), and `recipe-cover.server.ts` reached 100% coverage (`unit-1c-coverage.log`)
 - 2026-06-08 18:32 Unit 1c review converged
+- 2026-06-08 18:41 Unit 2a complete: added failing web read-surface tests for active cover provenance, intentional placeholders, and nested cookbook/profile/search cover display (`unit-2a-red.log`)
