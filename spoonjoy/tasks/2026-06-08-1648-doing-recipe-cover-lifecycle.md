@@ -107,15 +107,15 @@ Make Spoonjoy recipe imagery explicit, provenance-aware, and controllable across
 **What**: Refactor shared server cover formatting to avoid drift between API v1, search, and OG paths.
 **Acceptance**: Affected server tests pass with 100% coverage on new branches and no warnings.
 
-### ⬜ Unit 4a: Recipe New/Edit And Placeholder Mutations — Tests
+### ✅ Unit 4a: Recipe New/Edit And Placeholder Mutations — Tests
 **What**: Add failing tests for new recipe creation without photo, recipe upload assignment, recipe clear-image behavior, pure AI placeholder generation, verbatim uploaded active cover selection, manual cover mode, intentional no-cover mode, seed/demo recipe active-cover setup, and PostHog capture on placeholder failure.
 **Acceptance**: Tests fail because these mutations/jobs create rows without explicit active state, provenance, or manual replacement checks.
 
-### ⬜ Unit 4b: Recipe New/Edit And Placeholder Mutations — Implementation
+### ✅ Unit 4b: Recipe New/Edit And Placeholder Mutations — Implementation
 **What**: Update `app/routes/recipes.new.tsx`, `app/routes/recipes.$id.edit.tsx`, recipe clear-image, `prisma/seed.ts`, and placeholder generation flows to create covers with status/provenance, activate them through helpers, support verbatim active uploads, and prevent placeholder jobs from replacing manual covers. New recipe with no upload uses `coverMode="auto"` and no active cover until a placeholder succeeds; clear-image sets `coverMode="none"` with null `activeCoverId`/`activeCoverVariant`; explicit upload sets `coverMode="manual"`, `activeCoverVariant="image"`, and `sourceType="chef-upload"` unless editorial generation is requested.
 **Acceptance**: Unit 4a tests pass and placeholder failures leave visible failure state plus existing PostHog exception capture.
 
-### ⬜ Unit 4c: Recipe New/Edit And Placeholder Mutations — Coverage & Refactor
+### ✅ Unit 4c: Recipe New/Edit And Placeholder Mutations — Coverage & Refactor
 **What**: Refactor duplicate upload/placeholder activation logic and cover error paths for missing bucket, failed generation, empty image URL, and no-cover state.
 **Acceptance**: Affected mutation/job tests pass with 100% coverage on new branches and no warnings.
 
@@ -258,6 +258,8 @@ Make Spoonjoy recipe imagery explicit, provenance-aware, and controllable across
 - 2026-06-08 18:56 Unit 2c complete: targeted coverage passed for the web read-surface slice with new badge/header/grid/cookbook/search/index/profile branches at 100% (`unit-2c-coverage.log`); production build passed (`unit-2c-build.log`). The first strict coverage attempt (`unit-2c-coverage-attempt-1.log`) hit unrelated repo-wide baseline thresholds, not uncovered Unit 2 code.
 - 2026-06-08 19:03 Fixed Unit 2 review findings: production search documents now store active-cover provenance metadata, and cookbook detail passes provenance into `CookbookCoverArt`; review-fix red/green, expanded Unit 2 targeted tests, and build passed (`unit-2-review-fix-red.log`, `unit-2-review-fix-green.log`, `unit-2-review-fix-targeted.log`, `unit-2-review-fix-build.log`)
 - 2026-06-08 19:10 Fixed Unit 2 Round 2 review finding: search freshness fingerprint now hashes active cover selection plus source/status/archive/display fields, so provenance-only and D1-style active-variant changes refresh indexed `imageUrl` and `coverProvenanceLabel`; red/green, expanded targeted tests, and build passed (`unit-2-round2-fix-red.log`, `unit-2-round2-fix-green.log`, `unit-2-round2-fix-targeted.log`, `unit-2-round2-fix-build.log`)
+- 2026-06-08 20:20 Unit 4a/4b/4c complete: added red tests for new/edit upload activation, explicit no-cover clearing, AI placeholder lifecycle/status/failure behavior, manual-cover race protection, and seed/demo cover activation (`unit-4a-red.log`); implemented raw upload active-cover assignment, no-cover clear semantics, placeholder status transitions plus safe auto-activation, and seed cover upsert activation; targeted tests passed (`unit-4b-green.log`, `unit-4c-green.log`), targeted changed-file coverage reached 100% statements/branches/functions/lines (`unit-4c-targeted-coverage.log`), and production build passed (`unit-4c-build.log`). The broader coverage command (`unit-4c-coverage.log`) still reports the unrelated repo-wide baseline threshold gap while the Unit 4 changed files are fully covered.
+- 2026-06-08 20:25 Unit 4 review converged: fresh sub-agent Hubble reviewed the refreshed diff (`unit-4-review.diff`), targeted test/coverage/build logs, and acceptance criteria with no findings.
 - 2026-06-08 19:10 Unit 2 review converged after Round 3
 - 2026-06-08 19:28 Unit 3a/3b/3c complete: added red tests for API v1 recipe/cookbook responses, OpenAPI schemas/examples, search cover metadata, and OG active-cover image selection (`unit-3a-red.log`); implemented active-cover display/provenance fields and regenerated the API playground; targeted tests passed (`unit-3b-green.log`), coverage passed with touched search/OG/OpenAPI files at 100% and changed API lines covered (`unit-3c-coverage.log`), and builds passed (`unit-3b-build.log`, `unit-3c-build.log`).
 - 2026-06-08 19:48 Fixed Unit 3 review findings: API provenance now nulls when the active image URL is not publicly displayable, API/OG loaders fetch only the scoped active cover candidate through shared cover helpers, and dynamic OG responses emit active-cover-derived freshness headers; targeted tests, coverage, and build passed (`unit-3-review-fix-green.log`, `unit-3-review-fix-coverage.log`, `unit-3-review-fix-build.log`).

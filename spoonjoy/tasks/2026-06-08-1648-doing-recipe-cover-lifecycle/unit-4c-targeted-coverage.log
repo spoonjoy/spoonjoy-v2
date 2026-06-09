@@ -1,0 +1,28 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+      Coverage enabled with istanbul
+
+ ✓ test/routes/recipes-id-edit.test.tsx (73 tests) 12398ms
+       ✓ should populate hidden form and submit when Save Recipe is clicked  364ms
+       ✓ should keep the mobile dock off edit forms and submit from the in-flow Save Recipe button  353ms
+ ✓ test/routes/recipes-new.test.tsx (52 tests) 5377ms
+       ✓ should populate hidden form and submit when RecipeBuilder saves  324ms
+ ✓ test/lib/ai-placeholder-cover.server.test.ts (14 tests) 1363ms
+     ✓ constructs a real OpenAI runner when no explicit runner is passed and the API key is set  1208ms
+
+ Test Files  3 passed (3)
+      Tests  139 passed (139)
+   Start at  20:19:14
+   Duration  22.22s (transform 645ms, setup 225ms, import 1.91s, tests 19.14s, environment 547ms)
+
+ % Coverage report from istanbul
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |     100 |      100 |     100 |     100 |                   
+ lib               |     100 |      100 |     100 |     100 |                   
+  ...ver.server.ts |     100 |      100 |     100 |     100 |                   
+ routes            |     100 |      100 |     100 |     100 |                   
+  ....$id.edit.tsx |     100 |      100 |     100 |     100 |                   
+  recipes.new.tsx  |     100 |      100 |     100 |     100 |                   
+-------------------|---------|----------|---------|---------|-------------------

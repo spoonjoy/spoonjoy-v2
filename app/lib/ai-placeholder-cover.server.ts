@@ -97,6 +97,53 @@ async function captureGenerationException(
   });
 }
 
+async function markPlaceholderFailed(
+  input: SchedulePlaceholderInput,
+  reason: string,
+  logger: Pick<Console, "error">,
+): Promise<void> {
+  try {
+    await input.db.recipeCover.update({
+      where: { id: input.coverId },
+      data: {
+        status: "failed",
+        generationStatus: "failed",
+        failureReason: reason,
+      },
+    });
+  } catch (error) {
+    logger.error("ai-placeholder cover failure state update failed", error);
+  }
+}
+
+async function activatePlaceholderIfStillAutomatic(
+  input: SchedulePlaceholderInput,
+): Promise<void> {
+  await input.db.recipe.updateMany({
+    where: {
+      id: input.recipeId,
+      coverMode: "auto",
+      activeCoverId: null,
+    },
+    data: {
+      activeCoverId: input.coverId,
+      activeCoverVariant: "image",
+      coverMode: "auto",
+    },
+  });
+}
+
+function failureReasonFor(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const cause = typeof error === "object" && error !== null && "cause" in error
+    ? (error as { cause?: unknown }).cause
+    : undefined;
+  if (cause === undefined) return message;
+
+  const causeMessage = failureReasonFor(cause);
+  return causeMessage === message ? message : `${message}: ${causeMessage}`;
+}
+
 /**
  * Background task: spends a per-user image-gen quota unit, generates the AI placeholder
  * cover for `coverId`, and replaces its `imageUrl` with the resulting R2 URL. Failures
@@ -110,6 +157,7 @@ export async function scheduleAiPlaceholderCover(
     const runnerResolution = resolveRunner(input);
     if ("reason" in runnerResolution) {
       await captureSkipped(input, runnerResolution.reason);
+      await markPlaceholderFailed(input, runnerResolution.reason, logger);
       return;
     }
 
@@ -121,6 +169,7 @@ export async function scheduleAiPlaceholderCover(
     );
     if (!consumed) {
       await captureSkipped(input, "quota_exhausted");
+      await markPlaceholderFailed(input, "quota_exhausted", logger);
       return;
     }
 
@@ -134,10 +183,17 @@ export async function scheduleAiPlaceholderCover(
 
     await input.db.recipeCover.update({
       where: { id: input.coverId },
-      data: { imageUrl: url },
+      data: {
+        imageUrl: url,
+        status: "ready",
+        generationStatus: "succeeded",
+        failureReason: null,
+      },
     });
+    await activatePlaceholderIfStillAutomatic(input);
   } catch (error) {
     await captureGenerationException(input, error);
+    await markPlaceholderFailed(input, failureReasonFor(error), logger);
     logger.error("ai-placeholder cover generation failed", error);
   }
 }

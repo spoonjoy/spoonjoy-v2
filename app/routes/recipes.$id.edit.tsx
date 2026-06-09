@@ -22,8 +22,7 @@ import {
 } from "~/lib/image-storage.server";
 import { FOOD_IMAGE_ACCEPT, RECIPE_IMAGE_SIZE_MESSAGE, RECIPE_IMAGE_TYPE_MESSAGE } from "~/lib/recipe-image";
 import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
-import { createCover, getRecipeCoverImageUrl } from "~/lib/recipe-cover.server";
-import { scheduleAiPlaceholderCover } from "~/lib/ai-placeholder-cover.server";
+import { createCover, getRecipeCoverImageUrl, setActiveRecipeCover } from "~/lib/recipe-cover.server";
 import { scheduleSpoonCoverStylization } from "~/lib/spoon-cover-stylization.server";
 import { Button } from "~/components/ui/button";
 import { Dialog, DialogActions, DialogDescription, DialogTitle } from "~/components/ui/dialog";
@@ -111,17 +110,12 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     select: {
       chefId: true,
       deletedAt: true,
-      covers: {
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        take: 1,
-      },
     },
   });
 
   if (!recipe || recipe.deletedAt) {
     throw new Response("Recipe not found", { status: 404 });
   }
-  const currentCover = recipe.covers[0] ?? null;
 
   if (recipe.chefId !== userId) {
     throw new Response("Unauthorized", { status: 403 });
@@ -299,6 +293,15 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         recipeId: id,
         imageUrl: uploadedImageUrl,
         sourceType: "chef-upload",
+        status: "ready",
+        createdById: userId,
+        sourceImageUrl: uploadedImageUrl,
+        generationStatus: "none",
+      });
+      await setActiveRecipeCover(database, {
+        recipeId: id,
+        coverId: uploadedCover.id,
+        variant: "image",
       });
       await scheduleSpoonCoverStylization({
         db: database,
@@ -311,28 +314,15 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         bucket: photosBucket,
         sourceType: "chef-upload",
       });
-    } else if (clearImage && currentCover) {
-      const placeholderCover = await createCover(database, {
-        recipeId: id,
-        imageUrl: "",
-        sourceType: "ai-placeholder",
+    } else if (clearImage) {
+      await database.recipe.update({
+        where: { id },
+        data: {
+          activeCoverId: null,
+          activeCoverVariant: null,
+          coverMode: "none",
+        },
       });
-      const waitUntil = context.cloudflare?.ctx?.waitUntil;
-      const task = scheduleAiPlaceholderCover({
-        db: database,
-        userId,
-        recipeId: id,
-        coverId: placeholderCover.id,
-        title: updateData.title,
-        description: updateData.description,
-        env: cloudflareEnv,
-        bucket: photosBucket,
-      });
-      if (waitUntil) {
-        waitUntil.call(context.cloudflare!.ctx!, task);
-      } else {
-        await task;
-      }
     }
 
     return redirect(`/recipes/${id}`);

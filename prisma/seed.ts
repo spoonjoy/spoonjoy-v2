@@ -1235,6 +1235,49 @@ const RECIPES: RecipeData[] = [
   },
 ];
 
+async function upsertSeedRecipeCover(recipeId: string, imageUrl: string) {
+  const existingCover = await prisma.recipeCover.findFirst({
+    where: {
+      recipeId,
+      imageUrl,
+    },
+  });
+
+  const cover = existingCover
+    ? await prisma.recipeCover.update({
+        where: { id: existingCover.id },
+        data: {
+          sourceType: "chef-upload",
+          sourceImageUrl: imageUrl,
+          status: "ready",
+          generationStatus: "none",
+          failureReason: null,
+          archivedAt: null,
+        },
+      })
+    : await prisma.recipeCover.create({
+        data: {
+          recipeId,
+          imageUrl,
+          sourceType: "chef-upload",
+          sourceImageUrl: imageUrl,
+          status: "ready",
+          generationStatus: "none",
+        },
+      });
+
+  await prisma.recipe.update({
+    where: { id: recipeId },
+    data: {
+      activeCoverId: cover.id,
+      activeCoverVariant: "image",
+      coverMode: "manual",
+    },
+  });
+
+  return cover;
+}
+
 async function seedRecipes(
   users: { id: string; email: string; username: string }[],
   units: { id: string; name: string }[],
@@ -1277,22 +1320,7 @@ async function seedRecipes(
       });
 
       if (recipeData.imageUrl) {
-        const existingCover = await prisma.recipeCover.findFirst({
-          where: {
-            recipeId: existing.id,
-            imageUrl: recipeData.imageUrl,
-          },
-        });
-
-        if (!existingCover) {
-          await prisma.recipeCover.create({
-            data: {
-              recipeId: existing.id,
-              imageUrl: recipeData.imageUrl,
-              sourceType: "chef-upload",
-            },
-          });
-        }
+        await upsertSeedRecipeCover(existing.id, recipeData.imageUrl);
       }
 
       createdRecipes.push({ id: existing.id, title: existing.title, chefId: existing.chefId });
@@ -1312,13 +1340,7 @@ async function seedRecipes(
     // Seed a chef-upload cover when an image URL is provided so the recipe renders
     // with the same artwork it had under the old Recipe.imageUrl field.
     if (recipeData.imageUrl) {
-      await prisma.recipeCover.create({
-        data: {
-          recipeId: recipe.id,
-          imageUrl: recipeData.imageUrl,
-          sourceType: "chef-upload",
-        },
-      });
+      await upsertSeedRecipeCover(recipe.id, recipeData.imageUrl);
     }
 
     // Create steps with ingredients

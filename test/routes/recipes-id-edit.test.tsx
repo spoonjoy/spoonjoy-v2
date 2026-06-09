@@ -38,6 +38,17 @@ function validImageFile(name: string, type: "image/jpeg" | "image/png" | "image/
   return new File([validImageBytes(type)], name, { type });
 }
 
+async function activateRecipeCoverForTest(recipeId: string, coverId: string) {
+  await db.recipe.update({
+    where: { id: recipeId },
+    data: {
+      activeCoverId: coverId,
+      activeCoverVariant: "image",
+      coverMode: "manual",
+    },
+  });
+}
+
 describe("Recipes $id Edit Route", () => {
   let testUserId: string;
   let otherUserId: string;
@@ -928,15 +939,16 @@ describe("Recipes $id Edit Route", () => {
       }
     });
 
-    it("should clear image when clearImage is true", async () => {
+    it("should set an explicit no-cover state when clearImage is true", async () => {
       // First create a cover for the recipe
-      await db.recipeCover.create({
+      const oldCover = await db.recipeCover.create({
         data: {
           recipeId,
           imageUrl: "https://example.com/old-image.jpg",
           sourceType: "chef-upload",
         },
       });
+      await activateRecipeCoverForTest(recipeId, oldCover.id);
 
       const request = await createFormRequest(
         {
@@ -956,23 +968,27 @@ describe("Recipes $id Edit Route", () => {
       expect(response.status).toBe(302);
       expect(response.headers.get("Location")).toBe(`/recipes/${recipeId}`);
 
-      // Latest cover should now be an empty ai-placeholder row representing the clear
-      const latest = await db.recipeCover.findFirst({
-        where: { recipeId },
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      const recipe = await db.recipe.findUniqueOrThrow({
+        where: { id: recipeId },
+        select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
       });
-      expect(latest?.imageUrl).toBe("");
-      expect(latest?.sourceType).toBe("ai-placeholder");
+      expect(recipe).toEqual({
+        activeCoverId: null,
+        activeCoverVariant: null,
+        coverMode: "none",
+      });
+      await expect(db.recipeCover.count({ where: { recipeId } })).resolves.toBe(1);
     });
 
-    it("should schedule placeholder generation with waitUntil when clearing an image", async () => {
-      await db.recipeCover.create({
+    it("does not schedule placeholder generation when clearing an image", async () => {
+      const oldCover = await db.recipeCover.create({
         data: {
           recipeId,
           imageUrl: "https://example.com/old-image.jpg",
           sourceType: "chef-upload",
         },
       });
+      await activateRecipeCoverForTest(recipeId, oldCover.id);
       const captured: Promise<unknown>[] = [];
       const waitUntil = vi.fn((promise: Promise<unknown>) => {
         captured.push(promise);
@@ -993,7 +1009,17 @@ describe("Recipes $id Edit Route", () => {
 
       expect(response).toBeInstanceOf(Response);
       expect(response.status).toBe(302);
-      expect(waitUntil).toHaveBeenCalledTimes(1);
+      expect(waitUntil).not.toHaveBeenCalled();
+      await expect(
+        db.recipe.findUniqueOrThrow({
+          where: { id: recipeId },
+          select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
+        }),
+      ).resolves.toEqual({
+        activeCoverId: null,
+        activeCoverVariant: null,
+        coverMode: "none",
+      });
       await Promise.all(captured);
     });
 
@@ -1098,8 +1124,24 @@ describe("Recipes $id Edit Route", () => {
         where: { recipeId },
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       });
-      expect(cover?.sourceType).toBe("chef-upload");
+      expect(cover).toMatchObject({
+        sourceType: "chef-upload",
+        status: "ready",
+        generationStatus: "none",
+        createdById: testUserId,
+      });
       expect(cover?.imageUrl).toMatch(/^data:image\/jpeg;base64,/);
+      expect(cover?.sourceImageUrl).toBe(cover?.imageUrl);
+      await expect(
+        db.recipe.findUniqueOrThrow({
+          where: { id: recipeId },
+          select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
+        }),
+      ).resolves.toEqual({
+        activeCoverId: cover!.id,
+        activeCoverVariant: "image",
+        coverMode: "manual",
+      });
     });
 
     it("should return validation error for image exceeding 5MB", async () => {
@@ -1169,6 +1211,23 @@ describe("Recipes $id Edit Route", () => {
       expect(latest?.imageUrl).toMatch(
         new RegExp(`^/photos/recipes/${testUserId}/${recipeId}/\\d+-[a-f0-9-]+\\.png$`),
       );
+      expect(latest).toMatchObject({
+        sourceType: "chef-upload",
+        status: "ready",
+        generationStatus: "none",
+        createdById: testUserId,
+      });
+      expect(latest?.sourceImageUrl).toBe(latest?.imageUrl);
+      await expect(
+        db.recipe.findUniqueOrThrow({
+          where: { id: recipeId },
+          select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
+        }),
+      ).resolves.toEqual({
+        activeCoverId: latest!.id,
+        activeCoverVariant: "image",
+        coverMode: "manual",
+      });
       expect(mockR2Bucket.put).toHaveBeenCalledWith(
         latest!.imageUrl.replace("/photos/", ""),
         expect.any(File),
@@ -1211,6 +1270,16 @@ describe("Recipes $id Edit Route", () => {
         new RegExp(`^/photos/recipes/${testUserId}/${recipeId}/\\d+-[a-f0-9-]+\\.png$`),
       );
       expect(latest.stylizedImageUrl).toBeNull();
+      await expect(
+        db.recipe.findUniqueOrThrow({
+          where: { id: recipeId },
+          select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
+        }),
+      ).resolves.toEqual({
+        activeCoverId: latest.id,
+        activeCoverVariant: "image",
+        coverMode: "manual",
+      });
       expect(mockR2Bucket.delete).not.toHaveBeenCalled();
       expect(captured).toHaveLength(0);
     });
@@ -1403,14 +1472,15 @@ describe("Recipes $id Edit Route", () => {
       expect(covers).toEqual([]);
     });
 
-    it("should clear an R2 image without deleting the referenced stored object", async () => {
-      await db.recipeCover.create({
+    it("should enter no-cover mode without deleting the referenced stored object", async () => {
+      const oldCover = await db.recipeCover.create({
         data: {
           recipeId,
           imageUrl: "/photos/recipes/user-old/recipe-old/111.jpg",
           sourceType: "chef-upload",
         },
       });
+      await activateRecipeCoverForTest(recipeId, oldCover.id);
       const mockR2Bucket = {
         delete: vi.fn().mockRejectedValue(new Error("delete failed")),
       };
@@ -1432,12 +1502,17 @@ describe("Recipes $id Edit Route", () => {
       expect(response.status).toBe(302);
       expect(mockR2Bucket.delete).not.toHaveBeenCalled();
 
-      const latest = await db.recipeCover.findFirst({
-        where: { recipeId },
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      await expect(
+        db.recipe.findUniqueOrThrow({
+          where: { id: recipeId },
+          select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
+        }),
+      ).resolves.toEqual({
+        activeCoverId: null,
+        activeCoverVariant: null,
+        coverMode: "none",
       });
-      expect(latest?.imageUrl).toBe("");
-      expect(latest?.sourceType).toBe("ai-placeholder");
+      await expect(db.recipeCover.count({ where: { recipeId } })).resolves.toBe(1);
     });
 
     it("should delete uploaded replacement image when database update fails", async () => {

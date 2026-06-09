@@ -58,6 +58,9 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
         recipeId,
         imageUrl: "",
         sourceType: "ai-placeholder",
+        status: "processing",
+        generationStatus: "processing",
+        createdById: userId,
       },
     });
     coverId = cover.id;
@@ -68,7 +71,17 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
     await cleanupDatabase();
   });
 
-  it("replaces the cover imageUrl with the generated URL on success", async () => {
+  async function expectPlaceholderFailed(reason: string) {
+    const cover = await db.recipeCover.findUniqueOrThrow({ where: { id: coverId } });
+    expect(cover).toMatchObject({
+      imageUrl: "",
+      status: "failed",
+      generationStatus: "failed",
+    });
+    expect(cover.failureReason).toContain(reason);
+  }
+
+  it("marks the generated placeholder ready and activates it only after success", async () => {
     const runner = makeRunner();
     const bucket = mockR2();
     await scheduleAiPlaceholderCover({
@@ -84,7 +97,22 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
       logger: errorSpy,
     });
     const cover = await db.recipeCover.findUniqueOrThrow({ where: { id: coverId } });
+    expect(cover).toMatchObject({
+      status: "ready",
+      generationStatus: "succeeded",
+      failureReason: null,
+    });
     expect(cover.imageUrl).toMatch(/^\/photos\/covers\/1234-[a-f0-9-]+\.png$/);
+    await expect(
+      db.recipe.findUniqueOrThrow({
+        where: { id: recipeId },
+        select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
+      }),
+    ).resolves.toEqual({
+      activeCoverId: coverId,
+      activeCoverVariant: "image",
+      coverMode: "auto",
+    });
     expect(bucket.put).toHaveBeenCalledWith(
       cover.imageUrl.replace("/photos/", ""),
       GENERATED_BYTES,
@@ -112,8 +140,7 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
       logger: errorSpy,
     });
     expect(runner.textToImage).not.toHaveBeenCalled();
-    const cover = await db.recipeCover.findUniqueOrThrow({ where: { id: coverId } });
-    expect(cover.imageUrl).toBe("");
+    await expectPlaceholderFailed("quota_exhausted");
   });
 
   it("returns silently when no runner is available and OPENAI_API_KEY is absent", async () => {
@@ -132,6 +159,9 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
     });
     const cover = await db.recipeCover.findUniqueOrThrow({ where: { id: coverId } });
     expect(cover.imageUrl).toBe("");
+    expect(cover.status).toBe("failed");
+    expect(cover.generationStatus).toBe("failed");
+    expect(cover.failureReason).toContain("missing_openai_key");
     expect(errorSpy.error).not.toHaveBeenCalled();
     await expect(
       db.imageGenLedger.count({ where: { userId, kind: "placeholder" } }),
@@ -171,6 +201,9 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
     });
     const cover = await db.recipeCover.findUniqueOrThrow({ where: { id: coverId } });
     expect(cover.imageUrl).toBe("");
+    expect(cover.status).toBe("failed");
+    expect(cover.generationStatus).toBe("failed");
+    expect(cover.failureReason).toContain("missing_runner");
     await expect(
       db.imageGenLedger.count({ where: { userId, kind: "placeholder" } }),
     ).resolves.toBe(0);
@@ -204,6 +237,7 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
       logger: errorSpy,
     });
     expect(errorSpy.error).not.toHaveBeenCalled();
+    await expectPlaceholderFailed("missing_openai_key");
   });
 
   it("logs and swallows runner errors without throwing", async () => {
@@ -226,8 +260,52 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
       }),
     ).resolves.toBeUndefined();
     expect(errorSpy.error).toHaveBeenCalledTimes(1);
+    await expectPlaceholderFailed("boom");
+  });
+
+  it("includes non-Error provider failures in the visible failure reason", async () => {
+    const runner: ImageGenRunner = {
+      textToImage: vi.fn(async () => {
+        throw "plain provider failure";
+      }),
+      imageToImage: vi.fn(),
+    };
+
+    await scheduleAiPlaceholderCover({
+      db,
+      userId,
+      recipeId,
+      coverId,
+      title: "Pasta",
+      description: null,
+      runner,
+      logger: errorSpy,
+    });
+
+    await expectPlaceholderFailed("plain provider failure");
+  });
+
+  it("does not duplicate wrapper and cause messages when they match", async () => {
+    const runner: ImageGenRunner = {
+      textToImage: vi.fn(async () => {
+        throw new Error("Placeholder image generation failed");
+      }),
+      imageToImage: vi.fn(),
+    };
+
+    await scheduleAiPlaceholderCover({
+      db,
+      userId,
+      recipeId,
+      coverId,
+      title: "Pasta",
+      description: null,
+      runner,
+      logger: errorSpy,
+    });
+
     const cover = await db.recipeCover.findUniqueOrThrow({ where: { id: coverId } });
-    expect(cover.imageUrl).toBe("");
+    expect(cover.failureReason).toBe("Placeholder image generation failed");
   });
 
   it("defaults logger to console when none provided and the runner fails", async () => {
@@ -254,6 +332,37 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
     } finally {
       console.error = original;
     }
+  });
+
+  it("logs when a failed placeholder row can no longer be updated", async () => {
+    const runner: ImageGenRunner = {
+      textToImage: vi.fn(async () => {
+        throw new Error("boom");
+      }),
+      imageToImage: vi.fn(),
+    };
+
+    await expect(
+      scheduleAiPlaceholderCover({
+        db,
+        userId,
+        recipeId,
+        coverId: "missing-cover-id",
+        title: "Pasta",
+        description: null,
+        runner,
+        logger: errorSpy,
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(errorSpy.error).toHaveBeenCalledWith(
+      "ai-placeholder cover failure state update failed",
+      expect.anything(),
+    );
+    expect(errorSpy.error).toHaveBeenCalledWith(
+      "ai-placeholder cover generation failed",
+      expect.any(Error),
+    );
   });
 
   it("uses the OpenAI runner factory when OPENAI_API_KEY is provided", async () => {
@@ -300,6 +409,7 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
     // (500), so generatePlaceholderImage threw and we landed in the catch block.
     expect(errorSpy.error).toHaveBeenCalled();
     expect(stubFetch).toHaveBeenCalled();
+    await expectPlaceholderFailed("stubbed");
   });
 
   it("captures generation exceptions with image-generation metadata", async () => {
@@ -323,6 +433,7 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
       analyticsFetchImpl,
       logger: errorSpy,
     });
+    await expectPlaceholderFailed("openai down");
     expect(postHogBodies(analyticsFetchImpl)).toEqual([
       expect.objectContaining({
         event: "$exception",
@@ -339,5 +450,53 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
         }),
       }),
     ]);
+  });
+
+  it("does not replace a manual cover when placeholder generation finishes later", async () => {
+    const manualCover = await db.recipeCover.create({
+      data: {
+        recipeId,
+        imageUrl: "/photos/manual/raw.jpg",
+        sourceType: "chef-upload",
+        status: "ready",
+      },
+    });
+    await db.recipe.update({
+      where: { id: recipeId },
+      data: {
+        activeCoverId: manualCover.id,
+        activeCoverVariant: "image",
+        coverMode: "manual",
+      },
+    });
+    const runner = makeRunner();
+    await scheduleAiPlaceholderCover({
+      db,
+      userId,
+      recipeId,
+      coverId,
+      title: "Pasta",
+      description: null,
+      runner,
+      bucket: mockR2(),
+      now: () => 1234,
+      logger: errorSpy,
+    });
+
+    await expect(
+      db.recipe.findUniqueOrThrow({
+        where: { id: recipeId },
+        select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
+      }),
+    ).resolves.toEqual({
+      activeCoverId: manualCover.id,
+      activeCoverVariant: "image",
+      coverMode: "manual",
+    });
+    await expect(db.recipeCover.findUniqueOrThrow({ where: { id: coverId } }))
+      .resolves.toMatchObject({
+        status: "ready",
+        generationStatus: "succeeded",
+      });
   });
 });

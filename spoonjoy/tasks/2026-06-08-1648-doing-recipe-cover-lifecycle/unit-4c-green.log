@@ -1,0 +1,17 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ✓ test/routes/recipes-id-edit.test.tsx (73 tests) 12001ms
+       ✓ should populate hidden form and submit when Save Recipe is clicked  336ms
+       ✓ should keep the mobile dock off edit forms and submit from the in-flow Save Recipe button  340ms
+ ✓ test/routes/recipes-new.test.tsx (52 tests) 5224ms
+       ✓ should populate hidden form and submit when RecipeBuilder saves  333ms
+ ✓ test/lib/ai-placeholder-cover.server.test.ts (14 tests) 1648ms
+     ✓ constructs a real OpenAI runner when no explicit runner is passed and the API key is set  1467ms
+ ✓ test/scripts/seed-recipe-cover-lifecycle.test.ts (1 test) 25ms
+
+ Test Files  4 passed (4)
+      Tests  140 passed (140)
+   Start at  20:18:40
+   Duration  21.95s (transform 399ms, setup 270ms, import 1.60s, tests 18.90s, environment 715ms)
+

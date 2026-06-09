@@ -41,6 +41,32 @@ function validImageFile(name: string, type: "image/jpeg" | "image/png" | "image/
   return new File([validImageBytes(type)], name, { type });
 }
 
+async function expectAwaitingPlaceholderCover(recipeId: string, userId: string) {
+  const recipe = await db.recipe.findUniqueOrThrow({
+    where: { id: recipeId },
+    select: {
+      activeCoverId: true,
+      activeCoverVariant: true,
+      coverMode: true,
+      covers: true,
+    },
+  });
+  expect(recipe).toMatchObject({
+    activeCoverId: null,
+    activeCoverVariant: null,
+    coverMode: "auto",
+  });
+  expect(recipe.covers).toHaveLength(1);
+  expect(recipe.covers[0]).toMatchObject({
+    sourceType: "ai-placeholder",
+    imageUrl: "",
+    status: "failed",
+    generationStatus: "failed",
+    createdById: userId,
+  });
+  expect(recipe.covers[0].failureReason).toContain("missing_openai_key");
+}
+
 describe("Recipes New Route", () => {
   let testUserId: string;
 
@@ -184,10 +210,7 @@ describe("Recipes New Route", () => {
       expect(recipes[0].title).toBe("My New Recipe");
       expect(recipes[0].description).toBe("A delicious recipe");
       expect(recipes[0].servings).toBe("4");
-      const covers = await db.recipeCover.findMany({ where: { recipeId: recipes[0].id } });
-      expect(covers).toHaveLength(1);
-      expect(covers[0].sourceType).toBe("ai-placeholder");
-      expect(covers[0].imageUrl).toBe("");
+      await expectAwaitingPlaceholderCover(recipes[0].id, testUserId);
     });
 
     it("should parse ingredients for the unsaved new recipe builder", async () => {
@@ -294,10 +317,7 @@ describe("Recipes New Route", () => {
       expect(recipes[0].title).toBe("Minimal Recipe");
       expect(recipes[0].description).toBeNull();
       expect(recipes[0].servings).toBeNull();
-      const covers = await db.recipeCover.findMany({ where: { recipeId: recipes[0].id } });
-      expect(covers).toHaveLength(1);
-      expect(covers[0].sourceType).toBe("ai-placeholder");
-      expect(covers[0].imageUrl).toBe("");
+      await expectAwaitingPlaceholderCover(recipes[0].id, testUserId);
     });
 
     it("should reject duplicate active recipe titles for the same chef", async () => {
@@ -615,8 +635,19 @@ describe("Recipes New Route", () => {
       expect(recipe!.title).toBe("Valid Title");
       const covers = await db.recipeCover.findMany({ where: { recipeId: recipe!.id } });
       expect(covers).toHaveLength(1);
-      expect(covers[0].sourceType).toBe("chef-upload");
+      expect(covers[0]).toMatchObject({
+        sourceType: "chef-upload",
+        status: "ready",
+        generationStatus: "none",
+        createdById: testUserId,
+      });
       expect(covers[0].imageUrl).toMatch(/^data:image\/jpeg;base64,/);
+      expect(covers[0].sourceImageUrl).toBe(covers[0].imageUrl);
+      expect(recipe).toMatchObject({
+        activeCoverId: covers[0].id,
+        activeCoverVariant: "image",
+        coverMode: "manual",
+      });
     });
 
     it("should upload valid recipe image to R2 when a bucket is available", async () => {
@@ -643,10 +674,21 @@ describe("Recipes New Route", () => {
       });
       const covers = await db.recipeCover.findMany({ where: { recipeId: recipe.id } });
       expect(covers).toHaveLength(1);
-      expect(covers[0].sourceType).toBe("chef-upload");
+      expect(covers[0]).toMatchObject({
+        sourceType: "chef-upload",
+        status: "ready",
+        generationStatus: "none",
+        createdById: testUserId,
+      });
       expect(covers[0].imageUrl).toMatch(
         new RegExp(`^/photos/recipes/${testUserId}/${recipe.id}/\\d+-[a-f0-9-]+\\.jpg$`),
       );
+      expect(covers[0].sourceImageUrl).toBe(covers[0].imageUrl);
+      expect(recipe).toMatchObject({
+        activeCoverId: covers[0].id,
+        activeCoverVariant: "image",
+        coverMode: "manual",
+      });
       expect(mockR2Bucket.put).toHaveBeenCalledWith(
         covers[0].imageUrl.replace("/photos/", ""),
         expect.any(File),
@@ -690,6 +732,11 @@ describe("Recipes New Route", () => {
         new RegExp(`^/photos/recipes/${testUserId}/${recipe.id}/\\d+-[a-f0-9-]+\\.jpg$`),
       );
       expect(cover.stylizedImageUrl).toBeNull();
+      expect(recipe).toMatchObject({
+        activeCoverId: cover.id,
+        activeCoverVariant: "image",
+        coverMode: "manual",
+      });
       expect(captured).toHaveLength(0);
     });
 
@@ -732,6 +779,10 @@ describe("Recipes New Route", () => {
       expect(response).toBeInstanceOf(Response);
       expect(response.status).toBe(302);
       expect(waitUntil).toHaveBeenCalledTimes(1);
+      const recipe = await db.recipe.findFirstOrThrow({
+        where: { chefId: testUserId, title: "WaitUntil Recipe" },
+      });
+      await expectAwaitingPlaceholderCover(recipe.id, testUserId);
       // Allow the captured promise to resolve so cleanup is clean.
       await Promise.all(captured);
     });

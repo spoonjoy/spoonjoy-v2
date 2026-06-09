@@ -21,7 +21,7 @@ import {
 } from "~/lib/image-storage.server";
 import { FOOD_IMAGE_ACCEPT, RECIPE_IMAGE_SIZE_MESSAGE, RECIPE_IMAGE_TYPE_MESSAGE } from "~/lib/recipe-image";
 import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
-import { createCover } from "~/lib/recipe-cover.server";
+import { createCover, setActiveRecipeCover } from "~/lib/recipe-cover.server";
 import { scheduleAiPlaceholderCover } from "~/lib/ai-placeholder-cover.server";
 import { scheduleSpoonCoverStylization } from "~/lib/spoon-cover-stylization.server";
 import {
@@ -170,6 +170,15 @@ export async function action({ request, context }: Route.ActionArgs) {
         recipeId: recipe.id,
         imageUrl: uploadedImageUrl,
         sourceType: "chef-upload",
+        status: "ready",
+        createdById: userId,
+        sourceImageUrl: uploadedImageUrl,
+        generationStatus: "none",
+      });
+      await setActiveRecipeCover(database, {
+        recipeId: recipe.id,
+        coverId: uploadedCover.id,
+        variant: "image",
       });
       await scheduleSpoonCoverStylization({
         db: database,
@@ -187,6 +196,9 @@ export async function action({ request, context }: Route.ActionArgs) {
         recipeId: recipe.id,
         imageUrl: "",
         sourceType: "ai-placeholder",
+        status: "processing",
+        createdById: userId,
+        generationStatus: "processing",
       });
       const waitUntil = context.cloudflare?.ctx?.waitUntil;
       const task = scheduleAiPlaceholderCover({

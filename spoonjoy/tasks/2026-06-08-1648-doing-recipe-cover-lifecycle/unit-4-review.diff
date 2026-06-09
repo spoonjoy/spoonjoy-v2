@@ -1,0 +1,950 @@
+diff --git a/app/lib/ai-placeholder-cover.server.ts b/app/lib/ai-placeholder-cover.server.ts
+index ee38d063..b7bb298a 100644
+--- a/app/lib/ai-placeholder-cover.server.ts
++++ b/app/lib/ai-placeholder-cover.server.ts
+@@ -97,6 +97,53 @@ async function captureGenerationException(
+   });
+ }
+ 
++async function markPlaceholderFailed(
++  input: SchedulePlaceholderInput,
++  reason: string,
++  logger: Pick<Console, "error">,
++): Promise<void> {
++  try {
++    await input.db.recipeCover.update({
++      where: { id: input.coverId },
++      data: {
++        status: "failed",
++        generationStatus: "failed",
++        failureReason: reason,
++      },
++    });
++  } catch (error) {
++    logger.error("ai-placeholder cover failure state update failed", error);
++  }
++}
++
++async function activatePlaceholderIfStillAutomatic(
++  input: SchedulePlaceholderInput,
++): Promise<void> {
++  await input.db.recipe.updateMany({
++    where: {
++      id: input.recipeId,
++      coverMode: "auto",
++      activeCoverId: null,
++    },
++    data: {
++      activeCoverId: input.coverId,
++      activeCoverVariant: "image",
++      coverMode: "auto",
++    },
++  });
++}
++
++function failureReasonFor(error: unknown): string {
++  const message = error instanceof Error ? error.message : String(error);
++  const cause = typeof error === "object" && error !== null && "cause" in error
++    ? (error as { cause?: unknown }).cause
++    : undefined;
++  if (cause === undefined) return message;
++
++  const causeMessage = failureReasonFor(cause);
++  return causeMessage === message ? message : `${message}: ${causeMessage}`;
++}
++
+ /**
+  * Background task: spends a per-user image-gen quota unit, generates the AI placeholder
+  * cover for `coverId`, and replaces its `imageUrl` with the resulting R2 URL. Failures
+@@ -110,6 +157,7 @@ export async function scheduleAiPlaceholderCover(
+     const runnerResolution = resolveRunner(input);
+     if ("reason" in runnerResolution) {
+       await captureSkipped(input, runnerResolution.reason);
++      await markPlaceholderFailed(input, runnerResolution.reason, logger);
+       return;
+     }
+ 
+@@ -121,6 +169,7 @@ export async function scheduleAiPlaceholderCover(
+     );
+     if (!consumed) {
+       await captureSkipped(input, "quota_exhausted");
++      await markPlaceholderFailed(input, "quota_exhausted", logger);
+       return;
+     }
+ 
+@@ -134,10 +183,17 @@ export async function scheduleAiPlaceholderCover(
+ 
+     await input.db.recipeCover.update({
+       where: { id: input.coverId },
+-      data: { imageUrl: url },
++      data: {
++        imageUrl: url,
++        status: "ready",
++        generationStatus: "succeeded",
++        failureReason: null,
++      },
+     });
++    await activatePlaceholderIfStillAutomatic(input);
+   } catch (error) {
+     await captureGenerationException(input, error);
++    await markPlaceholderFailed(input, failureReasonFor(error), logger);
+     logger.error("ai-placeholder cover generation failed", error);
+   }
+ }
+diff --git a/app/routes/recipes.$id.edit.tsx b/app/routes/recipes.$id.edit.tsx
+index 85143346..2b0769ac 100644
+--- a/app/routes/recipes.$id.edit.tsx
++++ b/app/routes/recipes.$id.edit.tsx
+@@ -22,8 +22,7 @@ import {
+ } from "~/lib/image-storage.server";
+ import { FOOD_IMAGE_ACCEPT, RECIPE_IMAGE_SIZE_MESSAGE, RECIPE_IMAGE_TYPE_MESSAGE } from "~/lib/recipe-image";
+ import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
+-import { createCover, getRecipeCoverImageUrl } from "~/lib/recipe-cover.server";
+-import { scheduleAiPlaceholderCover } from "~/lib/ai-placeholder-cover.server";
++import { createCover, getRecipeCoverImageUrl, setActiveRecipeCover } from "~/lib/recipe-cover.server";
+ import { scheduleSpoonCoverStylization } from "~/lib/spoon-cover-stylization.server";
+ import { Button } from "~/components/ui/button";
+ import { Dialog, DialogActions, DialogDescription, DialogTitle } from "~/components/ui/dialog";
+@@ -111,17 +110,12 @@ export async function action({ request, params, context }: Route.ActionArgs) {
+     select: {
+       chefId: true,
+       deletedAt: true,
+-      covers: {
+-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+-        take: 1,
+-      },
+     },
+   });
+ 
+   if (!recipe || recipe.deletedAt) {
+     throw new Response("Recipe not found", { status: 404 });
+   }
+-  const currentCover = recipe.covers[0] ?? null;
+ 
+   if (recipe.chefId !== userId) {
+     throw new Response("Unauthorized", { status: 403 });
+@@ -299,6 +293,15 @@ export async function action({ request, params, context }: Route.ActionArgs) {
+         recipeId: id,
+         imageUrl: uploadedImageUrl,
+         sourceType: "chef-upload",
++        status: "ready",
++        createdById: userId,
++        sourceImageUrl: uploadedImageUrl,
++        generationStatus: "none",
++      });
++      await setActiveRecipeCover(database, {
++        recipeId: id,
++        coverId: uploadedCover.id,
++        variant: "image",
+       });
+       await scheduleSpoonCoverStylization({
+         db: database,
+@@ -311,28 +314,15 @@ export async function action({ request, params, context }: Route.ActionArgs) {
+         bucket: photosBucket,
+         sourceType: "chef-upload",
+       });
+-    } else if (clearImage && currentCover) {
+-      const placeholderCover = await createCover(database, {
+-        recipeId: id,
+-        imageUrl: "",
+-        sourceType: "ai-placeholder",
+-      });
+-      const waitUntil = context.cloudflare?.ctx?.waitUntil;
+-      const task = scheduleAiPlaceholderCover({
+-        db: database,
+-        userId,
+-        recipeId: id,
+-        coverId: placeholderCover.id,
+-        title: updateData.title,
+-        description: updateData.description,
+-        env: cloudflareEnv,
+-        bucket: photosBucket,
++    } else if (clearImage) {
++      await database.recipe.update({
++        where: { id },
++        data: {
++          activeCoverId: null,
++          activeCoverVariant: null,
++          coverMode: "none",
++        },
+       });
+-      if (waitUntil) {
+-        waitUntil.call(context.cloudflare!.ctx!, task);
+-      } else {
+-        await task;
+-      }
+     }
+ 
+     return redirect(`/recipes/${id}`);
+diff --git a/app/routes/recipes.new.tsx b/app/routes/recipes.new.tsx
+index 3f5b2a70..d9068253 100644
+--- a/app/routes/recipes.new.tsx
++++ b/app/routes/recipes.new.tsx
+@@ -21,7 +21,7 @@ import {
+ } from "~/lib/image-storage.server";
+ import { FOOD_IMAGE_ACCEPT, RECIPE_IMAGE_SIZE_MESSAGE, RECIPE_IMAGE_TYPE_MESSAGE } from "~/lib/recipe-image";
+ import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
+-import { createCover } from "~/lib/recipe-cover.server";
++import { createCover, setActiveRecipeCover } from "~/lib/recipe-cover.server";
+ import { scheduleAiPlaceholderCover } from "~/lib/ai-placeholder-cover.server";
+ import { scheduleSpoonCoverStylization } from "~/lib/spoon-cover-stylization.server";
+ import {
+@@ -170,6 +170,15 @@ export async function action({ request, context }: Route.ActionArgs) {
+         recipeId: recipe.id,
+         imageUrl: uploadedImageUrl,
+         sourceType: "chef-upload",
++        status: "ready",
++        createdById: userId,
++        sourceImageUrl: uploadedImageUrl,
++        generationStatus: "none",
++      });
++      await setActiveRecipeCover(database, {
++        recipeId: recipe.id,
++        coverId: uploadedCover.id,
++        variant: "image",
+       });
+       await scheduleSpoonCoverStylization({
+         db: database,
+@@ -187,6 +196,9 @@ export async function action({ request, context }: Route.ActionArgs) {
+         recipeId: recipe.id,
+         imageUrl: "",
+         sourceType: "ai-placeholder",
++        status: "processing",
++        createdById: userId,
++        generationStatus: "processing",
+       });
+       const waitUntil = context.cloudflare?.ctx?.waitUntil;
+       const task = scheduleAiPlaceholderCover({
+diff --git a/prisma/seed.ts b/prisma/seed.ts
+index 19aaeaee..7efa67b1 100644
+--- a/prisma/seed.ts
++++ b/prisma/seed.ts
+@@ -1235,6 +1235,49 @@ const RECIPES: RecipeData[] = [
+   },
+ ];
+ 
++async function upsertSeedRecipeCover(recipeId: string, imageUrl: string) {
++  const existingCover = await prisma.recipeCover.findFirst({
++    where: {
++      recipeId,
++      imageUrl,
++    },
++  });
++
++  const cover = existingCover
++    ? await prisma.recipeCover.update({
++        where: { id: existingCover.id },
++        data: {
++          sourceType: "chef-upload",
++          sourceImageUrl: imageUrl,
++          status: "ready",
++          generationStatus: "none",
++          failureReason: null,
++          archivedAt: null,
++        },
++      })
++    : await prisma.recipeCover.create({
++        data: {
++          recipeId,
++          imageUrl,
++          sourceType: "chef-upload",
++          sourceImageUrl: imageUrl,
++          status: "ready",
++          generationStatus: "none",
++        },
++      });
++
++  await prisma.recipe.update({
++    where: { id: recipeId },
++    data: {
++      activeCoverId: cover.id,
++      activeCoverVariant: "image",
++      coverMode: "manual",
++    },
++  });
++
++  return cover;
++}
++
+ async function seedRecipes(
+   users: { id: string; email: string; username: string }[],
+   units: { id: string; name: string }[],
+@@ -1277,22 +1320,7 @@ async function seedRecipes(
+       });
+ 
+       if (recipeData.imageUrl) {
+-        const existingCover = await prisma.recipeCover.findFirst({
+-          where: {
+-            recipeId: existing.id,
+-            imageUrl: recipeData.imageUrl,
+-          },
+-        });
+-
+-        if (!existingCover) {
+-          await prisma.recipeCover.create({
+-            data: {
+-              recipeId: existing.id,
+-              imageUrl: recipeData.imageUrl,
+-              sourceType: "chef-upload",
+-            },
+-          });
+-        }
++        await upsertSeedRecipeCover(existing.id, recipeData.imageUrl);
+       }
+ 
+       createdRecipes.push({ id: existing.id, title: existing.title, chefId: existing.chefId });
+@@ -1312,13 +1340,7 @@ async function seedRecipes(
+     // Seed a chef-upload cover when an image URL is provided so the recipe renders
+     // with the same artwork it had under the old Recipe.imageUrl field.
+     if (recipeData.imageUrl) {
+-      await prisma.recipeCover.create({
+-        data: {
+-          recipeId: recipe.id,
+-          imageUrl: recipeData.imageUrl,
+-          sourceType: "chef-upload",
+-        },
+-      });
++      await upsertSeedRecipeCover(recipe.id, recipeData.imageUrl);
+     }
+ 
+     // Create steps with ingredients
+diff --git a/spoonjoy/tasks/2026-06-08-1648-doing-recipe-cover-lifecycle.md b/spoonjoy/tasks/2026-06-08-1648-doing-recipe-cover-lifecycle.md
+index 1856ec89..f4ec30df 100644
+--- a/spoonjoy/tasks/2026-06-08-1648-doing-recipe-cover-lifecycle.md
++++ b/spoonjoy/tasks/2026-06-08-1648-doing-recipe-cover-lifecycle.md
+@@ -107,15 +107,15 @@ Make Spoonjoy recipe imagery explicit, provenance-aware, and controllable across
+ **What**: Refactor shared server cover formatting to avoid drift between API v1, search, and OG paths.
+ **Acceptance**: Affected server tests pass with 100% coverage on new branches and no warnings.
+ 
+-### ⬜ Unit 4a: Recipe New/Edit And Placeholder Mutations — Tests
++### ✅ Unit 4a: Recipe New/Edit And Placeholder Mutations — Tests
+ **What**: Add failing tests for new recipe creation without photo, recipe upload assignment, recipe clear-image behavior, pure AI placeholder generation, verbatim uploaded active cover selection, manual cover mode, intentional no-cover mode, seed/demo recipe active-cover setup, and PostHog capture on placeholder failure.
+ **Acceptance**: Tests fail because these mutations/jobs create rows without explicit active state, provenance, or manual replacement checks.
+ 
+-### ⬜ Unit 4b: Recipe New/Edit And Placeholder Mutations — Implementation
++### ✅ Unit 4b: Recipe New/Edit And Placeholder Mutations — Implementation
+ **What**: Update `app/routes/recipes.new.tsx`, `app/routes/recipes.$id.edit.tsx`, recipe clear-image, `prisma/seed.ts`, and placeholder generation flows to create covers with status/provenance, activate them through helpers, support verbatim active uploads, and prevent placeholder jobs from replacing manual covers. New recipe with no upload uses `coverMode="auto"` and no active cover until a placeholder succeeds; clear-image sets `coverMode="none"` with null `activeCoverId`/`activeCoverVariant`; explicit upload sets `coverMode="manual"`, `activeCoverVariant="image"`, and `sourceType="chef-upload"` unless editorial generation is requested.
+ **Acceptance**: Unit 4a tests pass and placeholder failures leave visible failure state plus existing PostHog exception capture.
+ 
+-### ⬜ Unit 4c: Recipe New/Edit And Placeholder Mutations — Coverage & Refactor
++### ✅ Unit 4c: Recipe New/Edit And Placeholder Mutations — Coverage & Refactor
+ **What**: Refactor duplicate upload/placeholder activation logic and cover error paths for missing bucket, failed generation, empty image URL, and no-cover state.
+ **Acceptance**: Affected mutation/job tests pass with 100% coverage on new branches and no warnings.
+ 
+@@ -258,6 +258,7 @@ Make Spoonjoy recipe imagery explicit, provenance-aware, and controllable across
+ - 2026-06-08 18:56 Unit 2c complete: targeted coverage passed for the web read-surface slice with new badge/header/grid/cookbook/search/index/profile branches at 100% (`unit-2c-coverage.log`); production build passed (`unit-2c-build.log`). The first strict coverage attempt (`unit-2c-coverage-attempt-1.log`) hit unrelated repo-wide baseline thresholds, not uncovered Unit 2 code.
+ - 2026-06-08 19:03 Fixed Unit 2 review findings: production search documents now store active-cover provenance metadata, and cookbook detail passes provenance into `CookbookCoverArt`; review-fix red/green, expanded Unit 2 targeted tests, and build passed (`unit-2-review-fix-red.log`, `unit-2-review-fix-green.log`, `unit-2-review-fix-targeted.log`, `unit-2-review-fix-build.log`)
+ - 2026-06-08 19:10 Fixed Unit 2 Round 2 review finding: search freshness fingerprint now hashes active cover selection plus source/status/archive/display fields, so provenance-only and D1-style active-variant changes refresh indexed `imageUrl` and `coverProvenanceLabel`; red/green, expanded targeted tests, and build passed (`unit-2-round2-fix-red.log`, `unit-2-round2-fix-green.log`, `unit-2-round2-fix-targeted.log`, `unit-2-round2-fix-build.log`)
++- 2026-06-08 20:20 Unit 4a/4b/4c complete: added red tests for new/edit upload activation, explicit no-cover clearing, AI placeholder lifecycle/status/failure behavior, manual-cover race protection, and seed/demo cover activation (`unit-4a-red.log`); implemented raw upload active-cover assignment, no-cover clear semantics, placeholder status transitions plus safe auto-activation, and seed cover upsert activation; targeted tests passed (`unit-4b-green.log`, `unit-4c-green.log`), targeted changed-file coverage reached 100% statements/branches/functions/lines (`unit-4c-targeted-coverage.log`), and production build passed (`unit-4c-build.log`). The broader coverage command (`unit-4c-coverage.log`) still reports the unrelated repo-wide baseline threshold gap while the Unit 4 changed files are fully covered.
+ - 2026-06-08 19:10 Unit 2 review converged after Round 3
+ - 2026-06-08 19:28 Unit 3a/3b/3c complete: added red tests for API v1 recipe/cookbook responses, OpenAPI schemas/examples, search cover metadata, and OG active-cover image selection (`unit-3a-red.log`); implemented active-cover display/provenance fields and regenerated the API playground; targeted tests passed (`unit-3b-green.log`), coverage passed with touched search/OG/OpenAPI files at 100% and changed API lines covered (`unit-3c-coverage.log`), and builds passed (`unit-3b-build.log`, `unit-3c-build.log`).
+ - 2026-06-08 19:48 Fixed Unit 3 review findings: API provenance now nulls when the active image URL is not publicly displayable, API/OG loaders fetch only the scoped active cover candidate through shared cover helpers, and dynamic OG responses emit active-cover-derived freshness headers; targeted tests, coverage, and build passed (`unit-3-review-fix-green.log`, `unit-3-review-fix-coverage.log`, `unit-3-review-fix-build.log`).
+diff --git a/test/lib/ai-placeholder-cover.server.test.ts b/test/lib/ai-placeholder-cover.server.test.ts
+index 6bc42720..f903f3fb 100644
+--- a/test/lib/ai-placeholder-cover.server.test.ts
++++ b/test/lib/ai-placeholder-cover.server.test.ts
+@@ -58,6 +58,9 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
+         recipeId,
+         imageUrl: "",
+         sourceType: "ai-placeholder",
++        status: "processing",
++        generationStatus: "processing",
++        createdById: userId,
+       },
+     });
+     coverId = cover.id;
+@@ -68,7 +71,17 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
+     await cleanupDatabase();
+   });
+ 
+-  it("replaces the cover imageUrl with the generated URL on success", async () => {
++  async function expectPlaceholderFailed(reason: string) {
++    const cover = await db.recipeCover.findUniqueOrThrow({ where: { id: coverId } });
++    expect(cover).toMatchObject({
++      imageUrl: "",
++      status: "failed",
++      generationStatus: "failed",
++    });
++    expect(cover.failureReason).toContain(reason);
++  }
++
++  it("marks the generated placeholder ready and activates it only after success", async () => {
+     const runner = makeRunner();
+     const bucket = mockR2();
+     await scheduleAiPlaceholderCover({
+@@ -84,7 +97,22 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
+       logger: errorSpy,
+     });
+     const cover = await db.recipeCover.findUniqueOrThrow({ where: { id: coverId } });
++    expect(cover).toMatchObject({
++      status: "ready",
++      generationStatus: "succeeded",
++      failureReason: null,
++    });
+     expect(cover.imageUrl).toMatch(/^\/photos\/covers\/1234-[a-f0-9-]+\.png$/);
++    await expect(
++      db.recipe.findUniqueOrThrow({
++        where: { id: recipeId },
++        select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
++      }),
++    ).resolves.toEqual({
++      activeCoverId: coverId,
++      activeCoverVariant: "image",
++      coverMode: "auto",
++    });
+     expect(bucket.put).toHaveBeenCalledWith(
+       cover.imageUrl.replace("/photos/", ""),
+       GENERATED_BYTES,
+@@ -112,8 +140,7 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
+       logger: errorSpy,
+     });
+     expect(runner.textToImage).not.toHaveBeenCalled();
+-    const cover = await db.recipeCover.findUniqueOrThrow({ where: { id: coverId } });
+-    expect(cover.imageUrl).toBe("");
++    await expectPlaceholderFailed("quota_exhausted");
+   });
+ 
+   it("returns silently when no runner is available and OPENAI_API_KEY is absent", async () => {
+@@ -132,6 +159,9 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
+     });
+     const cover = await db.recipeCover.findUniqueOrThrow({ where: { id: coverId } });
+     expect(cover.imageUrl).toBe("");
++    expect(cover.status).toBe("failed");
++    expect(cover.generationStatus).toBe("failed");
++    expect(cover.failureReason).toContain("missing_openai_key");
+     expect(errorSpy.error).not.toHaveBeenCalled();
+     await expect(
+       db.imageGenLedger.count({ where: { userId, kind: "placeholder" } }),
+@@ -171,6 +201,9 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
+     });
+     const cover = await db.recipeCover.findUniqueOrThrow({ where: { id: coverId } });
+     expect(cover.imageUrl).toBe("");
++    expect(cover.status).toBe("failed");
++    expect(cover.generationStatus).toBe("failed");
++    expect(cover.failureReason).toContain("missing_runner");
+     await expect(
+       db.imageGenLedger.count({ where: { userId, kind: "placeholder" } }),
+     ).resolves.toBe(0);
+@@ -204,6 +237,7 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
+       logger: errorSpy,
+     });
+     expect(errorSpy.error).not.toHaveBeenCalled();
++    await expectPlaceholderFailed("missing_openai_key");
+   });
+ 
+   it("logs and swallows runner errors without throwing", async () => {
+@@ -226,8 +260,52 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
+       }),
+     ).resolves.toBeUndefined();
+     expect(errorSpy.error).toHaveBeenCalledTimes(1);
++    await expectPlaceholderFailed("boom");
++  });
++
++  it("includes non-Error provider failures in the visible failure reason", async () => {
++    const runner: ImageGenRunner = {
++      textToImage: vi.fn(async () => {
++        throw "plain provider failure";
++      }),
++      imageToImage: vi.fn(),
++    };
++
++    await scheduleAiPlaceholderCover({
++      db,
++      userId,
++      recipeId,
++      coverId,
++      title: "Pasta",
++      description: null,
++      runner,
++      logger: errorSpy,
++    });
++
++    await expectPlaceholderFailed("plain provider failure");
++  });
++
++  it("does not duplicate wrapper and cause messages when they match", async () => {
++    const runner: ImageGenRunner = {
++      textToImage: vi.fn(async () => {
++        throw new Error("Placeholder image generation failed");
++      }),
++      imageToImage: vi.fn(),
++    };
++
++    await scheduleAiPlaceholderCover({
++      db,
++      userId,
++      recipeId,
++      coverId,
++      title: "Pasta",
++      description: null,
++      runner,
++      logger: errorSpy,
++    });
++
+     const cover = await db.recipeCover.findUniqueOrThrow({ where: { id: coverId } });
+-    expect(cover.imageUrl).toBe("");
++    expect(cover.failureReason).toBe("Placeholder image generation failed");
+   });
+ 
+   it("defaults logger to console when none provided and the runner fails", async () => {
+@@ -256,6 +334,37 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
+     }
+   });
+ 
++  it("logs when a failed placeholder row can no longer be updated", async () => {
++    const runner: ImageGenRunner = {
++      textToImage: vi.fn(async () => {
++        throw new Error("boom");
++      }),
++      imageToImage: vi.fn(),
++    };
++
++    await expect(
++      scheduleAiPlaceholderCover({
++        db,
++        userId,
++        recipeId,
++        coverId: "missing-cover-id",
++        title: "Pasta",
++        description: null,
++        runner,
++        logger: errorSpy,
++      }),
++    ).resolves.toBeUndefined();
++
++    expect(errorSpy.error).toHaveBeenCalledWith(
++      "ai-placeholder cover failure state update failed",
++      expect.anything(),
++    );
++    expect(errorSpy.error).toHaveBeenCalledWith(
++      "ai-placeholder cover generation failed",
++      expect.any(Error),
++    );
++  });
++
+   it("uses the OpenAI runner factory when OPENAI_API_KEY is provided", async () => {
+     // The default runner makes a real OpenAI call; supply a stub runner so this
+     // unit test never reaches the network while still exercising the env-present
+@@ -300,6 +409,7 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
+     // (500), so generatePlaceholderImage threw and we landed in the catch block.
+     expect(errorSpy.error).toHaveBeenCalled();
+     expect(stubFetch).toHaveBeenCalled();
++    await expectPlaceholderFailed("stubbed");
+   });
+ 
+   it("captures generation exceptions with image-generation metadata", async () => {
+@@ -323,6 +433,7 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
+       analyticsFetchImpl,
+       logger: errorSpy,
+     });
++    await expectPlaceholderFailed("openai down");
+     expect(postHogBodies(analyticsFetchImpl)).toEqual([
+       expect.objectContaining({
+         event: "$exception",
+@@ -340,4 +451,52 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
+       }),
+     ]);
+   });
++
++  it("does not replace a manual cover when placeholder generation finishes later", async () => {
++    const manualCover = await db.recipeCover.create({
++      data: {
++        recipeId,
++        imageUrl: "/photos/manual/raw.jpg",
++        sourceType: "chef-upload",
++        status: "ready",
++      },
++    });
++    await db.recipe.update({
++      where: { id: recipeId },
++      data: {
++        activeCoverId: manualCover.id,
++        activeCoverVariant: "image",
++        coverMode: "manual",
++      },
++    });
++    const runner = makeRunner();
++    await scheduleAiPlaceholderCover({
++      db,
++      userId,
++      recipeId,
++      coverId,
++      title: "Pasta",
++      description: null,
++      runner,
++      bucket: mockR2(),
++      now: () => 1234,
++      logger: errorSpy,
++    });
++
++    await expect(
++      db.recipe.findUniqueOrThrow({
++        where: { id: recipeId },
++        select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
++      }),
++    ).resolves.toEqual({
++      activeCoverId: manualCover.id,
++      activeCoverVariant: "image",
++      coverMode: "manual",
++    });
++    await expect(db.recipeCover.findUniqueOrThrow({ where: { id: coverId } }))
++      .resolves.toMatchObject({
++        status: "ready",
++        generationStatus: "succeeded",
++      });
++  });
+ });
+diff --git a/test/routes/recipes-id-edit.test.tsx b/test/routes/recipes-id-edit.test.tsx
+index dc6fe636..b7532f9c 100644
+--- a/test/routes/recipes-id-edit.test.tsx
++++ b/test/routes/recipes-id-edit.test.tsx
+@@ -38,6 +38,17 @@ function validImageFile(name: string, type: "image/jpeg" | "image/png" | "image/
+   return new File([validImageBytes(type)], name, { type });
+ }
+ 
++async function activateRecipeCoverForTest(recipeId: string, coverId: string) {
++  await db.recipe.update({
++    where: { id: recipeId },
++    data: {
++      activeCoverId: coverId,
++      activeCoverVariant: "image",
++      coverMode: "manual",
++    },
++  });
++}
++
+ describe("Recipes $id Edit Route", () => {
+   let testUserId: string;
+   let otherUserId: string;
+@@ -928,15 +939,16 @@ describe("Recipes $id Edit Route", () => {
+       }
+     });
+ 
+-    it("should clear image when clearImage is true", async () => {
++    it("should set an explicit no-cover state when clearImage is true", async () => {
+       // First create a cover for the recipe
+-      await db.recipeCover.create({
++      const oldCover = await db.recipeCover.create({
+         data: {
+           recipeId,
+           imageUrl: "https://example.com/old-image.jpg",
+           sourceType: "chef-upload",
+         },
+       });
++      await activateRecipeCoverForTest(recipeId, oldCover.id);
+ 
+       const request = await createFormRequest(
+         {
+@@ -956,23 +968,27 @@ describe("Recipes $id Edit Route", () => {
+       expect(response.status).toBe(302);
+       expect(response.headers.get("Location")).toBe(`/recipes/${recipeId}`);
+ 
+-      // Latest cover should now be an empty ai-placeholder row representing the clear
+-      const latest = await db.recipeCover.findFirst({
+-        where: { recipeId },
+-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
++      const recipe = await db.recipe.findUniqueOrThrow({
++        where: { id: recipeId },
++        select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
++      });
++      expect(recipe).toEqual({
++        activeCoverId: null,
++        activeCoverVariant: null,
++        coverMode: "none",
+       });
+-      expect(latest?.imageUrl).toBe("");
+-      expect(latest?.sourceType).toBe("ai-placeholder");
++      await expect(db.recipeCover.count({ where: { recipeId } })).resolves.toBe(1);
+     });
+ 
+-    it("should schedule placeholder generation with waitUntil when clearing an image", async () => {
+-      await db.recipeCover.create({
++    it("does not schedule placeholder generation when clearing an image", async () => {
++      const oldCover = await db.recipeCover.create({
+         data: {
+           recipeId,
+           imageUrl: "https://example.com/old-image.jpg",
+           sourceType: "chef-upload",
+         },
+       });
++      await activateRecipeCoverForTest(recipeId, oldCover.id);
+       const captured: Promise<unknown>[] = [];
+       const waitUntil = vi.fn((promise: Promise<unknown>) => {
+         captured.push(promise);
+@@ -993,7 +1009,17 @@ describe("Recipes $id Edit Route", () => {
+ 
+       expect(response).toBeInstanceOf(Response);
+       expect(response.status).toBe(302);
+-      expect(waitUntil).toHaveBeenCalledTimes(1);
++      expect(waitUntil).not.toHaveBeenCalled();
++      await expect(
++        db.recipe.findUniqueOrThrow({
++          where: { id: recipeId },
++          select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
++        }),
++      ).resolves.toEqual({
++        activeCoverId: null,
++        activeCoverVariant: null,
++        coverMode: "none",
++      });
+       await Promise.all(captured);
+     });
+ 
+@@ -1098,8 +1124,24 @@ describe("Recipes $id Edit Route", () => {
+         where: { recipeId },
+         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+       });
+-      expect(cover?.sourceType).toBe("chef-upload");
++      expect(cover).toMatchObject({
++        sourceType: "chef-upload",
++        status: "ready",
++        generationStatus: "none",
++        createdById: testUserId,
++      });
+       expect(cover?.imageUrl).toMatch(/^data:image\/jpeg;base64,/);
++      expect(cover?.sourceImageUrl).toBe(cover?.imageUrl);
++      await expect(
++        db.recipe.findUniqueOrThrow({
++          where: { id: recipeId },
++          select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
++        }),
++      ).resolves.toEqual({
++        activeCoverId: cover!.id,
++        activeCoverVariant: "image",
++        coverMode: "manual",
++      });
+     });
+ 
+     it("should return validation error for image exceeding 5MB", async () => {
+@@ -1169,6 +1211,23 @@ describe("Recipes $id Edit Route", () => {
+       expect(latest?.imageUrl).toMatch(
+         new RegExp(`^/photos/recipes/${testUserId}/${recipeId}/\\d+-[a-f0-9-]+\\.png$`),
+       );
++      expect(latest).toMatchObject({
++        sourceType: "chef-upload",
++        status: "ready",
++        generationStatus: "none",
++        createdById: testUserId,
++      });
++      expect(latest?.sourceImageUrl).toBe(latest?.imageUrl);
++      await expect(
++        db.recipe.findUniqueOrThrow({
++          where: { id: recipeId },
++          select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
++        }),
++      ).resolves.toEqual({
++        activeCoverId: latest!.id,
++        activeCoverVariant: "image",
++        coverMode: "manual",
++      });
+       expect(mockR2Bucket.put).toHaveBeenCalledWith(
+         latest!.imageUrl.replace("/photos/", ""),
+         expect.any(File),
+@@ -1211,6 +1270,16 @@ describe("Recipes $id Edit Route", () => {
+         new RegExp(`^/photos/recipes/${testUserId}/${recipeId}/\\d+-[a-f0-9-]+\\.png$`),
+       );
+       expect(latest.stylizedImageUrl).toBeNull();
++      await expect(
++        db.recipe.findUniqueOrThrow({
++          where: { id: recipeId },
++          select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
++        }),
++      ).resolves.toEqual({
++        activeCoverId: latest.id,
++        activeCoverVariant: "image",
++        coverMode: "manual",
++      });
+       expect(mockR2Bucket.delete).not.toHaveBeenCalled();
+       expect(captured).toHaveLength(0);
+     });
+@@ -1403,14 +1472,15 @@ describe("Recipes $id Edit Route", () => {
+       expect(covers).toEqual([]);
+     });
+ 
+-    it("should clear an R2 image without deleting the referenced stored object", async () => {
+-      await db.recipeCover.create({
++    it("should enter no-cover mode without deleting the referenced stored object", async () => {
++      const oldCover = await db.recipeCover.create({
+         data: {
+           recipeId,
+           imageUrl: "/photos/recipes/user-old/recipe-old/111.jpg",
+           sourceType: "chef-upload",
+         },
+       });
++      await activateRecipeCoverForTest(recipeId, oldCover.id);
+       const mockR2Bucket = {
+         delete: vi.fn().mockRejectedValue(new Error("delete failed")),
+       };
+@@ -1432,12 +1502,17 @@ describe("Recipes $id Edit Route", () => {
+       expect(response.status).toBe(302);
+       expect(mockR2Bucket.delete).not.toHaveBeenCalled();
+ 
+-      const latest = await db.recipeCover.findFirst({
+-        where: { recipeId },
+-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+-      });
+-      expect(latest?.imageUrl).toBe("");
+-      expect(latest?.sourceType).toBe("ai-placeholder");
++      await expect(
++        db.recipe.findUniqueOrThrow({
++          where: { id: recipeId },
++          select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
++        }),
++      ).resolves.toEqual({
++        activeCoverId: null,
++        activeCoverVariant: null,
++        coverMode: "none",
++      });
++      await expect(db.recipeCover.count({ where: { recipeId } })).resolves.toBe(1);
+     });
+ 
+     it("should delete uploaded replacement image when database update fails", async () => {
+diff --git a/test/routes/recipes-new.test.tsx b/test/routes/recipes-new.test.tsx
+index 862daf5c..3dd4dd94 100644
+--- a/test/routes/recipes-new.test.tsx
++++ b/test/routes/recipes-new.test.tsx
+@@ -41,6 +41,32 @@ function validImageFile(name: string, type: "image/jpeg" | "image/png" | "image/
+   return new File([validImageBytes(type)], name, { type });
+ }
+ 
++async function expectAwaitingPlaceholderCover(recipeId: string, userId: string) {
++  const recipe = await db.recipe.findUniqueOrThrow({
++    where: { id: recipeId },
++    select: {
++      activeCoverId: true,
++      activeCoverVariant: true,
++      coverMode: true,
++      covers: true,
++    },
++  });
++  expect(recipe).toMatchObject({
++    activeCoverId: null,
++    activeCoverVariant: null,
++    coverMode: "auto",
++  });
++  expect(recipe.covers).toHaveLength(1);
++  expect(recipe.covers[0]).toMatchObject({
++    sourceType: "ai-placeholder",
++    imageUrl: "",
++    status: "failed",
++    generationStatus: "failed",
++    createdById: userId,
++  });
++  expect(recipe.covers[0].failureReason).toContain("missing_openai_key");
++}
++
+ describe("Recipes New Route", () => {
+   let testUserId: string;
+ 
+@@ -184,10 +210,7 @@ describe("Recipes New Route", () => {
+       expect(recipes[0].title).toBe("My New Recipe");
+       expect(recipes[0].description).toBe("A delicious recipe");
+       expect(recipes[0].servings).toBe("4");
+-      const covers = await db.recipeCover.findMany({ where: { recipeId: recipes[0].id } });
+-      expect(covers).toHaveLength(1);
+-      expect(covers[0].sourceType).toBe("ai-placeholder");
+-      expect(covers[0].imageUrl).toBe("");
++      await expectAwaitingPlaceholderCover(recipes[0].id, testUserId);
+     });
+ 
+     it("should parse ingredients for the unsaved new recipe builder", async () => {
+@@ -294,10 +317,7 @@ describe("Recipes New Route", () => {
+       expect(recipes[0].title).toBe("Minimal Recipe");
+       expect(recipes[0].description).toBeNull();
+       expect(recipes[0].servings).toBeNull();
+-      const covers = await db.recipeCover.findMany({ where: { recipeId: recipes[0].id } });
+-      expect(covers).toHaveLength(1);
+-      expect(covers[0].sourceType).toBe("ai-placeholder");
+-      expect(covers[0].imageUrl).toBe("");
++      await expectAwaitingPlaceholderCover(recipes[0].id, testUserId);
+     });
+ 
+     it("should reject duplicate active recipe titles for the same chef", async () => {
+@@ -615,8 +635,19 @@ describe("Recipes New Route", () => {
+       expect(recipe!.title).toBe("Valid Title");
+       const covers = await db.recipeCover.findMany({ where: { recipeId: recipe!.id } });
+       expect(covers).toHaveLength(1);
+-      expect(covers[0].sourceType).toBe("chef-upload");
++      expect(covers[0]).toMatchObject({
++        sourceType: "chef-upload",
++        status: "ready",
++        generationStatus: "none",
++        createdById: testUserId,
++      });
+       expect(covers[0].imageUrl).toMatch(/^data:image\/jpeg;base64,/);
++      expect(covers[0].sourceImageUrl).toBe(covers[0].imageUrl);
++      expect(recipe).toMatchObject({
++        activeCoverId: covers[0].id,
++        activeCoverVariant: "image",
++        coverMode: "manual",
++      });
+     });
+ 
+     it("should upload valid recipe image to R2 when a bucket is available", async () => {
+@@ -643,10 +674,21 @@ describe("Recipes New Route", () => {
+       });
+       const covers = await db.recipeCover.findMany({ where: { recipeId: recipe.id } });
+       expect(covers).toHaveLength(1);
+-      expect(covers[0].sourceType).toBe("chef-upload");
++      expect(covers[0]).toMatchObject({
++        sourceType: "chef-upload",
++        status: "ready",
++        generationStatus: "none",
++        createdById: testUserId,
++      });
+       expect(covers[0].imageUrl).toMatch(
+         new RegExp(`^/photos/recipes/${testUserId}/${recipe.id}/\\d+-[a-f0-9-]+\\.jpg$`),
+       );
++      expect(covers[0].sourceImageUrl).toBe(covers[0].imageUrl);
++      expect(recipe).toMatchObject({
++        activeCoverId: covers[0].id,
++        activeCoverVariant: "image",
++        coverMode: "manual",
++      });
+       expect(mockR2Bucket.put).toHaveBeenCalledWith(
+         covers[0].imageUrl.replace("/photos/", ""),
+         expect.any(File),
+@@ -690,6 +732,11 @@ describe("Recipes New Route", () => {
+         new RegExp(`^/photos/recipes/${testUserId}/${recipe.id}/\\d+-[a-f0-9-]+\\.jpg$`),
+       );
+       expect(cover.stylizedImageUrl).toBeNull();
++      expect(recipe).toMatchObject({
++        activeCoverId: cover.id,
++        activeCoverVariant: "image",
++        coverMode: "manual",
++      });
+       expect(captured).toHaveLength(0);
+     });
+ 
+@@ -732,6 +779,10 @@ describe("Recipes New Route", () => {
+       expect(response).toBeInstanceOf(Response);
+       expect(response.status).toBe(302);
+       expect(waitUntil).toHaveBeenCalledTimes(1);
++      const recipe = await db.recipe.findFirstOrThrow({
++        where: { chefId: testUserId, title: "WaitUntil Recipe" },
++      });
++      await expectAwaitingPlaceholderCover(recipe.id, testUserId);
+       // Allow the captured promise to resolve so cleanup is clean.
+       await Promise.all(captured);
+     });
+diff --git a/test/scripts/seed-recipe-cover-lifecycle.test.ts b/test/scripts/seed-recipe-cover-lifecycle.test.ts
+new file mode 100644
+index 00000000..2b58d50a
+--- /dev/null
++++ b/test/scripts/seed-recipe-cover-lifecycle.test.ts
+@@ -0,0 +1,15 @@
++import { readFile } from "node:fs/promises";
++import { describe, expect, it } from "vitest";
++
++describe("prisma seed recipe cover lifecycle", () => {
++  it("activates demo recipe covers when seeding image-backed recipes", async () => {
++    const seedSource = await readFile("prisma/seed.ts", "utf8");
++
++    expect(seedSource).toContain("async function upsertSeedRecipeCover");
++    expect(seedSource).toContain("activeCoverId");
++    expect(seedSource).toContain("activeCoverVariant");
++    expect(seedSource).toContain("coverMode");
++    expect(seedSource).toContain("sourceImageUrl: imageUrl");
++    expect(seedSource).toContain('sourceType: "chef-upload"');
++  });
++});
