@@ -223,3 +223,4 @@ Make Spoonjoy recipe imagery explicit, provenance-aware, and controllable across
 
 ## Progress Log
 - 2026-06-08 17:00 Created from planning doc
+- 2026-06-08 17:03 Addressed granularity review findings by splitting large units
