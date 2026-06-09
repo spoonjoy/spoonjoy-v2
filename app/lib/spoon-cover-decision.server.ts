@@ -64,7 +64,10 @@ export function hasActiveRealRecipeCover(recipe: {
   if (!recipe.activeCoverId || !cover || cover.id !== recipe.activeCoverId) return false;
   if (cover.recipeId !== recipe.id || cover.status !== "ready" || cover.archivedAt) return false;
   if (cover.sourceType === "ai-placeholder") return false;
-  return activeCoverHasDisplayUrl(recipe);
+  return activeCoverHasDisplayUrl({
+    activeCoverVariant: recipe.activeCoverVariant,
+    activeCover: cover,
+  });
 }
 
 export function getSpoonCoverPromptMode(input: {

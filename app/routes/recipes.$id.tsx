@@ -258,11 +258,15 @@ export default function RecipeDetail() {
   const loaderData = useLoaderData<typeof loader>();
   const actionData = useActionData() as RecipeDetailActionData | undefined;
   const { recipe, coverImageUrl, coverProvenanceLabel, isOwner, hasIngredientsInShoppingList = false } = loaderData;
-  const recipeCoverImageUrl = typeof (recipe as { coverImageUrl?: unknown }).coverImageUrl === "string"
-    ? (recipe as { coverImageUrl: string }).coverImageUrl
+  const recipeCoverFields = recipe as unknown as {
+    coverImageUrl?: unknown;
+    coverProvenanceLabel?: unknown;
+  };
+  const recipeCoverImageUrl = typeof recipeCoverFields.coverImageUrl === "string"
+    ? recipeCoverFields.coverImageUrl
     : null;
-  const recipeCoverProvenanceLabel = typeof (recipe as { coverProvenanceLabel?: unknown }).coverProvenanceLabel === "string"
-    ? (recipe as { coverProvenanceLabel: string }).coverProvenanceLabel
+  const recipeCoverProvenanceLabel = typeof recipeCoverFields.coverProvenanceLabel === "string"
+    ? recipeCoverFields.coverProvenanceLabel
     : null;
   const isAuthenticated = loaderData.isAuthenticated ?? true;
   const cookbooks = loaderData.cookbooks ?? EMPTY_COOKBOOKS;

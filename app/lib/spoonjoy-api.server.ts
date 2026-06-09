@@ -13,7 +13,13 @@ import {
   startAgentConnection,
 } from "~/lib/agent-connection.server";
 import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
-import { createCover, getRecipeCoverImageUrl, setActiveRecipeCover } from "~/lib/recipe-cover.server";
+import {
+  createCover,
+  getRecipeCoverDisplay,
+  getRecipeCoverProvenanceLabel,
+  setActiveRecipeCover,
+  type RecipeCoverVariant,
+} from "~/lib/recipe-cover.server";
 import { uploadFoodImage } from "~/lib/image-upload-tools.server";
 import { FOOD_IMAGE_TYPES } from "~/lib/recipe-image";
 import {
@@ -247,6 +253,16 @@ function normalizeLimit(value: unknown): number {
   return Math.min(MAX_LIMIT, Math.max(1, Math.floor(value)));
 }
 
+function normalizeOffset(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return 0;
+  return Math.max(0, Math.floor(value));
+}
+
+function normalizeBrowseLimit(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return MAX_LIMIT;
+  return Math.min(MAX_LIMIT, Math.max(1, Math.floor(value)));
+}
+
 function ownerEmail(args: Record<string, unknown>, context: SpoonjoyApiContext): string | undefined {
   const requestedOwnerEmail = optionalString(args.ownerEmail)?.toLowerCase();
 
@@ -383,6 +399,112 @@ function formatCover(cover: {
   };
 }
 
+function nonEmptyString(value: string | null | undefined): value is string {
+  return typeof value === "string" && value.length > 0;
+}
+
+function preferredCoverVariant(cover: {
+  imageUrl: string | null;
+  stylizedImageUrl: string | null;
+}): RecipeCoverVariant | null {
+  if (nonEmptyString(cover.stylizedImageUrl)) return "stylized";
+  if (nonEmptyString(cover.imageUrl)) return "image";
+  return null;
+}
+
+function coverUrlForVariant(
+  cover: { imageUrl: string | null; stylizedImageUrl: string | null },
+  variant: RecipeCoverVariant,
+): string | null {
+  return variant === "stylized" ? cover.stylizedImageUrl : cover.imageUrl;
+}
+
+function activeCoverDisplayFields(recipe: RecipeIdentityForCoverPayload, covers: Prisma.RecipeCoverGetPayload<{}>[]) {
+  const display = getRecipeCoverDisplay(recipe, covers);
+  if (!display) {
+    return {
+      imageUrl: null,
+      coverImageUrl: null,
+      coverProvenanceLabel: null,
+      coverSourceType: null,
+      coverVariant: null,
+      activeCover: null,
+    };
+  }
+
+  return {
+    imageUrl: display.displayUrl,
+    coverImageUrl: display.displayUrl,
+    coverProvenanceLabel: display.provenanceLabel,
+    coverSourceType: display.sourceType,
+    coverVariant: display.activeVariant,
+    activeCover: publicCoverPayload(display),
+  };
+}
+
+type RecipeIdentityForCoverPayload = {
+  id: string;
+  title: string;
+  activeCoverId: string | null;
+  activeCoverVariant: string | null;
+  coverMode: string | null;
+};
+
+function publicCoverPayload(display: {
+  cover: Prisma.RecipeCoverGetPayload<{}>;
+  displayUrl: string;
+  activeVariant: RecipeCoverVariant;
+  sourceType: string;
+  provenanceLabel: string;
+}) {
+  return {
+    id: display.cover.id,
+    recipeId: display.cover.recipeId,
+    imageUrl: display.displayUrl,
+    displayUrl: display.displayUrl,
+    sourceType: display.sourceType,
+    activeVariant: display.activeVariant,
+    provenanceLabel: display.provenanceLabel,
+  };
+}
+
+function fullCoverPayload(
+  cover: Prisma.RecipeCoverGetPayload<{}>,
+  recipe: { activeCoverId: string | null; activeCoverVariant: string | null },
+) {
+  const activeVariant = recipe.activeCoverId === cover.id &&
+    (recipe.activeCoverVariant === "image" || recipe.activeCoverVariant === "stylized")
+    ? recipe.activeCoverVariant
+    : null;
+  const displayVariant = activeVariant ?? preferredCoverVariant(cover);
+  const displayUrl = displayVariant ? coverUrlForVariant(cover, displayVariant) : null;
+
+  return {
+    id: cover.id,
+    recipeId: cover.recipeId,
+    status: cover.status,
+    sourceType: cover.sourceType,
+    imageUrl: cover.imageUrl,
+    stylizedImageUrl: cover.stylizedImageUrl,
+    displayUrl,
+    activeVariant,
+    provenanceLabel: displayVariant
+      ? getRecipeCoverProvenanceLabel(cover.sourceType, displayVariant)
+      : null,
+    sourceSpoonId: cover.sourceSpoonId,
+    createdById: cover.createdById,
+    archivedAt: cover.archivedAt?.toISOString() ?? null,
+    generationStatus: cover.generationStatus,
+    failureReason: cover.failureReason,
+    sourceImageUrl: cover.sourceImageUrl,
+    createdAt: cover.createdAt.toISOString(),
+  };
+}
+
+function paginationFor(pageSize: number, limit: number, offset: number, hasMore: boolean) {
+  return { limit, offset, count: pageSize, hasMore };
+}
+
 function normalizeName(value: string): string {
   return value.trim().toLowerCase();
 }
@@ -450,6 +572,7 @@ function formatRecipe(recipe: RecipeWithDetails) {
         })),
     }));
 
+  const coverFields = activeCoverDisplayFields(recipe, recipe.covers);
   return {
     id: recipe.id,
     title: recipe.title,
@@ -457,7 +580,7 @@ function formatRecipe(recipe: RecipeWithDetails) {
     servings: recipe.servings,
     sourceUrl: recipe.sourceUrl,
     sourceRecipeId: recipe.sourceRecipeId,
-    imageUrl: getRecipeCoverImageUrl(recipe, recipe.covers),
+    ...coverFields,
     chef: recipe.chef,
     steps,
     ingredientCount: steps.reduce((sum, step) => sum + step.ingredients.length, 0),
@@ -472,11 +595,13 @@ function formatRecipeSummary(recipe: RecipeWithDetails) {
     }
   }
 
+  const coverFields = activeCoverDisplayFields(recipe, recipe.covers);
   return {
     id: recipe.id,
     title: recipe.title,
     description: recipe.description,
     servings: recipe.servings,
+    ...coverFields,
     chef: recipe.chef,
     stepCount: recipe.steps.length,
     ingredientNames: [...ingredientNames].sort(),
@@ -529,11 +654,18 @@ function formatCookbookSummary(cookbook: CookbookWithRecipes) {
     ownerId: cookbook.authorId,
     author: cookbook.author,
     recipeCount: recipes.length,
-    recipes: recipes.map((item) => ({
-      id: item.recipe.id,
-      title: item.recipe.title,
-      imageUrl: getRecipeCoverImageUrl(item.recipe, item.recipe.covers),
-    })),
+    recipes: recipes.map((item) => {
+      const coverFields = activeCoverDisplayFields(item.recipe, item.recipe.covers);
+      return {
+        id: item.recipe.id,
+        title: item.recipe.title,
+        imageUrl: coverFields.imageUrl,
+        coverImageUrl: coverFields.coverImageUrl,
+        coverProvenanceLabel: coverFields.coverProvenanceLabel,
+        coverSourceType: coverFields.coverSourceType,
+        coverVariant: coverFields.coverVariant,
+      };
+    }),
   };
 }
 
@@ -544,11 +676,18 @@ function formatLeanCookbookSummary(cookbook: CookbookSummaryBase, recipes: Cookb
     ownerId: cookbook.authorId,
     author: cookbook.author,
     recipeCount: recipes.length,
-    recipes: recipes.map((item) => ({
-      id: item.recipe.id,
-      title: item.recipe.title,
-      imageUrl: getRecipeCoverImageUrl(item.recipe, item.recipe.covers),
-    })),
+    recipes: recipes.map((item) => {
+      const coverFields = activeCoverDisplayFields(item.recipe, item.recipe.covers);
+      return {
+        id: item.recipe.id,
+        title: item.recipe.title,
+        imageUrl: coverFields.imageUrl,
+        coverImageUrl: coverFields.coverImageUrl,
+        coverProvenanceLabel: coverFields.coverProvenanceLabel,
+        coverSourceType: coverFields.coverSourceType,
+        coverVariant: coverFields.coverVariant,
+      };
+    }),
   };
 }
 
@@ -1104,6 +1243,140 @@ const getRecipeTool: SpoonjoyApiOperation = {
   async handle(args, context) {
     const recipe = await findRecipeByIdOrTitle(context.db, args);
     return json({ recipe: recipe ? formatRecipe(recipe) : null });
+  },
+};
+
+const listRecipeCoversTool: SpoonjoyApiOperation = {
+  name: "list_recipe_covers",
+  description: "List recipe cover candidates. Owners with kitchen write access receive full cover history; other readers receive active public cover metadata only.",
+  requiredScopes: ["recipes:read"],
+  inputSchema: {
+    type: "object",
+    properties: {
+      recipeId: { type: "string" },
+      includeArchived: { type: "boolean" },
+      limit: { type: "number", minimum: 1, maximum: MAX_LIMIT },
+      offset: { type: "number", minimum: 0 },
+    },
+    required: ["recipeId"],
+    additionalProperties: false,
+  },
+  async handle(args, context) {
+    const principal = requireApiPrincipal(context.principal);
+    const recipeId = requiredString(args, "recipeId");
+    const limit = normalizeBrowseLimit(args.limit);
+    const offset = normalizeOffset(args.offset);
+    const recipe = await context.db.recipe.findFirst({
+      where: { id: recipeId, deletedAt: null },
+      select: {
+        id: true,
+        title: true,
+        chefId: true,
+        activeCoverId: true,
+        activeCoverVariant: true,
+        coverMode: true,
+      },
+    });
+    if (!recipe) throw new ApiAuthError("Recipe not found", 404);
+
+    const canReadFullHistory = recipe.chefId === principal.id && principal.scopes.includes("kitchen:write");
+    const activeCover = recipe.activeCoverId
+      ? await context.db.recipeCover.findFirst({
+          where: { id: recipe.activeCoverId, recipeId: recipe.id },
+        })
+      : null;
+
+    if (!canReadFullHistory) {
+      const publicActiveCover = activeCoverDisplayFields(recipe, activeCover ? [activeCover] : []).activeCover;
+      return json({
+        covers: publicActiveCover ? [publicActiveCover] : [],
+        activeCover: publicActiveCover,
+        pagination: paginationFor(publicActiveCover ? 1 : 0, limit, offset, false),
+      });
+    }
+
+    const includeArchived = args.includeArchived === true;
+    const covers = await context.db.recipeCover.findMany({
+      where: {
+        recipeId: recipe.id,
+        ...(includeArchived ? {} : { status: { not: "archived" }, archivedAt: null }),
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: limit + 1,
+      skip: offset,
+    });
+    const page = covers.slice(0, limit);
+    const activePayload = activeCover ? fullCoverPayload(activeCover, recipe) : null;
+    return json({
+      covers: page.map((cover) => fullCoverPayload(cover, recipe)),
+      activeCover: activePayload,
+      pagination: paginationFor(page.length, limit, offset, covers.length > limit),
+    });
+  },
+};
+
+const listRecipeSpoonImagesTool: SpoonjoyApiOperation = {
+  name: "list_recipe_spoon_images",
+  description: "List owner-only spoon photos that can be used as recipe cover sources.",
+  requiredScopes: ["kitchen:write"],
+  inputSchema: {
+    type: "object",
+    properties: {
+      recipeId: { type: "string" },
+      limit: { type: "number", minimum: 1, maximum: MAX_LIMIT },
+      offset: { type: "number", minimum: 0 },
+    },
+    required: ["recipeId"],
+    additionalProperties: false,
+  },
+  async handle(args, context) {
+    const principal = requireApiPrincipal(context.principal);
+    const recipeId = requiredString(args, "recipeId");
+    const recipe = await context.db.recipe.findFirst({
+      where: { id: recipeId, deletedAt: null },
+      select: { id: true, chefId: true },
+    });
+    if (!recipe) throw new ApiAuthError("Recipe not found", 404);
+    if (recipe.chefId !== principal.id) throw new ApiAuthError("Unauthorized", 403);
+
+    const limit = normalizeBrowseLimit(args.limit);
+    const offset = normalizeOffset(args.offset);
+    const spoons = await context.db.recipeSpoon.findMany({
+      where: {
+        recipeId,
+        deletedAt: null,
+        photoUrl: { not: null },
+      },
+      select: {
+        id: true,
+        recipeId: true,
+        chefId: true,
+        photoUrl: true,
+        cookedAt: true,
+        createdAt: true,
+        updatedAt: true,
+        chef: { select: { id: true, username: true, photoUrl: true } },
+      },
+      orderBy: [{ cookedAt: "desc" }, { id: "desc" }],
+      take: limit + 1,
+      skip: offset,
+    });
+    const page = spoons
+      .filter((spoon): spoon is typeof spoon & { photoUrl: string } => nonEmptyString(spoon.photoUrl))
+      .slice(0, limit);
+    return json({
+      spoonImages: page.map((spoon) => ({
+        id: spoon.id,
+        recipeId: spoon.recipeId,
+        chefId: spoon.chefId,
+        photoUrl: spoon.photoUrl,
+        cookedAt: spoon.cookedAt.toISOString(),
+        createdAt: spoon.createdAt.toISOString(),
+        updatedAt: spoon.updatedAt.toISOString(),
+        chef: spoon.chef,
+      })),
+      pagination: paginationFor(page.length, limit, offset, spoons.length > limit),
+    });
   },
 };
 
@@ -2245,13 +2518,14 @@ const listSpoonsForRecipeTool: SpoonjoyApiOperation = {
         covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
       },
     });
-    const coverImageUrl = recipe
-      ? getRecipeCoverImageUrl(recipe, recipe.covers)
-      : null;
+    const coverFields = recipe ? activeCoverDisplayFields(recipe, recipe.covers) : null;
     return json({
       spoons: spoons.map((spoon) => ({
         ...formatSpoonWithChef(spoon),
-        coverImageUrl,
+        coverImageUrl: coverFields?.coverImageUrl ?? null,
+        coverProvenanceLabel: coverFields?.coverProvenanceLabel ?? null,
+        coverSourceType: coverFields?.coverSourceType ?? null,
+        coverVariant: coverFields?.coverVariant ?? null,
       })),
     });
   },
@@ -2282,18 +2556,21 @@ const listSpoonsByChefTool: SpoonjoyApiOperation = {
       offset,
     });
     return json({
-      spoons: spoons.map((spoon) => ({
-        ...formatSpoonWithChef(spoon),
-        recipe: {
-          id: spoon.recipe.id,
-          title: spoon.recipe.title,
-          chefId: spoon.recipe.chefId,
-        },
-        coverImageUrl: getRecipeCoverImageUrl(
-          { id: spoon.recipe.id, title: spoon.recipe.title },
-          spoon.recipe.covers,
-        ),
-      })),
+      spoons: spoons.map((spoon) => {
+        const coverFields = activeCoverDisplayFields(spoon.recipe, spoon.recipe.covers);
+        return {
+          ...formatSpoonWithChef(spoon),
+          recipe: {
+            id: spoon.recipe.id,
+            title: spoon.recipe.title,
+            chefId: spoon.recipe.chefId,
+          },
+          coverImageUrl: coverFields.coverImageUrl,
+          coverProvenanceLabel: coverFields.coverProvenanceLabel,
+          coverSourceType: coverFields.coverSourceType,
+          coverVariant: coverFields.coverVariant,
+        };
+      }),
     });
   },
 };
@@ -2458,6 +2735,8 @@ const tools: SpoonjoyApiOperation[] = [
   searchRecipesTool,
   searchShoppingListTool,
   getRecipeTool,
+  listRecipeCoversTool,
+  listRecipeSpoonImagesTool,
   createRecipeTool,
   updateRecipeTool,
   deleteRecipeTool,
@@ -2500,6 +2779,8 @@ const TOOL_ANNOTATIONS = {
   search_recipes: { title: "Search recipes", readOnlyHint: true },
   search_shopping_list: { title: "Search shopping list", readOnlyHint: true },
   get_recipe: { title: "Get recipe", readOnlyHint: true },
+  list_recipe_covers: { title: "List recipe covers", readOnlyHint: true },
+  list_recipe_spoon_images: { title: "List recipe spoon images", readOnlyHint: true },
   create_recipe: { title: "Create recipe", readOnlyHint: false, destructiveHint: false },
   update_recipe: { title: "Update recipe", readOnlyHint: false, destructiveHint: true },
   delete_recipe: { title: "Delete recipe", readOnlyHint: false, destructiveHint: true, idempotentHint: true },

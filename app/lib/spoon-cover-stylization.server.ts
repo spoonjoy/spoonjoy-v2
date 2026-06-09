@@ -55,7 +55,7 @@ export interface ScheduleSpoonStylizationInput {
   activationGuard?: {
     activeCoverId: string | null;
     activeCoverVariant: string | null;
-    coverMode: string | null;
+    coverMode: string;
   };
   postHogConfig?: PostHogServerConfig;
   analyticsFetchImpl?: typeof fetch;

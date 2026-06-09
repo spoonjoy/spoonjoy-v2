@@ -105,6 +105,8 @@ describe("spoonjoy-api spoon operations", () => {
           "delete_spoon",
           "list_spoons_for_recipe",
           "list_spoons_by_chef",
+          "list_recipe_covers",
+          "list_recipe_spoon_images",
         ]),
       );
     });
@@ -192,6 +194,444 @@ describe("spoonjoy-api spoon operations", () => {
       }, { db, principal })).rejects.toMatchObject({
         status: 503,
         message: "Image uploads require the PHOTOS bucket.",
+      });
+    });
+  });
+
+  describe("recipe cover read operations", () => {
+    it("exposes active cover provenance on existing get_recipe responses", async () => {
+      const { principal: chef } = await makeUser(db);
+      const recipe = await makeRecipe(db, chef.id);
+      const cover = await db.recipeCover.create({
+        data: {
+          recipeId: recipe.id,
+          imageUrl: "/photos/raw.jpg",
+          stylizedImageUrl: "/photos/editorial.jpg",
+          sourceType: "spoon",
+          status: "ready",
+          generationStatus: "succeeded",
+        },
+      });
+      await db.recipe.update({
+        where: { id: recipe.id },
+        data: {
+          activeCoverId: cover.id,
+          activeCoverVariant: "stylized",
+          coverMode: "manual",
+        },
+      });
+
+      const result = (await callSpoonjoyApiOperation(
+        "get_recipe",
+        { id: recipe.id },
+        { db, principal: chef },
+      )) as {
+        recipe: {
+          imageUrl: string | null;
+          coverImageUrl: string | null;
+          coverProvenanceLabel: string | null;
+          coverSourceType: string | null;
+          coverVariant: string | null;
+          activeCover: Record<string, unknown> | null;
+        };
+      };
+
+      expect(result.recipe).toMatchObject({
+        imageUrl: "/photos/editorial.jpg",
+        coverImageUrl: "/photos/editorial.jpg",
+        coverProvenanceLabel: "Editorialized chef photo",
+        coverSourceType: "spoon",
+        coverVariant: "stylized",
+        activeCover: {
+          id: cover.id,
+          recipeId: recipe.id,
+          displayUrl: "/photos/editorial.jpg",
+          sourceType: "spoon",
+          activeVariant: "stylized",
+          provenanceLabel: "Editorialized chef photo",
+        },
+      });
+      expect(result.recipe.activeCover).not.toHaveProperty("failureReason");
+      expect(result.recipe.activeCover).not.toHaveProperty("sourceImageUrl");
+    });
+
+    it("returns owner/full cover history with archived and failed metadata", async () => {
+      const { principal: chef } = await makeUser(db);
+      const recipe = await makeRecipe(db, chef.id);
+      const spoon = await db.recipeSpoon.create({
+        data: {
+          recipeId: recipe.id,
+          chefId: chef.id,
+          photoUrl: "/photos/spoons/risotto.jpg",
+        },
+      });
+      const active = await db.recipeCover.create({
+        data: {
+          recipeId: recipe.id,
+          imageUrl: "/photos/raw.jpg",
+          stylizedImageUrl: "/photos/editorial.jpg",
+          sourceType: "spoon",
+          sourceSpoonId: spoon.id,
+          status: "ready",
+          generationStatus: "succeeded",
+          createdById: chef.id,
+          sourceImageUrl: "/photos/spoons/risotto.jpg",
+          createdAt: new Date("2026-01-01T00:00:00.000Z"),
+        },
+      });
+      const failed = await db.recipeCover.create({
+        data: {
+          recipeId: recipe.id,
+          imageUrl: "/photos/failed-raw.jpg",
+          sourceType: "chef-upload",
+          status: "ready",
+          generationStatus: "failed",
+          failureReason: "quota_exhausted",
+          createdById: chef.id,
+          sourceImageUrl: "/photos/source.jpg",
+          createdAt: new Date("2026-01-02T00:00:00.000Z"),
+        },
+      });
+      const archived = await db.recipeCover.create({
+        data: {
+          recipeId: recipe.id,
+          imageUrl: "/photos/archived.jpg",
+          sourceType: "import",
+          status: "archived",
+          archivedAt: new Date("2026-01-03T00:00:00.000Z"),
+          createdAt: new Date("2026-01-03T00:00:00.000Z"),
+        },
+      });
+      await db.recipe.update({
+        where: { id: recipe.id },
+        data: {
+          activeCoverId: active.id,
+          activeCoverVariant: "stylized",
+          coverMode: "manual",
+        },
+      });
+
+      const page = (await callSpoonjoyApiOperation(
+        "list_recipe_covers",
+        { recipeId: recipe.id, includeArchived: true, limit: 2 },
+        { db, principal: chef },
+      )) as {
+        covers: Array<Record<string, unknown>>;
+        activeCover: Record<string, unknown>;
+        pagination: { limit: number; offset: number; count: number; hasMore: boolean };
+      };
+
+      expect(page.pagination).toEqual({ limit: 2, offset: 0, count: 2, hasMore: true });
+      expect(page.activeCover).toMatchObject({
+        id: active.id,
+        recipeId: recipe.id,
+        displayUrl: "/photos/editorial.jpg",
+        activeVariant: "stylized",
+        provenanceLabel: "Editorialized chef photo",
+        sourceSpoonId: spoon.id,
+        createdById: chef.id,
+        generationStatus: "succeeded",
+      });
+      expect(page.covers.map((cover) => cover.id)).toEqual([archived.id, failed.id]);
+      expect(page.covers[0]).toMatchObject({
+        id: archived.id,
+        status: "archived",
+        archivedAt: "2026-01-03T00:00:00.000Z",
+        provenanceLabel: "Imported photo",
+      });
+      expect(page.covers[1]).toMatchObject({
+        id: failed.id,
+        status: "ready",
+        generationStatus: "failed",
+        failureReason: "quota_exhausted",
+        sourceImageUrl: "/photos/source.jpg",
+      });
+    });
+
+    it("limits non-owner cover history reads to active public cover metadata", async () => {
+      const { principal: chef } = await makeUser(db);
+      const { principal: cook } = await makeUser(db);
+      const recipe = await makeRecipe(db, chef.id);
+      const active = await db.recipeCover.create({
+        data: {
+          recipeId: recipe.id,
+          imageUrl: "/photos/raw.jpg",
+          sourceType: "chef-upload",
+          status: "ready",
+          generationStatus: "failed",
+          failureReason: "visible-only-to-owner",
+          sourceImageUrl: "/photos/private-source.jpg",
+        },
+      });
+      await db.recipeCover.create({
+        data: {
+          recipeId: recipe.id,
+          imageUrl: "/photos/archived.jpg",
+          sourceType: "import",
+          status: "archived",
+          archivedAt: new Date(),
+        },
+      });
+      await db.recipe.update({
+        where: { id: recipe.id },
+        data: { activeCoverId: active.id, activeCoverVariant: "image", coverMode: "manual" },
+      });
+
+      const page = (await callSpoonjoyApiOperation(
+        "list_recipe_covers",
+        { recipeId: recipe.id, includeArchived: true },
+        { db, principal: { ...cook, scopes: ["recipes:read"] } },
+      )) as { covers: Array<Record<string, unknown>>; activeCover: Record<string, unknown> | null };
+
+      expect(page.covers).toHaveLength(1);
+      expect(page.activeCover).toMatchObject({
+        id: active.id,
+        displayUrl: "/photos/raw.jpg",
+        sourceType: "chef-upload",
+        activeVariant: "image",
+        provenanceLabel: "Chef photo",
+      });
+      expect(page.covers[0]).not.toHaveProperty("failureReason");
+      expect(page.covers[0]).not.toHaveProperty("sourceImageUrl");
+      expect(page.covers[0]).not.toHaveProperty("createdById");
+    });
+
+    it("lists owner-only spoon images for recipe cover source selection", async () => {
+      const { principal: chef } = await makeUser(db);
+      const { principal: cook } = await makeUser(db);
+      const recipe = await makeRecipe(db, chef.id);
+      const older = await db.recipeSpoon.create({
+        data: {
+          recipeId: recipe.id,
+          chefId: cook.id,
+          photoUrl: "/photos/spoons/older.jpg",
+          cookedAt: new Date("2026-01-01T00:00:00.000Z"),
+        },
+      });
+      const newer = await db.recipeSpoon.create({
+        data: {
+          recipeId: recipe.id,
+          chefId: chef.id,
+          photoUrl: "/photos/spoons/newer.jpg",
+          cookedAt: new Date("2026-01-02T00:00:00.000Z"),
+        },
+      });
+      await db.recipeSpoon.create({
+        data: { recipeId: recipe.id, chefId: chef.id, note: "no photo" },
+      });
+      await db.recipeSpoon.create({
+        data: {
+          recipeId: recipe.id,
+          chefId: chef.id,
+          photoUrl: "/photos/spoons/deleted.jpg",
+          deletedAt: new Date(),
+        },
+      });
+
+      const firstPage = (await callSpoonjoyApiOperation(
+        "list_recipe_spoon_images",
+        { recipeId: recipe.id, limit: 1 },
+        { db, principal: chef },
+      )) as {
+        spoonImages: Array<{ id: string; photoUrl: string; chef: { id: string; username: string } }>;
+        pagination: { limit: number; offset: number; count: number; hasMore: boolean };
+      };
+
+      expect(firstPage.pagination).toEqual({ limit: 1, offset: 0, count: 1, hasMore: true });
+      expect(firstPage.spoonImages).toEqual([
+        expect.objectContaining({
+          id: newer.id,
+          photoUrl: "/photos/spoons/newer.jpg",
+          chef: expect.objectContaining({ id: chef.id, username: chef.username }),
+        }),
+      ]);
+
+      const secondPage = (await callSpoonjoyApiOperation(
+        "list_recipe_spoon_images",
+        { recipeId: recipe.id, limit: 1, offset: 1 },
+        { db, principal: chef },
+      )) as { spoonImages: Array<{ id: string }> };
+      expect(secondPage.spoonImages).toEqual([expect.objectContaining({ id: older.id })]);
+    });
+
+    it("rejects non-owner and read-only callers for recipe spoon image browsing", async () => {
+      const { principal: chef } = await makeUser(db);
+      const { principal: cook } = await makeUser(db);
+      const recipe = await makeRecipe(db, chef.id);
+
+      await expect(callSpoonjoyApiOperation(
+        "list_recipe_spoon_images",
+        { recipeId: recipe.id },
+        { db, principal: cook },
+      )).rejects.toMatchObject({ status: 403 });
+
+      await expect(callSpoonjoyApiOperation(
+        "list_recipe_spoon_images",
+        { recipeId: recipe.id },
+        { db, principal: { ...chef, scopes: ["recipes:read"] } },
+      )).rejects.toMatchObject({ status: 403, message: "Missing required scope: kitchen:write" });
+    });
+
+    it("returns empty public cover metadata when the active cover is not displayable", async () => {
+      const { principal: chef } = await makeUser(db);
+      const { principal: cook } = await makeUser(db);
+      const recipe = await makeRecipe(db, chef.id);
+
+      const noActivePage = (await callSpoonjoyApiOperation(
+        "list_recipe_covers",
+        { recipeId: recipe.id },
+        { db, principal: { ...cook, scopes: ["recipes:read"] } },
+      )) as { covers: unknown[]; activeCover: unknown; pagination: { limit: number; offset: number; count: number; hasMore: boolean } };
+
+      expect(noActivePage).toEqual({
+        covers: [],
+        activeCover: null,
+        pagination: { limit: 25, offset: 0, count: 0, hasMore: false },
+      });
+
+      const emptyCover = await db.recipeCover.create({
+        data: {
+          recipeId: recipe.id,
+          imageUrl: "",
+          sourceType: "chef-upload",
+          status: "ready",
+        },
+      });
+      await db.recipe.update({
+        where: { id: recipe.id },
+        data: { activeCoverId: emptyCover.id, activeCoverVariant: "image", coverMode: "manual" },
+      });
+
+      const page = (await callSpoonjoyApiOperation(
+        "list_recipe_covers",
+        { recipeId: recipe.id },
+        { db, principal: { ...cook, scopes: ["recipes:read"] } },
+      )) as { covers: unknown[]; activeCover: unknown; pagination: { limit: number; offset: number; count: number; hasMore: boolean } };
+
+      expect(page).toEqual({
+        covers: [],
+        activeCover: null,
+        pagination: { limit: 25, offset: 0, count: 0, hasMore: false },
+      });
+    });
+
+    it("returns owner cover history without an active cover and excludes archived rows by default", async () => {
+      const { principal: chef } = await makeUser(db);
+      const recipe = await makeRecipe(db, chef.id);
+      const ready = await db.recipeCover.create({
+        data: {
+          recipeId: recipe.id,
+          imageUrl: "/photos/current.jpg",
+          sourceType: "chef-upload",
+          status: "ready",
+          createdAt: new Date("2026-01-02T00:00:00.000Z"),
+        },
+      });
+      const empty = await db.recipeCover.create({
+        data: {
+          recipeId: recipe.id,
+          imageUrl: "",
+          sourceType: "chef-upload",
+          status: "ready",
+          createdAt: new Date("2026-01-04T00:00:00.000Z"),
+        },
+      });
+      await db.recipeCover.create({
+        data: {
+          recipeId: recipe.id,
+          imageUrl: "/photos/archived.jpg",
+          sourceType: "import",
+          status: "archived",
+          archivedAt: new Date("2026-01-03T00:00:00.000Z"),
+          createdAt: new Date("2026-01-03T00:00:00.000Z"),
+        },
+      });
+
+      const page = (await callSpoonjoyApiOperation(
+        "list_recipe_covers",
+        { recipeId: recipe.id, limit: 99, offset: -5 },
+        { db, principal: chef },
+      )) as {
+        covers: Array<{
+          id: string;
+          displayUrl: string | null;
+          activeVariant: string | null;
+          provenanceLabel: string | null;
+        }>;
+        activeCover: unknown;
+        pagination: { limit: number; offset: number; count: number; hasMore: boolean };
+      };
+
+      expect(page.pagination).toEqual({ limit: 25, offset: 0, count: 2, hasMore: false });
+      expect(page.activeCover).toBeNull();
+      expect(page.covers).toEqual([
+        expect.objectContaining({
+          id: empty.id,
+          displayUrl: null,
+          activeVariant: null,
+          provenanceLabel: null,
+        }),
+        expect.objectContaining({
+          id: ready.id,
+          displayUrl: "/photos/current.jpg",
+          activeVariant: null,
+        }),
+      ]);
+    });
+
+    it("returns 404 for missing recipe cover and spoon image browse targets", async () => {
+      const { principal: chef } = await makeUser(db);
+
+      await expect(callSpoonjoyApiOperation(
+        "list_recipe_covers",
+        { recipeId: "missing-recipe" },
+        { db, principal: chef },
+      )).rejects.toMatchObject({ status: 404, message: "Recipe not found" });
+
+      await expect(callSpoonjoyApiOperation(
+        "list_recipe_spoon_images",
+        { recipeId: "missing-recipe" },
+        { db, principal: chef },
+      )).rejects.toMatchObject({ status: 404, message: "Recipe not found" });
+    });
+
+    it("filters blank spoon photo URLs from cover source browsing", async () => {
+      const { principal: chef } = await makeUser(db);
+      const recipe = await makeRecipe(db, chef.id);
+      await db.recipeSpoon.create({
+        data: {
+          recipeId: recipe.id,
+          chefId: chef.id,
+          photoUrl: "",
+          cookedAt: new Date("2026-01-02T00:00:00.000Z"),
+        },
+      });
+      const valid = await db.recipeSpoon.create({
+        data: {
+          recipeId: recipe.id,
+          chefId: chef.id,
+          photoUrl: "/photos/spoons/usable.jpg",
+          cookedAt: new Date("2026-01-01T00:00:00.000Z"),
+        },
+      });
+
+      const page = (await callSpoonjoyApiOperation(
+        "list_recipe_spoon_images",
+        { recipeId: recipe.id },
+        { db, principal: chef },
+      )) as {
+        spoonImages: Array<{ id: string; photoUrl: string }>;
+        pagination: { limit: number; offset: number; count: number; hasMore: boolean };
+      };
+
+      expect(page).toEqual({
+        spoonImages: [
+          expect.objectContaining({
+            id: valid.id,
+            photoUrl: "/photos/spoons/usable.jpg",
+          }),
+        ],
+        pagination: { limit: 25, offset: 0, count: 1, hasMore: false },
       });
     });
   });
@@ -309,21 +749,25 @@ describe("spoonjoy-api spoon operations", () => {
       ).rejects.toMatchObject({ status: 400 });
     });
 
-    it("enforces origin-cook photo requirement with 400", async () => {
+    it("allows an origin-cook note without a photo and creates no cover", async () => {
       const { principal: chef } = await makeUser(db);
       const recipe = await makeRecipe(db, chef.id);
       const context: SpoonjoyApiContext = { db, principal: chef };
 
-      await expect(
-        callSpoonjoyApiOperation(
-          "create_spoon",
-          { recipeId: recipe.id, note: "looks good" },
-          context,
-        ),
-      ).rejects.toMatchObject({
-        status: 400,
-        message: expect.stringMatching(/photo/i),
+      const result = (await callSpoonjoyApiOperation(
+        "create_spoon",
+        { recipeId: recipe.id, note: "looks good" },
+        context,
+      )) as { spoon: { chefId: string; note: string; photoUrl: string | null }; isOriginCook: boolean; cover: unknown };
+
+      expect(result.spoon).toMatchObject({
+        chefId: chef.id,
+        note: "looks good",
+        photoUrl: null,
       });
+      expect(result.isOriginCook).toBe(true);
+      expect(result.cover).toBeNull();
+      await expect(db.recipeCover.findMany({ where: { recipeId: recipe.id } })).resolves.toEqual([]);
     });
 
     it("accepts cookedAt as an ISO date string", async () => {
@@ -1088,6 +1532,24 @@ describe("spoonjoy-api spoon operations", () => {
       const { principal: chef } = await makeUser(db);
       const { principal: cook } = await makeUser(db);
       const recipe = await makeRecipe(db, chef.id);
+      const activeCover = await db.recipeCover.create({
+        data: {
+          recipeId: recipe.id,
+          imageUrl: "/photos/raw.jpg",
+          stylizedImageUrl: "/photos/editorial.jpg",
+          sourceType: "spoon",
+          status: "ready",
+          generationStatus: "succeeded",
+        },
+      });
+      await db.recipe.update({
+        where: { id: recipe.id },
+        data: {
+          activeCoverId: activeCover.id,
+          activeCoverVariant: "stylized",
+          coverMode: "manual",
+        },
+      });
       await db.recipeSpoon.create({
         data: { chefId: cook.id, recipeId: recipe.id, note: "hi" },
       });
@@ -1096,10 +1558,23 @@ describe("spoonjoy-api spoon operations", () => {
         "list_spoons_for_recipe",
         { recipeId: recipe.id },
         context,
-      )) as { spoons: Array<{ chef: { username: string }; coverImageUrl: string | null }> };
+      )) as {
+        spoons: Array<{
+          chef: { username: string };
+          coverImageUrl: string | null;
+          coverProvenanceLabel: string | null;
+          coverSourceType: string | null;
+          coverVariant: string | null;
+        }>;
+      };
       expect(result.spoons).toHaveLength(1);
       expect(result.spoons[0].chef.username).toBe(cook.username);
-      expect(result.spoons[0].coverImageUrl).toBeNull();
+      expect(result.spoons[0]).toMatchObject({
+        coverImageUrl: "/photos/editorial.jpg",
+        coverProvenanceLabel: "Editorialized chef photo",
+        coverSourceType: "spoon",
+        coverVariant: "stylized",
+      });
     });
 
     it("respects limit/offset", async () => {
@@ -1205,12 +1680,55 @@ describe("spoonjoy-api spoon operations", () => {
       )) as { spoons: unknown[] };
       expect(result.spoons).toHaveLength(0);
     });
+
+    it("returns null cover provenance when the recipe has no active cover", async () => {
+      const { principal: chef } = await makeUser(db);
+      const { principal: cook } = await makeUser(db);
+      const recipe = await makeRecipe(db, chef.id);
+      await db.recipeSpoon.create({
+        data: { chefId: cook.id, recipeId: recipe.id, note: "no cover yet" },
+      });
+      const context: SpoonjoyApiContext = { db, principal: cook };
+      const result = (await callSpoonjoyApiOperation(
+        "list_spoons_for_recipe",
+        { recipeId: recipe.id },
+        context,
+      )) as {
+        spoons: Array<{
+          coverImageUrl: string | null;
+          coverProvenanceLabel: string | null;
+          coverSourceType: string | null;
+          coverVariant: string | null;
+        }>;
+      };
+
+      expect(result.spoons).toEqual([
+        expect.objectContaining({
+          coverImageUrl: null,
+          coverProvenanceLabel: null,
+          coverSourceType: null,
+          coverVariant: null,
+        }),
+      ]);
+    });
   });
 
   describe("list_spoons_by_chef", () => {
     it("returns spoons by chef id with recipe + coverImageUrl preloaded", async () => {
       const { principal: chef } = await makeUser(db);
       const recipe = await makeRecipe(db, chef.id);
+      const cover = await db.recipeCover.create({
+        data: {
+          recipeId: recipe.id,
+          imageUrl: "/photos/original.jpg",
+          sourceType: "chef-upload",
+          status: "ready",
+        },
+      });
+      await db.recipe.update({
+        where: { id: recipe.id },
+        data: { activeCoverId: cover.id, activeCoverVariant: "image", coverMode: "manual" },
+      });
       await db.recipeSpoon.create({
         data: {
           chefId: chef.id,
@@ -1224,11 +1742,24 @@ describe("spoonjoy-api spoon operations", () => {
         "list_spoons_by_chef",
         { chefIdOrUsername: chef.id },
         context,
-      )) as { spoons: Array<{ recipe: { id: string; title: string }; coverImageUrl: string | null }> };
+      )) as {
+        spoons: Array<{
+          recipe: { id: string; title: string };
+          coverImageUrl: string | null;
+          coverProvenanceLabel: string | null;
+          coverSourceType: string | null;
+          coverVariant: string | null;
+        }>;
+      };
       expect(result.spoons).toHaveLength(1);
       expect(result.spoons[0].recipe.id).toBe(recipe.id);
       expect(result.spoons[0].recipe.title).toBe(recipe.title);
-      expect(result.spoons[0].coverImageUrl).toBeNull();
+      expect(result.spoons[0]).toMatchObject({
+        coverImageUrl: "/photos/original.jpg",
+        coverProvenanceLabel: "Chef photo",
+        coverSourceType: "chef-upload",
+        coverVariant: "image",
+      });
     });
 
     it("resolves by username", async () => {
