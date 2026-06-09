@@ -1,7 +1,8 @@
 import { test, expect, type Page } from '@playwright/test';
+import { publicRecipeHrefByChef, publicRecipeLinks } from '../support/recipes';
 
 function recipeDetailLinks(page: Page) {
-  return page.locator('main a[href^="/recipes/"]:not([href="/recipes"]):not([href="/recipes/new"]):not([href*="#"])');
+  return publicRecipeLinks(page);
 }
 
 test.describe('Recipe Flow', () => {
@@ -44,16 +45,7 @@ test.describe('Recipe Flow', () => {
   test('recipe detail shows steps and ingredients', async ({ page }) => {
     // Use a seeded chef_julia recipe so this flow is not affected by parallel
     // e2e-created recipes appearing at the top of the global recipe index.
-    await page.goto('/?tab=recipes&chef=chef_julia');
-    
-    // Get the first recipe card link
-    const recipeLink = recipeDetailLinks(page).first();
-    
-    // Get the href attribute to extract the recipe ID
-    const href = await recipeLink.getAttribute('href');
-    if (!href) {
-      throw new Error('Could not find recipe link');
-    }
+    const href = await publicRecipeHrefByChef(page, 'chef_julia');
     
     // Navigate to the recipe detail page
     await page.goto(href);

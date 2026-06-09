@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import path from 'node:path';
+import { openPublicRecipeByChef } from '../support/recipes';
 
 const FIXTURE_PHOTO = path.resolve('e2e/fixtures/spoon-test-photo.png');
 
@@ -7,14 +8,7 @@ test.describe('Spoon a recipe flow', () => {
   test('user can log a cook and see it appear in the spoons strip', async ({ page }) => {
     // Land on the kitchen view; pick any seeded recipe owned by another chef
     // so the demo user lands on the non-origin-cook path (photo not required).
-    await page.goto('/?tab=recipes&chef=chef_julia');
-    const recipeLink = page
-      .locator('main a[href^="/recipes/"]')
-      .filter({ hasNotText: /new/i })
-      .first();
-    await expect(recipeLink).toBeVisible({ timeout: 10_000 });
-    await recipeLink.click();
-    await expect(page).toHaveURL(/\/recipes\/[^/]+$/, { timeout: 10_000 });
+    await openPublicRecipeByChef(page, 'chef_julia');
 
     // Open the spoon dialog.
     const logCookButton = page.getByTestId('recipe-header-log-cook-action');

@@ -1,17 +1,11 @@
 import { test, expect } from '@playwright/test';
+import { openPublicRecipeByChef } from '../support/recipes';
 
 test.describe('Fork recipe flow', () => {
   test('viewer (demo) forks a recipe owned by chef_julia and lands on the fork', async ({ page }) => {
     // Land on the kitchen, browse chef_julia's recipes — demo user is not the owner,
     // so the Fork button label should be exactly "Fork".
-    await page.goto('/?tab=recipes&chef=chef_julia');
-    const recipeLink = page
-      .locator('main a[href^="/recipes/"]')
-      .filter({ hasNotText: /new/i })
-      .first();
-    await expect(recipeLink).toBeVisible({ timeout: 10_000 });
-    await recipeLink.click();
-    await expect(page).toHaveURL(/\/recipes\/[^/]+$/, { timeout: 10_000 });
+    await openPublicRecipeByChef(page, 'chef_julia');
 
     // The page should now show a "Fork" button (demo is not the owner).
     const forkButton = page.getByTestId('recipe-header-fork-action');

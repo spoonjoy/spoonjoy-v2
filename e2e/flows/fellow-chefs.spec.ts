@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import path from 'node:path';
+import { openPublicRecipeByChef } from '../support/recipes';
 
 const FIXTURE_PHOTO = path.resolve('e2e/fixtures/spoon-test-photo.png');
 
@@ -7,14 +8,7 @@ test.describe('Fellow chefs + Kitchen visitors flow', () => {
   test('demo_chef spoons a chef_julia recipe and both appear on the derived-graph pages', async ({ page }) => {
     // 1) demo_chef (logged in) spoons one of chef_julia's recipes —
     //    same shape as the existing spoon-a-recipe.spec.ts.
-    await page.goto('/?tab=recipes&chef=chef_julia');
-    const recipeLink = page
-      .locator('main a[href^="/recipes/"]')
-      .filter({ hasNotText: /new/i })
-      .first();
-    await expect(recipeLink).toBeVisible({ timeout: 10_000 });
-    await recipeLink.click();
-    await expect(page).toHaveURL(/\/recipes\/[^/]+$/, { timeout: 10_000 });
+    await openPublicRecipeByChef(page, 'chef_julia');
 
     const logCookButton = page.getByTestId('recipe-header-log-cook-action');
     await expect(logCookButton).toBeVisible({ timeout: 5_000 });
