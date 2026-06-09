@@ -7,6 +7,10 @@ import {
   listSpoonjoyApiOperations,
   type SpoonjoyApiContext,
 } from "~/lib/spoonjoy-api.server";
+import {
+  hashIdempotencyRequest,
+  idempotencyClientKey,
+} from "~/lib/api-idempotency.server";
 import type { ApiPrincipal } from "~/lib/api-auth.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 
@@ -81,6 +85,32 @@ async function makeRecipe(db: Database, chefId: string) {
   });
 }
 
+function dataUrl(bytes = VALID_PNG_BYTES) {
+  return `data:image/png;base64,${Buffer.from(bytes).toString("base64")}`;
+}
+
+function imageRunner() {
+  return {
+    textToImage: vi.fn(),
+    imageToImage: vi.fn().mockResolvedValue({ bytes: GENERATED_BYTES, contentType: "image/png" }),
+  };
+}
+
+async function mcpCoverMutationHash(
+  operation: string,
+  recipeId: string,
+  body: Record<string, unknown>,
+) {
+  const normalizedBody = Object.fromEntries(
+    Object.entries(body).filter(([key]) => key !== "dryRun" && key !== "idempotencyKey"),
+  );
+  return hashIdempotencyRequest({
+    method: "MCP",
+    path: `/mcp/tools/${operation}/recipes/${recipeId}`,
+    body: normalizedBody,
+  });
+}
+
 describe("spoonjoy-api spoon operations", () => {
   let db: Database;
 
@@ -107,6 +137,10 @@ describe("spoonjoy-api spoon operations", () => {
           "list_spoons_by_chef",
           "list_recipe_covers",
           "list_recipe_spoon_images",
+          "create_recipe_cover_from_upload",
+          "create_recipe_cover_from_spoon",
+          "regenerate_recipe_cover",
+          "get_cover_generation_status",
         ]),
       );
     });
@@ -700,6 +734,290 @@ describe("spoonjoy-api spoon operations", () => {
         ],
         pagination: { limit: 1, offset: 0, count: 1, hasMore: false },
       });
+    });
+  });
+
+  describe("recipe cover write operations", () => {
+    it("dry-runs upload cover creation without writing or consuming idempotency", async () => {
+      const { principal: chef } = await makeUser(db);
+      const recipe = await makeRecipe(db, chef.id);
+      const currentCover = await db.recipeCover.create({
+        data: {
+          recipeId: recipe.id,
+          imageUrl: "/photos/current.jpg",
+          sourceType: "chef-upload",
+          status: "ready",
+        },
+      });
+      await db.recipe.update({
+        where: { id: recipe.id },
+        data: { activeCoverId: currentCover.id, activeCoverVariant: "image", coverMode: "manual" },
+      });
+
+      const result = await callSpoonjoyApiOperation(
+        "create_recipe_cover_from_upload",
+        {
+          recipeId: recipe.id,
+          imageUrl: dataUrl(),
+          activate: true,
+          generateEditorial: true,
+          idempotencyKey: "dry-run-cover-upload",
+          dryRun: true,
+        },
+        { db, principal: chef, allowLocalImageFallback: true },
+      ) as {
+        activeCover: { id: string } | null;
+        previousActiveCover: { id: string } | null;
+        createdCover: unknown;
+        generationStatus: string;
+        warnings: string[];
+        nextActions: string[];
+      };
+
+      expect(result).toMatchObject({
+        activeCover: { id: currentCover.id },
+        previousActiveCover: { id: currentCover.id },
+        createdCover: null,
+        generationStatus: "dry_run",
+        warnings: [],
+      });
+      expect(result.nextActions).toContain("create_recipe_cover_from_upload");
+      await expect(db.recipeCover.count({ where: { recipeId: recipe.id } })).resolves.toBe(1);
+      await expect(db.apiIdempotencyKey.count({ where: { key: "dry-run-cover-upload" } })).resolves.toBe(0);
+    });
+
+    it("creates upload cover candidates without replacing manual active covers unless activated", async () => {
+      const { principal: chef } = await makeUser(db);
+      const recipe = await makeRecipe(db, chef.id);
+      const currentCover = await db.recipeCover.create({
+        data: {
+          recipeId: recipe.id,
+          imageUrl: "/photos/current.jpg",
+          sourceType: "chef-upload",
+          status: "ready",
+        },
+      });
+      await db.recipe.update({
+        where: { id: recipe.id },
+        data: { activeCoverId: currentCover.id, activeCoverVariant: "image", coverMode: "manual" },
+      });
+
+      const candidate = await callSpoonjoyApiOperation(
+        "create_recipe_cover_from_upload",
+        {
+          recipeId: recipe.id,
+          imageUrl: dataUrl(),
+          generateEditorial: false,
+        },
+        { db, principal: chef, allowLocalImageFallback: true },
+      ) as {
+        activeCover: { id: string } | null;
+        previousActiveCover: { id: string } | null;
+        createdCover: { id: string; imageUrl: string; sourceType: string; status: string; generationStatus: string };
+        generationStatus: string;
+        warnings: string[];
+        nextActions: string[];
+      };
+
+      expect(candidate).toMatchObject({
+        activeCover: { id: currentCover.id },
+        previousActiveCover: { id: currentCover.id },
+        createdCover: {
+          imageUrl: dataUrl(),
+          sourceType: "chef-upload",
+          status: "ready",
+          generationStatus: "none",
+        },
+        generationStatus: "none",
+      });
+      expect(candidate.nextActions).toContain("set_active_recipe_cover");
+      await expect(db.recipe.findUniqueOrThrow({
+        where: { id: recipe.id },
+        select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
+      })).resolves.toEqual({
+        activeCoverId: currentCover.id,
+        activeCoverVariant: "image",
+        coverMode: "manual",
+      });
+    });
+
+    it("creates and activates spoon cover candidates for owner spoons only", async () => {
+      const { principal: chef } = await makeUser(db);
+      const { principal: cook } = await makeUser(db);
+      const recipe = await makeRecipe(db, chef.id);
+      const spoon = await db.recipeSpoon.create({
+        data: {
+          recipeId: recipe.id,
+          chefId: chef.id,
+          photoUrl: "/photos/spoons/source.jpg",
+        },
+      });
+
+      const result = await callSpoonjoyApiOperation(
+        "create_recipe_cover_from_spoon",
+        {
+          recipeId: recipe.id,
+          spoonId: spoon.id,
+          activate: true,
+          generateEditorial: false,
+        },
+        { db, principal: chef },
+      ) as {
+        activeCover: { id: string; sourceSpoonId: string | null; sourceType: string; activeVariant: string | null } | null;
+        previousActiveCover: null;
+        createdCover: { id: string; sourceSpoonId: string | null; sourceType: string; imageUrl: string };
+      };
+
+      expect(result.previousActiveCover).toBeNull();
+      expect(result.createdCover).toMatchObject({
+        sourceType: "spoon",
+        sourceSpoonId: spoon.id,
+        imageUrl: "/photos/spoons/source.jpg",
+      });
+      expect(result.activeCover).toMatchObject({
+        id: result.createdCover.id,
+        sourceSpoonId: spoon.id,
+        sourceType: "spoon",
+        activeVariant: "image",
+      });
+      await expect(callSpoonjoyApiOperation(
+        "create_recipe_cover_from_spoon",
+        { recipeId: recipe.id, spoonId: spoon.id },
+        { db, principal: cook },
+      )).rejects.toMatchObject({ status: 403 });
+    });
+
+    it("regenerates a cover and exposes generation status", async () => {
+      const { principal: chef } = await makeUser(db);
+      const recipe = await makeRecipe(db, chef.id);
+      const cover = await db.recipeCover.create({
+        data: {
+          recipeId: recipe.id,
+          imageUrl: dataUrl(),
+          sourceType: "chef-upload",
+          sourceImageUrl: dataUrl(),
+          status: "ready",
+        },
+      });
+      await db.recipe.update({
+        where: { id: recipe.id },
+        data: { activeCoverId: cover.id, activeCoverVariant: "image", coverMode: "manual" },
+      });
+      const runner = imageRunner();
+
+      const regenerated = await callSpoonjoyApiOperation(
+        "regenerate_recipe_cover",
+        {
+          recipeId: recipe.id,
+          coverId: cover.id,
+          activateWhenReady: true,
+        },
+        { db, principal: chef, allowLocalImageFallback: true, imageGenRunner: runner },
+      ) as {
+        activeCover: { id: string; activeVariant: string; generationStatus: string } | null;
+        createdCover: { id: string; stylizedImageUrl: string | null; generationStatus: string; status: string };
+        generationStatus: string;
+      };
+
+      expect(runner.imageToImage).toHaveBeenCalledTimes(1);
+      expect(regenerated.createdCover).toMatchObject({
+        id: cover.id,
+        status: "ready",
+        generationStatus: "succeeded",
+      });
+      expect(regenerated.createdCover.stylizedImageUrl).toBe(`data:image/png;base64,${Buffer.from(GENERATED_BYTES).toString("base64")}`);
+      expect(regenerated.activeCover).toMatchObject({
+        id: cover.id,
+        activeVariant: "stylized",
+        generationStatus: "succeeded",
+      });
+      expect(regenerated.generationStatus).toBe("succeeded");
+
+      const status = await callSpoonjoyApiOperation(
+        "get_cover_generation_status",
+        { recipeId: recipe.id, coverId: cover.id },
+        { db, principal: chef },
+      ) as { cover: { id: string; generationStatus: string; status: string; stylizedImageUrl: string | null }; activeCover: { id: string } | null };
+      expect(status.cover).toMatchObject({
+        id: cover.id,
+        status: "ready",
+        generationStatus: "succeeded",
+      });
+      expect(status.activeCover).toMatchObject({ id: cover.id });
+    });
+
+    it("replays exact idempotent upload cover mutations and rejects key conflicts", async () => {
+      const { principal: chef } = await makeUser(db);
+      const recipe = await makeRecipe(db, chef.id);
+      const first = await callSpoonjoyApiOperation(
+        "create_recipe_cover_from_upload",
+        {
+          recipeId: recipe.id,
+          imageUrl: dataUrl(),
+          generateEditorial: false,
+          idempotencyKey: "upload-cover-idempotent",
+        },
+        { db, principal: chef, allowLocalImageFallback: true },
+      ) as { createdCover: { id: string }; mutation: { replayed: boolean } };
+      const replay = await callSpoonjoyApiOperation(
+        "create_recipe_cover_from_upload",
+        {
+          recipeId: recipe.id,
+          imageUrl: dataUrl(),
+          generateEditorial: false,
+          idempotencyKey: "upload-cover-idempotent",
+        },
+        { db, principal: chef, allowLocalImageFallback: true },
+      ) as { createdCover: { id: string }; mutation: { replayed: boolean } };
+
+      expect(replay.createdCover.id).toBe(first.createdCover.id);
+      expect(replay.mutation.replayed).toBe(true);
+      await expect(db.recipeCover.count({ where: { recipeId: recipe.id } })).resolves.toBe(1);
+
+      await expect(callSpoonjoyApiOperation(
+        "create_recipe_cover_from_upload",
+        {
+          recipeId: recipe.id,
+          imageUrl: dataUrl(GENERATED_BYTES),
+          generateEditorial: false,
+          idempotencyKey: "upload-cover-idempotent",
+        },
+        { db, principal: chef, allowLocalImageFallback: true },
+      )).rejects.toMatchObject({
+        status: 409,
+        message: expect.stringMatching(/different request/i),
+      });
+    });
+
+    it("rejects in-flight idempotent cover mutations without creating duplicate work", async () => {
+      const { principal: chef } = await makeUser(db);
+      const recipe = await makeRecipe(db, chef.id);
+      const body = {
+        recipeId: recipe.id,
+        imageUrl: dataUrl(),
+        generateEditorial: false,
+        idempotencyKey: "pending-cover-upload",
+      };
+      await db.apiIdempotencyKey.create({
+        data: {
+          userId: chef.id,
+          clientKey: idempotencyClientKey(chef),
+          key: "pending-cover-upload",
+          operation: "create_recipe_cover_from_upload",
+          requestHash: await mcpCoverMutationHash("create_recipe_cover_from_upload", recipe.id, body),
+          expiresAt: new Date(Date.now() + 60_000),
+        },
+      });
+
+      await expect(callSpoonjoyApiOperation(
+        "create_recipe_cover_from_upload",
+        body,
+        { db, principal: chef, allowLocalImageFallback: true },
+      )).rejects.toMatchObject({
+        status: 409,
+        message: expect.stringMatching(/in progress/i),
+      });
+      await expect(db.recipeCover.count({ where: { recipeId: recipe.id } })).resolves.toBe(0);
     });
   });
 

@@ -101,6 +101,10 @@ describe("spoonjoy MCP tools", () => {
       "get_recipe",
       "list_recipe_covers",
       "list_recipe_spoon_images",
+      "create_recipe_cover_from_upload",
+      "create_recipe_cover_from_spoon",
+      "regenerate_recipe_cover",
+      "get_cover_generation_status",
       "create_recipe",
       "update_recipe",
       "delete_recipe",
@@ -152,6 +156,10 @@ describe("spoonjoy MCP tools", () => {
     expect(byName.get("get_recipe")).toMatchObject({ readOnlyHint: true });
     expect(byName.get("list_recipe_covers")).toMatchObject({ readOnlyHint: true });
     expect(byName.get("list_recipe_spoon_images")).toMatchObject({ readOnlyHint: true });
+    expect(byName.get("create_recipe_cover_from_upload")).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true });
+    expect(byName.get("create_recipe_cover_from_spoon")).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true });
+    expect(byName.get("regenerate_recipe_cover")).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true });
+    expect(byName.get("get_cover_generation_status")).toMatchObject({ readOnlyHint: true });
     expect(byName.get("create_recipe")).toMatchObject({ readOnlyHint: false, destructiveHint: false });
     expect(byName.get("update_recipe")).toMatchObject({ readOnlyHint: false, destructiveHint: true });
     expect(byName.get("delete_recipe")).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true });
@@ -208,6 +216,74 @@ describe("spoonjoy MCP tools", () => {
           recipeId: { type: "string" },
           limit: { type: "number", minimum: 1, maximum: 25 },
           offset: { type: "number", minimum: 0 },
+        },
+        additionalProperties: false,
+      },
+    });
+  });
+
+  it("publishes recipe cover mutation schemas with idempotent write annotations", () => {
+    const byName = new Map(listSpoonjoyMcpTools().map((tool) => [tool.name, tool]));
+
+    expect(byName.get("create_recipe_cover_from_upload")).toMatchObject({
+      requiredScopes: ["kitchen:write"],
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+      inputSchema: {
+        type: "object",
+        required: ["recipeId", "imageUrl"],
+        properties: {
+          recipeId: { type: "string" },
+          imageUrl: { type: "string" },
+          activate: { type: "boolean" },
+          generateEditorial: { type: "boolean" },
+          idempotencyKey: { type: "string" },
+          dryRun: { type: "boolean" },
+        },
+        additionalProperties: false,
+      },
+    });
+    expect(byName.get("create_recipe_cover_from_spoon")).toMatchObject({
+      requiredScopes: ["kitchen:write"],
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+      inputSchema: {
+        type: "object",
+        required: ["recipeId", "spoonId"],
+        properties: {
+          recipeId: { type: "string" },
+          spoonId: { type: "string" },
+          activate: { type: "boolean" },
+          generateEditorial: { type: "boolean" },
+          idempotencyKey: { type: "string" },
+          dryRun: { type: "boolean" },
+        },
+        additionalProperties: false,
+      },
+    });
+    expect(byName.get("regenerate_recipe_cover")).toMatchObject({
+      requiredScopes: ["kitchen:write"],
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+      inputSchema: {
+        type: "object",
+        required: ["recipeId", "coverId"],
+        properties: {
+          recipeId: { type: "string" },
+          coverId: { type: "string" },
+          activateWhenReady: { type: "boolean" },
+          idempotencyKey: { type: "string" },
+          dryRun: { type: "boolean" },
+        },
+        additionalProperties: false,
+      },
+    });
+    expect(byName.get("get_cover_generation_status")).toMatchObject({
+      requiredScopes: ["kitchen:write"],
+      annotations: { readOnlyHint: true },
+      inputSchema: {
+        type: "object",
+        required: ["recipeId", "coverId"],
+        properties: {
+          recipeId: { type: "string" },
+          coverId: { type: "string" },
         },
         additionalProperties: false,
       },
@@ -279,6 +355,71 @@ describe("spoonjoy MCP tools", () => {
         photoUrl: "/photos/spoons/mcp.jpg",
       }),
     ]);
+  });
+
+  it("round-trips recipe cover mutation results over MCP JSON", async () => {
+    const chef = await context.db.user.create({
+      data: {
+        email: uniqueEmail("cover-write-chef"),
+        username: `cover_write_chef_${faker.string.alphanumeric(6).toLowerCase()}`,
+      },
+    });
+    const principal = {
+      id: chef.id,
+      email: chef.email,
+      username: chef.username,
+      source: "bearer" as const,
+      scopes: ["recipes:read", "kitchen:write"],
+    };
+    const recipe = await context.db.recipe.create({
+      data: {
+        title: `MCP Cover Write ${faker.string.alphanumeric(6)}`,
+        chefId: chef.id,
+      },
+    });
+
+    const dryRun = parseJson(await callSpoonjoyMcpTool(
+      "create_recipe_cover_from_upload",
+      {
+        recipeId: recipe.id,
+        imageUrl: `data:image/png;base64,${b64(VALID_PNG_BYTES)}`,
+        generateEditorial: false,
+        dryRun: true,
+      },
+      { db: context.db, principal, allowLocalImageFallback: true },
+    ));
+    expect(dryRun).toMatchObject({
+      createdCover: null,
+      generationStatus: "dry_run",
+      warnings: [],
+    });
+
+    const created = parseJson(await callSpoonjoyMcpTool(
+      "create_recipe_cover_from_upload",
+      {
+        recipeId: recipe.id,
+        imageUrl: `data:image/png;base64,${b64(VALID_PNG_BYTES)}`,
+        generateEditorial: false,
+      },
+      { db: context.db, principal, allowLocalImageFallback: true },
+    ));
+    expect(created.createdCover).toMatchObject({
+      recipeId: recipe.id,
+      sourceType: "chef-upload",
+      status: "ready",
+      generationStatus: "none",
+    });
+
+    const status = parseJson(await callSpoonjoyMcpTool(
+      "get_cover_generation_status",
+      { recipeId: recipe.id, coverId: created.createdCover.id },
+      { db: context.db, principal },
+    ));
+    expect(status.cover).toMatchObject({
+      id: created.createdCover.id,
+      generationStatus: "none",
+      status: "ready",
+    });
   });
 
   it("uploads recipe and spoon photos to owner-scoped R2 namespaces", async () => {
