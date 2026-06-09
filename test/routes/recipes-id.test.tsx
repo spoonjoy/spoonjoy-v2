@@ -338,6 +338,92 @@ describe("Recipes $id Route", () => {
       expect(result.coverProvenanceLabel).toBe("Editorialized chef photo");
     });
 
+    it("returns owner-only cover history with active variant and provenance labels", async () => {
+      const session = await sessionStorage.getSession();
+      session.set("userId", testUserId);
+      const setCookieHeader = await sessionStorage.commitSession(session);
+      const cookieValue = setCookieHeader.split(";")[0];
+      const headers = new Headers({ Cookie: cookieValue });
+      const activeCover = await db.recipeCover.create({
+        data: {
+          recipeId,
+          imageUrl: "/photos/detail-raw.jpg",
+          stylizedImageUrl: "/photos/detail-editorial.jpg",
+          sourceType: "spoon",
+          status: "ready",
+          createdAt: new Date("2026-01-01T00:00:00.000Z"),
+        },
+      });
+      const importedCover = await db.recipeCover.create({
+        data: {
+          recipeId,
+          imageUrl: "/photos/imported.jpg",
+          sourceType: "import",
+          status: "ready",
+          createdAt: new Date("2026-02-01T00:00:00.000Z"),
+        },
+      });
+      await db.recipe.update({
+        where: { id: recipeId },
+        data: {
+          activeCoverId: activeCover.id,
+          activeCoverVariant: "stylized",
+          coverMode: "manual",
+        },
+      });
+
+      const ownerResult = await loader({
+        request: new UndiciRequest(`http://localhost:3000/recipes/${recipeId}`, { headers }),
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any);
+
+      expect(ownerResult.recipe.covers).toBeUndefined();
+      expect(ownerResult.recipe.activeCover).toBeUndefined();
+      expect(ownerResult.coverHistory).toEqual([
+        expect.objectContaining({
+          id: importedCover.id,
+          isActive: false,
+          variants: [
+            expect.objectContaining({
+              variant: "image",
+              imageUrl: "/photos/imported.jpg",
+              provenanceLabel: "Imported photo",
+              isActive: false,
+            }),
+          ],
+        }),
+        expect.objectContaining({
+          id: activeCover.id,
+          isActive: true,
+          activeVariant: "stylized",
+          variants: [
+            expect.objectContaining({
+              variant: "image",
+              imageUrl: "/photos/detail-raw.jpg",
+              provenanceLabel: "Chef photo",
+              isActive: false,
+            }),
+            expect.objectContaining({
+              variant: "stylized",
+              imageUrl: "/photos/detail-editorial.jpg",
+              provenanceLabel: "Editorialized chef photo",
+              isActive: true,
+            }),
+          ],
+        }),
+      ]);
+
+      const publicResult = await loader({
+        request: new UndiciRequest(`http://localhost:3000/recipes/${recipeId}`),
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any);
+      expect(publicResult.coverHistory).toEqual([]);
+      expect(publicResult.recipe.covers).toBeUndefined();
+      expect(publicResult.recipe.activeCover).toBeUndefined();
+    });
+
     it("should return recipe data when logged in as owner", async () => {
       const session = await sessionStorage.getSession();
       session.set("userId", testUserId);
@@ -989,6 +1075,104 @@ describe("Recipes $id Route", () => {
       const recipe = await db.recipe.findUnique({ where: { id: recipeId } });
       expect(recipe).not.toBeNull();
       expect(recipe?.deletedAt).not.toBeNull();
+    });
+
+    it("sets the active recipe cover variant for the owner", async () => {
+      const cover = await db.recipeCover.create({
+        data: {
+          recipeId,
+          imageUrl: "/photos/raw.jpg",
+          stylizedImageUrl: "/photos/editorial.jpg",
+          sourceType: "chef-upload",
+          status: "ready",
+        },
+      });
+      const request = await createFormRequest(
+        { intent: "setRecipeCover", coverId: cover.id, variant: "stylized" },
+        testUserId,
+      );
+
+      const result = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any);
+
+      expect(result).toEqual({ success: true, intent: "setRecipeCover" });
+      await expect(
+        db.recipe.findUniqueOrThrow({
+          where: { id: recipeId },
+          select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
+        }),
+      ).resolves.toEqual({
+        activeCoverId: cover.id,
+        activeCoverVariant: "stylized",
+        coverMode: "manual",
+      });
+    });
+
+    it("sets an explicit no-cover state for the owner", async () => {
+      const cover = await db.recipeCover.create({
+        data: {
+          recipeId,
+          imageUrl: "/photos/raw.jpg",
+          sourceType: "chef-upload",
+          status: "ready",
+        },
+      });
+      await db.recipe.update({
+        where: { id: recipeId },
+        data: { activeCoverId: cover.id, activeCoverVariant: "image", coverMode: "manual" },
+      });
+      const request = await createFormRequest(
+        { intent: "setRecipeNoCover", confirmNoCover: "true" },
+        testUserId,
+      );
+
+      const result = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any);
+
+      expect(result).toEqual({ success: true, intent: "setRecipeNoCover" });
+      await expect(
+        db.recipe.findUniqueOrThrow({
+          where: { id: recipeId },
+          select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
+        }),
+      ).resolves.toEqual({
+        activeCoverId: null,
+        activeCoverVariant: null,
+        coverMode: "none",
+      });
+    });
+
+    it("rejects cover activation from non-owners", async () => {
+      const cover = await db.recipeCover.create({
+        data: {
+          recipeId,
+          imageUrl: "/photos/raw.jpg",
+          sourceType: "chef-upload",
+          status: "ready",
+        },
+      });
+      const request = await createFormRequest(
+        { intent: "setRecipeCover", coverId: cover.id, variant: "image" },
+        otherUserId,
+      );
+
+      await expect(
+        action({
+          request,
+          context: { cloudflare: { env: null } },
+          params: { id: recipeId },
+        } as any),
+      ).rejects.toSatisfy((error: any) => {
+        expect(error).toBeInstanceOf(Response);
+        expect(error.status).toBe(403);
+        return true;
+      });
     });
 
     it("should throw 404 for non-existent recipe", async () => {
@@ -2126,6 +2310,131 @@ describe("Recipes $id Route", () => {
       expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
       fireEvent.click(screen.getByRole("button", { name: "Recipe maintenance Open +" }));
       expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
+    });
+
+    it("renders owner cover history controls and hides them from non-owners", async () => {
+      const user = userEvent.setup();
+      const submittedIntents: Array<Record<string, string | null>> = [];
+      const coverHistory = [
+        {
+          id: "cover-imported",
+          status: "ready",
+          generationStatus: "none",
+          sourceType: "import",
+          createdAt: "2026-02-01T00:00:00.000Z",
+          isActive: false,
+          activeVariant: null,
+          variants: [
+            {
+              variant: "image",
+              imageUrl: "/photos/imported.jpg",
+              provenanceLabel: "Imported photo",
+              isActive: false,
+            },
+          ],
+        },
+        {
+          id: "cover-active",
+          status: "ready",
+          generationStatus: "succeeded",
+          sourceType: "spoon",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          isActive: true,
+          activeVariant: "stylized",
+          variants: [
+            {
+              variant: "image",
+              imageUrl: "/photos/raw.jpg",
+              provenanceLabel: "Chef photo",
+              isActive: false,
+            },
+            {
+              variant: "stylized",
+              imageUrl: "/photos/editorial.jpg",
+              provenanceLabel: "Editorialized chef photo",
+              isActive: true,
+            },
+          ],
+        },
+      ];
+      const ownerData = {
+        recipe: {
+          id: "recipe-1",
+          title: "Cover History Recipe",
+          description: null,
+          servings: null,
+          coverImageUrl: "/photos/editorial.jpg",
+          chef: { id: "user-1", username: "testchef" },
+          steps: [],
+        },
+        coverImageUrl: "/photos/editorial.jpg",
+        coverProvenanceLabel: "Editorialized chef photo",
+        isOwner: true,
+        coverHistory,
+      };
+
+      const OwnerStub = createTestRoutesStub([
+        {
+          path: "/recipes/:id",
+          Component: RecipeDetail,
+          loader: () => ownerData,
+          action: async ({ request }) => {
+            const formData = await request.formData();
+            submittedIntents.push({
+              intent: formData.get("intent")?.toString() ?? null,
+              coverId: formData.get("coverId")?.toString() ?? null,
+              variant: formData.get("variant")?.toString() ?? null,
+              confirmNoCover: formData.get("confirmNoCover")?.toString() ?? null,
+            });
+            return { success: true };
+          },
+        },
+      ]);
+
+      const ownerRender = render(<OwnerStub initialEntries={["/recipes/recipe-1"]} />);
+      await screen.findByRole("heading", { name: "Cover History Recipe" });
+      await user.click(screen.getByRole("button", { name: "Recipe maintenance Open +" }));
+
+      const history = await screen.findByTestId("recipe-cover-history");
+      expect(within(history).getByRole("heading", { name: "Recipe covers" })).toBeInTheDocument();
+      expect(within(history).getByText("Current")).toBeInTheDocument();
+      expect(within(history).getByText("Chef photo")).toBeInTheDocument();
+      expect(within(history).getByText("Editorialized chef photo")).toBeInTheDocument();
+      expect(within(history).getByText("Imported photo")).toBeInTheDocument();
+      expect(within(history).getByText("No cover selected")).toBeInTheDocument();
+
+      await user.click(within(history).getByRole("button", { name: "Use Imported photo cover" }));
+      await waitFor(() => {
+        expect(submittedIntents).toContainEqual({
+          intent: "setRecipeCover",
+          coverId: "cover-imported",
+          variant: "image",
+          confirmNoCover: null,
+        });
+      });
+
+      await user.click(within(history).getByRole("button", { name: "Set no cover" }));
+      await waitFor(() => {
+        expect(submittedIntents).toContainEqual({
+          intent: "setRecipeNoCover",
+          coverId: null,
+          variant: null,
+          confirmNoCover: "true",
+        });
+      });
+      ownerRender.unmount();
+
+      const PublicStub = createTestRoutesStub([
+        {
+          path: "/recipes/:id",
+          Component: RecipeDetail,
+          loader: () => ({ ...ownerData, isOwner: false }),
+        },
+      ]);
+
+      render(<PublicStub initialEntries={["/recipes/recipe-1"]} />);
+      await screen.findAllByRole("heading", { name: "Cover History Recipe" });
+      expect(screen.queryByTestId("recipe-cover-history")).toBeNull();
     });
 
     it("should not render description when null", async () => {

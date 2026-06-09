@@ -1,0 +1,646 @@
+diff --git a/app/lib/recipe-cover.server.ts b/app/lib/recipe-cover.server.ts
+index 1910a14e..1b0be5b9 100644
+--- a/app/lib/recipe-cover.server.ts
++++ b/app/lib/recipe-cover.server.ts
+@@ -360,6 +360,13 @@ function buildDisplay(
+   };
+ }
+ 
++export function getRecipeCoverProvenanceLabel(
++  sourceType: string,
++  variant: RecipeCoverVariant,
++): string {
++  return provenanceLabel(sourceType, variant);
++}
++
+ function provenanceLabel(sourceType: string, variant: RecipeCoverVariant): string {
+   if ((sourceType === "chef-upload" || sourceType === "spoon") && variant === "stylized") {
+     return "Editorialized chef photo";
+@@ -381,6 +388,9 @@ function assertActivatableCover(cover: RecipeCover): void {
+   if (cover.status === "failed") {
+     throw new Error("Cannot activate a failed cover");
+   }
++  if (cover.generationStatus === "failed") {
++    throw new Error("Cannot activate a cover with failed generation");
++  }
+ }
+ 
+ function assertVariantAvailable(cover: RecipeCover, variant: RecipeCoverVariant): void {
+diff --git a/app/lib/recipe-detail.server.ts b/app/lib/recipe-detail.server.ts
+index 2f0b38ac..daadd227 100644
+--- a/app/lib/recipe-detail.server.ts
++++ b/app/lib/recipe-detail.server.ts
+@@ -2,7 +2,15 @@ import type { AppLoadContext } from "react-router";
+ import { redirect } from "react-router";
+ import { deferBackgroundTask } from "~/lib/background-task.server";
+ import { getRequestDb } from "~/lib/route-platform.server";
+-import { createCover, getRecipeCoverDisplay } from "~/lib/recipe-cover.server";
++import {
++  createCover,
++  getRecipeCoverDisplay,
++  getRecipeCoverProvenanceLabel,
++  getScopedActiveCover,
++  RECIPE_COVER_DISPLAY_SELECT,
++  setActiveRecipeCover,
++  type RecipeCoverVariant,
++} from "~/lib/recipe-cover.server";
+ import { activateSpoonCoverForDecision } from "~/lib/spoon-cover-activation.server";
+ import {
+   createSpoon,
+@@ -26,6 +34,7 @@ import {
+   getSpoonCoverPromptMode,
+   hasActiveRealRecipeCover,
+ } from "~/lib/spoon-cover-decision.server";
++import type { RecipeCover } from "@prisma/client";
+ 
+ interface CloudflareContextLike {
+   cloudflare?: {
+@@ -89,6 +98,48 @@ interface RecipeDetailRouteArgs {
+   context: AppLoadContext;
+ }
+ 
++function nonEmpty(value: string | null | undefined): value is string {
++  return typeof value === "string" && value.length > 0;
++}
++
++function recipeCoverHistoryFor(recipe: {
++  activeCoverId: string | null;
++  activeCoverVariant: string | null;
++  covers: RecipeCover[];
++}) {
++  return recipe.covers.map((cover) => {
++    const variants = [
++      nonEmpty(cover.imageUrl)
++        ? {
++            variant: "image" as const,
++            imageUrl: cover.imageUrl,
++            provenanceLabel: getRecipeCoverProvenanceLabel(cover.sourceType, "image"),
++            isActive: recipe.activeCoverId === cover.id && recipe.activeCoverVariant === "image",
++          }
++        : null,
++      nonEmpty(cover.stylizedImageUrl)
++        ? {
++            variant: "stylized" as const,
++            imageUrl: cover.stylizedImageUrl,
++            provenanceLabel: getRecipeCoverProvenanceLabel(cover.sourceType, "stylized"),
++            isActive: recipe.activeCoverId === cover.id && recipe.activeCoverVariant === "stylized",
++          }
++        : null,
++    ].filter((item): item is NonNullable<typeof item> => item !== null);
++
++    return {
++      id: cover.id,
++      status: cover.status,
++      generationStatus: cover.generationStatus,
++      sourceType: cover.sourceType,
++      createdAt: cover.createdAt.toISOString(),
++      isActive: recipe.activeCoverId === cover.id,
++      activeVariant: recipe.activeCoverId === cover.id ? recipe.activeCoverVariant : null,
++      variants,
++    };
++  });
++}
++
+ export async function loadRecipeDetail({ request, params, context }: RecipeDetailRouteArgs) {
+   const userId = await getUserId(request, context.cloudflare?.env);
+   const { id } = params;
+@@ -113,19 +164,8 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
+           chef: { select: { username: true } },
+         },
+       },
+-      covers: {
+-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+-      },
+       activeCover: {
+-        select: {
+-          id: true,
+-          recipeId: true,
+-          imageUrl: true,
+-          stylizedImageUrl: true,
+-          sourceType: true,
+-          status: true,
+-          archivedAt: true,
+-        },
++        select: RECIPE_COVER_DISPLAY_SELECT,
+       },
+       steps: {
+         orderBy: {
+@@ -161,7 +201,8 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
+   }
+ 
+   const isOwner = userId !== null && recipe.chefId === userId;
+-  const coverDisplay = getRecipeCoverDisplay(recipe, recipe.covers);
++  const activeCover = getScopedActiveCover(recipe);
++  const coverDisplay = getRecipeCoverDisplay(recipe, activeCover ? [activeCover] : []);
+   const activeRealCover = hasActiveRealRecipeCover(recipe);
+   const coverImageUrl = coverDisplay?.displayUrl ?? null;
+   const coverProvenanceLabel = coverDisplay?.provenanceLabel ?? null;
+@@ -240,9 +281,16 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
+     nextTime: spoon.nextTime,
+     chef: spoon.chef,
+   }));
++  const coverHistoryCovers = isOwner
++    ? await database.recipeCover.findMany({
++        where: { recipeId: id },
++        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
++      })
++    : [];
++  const { activeCover: _activeCover, ...recipeForClient } = recipe;
+ 
+   return {
+-    recipe,
++    recipe: recipeForClient,
+     coverImageUrl,
+     coverProvenanceLabel,
+     canonicalUrl,
+@@ -252,6 +300,9 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
+     savedInCookbookIds,
+     hasIngredientsInShoppingList,
+     spoons,
++    coverHistory: isOwner
++      ? recipeCoverHistoryFor({ ...recipe, covers: coverHistoryCovers })
++      : [],
+     isOriginCookCandidate: originCookCandidate,
+     coverPromptMode: getSpoonCoverPromptMode({
+       isOwner,
+@@ -525,6 +576,38 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
+     throw new Response("Unauthorized", { status: 403 });
+   }
+ 
++  if (intent === "setRecipeCover") {
++    const coverId = formData.get("coverId");
++    const variant = formData.get("variant");
++    if (typeof coverId !== "string" || !coverId) {
++      throw new Response("coverId is required", { status: 400 });
++    }
++    if (variant !== "image" && variant !== "stylized") {
++      throw new Response("Invalid cover variant", { status: 400 });
++    }
++    await setActiveRecipeCover(database, {
++      recipeId: id,
++      coverId,
++      variant: variant as RecipeCoverVariant,
++    });
++    return { success: true, intent: "setRecipeCover" };
++  }
++
++  if (intent === "setRecipeNoCover") {
++    if (formData.get("confirmNoCover") !== "true") {
++      throw new Response("confirmNoCover is required", { status: 400 });
++    }
++    await database.recipe.update({
++      where: { id },
++      data: {
++        activeCoverId: null,
++        activeCoverVariant: null,
++        coverMode: "none",
++      },
++    });
++    return { success: true, intent: "setRecipeNoCover" };
++  }
++
+   if (intent === "delete") {
+     await database.recipe.update({
+       where: { id },
+diff --git a/app/routes/recipes.$id.tsx b/app/routes/recipes.$id.tsx
+index 5bff4327..22fbfba9 100644
+--- a/app/routes/recipes.$id.tsx
++++ b/app/routes/recipes.$id.tsx
+@@ -20,6 +20,7 @@ import { RecipeHeader } from "~/components/recipe/RecipeHeader";
+ import { ScaleSelector } from "~/components/recipe/ScaleSelector";
+ import { RecipeProvenance } from "~/components/recipe/RecipeProvenance";
+ import { ForkRecipeButton } from "~/components/recipe/ForkRecipeButton";
++import { RecipeCoverHistory } from "~/components/recipe/RecipeCoverHistory";
+ import { SpoonDialog } from "~/components/recipe/SpoonDialog";
+ import { SpoonsStrip } from "~/components/recipe/SpoonsStrip";
+ import { StepCard } from "~/components/recipe/StepCard";
+@@ -267,6 +268,7 @@ export default function RecipeDetail() {
+   const cookbooks = loaderData.cookbooks ?? EMPTY_COOKBOOKS;
+   const savedInCookbookIds = loaderData.savedInCookbookIds ?? EMPTY_SAVED_COOKBOOK_IDS;
+   const spoons = loaderData.spoons ?? EMPTY_SPOONS;
++  const coverHistory = loaderData.coverHistory ?? [];
+   const isOriginCookCandidate = loaderData.isOriginCookCandidate ?? false;
+   const coverPromptMode = loaderData.coverPromptMode ?? "none";
+   const submit = useSubmit();
+@@ -914,6 +916,9 @@ export default function RecipeDetail() {
+                     Delete
+                   </Button>
+                 </div>
++                <div className="mt-6">
++                  <RecipeCoverHistory covers={coverHistory} />
++                </div>
+               </div>
+             ) : null}
+           </div>
+diff --git a/spoonjoy/tasks/2026-06-08-1648-doing-recipe-cover-lifecycle.md b/spoonjoy/tasks/2026-06-08-1648-doing-recipe-cover-lifecycle.md
+index 7f32a4d8..a11abb9d 100644
+--- a/spoonjoy/tasks/2026-06-08-1648-doing-recipe-cover-lifecycle.md
++++ b/spoonjoy/tasks/2026-06-08-1648-doing-recipe-cover-lifecycle.md
+@@ -155,15 +155,15 @@ Make Spoonjoy recipe imagery explicit, provenance-aware, and controllable across
+ **What**: Refactor spoon-cover decision logic into tested helpers and cover invalid form inputs, missing photo, invalid photo, owner/non-owner, and existing active-cover cases.
+ **Acceptance**: Spoon backend/dialog tests pass with 100% coverage on new branches and no warnings.
+ 
+-### ⬜ Unit 8a: Owner Cover History UI — Tests
++### ✅ Unit 8a: Owner Cover History UI — Tests
+ **What**: Add failing route/component tests for owner-only cover history browsing on recipe pages: current badge, provenance labels, source thumbnails, active variant labels, set-active action, no-cover state, and non-owner hidden state. Placeholder copy must be `Awaiting first chef photo` for owners and `Cover coming soon` for public/non-owner viewers.
+ **Acceptance**: Tests fail because owner cover history UI does not exist.
+ 
+-### ⬜ Unit 8b: Owner Cover History UI — Implementation
++### ✅ Unit 8b: Owner Cover History UI — Implementation
+ **What**: Add focused recipe cover history components and route actions for browsing covers and setting the active cover/variant. Route action intents: `setRecipeCover`, `setRecipeNoCover`. Fields for `setRecipeCover`: `coverId`, `variant`. Field for `setRecipeNoCover`: `confirmNoCover=true`. Set-active action sets `coverMode="manual"`; no-cover action sets `coverMode="none"`. Keep controls accessible, stable in size, and visually consistent with existing Spoonjoy surfaces.
+ **Acceptance**: Unit 8a tests pass and owner can swap between retained covers including verbatim and editorialized variants.
+ 
+-### ⬜ Unit 8c: Owner Cover History UI — Coverage & Refactor
++### ✅ Unit 8c: Owner Cover History UI — Coverage & Refactor
+ **What**: Cover empty, loading, failed, archived, long-title, and mobile layout states without overlapping text or nested cards.
+ **Acceptance**: Cover history UI tests pass with 100% coverage on new branches and no warnings.
+ 
+@@ -274,3 +274,5 @@ Make Spoonjoy recipe imagery explicit, provenance-aware, and controllable across
+ - 2026-06-08 21:21 Unit 7a/7b/7c complete: added red tests for text-only first chef spoons, first-photo auto-seeded processing covers, existing-real-cover preservation, later owner opt-in covers, forged non-owner cover opt-in denial, non-owner hidden controls, and dialog form submission (`unit-7a-red.log`); implemented optional first-photo spoon posting, owner-only cover creation decisions, processing cover activation, waitUntil-deferred stylization dispatch, first-photo copy, later-photo checkbox opt-in, and no non-owner cover controls; targeted tests passed (`unit-7b-green-attempt-2.log`, `unit-7c-refactor-green-attempt-1.log`, `unit-7c-green-3.log`), new helper coverage reached 100% statements/branches/functions/lines (`unit-7c-helper-coverage-attempt-2.log`), and production build passed (`unit-7c-build-attempt-1.log`).
+ - 2026-06-08 21:31 Fixed Unit 7 review finding: first-spoon auto-seed activation now uses a relation-aware atomic guard so a real/manual active cover selected between the decision read and activation write cannot be overwritten; regression red/green, new helper coverage, targeted Unit 7 tests, adjacent recipe-detail route tests, and build passed (`unit-7-review-fix-red.log`, `unit-7-review-fix-green-attempt-1.log`, `unit-7-review-fix-coverage-attempt-1.log`, `unit-7-review-fix-targeted-attempt-1.log`, `unit-7-review-fix-adjacent-attempt-1.log`, `unit-7-review-fix-build-attempt-1.log`).
+ - 2026-06-08 21:32 Unit 7 review converged after Round 2: fresh reviewer Darwin verified the atomic auto-seed activation guard, forged non-owner denial, targeted coverage, adjacent route tests, and build evidence.
++- 2026-06-08 21:41 Unit 8a/8b/8c complete: added red tests for owner-only cover history loader data, active variant/provenance labels, owner set-cover and no-cover actions, non-owner permission denial, and owner-only cover controls (`unit-8a-red-attempt-1.log`); implemented owner cover history loader formatting, `setRecipeCover` and `setRecipeNoCover` route actions, and compact owner maintenance UI for browsing original/editorial variants and choosing no-cover; route/component/helper suites passed (`unit-8b-green-attempt-1.log`, `unit-8c-green-attempt-2.log`, `unit-8c-targeted-attempt-1.log`), failed/archived variants are shown but not activatable, new cover-history component coverage reached 100% statements/branches/functions/lines (`unit-8c-component-coverage-attempt-2.log`), and production build passed (`unit-8c-build-attempt-2.log`).
++- 2026-06-08 21:50 Fixed Unit 8 review findings: recipe detail loader no longer returns raw `recipe.covers` or `recipe.activeCover` to clients and fetches full cover history only for owners, while failed-generation covers are non-activatable in both cover history UI and the server activation helper; targeted route/component/helper tests, focused coverage, and clean build passed (`unit-8-review-fix-green-attempt-1.log`, `unit-8-review-fix-coverage-attempt-2.log`, `unit-8-review-fix-build-attempt-2.log`).
+diff --git a/test/lib/recipe-cover.server.test.ts b/test/lib/recipe-cover.server.test.ts
+index d0503582..91548811 100644
+--- a/test/lib/recipe-cover.server.test.ts
++++ b/test/lib/recipe-cover.server.test.ts
+@@ -8,6 +8,7 @@ import {
+   getCurrentCover,
+   getRecipeCoverDisplay,
+   getRecipeCoverImageUrl,
++  getRecipeCoverProvenanceLabel,
+   getScopedActiveCover,
+   listCoversForRecipe,
+   makeFallbackPlaceholderSvg,
+@@ -350,6 +351,14 @@ describe("recipe-cover.server", () => {
+   });
+ 
+   describe("active cover payload helpers", () => {
++    it("formats standalone provenance labels", () => {
++      expect(getRecipeCoverProvenanceLabel("spoon", "stylized")).toBe("Editorialized chef photo");
++      expect(getRecipeCoverProvenanceLabel("chef-upload", "image")).toBe("Chef photo");
++      expect(getRecipeCoverProvenanceLabel("import", "image")).toBe("Imported photo");
++      expect(getRecipeCoverProvenanceLabel("ai-placeholder", "image")).toBe("AI generated");
++      expect(getRecipeCoverProvenanceLabel("mystery", "image")).toBe("Unknown source");
++    });
++
+     it("returns only same-recipe active covers and serializes cache snapshots", async () => {
+       const cover = await createCover(db, {
+         recipeId,
+@@ -498,6 +507,21 @@ describe("recipe-cover.server", () => {
+         .rejects.toThrow("Cannot activate a failed cover");
+     });
+ 
++    it("rejects a cover with failed generation even when the raw image is retained", async () => {
++      const cover = await db.recipeCover.create({
++        data: {
++          recipeId,
++          imageUrl: "raw",
++          sourceType: "chef-upload",
++          status: "ready",
++          generationStatus: "failed",
++        },
++      });
++
++      await expect(setActiveRecipeCover(db, { recipeId, coverId: cover.id, variant: "image" }))
++        .rejects.toThrow("Cannot activate a cover with failed generation");
++    });
++
+     it("rejects a cover with an invalid status", async () => {
+       const cover = await db.recipeCover.create({
+         data: {
+diff --git a/test/routes/recipes-id.test.tsx b/test/routes/recipes-id.test.tsx
+index af03a80f..98d25b2c 100644
+--- a/test/routes/recipes-id.test.tsx
++++ b/test/routes/recipes-id.test.tsx
+@@ -338,6 +338,92 @@ describe("Recipes $id Route", () => {
+       expect(result.coverProvenanceLabel).toBe("Editorialized chef photo");
+     });
+ 
++    it("returns owner-only cover history with active variant and provenance labels", async () => {
++      const session = await sessionStorage.getSession();
++      session.set("userId", testUserId);
++      const setCookieHeader = await sessionStorage.commitSession(session);
++      const cookieValue = setCookieHeader.split(";")[0];
++      const headers = new Headers({ Cookie: cookieValue });
++      const activeCover = await db.recipeCover.create({
++        data: {
++          recipeId,
++          imageUrl: "/photos/detail-raw.jpg",
++          stylizedImageUrl: "/photos/detail-editorial.jpg",
++          sourceType: "spoon",
++          status: "ready",
++          createdAt: new Date("2026-01-01T00:00:00.000Z"),
++        },
++      });
++      const importedCover = await db.recipeCover.create({
++        data: {
++          recipeId,
++          imageUrl: "/photos/imported.jpg",
++          sourceType: "import",
++          status: "ready",
++          createdAt: new Date("2026-02-01T00:00:00.000Z"),
++        },
++      });
++      await db.recipe.update({
++        where: { id: recipeId },
++        data: {
++          activeCoverId: activeCover.id,
++          activeCoverVariant: "stylized",
++          coverMode: "manual",
++        },
++      });
++
++      const ownerResult = await loader({
++        request: new UndiciRequest(`http://localhost:3000/recipes/${recipeId}`, { headers }),
++        context: { cloudflare: { env: null } },
++        params: { id: recipeId },
++      } as any);
++
++      expect(ownerResult.recipe.covers).toBeUndefined();
++      expect(ownerResult.recipe.activeCover).toBeUndefined();
++      expect(ownerResult.coverHistory).toEqual([
++        expect.objectContaining({
++          id: importedCover.id,
++          isActive: false,
++          variants: [
++            expect.objectContaining({
++              variant: "image",
++              imageUrl: "/photos/imported.jpg",
++              provenanceLabel: "Imported photo",
++              isActive: false,
++            }),
++          ],
++        }),
++        expect.objectContaining({
++          id: activeCover.id,
++          isActive: true,
++          activeVariant: "stylized",
++          variants: [
++            expect.objectContaining({
++              variant: "image",
++              imageUrl: "/photos/detail-raw.jpg",
++              provenanceLabel: "Chef photo",
++              isActive: false,
++            }),
++            expect.objectContaining({
++              variant: "stylized",
++              imageUrl: "/photos/detail-editorial.jpg",
++              provenanceLabel: "Editorialized chef photo",
++              isActive: true,
++            }),
++          ],
++        }),
++      ]);
++
++      const publicResult = await loader({
++        request: new UndiciRequest(`http://localhost:3000/recipes/${recipeId}`),
++        context: { cloudflare: { env: null } },
++        params: { id: recipeId },
++      } as any);
++      expect(publicResult.coverHistory).toEqual([]);
++      expect(publicResult.recipe.covers).toBeUndefined();
++      expect(publicResult.recipe.activeCover).toBeUndefined();
++    });
++
+     it("should return recipe data when logged in as owner", async () => {
+       const session = await sessionStorage.getSession();
+       session.set("userId", testUserId);
+@@ -991,6 +1077,104 @@ describe("Recipes $id Route", () => {
+       expect(recipe?.deletedAt).not.toBeNull();
+     });
+ 
++    it("sets the active recipe cover variant for the owner", async () => {
++      const cover = await db.recipeCover.create({
++        data: {
++          recipeId,
++          imageUrl: "/photos/raw.jpg",
++          stylizedImageUrl: "/photos/editorial.jpg",
++          sourceType: "chef-upload",
++          status: "ready",
++        },
++      });
++      const request = await createFormRequest(
++        { intent: "setRecipeCover", coverId: cover.id, variant: "stylized" },
++        testUserId,
++      );
++
++      const result = await action({
++        request,
++        context: { cloudflare: { env: null } },
++        params: { id: recipeId },
++      } as any);
++
++      expect(result).toEqual({ success: true, intent: "setRecipeCover" });
++      await expect(
++        db.recipe.findUniqueOrThrow({
++          where: { id: recipeId },
++          select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
++        }),
++      ).resolves.toEqual({
++        activeCoverId: cover.id,
++        activeCoverVariant: "stylized",
++        coverMode: "manual",
++      });
++    });
++
++    it("sets an explicit no-cover state for the owner", async () => {
++      const cover = await db.recipeCover.create({
++        data: {
++          recipeId,
++          imageUrl: "/photos/raw.jpg",
++          sourceType: "chef-upload",
++          status: "ready",
++        },
++      });
++      await db.recipe.update({
++        where: { id: recipeId },
++        data: { activeCoverId: cover.id, activeCoverVariant: "image", coverMode: "manual" },
++      });
++      const request = await createFormRequest(
++        { intent: "setRecipeNoCover", confirmNoCover: "true" },
++        testUserId,
++      );
++
++      const result = await action({
++        request,
++        context: { cloudflare: { env: null } },
++        params: { id: recipeId },
++      } as any);
++
++      expect(result).toEqual({ success: true, intent: "setRecipeNoCover" });
++      await expect(
++        db.recipe.findUniqueOrThrow({
++          where: { id: recipeId },
++          select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
++        }),
++      ).resolves.toEqual({
++        activeCoverId: null,
++        activeCoverVariant: null,
++        coverMode: "none",
++      });
++    });
++
++    it("rejects cover activation from non-owners", async () => {
++      const cover = await db.recipeCover.create({
++        data: {
++          recipeId,
++          imageUrl: "/photos/raw.jpg",
++          sourceType: "chef-upload",
++          status: "ready",
++        },
++      });
++      const request = await createFormRequest(
++        { intent: "setRecipeCover", coverId: cover.id, variant: "image" },
++        otherUserId,
++      );
++
++      await expect(
++        action({
++          request,
++          context: { cloudflare: { env: null } },
++          params: { id: recipeId },
++        } as any),
++      ).rejects.toSatisfy((error: any) => {
++        expect(error).toBeInstanceOf(Response);
++        expect(error.status).toBe(403);
++        return true;
++      });
++    });
++
+     it("should throw 404 for non-existent recipe", async () => {
+       const request = await createFormRequest({ intent: "delete" }, testUserId);
+ 
+@@ -2128,6 +2312,131 @@ describe("Recipes $id Route", () => {
+       expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
+     });
+ 
++    it("renders owner cover history controls and hides them from non-owners", async () => {
++      const user = userEvent.setup();
++      const submittedIntents: Array<Record<string, string | null>> = [];
++      const coverHistory = [
++        {
++          id: "cover-imported",
++          status: "ready",
++          generationStatus: "none",
++          sourceType: "import",
++          createdAt: "2026-02-01T00:00:00.000Z",
++          isActive: false,
++          activeVariant: null,
++          variants: [
++            {
++              variant: "image",
++              imageUrl: "/photos/imported.jpg",
++              provenanceLabel: "Imported photo",
++              isActive: false,
++            },
++          ],
++        },
++        {
++          id: "cover-active",
++          status: "ready",
++          generationStatus: "succeeded",
++          sourceType: "spoon",
++          createdAt: "2026-01-01T00:00:00.000Z",
++          isActive: true,
++          activeVariant: "stylized",
++          variants: [
++            {
++              variant: "image",
++              imageUrl: "/photos/raw.jpg",
++              provenanceLabel: "Chef photo",
++              isActive: false,
++            },
++            {
++              variant: "stylized",
++              imageUrl: "/photos/editorial.jpg",
++              provenanceLabel: "Editorialized chef photo",
++              isActive: true,
++            },
++          ],
++        },
++      ];
++      const ownerData = {
++        recipe: {
++          id: "recipe-1",
++          title: "Cover History Recipe",
++          description: null,
++          servings: null,
++          coverImageUrl: "/photos/editorial.jpg",
++          chef: { id: "user-1", username: "testchef" },
++          steps: [],
++        },
++        coverImageUrl: "/photos/editorial.jpg",
++        coverProvenanceLabel: "Editorialized chef photo",
++        isOwner: true,
++        coverHistory,
++      };
++
++      const OwnerStub = createTestRoutesStub([
++        {
++          path: "/recipes/:id",
++          Component: RecipeDetail,
++          loader: () => ownerData,
++          action: async ({ request }) => {
++            const formData = await request.formData();
++            submittedIntents.push({
++              intent: formData.get("intent")?.toString() ?? null,
++              coverId: formData.get("coverId")?.toString() ?? null,
++              variant: formData.get("variant")?.toString() ?? null,
++              confirmNoCover: formData.get("confirmNoCover")?.toString() ?? null,
++            });
++            return { success: true };
++          },
++        },
++      ]);
++
++      const ownerRender = render(<OwnerStub initialEntries={["/recipes/recipe-1"]} />);
++      await screen.findByRole("heading", { name: "Cover History Recipe" });
++      await user.click(screen.getByRole("button", { name: "Recipe maintenance Open +" }));
++
++      const history = await screen.findByTestId("recipe-cover-history");
++      expect(within(history).getByRole("heading", { name: "Recipe covers" })).toBeInTheDocument();
++      expect(within(history).getByText("Current")).toBeInTheDocument();
++      expect(within(history).getByText("Chef photo")).toBeInTheDocument();
++      expect(within(history).getByText("Editorialized chef photo")).toBeInTheDocument();
++      expect(within(history).getByText("Imported photo")).toBeInTheDocument();
++      expect(within(history).getByText("No cover selected")).toBeInTheDocument();
++
++      await user.click(within(history).getByRole("button", { name: "Use Imported photo cover" }));
++      await waitFor(() => {
++        expect(submittedIntents).toContainEqual({
++          intent: "setRecipeCover",
++          coverId: "cover-imported",
++          variant: "image",
++          confirmNoCover: null,
++        });
++      });
++
++      await user.click(within(history).getByRole("button", { name: "Set no cover" }));
++      await waitFor(() => {
++        expect(submittedIntents).toContainEqual({
++          intent: "setRecipeNoCover",
++          coverId: null,
++          variant: null,
++          confirmNoCover: "true",
++        });
++      });
++      ownerRender.unmount();
++
++      const PublicStub = createTestRoutesStub([
++        {
++          path: "/recipes/:id",
++          Component: RecipeDetail,
++          loader: () => ({ ...ownerData, isOwner: false }),
++        },
++      ]);
++
++      render(<PublicStub initialEntries={["/recipes/recipe-1"]} />);
++      await screen.findAllByRole("heading", { name: "Cover History Recipe" });
++      expect(screen.queryByTestId("recipe-cover-history")).toBeNull();
++    });
++
+     it("should not render description when null", async () => {
+       const mockData = {
+         recipe: {

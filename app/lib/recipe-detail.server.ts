@@ -2,7 +2,15 @@ import type { AppLoadContext } from "react-router";
 import { redirect } from "react-router";
 import { deferBackgroundTask } from "~/lib/background-task.server";
 import { getRequestDb } from "~/lib/route-platform.server";
-import { createCover, getRecipeCoverDisplay } from "~/lib/recipe-cover.server";
+import {
+  createCover,
+  getRecipeCoverDisplay,
+  getRecipeCoverProvenanceLabel,
+  getScopedActiveCover,
+  RECIPE_COVER_DISPLAY_SELECT,
+  setActiveRecipeCover,
+  type RecipeCoverVariant,
+} from "~/lib/recipe-cover.server";
 import { activateSpoonCoverForDecision } from "~/lib/spoon-cover-activation.server";
 import {
   createSpoon,
@@ -26,6 +34,7 @@ import {
   getSpoonCoverPromptMode,
   hasActiveRealRecipeCover,
 } from "~/lib/spoon-cover-decision.server";
+import type { RecipeCover } from "@prisma/client";
 
 interface CloudflareContextLike {
   cloudflare?: {
@@ -89,6 +98,48 @@ interface RecipeDetailRouteArgs {
   context: AppLoadContext;
 }
 
+function nonEmpty(value: string | null | undefined): value is string {
+  return typeof value === "string" && value.length > 0;
+}
+
+function recipeCoverHistoryFor(recipe: {
+  activeCoverId: string | null;
+  activeCoverVariant: string | null;
+  covers: RecipeCover[];
+}) {
+  return recipe.covers.map((cover) => {
+    const variants = [
+      nonEmpty(cover.imageUrl)
+        ? {
+            variant: "image" as const,
+            imageUrl: cover.imageUrl,
+            provenanceLabel: getRecipeCoverProvenanceLabel(cover.sourceType, "image"),
+            isActive: recipe.activeCoverId === cover.id && recipe.activeCoverVariant === "image",
+          }
+        : null,
+      nonEmpty(cover.stylizedImageUrl)
+        ? {
+            variant: "stylized" as const,
+            imageUrl: cover.stylizedImageUrl,
+            provenanceLabel: getRecipeCoverProvenanceLabel(cover.sourceType, "stylized"),
+            isActive: recipe.activeCoverId === cover.id && recipe.activeCoverVariant === "stylized",
+          }
+        : null,
+    ].filter((item): item is NonNullable<typeof item> => item !== null);
+
+    return {
+      id: cover.id,
+      status: cover.status,
+      generationStatus: cover.generationStatus,
+      sourceType: cover.sourceType,
+      createdAt: cover.createdAt.toISOString(),
+      isActive: recipe.activeCoverId === cover.id,
+      activeVariant: recipe.activeCoverId === cover.id ? recipe.activeCoverVariant : null,
+      variants,
+    };
+  });
+}
+
 export async function loadRecipeDetail({ request, params, context }: RecipeDetailRouteArgs) {
   const userId = await getUserId(request, context.cloudflare?.env);
   const { id } = params;
@@ -113,19 +164,8 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
           chef: { select: { username: true } },
         },
       },
-      covers: {
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      },
       activeCover: {
-        select: {
-          id: true,
-          recipeId: true,
-          imageUrl: true,
-          stylizedImageUrl: true,
-          sourceType: true,
-          status: true,
-          archivedAt: true,
-        },
+        select: RECIPE_COVER_DISPLAY_SELECT,
       },
       steps: {
         orderBy: {
@@ -161,7 +201,8 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
   }
 
   const isOwner = userId !== null && recipe.chefId === userId;
-  const coverDisplay = getRecipeCoverDisplay(recipe, recipe.covers);
+  const activeCover = getScopedActiveCover(recipe);
+  const coverDisplay = getRecipeCoverDisplay(recipe, activeCover ? [activeCover] : []);
   const activeRealCover = hasActiveRealRecipeCover(recipe);
   const coverImageUrl = coverDisplay?.displayUrl ?? null;
   const coverProvenanceLabel = coverDisplay?.provenanceLabel ?? null;
@@ -240,9 +281,16 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
     nextTime: spoon.nextTime,
     chef: spoon.chef,
   }));
+  const coverHistoryCovers = isOwner
+    ? await database.recipeCover.findMany({
+        where: { recipeId: id },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      })
+    : [];
+  const { activeCover: _activeCover, ...recipeForClient } = recipe;
 
   return {
-    recipe,
+    recipe: recipeForClient,
     coverImageUrl,
     coverProvenanceLabel,
     canonicalUrl,
@@ -252,6 +300,9 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
     savedInCookbookIds,
     hasIngredientsInShoppingList,
     spoons,
+    coverHistory: isOwner
+      ? recipeCoverHistoryFor({ ...recipe, covers: coverHistoryCovers })
+      : [],
     isOriginCookCandidate: originCookCandidate,
     coverPromptMode: getSpoonCoverPromptMode({
       isOwner,
@@ -523,6 +574,38 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
 
   if (recipe.chefId !== userId) {
     throw new Response("Unauthorized", { status: 403 });
+  }
+
+  if (intent === "setRecipeCover") {
+    const coverId = formData.get("coverId");
+    const variant = formData.get("variant");
+    if (typeof coverId !== "string" || !coverId) {
+      throw new Response("coverId is required", { status: 400 });
+    }
+    if (variant !== "image" && variant !== "stylized") {
+      throw new Response("Invalid cover variant", { status: 400 });
+    }
+    await setActiveRecipeCover(database, {
+      recipeId: id,
+      coverId,
+      variant: variant as RecipeCoverVariant,
+    });
+    return { success: true, intent: "setRecipeCover" };
+  }
+
+  if (intent === "setRecipeNoCover") {
+    if (formData.get("confirmNoCover") !== "true") {
+      throw new Response("confirmNoCover is required", { status: 400 });
+    }
+    await database.recipe.update({
+      where: { id },
+      data: {
+        activeCoverId: null,
+        activeCoverVariant: null,
+        coverMode: "none",
+      },
+    });
+    return { success: true, intent: "setRecipeNoCover" };
   }
 
   if (intent === "delete") {

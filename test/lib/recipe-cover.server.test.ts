@@ -8,6 +8,7 @@ import {
   getCurrentCover,
   getRecipeCoverDisplay,
   getRecipeCoverImageUrl,
+  getRecipeCoverProvenanceLabel,
   getScopedActiveCover,
   listCoversForRecipe,
   makeFallbackPlaceholderSvg,
@@ -350,6 +351,14 @@ describe("recipe-cover.server", () => {
   });
 
   describe("active cover payload helpers", () => {
+    it("formats standalone provenance labels", () => {
+      expect(getRecipeCoverProvenanceLabel("spoon", "stylized")).toBe("Editorialized chef photo");
+      expect(getRecipeCoverProvenanceLabel("chef-upload", "image")).toBe("Chef photo");
+      expect(getRecipeCoverProvenanceLabel("import", "image")).toBe("Imported photo");
+      expect(getRecipeCoverProvenanceLabel("ai-placeholder", "image")).toBe("AI generated");
+      expect(getRecipeCoverProvenanceLabel("mystery", "image")).toBe("Unknown source");
+    });
+
     it("returns only same-recipe active covers and serializes cache snapshots", async () => {
       const cover = await createCover(db, {
         recipeId,
@@ -496,6 +505,21 @@ describe("recipe-cover.server", () => {
 
       await expect(setActiveRecipeCover(db, { recipeId, coverId: cover.id, variant: "image" }))
         .rejects.toThrow("Cannot activate a failed cover");
+    });
+
+    it("rejects a cover with failed generation even when the raw image is retained", async () => {
+      const cover = await db.recipeCover.create({
+        data: {
+          recipeId,
+          imageUrl: "raw",
+          sourceType: "chef-upload",
+          status: "ready",
+          generationStatus: "failed",
+        },
+      });
+
+      await expect(setActiveRecipeCover(db, { recipeId, coverId: cover.id, variant: "image" }))
+        .rejects.toThrow("Cannot activate a cover with failed generation");
     });
 
     it("rejects a cover with an invalid status", async () => {

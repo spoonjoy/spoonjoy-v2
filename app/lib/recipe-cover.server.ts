@@ -360,6 +360,13 @@ function buildDisplay(
   };
 }
 
+export function getRecipeCoverProvenanceLabel(
+  sourceType: string,
+  variant: RecipeCoverVariant,
+): string {
+  return provenanceLabel(sourceType, variant);
+}
+
 function provenanceLabel(sourceType: string, variant: RecipeCoverVariant): string {
   if ((sourceType === "chef-upload" || sourceType === "spoon") && variant === "stylized") {
     return "Editorialized chef photo";
@@ -380,6 +387,9 @@ function assertActivatableCover(cover: RecipeCover): void {
   }
   if (cover.status === "failed") {
     throw new Error("Cannot activate a failed cover");
+  }
+  if (cover.generationStatus === "failed") {
+    throw new Error("Cannot activate a cover with failed generation");
   }
 }
 

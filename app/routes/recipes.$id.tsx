@@ -20,6 +20,7 @@ import { RecipeHeader } from "~/components/recipe/RecipeHeader";
 import { ScaleSelector } from "~/components/recipe/ScaleSelector";
 import { RecipeProvenance } from "~/components/recipe/RecipeProvenance";
 import { ForkRecipeButton } from "~/components/recipe/ForkRecipeButton";
+import { RecipeCoverHistory } from "~/components/recipe/RecipeCoverHistory";
 import { SpoonDialog } from "~/components/recipe/SpoonDialog";
 import { SpoonsStrip } from "~/components/recipe/SpoonsStrip";
 import { StepCard } from "~/components/recipe/StepCard";
@@ -267,6 +268,7 @@ export default function RecipeDetail() {
   const cookbooks = loaderData.cookbooks ?? EMPTY_COOKBOOKS;
   const savedInCookbookIds = loaderData.savedInCookbookIds ?? EMPTY_SAVED_COOKBOOK_IDS;
   const spoons = loaderData.spoons ?? EMPTY_SPOONS;
+  const coverHistory = loaderData.coverHistory ?? [];
   const isOriginCookCandidate = loaderData.isOriginCookCandidate ?? false;
   const coverPromptMode = loaderData.coverPromptMode ?? "none";
   const submit = useSubmit();
@@ -913,6 +915,9 @@ export default function RecipeDetail() {
                   >
                     Delete
                   </Button>
+                </div>
+                <div className="mt-6">
+                  <RecipeCoverHistory covers={coverHistory} />
                 </div>
               </div>
             ) : null}
