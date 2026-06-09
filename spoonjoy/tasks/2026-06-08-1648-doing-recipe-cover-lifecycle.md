@@ -15,6 +15,14 @@
 ## Objective
 Make Spoonjoy recipe imagery explicit, provenance-aware, and controllable across web UI and MCP. Recipes should distinguish pure AI placeholders, uploaded photos, imported photos, and editorialized chef photos while letting chefs browse, choose, and retain cover history.
 
+## Decision Record
+- 2026-06-08: Main recipe cards/pages should show cover provenance because pure AI, verbatim chef photos, imported photos, and editorialized chef photos must be distinguishable in today's trust environment.
+- 2026-06-08: Verbatim uploaded photos are valid active covers. Editorialized generation is optional, not required, even when a chef uploads a photo.
+- 2026-06-08: Recipes with no real photo should show an intentional awaiting-cover state, with owner copy clarifying that Spoonjoy is awaiting a first chef spoon photo or direct photo upload.
+- 2026-06-08: If no photo exists, Spoonjoy may eventually use a pure AI generated placeholder, but the UI/API/MCP must clearly identify it as pure AI rather than an editorialized chef photo.
+- 2026-06-08: Chefs should be able to browse all recipe covers and all spoon images for a recipe, then choose raw or editorialized variants explicitly.
+- 2026-06-08: GIF uploads are out of scope for recipe and spoon imagery.
+
 ## Upstream Work Items
 - None
 
