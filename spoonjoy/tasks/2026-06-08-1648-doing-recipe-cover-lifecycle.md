@@ -244,3 +244,4 @@ Make Spoonjoy recipe imagery explicit, provenance-aware, and controllable across
 - 2026-06-08 18:24 Fixed Unit 1 review findings: migration tests now apply both root D1 and Prisma migration SQL, active-cover archive rejects self-replacement, and validation passed with `unit-1-review-fix-red.log`, `unit-1-review-fix-green.log`, and `unit-1-review-fix-build.log`
 - 2026-06-08 18:25 Unit 1 review converged after Round 2
 - 2026-06-08 18:31 Unit 1c complete: added runtime validation and edge coverage for invalid cover lifecycle strings, failed/archived states, replacement archive sequencing, unknown provenance labels, and D1-safe helper writes; targeted tests passed (`unit-1c-green.log`), build passed (`unit-1c-build.log`), and `recipe-cover.server.ts` reached 100% coverage (`unit-1c-coverage.log`)
+- 2026-06-08 18:32 Unit 1c review converged
