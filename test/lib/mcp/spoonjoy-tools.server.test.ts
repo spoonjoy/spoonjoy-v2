@@ -543,6 +543,15 @@ describe("spoonjoy MCP tools", () => {
       imageUrl: upload.imageUrl,
       sourceType: "chef-upload",
     });
+    const createdRecipe = await context.db.recipe.findUniqueOrThrow({
+      where: { id: created.recipe.id },
+      select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
+    });
+    expect(createdRecipe).toMatchObject({
+      activeCoverId: firstCover.id,
+      activeCoverVariant: "stylized",
+      coverMode: "manual",
+    });
     expect(captured).toHaveLength(0);
     expect(runner.imageToImage).toHaveBeenCalledTimes(1);
 
@@ -558,6 +567,19 @@ describe("spoonjoy MCP tools", () => {
 
     expect(updated.recipe.imageUrl).toMatch(/^\/photos\/covers\/\d+-[a-f0-9-]+\.png$/);
     await expect(context.db.recipeCover.count({ where: { recipeId: created.recipe.id } })).resolves.toBe(2);
+    const activeAfterUpdate = await context.db.recipe.findUniqueOrThrow({
+      where: { id: created.recipe.id },
+      select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
+    });
+    const replacementCover = await context.db.recipeCover.findFirstOrThrow({
+      where: { recipeId: created.recipe.id },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(activeAfterUpdate).toMatchObject({
+      activeCoverId: replacementCover.id,
+      activeCoverVariant: "stylized",
+      coverMode: "manual",
+    });
     expect(captured).toHaveLength(0);
     expect(runner.imageToImage).toHaveBeenCalledTimes(2);
   });

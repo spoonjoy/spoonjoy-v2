@@ -13,7 +13,7 @@ import {
   startAgentConnection,
 } from "~/lib/agent-connection.server";
 import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
-import { createCover, getRecipeCoverImageUrl } from "~/lib/recipe-cover.server";
+import { createCover, getRecipeCoverImageUrl, setActiveRecipeCover } from "~/lib/recipe-cover.server";
 import { uploadFoodImage } from "~/lib/image-upload-tools.server";
 import { FOOD_IMAGE_TYPES } from "~/lib/recipe-image";
 import {
@@ -317,6 +317,24 @@ async function scheduleCoverStylization(
     logger: context.logger,
   });
   await task;
+}
+
+async function activateUploadedRecipeCover(
+  context: SpoonjoyApiContext,
+  input: {
+    recipeId: string;
+    coverId: string;
+  },
+): Promise<void> {
+  const cover = await context.db.recipeCover.findUnique({
+    where: { id: input.coverId },
+    select: { stylizedImageUrl: true },
+  });
+  await setActiveRecipeCover(context.db, {
+    recipeId: input.recipeId,
+    coverId: input.coverId,
+    variant: cover?.stylizedImageUrl ? "stylized" : "image",
+  });
 }
 
 function formatSpoon(spoon: {
@@ -1178,6 +1196,10 @@ const createRecipeTool: SpoonjoyApiOperation = {
         recipeTitle: title,
         sourceType: "chef-upload",
       });
+      await activateUploadedRecipeCover(context, {
+        recipeId: created.id,
+        coverId: cover.id,
+      });
     }
 
     const recipe = await context.db.recipe.findUniqueOrThrow({
@@ -1299,6 +1321,10 @@ const updateRecipeTool: SpoonjoyApiOperation = {
         rawPhotoUrl: imageUrl,
         recipeTitle: title ?? existing.title,
         sourceType: "chef-upload",
+      });
+      await activateUploadedRecipeCover(context, {
+        recipeId: existing.id,
+        coverId: cover.id,
       });
     }
 

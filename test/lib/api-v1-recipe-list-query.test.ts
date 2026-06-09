@@ -28,7 +28,7 @@ describe("API v1 recipe list query", () => {
         servings: "2",
         sourceUrl: null,
         sourceRecipe: null,
-        covers: [],
+        activeCover: null,
         chef: { id: "chef_1", username: "ari" },
         createdAt: new Date("2026-06-01T12:00:00.000Z"),
         updatedAt: new Date("2026-06-01T12:30:00.000Z"),
@@ -61,7 +61,7 @@ describe("API v1 recipe list query", () => {
       },
     });
     expect(mocks.recipeFindMany).toHaveBeenCalledWith(expect.objectContaining({
-      select: {
+      select: expect.objectContaining({
         id: true,
         title: true,
         description: true,
@@ -78,11 +78,17 @@ describe("API v1 recipe list query", () => {
             chef: { select: { id: true, username: true } },
           },
         },
-        covers: {
-          select: { id: true, imageUrl: true, stylizedImageUrl: true, createdAt: true },
-          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        activeCover: {
+          select: expect.objectContaining({
+            id: true,
+            recipeId: true,
+            imageUrl: true,
+            stylizedImageUrl: true,
+            status: true,
+            archivedAt: true,
+          }),
         },
-      },
+      }),
     }));
     expect(mocks.recipeFindMany.mock.calls[0][0]).not.toHaveProperty("include");
   });
