@@ -215,7 +215,11 @@ model Recipe {
   steps       RecipeStep[]
   cookbooks   RecipeInCookbook[]
   spoons      RecipeSpoon[]
-  covers      RecipeCover[]
+  covers      RecipeCover[]      @relation("RecipeCoverHistory")
+  activeCoverId      String?
+  activeCover        RecipeCover? @relation("RecipeActiveCover", fields: [activeCoverId], references: [id], onDelete: SetNull)
+  activeCoverVariant String?
+  coverMode          String       @default("auto")
 
   sourceRecipeId String?
   sourceRecipe   Recipe? @relation("SourceRecipe", fields: [sourceRecipeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
@@ -231,6 +235,8 @@ model Recipe {
   @@unique([chefId, title, deletedAt])
   @@index([chefId])
   @@index([sourceRecipeId])
+  @@index([activeCoverId])
+  @@index([coverMode])
 }
 
 model RecipeStep {
@@ -399,16 +405,27 @@ model RecipeSpoon {
 model RecipeCover {
   id               String       @id @default(cuid())
   recipeId         String
-  recipe           Recipe       @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  recipe           Recipe       @relation("RecipeCoverHistory", fields: [recipeId], references: [id], onDelete: Cascade)
   imageUrl         String
   stylizedImageUrl String?
   sourceType       String
   sourceSpoonId    String?
   sourceSpoon      RecipeSpoon? @relation(fields: [sourceSpoonId], references: [id], onDelete: SetNull)
+  activeForRecipes Recipe[]     @relation("RecipeActiveCover")
+  status           String       @default("ready")
+  createdById      String?
+  sourceImageUrl   String?
+  generationStatus String       @default("none")
+  failureReason    String?
+  promptVersion    String?
+  styleVersion     String?
+  archivedAt       DateTime?
   createdAt        DateTime     @default(now())
 
   @@index([recipeId, createdAt])
   @@index([sourceSpoonId])
+  @@index([recipeId, status, createdAt])
+  @@index([status])
 }
 
 model ImageGenLedger {

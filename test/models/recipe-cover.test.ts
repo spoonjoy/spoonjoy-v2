@@ -40,6 +40,14 @@ describe("RecipeCover Model", () => {
       expect(cover.sourceType).toBe(sourceType);
       expect(cover.stylizedImageUrl).toBeNull();
       expect(cover.sourceSpoonId).toBeNull();
+      expect(cover.status).toBe("ready");
+      expect(cover.generationStatus).toBe("none");
+      expect(cover.createdById).toBeNull();
+      expect(cover.sourceImageUrl).toBeNull();
+      expect(cover.failureReason).toBeNull();
+      expect(cover.promptVersion).toBeNull();
+      expect(cover.styleVersion).toBeNull();
+      expect(cover.archivedAt).toBeNull();
       expect(cover.createdAt).toBeInstanceOf(Date);
     });
 
@@ -67,6 +75,34 @@ describe("RecipeCover Model", () => {
       });
       expect(cover.sourceSpoonId).toBe(spoon.id);
     });
+
+    it("stores cover lifecycle metadata", async () => {
+      const cover = await db.recipeCover.create({
+        data: {
+          recipeId,
+          imageUrl: "https://example.com/raw.jpg",
+          stylizedImageUrl: "https://example.com/editorial.jpg",
+          sourceType: "chef-upload",
+          status: "processing",
+          generationStatus: "processing",
+          createdById: chefId,
+          sourceImageUrl: "https://example.com/source.jpg",
+          failureReason: "queued",
+          promptVersion: "editorial-v1",
+          styleVersion: "phone-to-editorial-v1",
+        },
+      });
+
+      expect(cover).toMatchObject({
+        status: "processing",
+        generationStatus: "processing",
+        createdById: chefId,
+        sourceImageUrl: "https://example.com/source.jpg",
+        failureReason: "queued",
+        promptVersion: "editorial-v1",
+        styleVersion: "phone-to-editorial-v1",
+      });
+    });
   });
 
   describe("relations", () => {
@@ -86,6 +122,31 @@ describe("RecipeCover Model", () => {
       expect(found?.sourceSpoonId).toBeNull();
     });
 
+    it("sets Recipe.activeCoverId to null when the active cover is hard-deleted", async () => {
+      const cover = await db.recipeCover.create({
+        data: {
+          recipeId,
+          imageUrl: "https://example.com/raw.jpg",
+          sourceType: "chef-upload",
+        },
+      });
+      await db.recipe.update({
+        where: { id: recipeId },
+        data: {
+          activeCoverId: cover.id,
+          activeCoverVariant: "image",
+          coverMode: "manual",
+        },
+      });
+
+      await db.recipeCover.delete({ where: { id: cover.id } });
+
+      const found = await db.recipe.findUniqueOrThrow({ where: { id: recipeId } });
+      expect(found.activeCoverId).toBeNull();
+      expect(found.activeCoverVariant).toBe("image");
+      expect(found.coverMode).toBe("manual");
+    });
+
     it("cascade-deletes when the recipe is removed", async () => {
       const cover = await db.recipeCover.create({
         data: {
@@ -101,7 +162,7 @@ describe("RecipeCover Model", () => {
   });
 
   describe("indexes", () => {
-    it("declares the expected indexes", async () => {
+    it("declares the expected cover indexes", async () => {
       const rows = await db.$queryRawUnsafe<{ name: string }[]>(
         "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='RecipeCover'",
       );
@@ -110,6 +171,21 @@ describe("RecipeCover Model", () => {
         expect.arrayContaining([
           "RecipeCover_recipeId_createdAt_idx",
           "RecipeCover_sourceSpoonId_idx",
+          "RecipeCover_recipeId_status_createdAt_idx",
+          "RecipeCover_status_idx",
+        ]),
+      );
+    });
+
+    it("declares the expected recipe active-cover indexes", async () => {
+      const rows = await db.$queryRawUnsafe<{ name: string }[]>(
+        "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='Recipe'",
+      );
+      const names = rows.map((r) => r.name);
+      expect(names).toEqual(
+        expect.arrayContaining([
+          "Recipe_activeCoverId_idx",
+          "Recipe_coverMode_idx",
         ]),
       );
     });

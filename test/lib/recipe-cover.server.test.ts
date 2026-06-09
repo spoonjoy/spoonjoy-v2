@@ -1,11 +1,15 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { db } from "~/lib/db.server";
 import {
+  archiveRecipeCover,
+  backfillActiveCoverForRecipe,
   createCover,
-  getCurrentCover,
+  getActiveRecipeCover,
+  getRecipeCoverDisplay,
   getRecipeCoverImageUrl,
   listCoversForRecipe,
   makeFallbackPlaceholderSvg,
+  setActiveRecipeCover,
 } from "~/lib/recipe-cover.server";
 import type { RecipeCover } from "@prisma/client";
 import { createTestUser, createTestRecipe } from "../utils";
@@ -40,6 +44,14 @@ describe("recipe-cover.server", () => {
       expect(cover.sourceType).toBe("ai-placeholder");
       expect(cover.stylizedImageUrl).toBeNull();
       expect(cover.sourceSpoonId).toBeNull();
+      expect(cover.status).toBe("ready");
+      expect(cover.generationStatus).toBe("none");
+      expect(cover.createdById).toBeNull();
+      expect(cover.sourceImageUrl).toBeNull();
+      expect(cover.failureReason).toBeNull();
+      expect(cover.promptVersion).toBeNull();
+      expect(cover.styleVersion).toBeNull();
+      expect(cover.archivedAt).toBeNull();
     });
 
     it("stores optional stylizedImageUrl and sourceSpoonId", async () => {
@@ -53,6 +65,32 @@ describe("recipe-cover.server", () => {
       });
       expect(cover.stylizedImageUrl).toBe("https://example.com/a-stylized.png");
       expect(cover.sourceSpoonId).toBe(spoon.id);
+    });
+
+    it("stores status, generation, provenance, and prompt metadata", async () => {
+      const cover = await createCover(db, {
+        recipeId,
+        imageUrl: "https://example.com/raw.png",
+        stylizedImageUrl: "https://example.com/editorial.png",
+        sourceType: "chef-upload",
+        createdById: chefId,
+        sourceImageUrl: "https://example.com/source.png",
+        status: "processing",
+        generationStatus: "processing",
+        failureReason: "queued",
+        promptVersion: "editorial-v1",
+        styleVersion: "mendelow-phone-to-editorial-v1",
+      });
+
+      expect(cover).toMatchObject({
+        status: "processing",
+        generationStatus: "processing",
+        createdById: chefId,
+        sourceImageUrl: "https://example.com/source.png",
+        failureReason: "queued",
+        promptVersion: "editorial-v1",
+        styleVersion: "mendelow-phone-to-editorial-v1",
+      });
     });
   });
 
@@ -79,21 +117,30 @@ describe("recipe-cover.server", () => {
     });
   });
 
-  describe("getCurrentCover", () => {
-    it("returns the latest cover by (createdAt desc, id desc)", async () => {
+  describe("getActiveRecipeCover", () => {
+    it("returns the explicitly active cover instead of the latest row", async () => {
       const t = new Date("2026-01-02T00:00:00Z");
-      await db.recipeCover.create({
+      const active = await db.recipeCover.create({
         data: { id: "a", recipeId, imageUrl: "u1", sourceType: "chef-upload", createdAt: t },
       });
-      const winner = await db.recipeCover.create({
+      await db.recipeCover.create({
         data: { id: "b", recipeId, imageUrl: "u2", sourceType: "chef-upload", createdAt: t },
       });
-      const current = await getCurrentCover(db, recipeId);
-      expect(current?.id).toBe(winner.id);
+      await db.recipe.update({
+        where: { id: recipeId },
+        data: { activeCoverId: active.id, activeCoverVariant: "image", coverMode: "manual" },
+      });
+
+      const current = await getActiveRecipeCover(db, recipeId);
+      expect(current?.id).toBe(active.id);
     });
 
-    it("returns null when no covers exist", async () => {
-      const current = await getCurrentCover(db, recipeId);
+    it("returns null when the recipe has no active cover", async () => {
+      await db.recipeCover.create({
+        data: { id: "a", recipeId, imageUrl: "u1", sourceType: "chef-upload" },
+      });
+
+      const current = await getActiveRecipeCover(db, recipeId);
       expect(current).toBeNull();
     });
   });
@@ -106,108 +153,255 @@ describe("recipe-cover.server", () => {
       stylizedImageUrl: null,
       sourceType: "chef-upload",
       sourceSpoonId: null,
+      status: "ready",
+      createdById: null,
+      sourceImageUrl: null,
+      generationStatus: "none",
+      failureReason: null,
+      promptVersion: null,
+      styleVersion: null,
+      archivedAt: null,
       createdAt: new Date("2026-01-01T00:00:00Z"),
       ...over,
     };
   }
 
   describe("getRecipeCoverImageUrl", () => {
-    const recipe = { id: "r", title: "Tomato Soup" };
+    const recipe = {
+      id: "r",
+      title: "Tomato Soup",
+      activeCoverId: "active",
+      activeCoverVariant: "stylized",
+      coverMode: "manual",
+    };
 
-    it("returns stylizedImageUrl when present on the latest cover", () => {
+    it("returns the requested active stylized variant", () => {
       const url = getRecipeCoverImageUrl(recipe, [
         fakeCover({
-          id: "b",
+          id: "active",
           imageUrl: "raw",
           stylizedImageUrl: "stylized",
           createdAt: new Date("2026-02-01"),
+        }),
+        fakeCover({
+          id: "newer",
+          imageUrl: "newer-raw",
+          stylizedImageUrl: "newer-stylized",
+          createdAt: new Date("2026-03-01"),
         }),
       ]);
       expect(url).toBe("stylized");
     });
 
-    it("returns imageUrl when stylizedImageUrl is null", () => {
+    it("returns the requested active image variant", () => {
       const url = getRecipeCoverImageUrl(recipe, [
-        fakeCover({ id: "a", imageUrl: "raw", createdAt: new Date("2026-02-01") }),
-      ]);
+        fakeCover({ id: "active", imageUrl: "raw", stylizedImageUrl: "stylized" }),
+      ], "image");
       expect(url).toBe("raw");
     });
 
-    it("breaks createdAt ties by id desc", () => {
-      const t = new Date("2026-02-01");
-      const url = getRecipeCoverImageUrl(recipe, [
-        fakeCover({ id: "a", imageUrl: "loser", createdAt: t }),
-        fakeCover({ id: "z", imageUrl: "winner", createdAt: t }),
-      ]);
-      expect(url).toBe("winner");
-    });
-
-    it("picks the newer cover when createdAt differs", () => {
-      const url = getRecipeCoverImageUrl(recipe, [
-        fakeCover({ id: "old", imageUrl: "old", createdAt: new Date("2026-01-01") }),
-        fakeCover({ id: "new", imageUrl: "new", createdAt: new Date("2026-03-01") }),
-      ]);
-      expect(url).toBe("new");
-    });
-
-    it("treats identical (createdAt, id) pairs as equal in the comparator", () => {
-      const t = new Date("2026-02-01");
-      const url = getRecipeCoverImageUrl(recipe, [
-        fakeCover({ id: "x", imageUrl: "x", createdAt: t }),
-        fakeCover({ id: "x", imageUrl: "y", createdAt: t }),
-      ]);
-      // Both rows tie on createdAt+id so the first non-empty imageUrl wins by stable order.
-      expect(url).toBe("x");
-    });
-
-    it("exercises both arms of the id-desc tiebreak comparator", () => {
-      const t = new Date("2026-02-01");
-      const url = getRecipeCoverImageUrl(recipe, [
-        fakeCover({ id: "m", imageUrl: "middle", createdAt: t }),
-        fakeCover({ id: "a", imageUrl: "lowest", createdAt: t }),
-        fakeCover({ id: "z", imageUrl: "winner", createdAt: t }),
-      ]);
-      expect(url).toBe("winner");
-    });
-
-    it("returns null when covers array is empty", () => {
-      const url = getRecipeCoverImageUrl(recipe, []);
+    it("returns null when coverMode is intentionally none", () => {
+      const url = getRecipeCoverImageUrl(
+        { ...recipe, coverMode: "none", activeCoverId: null, activeCoverVariant: null },
+        [fakeCover({ id: "active", imageUrl: "raw", stylizedImageUrl: "stylized" })],
+      );
       expect(url).toBeNull();
     });
 
-    it("returns null when the latest cover row is empty", () => {
+    it("does not fall back to newest row when the active cover is missing", () => {
       const url = getRecipeCoverImageUrl(recipe, [
-        fakeCover({
-          id: "old",
-          imageUrl: "older-real",
-          stylizedImageUrl: null,
-          createdAt: new Date("2026-01-01"),
-        }),
-        fakeCover({
-          id: "new",
-          imageUrl: "",
-          stylizedImageUrl: "",
-          createdAt: new Date("2026-03-01"),
-        }),
+        fakeCover({ id: "newer", imageUrl: "newer", createdAt: new Date("2026-03-01") }),
       ]);
       expect(url).toBeNull();
     });
 
-    it("returns an ai-placeholder image once generation has filled imageUrl", () => {
+    it("returns null when the active cover is archived", () => {
       const url = getRecipeCoverImageUrl(recipe, [
-        fakeCover({
-          id: "placeholder",
-          imageUrl: "/photos/covers/generated.png",
-          stylizedImageUrl: null,
-          sourceType: "ai-placeholder",
-          createdAt: new Date("2026-03-01"),
-        }),
+        fakeCover({ id: "active", imageUrl: "raw", status: "archived", archivedAt: new Date("2026-02-01") }),
       ]);
-      expect(url).toBe("/photos/covers/generated.png");
+      expect(url).toBeNull();
+    });
+
+    it("uses raw image as temporary display for a processing active cover with no variant", () => {
+      const url = getRecipeCoverImageUrl(
+        { ...recipe, activeCoverVariant: null, coverMode: "auto" },
+        [fakeCover({ id: "active", imageUrl: "raw", stylizedImageUrl: null, status: "processing" })],
+      );
+      expect(url).toBe("raw");
+    });
+
+    it("returns null when the selected variant URL is empty", () => {
+      const url = getRecipeCoverImageUrl(recipe, [
+        fakeCover({ id: "active", imageUrl: "raw", stylizedImageUrl: "" }),
+      ]);
+      expect(url).toBeNull();
     });
 
     it("does not throw when recipe.title is an empty string", () => {
-      expect(() => getRecipeCoverImageUrl({ id: "r", title: "" }, [])).not.toThrow();
+      expect(() => getRecipeCoverImageUrl({ ...recipe, title: "" }, [])).not.toThrow();
+    });
+  });
+
+  describe("getRecipeCoverDisplay", () => {
+    it.each([
+      ["ai-placeholder", "image", "AI generated"],
+      ["chef-upload", "image", "Chef photo"],
+      ["chef-upload", "stylized", "Editorialized chef photo"],
+      ["spoon", "image", "Chef photo"],
+      ["spoon", "stylized", "Editorialized chef photo"],
+      ["import", "image", "Imported photo"],
+    ] as const)("labels %s/%s as %s", (sourceType, variant, provenanceLabel) => {
+      const display = getRecipeCoverDisplay(
+        { id: "r", title: "Tomato Soup", activeCoverId: "active", activeCoverVariant: variant, coverMode: "manual" },
+        [fakeCover({ id: "active", sourceType, imageUrl: "raw", stylizedImageUrl: "stylized" })],
+      );
+      expect(display).toMatchObject({
+        coverId: "active",
+        activeVariant: variant,
+        provenanceLabel,
+      });
+    });
+  });
+
+  describe("setActiveRecipeCover", () => {
+    it("sets recipe active cover, variant, and manual cover mode", async () => {
+      const cover = await db.recipeCover.create({
+        data: {
+          recipeId,
+          imageUrl: "raw",
+          stylizedImageUrl: "stylized",
+          sourceType: "chef-upload",
+        },
+      });
+
+      const result = await setActiveRecipeCover(db, { recipeId, coverId: cover.id, variant: "stylized" });
+      expect(result.activeCoverId).toBe(cover.id);
+      expect(result.activeCoverVariant).toBe("stylized");
+      expect(result.coverMode).toBe("manual");
+    });
+
+    it("rejects an archived cover", async () => {
+      const cover = await db.recipeCover.create({
+        data: {
+          recipeId,
+          imageUrl: "raw",
+          sourceType: "chef-upload",
+          status: "archived",
+          archivedAt: new Date("2026-02-01"),
+        },
+      });
+
+      await expect(setActiveRecipeCover(db, { recipeId, coverId: cover.id, variant: "image" }))
+        .rejects.toThrow("Cannot activate an archived cover");
+    });
+
+    it("rejects a missing stylized variant URL", async () => {
+      const cover = await db.recipeCover.create({
+        data: {
+          recipeId,
+          imageUrl: "raw",
+          sourceType: "chef-upload",
+        },
+      });
+
+      await expect(setActiveRecipeCover(db, { recipeId, coverId: cover.id, variant: "stylized" }))
+        .rejects.toThrow("Selected cover variant is unavailable");
+    });
+  });
+
+  describe("archiveRecipeCover", () => {
+    it("archives an inactive cover", async () => {
+      const cover = await db.recipeCover.create({
+        data: { recipeId, imageUrl: "raw", sourceType: "chef-upload" },
+      });
+
+      const result = await archiveRecipeCover(db, { recipeId, coverId: cover.id });
+      expect(result.archivedCover.status).toBe("archived");
+      expect(result.archivedCover.archivedAt).toBeInstanceOf(Date);
+    });
+
+    it("requires a replacement or explicit no-cover state for the active cover", async () => {
+      const cover = await db.recipeCover.create({
+        data: { recipeId, imageUrl: "raw", sourceType: "chef-upload" },
+      });
+      await db.recipe.update({
+        where: { id: recipeId },
+        data: { activeCoverId: cover.id, activeCoverVariant: "image", coverMode: "manual" },
+      });
+
+      await expect(archiveRecipeCover(db, { recipeId, coverId: cover.id }))
+        .rejects.toThrow("Archiving the active cover requires a replacement or confirmNoCover");
+    });
+
+    it("sets coverMode none when archiving the active cover with confirmation", async () => {
+      const cover = await db.recipeCover.create({
+        data: { recipeId, imageUrl: "raw", sourceType: "chef-upload" },
+      });
+      await db.recipe.update({
+        where: { id: recipeId },
+        data: { activeCoverId: cover.id, activeCoverVariant: "image", coverMode: "manual" },
+      });
+
+      const result = await archiveRecipeCover(db, { recipeId, coverId: cover.id, confirmNoCover: true });
+      expect(result.recipe).toMatchObject({
+        activeCoverId: null,
+        activeCoverVariant: null,
+        coverMode: "none",
+      });
+    });
+  });
+
+  describe("backfillActiveCoverForRecipe", () => {
+    it("chooses the newest ready non-archived cover with a non-empty display URL", async () => {
+      await db.recipeCover.create({
+        data: {
+          id: "old-real",
+          recipeId,
+          imageUrl: "old",
+          sourceType: "chef-upload",
+          createdAt: new Date("2026-01-01"),
+        },
+      });
+      const winner = await db.recipeCover.create({
+        data: {
+          id: "winner",
+          recipeId,
+          imageUrl: "raw",
+          stylizedImageUrl: "stylized",
+          sourceType: "spoon",
+          createdAt: new Date("2026-02-01"),
+        },
+      });
+      await db.recipeCover.create({
+        data: {
+          id: "new-empty",
+          recipeId,
+          imageUrl: "",
+          stylizedImageUrl: "",
+          sourceType: "ai-placeholder",
+          createdAt: new Date("2026-03-01"),
+        },
+      });
+
+      const recipe = await backfillActiveCoverForRecipe(db, recipeId);
+      expect(recipe.activeCoverId).toBe(winner.id);
+      expect(recipe.activeCoverVariant).toBe("stylized");
+      expect(recipe.coverMode).toBe("auto");
+    });
+
+    it("leaves active fields null when no ready displayable cover exists", async () => {
+      await db.recipeCover.create({
+        data: {
+          recipeId,
+          imageUrl: "",
+          sourceType: "ai-placeholder",
+        },
+      });
+
+      const recipe = await backfillActiveCoverForRecipe(db, recipeId);
+      expect(recipe.activeCoverId).toBeNull();
+      expect(recipe.activeCoverVariant).toBeNull();
+      expect(recipe.coverMode).toBe("auto");
     });
   });
 
