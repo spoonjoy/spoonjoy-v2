@@ -112,17 +112,37 @@ describe("SpoonDialog", () => {
     expect(screen.getByTestId("spoon-photo-picker")).toHaveTextContent("cook.png");
   });
 
-  it("when isOriginCookCandidate=true shows a photo-required hint and disables submit until photo is provided", async () => {
-    renderDialog({ isOriginCookCandidate: true });
-    expect(await screen.findByText(/photo required/i)).toBeInTheDocument();
+  it("shows the first-chef cover prompt without requiring a photo", async () => {
+    renderDialog({ isOriginCookCandidate: true, coverPromptMode: "first-photo" });
+    expect(await screen.findByText("Add a photo to create the recipe cover")).toBeInTheDocument();
     const submit = screen.getByRole("button", { name: /save spoon/i });
     expect(submit).toBeDisabled();
-    await userEvent.type(screen.getByLabelText(/note/i), "ignored without photo");
-    expect(submit).toBeDisabled();
+    await userEvent.type(screen.getByLabelText(/note/i), "first cook, no photo");
+    expect(submit).not.toBeDisabled();
 
     const fileInput = screen.getByLabelText(/photo/i) as HTMLInputElement;
     await userEvent.upload(fileInput, makeFile("a.png", "image/png"));
     expect(submit).not.toBeDisabled();
+  });
+
+  it("shows an owner cover opt-in checkbox when a later spoon photo is selected", async () => {
+    renderDialog({ coverPromptMode: "optional-update" });
+    expect(screen.queryByRole("checkbox", { name: /use this photo as recipe cover/i })).toBeNull();
+
+    const fileInput = (await screen.findByLabelText(/photo/i)) as HTMLInputElement;
+    await userEvent.upload(fileInput, makeFile("spoon-cover.png", "image/png"));
+
+    const checkbox = screen.getByRole("checkbox", { name: /use this photo as recipe cover/i });
+    expect(checkbox).not.toBeChecked();
+    await userEvent.click(checkbox);
+    expect(checkbox).toBeChecked();
+  });
+
+  it("does not show recipe-cover controls for non-owner spoon posts", async () => {
+    renderDialog({ coverPromptMode: "none" });
+    expect(await screen.findByLabelText(/photo/i)).toBeInTheDocument();
+    expect(screen.queryByText("Add a photo to create the recipe cover")).toBeNull();
+    expect(screen.queryByRole("checkbox", { name: /recipe cover/i })).toBeNull();
   });
 
   it("rejects MIME types not in the food-photo allow-list with an inline error", async () => {
@@ -166,6 +186,7 @@ describe("SpoonDialog", () => {
             onClose={onClose}
             actionUrl="/recipes/r1"
             isOriginCookCandidate={false}
+            coverPromptMode="optional-update"
           />
         ),
       },
@@ -180,10 +201,13 @@ describe("SpoonDialog", () => {
     ]);
     render(<Stub initialEntries={["/"]} />);
     await userEvent.type(await screen.findByLabelText(/note/i), "tasted ok");
+    await userEvent.upload(screen.getByLabelText(/photo/i), makeFile("cover.png", "image/png"));
+    await userEvent.click(screen.getByRole("checkbox", { name: /use this photo as recipe cover/i }));
     await userEvent.click(screen.getByRole("button", { name: /save spoon/i }));
     await waitFor(() => expect(captured).not.toBeNull());
     expect(captured!.get("intent")).toBe("createSpoon");
     expect(captured!.get("note")).toBe("tasted ok");
+    expect(captured!.get("useAsRecipeCover")).toBe("true");
   });
 
   it("locks the form and ignores duplicate submits while a photo is uploading", async () => {

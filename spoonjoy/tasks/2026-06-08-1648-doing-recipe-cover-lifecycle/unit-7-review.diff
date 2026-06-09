@@ -1,0 +1,607 @@
+diff --git a/app/components/recipe/SpoonDialog.tsx b/app/components/recipe/SpoonDialog.tsx
+index 2869b2c8..6cb549b2 100644
+--- a/app/components/recipe/SpoonDialog.tsx
++++ b/app/components/recipe/SpoonDialog.tsx
+@@ -6,6 +6,7 @@ import { Field, Label } from "../ui/fieldset";
+ import { Input } from "../ui/input";
+ import { Textarea } from "../ui/textarea";
+ import { Button } from "../ui/button";
++import { Checkbox, CheckboxField } from "../ui/checkbox";
+ import {
+   FOOD_IMAGE_ACCEPT,
+   FOOD_IMAGE_SIZE_MESSAGE,
+@@ -32,6 +33,7 @@ export interface SpoonDialogProps {
+   onClose: () => void;
+   actionUrl: string;
+   isOriginCookCandidate: boolean;
++  coverPromptMode?: "none" | "first-photo" | "optional-update";
+   errorMessage?: string | null;
+ }
+ 
+@@ -40,6 +42,7 @@ export function SpoonDialog({
+   onClose,
+   actionUrl,
+   isOriginCookCandidate,
++  coverPromptMode = "none",
+   errorMessage,
+ }: SpoonDialogProps) {
+   const noteId = useId();
+@@ -57,6 +60,7 @@ export function SpoonDialog({
+   const [cookedAt, setCookedAt] = useState("");
+   const [photoFile, setPhotoFile] = useState<File | null>(null);
+   const [photoError, setPhotoError] = useState<string | null>(null);
++  const [useAsRecipeCover, setUseAsRecipeCover] = useState(false);
+   const [submitStarted, setSubmitStarted] = useState(false);
+ 
+   useEffect(() => {
+@@ -66,11 +70,18 @@ export function SpoonDialog({
+       setCookedAt("");
+       setPhotoFile(null);
+       setPhotoError(null);
++      setUseAsRecipeCover(false);
+       setSubmitStarted(false);
+       submitInFlightRef.current = false;
+     }
+   }, [isOpen]);
+ 
++  useEffect(() => {
++    if (!photoFile) {
++      setUseAsRecipeCover(false);
++    }
++  }, [photoFile]);
++
+   useEffect(() => {
+     if (navigation.state === "idle") {
+       setSubmitStarted(false);
+@@ -83,11 +94,12 @@ export function SpoonDialog({
+     navigation.formData?.get("intent") === "createSpoon";
+   const isPosting = submitStarted || isRouterPostingSpoon;
+   const hasContent = note.trim() !== "" || nextTime.trim() !== "" || photoFile !== null;
+-  const requiresPhoto = isOriginCookCandidate;
+-  const hasValidContent = hasContent && (!requiresPhoto || photoFile !== null) && photoError === null;
++  const hasValidContent = hasContent && photoError === null;
+   const canSubmit = hasValidContent && !isPosting;
+   const submitStatus = photoFile ? "Uploading photo..." : "Saving spoon...";
+   const dialogOnClose = isPosting ? ignoreCloseWhilePosting : onClose;
++  const showFirstPhotoCoverPrompt = coverPromptMode === "first-photo";
++  const showCoverOptIn = coverPromptMode === "optional-update" && photoFile !== null;
+ 
+   function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+     const file = event.target.files?.[0] ?? null;
+@@ -130,9 +142,9 @@ export function SpoonDialog({
+           onSubmit={handleSubmit}
+         >
+           <input type="hidden" name="intent" value="createSpoon" />
+-          {requiresPhoto ? (
++          {showFirstPhotoCoverPrompt ? (
+             <p className="text-sm text-[var(--sj-brass)]">
+-              Photo required for your own cook.
++              Add a photo to create the recipe cover
+             </p>
+           ) : null}
+           {errorMessage ? (
+@@ -179,6 +191,18 @@ export function SpoonDialog({
+               </p>
+             ) : null}
+           </Field>
++          {showCoverOptIn ? (
++            <CheckboxField>
++              <Checkbox
++                name="useAsRecipeCover"
++                value="true"
++                checked={useAsRecipeCover}
++                onChange={setUseAsRecipeCover}
++                disabled={isPosting}
++              />
++              <Label>Use this photo as recipe cover</Label>
++            </CheckboxField>
++          ) : null}
+           <Field>
+             <Label htmlFor={noteId}>Note</Label>
+             <Textarea
+diff --git a/app/lib/recipe-detail.server.ts b/app/lib/recipe-detail.server.ts
+index 2c6d4d00..2f0b38ac 100644
+--- a/app/lib/recipe-detail.server.ts
++++ b/app/lib/recipe-detail.server.ts
+@@ -1,7 +1,9 @@
+ import type { AppLoadContext } from "react-router";
+ import { redirect } from "react-router";
++import { deferBackgroundTask } from "~/lib/background-task.server";
+ import { getRequestDb } from "~/lib/route-platform.server";
+ import { createCover, getRecipeCoverDisplay } from "~/lib/recipe-cover.server";
++import { activateSpoonCoverForDecision } from "~/lib/spoon-cover-activation.server";
+ import {
+   createSpoon,
+   deleteSpoon,
+@@ -19,6 +21,11 @@ import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
+ import { absoluteUrlFromRequest, recipeOgPath } from "~/lib/og-image.server";
+ import type { PostHogServerEnv } from "~/lib/analytics-server";
+ import type { ImageGenEnv } from "~/lib/image-gen.server";
++import {
++  decideSpoonCoverCreation,
++  getSpoonCoverPromptMode,
++  hasActiveRealRecipeCover,
++} from "~/lib/spoon-cover-decision.server";
+ 
+ interface CloudflareContextLike {
+   cloudflare?: {
+@@ -75,6 +82,7 @@ function getCloudflareCtx(context: AppLoadContext): {
+   };
+ }
+ 
++
+ interface RecipeDetailRouteArgs {
+   request: Request;
+   params: { id: string };
+@@ -108,6 +116,17 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
+       covers: {
+         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+       },
++      activeCover: {
++        select: {
++          id: true,
++          recipeId: true,
++          imageUrl: true,
++          stylizedImageUrl: true,
++          sourceType: true,
++          status: true,
++          archivedAt: true,
++        },
++      },
+       steps: {
+         orderBy: {
+           stepNum: "asc",
+@@ -143,6 +162,7 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
+ 
+   const isOwner = userId !== null && recipe.chefId === userId;
+   const coverDisplay = getRecipeCoverDisplay(recipe, recipe.covers);
++  const activeRealCover = hasActiveRealRecipeCover(recipe);
+   const coverImageUrl = coverDisplay?.displayUrl ?? null;
+   const coverProvenanceLabel = coverDisplay?.provenanceLabel ?? null;
+   const canonicalUrl = absoluteUrlFromRequest(request.url, `/recipes/${id}`);
+@@ -233,6 +253,12 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
+     hasIngredientsInShoppingList,
+     spoons,
+     isOriginCookCandidate: originCookCandidate,
++    coverPromptMode: getSpoonCoverPromptMode({
++      isOwner,
++      isOriginCookCandidate: originCookCandidate,
++      coverMode: recipe.coverMode,
++      hasActiveRealCover: activeRealCover,
++    }),
+     isAuthenticated: Boolean(userId),
+   };
+ }
+@@ -249,6 +275,7 @@ async function handleCreateSpoon(
+   const noteRaw = formData.get("note");
+   const nextTimeRaw = formData.get("nextTime");
+   const cookedAtRaw = formData.get("cookedAt");
++  const useAsRecipeCover = formData.get("useAsRecipeCover") === "true";
+   const note = typeof noteRaw === "string" ? noteRaw : undefined;
+   const nextTime = typeof nextTimeRaw === "string" ? nextTimeRaw : undefined;
+   let cookedAt: Date | undefined;
+@@ -285,28 +312,70 @@ async function handleCreateSpoon(
+     // VAPID not configured locally — skip silently.
+   }
+ 
+-  if (result.isOriginCook && result.spoon.photoUrl) {
++  if (result.spoon.photoUrl) {
+     const recipe = await database.recipe.findUniqueOrThrow({
+       where: { id: recipeId },
+-      select: { id: true, title: true },
+-    });
+-    const cover = await createCover(database, {
+-      recipeId,
+-      imageUrl: result.spoon.photoUrl,
+-      sourceType: "spoon",
+-      sourceSpoonId: result.spoon.id,
++      select: {
++        id: true,
++        title: true,
++        chefId: true,
++        coverMode: true,
++        activeCoverId: true,
++        activeCoverVariant: true,
++        activeCover: {
++          select: {
++            id: true,
++            recipeId: true,
++            imageUrl: true,
++            stylizedImageUrl: true,
++            sourceType: true,
++            status: true,
++            archivedAt: true,
++          },
++        },
++      },
+     });
+-    const task = scheduleSpoonCoverStylization({
+-      db: database,
++    const coverDecision = decideSpoonCoverCreation({
++      recipe,
+       userId,
+-      recipeId,
+-      coverId: cover.id,
+-      rawPhotoUrl: result.spoon.photoUrl,
+-      recipeTitle: recipe.title,
+-      env,
+-      bucket,
++      isOriginCook: result.isOriginCook,
++      hasPhoto: true,
++      useAsRecipeCover,
+     });
+-    await task;
++
++    if (coverDecision.shouldCreateCover) {
++      const cover = await createCover(database, {
++        recipeId,
++        imageUrl: result.spoon.photoUrl,
++        sourceType: "spoon",
++        sourceSpoonId: result.spoon.id,
++        status: "processing",
++        createdById: userId,
++        sourceImageUrl: result.spoon.photoUrl,
++        generationStatus: "processing",
++      });
++      await activateSpoonCoverForDecision(database, {
++        recipeId,
++        coverId: cover.id,
++        decision: coverDecision,
++        previousActiveCoverId: recipe.activeCoverId,
++      });
++      const stylizationInput = {
++        db: database,
++        userId,
++        recipeId,
++        coverId: cover.id,
++        rawPhotoUrl: result.spoon.photoUrl,
++        recipeTitle: recipe.title,
++        env,
++        bucket,
++      };
++      if (waitUntil) {
++        waitUntil(deferBackgroundTask(() => scheduleSpoonCoverStylization(stylizationInput)));
++      } else {
++        await scheduleSpoonCoverStylization(stylizationInput);
++      }
++    }
+   }
+ 
+   // Fan-out fellow_chef_origin_cook to every chef the spooner has previously
+diff --git a/app/lib/recipe-spoon.server.ts b/app/lib/recipe-spoon.server.ts
+index 05cef86a..a9485dea 100644
+--- a/app/lib/recipe-spoon.server.ts
++++ b/app/lib/recipe-spoon.server.ts
+@@ -144,10 +144,6 @@ export async function createSpoon(
+       "Spoon must include at least one of: photo, note, nextTime",
+     );
+   }
+-  if (isOriginCook && !photoUrl) {
+-    throw new SpoonValidationError("Origin-cook spoon requires a photo");
+-  }
+-
+   const data: Prisma.RecipeSpoonUncheckedCreateInput = {
+     chefId: input.chefId,
+     recipeId: input.recipeId,
+diff --git a/spoonjoy/tasks/2026-06-08-1648-doing-recipe-cover-lifecycle.md b/spoonjoy/tasks/2026-06-08-1648-doing-recipe-cover-lifecycle.md
+index 336a8e27..cf9d6a3b 100644
+--- a/spoonjoy/tasks/2026-06-08-1648-doing-recipe-cover-lifecycle.md
++++ b/spoonjoy/tasks/2026-06-08-1648-doing-recipe-cover-lifecycle.md
+@@ -143,15 +143,15 @@ Make Spoonjoy recipe imagery explicit, provenance-aware, and controllable across
+ **What**: Refactor shared generation status and telemetry helpers; cover success, failure, timeout, missing bucket, and stale-job branches.
+ **Acceptance**: Generation/job tests pass with 100% coverage on new branches and no warnings.
+ 
+-### ⬜ Unit 7a: Spoon Backend And Dialog Flow — Tests
++### ✅ Unit 7a: Spoon Backend And Dialog Flow — Tests
+ **What**: Add failing tests for optional first chef spoon photo, first chef photo auto-seed only when no active real cover exists, later chef spoon explicit cover opt-in, non-owner spoon photos never auto-update recipe cover, and preservation of upload progress/disabled submit behavior. The form field for later opt-in is `useAsRecipeCover=true`; first-chef/no-real-cover auto-seed does not require the field. First-chef auto-seed creates a cover in `status="processing"` with `sourceType="spoon"`, `imageUrl` set to the raw photo, `activeCoverId` set to that cover, and `activeCoverVariant` left null until stylization succeeds; the active display may use raw photo while processing, but it must not count as a real cover for the same cover's stylization activation.
+ **Acceptance**: Tests fail because current backend requires first chef photo and current dialog lacks cover opt-in controls.
+ 
+-### ⬜ Unit 7b: Spoon Backend And Dialog Flow — Implementation
++### ✅ Unit 7b: Spoon Backend And Dialog Flow — Implementation
+ **What**: Update `app/lib/recipe-spoon.server.ts`, `app/lib/recipe-detail.server.ts`, `app/routes/recipes.$id.tsx`, and `SpoonDialog` so first chef spoon photo is optional, first chef photo auto-seeds through helpers only when `coverMode="auto"` and no real cover exists, later chef spoon cover creation requires `useAsRecipeCover=true`, and posting stays disabled while uploading. Dialog copy: when owner recipe has no real cover and `coverMode="auto"`, show `Add a photo to create the recipe cover`; later owner spoon with photo shows checkbox label `Use this photo as recipe cover`; non-owner dialog shows no cover copy/control. First-chef auto-seed must schedule editorialization for the same processing cover and update that cover to `status="ready"`, `generationStatus="succeeded"`, and `activeCoverVariant="stylized"` when the stylized URL is available.
+ **Acceptance**: Unit 7a tests pass and non-owner users cannot invoke owner cover behavior through spoon creation.
+ 
+-### ⬜ Unit 7c: Spoon Backend And Dialog Flow — Coverage & Refactor
++### ✅ Unit 7c: Spoon Backend And Dialog Flow — Coverage & Refactor
+ **What**: Refactor spoon-cover decision logic into tested helpers and cover invalid form inputs, missing photo, invalid photo, owner/non-owner, and existing active-cover cases.
+ **Acceptance**: Spoon backend/dialog tests pass with 100% coverage on new branches and no warnings.
+ 
+@@ -271,3 +271,5 @@ Make Spoonjoy recipe imagery explicit, provenance-aware, and controllable across
+ - 2026-06-08 20:54 Unit 6a/6b/6c complete: added red tests for stylization success lifecycle, safe auto-activation, manual/stale-cover races, missing source images, failed generation telemetry, archived jobs, and active-real-cover guards (`unit-6a-red.log`); implemented durable processing/succeeded/failed cover generation state, prompt/style versioning, missing-source skip telemetry, and guarded auto-activation; focused and related suites passed (`unit-6b-green-attempt-1.log`, `unit-6b-related-attempt-1.log`, `unit-6c-green-attempt-1.log`, `unit-6c-green-attempt-2.log`, `unit-6c-targeted.log`), changed-file coverage reached 100% statements/branches/functions/lines (`unit-6c-coverage.log`), and builds passed (`unit-6b-build.log`, `unit-6c-build.log`).
+ - 2026-06-08 21:03 Fixed Unit 6 review findings: provider-resolution skips now persist failed editorial generation metadata on attempted jobs, and auto-activation uses a relation-aware atomic guard so a real active cover that becomes ready between read/write is not overwritten; regression red/green, coverage, targeted callers, and build passed (`unit-6-review-fix-red-2.log`, `unit-6-review-fix-green.log`, `unit-6-review-fix-coverage.log`, `unit-6-review-fix-targeted-2.log`, `unit-6-review-fix-build.log`).
+ - 2026-06-08 21:06 Unit 6 review converged after Round 2: fresh reviewer Curie verified provider-skip durable failure state, raw-cover preservation, atomic real-cover activation guard, changed-file coverage, targeted callers, and build evidence.
++- 2026-06-08 21:21 Unit 7a/7b/7c complete: added red tests for text-only first chef spoons, first-photo auto-seeded processing covers, existing-real-cover preservation, later owner opt-in covers, forged non-owner cover opt-in denial, non-owner hidden controls, and dialog form submission (`unit-7a-red.log`); implemented optional first-photo spoon posting, owner-only cover creation decisions, processing cover activation, waitUntil-deferred stylization dispatch, first-photo copy, later-photo checkbox opt-in, and no non-owner cover controls; targeted tests passed (`unit-7b-green-attempt-2.log`, `unit-7c-refactor-green-attempt-1.log`, `unit-7c-green-3.log`), new helper coverage reached 100% statements/branches/functions/lines (`unit-7c-helper-coverage-attempt-2.log`), and production build passed (`unit-7c-build-attempt-1.log`).
++- 2026-06-08 21:31 Fixed Unit 7 review finding: first-spoon auto-seed activation now uses a relation-aware atomic guard so a real/manual active cover selected between the decision read and activation write cannot be overwritten; regression red/green, new helper coverage, targeted Unit 7 tests, adjacent recipe-detail route tests, and build passed (`unit-7-review-fix-red.log`, `unit-7-review-fix-green-attempt-1.log`, `unit-7-review-fix-coverage-attempt-1.log`, `unit-7-review-fix-targeted-attempt-1.log`, `unit-7-review-fix-adjacent-attempt-1.log`, `unit-7-review-fix-build-attempt-1.log`).
+diff --git a/test/components/recipe/SpoonDialog.test.tsx b/test/components/recipe/SpoonDialog.test.tsx
+index 0eb999dd..e5e7b9b3 100644
+--- a/test/components/recipe/SpoonDialog.test.tsx
++++ b/test/components/recipe/SpoonDialog.test.tsx
+@@ -112,19 +112,39 @@ describe("SpoonDialog", () => {
+     expect(screen.getByTestId("spoon-photo-picker")).toHaveTextContent("cook.png");
+   });
+ 
+-  it("when isOriginCookCandidate=true shows a photo-required hint and disables submit until photo is provided", async () => {
+-    renderDialog({ isOriginCookCandidate: true });
+-    expect(await screen.findByText(/photo required/i)).toBeInTheDocument();
++  it("shows the first-chef cover prompt without requiring a photo", async () => {
++    renderDialog({ isOriginCookCandidate: true, coverPromptMode: "first-photo" });
++    expect(await screen.findByText("Add a photo to create the recipe cover")).toBeInTheDocument();
+     const submit = screen.getByRole("button", { name: /save spoon/i });
+     expect(submit).toBeDisabled();
+-    await userEvent.type(screen.getByLabelText(/note/i), "ignored without photo");
+-    expect(submit).toBeDisabled();
++    await userEvent.type(screen.getByLabelText(/note/i), "first cook, no photo");
++    expect(submit).not.toBeDisabled();
+ 
+     const fileInput = screen.getByLabelText(/photo/i) as HTMLInputElement;
+     await userEvent.upload(fileInput, makeFile("a.png", "image/png"));
+     expect(submit).not.toBeDisabled();
+   });
+ 
++  it("shows an owner cover opt-in checkbox when a later spoon photo is selected", async () => {
++    renderDialog({ coverPromptMode: "optional-update" });
++    expect(screen.queryByRole("checkbox", { name: /use this photo as recipe cover/i })).toBeNull();
++
++    const fileInput = (await screen.findByLabelText(/photo/i)) as HTMLInputElement;
++    await userEvent.upload(fileInput, makeFile("spoon-cover.png", "image/png"));
++
++    const checkbox = screen.getByRole("checkbox", { name: /use this photo as recipe cover/i });
++    expect(checkbox).not.toBeChecked();
++    await userEvent.click(checkbox);
++    expect(checkbox).toBeChecked();
++  });
++
++  it("does not show recipe-cover controls for non-owner spoon posts", async () => {
++    renderDialog({ coverPromptMode: "none" });
++    expect(await screen.findByLabelText(/photo/i)).toBeInTheDocument();
++    expect(screen.queryByText("Add a photo to create the recipe cover")).toBeNull();
++    expect(screen.queryByRole("checkbox", { name: /recipe cover/i })).toBeNull();
++  });
++
+   it("rejects MIME types not in the food-photo allow-list with an inline error", async () => {
+     renderDialog();
+     const fileInput = (await screen.findByLabelText(/photo/i)) as HTMLInputElement;
+@@ -166,6 +186,7 @@ describe("SpoonDialog", () => {
+             onClose={onClose}
+             actionUrl="/recipes/r1"
+             isOriginCookCandidate={false}
++            coverPromptMode="optional-update"
+           />
+         ),
+       },
+@@ -180,10 +201,13 @@ describe("SpoonDialog", () => {
+     ]);
+     render(<Stub initialEntries={["/"]} />);
+     await userEvent.type(await screen.findByLabelText(/note/i), "tasted ok");
++    await userEvent.upload(screen.getByLabelText(/photo/i), makeFile("cover.png", "image/png"));
++    await userEvent.click(screen.getByRole("checkbox", { name: /use this photo as recipe cover/i }));
+     await userEvent.click(screen.getByRole("button", { name: /save spoon/i }));
+     await waitFor(() => expect(captured).not.toBeNull());
+     expect(captured!.get("intent")).toBe("createSpoon");
+     expect(captured!.get("note")).toBe("tasted ok");
++    expect(captured!.get("useAsRecipeCover")).toBe("true");
+   });
+ 
+   it("locks the form and ignores duplicate submits while a photo is uploading", async () => {
+diff --git a/test/lib/recipe-spoon.server.test.ts b/test/lib/recipe-spoon.server.test.ts
+index 4a6d78ea..0b6a7322 100644
+--- a/test/lib/recipe-spoon.server.test.ts
++++ b/test/lib/recipe-spoon.server.test.ts
+@@ -180,16 +180,18 @@ describe("recipe-spoon.server", () => {
+       expect(result.spoon.nextTime).toBe("add cheese");
+     });
+ 
+-    it("origin-cook with no photoFile throws SpoonValidationError", async () => {
++    it("origin-cook can be logged with only a note", async () => {
+       const chef = await makeUser();
+       const recipe = await makeRecipe(chef.id);
+-      await expect(
+-        createSpoon(db, {
+-          chefId: chef.id,
+-          recipeId: recipe.id,
+-          note: "looks great",
+-        })
+-      ).rejects.toBeInstanceOf(SpoonValidationError);
++      const result = await createSpoon(db, {
++        chefId: chef.id,
++        recipeId: recipe.id,
++        note: "looks great",
++      });
++
++      expect(result.isOriginCook).toBe(true);
++      expect(result.spoon.note).toBe("looks great");
++      expect(result.spoon.photoUrl).toBeNull();
+     });
+ 
+     it("origin-cook with photoFile succeeds and reports isOriginCook=true", async () => {
+diff --git a/test/routes/recipes-id-spoons.test.tsx b/test/routes/recipes-id-spoons.test.tsx
+index 0d9aa177..a19cb8f0 100644
+--- a/test/routes/recipes-id-spoons.test.tsx
++++ b/test/routes/recipes-id-spoons.test.tsx
+@@ -412,6 +412,64 @@ describe("Recipes $id route — spoons + provenance", () => {
+     expect(stored[0].note).toBe("delicious");
+   });
+ 
++  it("action with intent=createSpoon ignores forged cover opt-in from non-owners", async () => {
++    const fd = new UndiciFormData();
++    fd.append("intent", "createSpoon");
++    fd.append("photo", validImageFile("guest-spoon.png"));
++    fd.append("useAsRecipeCover", "true");
++    const request = new UndiciRequest("http://localhost/recipes/x", {
++      method: "POST",
++      headers: { cookie: cookSessionCookie },
++      body: fd,
++    }) as unknown as Request;
++
++    const response = await action({
++      request,
++      params: { id: recipeId },
++      context: { cloudflare: { env: null } } as any,
++    });
++
++    const { data } = extractResponseData(response);
++    expect(data?.success).toBe(true);
++    await expect(db.recipeSpoon.findMany({ where: { recipeId, chefId: cookUserId } }))
++      .resolves.toMatchObject([{ photoUrl: expect.any(String) }]);
++    await expect(db.recipeCover.count({ where: { recipeId } })).resolves.toBe(0);
++    await expect(
++      db.recipe.findUniqueOrThrow({
++        where: { id: recipeId },
++        select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
++      }),
++    ).resolves.toEqual({
++      activeCoverId: null,
++      activeCoverVariant: null,
++      coverMode: "auto",
++    });
++  });
++
++  it("action with intent=createSpoon lets the recipe chef log an origin cook without a photo", async () => {
++    const fd = new UndiciFormData();
++    fd.append("intent", "createSpoon");
++    fd.append("note", "first cook, no camera");
++    const request = new UndiciRequest("http://localhost/recipes/x", {
++      method: "POST",
++      headers: { cookie: chefSessionCookie },
++      body: fd,
++    }) as unknown as Request;
++
++    const response = await action({
++      request,
++      params: { id: recipeId },
++      context: { cloudflare: { env: null } } as any,
++    });
++
++    const { data } = extractResponseData(response);
++    expect(data?.success).toBe(true);
++    expect(data?.isOriginCook).toBe(true);
++    await expect(db.recipeSpoon.findMany({ where: { recipeId, chefId: chefUserId } }))
++      .resolves.toMatchObject([{ note: "first cook, no camera", photoUrl: null }]);
++    await expect(db.recipeCover.count({ where: { recipeId } })).resolves.toBe(0);
++  });
++
+   it("action with intent=createSpoon as the origin cook writes a RecipeCover row and attempts stylization inline", async () => {
+     const fd = new UndiciFormData();
+     fd.append("intent", "createSpoon");
+@@ -438,8 +496,119 @@ describe("Recipes $id route — spoons + provenance", () => {
+     expect(covers).toHaveLength(1);
+     expect(covers[0].sourceType).toBe("spoon");
+     expect(covers[0].sourceSpoonId).not.toBeNull();
+-    expect(waitUntil).not.toHaveBeenCalled();
+-    expect(captured).toHaveLength(0);
++    expect(covers[0]).toMatchObject({
++      status: "processing",
++      generationStatus: "processing",
++      createdById: chefUserId,
++    });
++    await expect(
++      db.recipe.findUniqueOrThrow({
++        where: { id: recipeId },
++        select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
++      }),
++    ).resolves.toEqual({
++      activeCoverId: covers[0].id,
++      activeCoverVariant: null,
++      coverMode: "auto",
++    });
++    expect(waitUntil).toHaveBeenCalledTimes(1);
++    expect(captured).toHaveLength(1);
++  });
++
++  it("action with intent=createSpoon as the origin cook does not seed a cover when a real active cover exists", async () => {
++    const activeCover = await db.recipeCover.create({
++      data: {
++        recipeId,
++        imageUrl: "/photos/recipes/existing.jpg",
++        sourceType: "chef-upload",
++        status: "ready",
++      },
++    });
++    await db.recipe.update({
++      where: { id: recipeId },
++      data: {
++        activeCoverId: activeCover.id,
++        activeCoverVariant: "image",
++        coverMode: "manual",
++      },
++    });
++    const fd = new UndiciFormData();
++    fd.append("intent", "createSpoon");
++    fd.append("photo", validImageFile("spoon.png"));
++    const request = new UndiciRequest("http://localhost/recipes/x", {
++      method: "POST",
++      headers: { cookie: chefSessionCookie },
++      body: fd,
++    }) as unknown as Request;
++
++    const response = await action({
++      request,
++      params: { id: recipeId },
++      context: { cloudflare: { env: null } } as any,
++    });
++
++    const { data } = extractResponseData(response);
++    expect(data?.success).toBe(true);
++    await expect(db.recipeCover.count({ where: { recipeId } })).resolves.toBe(1);
++    await expect(
++      db.recipe.findUniqueOrThrow({
++        where: { id: recipeId },
++        select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
++      }),
++    ).resolves.toEqual({
++      activeCoverId: activeCover.id,
++      activeCoverVariant: "image",
++      coverMode: "manual",
++    });
++  });
++
++  it("action with intent=createSpoon lets a later chef spoon explicitly replace the cover", async () => {
++    await db.recipeSpoon.create({
++      data: { chefId: chefUserId, recipeId, note: "first cook" },
++    });
++    const fd = new UndiciFormData();
++    fd.append("intent", "createSpoon");
++    fd.append("photo", validImageFile("second-spoon.png"));
++    fd.append("useAsRecipeCover", "true");
++    const captured: Promise<unknown>[] = [];
++    const waitUntil = vi.fn((promise: Promise<unknown>) => {
++      captured.push(promise);
++    });
++    const request = new UndiciRequest("http://localhost/recipes/x", {
++      method: "POST",
++      headers: { cookie: chefSessionCookie },
++      body: fd,
++    }) as unknown as Request;
++
++    const response = await action({
++      request,
++      params: { id: recipeId },
++      context: { cloudflare: { env: null, ctx: { waitUntil } as any } } as any,
++    });
++
++    const { data } = extractResponseData(response);
++    expect(data?.success).toBe(true);
++    expect(data?.isOriginCook).toBe(false);
++    const cover = await db.recipeCover.findFirstOrThrow({ where: { recipeId } });
++    expect(cover).toMatchObject({
++      sourceType: "spoon",
++      status: "processing",
++      generationStatus: "processing",
++      createdById: chefUserId,
++    });
++    expect(cover.sourceSpoonId).not.toBeNull();
++    await expect(
++      db.recipe.findUniqueOrThrow({
++        where: { id: recipeId },
++        select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
++      }),
++    ).resolves.toEqual({
++      activeCoverId: cover.id,
++      activeCoverVariant: "image",
++      coverMode: "manual",
++    });
++    expect(waitUntil).toHaveBeenCalledTimes(1);
++    expect(captured).toHaveLength(1);
+   });
+ 
+   it("action with intent=createSpoon rejects a GIF spoon photo with 400", async () => {

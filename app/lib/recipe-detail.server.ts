@@ -1,7 +1,9 @@
 import type { AppLoadContext } from "react-router";
 import { redirect } from "react-router";
+import { deferBackgroundTask } from "~/lib/background-task.server";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { createCover, getRecipeCoverDisplay } from "~/lib/recipe-cover.server";
+import { activateSpoonCoverForDecision } from "~/lib/spoon-cover-activation.server";
 import {
   createSpoon,
   deleteSpoon,
@@ -19,6 +21,11 @@ import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
 import { absoluteUrlFromRequest, recipeOgPath } from "~/lib/og-image.server";
 import type { PostHogServerEnv } from "~/lib/analytics-server";
 import type { ImageGenEnv } from "~/lib/image-gen.server";
+import {
+  decideSpoonCoverCreation,
+  getSpoonCoverPromptMode,
+  hasActiveRealRecipeCover,
+} from "~/lib/spoon-cover-decision.server";
 
 interface CloudflareContextLike {
   cloudflare?: {
@@ -75,6 +82,7 @@ function getCloudflareCtx(context: AppLoadContext): {
   };
 }
 
+
 interface RecipeDetailRouteArgs {
   request: Request;
   params: { id: string };
@@ -107,6 +115,17 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
       },
       covers: {
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      },
+      activeCover: {
+        select: {
+          id: true,
+          recipeId: true,
+          imageUrl: true,
+          stylizedImageUrl: true,
+          sourceType: true,
+          status: true,
+          archivedAt: true,
+        },
       },
       steps: {
         orderBy: {
@@ -143,6 +162,7 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
 
   const isOwner = userId !== null && recipe.chefId === userId;
   const coverDisplay = getRecipeCoverDisplay(recipe, recipe.covers);
+  const activeRealCover = hasActiveRealRecipeCover(recipe);
   const coverImageUrl = coverDisplay?.displayUrl ?? null;
   const coverProvenanceLabel = coverDisplay?.provenanceLabel ?? null;
   const canonicalUrl = absoluteUrlFromRequest(request.url, `/recipes/${id}`);
@@ -233,6 +253,12 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
     hasIngredientsInShoppingList,
     spoons,
     isOriginCookCandidate: originCookCandidate,
+    coverPromptMode: getSpoonCoverPromptMode({
+      isOwner,
+      isOriginCookCandidate: originCookCandidate,
+      coverMode: recipe.coverMode,
+      hasActiveRealCover: activeRealCover,
+    }),
     isAuthenticated: Boolean(userId),
   };
 }
@@ -249,6 +275,7 @@ async function handleCreateSpoon(
   const noteRaw = formData.get("note");
   const nextTimeRaw = formData.get("nextTime");
   const cookedAtRaw = formData.get("cookedAt");
+  const useAsRecipeCover = formData.get("useAsRecipeCover") === "true";
   const note = typeof noteRaw === "string" ? noteRaw : undefined;
   const nextTime = typeof nextTimeRaw === "string" ? nextTimeRaw : undefined;
   let cookedAt: Date | undefined;
@@ -285,28 +312,70 @@ async function handleCreateSpoon(
     // VAPID not configured locally — skip silently.
   }
 
-  if (result.isOriginCook && result.spoon.photoUrl) {
+  if (result.spoon.photoUrl) {
     const recipe = await database.recipe.findUniqueOrThrow({
       where: { id: recipeId },
-      select: { id: true, title: true },
+      select: {
+        id: true,
+        title: true,
+        chefId: true,
+        coverMode: true,
+        activeCoverId: true,
+        activeCoverVariant: true,
+        activeCover: {
+          select: {
+            id: true,
+            recipeId: true,
+            imageUrl: true,
+            stylizedImageUrl: true,
+            sourceType: true,
+            status: true,
+            archivedAt: true,
+          },
+        },
+      },
     });
-    const cover = await createCover(database, {
-      recipeId,
-      imageUrl: result.spoon.photoUrl,
-      sourceType: "spoon",
-      sourceSpoonId: result.spoon.id,
-    });
-    const task = scheduleSpoonCoverStylization({
-      db: database,
+    const coverDecision = decideSpoonCoverCreation({
+      recipe,
       userId,
-      recipeId,
-      coverId: cover.id,
-      rawPhotoUrl: result.spoon.photoUrl,
-      recipeTitle: recipe.title,
-      env,
-      bucket,
+      isOriginCook: result.isOriginCook,
+      hasPhoto: true,
+      useAsRecipeCover,
     });
-    await task;
+
+    if (coverDecision.shouldCreateCover) {
+      const cover = await createCover(database, {
+        recipeId,
+        imageUrl: result.spoon.photoUrl,
+        sourceType: "spoon",
+        sourceSpoonId: result.spoon.id,
+        status: "processing",
+        createdById: userId,
+        sourceImageUrl: result.spoon.photoUrl,
+        generationStatus: "processing",
+      });
+      await activateSpoonCoverForDecision(database, {
+        recipeId,
+        coverId: cover.id,
+        decision: coverDecision,
+        previousActiveCoverId: recipe.activeCoverId,
+      });
+      const stylizationInput = {
+        db: database,
+        userId,
+        recipeId,
+        coverId: cover.id,
+        rawPhotoUrl: result.spoon.photoUrl,
+        recipeTitle: recipe.title,
+        env,
+        bucket,
+      };
+      if (waitUntil) {
+        waitUntil(deferBackgroundTask(() => scheduleSpoonCoverStylization(stylizationInput)));
+      } else {
+        await scheduleSpoonCoverStylization(stylizationInput);
+      }
+    }
   }
 
   // Fan-out fellow_chef_origin_cook to every chef the spooner has previously

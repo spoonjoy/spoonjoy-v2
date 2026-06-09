@@ -268,6 +268,7 @@ export default function RecipeDetail() {
   const savedInCookbookIds = loaderData.savedInCookbookIds ?? EMPTY_SAVED_COOKBOOK_IDS;
   const spoons = loaderData.spoons ?? EMPTY_SPOONS;
   const isOriginCookCandidate = loaderData.isOriginCookCandidate ?? false;
+  const coverPromptMode = loaderData.coverPromptMode ?? "none";
   const submit = useSubmit();
   const addToListFetcher = useFetcher();
   const createCookbookFetcher = useFetcher<typeof action>();
@@ -924,6 +925,7 @@ export default function RecipeDetail() {
         onClose={() => setIsSpoonDialogOpen(false)}
         actionUrl={`/recipes/${recipe.id}`}
         isOriginCookCandidate={isOriginCookCandidate}
+        coverPromptMode={coverPromptMode}
       />
 
       {/* Save to Cookbook Modal (Bottom Sheet) */}

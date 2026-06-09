@@ -180,16 +180,18 @@ describe("recipe-spoon.server", () => {
       expect(result.spoon.nextTime).toBe("add cheese");
     });
 
-    it("origin-cook with no photoFile throws SpoonValidationError", async () => {
+    it("origin-cook can be logged with only a note", async () => {
       const chef = await makeUser();
       const recipe = await makeRecipe(chef.id);
-      await expect(
-        createSpoon(db, {
-          chefId: chef.id,
-          recipeId: recipe.id,
-          note: "looks great",
-        })
-      ).rejects.toBeInstanceOf(SpoonValidationError);
+      const result = await createSpoon(db, {
+        chefId: chef.id,
+        recipeId: recipe.id,
+        note: "looks great",
+      });
+
+      expect(result.isOriginCook).toBe(true);
+      expect(result.spoon.note).toBe("looks great");
+      expect(result.spoon.photoUrl).toBeNull();
     });
 
     it("origin-cook with photoFile succeeds and reports isOriginCook=true", async () => {

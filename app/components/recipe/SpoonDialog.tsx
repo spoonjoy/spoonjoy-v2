@@ -6,6 +6,7 @@ import { Field, Label } from "../ui/fieldset";
 import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
 import { Button } from "../ui/button";
+import { Checkbox, CheckboxField } from "../ui/checkbox";
 import {
   FOOD_IMAGE_ACCEPT,
   FOOD_IMAGE_SIZE_MESSAGE,
@@ -32,6 +33,7 @@ export interface SpoonDialogProps {
   onClose: () => void;
   actionUrl: string;
   isOriginCookCandidate: boolean;
+  coverPromptMode?: "none" | "first-photo" | "optional-update";
   errorMessage?: string | null;
 }
 
@@ -40,6 +42,7 @@ export function SpoonDialog({
   onClose,
   actionUrl,
   isOriginCookCandidate,
+  coverPromptMode = "none",
   errorMessage,
 }: SpoonDialogProps) {
   const noteId = useId();
@@ -57,6 +60,7 @@ export function SpoonDialog({
   const [cookedAt, setCookedAt] = useState("");
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoError, setPhotoError] = useState<string | null>(null);
+  const [useAsRecipeCover, setUseAsRecipeCover] = useState(false);
   const [submitStarted, setSubmitStarted] = useState(false);
 
   useEffect(() => {
@@ -66,10 +70,17 @@ export function SpoonDialog({
       setCookedAt("");
       setPhotoFile(null);
       setPhotoError(null);
+      setUseAsRecipeCover(false);
       setSubmitStarted(false);
       submitInFlightRef.current = false;
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!photoFile) {
+      setUseAsRecipeCover(false);
+    }
+  }, [photoFile]);
 
   useEffect(() => {
     if (navigation.state === "idle") {
@@ -83,11 +94,12 @@ export function SpoonDialog({
     navigation.formData?.get("intent") === "createSpoon";
   const isPosting = submitStarted || isRouterPostingSpoon;
   const hasContent = note.trim() !== "" || nextTime.trim() !== "" || photoFile !== null;
-  const requiresPhoto = isOriginCookCandidate;
-  const hasValidContent = hasContent && (!requiresPhoto || photoFile !== null) && photoError === null;
+  const hasValidContent = hasContent && photoError === null;
   const canSubmit = hasValidContent && !isPosting;
   const submitStatus = photoFile ? "Uploading photo..." : "Saving spoon...";
   const dialogOnClose = isPosting ? ignoreCloseWhilePosting : onClose;
+  const showFirstPhotoCoverPrompt = coverPromptMode === "first-photo";
+  const showCoverOptIn = coverPromptMode === "optional-update" && photoFile !== null;
 
   function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null;
@@ -130,9 +142,9 @@ export function SpoonDialog({
           onSubmit={handleSubmit}
         >
           <input type="hidden" name="intent" value="createSpoon" />
-          {requiresPhoto ? (
+          {showFirstPhotoCoverPrompt ? (
             <p className="text-sm text-[var(--sj-brass)]">
-              Photo required for your own cook.
+              Add a photo to create the recipe cover
             </p>
           ) : null}
           {errorMessage ? (
@@ -179,6 +191,18 @@ export function SpoonDialog({
               </p>
             ) : null}
           </Field>
+          {showCoverOptIn ? (
+            <CheckboxField>
+              <Checkbox
+                name="useAsRecipeCover"
+                value="true"
+                checked={useAsRecipeCover}
+                onChange={setUseAsRecipeCover}
+                disabled={isPosting}
+              />
+              <Label>Use this photo as recipe cover</Label>
+            </CheckboxField>
+          ) : null}
           <Field>
             <Label htmlFor={noteId}>Note</Label>
             <Textarea

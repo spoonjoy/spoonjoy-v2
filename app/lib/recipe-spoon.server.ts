@@ -144,10 +144,6 @@ export async function createSpoon(
       "Spoon must include at least one of: photo, note, nextTime",
     );
   }
-  if (isOriginCook && !photoUrl) {
-    throw new SpoonValidationError("Origin-cook spoon requires a photo");
-  }
-
   const data: Prisma.RecipeSpoonUncheckedCreateInput = {
     chefId: input.chefId,
     recipeId: input.recipeId,

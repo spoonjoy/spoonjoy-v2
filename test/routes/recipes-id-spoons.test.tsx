@@ -412,6 +412,64 @@ describe("Recipes $id route — spoons + provenance", () => {
     expect(stored[0].note).toBe("delicious");
   });
 
+  it("action with intent=createSpoon ignores forged cover opt-in from non-owners", async () => {
+    const fd = new UndiciFormData();
+    fd.append("intent", "createSpoon");
+    fd.append("photo", validImageFile("guest-spoon.png"));
+    fd.append("useAsRecipeCover", "true");
+    const request = new UndiciRequest("http://localhost/recipes/x", {
+      method: "POST",
+      headers: { cookie: cookSessionCookie },
+      body: fd,
+    }) as unknown as Request;
+
+    const response = await action({
+      request,
+      params: { id: recipeId },
+      context: { cloudflare: { env: null } } as any,
+    });
+
+    const { data } = extractResponseData(response);
+    expect(data?.success).toBe(true);
+    await expect(db.recipeSpoon.findMany({ where: { recipeId, chefId: cookUserId } }))
+      .resolves.toMatchObject([{ photoUrl: expect.any(String) }]);
+    await expect(db.recipeCover.count({ where: { recipeId } })).resolves.toBe(0);
+    await expect(
+      db.recipe.findUniqueOrThrow({
+        where: { id: recipeId },
+        select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
+      }),
+    ).resolves.toEqual({
+      activeCoverId: null,
+      activeCoverVariant: null,
+      coverMode: "auto",
+    });
+  });
+
+  it("action with intent=createSpoon lets the recipe chef log an origin cook without a photo", async () => {
+    const fd = new UndiciFormData();
+    fd.append("intent", "createSpoon");
+    fd.append("note", "first cook, no camera");
+    const request = new UndiciRequest("http://localhost/recipes/x", {
+      method: "POST",
+      headers: { cookie: chefSessionCookie },
+      body: fd,
+    }) as unknown as Request;
+
+    const response = await action({
+      request,
+      params: { id: recipeId },
+      context: { cloudflare: { env: null } } as any,
+    });
+
+    const { data } = extractResponseData(response);
+    expect(data?.success).toBe(true);
+    expect(data?.isOriginCook).toBe(true);
+    await expect(db.recipeSpoon.findMany({ where: { recipeId, chefId: chefUserId } }))
+      .resolves.toMatchObject([{ note: "first cook, no camera", photoUrl: null }]);
+    await expect(db.recipeCover.count({ where: { recipeId } })).resolves.toBe(0);
+  });
+
   it("action with intent=createSpoon as the origin cook writes a RecipeCover row and attempts stylization inline", async () => {
     const fd = new UndiciFormData();
     fd.append("intent", "createSpoon");
@@ -438,8 +496,119 @@ describe("Recipes $id route — spoons + provenance", () => {
     expect(covers).toHaveLength(1);
     expect(covers[0].sourceType).toBe("spoon");
     expect(covers[0].sourceSpoonId).not.toBeNull();
-    expect(waitUntil).not.toHaveBeenCalled();
-    expect(captured).toHaveLength(0);
+    expect(covers[0]).toMatchObject({
+      status: "processing",
+      generationStatus: "processing",
+      createdById: chefUserId,
+    });
+    await expect(
+      db.recipe.findUniqueOrThrow({
+        where: { id: recipeId },
+        select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
+      }),
+    ).resolves.toEqual({
+      activeCoverId: covers[0].id,
+      activeCoverVariant: null,
+      coverMode: "auto",
+    });
+    expect(waitUntil).toHaveBeenCalledTimes(1);
+    expect(captured).toHaveLength(1);
+  });
+
+  it("action with intent=createSpoon as the origin cook does not seed a cover when a real active cover exists", async () => {
+    const activeCover = await db.recipeCover.create({
+      data: {
+        recipeId,
+        imageUrl: "/photos/recipes/existing.jpg",
+        sourceType: "chef-upload",
+        status: "ready",
+      },
+    });
+    await db.recipe.update({
+      where: { id: recipeId },
+      data: {
+        activeCoverId: activeCover.id,
+        activeCoverVariant: "image",
+        coverMode: "manual",
+      },
+    });
+    const fd = new UndiciFormData();
+    fd.append("intent", "createSpoon");
+    fd.append("photo", validImageFile("spoon.png"));
+    const request = new UndiciRequest("http://localhost/recipes/x", {
+      method: "POST",
+      headers: { cookie: chefSessionCookie },
+      body: fd,
+    }) as unknown as Request;
+
+    const response = await action({
+      request,
+      params: { id: recipeId },
+      context: { cloudflare: { env: null } } as any,
+    });
+
+    const { data } = extractResponseData(response);
+    expect(data?.success).toBe(true);
+    await expect(db.recipeCover.count({ where: { recipeId } })).resolves.toBe(1);
+    await expect(
+      db.recipe.findUniqueOrThrow({
+        where: { id: recipeId },
+        select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
+      }),
+    ).resolves.toEqual({
+      activeCoverId: activeCover.id,
+      activeCoverVariant: "image",
+      coverMode: "manual",
+    });
+  });
+
+  it("action with intent=createSpoon lets a later chef spoon explicitly replace the cover", async () => {
+    await db.recipeSpoon.create({
+      data: { chefId: chefUserId, recipeId, note: "first cook" },
+    });
+    const fd = new UndiciFormData();
+    fd.append("intent", "createSpoon");
+    fd.append("photo", validImageFile("second-spoon.png"));
+    fd.append("useAsRecipeCover", "true");
+    const captured: Promise<unknown>[] = [];
+    const waitUntil = vi.fn((promise: Promise<unknown>) => {
+      captured.push(promise);
+    });
+    const request = new UndiciRequest("http://localhost/recipes/x", {
+      method: "POST",
+      headers: { cookie: chefSessionCookie },
+      body: fd,
+    }) as unknown as Request;
+
+    const response = await action({
+      request,
+      params: { id: recipeId },
+      context: { cloudflare: { env: null, ctx: { waitUntil } as any } } as any,
+    });
+
+    const { data } = extractResponseData(response);
+    expect(data?.success).toBe(true);
+    expect(data?.isOriginCook).toBe(false);
+    const cover = await db.recipeCover.findFirstOrThrow({ where: { recipeId } });
+    expect(cover).toMatchObject({
+      sourceType: "spoon",
+      status: "processing",
+      generationStatus: "processing",
+      createdById: chefUserId,
+    });
+    expect(cover.sourceSpoonId).not.toBeNull();
+    await expect(
+      db.recipe.findUniqueOrThrow({
+        where: { id: recipeId },
+        select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
+      }),
+    ).resolves.toEqual({
+      activeCoverId: cover.id,
+      activeCoverVariant: "image",
+      coverMode: "manual",
+    });
+    expect(waitUntil).toHaveBeenCalledTimes(1);
+    expect(captured).toHaveLength(1);
   });
 
   it("action with intent=createSpoon rejects a GIF spoon photo with 400", async () => {
