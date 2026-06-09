@@ -58,7 +58,7 @@ Make Spoonjoy recipe imagery explicit, provenance-aware, and controllable across
 
 **CRITICAL: Every unit header MUST start with status emoji (⬜ for new units).**
 
-### ⬜ Unit 0: Setup/Research
+### ✅ Unit 0: Setup/Research
 **What**: Inventory every active-cover read/write path before editing: `prisma/schema.prisma`, `prisma/seed.ts`, root D1 SQL migrations under `migrations/`, `app/lib/recipe-cover.server.ts`, `app/lib/ai-placeholder-cover.server.ts`, `app/lib/spoon-cover-stylization.server.ts`, `app/lib/api-v1.server.ts`, `app/lib/api-v1-openapi.server.ts`, `app/lib/recipe-detail.server.ts`, `app/lib/recipe-spoon.server.ts`, `app/lib/spoonjoy-api.server.ts`, `app/lib/search.server.ts`, `app/lib/recipe-fork.server.ts`, `app/lib/recipe-import.server.ts`, `app/routes/recipes.new.tsx`, `app/routes/recipes.$id.edit.tsx`, `app/routes/recipes.$id.tsx`, `app/routes/recipes._index.tsx`, `app/routes/_index.tsx`, `app/routes/users.$identifier.tsx`, `app/routes/cookbooks.$id.tsx`, `app/routes/search.tsx`, `app/routes/og.recipes.$id.png.tsx`, `app/routes/og.cookbooks.$id.png.tsx`, `app/components/recipe/RecipeHeader.tsx`, `app/components/recipe/SpoonDialog.tsx`, `app/components/pantry/RecipeGrid.tsx`, `app/components/cookbook/CookbookCoverArt.tsx`, and `app/lib/og-image.server.tsx`.
 **Output**: Notes saved under `./2026-06-08-1648-doing-recipe-cover-lifecycle/cover-read-write-inventory.md`.
 **Acceptance**: Inventory lists each read/write path, the current behavior, and the unit that will change or intentionally leave it.
@@ -237,3 +237,4 @@ Make Spoonjoy recipe imagery explicit, provenance-aware, and controllable across
 - 2026-06-08 17:42 Tinfoil scrutiny converged
 - 2026-06-08 17:49 Moved docs to spoonjoy/tasks, renamed branch, and addressed Stranger With Candy findings
 - 2026-06-08 17:52 Stranger With Candy scrutiny converged; doing doc ready for execution
+- 2026-06-08 17:55 Unit 0 complete: inventoried recipe cover read/write paths
