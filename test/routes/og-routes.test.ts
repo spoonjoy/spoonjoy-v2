@@ -65,6 +65,14 @@ function latestOgImageSources() {
   return imageSourcesIn(element);
 }
 
+function expectDynamicOgFreshness(response: Response) {
+  const coverKey = response.headers.get("X-Spoonjoy-OG-Cover-Key");
+  expect(response.headers.get("Cache-Control")).toBe("public, no-cache, must-revalidate");
+  expect(coverKey).toMatch(/^W\/"og-[a-f0-9]+-\d+"$/);
+  expect(response.headers.get("ETag")).toBe(coverKey);
+  return coverKey;
+}
+
 describe("dynamic OG image routes", () => {
   let userId: string;
 
@@ -155,9 +163,53 @@ describe("dynamic OG image routes", () => {
     expect(await response.text()).toBe("PNG");
     expect(response.headers.get("Content-Type")).toContain("image/png");
     expect(response.headers.get("X-OG-Width")).toBe("1200");
+    const firstCoverKey = expectDynamicOgFreshness(response);
     expect(mocks.create).toHaveBeenCalledTimes(1);
     expect(latestOgImageSources()).toContain("https://spoonjoy.app/photos/tomato-editorial.jpg");
     expect(latestOgImageSources()).not.toContain("https://spoonjoy.app/photos/tomato-newer-archived.jpg");
+
+    mocks.create.mockClear();
+    await db.recipe.update({
+      where: { id: recipe.id },
+      data: { activeCoverVariant: "image" },
+    });
+    const updatedResponse = await recipeOgLoader({
+      request: new Request(`https://spoonjoy.app/og/recipes/${recipe.id}.png`),
+      params: { id: recipe.id },
+      context: { cloudflare: { env: null, ctx: { waitUntil: vi.fn() } } },
+    } as any);
+
+    const updatedCoverKey = expectDynamicOgFreshness(updatedResponse);
+    expect(updatedCoverKey).not.toBe(firstCoverKey);
+    expect(latestOgImageSources()).toContain("https://spoonjoy.app/photos/tomato.jpg");
+
+    mocks.create.mockClear();
+    await db.recipeCover.update({
+      where: { id: activeCover.id },
+      data: { status: "archived", archivedAt: new Date("2026-01-03T00:00:00.000Z") },
+    });
+    const archivedResponse = await recipeOgLoader({
+      request: new Request(`https://spoonjoy.app/og/recipes/${recipe.id}.png`),
+      params: { id: recipe.id },
+      context: { cloudflare: { env: null, ctx: { waitUntil: vi.fn() } } },
+    } as any);
+
+    expect(expectDynamicOgFreshness(archivedResponse)).not.toBe(updatedCoverKey);
+    expect(latestOgImageSources()).not.toContain("https://spoonjoy.app/photos/tomato.jpg");
+
+    mocks.create.mockClear();
+    await db.recipe.update({
+      where: { id: recipe.id },
+      data: { activeCoverId: null, activeCoverVariant: null, coverMode: "none" },
+    });
+    const noCoverResponse = await recipeOgLoader({
+      request: new Request(`https://spoonjoy.app/og/recipes/${recipe.id}.png`),
+      params: { id: recipe.id },
+      context: { cloudflare: { env: null, ctx: { waitUntil: vi.fn() } } },
+    } as any);
+
+    expect(expectDynamicOgFreshness(noCoverResponse)).not.toBe(updatedCoverKey);
+    expect(latestOgImageSources()).toEqual([]);
   });
 
   it("404s recipe OG cards for missing or deleted recipes", async () => {
@@ -235,9 +287,38 @@ describe("dynamic OG image routes", () => {
 
     expect(response.headers.get("Content-Type")).toContain("image/png");
     expect(await response.text()).toBe("PNG");
+    const firstCoverKey = expectDynamicOgFreshness(response);
     expect(mocks.create).toHaveBeenCalledTimes(1);
     expect(latestOgImageSources()).toContain("https://cdn.example.com/supper-editorial.jpg");
     expect(latestOgImageSources()).not.toContain("https://cdn.example.com/supper-newer-empty.jpg");
+
+    mocks.create.mockClear();
+    await db.recipe.update({
+      where: { id: activeRecipe.id },
+      data: { activeCoverVariant: "image" },
+    });
+    const updatedResponse = await cookbookOgLoader({
+      request: new Request(`https://spoonjoy.app/og/cookbooks/${cookbook.id}.png`),
+      params: { id: cookbook.id },
+      context: { cloudflare: { env: null } },
+    } as any);
+
+    expect(expectDynamicOgFreshness(updatedResponse)).not.toBe(firstCoverKey);
+    expect(latestOgImageSources()).toContain("https://cdn.example.com/supper-raw.jpg");
+
+    mocks.create.mockClear();
+    await db.recipe.update({
+      where: { id: activeRecipe.id },
+      data: { activeCoverId: null, activeCoverVariant: null, coverMode: "none" },
+    });
+    const noCoverResponse = await cookbookOgLoader({
+      request: new Request(`https://spoonjoy.app/og/cookbooks/${cookbook.id}.png`),
+      params: { id: cookbook.id },
+      context: { cloudflare: { env: null } },
+    } as any);
+
+    expect(expectDynamicOgFreshness(noCoverResponse)).not.toBe(firstCoverKey);
+    expect(latestOgImageSources()).toEqual([]);
   });
 
   it("404s cookbook OG cards for missing cookbooks", async () => {

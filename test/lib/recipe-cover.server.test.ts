@@ -8,8 +8,10 @@ import {
   getCurrentCover,
   getRecipeCoverDisplay,
   getRecipeCoverImageUrl,
+  getScopedActiveCover,
   listCoversForRecipe,
   makeFallbackPlaceholderSvg,
+  recipeCoverCacheSnapshot,
   setActiveRecipeCover,
 } from "~/lib/recipe-cover.server";
 import type { RecipeCover } from "@prisma/client";
@@ -344,6 +346,42 @@ describe("recipe-cover.server", () => {
 
     it("does not throw when recipe.title is an empty string", () => {
       expect(() => getRecipeCoverImageUrl({ ...recipe, title: "" }, [])).not.toThrow();
+    });
+  });
+
+  describe("active cover payload helpers", () => {
+    it("returns only same-recipe active covers and serializes cache snapshots", async () => {
+      const cover = await createCover(db, {
+        recipeId,
+        imageUrl: "https://example.com/raw.jpg",
+        stylizedImageUrl: "https://example.com/editorial.jpg",
+        sourceType: "spoon",
+        sourceImageUrl: "https://example.com/source.jpg",
+        createdById: chefId,
+        promptVersion: "editorial-v1",
+        styleVersion: "phone-to-editorial-v1",
+      });
+      const otherRecipe = await db.recipe.create({
+        data: { ...createTestRecipe(chefId), chefId },
+      });
+
+      expect(getScopedActiveCover({ id: recipeId, activeCover: cover })).toBe(cover);
+      expect(getScopedActiveCover({ id: otherRecipe.id, activeCover: cover })).toBeNull();
+      expect(getScopedActiveCover({ id: recipeId, activeCover: null })).toBeNull();
+      expect(recipeCoverCacheSnapshot(null)).toBeNull();
+      expect(recipeCoverCacheSnapshot(cover)).toMatchObject({
+        id: cover.id,
+        recipeId,
+        imageUrl: "https://example.com/raw.jpg",
+        stylizedImageUrl: "https://example.com/editorial.jpg",
+        sourceType: "spoon",
+        sourceImageUrl: "https://example.com/source.jpg",
+        createdById: chefId,
+        promptVersion: "editorial-v1",
+        styleVersion: "phone-to-editorial-v1",
+        archivedAt: null,
+        createdAt: cover.createdAt.toISOString(),
+      });
     });
   });
 

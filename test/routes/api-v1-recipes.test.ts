@@ -249,7 +249,12 @@ describe("API v1 public recipe reads", () => {
     const dataPayload = await readJson(dataDetail);
 
     expect(dataDetail.status).toBe(200);
-    expect(dataPayload.data.recipe.coverImageUrl).toBeNull();
+    expect(dataPayload.data.recipe).toMatchObject({
+      coverImageUrl: null,
+      coverProvenanceLabel: null,
+      coverSourceType: null,
+      coverVariant: null,
+    });
 
     await db.recipeCover.create({
       data: {
@@ -289,19 +294,25 @@ describe("API v1 public recipe reads", () => {
     expect(clearedCoverDetail.status).toBe(200);
     expect(clearedCoverPayload.data.recipe.coverImageUrl).toBeNull();
 
-    await db.recipeCover.create({
+    const invalidAssetCover = await db.recipeCover.create({
       data: {
         recipeId: dataCover.recipe.id,
         imageUrl: "http://%",
-        sourceType: "broken-import",
+        sourceType: "import",
       },
     });
+    await activateRecipeCover(db, dataCover.recipe.id, invalidAssetCover.id, "image");
     const invalidAssetDetail = await loader(routeArgs(new UndiciRequest(`http://localhost/api/v1/recipes/${dataCover.recipe.id}`, {
       headers: { "X-Request-Id": "req_recipe_invalid_asset" },
     }) as unknown as Request, `recipes/${dataCover.recipe.id}`));
     const invalidAssetPayload = await readJson(invalidAssetDetail);
     expect(invalidAssetDetail.status).toBe(200);
-    expect(invalidAssetPayload.data.recipe.coverImageUrl).toBeNull();
+    expect(invalidAssetPayload.data.recipe).toMatchObject({
+      coverImageUrl: null,
+      coverProvenanceLabel: null,
+      coverSourceType: null,
+      coverVariant: null,
+    });
 
     const validCursor = listCursor({ createdAt: stylized.recipe.createdAt.toISOString(), id: stylized.recipe.id });
     const cursorResponse = await loader(routeArgs(new UndiciRequest(

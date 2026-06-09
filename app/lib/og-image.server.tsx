@@ -34,6 +34,10 @@ const OG_HEADERS = {
   "Cache-Control": "public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800",
 };
 
+const DYNAMIC_OG_HEADERS = {
+  "Cache-Control": "public, no-cache, must-revalidate",
+};
+
 const FALLBACK_EXECUTION_CONTEXT = {
   waitUntil() {
     return undefined;
@@ -72,7 +76,26 @@ function ogFonts(runtime: OgRuntime, text: string, ctx?: OgExecutionContext) {
   ];
 }
 
-export async function createRecipeOgImageResponse(input: RecipeOgInput, ctx?: OgExecutionContext) {
+function dynamicOgHeaders(cacheKey?: string) {
+  if (!cacheKey) return OG_HEADERS;
+  const etag = weakOgEtag(cacheKey);
+  return {
+    ...DYNAMIC_OG_HEADERS,
+    ETag: etag,
+    "X-Spoonjoy-OG-Cover-Key": etag,
+  };
+}
+
+function weakOgEtag(cacheKey: string) {
+  let hash = 2166136261;
+  for (let index = 0; index < cacheKey.length; index += 1) {
+    hash ^= cacheKey.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `W/"og-${(hash >>> 0).toString(16)}-${cacheKey.length}"`;
+}
+
+export async function createRecipeOgImageResponse(input: RecipeOgInput, ctx?: OgExecutionContext, cacheKey?: string) {
   const runtime = await loadOgRuntime();
   const description = recipeOgDescription(input);
   const text = [input.title, description, input.chefUsername, input.servingsLabel].filter(Boolean).join(" ");
@@ -81,11 +104,11 @@ export async function createRecipeOgImageResponse(input: RecipeOgInput, ctx?: Og
     width: OG_IMAGE_WIDTH,
     height: OG_IMAGE_HEIGHT,
     fonts: ogFonts(runtime, text, ctx),
-    headers: OG_HEADERS,
+    headers: dynamicOgHeaders(cacheKey),
   });
 }
 
-export async function createCookbookOgImageResponse(input: CookbookOgInput, ctx?: OgExecutionContext) {
+export async function createCookbookOgImageResponse(input: CookbookOgInput, ctx?: OgExecutionContext, cacheKey?: string) {
   const runtime = await loadOgRuntime();
   const recipeLabel = cookbookRecipeLabel(input.recipeCount);
   const text = [input.title, input.authorUsername, recipeLabel].join(" ");
@@ -94,7 +117,7 @@ export async function createCookbookOgImageResponse(input: CookbookOgInput, ctx?
     width: OG_IMAGE_WIDTH,
     height: OG_IMAGE_HEIGHT,
     fonts: ogFonts(runtime, text, ctx),
-    headers: OG_HEADERS,
+    headers: dynamicOgHeaders(cacheKey),
   });
 }
 

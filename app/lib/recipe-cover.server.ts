@@ -12,6 +12,24 @@ const COVER_MODES = ["auto", "manual", "none"] as const;
 const COVER_STATUSES = ["processing", "ready", "failed", "archived"] as const;
 const COVER_GENERATION_STATUSES = ["none", "processing", "succeeded", "failed"] as const;
 
+export const RECIPE_COVER_DISPLAY_SELECT = {
+  id: true,
+  recipeId: true,
+  imageUrl: true,
+  stylizedImageUrl: true,
+  sourceType: true,
+  sourceSpoonId: true,
+  status: true,
+  createdById: true,
+  sourceImageUrl: true,
+  generationStatus: true,
+  failureReason: true,
+  promptVersion: true,
+  styleVersion: true,
+  archivedAt: true,
+  createdAt: true,
+} satisfies Record<keyof RecipeCover, true>;
+
 export interface CreateCoverInput {
   recipeId: string;
   imageUrl: string;
@@ -133,6 +151,31 @@ export function getRecipeCoverImageUrl(
   overrideVariant?: RecipeCoverVariant,
 ): string | null {
   return getRecipeCoverDisplay(recipe, covers, overrideVariant)?.displayUrl ?? null;
+}
+
+export function getScopedActiveCover(recipe: { id: string; activeCover?: RecipeCover | null }): RecipeCover | null {
+  return recipe.activeCover?.recipeId === recipe.id ? recipe.activeCover : null;
+}
+
+export function recipeCoverCacheSnapshot(cover: RecipeCover | null) {
+  if (!cover) return null;
+  return {
+    id: cover.id,
+    recipeId: cover.recipeId,
+    imageUrl: cover.imageUrl,
+    stylizedImageUrl: cover.stylizedImageUrl,
+    sourceType: cover.sourceType,
+    sourceSpoonId: cover.sourceSpoonId,
+    status: cover.status,
+    createdById: cover.createdById,
+    sourceImageUrl: cover.sourceImageUrl,
+    generationStatus: cover.generationStatus,
+    failureReason: cover.failureReason,
+    promptVersion: cover.promptVersion,
+    styleVersion: cover.styleVersion,
+    archivedAt: cover.archivedAt?.toISOString() ?? null,
+    createdAt: cover.createdAt.toISOString(),
+  };
 }
 
 export function getRecipeCoverDisplay(

@@ -37,7 +37,12 @@ import {
   API_V1_SCOPE_REQUIREMENTS,
   type ApiV1ErrorCode,
 } from "~/lib/api-v1-contract.server";
-import { getRecipeCoverDisplay, type RecipeCoverVariant } from "~/lib/recipe-cover.server";
+import {
+  getRecipeCoverDisplay,
+  getScopedActiveCover,
+  RECIPE_COVER_DISPLAY_SELECT,
+  type RecipeCoverVariant,
+} from "~/lib/recipe-cover.server";
 
 const DEFAULT_LIST_LIMIT = 20;
 const MAX_LIST_LIMIT = 50;
@@ -681,16 +686,32 @@ type RecipeCoverFieldsInput = {
   activeCoverId: string | null;
   activeCoverVariant: string | null;
   coverMode: string | null;
-  covers: RecipeCover[];
+  activeCover: RecipeCover | null;
 };
 
-function recipeCoverApiFields(recipe: RecipeCoverFieldsInput) {
-  const coverDisplay = getRecipeCoverDisplay(recipe, recipe.covers);
+function emptyRecipeCoverApiFields() {
   return {
-    coverImageUrl: coverDisplay?.displayUrl ?? null,
-    coverProvenanceLabel: coverDisplay?.provenanceLabel ?? null,
-    coverSourceType: coverDisplay?.sourceType ?? null,
-    coverVariant: coverDisplay?.activeVariant ?? null,
+    coverImageUrl: null,
+    coverProvenanceLabel: null,
+    coverSourceType: null,
+    coverVariant: null,
+  };
+}
+
+function recipeCoverApiFields(recipe: RecipeCoverFieldsInput, origin: string) {
+  const activeCover = getScopedActiveCover(recipe);
+  const coverDisplay = getRecipeCoverDisplay(recipe, activeCover ? [activeCover] : []);
+  if (!coverDisplay) return emptyRecipeCoverApiFields();
+
+  const coverImageUrl = publicAssetUrl(origin, coverDisplay.displayUrl);
+  if (!coverImageUrl) {
+    return emptyRecipeCoverApiFields();
+  }
+  return {
+    coverImageUrl,
+    coverProvenanceLabel: coverDisplay.provenanceLabel,
+    coverSourceType: coverDisplay.sourceType,
+    coverVariant: coverDisplay.activeVariant,
   };
 }
 
@@ -702,7 +723,7 @@ function recipeSummary(recipe: RecipeSummaryRow, origin: string) {
     description: recipe.description,
     servings: recipe.servings,
     chef: { id: recipe.chef.id, username: recipe.chef.username },
-    coverImageUrl: publicAssetUrl(origin, recipe.coverImageUrl),
+    coverImageUrl: recipe.coverImageUrl,
     coverProvenanceLabel: recipe.coverProvenanceLabel,
     coverSourceType: recipe.coverSourceType,
     coverVariant: recipe.coverVariant,
@@ -716,7 +737,7 @@ function recipeSummary(recipe: RecipeSummaryRow, origin: string) {
 
 function recipeDetail(recipe: RecipeRow, origin: string) {
   return {
-    ...recipeSummary({ ...recipe, ...recipeCoverApiFields(recipe) }, origin),
+    ...recipeSummary({ ...recipe, ...recipeCoverApiFields(recipe, origin) }, origin),
     steps: [...recipe.steps]
       .sort((a, b) => a.stepNum - b.stepNum)
       .map((step) => ({
@@ -769,9 +790,7 @@ async function loadRecipeById(db: Awaited<ReturnType<typeof getRequestDb>>, id: 
           chef: { select: { id: true, username: true } },
         },
       },
-      covers: {
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      },
+      activeCover: { select: RECIPE_COVER_DISPLAY_SELECT },
       steps: {
         select: {
           id: true,
@@ -838,9 +857,7 @@ async function handleRecipeList(args: ApiV1RouteArgs, requestId: string, princip
           chef: { select: { id: true, username: true } },
         },
       },
-      covers: {
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      },
+      activeCover: { select: RECIPE_COVER_DISPLAY_SELECT },
     },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     take: limit + 1,
@@ -855,7 +872,7 @@ async function handleRecipeList(args: ApiV1RouteArgs, requestId: string, princip
     cursor: cursor?.raw ?? null,
     nextCursor,
     hasMore,
-    recipes: page.map((recipe) => recipeSummary({ ...recipe, ...recipeCoverApiFields(recipe) }, origin)),
+    recipes: page.map((recipe) => recipeSummary({ ...recipe, ...recipeCoverApiFields(recipe, origin) }, origin)),
   }, 200, principal ? authenticatedPublicCacheHeaders() : publicCacheHeaders());
 }
 
@@ -883,7 +900,7 @@ function cookbookSummary(cookbook: CookbookRow, origin: string) {
     chef: { id: cookbook.author.id, username: cookbook.author.username },
     recipeCount: activeEntries.length,
     coverImageUrls: activeEntries
-      .map((entry) => publicAssetUrl(origin, recipeCoverApiFields(entry.recipe).coverImageUrl))
+      .map((entry) => recipeCoverApiFields(entry.recipe, origin).coverImageUrl)
       .filter((url): url is string => Boolean(url))
       .slice(0, 4),
     href,
@@ -901,7 +918,7 @@ function cookbookDetail(cookbook: CookbookRow, origin: string) {
   return {
     ...cookbookSummary(cookbook, origin),
     recipes: activeCookbookRecipeEntries(cookbook).map((entry) =>
-      recipeSummary({ ...entry.recipe, ...recipeCoverApiFields(entry.recipe) }, origin)
+      recipeSummary({ ...entry.recipe, ...recipeCoverApiFields(entry.recipe, origin) }, origin)
     ),
   };
 }
@@ -940,9 +957,7 @@ async function loadCookbookById(db: Awaited<ReturnType<typeof getRequestDb>>, id
                   chef: { select: { id: true, username: true } },
                 },
               },
-              covers: {
-                orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-              },
+              activeCover: { select: RECIPE_COVER_DISPLAY_SELECT },
               chef: { select: { id: true, username: true } },
             },
           },
@@ -1002,9 +1017,7 @@ async function handleCookbookList(args: ApiV1RouteArgs, requestId: string, princ
                   chef: { select: { id: true, username: true } },
                 },
               },
-              covers: {
-                orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-              },
+              activeCover: { select: RECIPE_COVER_DISPLAY_SELECT },
               chef: { select: { id: true, username: true } },
             },
           },
