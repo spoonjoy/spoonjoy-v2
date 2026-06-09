@@ -59,7 +59,7 @@ Make Spoonjoy recipe imagery explicit, provenance-aware, and controllable across
 **CRITICAL: Every unit header MUST start with status emoji (⬜ for new units).**
 
 ### ⬜ Unit 0: Setup/Research
-**What**: Inventory every active-cover read/write path before editing: `prisma/schema.prisma`, `app/lib/recipe-cover.server.ts`, `app/lib/api-v1.server.ts`, `app/lib/recipe-detail.server.ts`, `app/lib/recipe-spoon.server.ts`, `app/lib/spoonjoy-api.server.ts`, `app/lib/search.server.ts`, `app/lib/recipe-fork.server.ts`, `app/lib/recipe-import.server.ts`, `app/routes/recipes.$id.tsx`, `app/routes/recipes._index.tsx`, `app/routes/_index.tsx`, `app/routes/users.$identifier.tsx`, `app/routes/cookbooks.$id.tsx`, `app/components/recipe/RecipeHeader.tsx`, `app/components/recipe/SpoonDialog.tsx`, `app/components/pantry/RecipeGrid.tsx`, `app/components/cookbook/CookbookCoverArt.tsx`, and Open Graph helpers.
+**What**: Inventory every active-cover read/write path before editing: `prisma/schema.prisma`, `app/lib/recipe-cover.server.ts`, `app/lib/api-v1.server.ts`, `app/lib/api-v1-openapi.server.ts`, `app/lib/recipe-detail.server.ts`, `app/lib/recipe-spoon.server.ts`, `app/lib/spoonjoy-api.server.ts`, `app/lib/search.server.ts`, `app/lib/recipe-fork.server.ts`, `app/lib/recipe-import.server.ts`, `app/routes/recipes.$id.tsx`, `app/routes/recipes._index.tsx`, `app/routes/_index.tsx`, `app/routes/users.$identifier.tsx`, `app/routes/cookbooks.$id.tsx`, `app/routes/og.recipes.$id.png.tsx`, `app/routes/og.cookbooks.$id.png.tsx`, `app/components/recipe/RecipeHeader.tsx`, `app/components/recipe/SpoonDialog.tsx`, `app/components/pantry/RecipeGrid.tsx`, `app/components/cookbook/CookbookCoverArt.tsx`, and `app/lib/og-image.server.tsx`.
 **Output**: Notes saved under `./2026-06-08-1648-doing-recipe-cover-lifecycle/cover-read-write-inventory.md`.
 **Acceptance**: Inventory lists each read/write path, the current behavior, and the unit that will change or intentionally leave it.
 
@@ -88,11 +88,11 @@ Make Spoonjoy recipe imagery explicit, provenance-aware, and controllable across
 **Acceptance**: Affected web route/component tests pass with 100% coverage on new branches and no warnings.
 
 ### ⬜ Unit 3a: API v1, Search, And Open Graph Read Surfaces — Tests
-**What**: Add failing tests proving `app/lib/api-v1.server.ts`, `app/lib/search.server.ts`, and Open Graph helpers use explicit active covers and include/derive correct provenance metadata. Include active older cover, archived newest row, empty newest row, and intentional no-cover cases.
+**What**: Add failing tests proving `app/lib/api-v1.server.ts`, `app/lib/api-v1-openapi.server.ts`, `app/lib/search.server.ts`, `app/routes/og.recipes.$id.png.tsx`, and `app/routes/og.cookbooks.$id.png.tsx` use explicit active covers and include/derive correct provenance metadata. Include active older cover, archived newest row, empty newest row, and intentional no-cover cases.
 **Acceptance**: Tests fail because these server surfaces still derive cover output from ordered cover arrays or lack provenance.
 
 ### ⬜ Unit 3b: API v1, Search, And Open Graph Read Surfaces — Implementation
-**What**: Replace newest-row cover selection in API v1, search metadata, and Open Graph output with active-cover helper output. Ensure search metadata updates when active cover or active variant changes.
+**What**: Replace newest-row cover selection in API v1, API v1 OpenAPI schemas/examples, search metadata, and Open Graph route output with active-cover helper output. Ensure search metadata updates when active cover or active variant changes.
 **Acceptance**: Unit 3a tests pass and server read surfaces agree on active cover URL/provenance.
 
 ### ⬜ Unit 3c: API v1, Search, And Open Graph Read Surfaces — Coverage & Refactor
