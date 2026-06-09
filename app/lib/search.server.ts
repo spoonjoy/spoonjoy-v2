@@ -80,11 +80,17 @@ interface SearchIndexCountRow {
 }
 
 interface RecipeCoverFingerprintRow {
-  id: string;
   recipeId: string;
+  activeCoverId: string | null;
+  activeCoverVariant: string | null;
+  coverMode: string | null;
+  id: string | null;
   createdAt: Date | string | number | bigint | null;
-  imageUrl: string;
+  imageUrl: string | null;
   stylizedImageUrl: string | null;
+  sourceType: string | null;
+  status: string | null;
+  archivedAt: Date | string | number | bigint | null;
 }
 
 const DEFAULT_SEARCH_LIMIT = 20;
@@ -296,36 +302,37 @@ async function sha256Hex(value: string): Promise<string> {
 async function currentRecipeCoverContentHash(database: PrismaClient): Promise<string> {
   const rows = await database.$queryRawUnsafe<RecipeCoverFingerprintRow[]>(
     `SELECT
-        "id",
-        "recipeId",
-        "createdAt",
-        "imageUrl",
-        "stylizedImageUrl"
-      FROM (
-        SELECT
-          rc."id" AS "id",
-          rc."recipeId" AS "recipeId",
-          rc."createdAt" AS "createdAt",
-          rc."imageUrl" AS "imageUrl",
-          rc."stylizedImageUrl" AS "stylizedImageUrl",
-          ROW_NUMBER() OVER (
-            PARTITION BY rc."recipeId"
-            ORDER BY rc."createdAt" DESC, rc."id" DESC
-          ) AS rn
-        FROM "RecipeCover" rc
-        INNER JOIN "Recipe" r ON r."id" = rc."recipeId"
-        WHERE r."deletedAt" IS NULL
-      )
-      WHERE rn = 1
-      ORDER BY "recipeId" ASC`
+        r."id" AS "recipeId",
+        r."activeCoverId" AS "activeCoverId",
+        r."activeCoverVariant" AS "activeCoverVariant",
+        r."coverMode" AS "coverMode",
+        rc."id" AS "id",
+        rc."createdAt" AS "createdAt",
+        rc."imageUrl" AS "imageUrl",
+        rc."stylizedImageUrl" AS "stylizedImageUrl",
+        rc."sourceType" AS "sourceType",
+        rc."status" AS "status",
+        rc."archivedAt" AS "archivedAt"
+      FROM "Recipe" r
+      LEFT JOIN "RecipeCover" rc
+        ON rc."id" = r."activeCoverId"
+        AND rc."recipeId" = r."id"
+      WHERE r."deletedAt" IS NULL
+      ORDER BY r."id" ASC`
   );
   const payload = JSON.stringify(
     rows.map((row) => ({
-      id: row.id,
       recipeId: row.recipeId,
+      activeCoverId: row.activeCoverId,
+      activeCoverVariant: row.activeCoverVariant,
+      coverMode: row.coverMode,
+      id: row.id,
       createdAt: aggregateDateString(row.createdAt),
       imageUrl: row.imageUrl,
       stylizedImageUrl: row.stylizedImageUrl,
+      sourceType: row.sourceType,
+      status: row.status,
+      archivedAt: aggregateDateString(row.archivedAt),
     })),
   );
   return `sha256:${await sha256Hex(payload)}`;

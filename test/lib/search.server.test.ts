@@ -368,8 +368,53 @@ describe("search.server", () => {
         coverMode: "manual",
       },
     });
+    const provenanceRecipe = await db.recipe.create({
+      data: {
+        title: "Provenance Cover Freshness Beans",
+        description: "Search cover freshness for provenance-only updates",
+        chefId: chef.id,
+      },
+    });
+    const provenanceCover = await db.recipeCover.create({
+      data: {
+        recipeId: provenanceRecipe.id,
+        imageUrl: "/photos/covers/provenance-beans.jpg",
+        sourceType: "chef-upload",
+      },
+    });
+    await db.recipe.update({
+      where: { id: provenanceRecipe.id },
+      data: {
+        activeCoverId: provenanceCover.id,
+        activeCoverVariant: "image",
+        coverMode: "manual",
+      },
+    });
+    const variantRecipe = await db.recipe.create({
+      data: {
+        title: "Variant Cover Freshness Soup",
+        description: "Search cover freshness for active variant updates",
+        chefId: chef.id,
+      },
+    });
+    const variantCover = await db.recipeCover.create({
+      data: {
+        recipeId: variantRecipe.id,
+        imageUrl: "/photos/covers/variant-soup-raw.jpg",
+        stylizedImageUrl: "/photos/covers/variant-soup-editorial.jpg",
+        sourceType: "spoon",
+      },
+    });
+    await db.recipe.update({
+      where: { id: variantRecipe.id },
+      data: {
+        activeCoverId: variantCover.id,
+        activeCoverVariant: "image",
+        coverMode: "manual",
+      },
+    });
 
-    await expect(rebuildSearchIndex(db)).resolves.toBe(5);
+    await expect(rebuildSearchIndex(db)).resolves.toBe(7);
 
     await expect(searchSpoonjoy(db, { query: "bare cover freshness", scope: "recipes" }))
       .resolves.toMatchObject([{ id: noCoverRecipe.id, imageUrl: null }]);
@@ -383,6 +428,18 @@ describe("search.server", () => {
       .resolves.toMatchObject([{ id: pendingRecipe.id, imageUrl: null }]);
     await expect(searchSpoonjoy(db, { query: "stylized cover freshness", scope: "recipes" }))
       .resolves.toMatchObject([{ id: stylizedRecipe.id, imageUrl: null }]);
+    await expect(searchSpoonjoy(db, { query: "provenance cover freshness", scope: "recipes" }))
+      .resolves.toMatchObject([{
+        id: provenanceRecipe.id,
+        imageUrl: "/photos/covers/provenance-beans.jpg",
+        metadata: { coverProvenanceLabel: "Chef photo" },
+      }]);
+    await expect(searchSpoonjoy(db, { query: "variant cover freshness", scope: "recipes" }))
+      .resolves.toMatchObject([{
+        id: variantRecipe.id,
+        imageUrl: "/photos/covers/variant-soup-raw.jpg",
+        metadata: { coverProvenanceLabel: "Chef photo" },
+      }]);
 
     await db.recipeCover.update({
       where: { id: pendingCover.id },
@@ -403,6 +460,37 @@ describe("search.server", () => {
       .resolves.toMatchObject([{
         id: stylizedRecipe.id,
         imageUrl: "/photos/covers/stylized-toast.png",
+        metadata: { coverProvenanceLabel: "Editorialized chef photo" },
+      }]);
+    await db.recipeCover.update({
+      where: { id: provenanceCover.id },
+      data: { sourceType: "import" },
+    });
+    await expect(searchSpoonjoy(db, { query: "provenance cover freshness", scope: "recipes" }))
+      .resolves.toMatchObject([{
+        id: provenanceRecipe.id,
+        imageUrl: "/photos/covers/provenance-beans.jpg",
+        metadata: { coverProvenanceLabel: "Imported photo" },
+      }]);
+    await db.recipeCover.update({
+      where: { id: provenanceCover.id },
+      data: { status: "archived", archivedAt: new Date("2026-03-01T00:00:00.000Z") },
+    });
+    await expect(searchSpoonjoy(db, { query: "provenance cover freshness", scope: "recipes" }))
+      .resolves.toMatchObject([{
+        id: provenanceRecipe.id,
+        imageUrl: null,
+        metadata: { coverProvenanceLabel: null },
+      }]);
+    await db.$executeRawUnsafe(
+      `UPDATE "Recipe" SET "activeCoverVariant" = ? WHERE "id" = ?`,
+      "stylized",
+      variantRecipe.id,
+    );
+    await expect(searchSpoonjoy(db, { query: "variant cover freshness", scope: "recipes" }))
+      .resolves.toMatchObject([{
+        id: variantRecipe.id,
+        imageUrl: "/photos/covers/variant-soup-editorial.jpg",
         metadata: { coverProvenanceLabel: "Editorialized chef photo" },
       }]);
 
