@@ -129,6 +129,22 @@ describe('RecipeHeader', () => {
       expect(screen.getByText('Editorialized chef photo')).toBeInTheDocument()
     })
 
+    it('uses a high-contrast overlay treatment for cover provenance on bright photos', () => {
+      renderWithRouter(
+        <RecipeHeader
+          {...defaultProps}
+          coverImageUrl="https://example.com/bright-recipe.jpg"
+          coverProvenanceLabel="Chef photo"
+        />
+      )
+
+      const badge = screen.getByTestId('cover-provenance-badge')
+      expect(badge).toHaveClass('bg-[color-mix(in_srgb,var(--sj-charcoal)_94%,transparent)]')
+      expect(badge).toHaveClass('border-[color-mix(in_srgb,var(--sj-paper)_82%,transparent)]')
+      expect(badge).toHaveClass('shadow-[0_2px_16px_rgba(0,0,0,0.38)]')
+      expect(badge.className).toContain('[text-shadow:0_1px_1px_rgba(0,0,0,0.55)]')
+    })
+
     it('renders placeholder when imageUrl is not provided', () => {
       renderWithRouter(<RecipeHeader {...defaultProps} />)
       expect(screen.getByTestId('recipe-image-placeholder')).toBeInTheDocument()
