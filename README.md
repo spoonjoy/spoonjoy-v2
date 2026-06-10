@@ -4,7 +4,7 @@ Recipe management platform rebuilt with React Router v7 on Cloudflare.
 
 ## Links
 
-- **Storybook**: https://spoonjoy-storybook.pages.dev/
+- **Storybook**: https://spoonjoy-storybook-cp6.pages.dev/
 - **Getting Started Guide**: [GUIDE.md](./GUIDE.md) — comprehensive walkthrough from clone to delighted
 - **Cloudflare Deployment Checklist**: [docs/deployment.md](./docs/deployment.md)
 - **Analytics & Privacy**: [docs/analytics-privacy.md](./docs/analytics-privacy.md)
