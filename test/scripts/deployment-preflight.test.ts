@@ -1081,6 +1081,20 @@ describe("package.json deploy scripts", () => {
     expect(configRaw).toContain("scripts/smoke-live-helpers.mjs");
     expect(configRaw).toContain("scripts/smoke-image-cover-live.mjs");
   });
+
+  it("runs image-cover smoke after UI screenshot checks so R2 cleanup cannot break later page loads", async () => {
+    const smokeRaw = await import("node:fs/promises").then((mod) =>
+      mod.readFile(`${process.cwd()}/scripts/smoke-live.mjs`, "utf8"),
+    );
+
+    const accountSettingsScreenshotIndex = smokeRaw.indexOf("'05-account-settings'");
+    const pushProbeIndex = smokeRaw.indexOf("report.pushPublicKeyStatus = pushResponse.status()");
+    const imageCoverSmokeIndex = smokeRaw.indexOf("report.imageCoverSmoke = await runImageCoverSmokeFlow");
+
+    expect(accountSettingsScreenshotIndex).toBeGreaterThan(-1);
+    expect(pushProbeIndex).toBeGreaterThan(accountSettingsScreenshotIndex);
+    expect(imageCoverSmokeIndex).toBeGreaterThan(pushProbeIndex);
+  });
 });
 
 describe("QA image-cover smoke workflow", () => {

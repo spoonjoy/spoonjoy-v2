@@ -274,29 +274,6 @@ async function main() {
     await expect(page.getByRole('heading', { name: recipeTitle })).toBeVisible({ timeout: 10_000 })
     report.screenshots.push(await screenshot(page, outDir, '02-recipe-detail'))
 
-    if (includeImageCoverSmoke) {
-      const adapters = createImageCoverAdapters(page, baseUrl)
-      report.imageCoverSmoke = await runImageCoverSmokeFlow({
-        baseUrl,
-        email,
-        recipeId,
-        recipeTitle,
-        stamp,
-        maxPollAttempts: 30,
-        pollDelayMs: 3_000,
-        listQaSecretNames,
-        apiTool: adapters.apiTool,
-        expectApiToolFailure: adapters.expectApiToolFailure,
-        mcpToolsList: adapters.mcpToolsList,
-        mcpTool: adapters.mcpTool,
-        readFileBytes: async (path) => new Uint8Array(await readFile(path)),
-        downloadPhotoBytes: adapters.downloadPhotoBytes,
-        deleteQaR2Object,
-        verifyQaR2ObjectDeleted,
-        wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-      })
-    }
-
     await gotoApp(page, new URL(`/recipes/${recipeId}#cook`, baseUrl).toString())
     await expect(page.getByTestId('cook-mode-panel')).toBeVisible({ timeout: 10_000 })
     await expect(page.getByText('Step 1 of 1')).toBeVisible()
@@ -332,6 +309,29 @@ async function main() {
       await checkAppleOAuth(page, report)
     } else {
       report.apple = { skipped: true, reason: `${targetEnv} smoke does not run production Apple OAuth guard` }
+    }
+
+    if (includeImageCoverSmoke) {
+      const adapters = createImageCoverAdapters(page, baseUrl)
+      report.imageCoverSmoke = await runImageCoverSmokeFlow({
+        baseUrl,
+        email,
+        recipeId,
+        recipeTitle,
+        stamp,
+        maxPollAttempts: 30,
+        pollDelayMs: 3_000,
+        listQaSecretNames,
+        apiTool: adapters.apiTool,
+        expectApiToolFailure: adapters.expectApiToolFailure,
+        mcpToolsList: adapters.mcpToolsList,
+        mcpTool: adapters.mcpTool,
+        readFileBytes: async (path) => new Uint8Array(await readFile(path)),
+        downloadPhotoBytes: adapters.downloadPhotoBytes,
+        deleteQaR2Object,
+        verifyQaR2ObjectDeleted,
+        wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+      })
     }
   } finally {
     await context.close()
