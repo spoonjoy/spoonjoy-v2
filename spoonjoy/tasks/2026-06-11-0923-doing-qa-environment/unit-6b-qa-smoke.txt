@@ -1,0 +1,5 @@
+
+> spoonjoy-v2@1.0.0 smoke:qa /Users/arimendelow/Projects/spoonjoy-v2
+> node scripts/smoke-live.mjs --target-env qa --base-url https://spoonjoy-v2-qa.mendelow-studio.workers.dev --out qa-live-smoke-artifacts
+
+qa-live-smoke-artifacts/smoke-results.json

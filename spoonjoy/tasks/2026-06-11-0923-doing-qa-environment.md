@@ -26,12 +26,12 @@ Add a real Spoonjoy QA deployment target with separate Cloudflare state so live/
 - [ ] `wrangler.json` has a `qa` environment with distinct QA D1/R2/rate-limit/base URL settings.
 - [ ] `pnpm run qa:preflight` proves QA config exists, is not aliased to production resources, resolves to the QA Worker URL, verifies QA secret presence with `wrangler secret list --env qa` when authenticated, and checks QA migrations with `--env qa`.
 - [ ] QA D1 migrations can be listed/applied with `--env qa` without touching production.
-- [ ] QA R2 bucket exists and `pnpm run qa:preflight` or QA smoke performs an actual QA R2 write/read/delete verification.
+- [x] QA R2 bucket exists and `pnpm run qa:preflight` or QA smoke performs an actual QA R2 write/read/delete verification.
 - [ ] QA seed command is idempotent, creates only disposable/demo data, runs with `--env qa`, and refuses production resources.
-- [ ] QA deploy command builds and deploys `spoonjoy-v2-qa`.
-- [ ] QA smoke command targets the QA base URL, requires the QA Wrangler environment for remote cleanup, and does not default to production.
-- [ ] QA smoke skips or adapts the production-only Apple OAuth guard instead of hitting production as part of QA verification.
-- [ ] QA smoke creates disposable QA data and verifies that cleanup removed that data from QA D1.
+- [x] QA deploy command builds and deploys `spoonjoy-v2-qa`.
+- [x] QA smoke command targets the QA base URL, requires the QA Wrangler environment for remote cleanup, and does not default to production.
+- [x] QA smoke skips or adapts the production-only Apple OAuth guard instead of hitting production as part of QA verification.
+- [x] QA smoke creates disposable QA data and verifies that cleanup removed that data from QA D1.
 - [ ] QA docs cover telemetry defaults, image-provider policy, OAuth callback expectations, WebAuthn/RP-origin expectations, QA seed data, and disposable data naming.
 - [ ] Docs make it clear future agents should verify QA before production-risky live flows.
 - [ ] `pnpm run deploy:preflight`, `pnpm test:coverage`, and `pnpm typecheck` pass.
@@ -150,7 +150,7 @@ Add a real Spoonjoy QA deployment target with separate Cloudflare state so live/
 **Output**: QA resource, migration, secret-list, seed, and preflight logs saved under the artifacts directory.
 **Acceptance**: Command outputs are saved in the artifact directory; failures are actionable and do not touch production.
 
-### ⬜ Unit 6b: Remote QA Verification — Implementation
+### ✅ Unit 6b: Remote QA Verification — Implementation
 **What**: Deploy QA, run QA smoke, verify QA smoke cleanup in QA D1, and run R2 round-trip verification if not already covered by preflight.
 **Output**: QA deploy, health, smoke, cleanup-verification, and R2 round-trip logs saved under the artifacts directory.
 **Acceptance**: QA Worker is reachable, QA smoke passes, QA disposable user is gone after cleanup, and artifacts show the exact URL and environment.
@@ -183,3 +183,4 @@ Add a real Spoonjoy QA deployment target with separate Cloudflare state so live/
 - 2026-06-11 11:02 America/Los_Angeles Units 5a-5c complete: added failing QA docs test, then documented QA resources, secret commands, telemetry/image-provider policy, OAuth callback and WebAuthn origin expectations, seed namespace, disposable smoke naming, and safe verification commands. Focused scripts suite passes.
 - 2026-06-11 11:10 America/Los_Angeles Unit 6a complete: targeted tests passed; QA D1 migrations applied; QA Worker bootstrapped; QA runtime secrets set and listed; QA seed ran and reran idempotently; full QA preflight passed with generated build config, D1 migrations, secrets, and R2 round trip.
 - 2026-06-11 10:10 America/Los_Angeles Addressed fresh reviewer findings before QA smoke: smoke target env and base URL now must match, and QA R2 preflight fails if the delete probe cannot be removed. Red/green evidence saved as `unit-review-fixes-red.txt` and `unit-review-fixes-green.txt`.
+- 2026-06-11 10:12 America/Los_Angeles Unit 6b complete: documented QA deploy succeeded, `/health` returned ok, `pnpm run smoke:qa` passed, QA D1 `codex-smoke-%` residue count is 0, and QA R2 write/read/delete preflight passed. Smoke JSON and screenshots are saved under the artifact directory.
