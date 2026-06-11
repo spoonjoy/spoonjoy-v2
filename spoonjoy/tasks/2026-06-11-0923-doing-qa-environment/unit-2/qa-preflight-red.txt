@@ -1,0 +1,33 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ❯ test/scripts/qa-preflight.test.ts (0 test)
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/scripts/qa-preflight.test.ts [ test/scripts/qa-preflight.test.ts ]
+Error: Failed to resolve import "../../scripts/qa-preflight" from "test/scripts/qa-preflight.test.ts". Does the file exist?
+  Plugin: vite:import-analysis
+  File: /Users/arimendelow/Projects/spoonjoy-v2/test/scripts/qa-preflight.test.ts:14:7
+  12 |    parseWranglerSecretNames,
+  13 |    runQaPreflight
+  14 |  } from "../../scripts/qa-preflight";
+     |          ^
+  15 |  function secretListStdout(names = REQUIRED_QA_SECRETS) {
+  16 |    return JSON.stringify(names.map((name) => ({ name, type: "secret_text" })));
+ ❯ TransformPluginContext._formatLog node_modules/.pnpm/vite@7.3.1_@types+node@25.1.0_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0/node_modules/vite/dist/node/chunks/config.js:28999:43
+ ❯ TransformPluginContext.error node_modules/.pnpm/vite@7.3.1_@types+node@25.1.0_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0/node_modules/vite/dist/node/chunks/config.js:28996:14
+ ❯ normalizeUrl node_modules/.pnpm/vite@7.3.1_@types+node@25.1.0_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0/node_modules/vite/dist/node/chunks/config.js:27119:18
+ ❯ node_modules/.pnpm/vite@7.3.1_@types+node@25.1.0_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0/node_modules/vite/dist/node/chunks/config.js:27177:32
+ ❯ TransformPluginContext.transform node_modules/.pnpm/vite@7.3.1_@types+node@25.1.0_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0/node_modules/vite/dist/node/chunks/config.js:27145:4
+ ❯ EnvironmentPluginContainer.transform node_modules/.pnpm/vite@7.3.1_@types+node@25.1.0_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0/node_modules/vite/dist/node/chunks/config.js:28797:14
+ ❯ loadAndTransform node_modules/.pnpm/vite@7.3.1_@types+node@25.1.0_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0/node_modules/vite/dist/node/chunks/config.js:22670:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  no tests
+   Start at  09:47:28
+   Duration  515ms (transform 43ms, setup 129ms, import 0ms, tests 0ms, environment 233ms)
+

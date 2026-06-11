@@ -1,6 +1,6 @@
 # Autopilot State
 
-Updated: 2026-06-11 10:45 America/Los_Angeles
+Updated: 2026-06-11 10:50 America/Los_Angeles
 Branch: `spoonjoy/qa-environment`
 Objective: Execute `SJ-043` dedicated QA/test environment, merge it, verify auto-deploy, smoke production, clean test data, and continue to the next obvious queued work.
 
@@ -16,7 +16,7 @@ Objective: Execute `SJ-043` dedicated QA/test environment, merge it, verify auto
 
 Execute Unit 0, then continue sequentially through implementation, QA deploy/smoke, merge, production deploy verification, production smoke, cleanup, Slugger notification, and branch/PR cleanup.
 
-Current execution point: Units 0 and 1a-1c are complete. Next action is Unit 2a: add failing tests for QA remote preflight.
+Current execution point: Units 0, 1a-1c, and 2a-2c are complete. Next action is Unit 3a: add failing tests for the idempotent QA seed command.
 
 ## Known External State
 

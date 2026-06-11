@@ -85,17 +85,17 @@ Add a real Spoonjoy QA deployment target with separate Cloudflare state so live/
 **Output**: Targeted coverage/test output saved under the artifacts directory and any small helper cleanup needed.
 **Acceptance**: New static validation branches are covered and focused tests remain green.
 
-### ⬜ Unit 2a: QA Remote Preflight — Tests
+### ✅ Unit 2a: QA Remote Preflight — Tests
 **What**: Add failing tests for `qa:preflight`: `--env qa` migration check, secret-list check, R2 write/read/delete argument construction, auth-warning behavior, and failure behavior for non-QA aliases.
 **Output**: New QA preflight tests plus red-run output saved under the artifacts directory.
 **Acceptance**: Focused QA preflight tests fail before the new script/helpers exist.
 
-### ⬜ Unit 2b: QA Remote Preflight — Implementation
+### ✅ Unit 2b: QA Remote Preflight — Implementation
 **What**: Add a testable `scripts/qa-preflight.ts` that runs static config validation plus QA remote migration, secret, and R2 round-trip checks.
 **Output**: `scripts/qa-preflight.ts`, package script wiring, and any shared preflight exports needed.
 **Acceptance**: Focused QA preflight tests pass; no production `--remote` call is constructed without `--env qa`.
 
-### ⬜ Unit 2c: QA Remote Preflight — Coverage & Refactor
+### ✅ Unit 2c: QA Remote Preflight — Coverage & Refactor
 **What**: Cover success, auth-warning, parse/failure, and cleanup-after-R2-failure branches.
 **Output**: Targeted coverage/test output saved under the artifacts directory and any helper cleanup needed.
 **Acceptance**: New QA preflight code has 100% coverage and focused tests remain green.
@@ -176,3 +176,4 @@ Add a real Spoonjoy QA deployment target with separate Cloudflare state so live/
 - 2026-06-11 09:58 America/Los_Angeles Doing-doc review gates converged; marked ready for execution.
 - 2026-06-11 10:01 America/Los_Angeles Unit 0 complete: branch is clean on `spoonjoy/qa-environment`; Wrangler auth works; QA D1 `spoonjoy-qa` and QA R2 `spoonjoy-photos-qa` exist; setup evidence saved to `./2026-06-11-0923-doing-qa-environment/unit-0/setup-verification.txt`.
 - 2026-06-11 10:45 America/Los_Angeles Units 1a-1c complete: added failing static QA tests, then implemented `env.qa`, QA scripts, and static deployment preflight checks. Focused tests pass; targeted coverage artifact saved with local thresholds because repo-wide coverage thresholds require the full suite.
+- 2026-06-11 10:50 America/Los_Angeles Units 2a-2c complete: added failing QA preflight tests, then implemented `scripts/qa-preflight.ts` with QA D1 migration checks, QA secret checks, and QA R2 write/read/delete verification. Focused preflight tests pass.
