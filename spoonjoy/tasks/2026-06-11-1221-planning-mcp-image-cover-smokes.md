@@ -1,6 +1,6 @@
 # Planning: MCP/API Image Cover Smokes
 
-**Status**: NEEDS_REVIEW
+**Status**: approved
 **Created**: 2026-06-11 12:21
 
 ## Goal
@@ -112,3 +112,4 @@ Runtime safety gates:
 - 2026-06-11 12:47 Reviewer found the first plan under-scoped. Added regenerate/status coverage, provenance proof, exact R2 cleanup, EXIF orientation assertions, and CI/scheduled QA gating before implementation.
 - 2026-06-11 12:55 Reviewer found safety/cleanup ambiguity. Added concrete QA preflight gates, endpoint-by-operation matrix, bounded provider polling, run-scoped user cleanup, canonical R2 key validation, and no-human-gate reviewer convergence language.
 - 2026-06-11 13:00 Moved the endpoint matrix and runtime gates into Notes to keep the planning doc compliant with the work-planner template.
+- 2026-06-11 13:05 Planning approved after sub-agent reviewer convergence with no findings.
