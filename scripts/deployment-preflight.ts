@@ -198,6 +198,17 @@ function childBlock(lines: WorkflowLine[], start: number, end: number, key: stri
   return null;
 }
 
+function immediateChildKeys(lines: WorkflowLine[], start: number, end: number): string[] {
+  const childIndent = lines[start].indent + 2;
+  const keys: string[] = [];
+  for (let index = start + 1; index < end; index += 1) {
+    if (lines[index].indent !== childIndent) continue;
+    const key = lines[index].text.match(/^([A-Za-z0-9_-]+):/);
+    if (key) keys.push(key[1]);
+  }
+  return keys;
+}
+
 function blockHasMainBranch(lines: WorkflowLine[], branchesStart: number, branchesEnd: number): boolean {
   const branchesLine = lines[branchesStart].text;
   const inlineBranches = branchesLine.match(/^branches:\s*\[([^\]]*)\]\s*$/);
@@ -346,16 +357,18 @@ function workflowTriggersOnlyDispatchAndSchedule(workflow: string): boolean {
   const onIndex = lines.findIndex((line) => line.indent === 0 && line.text === "on:");
   if (onIndex === -1) return false;
   const onEnd = blockEnd(lines, onIndex);
-  const workflowDispatch = childBlock(lines, onIndex, onEnd, "workflow_dispatch");
-  const schedule = childBlock(lines, onIndex, onEnd, "schedule");
-  const push = childBlock(lines, onIndex, onEnd, "push");
-  const pullRequest = childBlock(lines, onIndex, onEnd, "pull_request");
-  return Boolean(workflowDispatch && schedule && !push && !pullRequest);
+  const triggers = immediateChildKeys(lines, onIndex, onEnd);
+  const allowed = new Set(["workflow_dispatch", "schedule"]);
+  return triggers.length === allowed.size && triggers.every((trigger) => allowed.has(trigger));
 }
 
-function stepIfIncludesAll(lines: WorkflowLine[], stepStart: number, stepEnd: number, terms: string[]): boolean {
+function normalizedWorkflowCondition(value: string): string {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+function stepIfEquals(lines: WorkflowLine[], stepStart: number, stepEnd: number, expected: string): boolean {
   const value = stepPropertyValue(lines, stepStart, stepEnd, "if");
-  return typeof value === "string" && terms.every((term) => value.includes(term));
+  return typeof value === "string" && normalizedWorkflowCondition(value) === expected;
 }
 
 function stepUses(lines: WorkflowLine[], stepStart: number, stepEnd: number, action: string): boolean {
@@ -384,9 +397,51 @@ function qaSmokeStepOrderIsValid(order: Record<string, number>): boolean {
   );
 }
 
+function includesOrdered(text: string, parts: string[]): boolean {
+  let offset = 0;
+  for (const part of parts) {
+    const index = text.indexOf(part, offset);
+    if (index === -1) return false;
+    offset = index + part.length;
+  }
+  return true;
+}
+
+function cloudflareGateRunIsSafe(run: string): boolean {
+  return includesOrdered(run, [
+    'if [ -z "${CLOUDFLARE_API_TOKEN:-}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then',
+    'echo "ready=false" >> "$GITHUB_OUTPUT"',
+    "exit 0",
+    "fi",
+    'echo "ready=true" >> "$GITHUB_OUTPUT"',
+  ]);
+}
+
+function qaProviderGateRunIsSafe(run: string): boolean {
+  return includesOrdered(run, [
+    "wrangler secret list --env qa",
+    "grep -q",
+    '"OPENAI_API_KEY"',
+    'echo "ready=false" >> "$GITHUB_OUTPUT"',
+    "exit 0",
+    "grep -Eq",
+    "GEMINI_API_KEY",
+    "GOOGLE_API_KEY",
+    'echo "ready=false" >> "$GITHUB_OUTPUT"',
+    "exit 0",
+    "fi",
+    'echo "ready=true" >> "$GITHUB_OUTPUT"',
+  ]);
+}
+
 function workflowHasQaImageCoverSmokeGuards(workflow: string): boolean {
   const lines = workflowLines(workflow);
   if (workflowHasForbiddenQaSmokeTerms(lines)) return false;
+  const cloudflareReady = "steps.cloudflare.outputs.ready == 'true'";
+  const cloudflareAndProviderReady =
+    "steps.cloudflare.outputs.ready == 'true' && steps.qa-secrets.outputs.ready == 'true'";
+  const artifactReady =
+    "always() && steps.cloudflare.outputs.ready == 'true' && steps.qa-secrets.outputs.ready == 'true'";
 
   for (const [jobStart, jobEnd] of workflowJobBlocks(lines)) {
     const steps = childBlock(lines, jobStart, jobEnd, "steps");
@@ -408,29 +463,28 @@ function workflowHasQaImageCoverSmokeGuards(workflow: string): boolean {
       if (
         stepHasId(lines, stepStart, stepEnd, "cloudflare") &&
         stepHasEnvKeys(lines, stepStart, stepEnd, ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"]) &&
-        run.includes("ready=false") &&
-        run.includes("ready=true")
+        cloudflareGateRunIsSafe(run)
       ) {
         order.cloudflare = stepStart;
       }
 
       if (
         stepUses(lines, stepStart, stepEnd, "actions/checkout@") &&
-        stepIfIncludesAll(lines, stepStart, stepEnd, ["steps.cloudflare.outputs.ready == 'true'"])
+        stepIfEquals(lines, stepStart, stepEnd, cloudflareReady)
       ) {
         order.checkout = stepStart;
       }
 
       if (
         run === "pnpm install --frozen-lockfile" &&
-        stepIfIncludesAll(lines, stepStart, stepEnd, ["steps.cloudflare.outputs.ready == 'true'"])
+        stepIfEquals(lines, stepStart, stepEnd, cloudflareReady)
       ) {
         order.install = stepStart;
       }
 
       if (
         run === "pnpm prisma:generate" &&
-        stepIfIncludesAll(lines, stepStart, stepEnd, ["steps.cloudflare.outputs.ready == 'true'"])
+        stepIfEquals(lines, stepStart, stepEnd, cloudflareReady)
       ) {
         order.prisma = stepStart;
       }
@@ -438,15 +492,8 @@ function workflowHasQaImageCoverSmokeGuards(workflow: string): boolean {
       if (
         stepHasId(lines, stepStart, stepEnd, "qa-secrets") &&
         stepHasEnvKeys(lines, stepStart, stepEnd, ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"]) &&
-        stepIfIncludesAll(lines, stepStart, stepEnd, ["steps.cloudflare.outputs.ready == 'true'"]) &&
-        run.includes("wrangler secret list --env qa") &&
-        run.includes("grep -q") &&
-        run.includes('"OPENAI_API_KEY"') &&
-        run.includes("grep -Eq") &&
-        run.includes("GEMINI_API_KEY") &&
-        run.includes("GOOGLE_API_KEY") &&
-        run.includes("ready=false") &&
-        run.includes("ready=true")
+        stepIfEquals(lines, stepStart, stepEnd, cloudflareReady) &&
+        qaProviderGateRunIsSafe(run)
       ) {
         order.providerSecrets = stepStart;
       }
@@ -459,21 +506,14 @@ function workflowHasQaImageCoverSmokeGuards(workflow: string): boolean {
           "SPOONJOY_QA_SMOKE_BASE_URL",
           "SPOONJOY_QA_SMOKE_TARGET",
         ]) &&
-        stepIfIncludesAll(lines, stepStart, stepEnd, [
-          "steps.cloudflare.outputs.ready == 'true'",
-          "steps.qa-secrets.outputs.ready == 'true'",
-        ])
+        stepIfEquals(lines, stepStart, stepEnd, cloudflareAndProviderReady)
       ) {
         order.smoke = stepStart;
       }
 
       if (
         stepUses(lines, stepStart, stepEnd, "actions/upload-artifact@") &&
-        stepIfIncludesAll(lines, stepStart, stepEnd, [
-          "always()",
-          "steps.cloudflare.outputs.ready == 'true'",
-          "steps.qa-secrets.outputs.ready == 'true'",
-        ])
+        stepIfEquals(lines, stepStart, stepEnd, artifactReady)
       ) {
         const withBlock = childBlock(lines, stepStart, stepEnd, "with");
         if (withBlock) {
