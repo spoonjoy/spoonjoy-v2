@@ -65,7 +65,7 @@ Add a real Spoonjoy QA deployment target with separate Cloudflare state so live/
 
 **CRITICAL: Every unit header MUST start with status emoji (⬜ for new units).**
 
-### ⬜ Unit 0: Setup/Research
+### ✅ Unit 0: Setup/Research
 **What**: Verify branch/worktree state, existing Cloudflare auth, QA resource names, current deploy scripts, and current smoke cleanup behavior.
 **Output**: Durable notes in the progress log and artifact directory where useful.
 **Acceptance**: Branch is `spoonjoy/qa-environment`; QA D1/R2 resource existence is known; no unrelated worktree changes are overwritten.
@@ -174,3 +174,4 @@ Add a real Spoonjoy QA deployment target with separate Cloudflare state so live/
 - 2026-06-11 09:53 America/Los_Angeles Addressed doing-doc reviewer findings: added missing outputs, moved docs tests out of Unit 1, clarified red-test commit handling, made QA secret blocker handling explicit, and strengthened cleanup verification.
 - 2026-06-11 09:56 America/Los_Angeles Removed stale Unit 1a docs wording after reviewer re-check.
 - 2026-06-11 09:58 America/Los_Angeles Doing-doc review gates converged; marked ready for execution.
+- 2026-06-11 10:01 America/Los_Angeles Unit 0 complete: branch is clean on `spoonjoy/qa-environment`; Wrangler auth works; QA D1 `spoonjoy-qa` and QA R2 `spoonjoy-photos-qa` exist; setup evidence saved to `./2026-06-11-0923-doing-qa-environment/unit-0/setup-verification.txt`.
