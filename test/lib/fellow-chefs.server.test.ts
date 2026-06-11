@@ -9,8 +9,17 @@ import {
 import { createTestUser, createTestRecipe } from "../utils";
 import { cleanupDatabase } from "../helpers/cleanup";
 
+let userSequence = 0;
+
 async function makeUser() {
-  return db.user.create({ data: createTestUser() });
+  const suffix = `fellow-chef-${userSequence++}`;
+  return db.user.create({
+    data: {
+      ...createTestUser(),
+      email: `${suffix}@example.com`,
+      username: suffix,
+    },
+  });
 }
 
 async function makeRecipe(chefId: string) {
