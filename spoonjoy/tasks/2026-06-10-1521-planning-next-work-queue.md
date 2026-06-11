@@ -37,9 +37,9 @@ Ari wants Spoonjoy to have a queued set of obvious next moves so future agents d
    - Detect all-provider image failures before users do.
    - Benchmark Gemini/OpenAI and optional BFL/fal/Stability candidates with a controlled scorecard.
 
-5. `SJ-047` - Resolve `feat/profile-photo-crop`.
-   - Review the local unique branch and either replay/deploy its square-crop commit on fresh `main` or delete it with a recorded reason.
-   - 2026-06-11 state: the branch is stale/unsafe to merge directly, but unique commit `3400c19a` remains candidate source material.
+5. `SJ-047` - Resolve `feat/profile-photo-crop`. **Done 2026-06-11.**
+   - Current `main` already contains the square profile-photo crop implementation with newer shared image allow-list handling, cropper UI, Storybook coverage, and account-settings route tests.
+   - Focused proof passed with profile field, cropper, crop math, account-settings route, and Storybook-sync tests; the stale local branch was retired instead of merged.
 
 6. `SJ-036` - Finish PostHog server-side error tracking.
    - Image-generation alerting exists; broader Worker/server error capture and verification still needs completion.
@@ -78,7 +78,7 @@ Local Stranger With Candy pass:
 
 ## Thin Slice
 
-`SJ-043` is complete. Next execution should start with `SJ-045` unless the operator deliberately chooses to replay `SJ-047` first:
+`SJ-043` and `SJ-047` are complete. Next execution should start with `SJ-045`:
 
 - use QA rather than production for live MCP/API image-cover smokes;
 - include EXIF and unsupported GIF assertions;

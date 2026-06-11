@@ -43,7 +43,7 @@ The next wave should make future autonomous verification less delicate first, th
 2. `SJ-044`: Make smoke, cleanup, and preflight scripts environment-aware and refusal-safe.
 3. `SJ-045`: Add MCP/API image and cover e2e smokes against the QA environment.
 4. `SJ-046`: Add provider canaries and a visual benchmark workbench for editorial covers.
-5. `SJ-047`: Resolve the local `feat/profile-photo-crop` branch by reviewing, rebasing, merging, deploying, or explicitly deleting it.
+5. `SJ-047`: Resolve the local `feat/profile-photo-crop` branch by reviewing, rebasing, merging, deploying, or explicitly deleting it. Completed 2026-06-11: current `main` already contains the square-crop implementation, focused proof tests passed, and the stale local branch was retired.
 6. `SJ-036`: Finish PostHog server-side error tracking and alert verification. Recent image-generation alerting advanced this, but the broader server error capture item is still open.
 7. `SJ-037`: Rate-limit `/api/*` and the MCP bearer surface, with telemetry from `SJ-036`.
 8. `SJ-048`: Add an autopilot release verifier so merged work cannot sit undeployed or unsmoked.
@@ -1167,11 +1167,11 @@ Acceptance criteria:
 
 Priority: `P1`
 Lane: `repo-hygiene`, `profile`, `ui`, `deployment`
-Status: `needs-replay`
+Status: `done`
 
 Problem: Local branch `feat/profile-photo-crop` contains a unique unmerged commit (`3400c19a`, "feat: crop profile photos to a square on upload"). It is not stale residue, but leaving it local-only increases drift and future merge risk.
 
-State note (2026-06-11): The branch itself is stale and unsafe to merge because it is 48 commits behind `main` and would revert/delete substantial shipped work. Keep or rebuild only the unique profile-crop commit contents on fresh `main`, then delete the stale local branch after the replay is merged or a durable discard reason is recorded.
+Resolution note (2026-06-11): Current `main` already contains the square profile-photo crop implementation with newer shared image allow-list handling, cropper UI, Storybook coverage, and account-settings route tests. The stale branch remained 48 commits behind `main` and was unsafe to merge directly, so it was retired instead of replayed. Focused proof passed with `pnpm exec vitest run test/components/account/ProfilePhotoField.test.tsx test/components/account/ProfilePhotoCropper.test.tsx test/lib/image-crop.test.ts test/routes/account-settings.test.tsx test/storybook-sync.test.ts` (197 tests).
 
 Acceptance criteria:
 

@@ -1,15 +1,15 @@
 # Autopilot State
 
-Updated: 2026-06-11 11:19 America/Los_Angeles
-Branch: `main`
-Objective: Continue the Spoonjoy next-work queue after completing the dedicated QA/test environment, verifying production deployment, cleaning disposable data, and resolving the final CI flake.
+Updated: 2026-06-11 11:58 America/Los_Angeles
+Branch: `spoonjoy/profile-photo-crop-replay`
+Objective: Continue the Spoonjoy next-work queue after completing the dedicated QA/test environment, verifying production deployment, cleaning disposable data, resolving the final CI flake, and retiring the stale profile-photo-crop branch.
 
 ## Current Gate
 
 - Completed doing doc: `spoonjoy/tasks/2026-06-11-0923-doing-qa-environment.md`
-- Merged PRs: #179 dedicated QA environment, #180 post-merge verification artifacts, #181 fellow-chefs deterministic test-user flake fix.
-- Final verified main SHA: `c6a6c58d258407e548c963539e20f28ff9d1c0de`.
-- Final gates for `c6a6c58d`: Production Deploy passed, Storybook passed, CI passed (`e2e`, `coverage`, `typecheck`, `build`), production health passed on both `spoonjoy-v2.mendelow-studio.workers.dev` and `spoonjoy.app`.
+- Merged PRs: #179 dedicated QA environment, #180 post-merge verification artifacts, #181 fellow-chefs deterministic test-user flake fix, #182 final QA verification state.
+- Final verified main SHA: `1ac13795459267d06a69149452155aeea8c60aba`.
+- Final gates for `1ac13795`: Production Deploy passed, Storybook passed, CI passed (`e2e`, `coverage`, `typecheck`, `build`), production health passed on both `spoonjoy-v2.mendelow-studio.workers.dev` and `spoonjoy.app`.
 - Cleanup state: QA and production `codex-smoke-%` users are both `0`; local `pnpm cleanup:qa` dry run shows `0` active suspicious recipes, disposable users, disposable spoons, and e2e oauth clients.
 
 ## Next Action
@@ -18,12 +18,12 @@ Next queued work from `spoonjoy/tasks/2026-06-10-1521-planning-next-work-queue.m
 
 1. `SJ-045` - MCP/API image and cover e2e smokes against QA.
 2. `SJ-046` - Image provider canary and visual benchmark workbench.
-3. `SJ-047` - Resolve `feat/profile-photo-crop` by replaying or deleting its unique commit.
+3. `SJ-036` - Finish PostHog server-side error tracking and alert verification.
 
 Current branch inventory:
 
-- No open GitHub PRs.
-- Local `feat/profile-photo-crop` is not mergeable as a branch: it is 48 commits behind `main` and would revert/delete large mainline work if merged. Its unique commit `3400c19a` remains valuable source material for square profile photo cropping and should be replayed onto fresh `main` or explicitly discarded with a durable note.
+- No open GitHub PRs before this documentation branch.
+- `SJ-047` resolution: focused profile-photo proof passed on current `main` with `pnpm exec vitest run test/components/account/ProfilePhotoField.test.tsx test/components/account/ProfilePhotoCropper.test.tsx test/lib/image-crop.test.ts test/routes/account-settings.test.tsx test/storybook-sync.test.ts` (197 tests). The current main implementation already includes square crop behavior, so stale local branch `feat/profile-photo-crop` was deleted locally rather than merged.
 
 ## Known External State
 
