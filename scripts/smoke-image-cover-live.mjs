@@ -242,11 +242,7 @@ export function parseWranglerSecretNames(stdout) {
   try {
     parsed = JSON.parse(stdout.slice(start, end + 1));
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Could not parse Wrangler secret output: ${message}`);
-  }
-  if (!Array.isArray(parsed)) {
-    throw new Error("Wrangler secret output JSON was not an array.");
+    throw new Error("Could not parse Wrangler secret output.");
   }
   return parsed
     .map((row) => row && typeof row === "object" ? row.name : null)
@@ -258,11 +254,7 @@ export function assertQaImageProviderSecrets(names) {
   if (!secrets.has("OPENAI_API_KEY")) {
     throw new Error("QA image-cover smoke requires OPENAI_API_KEY for AI placeholder covers.");
   }
-  const editProviders = [];
-  if (secrets.has("OPENAI_API_KEY")) editProviders.push("openai");
+  const editProviders = ["openai"];
   if (secrets.has("GEMINI_API_KEY") || secrets.has("GOOGLE_API_KEY")) editProviders.push("gemini");
-  if (editProviders.length === 0) {
-    throw new Error("QA image-cover smoke requires at least one image edit provider secret.");
-  }
   return { placeholderProvider: "openai", editProviders };
 }

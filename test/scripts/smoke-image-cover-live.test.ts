@@ -24,6 +24,86 @@ import {
 } from "../../scripts/smoke-image-cover-live.mjs";
 
 const QA_BASE_URL = "https://spoonjoy-v2-qa.mendelow-studio.workers.dev";
+const textEncoder = new TextEncoder();
+
+function app1Segment(payloadBytes: Uint8Array): Uint8Array {
+  const length = payloadBytes.length + 2;
+  return new Uint8Array([0xff, 0xe1, (length >> 8) & 0xff, length & 0xff, ...payloadBytes]);
+}
+
+function jpegWithSegments(segments: Uint8Array[], scanData = new Uint8Array([0xff, 0xda, 0x00, 0x02, 0x11, 0x22])) {
+  return new Uint8Array([0xff, 0xd8, ...segments.flatMap((segment) => Array.from(segment)), ...scanData]);
+}
+
+function littleEndianExifOrientationSegment(orientation: number): Uint8Array {
+  const payloadBytes = new Uint8Array(32);
+  payloadBytes.set(textEncoder.encode("Exif\0\0"), 0);
+  payloadBytes.set(textEncoder.encode("II"), 6);
+  payloadBytes[8] = 0x2a;
+  payloadBytes[9] = 0x00;
+  payloadBytes[10] = 0x08;
+  payloadBytes[11] = 0x00;
+  payloadBytes[14] = 0x01;
+  payloadBytes[16] = 0x12;
+  payloadBytes[17] = 0x01;
+  payloadBytes[18] = 0x03;
+  payloadBytes[20] = 0x01;
+  payloadBytes[24] = orientation;
+  return app1Segment(payloadBytes);
+}
+
+function invalidMagicExifSegment(): Uint8Array {
+  const payloadBytes = new Uint8Array(32);
+  payloadBytes.set(textEncoder.encode("Exif\0\0"), 0);
+  payloadBytes.set(textEncoder.encode("MM"), 6);
+  payloadBytes[8] = 0x00;
+  payloadBytes[9] = 0x2b;
+  return app1Segment(payloadBytes);
+}
+
+function unknownEndianExifSegment(): Uint8Array {
+  const payloadBytes = new Uint8Array(32);
+  payloadBytes.set(textEncoder.encode("Exif\0\0"), 0);
+  payloadBytes.set(textEncoder.encode("ZZ"), 6);
+  return app1Segment(payloadBytes);
+}
+
+function outOfBoundsIfdExifSegment(): Uint8Array {
+  const payloadBytes = new Uint8Array(32);
+  payloadBytes.set(textEncoder.encode("Exif\0\0"), 0);
+  payloadBytes.set(textEncoder.encode("MM"), 6);
+  payloadBytes[8] = 0x00;
+  payloadBytes[9] = 0x2a;
+  payloadBytes[10] = 0xff;
+  payloadBytes[11] = 0xff;
+  return app1Segment(payloadBytes);
+}
+
+function truncatedEntryExifSegment(): Uint8Array {
+  const payloadBytes = new Uint8Array(32);
+  payloadBytes.set(textEncoder.encode("Exif\0\0"), 0);
+  payloadBytes.set(textEncoder.encode("MM"), 6);
+  payloadBytes[8] = 0x00;
+  payloadBytes[9] = 0x2a;
+  payloadBytes[13] = 0x14;
+  payloadBytes[27] = 0x01;
+  return app1Segment(payloadBytes);
+}
+
+function exifWithoutOrientationSegment(): Uint8Array {
+  const payloadBytes = new Uint8Array(32);
+  payloadBytes.set(textEncoder.encode("Exif\0\0"), 0);
+  payloadBytes.set(textEncoder.encode("MM"), 6);
+  payloadBytes[8] = 0x00;
+  payloadBytes[9] = 0x2a;
+  payloadBytes[13] = 0x08;
+  payloadBytes[15] = 0x01;
+  payloadBytes[16] = 0x99;
+  payloadBytes[17] = 0x99;
+  payloadBytes[19] = 0x03;
+  payloadBytes[23] = 0x01;
+  return app1Segment(payloadBytes);
+}
 
 describe("smoke image-cover helpers", () => {
   it("builds an oriented JPEG fixture with a dirty APP1 marker", async () => {
@@ -36,11 +116,29 @@ describe("smoke image-cover helpers", () => {
     expect(base64FromBytes(dirtyFixture)).toMatch(/^[A-Za-z0-9+/]+={0,2}$/);
   });
 
+  it("handles malformed and little-endian JPEG metadata", () => {
+    expect(() => addDirtyApp1Marker(new Uint8Array([0x00]))).toThrow(/SOI/);
+    expect(extractJpegExifOrientation(new Uint8Array([0xff, 0xd8, 0xff, 0xda]))).toBeNull();
+    expect(extractJpegExifOrientation(new Uint8Array([0xff, 0xd8, 0xff, 0xe1, 0x00, 0x20]))).toBeNull();
+    expect(extractJpegExifOrientation(jpegWithSegments([new Uint8Array([0xff, 0xe0, 0x00, 0x02])]))).toBeNull();
+    expect(extractJpegExifOrientation(jpegWithSegments([app1Segment(new Uint8Array([0x45]))]))).toBeNull();
+    expect(extractJpegExifOrientation(jpegWithSegments([app1Segment(textEncoder.encode("not exif"))]))).toBeNull();
+    expect(extractJpegExifOrientation(jpegWithSegments([unknownEndianExifSegment()]))).toBeNull();
+    expect(extractJpegExifOrientation(jpegWithSegments([invalidMagicExifSegment()]))).toBeNull();
+    expect(extractJpegExifOrientation(jpegWithSegments([outOfBoundsIfdExifSegment()]))).toBeNull();
+    expect(extractJpegExifOrientation(jpegWithSegments([truncatedEntryExifSegment()]))).toBeNull();
+    expect(extractJpegExifOrientation(jpegWithSegments([exifWithoutOrientationSegment()]))).toBeNull();
+    expect(extractJpegExifOrientation(jpegWithSegments([littleEndianExifOrientationSegment(8)]))).toBe(8);
+    expect(bytesContainAscii(new Uint8Array([0x61, 0x62, 0x63]), "z")).toBe(false);
+  });
+
   it("extracts and validates only run-owned upload keys and observed generated cover keys", () => {
     expect(photoKeyFromImageUrl("/photos/recipes/user-1/uploads/photo.jpg")).toBe("recipes/user-1/uploads/photo.jpg");
     expect(photoKeyFromImageUrl("/photos/spoons/user-1/uploads/photo.png")).toBe("spoons/user-1/uploads/photo.png");
     expect(photoKeyFromImageUrl("/photos/covers/123-generated.png")).toBe("covers/123-generated.png");
     expect(() => photoKeyFromImageUrl("https://cdn.example.com/photo.jpg")).toThrow(/\/photos\//);
+    expect(() => photoKeyFromImageUrl("/photos/")).toThrow(/Unsafe Spoonjoy photo URL/);
+    expect(() => photoKeyFromImageUrl("/photos/recipes/user-1/uploads/photo.jpg?x=1")).toThrow(/Unsafe Spoonjoy photo URL/);
 
     expect(validateSmokePhotoKey("recipes/user-1/uploads/photo.jpg", { ownerId: "user-1" })).toBe("recipes/user-1/uploads/photo.jpg");
     expect(validateSmokePhotoKey("spoons/user-1/uploads/photo.png", { ownerId: "user-1" })).toBe("spoons/user-1/uploads/photo.png");
@@ -134,12 +232,14 @@ describe("smoke image-cover helpers", () => {
   it("parses API and MCP tool payloads while surfacing failures", () => {
     expect(parseApiToolPayload({ ok: true, data: { token: "sj_token" } })).toEqual({ token: "sj_token" });
     expect(() => parseApiToolPayload({ ok: false, error: { message: "Nope", status: 400 } })).toThrow("Nope");
+    expect(() => parseApiToolPayload({ ok: false, error: { status: 500 } })).toThrow(/Legacy API tool request failed/);
     expect(() => parseApiToolPayload({ data: {} })).toThrow(/legacy API tool response/);
 
     expect(parseMcpToolPayload({
       result: { content: [{ type: "text", text: JSON.stringify({ cover: { id: "cover-1" } }) }] },
     })).toEqual({ cover: { id: "cover-1" } });
     expect(() => parseMcpToolPayload({ error: { message: "Bad MCP" } })).toThrow("Bad MCP");
+    expect(() => parseMcpToolPayload({ error: "bad" })).toThrow(/MCP tool request failed/);
     expect(() => parseMcpToolPayload({ result: { content: [] } })).toThrow(/MCP tool response/);
   });
 
@@ -161,6 +261,12 @@ describe("smoke image-cover helpers", () => {
     });
     expect(() => assertQaImageProviderSecrets(["GEMINI_API_KEY"])).toThrow(/OPENAI_API_KEY/);
     expect(() => parseWranglerSecretNames("not json")).toThrow(/secret output/);
+    expect(() => parseWranglerSecretNames("[not-json]")).toThrow(/Could not parse/);
+    expect(() => parseWranglerSecretNames("{}")).toThrow(/secret output/);
+    expect(() => parseWranglerSecretNames("[{}]")).not.toThrow();
+    expect(parseWranglerSecretNames(JSON.stringify([null, "bad", { name: "" }, { name: "OPENAI_API_KEY" }]))).toEqual([
+      "OPENAI_API_KEY",
+    ]);
   });
 
   it("names every MCP tool the image-cover smoke must prove", () => {

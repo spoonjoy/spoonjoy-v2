@@ -5,6 +5,7 @@ import {
   buildQaR2GetArgs,
   buildCleanupD1Args,
   buildUserCountD1Args,
+  parseD1CountOutput,
   parseSmokeArgs,
   shouldRunAppleOAuthCheck,
   usesLocalD1,
@@ -82,6 +83,23 @@ describe("smoke-live helpers", () => {
     expect(() =>
       parseSmokeArgs(["--base-url", "https://spoonjoy-v2-qa.mendelow-studio.workers.dev"]),
     ).toThrow(/--target-env/);
+  });
+
+  it("uses process argv defaults when no args are provided", () => {
+    const originalArgv = process.argv;
+    const originalBaseUrl = process.env.SPOONJOY_SMOKE_BASE_URL;
+    try {
+      process.argv = ["node", "scripts/smoke-live.mjs"];
+      delete process.env.SPOONJOY_SMOKE_BASE_URL;
+      expect(() => parseSmokeArgs()).toThrow(/--target-env/);
+    } finally {
+      process.argv = originalArgv;
+      if (originalBaseUrl === undefined) {
+        delete process.env.SPOONJOY_SMOKE_BASE_URL;
+      } else {
+        process.env.SPOONJOY_SMOKE_BASE_URL = originalBaseUrl;
+      }
+    }
   });
 
   it("allows local smoke URLs to infer local target env", () => {
@@ -210,5 +228,23 @@ describe("smoke-live helpers", () => {
     expect(() =>
       parseSmokeArgs(["--target-env", "local", "--base-url", "https://spoonjoy-v2.mendelow-studio.workers.dev"]),
     ).toThrow(/Local smoke/);
+  });
+
+  it("refuses unknown target envs", () => {
+    expect(() =>
+      parseSmokeArgs(["--target-env", "staging", "--base-url", "http://localhost:5173"]),
+    ).toThrow(/must be one of local, qa, or production/);
+  });
+
+  it("parses D1 count output variants and rejects malformed output", () => {
+    expect(parseD1CountOutput(JSON.stringify([{ results: [{ count: 2 }] }]))).toBe(2);
+    expect(parseD1CountOutput(JSON.stringify([{ results: [{ "COUNT(*)": "3" }] }]))).toBe(3);
+    expect(parseD1CountOutput(JSON.stringify([{ results: [{ "count(*)": 4 }] }]))).toBe(4);
+    expect(() => parseD1CountOutput("no json here")).toThrow(/JSON array/);
+    expect(() => parseD1CountOutput(JSON.stringify([{ results: [{}] }]))).toThrow(/numeric count/);
+  });
+
+  it("rejects unsupported target envs for D1 arg builders", () => {
+    expect(() => buildUserCountD1Args("codex@example.com", { targetEnv: "staging" })).toThrow(/targetEnv/);
   });
 });
