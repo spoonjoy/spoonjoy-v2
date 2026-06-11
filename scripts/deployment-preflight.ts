@@ -78,6 +78,14 @@ const REQUIRED_PACKAGE_SCRIPTS = [
   "db:seed",
 ] as const;
 
+const REQUIRED_QA_PACKAGE_SCRIPTS = [
+  "qa:preflight",
+  "qa:migrate",
+  "qa:seed",
+  "deploy:qa",
+  "smoke:qa",
+] as const;
+
 function hasBinding(
   bindings: unknown,
   bindingName: string,
@@ -89,6 +97,27 @@ function hasBinding(
     const record = entry as Record<string, unknown>;
     return record.binding === bindingName && requiredKeys.every((key) => typeof record[key] === "string" && record[key] !== "");
   });
+}
+
+function bindingRecord(bindings: unknown, bindingName: string): Record<string, unknown> | null {
+  if (!Array.isArray(bindings)) return null;
+  for (const entry of bindings) {
+    if (!entry || typeof entry !== "object") continue;
+    const record = entry as Record<string, unknown>;
+    if (record.binding === bindingName) return record;
+  }
+  return null;
+}
+
+function objectRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+function namespaceIds(ratelimits: unknown): string[] {
+  if (!Array.isArray(ratelimits)) return [];
+  return ratelimits
+    .map((entry) => (entry && typeof entry === "object" ? (entry as Record<string, unknown>).namespace_id : null))
+    .filter((namespaceId): namespaceId is string => typeof namespaceId === "string" && namespaceId !== "");
 }
 
 function packageScripts(packageJson: Record<string, unknown>): Record<string, string> {
@@ -255,6 +284,15 @@ function workflowHasCloudflareDeployAutoStep(workflow: string): boolean {
 export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): DeploymentPreflightResult {
   const scripts = packageScripts(inputs.packageJson);
   const readmeAndDeploymentDoc = `${inputs.readme}\n${inputs.deploymentDoc}`;
+  const envConfig = objectRecord(inputs.wrangler.env);
+  const qaConfig = objectRecord(envConfig.qa);
+  const qaVars = objectRecord(qaConfig.vars);
+  const productionDb = bindingRecord(inputs.wrangler.d1_databases, "DB");
+  const qaDb = bindingRecord(qaConfig.d1_databases, "DB");
+  const productionPhotos = bindingRecord(inputs.wrangler.r2_buckets, "PHOTOS");
+  const qaPhotos = bindingRecord(qaConfig.r2_buckets, "PHOTOS");
+  const productionNamespaceIds = new Set(namespaceIds(inputs.wrangler.ratelimits));
+  const qaNamespaceIds = namespaceIds(qaConfig.ratelimits);
 
   const checks: PreflightCheck[] = [
     check(
@@ -280,6 +318,26 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
       "wrangler.json must bind the recipe/profile photo bucket as PHOTOS."
     ),
     check(
+      "QA environment",
+      hasBinding(qaConfig.d1_databases, "DB", ["database_name", "database_id"]) &&
+        hasBinding(qaConfig.r2_buckets, "PHOTOS", ["bucket_name"]) &&
+        qaNamespaceIds.length === 3 &&
+        qaVars.NODE_ENV === "production" &&
+        qaVars.SPOONJOY_BASE_URL === "https://spoonjoy-v2-qa.mendelow-studio.workers.dev",
+      "wrangler.json must define env.qa with DB, PHOTOS, rate limits, NODE_ENV=production, and the QA Worker base URL."
+    ),
+    check(
+      "QA resource isolation",
+      qaDb?.database_name === "spoonjoy-qa" &&
+        qaDb.database_id === "c6c99e80-bd51-4cf2-b7c7-b7a6e27d3f34" &&
+        qaDb.database_id !== productionDb?.database_id &&
+        qaPhotos?.bucket_name === "spoonjoy-photos-qa" &&
+        qaPhotos.bucket_name !== productionPhotos?.bucket_name &&
+        qaNamespaceIds.length === 3 &&
+        qaNamespaceIds.every((namespaceId) => !productionNamespaceIds.has(namespaceId)),
+      "wrangler.json env.qa must use separate D1, R2, and rate-limit namespaces from production."
+    ),
+    check(
       "production node env",
       (inputs.wrangler.vars as Record<string, unknown> | undefined)?.NODE_ENV === "production",
       "wrangler.json vars should set NODE_ENV=production for deploy builds.",
@@ -289,6 +347,21 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
       "package scripts",
       REQUIRED_PACKAGE_SCRIPTS.every((script) => script in scripts),
       `package.json must include scripts: ${REQUIRED_PACKAGE_SCRIPTS.join(", ")}.`
+    ),
+    check(
+      "QA package scripts",
+      REQUIRED_QA_PACKAGE_SCRIPTS.every((script) => script in scripts) &&
+        scripts["qa:preflight"] === "tsx scripts/qa-preflight.ts" &&
+        scripts["qa:migrate"] === "pnpm exec wrangler d1 migrations apply DB --remote --env qa" &&
+        scripts["qa:seed"] === "node scripts/seed-qa.mjs --target-env qa" &&
+        typeof scripts["deploy:qa"] === "string" &&
+        scripts["deploy:qa"].includes("pnpm run qa:preflight") &&
+        scripts["deploy:qa"].includes("pnpm run qa:migrate") &&
+        scripts["deploy:qa"].includes("wrangler deploy --env qa") &&
+        typeof scripts["smoke:qa"] === "string" &&
+        scripts["smoke:qa"].includes("--target-env qa") &&
+        scripts["smoke:qa"].includes("spoonjoy-v2-qa.mendelow-studio.workers.dev"),
+      `package.json must include QA scripts: ${REQUIRED_QA_PACKAGE_SCRIPTS.join(", ")}.`
     ),
     check(
       "deploy script",

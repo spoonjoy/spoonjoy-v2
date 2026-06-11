@@ -1,0 +1,142 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ❯ test/scripts/deployment-preflight.test.ts (63 tests | 4 failed) 131ms
+     ✓ passes against the current repository configuration 3ms
+     ✓ surfaces remote-migration failures as errors 1ms
+     ✓ surfaces remote-migration auth errors as warnings only 1ms
+     ✓ uses createWranglerRunner by default when no runWrangler dep is provided 1ms
+     ✓ flags missing production-critical bindings and docs 0ms
+     ✓ requires deploy:auto in REQUIRED_PACKAGE_SCRIPTS 0ms
+     ✓ requires deploy:auto to apply migrations before the full remote preflight 0ms
+     ✓ requires the production deploy workflow to run on pushes to main 0ms
+     ✓ does not accept commented or misplaced push-to-main workflow text 0ms
+     ✓ does not accept inline branch names that merely contain main 0ms
+     ✓ requires deploy:auto and Cloudflare credentials on a real deploy step 0ms
+     ✓ reports NODE_ENV as a warning instead of a hard failure 0ms
+     ✓ flags missing telemetry typing, documentation, and deployment commands 0ms
+     ✓ flags missing image provider typing and documentation 0ms
+     × flags a missing isolated QA Wrangler environment and QA scripts 5ms
+     × flags QA resources that alias production resources 1ms
+     ✓ returns PASS when remote D1 reports no pending migrations 1ms
+     ✓ returns PASS when current Wrangler text output reports no pending migrations 0ms
+     ✓ FAILS when one migration is pending and includes its name in the message 0ms
+     ✓ FAILS and lists every pending migration name 0ms
+     ✓ FAILS and lists pending migration names from current Wrangler text output 0ms
+     ✓ WARNS instead of failing when wrangler emits an auth-keyed stderr with non-zero exit 0ms
+     ✓ WARNS when wrangler reports it needs a non-interactive API token 0ms
+     ✓ FAILS with a parse-error message when stdout is neither JSON nor current Wrangler text 0ms
+     ✓ FAILS with a shape-error message when JSON is a top-level object instead of an array 0ms
+     ✓ FAILS with a shape-error message when JSON is an array of strings 0ms
+     ✓ FAILS with a shape-error message when JSON objects use lowercase name instead of Name 0ms
+     ✓ FAILS with a clear message when wrangler exits non-zero without an auth-keyed stderr 0ms
+     ✓ FAILS when the runWrangler promise rejects (spawn/binary error) 0ms
+     ✓ FAILS with a string representation when runWrangler rejects with a non-Error value 0ms
+     ✓ FAILS with a string representation when JSON.parse throws a non-Error 0ms
+     ✓ returns a warning PASS when SPOONJOY_PREFLIGHT_SKIP_REMOTE=1 even if the fake would have reported pending migrations 0ms
+     ✓ falls back to process.env when no env is provided in deps 0ms
+     ✓ docs/deployment.md mentions pnpm deploy:auto 2ms
+     ✓ docs/deployment.md documents SPOONJOY_PREFLIGHT_SKIP_REMOTE 0ms
+     ✓ DEPLOY.md mentions pnpm deploy:auto 1ms
+     ✓ DEPLOY.md documents SPOONJOY_PREFLIGHT_SKIP_REMOTE 0ms
+     ✓ documents the full PostHog client and server telemetry setup 1ms
+     ✓ deploy chains preflight then build then wrangler deploy via pnpm exec 0ms
+     ✓ deploy:auto skips only the first remote preflight, then builds, migrates, fully preflights, and deploys 0ms
+     × exposes QA preflight, migration, seed, deploy, and smoke scripts 1ms
+     × defines an isolated Cloudflare QA environment 0ms
+     ✓ invokes the configured wrangler binary with pnpm exec and forwards args 0ms
+     ✓ resolves with stdout/stderr/exitCode when execFile callback signals success 0ms
+     ✓ resolves with non-zero exitCode and stderr when execFile callback signals a process error 0ms
+     ✓ rejects with the underlying error when execFile reports a spawn failure (no numeric exit code) 1ms
+     ✓ exposes a default factory that uses node:child_process execFile 0ms
+     ✓ prefixes passing checks with PASS 0ms
+     ✓ prefixes warning checks with WARN 0ms
+     ✓ prefixes failing error checks with FAIL 0ms
+     ✓ prints WARN line and a passed-with-warnings summary when wrangler reports an auth-keyed soft failure 1ms
+     ✓ prints a passed summary without warning suffix when everything is OK 1ms
+     ✓ calls io.error and io.exit(1) when there is a hard failure 1ms
+     ✓ uses real console.log/console.error/process.exit when io is not injected 1ms
+     ✓ returns false when argv1 is undefined 0ms
+     ✓ returns false when argv1 does not resolve to the module url 0ms
+     ✓ returns true when argv1 resolves to the same path as moduleUrl 0ms
+     ✓ returns false and does not invoke runMain when argv1 is not the module 0ms
+     ✓ returns true and invokes runMain when argv1 matches the moduleUrl 0ms
+     ✓ routes runMain errors through onError 0ms
+     ✓ uses default onError that prints and calls process.exit(1) when runMain rejects with an Error 0ms
+     ✓ uses default onError that stringifies non-Error rejections 0ms
+     ✓ uses default main when runMain is not provided 33ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/scripts/deployment-preflight.test.ts > deployment preflight > flags a missing isolated QA Wrangler environment and QA scripts
+AssertionError: expected [] to deeply equal ArrayContaining{…}
+
+- Expected
++ Received
+
+- ArrayContaining [
+-   "QA environment",
+-   "QA resource isolation",
+-   "QA package scripts",
+- ]
++ []
+
+ ❯ test/scripts/deployment-preflight.test.ts:305:52
+    303|     const result = validateDeploymentConfig(inputs);
+    304| 
+    305|     expect(result.errors.map((item) => item.name)).toEqual(
+       |                                                    ^
+    306|       expect.arrayContaining(["QA environment", "QA resource isolation…
+    307|     );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  test/scripts/deployment-preflight.test.ts > deployment preflight > flags QA resources that alias production resources
+AssertionError: expected [] to include 'QA resource isolation'
+ ❯ test/scripts/deployment-preflight.test.ts:329:52
+    327|     const result = validateDeploymentConfig(inputs);
+    328| 
+    329|     expect(result.errors.map((item) => item.name)).toContain("QA resou…
+       |                                                    ^
+    330|   });
+    331| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  test/scripts/deployment-preflight.test.ts > package.json deploy scripts > exposes QA preflight, migration, seed, deploy, and smoke scripts
+AssertionError: expected undefined to be 'tsx scripts/qa-preflight.ts' // Object.is equality
+
+- Expected: 
+"tsx scripts/qa-preflight.ts"
+
++ Received: 
+undefined
+
+ ❯ test/scripts/deployment-preflight.test.ts:716:41
+    714|     const pkg = JSON.parse(pkgRaw) as { scripts: Record<string, string…
+    715| 
+    716|     expect(pkg.scripts["qa:preflight"]).toBe("tsx scripts/qa-preflight…
+       |                                         ^
+    717|     expect(pkg.scripts["qa:migrate"]).toBe("pnpm exec wrangler d1 migr…
+    718|     expect(pkg.scripts["qa:seed"]).toBe("node scripts/seed-qa.mjs --ta…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  test/scripts/deployment-preflight.test.ts > wrangler QA environment > defines an isolated Cloudflare QA environment
+AssertionError: expected undefined to be defined
+ ❯ test/scripts/deployment-preflight.test.ts:746:16
+    744| 
+    745|     const qa = wrangler.env?.qa;
+    746|     expect(qa).toBeDefined();
+       |                ^
+    747|     expect(qa?.d1_databases).toEqual([
+    748|       {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 59 passed (63)
+   Start at  09:41:03
+   Duration  774ms (transform 92ms, setup 146ms, import 87ms, tests 131ms, environment 269ms)
+

@@ -70,17 +70,17 @@ Add a real Spoonjoy QA deployment target with separate Cloudflare state so live/
 **Output**: Durable notes in the progress log and artifact directory where useful.
 **Acceptance**: Branch is `spoonjoy/qa-environment`; QA D1/R2 resource existence is known; no unrelated worktree changes are overwritten.
 
-### ⬜ Unit 1a: Static QA Contract — Tests
+### ✅ Unit 1a: Static QA Contract — Tests
 **What**: Add failing tests for static QA configuration: `wrangler.json` `env.qa`, distinct D1/R2/rate-limit namespaces, QA base URL, and QA package scripts.
 **Output**: Updated preflight/package tests plus red-run output saved under the artifacts directory.
 **Acceptance**: Focused preflight tests fail because the QA environment/scripts do not exist yet.
 
-### ⬜ Unit 1b: Static QA Contract — Implementation
+### ✅ Unit 1b: Static QA Contract — Implementation
 **What**: Add the `env.qa` Wrangler config, package scripts, and static deployment-preflight validation needed for the tests.
 **Output**: `wrangler.json`, `package.json`, and static preflight helper changes.
 **Acceptance**: Focused static QA contract tests pass with no warnings.
 
-### ⬜ Unit 1c: Static QA Contract — Coverage & Refactor
+### ✅ Unit 1c: Static QA Contract — Coverage & Refactor
 **What**: Refactor static preflight helpers only where needed and run targeted coverage.
 **Output**: Targeted coverage/test output saved under the artifacts directory and any small helper cleanup needed.
 **Acceptance**: New static validation branches are covered and focused tests remain green.
@@ -175,3 +175,4 @@ Add a real Spoonjoy QA deployment target with separate Cloudflare state so live/
 - 2026-06-11 09:56 America/Los_Angeles Removed stale Unit 1a docs wording after reviewer re-check.
 - 2026-06-11 09:58 America/Los_Angeles Doing-doc review gates converged; marked ready for execution.
 - 2026-06-11 10:01 America/Los_Angeles Unit 0 complete: branch is clean on `spoonjoy/qa-environment`; Wrangler auth works; QA D1 `spoonjoy-qa` and QA R2 `spoonjoy-photos-qa` exist; setup evidence saved to `./2026-06-11-0923-doing-qa-environment/unit-0/setup-verification.txt`.
+- 2026-06-11 10:45 America/Los_Angeles Units 1a-1c complete: added failing static QA tests, then implemented `env.qa`, QA scripts, and static deployment preflight checks. Focused tests pass; targeted coverage artifact saved with local thresholds because repo-wide coverage thresholds require the full suite.

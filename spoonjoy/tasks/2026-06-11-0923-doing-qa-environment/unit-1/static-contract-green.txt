@@ -1,0 +1,10 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ✓ test/scripts/deployment-preflight.test.ts (63 tests) 124ms
+
+ Test Files  1 passed (1)
+      Tests  63 passed (63)
+   Start at  09:44:29
+   Duration  719ms (transform 90ms, setup 137ms, import 85ms, tests 124ms, environment 237ms)
+

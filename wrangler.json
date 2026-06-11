@@ -44,5 +44,44 @@
   "vars": {
     "NODE_ENV": "production",
     "SPOONJOY_BASE_URL": "https://spoonjoy.app"
+  },
+
+  "env": {
+    "qa": {
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "spoonjoy-qa",
+          "database_id": "c6c99e80-bd51-4cf2-b7c7-b7a6e27d3f34"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "PHOTOS",
+          "bucket_name": "spoonjoy-photos-qa"
+        }
+      ],
+      "ratelimits": [
+        {
+          "name": "API_TOKEN_RATE_LIMITER",
+          "namespace_id": "2001",
+          "simple": { "limit": 120, "period": 60 }
+        },
+        {
+          "name": "API_IP_RATE_LIMITER",
+          "namespace_id": "2002",
+          "simple": { "limit": 60, "period": 60 }
+        },
+        {
+          "name": "AUTH_IP_RATE_LIMITER",
+          "namespace_id": "2003",
+          "simple": { "limit": 20, "period": 60 }
+        }
+      ],
+      "vars": {
+        "NODE_ENV": "production",
+        "SPOONJOY_BASE_URL": "https://spoonjoy-v2-qa.mendelow-studio.workers.dev"
+      }
+    }
   }
 }

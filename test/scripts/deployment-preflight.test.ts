@@ -22,19 +22,52 @@ function validInputs(): DeploymentPreflightInputs {
       assets: { directory: "./build/client" },
       d1_databases: [{ binding: "DB", database_name: "spoonjoy", database_id: "database-id" }],
       r2_buckets: [{ binding: "PHOTOS", bucket_name: "spoonjoy-photos" }],
+      ratelimits: [
+        { name: "API_TOKEN_RATE_LIMITER", namespace_id: "1001" },
+        { name: "API_IP_RATE_LIMITER", namespace_id: "1002" },
+        { name: "AUTH_IP_RATE_LIMITER", namespace_id: "1003" },
+      ],
       vars: { NODE_ENV: "production" },
+      env: {
+        qa: {
+          d1_databases: [
+            {
+              binding: "DB",
+              database_name: "spoonjoy-qa",
+              database_id: "c6c99e80-bd51-4cf2-b7c7-b7a6e27d3f34",
+            },
+          ],
+          r2_buckets: [{ binding: "PHOTOS", bucket_name: "spoonjoy-photos-qa" }],
+          ratelimits: [
+            { name: "API_TOKEN_RATE_LIMITER", namespace_id: "2001" },
+            { name: "API_IP_RATE_LIMITER", namespace_id: "2002" },
+            { name: "AUTH_IP_RATE_LIMITER", namespace_id: "2003" },
+          ],
+          vars: {
+            NODE_ENV: "production",
+            SPOONJOY_BASE_URL: "https://spoonjoy-v2-qa.mendelow-studio.workers.dev",
+          },
+        },
+      },
     },
     packageJson: {
       scripts: {
         build: "react-router build",
         deploy: "pnpm run deploy:preflight && pnpm run build && pnpm exec wrangler deploy",
+        "deploy:qa":
+          "SPOONJOY_PREFLIGHT_SKIP_REMOTE=1 pnpm run qa:preflight && pnpm run build && pnpm run qa:migrate && pnpm run qa:preflight && pnpm exec wrangler deploy --env qa",
         "deploy:auto":
           "SPOONJOY_PREFLIGHT_SKIP_REMOTE=1 pnpm run deploy:preflight && pnpm run build && pnpm exec wrangler d1 migrations apply DB --remote && pnpm run deploy:preflight && pnpm exec wrangler deploy",
         "deploy:preflight": "tsx scripts/deployment-preflight.ts",
+        "qa:preflight": "tsx scripts/qa-preflight.ts",
+        "qa:migrate": "pnpm exec wrangler d1 migrations apply DB --remote --env qa",
+        "qa:seed": "node scripts/seed-qa.mjs --target-env qa",
         typecheck: "react-router typegen && tsc",
         "test:coverage": "vitest run --coverage",
         "test:e2e": "env -u FORCE_COLOR -u NO_COLOR playwright test",
         "smoke:api": "node scripts/smoke-api-live.mjs",
+        "smoke:qa":
+          "node scripts/smoke-live.mjs --target-env qa --base-url https://spoonjoy-v2-qa.mendelow-studio.workers.dev --out qa-live-smoke-artifacts",
         "db:seed": "pnpm exec tsx prisma/seed.ts",
       },
     },
@@ -294,6 +327,44 @@ describe("deployment preflight", () => {
 
     expect(result.errors.map((item) => item.name)).toEqual(
       expect.arrayContaining(["Cloudflare Env typing", "image provider documentation"]),
+    );
+  });
+
+  it("flags a missing isolated QA Wrangler environment and QA scripts", () => {
+    const inputs = validInputs();
+    delete inputs.wrangler.env;
+    for (const script of ["qa:preflight", "qa:migrate", "qa:seed", "deploy:qa", "smoke:qa"]) {
+      delete (inputs.packageJson.scripts as Record<string, string>)[script];
+    }
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toEqual(
+      expect.arrayContaining(["QA environment", "QA resource isolation", "QA package scripts"]),
+    );
+  });
+
+  it("flags QA resources that alias production resources", () => {
+    const inputs = validInputs();
+    inputs.wrangler.env = {
+      qa: {
+        d1_databases: [{ binding: "DB", database_name: "spoonjoy", database_id: "database-id" }],
+        r2_buckets: [{ binding: "PHOTOS", bucket_name: "spoonjoy-photos" }],
+        ratelimits: [
+          {
+            name: "API_TOKEN_RATE_LIMITER",
+            namespace_id: "1001",
+            simple: { limit: 120, period: 60 },
+          },
+        ],
+        vars: { NODE_ENV: "production", SPOONJOY_BASE_URL: "https://spoonjoy.app" },
+      },
+    };
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toEqual(
+      expect.arrayContaining(["QA environment", "QA resource isolation"]),
     );
   });
 });
@@ -673,6 +744,63 @@ describe("package.json deploy scripts", () => {
     expect(pkg.scripts["deploy:auto"]).toBe(
       "SPOONJOY_PREFLIGHT_SKIP_REMOTE=1 pnpm run deploy:preflight && pnpm run build && pnpm exec wrangler d1 migrations apply DB --remote && pnpm run deploy:preflight && pnpm exec wrangler deploy",
     );
+  });
+
+  it("exposes QA preflight, migration, seed, deploy, and smoke scripts", async () => {
+    const pkgRaw = await import("node:fs/promises").then((mod) =>
+      mod.readFile(`${process.cwd()}/package.json`, "utf8"),
+    );
+    const pkg = JSON.parse(pkgRaw) as { scripts: Record<string, string> };
+
+    expect(pkg.scripts["qa:preflight"]).toBe("tsx scripts/qa-preflight.ts");
+    expect(pkg.scripts["qa:migrate"]).toBe("pnpm exec wrangler d1 migrations apply DB --remote --env qa");
+    expect(pkg.scripts["qa:seed"]).toBe("node scripts/seed-qa.mjs --target-env qa");
+    expect(pkg.scripts["deploy:qa"]).toBe(
+      "SPOONJOY_PREFLIGHT_SKIP_REMOTE=1 pnpm run qa:preflight && pnpm run build && pnpm run qa:migrate && pnpm run qa:preflight && pnpm exec wrangler deploy --env qa",
+    );
+    expect(pkg.scripts["smoke:qa"]).toBe(
+      "node scripts/smoke-live.mjs --target-env qa --base-url https://spoonjoy-v2-qa.mendelow-studio.workers.dev --out qa-live-smoke-artifacts",
+    );
+  });
+});
+
+describe("wrangler QA environment", () => {
+  it("defines an isolated Cloudflare QA environment", async () => {
+    const wranglerRaw = await import("node:fs/promises").then((mod) =>
+      mod.readFile(`${process.cwd()}/wrangler.json`, "utf8"),
+    );
+    const wrangler = JSON.parse(wranglerRaw) as {
+      d1_databases: Array<{ binding: string; database_name: string; database_id: string }>;
+      r2_buckets: Array<{ binding: string; bucket_name: string }>;
+      ratelimits: Array<{ name: string; namespace_id: string }>;
+      env?: Record<string, {
+        d1_databases?: Array<{ binding: string; database_name: string; database_id: string }>;
+        r2_buckets?: Array<{ binding: string; bucket_name: string }>;
+        ratelimits?: Array<{ name: string; namespace_id: string }>;
+        vars?: Record<string, string>;
+      }>;
+    };
+
+    const qa = wrangler.env?.qa;
+    expect(qa).toBeDefined();
+    expect(qa?.d1_databases).toEqual([
+      {
+        binding: "DB",
+        database_name: "spoonjoy-qa",
+        database_id: "c6c99e80-bd51-4cf2-b7c7-b7a6e27d3f34",
+      },
+    ]);
+    expect(qa?.r2_buckets).toEqual([{ binding: "PHOTOS", bucket_name: "spoonjoy-photos-qa" }]);
+    expect(qa?.vars?.SPOONJOY_BASE_URL).toBe("https://spoonjoy-v2-qa.mendelow-studio.workers.dev");
+
+    const productionRateLimits = new Set(wrangler.ratelimits.map((limiter) => limiter.namespace_id));
+    expect(qa?.ratelimits?.map((limiter) => limiter.namespace_id)).toEqual(["2001", "2002", "2003"]);
+    for (const limiter of qa?.ratelimits ?? []) {
+      expect(productionRateLimits.has(limiter.namespace_id)).toBe(false);
+    }
+
+    expect(qa?.d1_databases?.[0]?.database_id).not.toBe(wrangler.d1_databases[0]?.database_id);
+    expect(qa?.r2_buckets?.[0]?.bucket_name).not.toBe(wrangler.r2_buckets[0]?.bucket_name);
   });
 });
 
