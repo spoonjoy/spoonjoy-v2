@@ -21,6 +21,7 @@ Add a real Spoonjoy QA deployment target with separate Cloudflare state so live/
 - Add a `qa` Wrangler environment that deploys as a distinct Worker target.
 - Configure QA to use separate D1, R2, rate-limit namespaces, and base URL values from production.
 - Add package scripts for QA preflight, migration application, deploy, and live smoke entrypoints.
+- Add an idempotent QA seed command/data set that runs against `--env qa`, uses disposable/demo names, and refuses production.
 - Extend deployment preflight checks to verify the QA environment contract without weakening production checks.
 - Add the minimal QA-aware smoke targeting needed so a QA smoke cannot accidentally clean production D1 or run production-only Apple OAuth assertions.
 - Document QA resource creation, secret setup, migration, deploy, smoke, and cleanup expectations.
@@ -41,10 +42,12 @@ Add a real Spoonjoy QA deployment target with separate Cloudflare state so live/
 - `wrangler.json` has a `qa` environment with distinct QA D1/R2/rate-limit/base URL settings.
 - `pnpm run qa:preflight` proves QA config exists, is not aliased to production resources, resolves to the QA Worker URL, verifies QA secret presence with `wrangler secret list --env qa` when authenticated, and checks QA migrations with `--env qa`.
 - QA D1 migrations can be listed/applied with `--env qa` without touching production.
-- QA R2 bucket exists and can be verified through documented create/list or smoke-time write/read/delete checks.
+- QA R2 bucket exists and `pnpm run qa:preflight` or QA smoke performs an actual QA R2 write/read/delete verification.
+- QA seed command is idempotent, creates only disposable/demo data, runs with `--env qa`, and refuses production resources.
 - QA deploy command builds and deploys `spoonjoy-v2-qa`.
 - QA smoke command targets the QA base URL, requires the QA Wrangler environment for remote cleanup, and does not default to production.
 - QA smoke skips or adapts the production-only Apple OAuth guard instead of hitting production as part of QA verification.
+- QA smoke creates disposable QA data and verifies that cleanup removed that data from QA D1.
 - QA docs cover telemetry defaults, image-provider policy, OAuth callback expectations, WebAuthn/RP-origin expectations, QA seed data, and disposable data naming.
 - Docs make it clear future agents should verify QA before production-risky live flows.
 - `pnpm run deploy:preflight`, `pnpm test:coverage`, and `pnpm typecheck` pass.
@@ -55,6 +58,7 @@ Add a real Spoonjoy QA deployment target with separate Cloudflare state so live/
 - Add or update unit coverage for QA-specific deployment preflight parsing and validation.
 - Cover failure cases where QA env is missing, QA D1/R2 aliases production, QA base URL is absent, and QA scripts are absent.
 - Cover the smoke cleanup argument builder so remote QA cleanup includes `--env qa` and production cleanup is explicit.
+- Cover the QA seed/refusal path so production-targeted seed attempts fail closed.
 - Keep total coverage at 100% statements, branches, functions, and lines with zero warnings.
 
 ## Open Questions
@@ -88,8 +92,10 @@ Add a real Spoonjoy QA deployment target with separate Cloudflare state so live/
 - Do not make `smoke:qa` silently fall back to production if QA vars are missing.
 - If QA secret setup blocks a full smoke, land the environment contract and document the exact missing secret state, then continue into `SJ-044` harness work rather than touching production data.
 - Do not claim `SJ-043` complete from docs alone; the QA resources must exist and be verified.
+- Do not treat R2 create/list as enough; verify an object round trip in the QA bucket.
 
 ## Progress Log
 
 - 2026-06-11 09:23 - Created planning doc after checking the next-work queue, Wrangler config, deployment preflight, production readiness, and live smoke scripts.
 - 2026-06-11 09:32 - Incorporated reviewer findings: QA smoke must be minimally environment-aware, QA preflight must prove secrets/migrations/base URL/resource isolation, and resource creation cannot be doc-only.
+- 2026-06-11 09:39 - Added reviewer-required QA seed, R2 round-trip, and smoke-create-cleanup completion criteria.
