@@ -63,15 +63,9 @@ jobs:
           secrets_json="$(pnpm exec wrangler secret list --env qa)"
           echo "$secrets_json"
 
-          if ! printf '%s' "$secrets_json" | grep -q '"OPENAI_API_KEY"'; then
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "Skipping QA image-cover smoke because QA OPENAI_API_KEY is not configured."
-            exit 0
-          fi
-
           if ! printf '%s' "$secrets_json" | grep -Eq '"(OPENAI_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY)"'; then
             echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "Skipping QA image-cover smoke because no QA edit-provider secret is configured."
+            echo "Skipping QA image-cover smoke because no QA image-provider secret is configured."
             exit 0
           fi
 

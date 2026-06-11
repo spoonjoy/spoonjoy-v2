@@ -420,7 +420,15 @@ describe("smoke image-cover helpers", () => {
       placeholderProvider: "openai",
       editProviders: ["openai"],
     });
-    expect(() => assertQaImageProviderSecrets(["GEMINI_API_KEY"])).toThrow(/OPENAI_API_KEY/);
+    expect(assertQaImageProviderSecrets(["GOOGLE_API_KEY"])).toEqual({
+      placeholderProvider: "gemini",
+      editProviders: ["gemini"],
+    });
+    expect(assertQaImageProviderSecrets(["GEMINI_API_KEY"])).toEqual({
+      placeholderProvider: "gemini",
+      editProviders: ["gemini"],
+    });
+    expect(() => assertQaImageProviderSecrets(["SESSION_SECRET"])).toThrow(/OPENAI_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY/);
     expect(() => parseWranglerSecretNames("not json")).toThrow(/secret output/);
     expect(() => parseWranglerSecretNames("[not-json]")).toThrow(/Could not parse/);
     expect(() => parseWranglerSecretNames("{}")).toThrow(/secret output/);
@@ -547,11 +555,11 @@ describe("image-cover live smoke flow", () => {
     const harness = createFlowHarness({
       listQaSecretNames: vi.fn(async () => {
         harness.calls.push({ kind: "secrets" });
-        return ["GEMINI_API_KEY"];
+        return ["SESSION_SECRET"];
       }),
     });
 
-    await expect(runImageCoverSmokeFlow(harness.options)).rejects.toThrow(/OPENAI_API_KEY/);
+    await expect(runImageCoverSmokeFlow(harness.options)).rejects.toThrow(/image provider secret/);
     expect(harness.calls).toEqual([{ kind: "secrets" }]);
     expect(harness.deletedKeys).toEqual([]);
   });

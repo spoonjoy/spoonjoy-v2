@@ -1,7 +1,11 @@
 import type { PrismaClient } from "@prisma/client";
 import {
+  createGeminiImageRunner,
   createOpenAIImageRunner,
+  DEFAULT_GEMINI_IMAGE_MODEL,
+  DEFAULT_GEMINI_IMAGE_TIMEOUT_MS,
   generatePlaceholderImage,
+  type ImageGenEnv,
   type ImageGenRunner,
 } from "~/lib/image-gen.server";
 import { tryConsumeImageGenQuota } from "~/lib/image-gen-ledger.server";
@@ -13,11 +17,16 @@ import {
 import { createOpenAIClient } from "~/lib/openai-client.server";
 import type { PostHogServerConfig, PostHogServerEnv } from "~/lib/analytics-server";
 
-const PLACEHOLDER_MODEL = "dall-e-3";
+const OPENAI_PLACEHOLDER_MODEL = "dall-e-3";
 
-type ImageGenerationSchedulerEnv = { OPENAI_API_KEY?: string } & PostHogServerEnv;
-type OpenAIImageGenerationEnv = ImageGenerationSchedulerEnv & { OPENAI_API_KEY: string };
-type ImageGenRunnerFactory = (env: OpenAIImageGenerationEnv) => ImageGenRunner | null;
+type ImageGenerationSchedulerEnv = ImageGenEnv & PostHogServerEnv;
+type ImageGenRunnerFactory = (env: ImageGenerationSchedulerEnv) => ImageGenRunner | null;
+type PlaceholderProvider = "openai" | "gemini";
+interface ResolvedPlaceholderRunner {
+  runner: ImageGenRunner;
+  model: string;
+  provider: PlaceholderProvider;
+}
 
 export interface SchedulePlaceholderInput {
   db: PrismaClient;
@@ -37,26 +46,87 @@ export interface SchedulePlaceholderInput {
   logger?: Pick<Console, "error">;
 }
 
-function hasOpenAIKey(
-  env: ImageGenerationSchedulerEnv | null | undefined,
-): env is OpenAIImageGenerationEnv {
-  return Boolean(env?.OPENAI_API_KEY);
+function trimmed(value: string | undefined): string {
+  return typeof value === "string" ? value.trim() : "";
 }
 
-function createDefaultRunner(env: OpenAIImageGenerationEnv): ImageGenRunner {
-  const client = createOpenAIClient({ apiKey: env.OPENAI_API_KEY });
-  return createOpenAIImageRunner(client as never);
+function positiveInteger(value: string | undefined): number | null {
+  const normalized = trimmed(value);
+  if (normalized === "") return null;
+  const parsed = Number(normalized);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function normalizeProvider(value: string): PlaceholderProvider | null {
+  const normalized = value.trim().toLowerCase();
+  return normalized === "openai" || normalized === "gemini" ? normalized : null;
+}
+
+function resolvePlaceholderProviderOrder(env: ImageGenerationSchedulerEnv): PlaceholderProvider[] {
+  const configured = [
+    trimmed(env.IMAGE_PROVIDER_PRIMARY),
+    ...trimmed(env.IMAGE_PROVIDER_FALLBACKS).split(","),
+  ].map((value) => value.trim()).filter(Boolean);
+  const rawOrder = configured.length > 0 ? configured : ["openai", "gemini"];
+  const order: PlaceholderProvider[] = [];
+  for (const item of rawOrder) {
+    const provider = normalizeProvider(item);
+    if (provider && !order.includes(provider)) order.push(provider);
+  }
+  return order;
+}
+
+function createDefaultRunner(
+  env: ImageGenerationSchedulerEnv,
+  fetchImpl?: typeof fetch,
+): ResolvedPlaceholderRunner | null {
+  for (const provider of resolvePlaceholderProviderOrder(env)) {
+    if (provider === "openai") {
+      const apiKey = trimmed(env.OPENAI_API_KEY);
+      if (!apiKey) continue;
+      const client = createOpenAIClient({ apiKey });
+      return {
+        provider,
+        model: OPENAI_PLACEHOLDER_MODEL,
+        runner: createOpenAIImageRunner(client as never),
+      };
+    }
+    const apiKey = trimmed(env.GEMINI_API_KEY) || trimmed(env.GOOGLE_API_KEY);
+    if (!apiKey) continue;
+    return {
+      provider,
+      model: trimmed(env.GEMINI_IMAGE_MODEL) || DEFAULT_GEMINI_IMAGE_MODEL,
+      runner: createGeminiImageRunner({
+        apiKey,
+        fetchImpl,
+        timeoutMs: positiveInteger(env.GEMINI_IMAGE_TIMEOUT_MS) ?? DEFAULT_GEMINI_IMAGE_TIMEOUT_MS,
+      }),
+    };
+  }
+  return null;
 }
 
 function resolveRunner(
   input: SchedulePlaceholderInput,
-): { runner: ImageGenRunner } | { reason: ImageGenerationSkipReason } {
-  if (input.runner) return { runner: input.runner };
-  if (!hasOpenAIKey(input.env)) return { reason: "missing_openai_key" };
+): ResolvedPlaceholderRunner | { reason: ImageGenerationSkipReason } {
+  if (input.runner) {
+    return {
+      runner: input.runner,
+      model: OPENAI_PLACEHOLDER_MODEL,
+      provider: "openai",
+    };
+  }
+  if (!input.env) return { reason: "missing_image_provider_config" };
 
-  const createRunner = input.createRunner ?? createDefaultRunner;
-  const runner = createRunner(input.env);
-  return runner ? { runner } : { reason: "missing_runner" };
+  if (input.createRunner) {
+    const runner = input.createRunner(input.env);
+    return runner
+      ? { runner, model: OPENAI_PLACEHOLDER_MODEL, provider: "openai" }
+      : { reason: "missing_runner" };
+  }
+
+  const runner = createDefaultRunner(input.env, input.fetchImpl);
+  return runner ?? { reason: "missing_image_provider_config" };
 }
 
 async function captureSkipped(
@@ -81,6 +151,7 @@ async function captureSkipped(
 async function captureGenerationException(
   input: SchedulePlaceholderInput,
   error: unknown,
+  model: string,
 ): Promise<void> {
   await captureImageGenerationException({
     env: input.env,
@@ -92,7 +163,7 @@ async function captureGenerationException(
     operation: "placeholder_generate",
     sourceType: "ai-placeholder",
     quotaKind: "placeholder",
-    model: PLACEHOLDER_MODEL,
+    model,
     error,
   });
 }
@@ -153,6 +224,7 @@ export async function scheduleAiPlaceholderCover(
   input: SchedulePlaceholderInput,
 ): Promise<void> {
   const logger = input.logger ?? console;
+  let model = OPENAI_PLACEHOLDER_MODEL;
   try {
     const runnerResolution = resolveRunner(input);
     if ("reason" in runnerResolution) {
@@ -160,6 +232,7 @@ export async function scheduleAiPlaceholderCover(
       await markPlaceholderFailed(input, runnerResolution.reason, logger);
       return;
     }
+    model = runnerResolution.model;
 
     const consumed = await tryConsumeImageGenQuota(
       input.db,
@@ -176,6 +249,7 @@ export async function scheduleAiPlaceholderCover(
     const url = await generatePlaceholderImage(input.title, input.description, {
       env: input.env ?? {},
       runner: runnerResolution.runner,
+      model: runnerResolution.model,
       fetchImpl: input.fetchImpl,
       bucket: input.bucket,
       now: input.now,
@@ -192,7 +266,7 @@ export async function scheduleAiPlaceholderCover(
     });
     await activatePlaceholderIfStillAutomatic(input);
   } catch (error) {
-    await captureGenerationException(input, error);
+    await captureGenerationException(input, error, model);
     await markPlaceholderFailed(input, failureReasonFor(error), logger);
     logger.error("ai-placeholder cover generation failed", error);
   }

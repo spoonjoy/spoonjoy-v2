@@ -143,7 +143,7 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
     await expectPlaceholderFailed("quota_exhausted");
   });
 
-  it("returns silently when no runner is available and OPENAI_API_KEY is absent", async () => {
+  it("returns silently when no placeholder image provider is configured", async () => {
     const analyticsFetchImpl = postHogFetchSpy();
     await scheduleAiPlaceholderCover({
       db,
@@ -161,7 +161,7 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
     expect(cover.imageUrl).toBe("");
     expect(cover.status).toBe("failed");
     expect(cover.generationStatus).toBe("failed");
-    expect(cover.failureReason).toContain("missing_openai_key");
+    expect(cover.failureReason).toContain("missing_image_provider_config");
     expect(errorSpy.error).not.toHaveBeenCalled();
     await expect(
       db.imageGenLedger.count({ where: { userId, kind: "placeholder" } }),
@@ -178,7 +178,7 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
           sourceType: "ai-placeholder",
           quotaKind: "placeholder",
           model: "none",
-          reason: "missing_openai_key",
+          reason: "missing_image_provider_config",
         }),
       }),
     ]);
@@ -225,6 +225,34 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
     ]);
   });
 
+  it("uses a custom runner factory when it returns a runner", async () => {
+    const runner = makeRunner();
+    await scheduleAiPlaceholderCover({
+      db,
+      userId,
+      recipeId,
+      coverId,
+      title: "Pasta",
+      description: null,
+      env: { OPENAI_API_KEY: "sk-test" },
+      createRunner: () => runner,
+      bucket: mockR2(),
+      logger: errorSpy,
+    });
+
+    await expect(
+      db.recipeCover.findUniqueOrThrow({
+        where: { id: coverId },
+        select: { status: true, generationStatus: true, failureReason: true },
+      }),
+    ).resolves.toEqual({
+      status: "ready",
+      generationStatus: "succeeded",
+      failureReason: null,
+    });
+    expect(runner.textToImage).toHaveBeenCalledTimes(1);
+  });
+
   it("returns silently when env is null", async () => {
     await scheduleAiPlaceholderCover({
       db,
@@ -237,7 +265,7 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
       logger: errorSpy,
     });
     expect(errorSpy.error).not.toHaveBeenCalled();
-    await expectPlaceholderFailed("missing_openai_key");
+    await expectPlaceholderFailed("missing_image_provider_config");
   });
 
   it("logs and swallows runner errors without throwing", async () => {
@@ -410,6 +438,188 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
     expect(errorSpy.error).toHaveBeenCalled();
     expect(stubFetch).toHaveBeenCalled();
     await expectPlaceholderFailed("stubbed");
+  });
+
+  it("constructs a real Gemini placeholder runner when only GOOGLE_API_KEY is set", async () => {
+    const bucket = mockR2();
+    const responseBody = {
+      candidates: [
+        {
+          content: {
+            parts: [
+              {
+                inlineData: {
+                  data: Buffer.from(GENERATED_BYTES).toString("base64"),
+                  mimeType: "image/png",
+                },
+              },
+            ],
+          },
+        },
+      ],
+    };
+    const fetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify(responseBody), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    ) as unknown as typeof fetch;
+
+    await scheduleAiPlaceholderCover({
+      db,
+      userId,
+      recipeId,
+      coverId,
+      title: "Pasta",
+      description: "warm",
+      env: { GOOGLE_API_KEY: "google-test", IMAGE_PROVIDER_PRIMARY: "gemini", GEMINI_IMAGE_TIMEOUT_MS: "12000" },
+      fetchImpl,
+      bucket,
+      now: () => 9876,
+      logger: errorSpy,
+    });
+
+    const cover = await db.recipeCover.findUniqueOrThrow({ where: { id: coverId } });
+    expect(cover).toMatchObject({
+      imageUrl: expect.stringMatching(/^\/photos\/covers\/9876-[a-f0-9-]+\.png$/),
+      status: "ready",
+      generationStatus: "succeeded",
+      failureReason: null,
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const [url, init] = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(String(url)).toContain("/models/gemini-3.1-flash-image:generateContent");
+    expect(init).toEqual(
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ "x-goog-api-key": "google-test" }),
+      }),
+    );
+    expect(JSON.parse(init.body as string)).toEqual(
+      expect.objectContaining({
+        contents: [
+          {
+            parts: [
+              {
+                text: expect.stringContaining("Warm editorial food photograph of Pasta"),
+              },
+            ],
+          },
+        ],
+        generationConfig: { responseModalities: ["Image"] },
+      }),
+    );
+    expect(bucket.put).toHaveBeenCalledWith(
+      cover.imageUrl.replace("/photos/", ""),
+      GENERATED_BYTES,
+      expect.objectContaining({ httpMetadata: { contentType: "image/png" } }),
+    );
+    expect(errorSpy.error).not.toHaveBeenCalled();
+  });
+
+  it("falls back to Gemini defaults when provider order and timeout config are noisy", async () => {
+    const responseBody = {
+      candidates: [
+        {
+          content: {
+            parts: [
+              {
+                inlineData: {
+                  data: Buffer.from(GENERATED_BYTES).toString("base64"),
+                  mimeType: "image/png",
+                },
+              },
+            ],
+          },
+        },
+      ],
+    };
+    const fetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify(responseBody), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    ) as unknown as typeof fetch;
+
+    await scheduleAiPlaceholderCover({
+      db,
+      userId,
+      recipeId,
+      coverId,
+      title: "Pasta",
+      description: null,
+      env: {
+        GOOGLE_API_KEY: "google-test",
+        IMAGE_PROVIDER_PRIMARY: "unknown",
+        IMAGE_PROVIDER_FALLBACKS: "gemini",
+        GEMINI_IMAGE_TIMEOUT_MS: "not-a-number",
+      },
+      fetchImpl,
+      bucket: mockR2(),
+      logger: errorSpy,
+    });
+
+    await expect(
+      db.recipeCover.findUniqueOrThrow({
+        where: { id: coverId },
+        select: { status: true, generationStatus: true, failureReason: true },
+      }),
+    ).resolves.toEqual({
+      status: "ready",
+      generationStatus: "succeeded",
+      failureReason: null,
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses the default Gemini timeout when timeout config is omitted", async () => {
+    const responseBody = {
+      candidates: [
+        {
+          content: {
+            parts: [
+              {
+                inlineData: {
+                  data: Buffer.from(GENERATED_BYTES).toString("base64"),
+                  mimeType: "image/png",
+                },
+              },
+            ],
+          },
+        },
+      ],
+    };
+    const fetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify(responseBody), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    ) as unknown as typeof fetch;
+
+    await scheduleAiPlaceholderCover({
+      db,
+      userId,
+      recipeId,
+      coverId,
+      title: "Pasta",
+      description: null,
+      env: { GEMINI_API_KEY: "gemini-test", IMAGE_PROVIDER_PRIMARY: "gemini" },
+      fetchImpl,
+      bucket: mockR2(),
+      logger: errorSpy,
+    });
+
+    await expect(
+      db.recipeCover.findUniqueOrThrow({
+        where: { id: coverId },
+        select: { status: true, generationStatus: true, failureReason: true },
+      }),
+    ).resolves.toEqual({
+      status: "ready",
+      generationStatus: "succeeded",
+      failureReason: null,
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
   it("captures generation exceptions with image-generation metadata", async () => {

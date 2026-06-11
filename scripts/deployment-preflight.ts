@@ -420,11 +420,8 @@ function cloudflareGateRunIsSafe(run: string): boolean {
 function qaProviderGateRunIsSafe(run: string): boolean {
   return includesOrdered(run, [
     "wrangler secret list --env qa",
-    "grep -q",
-    '"OPENAI_API_KEY"',
-    'echo "ready=false" >> "$GITHUB_OUTPUT"',
-    "exit 0",
     "grep -Eq",
+    "OPENAI_API_KEY",
     "GEMINI_API_KEY",
     "GOOGLE_API_KEY",
     'echo "ready=false" >> "$GITHUB_OUTPUT"',

@@ -33,6 +33,7 @@ export interface ImageGenRunner {
 export interface ImageGenDeps {
   env: ImageGenEnv;
   runner: ImageGenRunner;
+  model?: string;
   fetchImpl?: typeof fetch;
   bucket?: R2Bucket;
   now?: () => number;
@@ -451,7 +452,7 @@ export async function generatePlaceholderImage(
   const prompt = composePlaceholderPrompt(title, description);
   let runnerResult: GeneratedImageOutput;
   try {
-    runnerResult = await deps.runner.textToImage(prompt, { model: "dall-e-3" });
+    runnerResult = await deps.runner.textToImage(prompt, { model: deps.model ?? "dall-e-3" });
   } catch (cause) {
     throw new ImageGenError("Placeholder image generation failed", { cause });
   }

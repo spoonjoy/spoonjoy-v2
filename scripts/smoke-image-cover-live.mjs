@@ -253,12 +253,15 @@ export function parseWranglerSecretNames(stdout) {
 
 export function assertQaImageProviderSecrets(names) {
   const secrets = new Set(names);
-  if (!secrets.has("OPENAI_API_KEY")) {
-    throw new Error("QA image-cover smoke requires OPENAI_API_KEY for AI placeholder covers.");
+  const hasOpenAi = secrets.has("OPENAI_API_KEY");
+  const hasGemini = secrets.has("GEMINI_API_KEY") || secrets.has("GOOGLE_API_KEY");
+  if (!hasOpenAi && !hasGemini) {
+    throw new Error("QA image-cover smoke requires at least one image provider secret: OPENAI_API_KEY, GEMINI_API_KEY, or GOOGLE_API_KEY.");
   }
-  const editProviders = ["openai"];
-  if (secrets.has("GEMINI_API_KEY") || secrets.has("GOOGLE_API_KEY")) editProviders.push("gemini");
-  return { placeholderProvider: "openai", editProviders };
+  const editProviders = [];
+  if (hasOpenAi) editProviders.push("openai");
+  if (hasGemini) editProviders.push("gemini");
+  return { placeholderProvider: hasOpenAi ? "openai" : "gemini", editProviders };
 }
 
 function defaultWait(ms) {

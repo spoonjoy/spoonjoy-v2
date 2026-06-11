@@ -64,7 +64,7 @@ async function expectAwaitingPlaceholderCover(recipeId: string, userId: string) 
     generationStatus: "failed",
     createdById: userId,
   });
-  expect(recipe.covers[0].failureReason).toContain("missing_openai_key");
+  expect(recipe.covers[0].failureReason).toContain("missing_image_provider_config");
 }
 
 describe("Recipes New Route", () => {
