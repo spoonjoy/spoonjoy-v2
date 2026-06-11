@@ -1069,6 +1069,7 @@ describe("scheduleSpoonCoverStylization", () => {
       styleVersion: "mendelow-phone-to-editorial-v1",
     });
     expect(cover.failureReason).toContain("Stylization failed");
+    expect(cover.failureReason).toContain("img failed");
     expect(postHogBodies(analyticsFetchImpl)).toEqual([
       expect.objectContaining({
         event: "$exception",
@@ -1089,6 +1090,28 @@ describe("scheduleSpoonCoverStylization", () => {
         }),
       }),
     ]);
+  });
+
+  it("does not duplicate matching provider failure messages", async () => {
+    const duplicateMessage = "openai:gpt-image-2 image edit failed";
+    const runner: ImageGenRunner = {
+      textToImage: vi.fn(),
+      imageToImage: vi.fn().mockRejectedValue(new Error(duplicateMessage)),
+    };
+
+    await scheduleSpoonCoverStylization({
+      db,
+      userId,
+      recipeId,
+      coverId,
+      rawPhotoUrl: dataUrl("image/png", VALID_PNG_BYTES),
+      recipeTitle: "Stylize Me",
+      runner,
+      logger: errorSpy,
+    });
+
+    const cover = await db.recipeCover.findUniqueOrThrow({ where: { id: coverId } });
+    expect(cover.failureReason).toBe(`Stylization failed: ${duplicateMessage}`);
   });
 
   it("marks a processing cover failed without consuming quota when the source image is missing", async () => {

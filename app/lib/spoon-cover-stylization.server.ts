@@ -289,6 +289,17 @@ async function markStylizationFailed(
   });
 }
 
+function failureReasonFor(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const cause = typeof error === "object" && error !== null && "cause" in error
+    ? (error as { cause?: unknown }).cause
+    : undefined;
+  if (cause === undefined) return message;
+
+  const causeMessage = failureReasonFor(cause);
+  return causeMessage === message ? message : `${message}: ${causeMessage}`;
+}
+
 function hasActiveVariantUrl(cover: {
   imageUrl: string | null;
   stylizedImageUrl: string | null;
@@ -647,7 +658,7 @@ export async function scheduleSpoonCoverStylization(
     await captureRecoveredProviderFallback(input, result);
   } catch (error) {
     const serializedError = serializeError(error);
-    await markStylizationFailed(input, error instanceof Error ? error.message : String(error), { force: true });
+    await markStylizationFailed(input, failureReasonFor(error), { force: true });
     await captureGenerationException(input, error, serializedError);
     logger.error("spoon cover stylization failed", serializedError);
   }
