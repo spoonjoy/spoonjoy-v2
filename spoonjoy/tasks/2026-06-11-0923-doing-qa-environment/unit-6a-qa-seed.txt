@@ -1,0 +1,140 @@
+
+> spoonjoy-v2@1.0.0 qa:seed /Users/arimendelow/Projects/spoonjoy-v2
+> node scripts/seed-qa.mjs --target-env qa
+
+
+ ⛅️ wrangler 4.90.0 (update available 4.100.0)
+──────────────────────────────────────────────
+Resource location: remote 
+
+🌀 Executing on remote database DB (c6c99e80-bd51-4cf2-b7c7-b7a6e27d3f34):
+🌀 To execute on your local development database, remove the --remote flag from your wrangler command.
+🚣 Executed 6 commands in 1.17ms
+[
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "WNAM",
+      "served_by_colo": "SEA",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.2414
+      },
+      "duration": 0.2414,
+      "changes": 1,
+      "last_row_id": 5,
+      "changed_db": true,
+      "size_after": 577536,
+      "rows_read": 0,
+      "rows_written": 5,
+      "total_attempts": 1
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "WNAM",
+      "served_by_colo": "SEA",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.1084
+      },
+      "duration": 0.1084,
+      "changes": 1,
+      "last_row_id": 21,
+      "changed_db": true,
+      "size_after": 577536,
+      "rows_read": 0,
+      "rows_written": 3,
+      "total_attempts": 1
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "WNAM",
+      "served_by_colo": "SEA",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.1129
+      },
+      "duration": 0.1129,
+      "changes": 1,
+      "last_row_id": 50,
+      "changed_db": true,
+      "size_after": 577536,
+      "rows_read": 0,
+      "rows_written": 3,
+      "total_attempts": 1
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "WNAM",
+      "served_by_colo": "SEA",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.3498
+      },
+      "duration": 0.3498,
+      "changes": 1,
+      "last_row_id": 9,
+      "changed_db": true,
+      "size_after": 577536,
+      "rows_read": 0,
+      "rows_written": 7,
+      "total_attempts": 1
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "WNAM",
+      "served_by_colo": "SEA",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.2095
+      },
+      "duration": 0.2095,
+      "changes": 1,
+      "last_row_id": 37,
+      "changed_db": true,
+      "size_after": 577536,
+      "rows_read": 0,
+      "rows_written": 4,
+      "total_attempts": 1
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "WNAM",
+      "served_by_colo": "SEA",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.1446
+      },
+      "duration": 0.1446,
+      "changes": 1,
+      "last_row_id": 58,
+      "changed_db": true,
+      "size_after": 577536,
+      "rows_read": 0,
+      "rows_written": 6,
+      "total_attempts": 1
+    }
+  }
+]

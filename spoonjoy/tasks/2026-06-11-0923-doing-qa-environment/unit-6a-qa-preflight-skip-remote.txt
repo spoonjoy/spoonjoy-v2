@@ -1,0 +1,9 @@
+
+> spoonjoy-v2@1.0.0 qa:preflight /Users/arimendelow/Projects/spoonjoy-v2
+> tsx scripts/qa-preflight.ts
+
+PASS QA static config: QA static config targets https://spoonjoy-v2-qa.mendelow-studio.workers.dev.
+PASS QA D1 migrations: Skipped QA D1 migration check (SPOONJOY_PREFLIGHT_SKIP_REMOTE=1).
+PASS QA secrets: Skipped QA secret check (SPOONJOY_PREFLIGHT_SKIP_REMOTE=1).
+PASS QA R2 round trip: Skipped QA R2 round trip (SPOONJOY_PREFLIGHT_SKIP_REMOTE=1).
+QA preflight passed.

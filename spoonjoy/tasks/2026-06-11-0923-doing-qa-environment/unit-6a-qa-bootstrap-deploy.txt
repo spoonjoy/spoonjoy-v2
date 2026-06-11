@@ -1,0 +1,157 @@
+
+ ⛅️ wrangler 4.90.0 (update available 4.100.0)
+──────────────────────────────────────────────
+Using redirected Wrangler configuration.
+ - Configuration being used: "build/server/wrangler.json"
+ - Original user's configuration: "wrangler.json"
+ - Deploy configuration file: ".wrangler/deploy/config.json"
+Attaching additional modules:
+┌───────────────────────────────────────┬───────────────┬──────────────┐
+│ Name                                  │ Type          │ Size         │
+├───────────────────────────────────────┼───────────────┼──────────────┤
+│ assets/default-q4wsRDaS.js            │ esm           │ 253.94 KiB   │
+├───────────────────────────────────────┼───────────────┼──────────────┤
+│ assets/index-DLEKNHnV.js              │ esm           │ 78.99 KiB    │
+├───────────────────────────────────────┼───────────────┼──────────────┤
+│ assets/index-gksP9o8C.js              │ esm           │ 914.77 KiB   │
+├───────────────────────────────────────┼───────────────┼──────────────┤
+│ assets/query_engine_bg-BB05z0i1.wasm  │ compiled-wasm │ 2120.41 KiB  │
+├───────────────────────────────────────┼───────────────┼──────────────┤
+│ assets/resvg-Blvrv-U2.wasm            │ compiled-wasm │ 2420.51 KiB  │
+├───────────────────────────────────────┼───────────────┼──────────────┤
+│ assets/server-build-CYrESE5P.js       │ esm           │ 3873.67 KiB  │
+├───────────────────────────────────────┼───────────────┼──────────────┤
+│ assets/wasm-worker-loader-BRtQh8vu.js │ esm           │ 0.11 KiB     │
+├───────────────────────────────────────┼───────────────┼──────────────┤
+│ assets/worker-entry-Cr1lDHjz.js       │ esm           │ 301.53 KiB   │
+├───────────────────────────────────────┼───────────────┼──────────────┤
+│ assets/yoga-sbSbVeWy.wasm             │ compiled-wasm │ 70.05 KiB    │
+├───────────────────────────────────────┼───────────────┼──────────────┤
+│ Total (9 modules)                     │               │ 10033.97 KiB │
+└───────────────────────────────────────┴───────────────┴──────────────┘
+🌀 Building list of assets...
+✨ Read 145 files from the assets directory /Users/arimendelow/Projects/spoonjoy-v2/build/client
+🌀 Starting asset upload...
+🌀 Found 107 new or modified static assets to upload. Proceeding with upload...
++ /assets/api._-l0sNRNKZ.js
++ /assets/auth.apple.callback-B_bo4RnN.js
++ /assets/auth.google-B-uJiS1z.js
++ /assets/devtools-well-known-SeQRPkoZ.js
++ /assets/cookbooks-DbXA__8P.js
++ /assets/book-open-CCf_xOlN.js
++ /assets/refresh-cw-CxvXpyvo.js
++ /assets/api-DUfMzihx.js
++ /assets/heading-Bs-YMx8c.js
++ /assets/CoverProvenanceBadge-CgsOGH52.js
++ /assets/settings-vvUHq8dG.js
++ /assets/validation-error-BOL3rEGM.js
++ /logos/sj_black.svg
++ /assets/createLucideIcon-9qD3eDVn.js
++ /offline.html
++ /assets/auth-layout-Cxkn7HPp.js
++ /assets/users._identifier.kitchen-visitors-CYF28DfA.js
++ /assets/FellowChefList-CTrwH-BL.js
++ /assets/oauth-CNDacXrG.js
++ /assets/signup-DAapRn-e.js
++ /assets/login-CCorjz9v.js
++ /assets/CookbookCoverArt-DfyKxLz-.js
++ /assets/oauth.authorize-DGPmL-3j.js
++ /assets/terms-Bq8O7t9r.js
++ /assets/fieldset-DRL5QwEX.js
++ /assets/recipes._index-CYlXyGo_.js
++ /assets/switch-kcYY_N_y.js
++ /assets/quantity-w7WDhb5Z.js
++ /assets/webauthn-client-CwUEosbT.js
++ /assets/_index-CYbZfxYL.js
++ /assets/RecipeBuilder-LcVEGDKz.js
++ /assets/account.settings-BerfXrpd.js
++ /assets/manifest-72c503ad.js
++ /assets/recipes._id-CXc8_uce.js
++ /assets/proxy-Bm38A43m.js
++ /assets/index-wnAe5EVe.js
++ /.well-known/appspecific/com.chrome.devtools.json
++ /assets/auth.github-C56tSpel.js
++ /assets/auth.google.callback-CdptjXwS.js
++ /assets/logout-ViaBXDQF.js
++ /assets/recipes-CSoFoC8i.js
++ /assets/use-resolve-button-type-BoOUSrU-.js
++ /assets/bugs-DOYSPACm.js
++ /assets/api.playground-CNxCbI2n.js
++ /assets/recipe-image-fFDixTMm.js
++ /manifest.webmanifest
++ /assets/confirmation-dialog-ehjkPRcK.js
++ /assets/_-DYf5_ZfI.js
++ /logos/sj_white.svg
++ /assets/spoonjoy-logo-BaLoElSH.js
++ /assets/cookbooks.new-CcBaDsx3.js
++ /assets/toast-BQg8opxG.js
++ /assets/page-VIsz0uiv.js
++ /assets/analytics-CJYUghuz.js
++ /assets/textarea-OkEBh7o3.js
++ /assets/push-client-DWmDZ8-h.js
++ /assets/input-duHoqABT.js
++ /assets/button-C74nw8Go.js
++ /assets/index-Ujj8d3gV.js
++ /assets/SpoonsStrip-D982FaoQ.js
++ /assets/recipes._id.steps.new-Bb7h-fUv.js
++ /assets/recipes._id.edit-8Qtlz9ep.js
++ /icons/sj-512.png
++ /assets/users._identifier-CZkkw_er.js
++ /assets/ParsedIngredientList-CsPtv6RB.js
++ /assets/dialog-8j8W7kRb.js
++ /assets/text-Cm_iz4V2.js
++ /assets/root-BEC8ZBXT.js
++ /assets/developers.playground-sKzT8Nvp.js
++ /images/chef-rj.png
++ /assets/chunk-JZWAC4HX-BWgHnysW.js
++ /assets/entry.client-Du0c-emh.js
++ /assets/auth.apple-CXE5Ihln.js
++ /assets/auth.github.callback-BmtkqbdX.js
++ /assets/cookbooks._index-QsVdVxx0.js
++ /assets/plus-Btq7vv0U.js
++ /assets/search-B1oz_jwR.js
++ /assets/chef-hat-DEC3wL00.js
++ /assets/share-2-BCH18kw0.js
++ /assets/quick-actions-npdzVnVn.js
++ /assets/shopping-bag-UT86i5o_.js
++ /assets/jsx-runtime-u17CrQMm.js
++ /assets/hidden-CatFI8Ns.js
++ /assets/use-default-value-CyXWyiUT.js
++ /assets/dock-context-D75VxrVm.js
++ /assets/agent.connect-ThN9L5If.js
++ /assets/chef-avatar-CviPa73E.js
++ /assets/users._identifier.fellow-chefs-C6Xs9Qew.js
++ /icons/sj-192.png
++ /assets/checklist-row-CIDOq47D.js
++ /sw.js
++ /assets/recipes.new-C7RuA_nZ.js
++ /assets/select-CkqYHtnm.js
++ /assets/agent.connect._requestId-CTi1dUIY.js
++ /assets/ingredient-affordances-Dz5rar6P.js
++ /assets/label-CFzyLSMd.js
++ /assets/privacy-C7LJgBgN.js
++ /assets/recipes._id.steps._stepId.edit-C-kBveqU.js
++ /assets/search-C05uajQq.js
++ /assets/cookbooks._id-Cyvlkzqf.js
+   (truncating changed assets log, set `WRANGLER_LOG=debug` environment variable to see full diff)
+Uploaded 35 of 107 assets
+Uploaded 71 of 107 assets
+Uploaded 107 of 107 assets
+✨ Success! Uploaded 107 files (32 already uploaded) (1.36 sec)
+
+Total Upload: 10034.10 KiB / gzip: 2947.86 KiB
+Worker Startup Time: 13 ms
+Your Worker has access to the following bindings:
+Binding                                                                      Resource                  
+env.DB (spoonjoy-qa)                                                         D1 Database               
+env.PHOTOS (spoonjoy-photos-qa)                                              R2 Bucket                 
+env.API_TOKEN_RATE_LIMITER (120 requests/60s)                                Rate Limit                
+env.API_IP_RATE_LIMITER (60 requests/60s)                                    Rate Limit                
+env.AUTH_IP_RATE_LIMITER (20 requests/60s)                                   Rate Limit                
+env.NODE_ENV ("production")                                                  Environment Variable      
+env.SPOONJOY_BASE_URL ("https://spoonjoy-v2-qa.mendelow-studi...")           Environment Variable      
+
+Uploaded spoonjoy-v2-qa (10.48 sec)
+Deployed spoonjoy-v2-qa triggers (0.80 sec)
+  https://spoonjoy-v2-qa.mendelow-studio.workers.dev
+Current Version ID: dd97a1b9-54cb-4fe3-930a-0eab484c104c

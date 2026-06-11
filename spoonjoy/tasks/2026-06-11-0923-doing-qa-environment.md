@@ -145,7 +145,7 @@ Add a real Spoonjoy QA deployment target with separate Cloudflare state so live/
 **Output**: Focused docs/preflight test output saved under the artifacts directory and any doc/test cleanup needed.
 **Acceptance**: Docs-related tests remain green with no warnings.
 
-### ⬜ Unit 6a: Remote QA Verification — Tests/Preflight
+### ✅ Unit 6a: Remote QA Verification — Tests/Preflight
 **What**: Run local targeted tests, create or verify QA Cloudflare resources, apply QA migrations, verify QA secrets via `wrangler secret list --env qa` when authenticated, run QA seed, and run QA preflight. If auth or secret values are missing, record the exact blocker, do not touch production, and do not mark QA smoke complete.
 **Output**: QA resource, migration, secret-list, seed, and preflight logs saved under the artifacts directory.
 **Acceptance**: Command outputs are saved in the artifact directory; failures are actionable and do not touch production.
@@ -181,3 +181,4 @@ Add a real Spoonjoy QA deployment target with separate Cloudflare state so live/
 - 2026-06-11 10:57 America/Los_Angeles Units 3a-3c complete: added failing seed tests, then implemented `scripts/seed-qa.mjs` with idempotent disposable QA SQL and hard `--target-env qa` refusal. Focused scripts suite passes.
 - 2026-06-11 11:00 America/Los_Angeles Units 4a-4c complete: added failing smoke-helper tests, then made live smoke cleanup target-explicit, QA cleanup use `--env qa`, production smoke explicit, Apple OAuth guard production-only, and cleanup verification query the same target environment. Focused scripts suite passes.
 - 2026-06-11 11:02 America/Los_Angeles Units 5a-5c complete: added failing QA docs test, then documented QA resources, secret commands, telemetry/image-provider policy, OAuth callback and WebAuthn origin expectations, seed namespace, disposable smoke naming, and safe verification commands. Focused scripts suite passes.
+- 2026-06-11 11:10 America/Los_Angeles Unit 6a complete: targeted tests passed; QA D1 migrations applied; QA Worker bootstrapped; QA runtime secrets set and listed; QA seed ran and reran idempotently; full QA preflight passed with generated build config, D1 migrations, secrets, and R2 round trip.
