@@ -1,5 +1,6 @@
+import { Buffer } from "node:buffer";
 import { readFile } from "node:fs/promises";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   DIRTY_APP1_MARKER,
@@ -20,11 +21,171 @@ import {
   parseMcpToolPayload,
   parseWranglerSecretNames,
   photoKeyFromImageUrl,
+  pollCoverGeneration,
+  runImageCoverSmokeFlow,
   validateSmokePhotoKey,
 } from "../../scripts/smoke-image-cover-live.mjs";
 
 const QA_BASE_URL = "https://spoonjoy-v2-qa.mendelow-studio.workers.dev";
 const textEncoder = new TextEncoder();
+
+const AI_PLACEHOLDER_COVER = {
+  id: "cover-ai",
+  imageUrl: "/photos/covers/ai-placeholder.jpg",
+  stylizedImageUrl: null,
+  displayUrl: "/photos/covers/ai-placeholder.jpg",
+  provenanceLabel: "AI generated",
+  sourceType: "ai-placeholder",
+  generationStatus: "succeeded",
+  status: "ready",
+  activeVariant: "image",
+};
+
+const CHEF_PHOTO_COVER = {
+  id: "cover-chef",
+  imageUrl: "/photos/recipes/user-1/uploads/oriented.jpg",
+  stylizedImageUrl: null,
+  displayUrl: "/photos/recipes/user-1/uploads/oriented.jpg",
+  provenanceLabel: "Chef photo",
+  sourceType: "chef-upload",
+  generationStatus: "none",
+  status: "ready",
+  activeVariant: "image",
+};
+
+const EDITORIAL_COVER = {
+  id: "cover-editorial",
+  imageUrl: "/photos/recipes/user-1/uploads/oriented.jpg",
+  stylizedImageUrl: "/photos/covers/editorial.jpg",
+  displayUrl: "/photos/covers/editorial.jpg",
+  provenanceLabel: "Editorialized chef photo",
+  sourceType: "chef-upload",
+  generationStatus: "succeeded",
+  status: "ready",
+  activeVariant: "stylized",
+};
+
+const SPOON_EDITORIAL_COVER = {
+  id: "cover-spoon",
+  imageUrl: "/photos/spoons/user-1/uploads/spoon.png",
+  stylizedImageUrl: "/photos/covers/spoon-editorial.jpg",
+  displayUrl: "/photos/covers/spoon-editorial.jpg",
+  provenanceLabel: "Editorialized chef photo",
+  sourceType: "spoon",
+  sourceSpoonId: "spoon-1",
+  generationStatus: "succeeded",
+  status: "ready",
+  activeVariant: "stylized",
+};
+
+const GIF_BYTES = new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00]);
+
+type FlowCall = {
+  kind: string;
+  name?: string;
+  args?: unknown;
+};
+
+function terminalStatusCover(cover: typeof EDITORIAL_COVER) {
+  return { ...cover, generationStatus: "succeeded", status: "ready" };
+}
+
+function createFlowHarness(overrides: Record<string, unknown> = {}) {
+  const calls: FlowCall[] = [];
+  const deletedKeys: string[] = [];
+  const verifiedDeletedKeys: string[] = [];
+  let listCoversCount = 0;
+  const mcpTool = vi.fn(async (name: string, args: Record<string, unknown>) => {
+    calls.push({ kind: "mcp", name, args });
+    if (name === "list_recipe_covers") {
+      listCoversCount += 1;
+      const covers = listCoversCount === 1
+        ? [{ ...AI_PLACEHOLDER_COVER, imageUrl: null, displayUrl: null, generationStatus: "processing" }]
+        : [AI_PLACEHOLDER_COVER, CHEF_PHOTO_COVER, EDITORIAL_COVER, SPOON_EDITORIAL_COVER];
+      return { covers, activeCover: covers[0] };
+    }
+    if (name === "create_spoon") return { spoon: { id: "spoon-1", photoUrl: "/photos/spoons/user-1/uploads/spoon.png" } };
+    if (name === "list_recipe_spoon_images") return { spoonImages: [{ id: "spoon-1", photoUrl: "/photos/spoons/user-1/uploads/spoon.png" }] };
+    if (name === "create_recipe_cover_from_upload") {
+      return args.generateEditorial === false
+        ? { createdCover: CHEF_PHOTO_COVER, activeCover: CHEF_PHOTO_COVER, generationStatus: "none" }
+        : { createdCover: { ...EDITORIAL_COVER, stylizedImageUrl: null, generationStatus: "processing" }, generationStatus: "processing" };
+    }
+    if (name === "create_recipe_cover_from_spoon") {
+      return { createdCover: { ...SPOON_EDITORIAL_COVER, stylizedImageUrl: null, generationStatus: "processing" }, generationStatus: "processing" };
+    }
+    if (name === "regenerate_recipe_cover") {
+      return { createdCover: { ...EDITORIAL_COVER, generationStatus: "processing" }, generationStatus: "processing" };
+    }
+    if (name === "get_cover_generation_status") {
+      const coverId = String(args.coverId);
+      const cover = coverId === "cover-spoon" ? SPOON_EDITORIAL_COVER : EDITORIAL_COVER;
+      return { cover: terminalStatusCover(cover), activeCover: terminalStatusCover(cover) };
+    }
+    if (name === "set_active_recipe_cover") return { activeCover: CHEF_PHOTO_COVER };
+    if (name === "archive_recipe_cover") return { archivedCover: SPOON_EDITORIAL_COVER, activeCover: CHEF_PHOTO_COVER };
+    throw new Error(`Unexpected MCP tool ${name}`);
+  });
+
+  const harness = {
+    calls,
+    deletedKeys,
+    verifiedDeletedKeys,
+    options: {
+      baseUrl: QA_BASE_URL,
+      email: "codex-smoke@example.com",
+      recipeId: "recipe-1",
+      recipeTitle: "Codex smoke risotto",
+      stamp: "unit2a",
+      maxPollAttempts: 3,
+      pollDelayMs: 0,
+      listQaSecretNames: vi.fn(async () => {
+        calls.push({ kind: "secrets" });
+        return ["SESSION_SECRET", "OPENAI_API_KEY", "GEMINI_API_KEY"];
+      }),
+      apiTool: vi.fn(async (name: string, args: Record<string, unknown>) => {
+        calls.push({ kind: "api", name, args });
+        if (name === "create_api_token") {
+          return { token: "sj_secret_token", credential: { id: "credential-1" } };
+        }
+        if (name === "upload_recipe_image") {
+          return { imageUrl: "/photos/recipes/user-1/uploads/oriented.jpg", mimeType: "image/jpeg", sizeBytes: 1024 };
+        }
+        if (name === "upload_spoon_photo") {
+          return { imageUrl: "/photos/spoons/user-1/uploads/spoon.png", mimeType: "image/png", sizeBytes: 67 };
+        }
+        if (name === "revoke_api_token") {
+          return { revoked: true, credential: { id: args.credentialId, revokedAt: new Date(0).toISOString() } };
+        }
+        throw new Error(`Unexpected API tool ${name}`);
+      }),
+      expectApiToolFailure: vi.fn(async (name: string, args: Record<string, unknown>) => {
+        calls.push({ kind: "api-failure", name, args });
+        return { status: 400, message: "GIF uploads are not supported" };
+      }),
+      mcpToolsList: vi.fn(async () => {
+        calls.push({ kind: "mcp-tools-list" });
+        return { tools: IMAGE_COVER_REQUIRED_MCP_TOOLS.map((name) => ({ name })) };
+      }),
+      mcpTool,
+      readFileBytes: vi.fn(async (path: string) => {
+        if (path.endsWith(".png")) return new Uint8Array(await readFile("e2e/fixtures/spoon-test-photo.png"));
+        if (path.endsWith(".gif")) return GIF_BYTES;
+        return new Uint8Array(await readFile(ORIENTED_JPEG_FIXTURE_PATH));
+      }),
+      downloadPhotoBytes: vi.fn(async () => new Uint8Array(await readFile(ORIENTED_JPEG_FIXTURE_PATH))),
+      deleteQaR2Object: vi.fn(async (key: string) => {
+        deletedKeys.push(key);
+      }),
+      verifyQaR2ObjectDeleted: vi.fn(async (key: string) => {
+        verifiedDeletedKeys.push(key);
+      }),
+      wait: vi.fn(async () => undefined),
+      ...(overrides as object),
+    },
+  };
+  return harness;
+}
 
 function app1Segment(payloadBytes: Uint8Array): Uint8Array {
   const length = payloadBytes.length + 2;
@@ -281,5 +442,180 @@ describe("smoke image-cover helpers", () => {
       "archive_recipe_cover",
       "list_recipe_covers",
     ]);
+  });
+});
+
+describe("image-cover live smoke flow", () => {
+  it("runs preflight before mutation, proves API/MCP operations, provenance, and exact cleanup", async () => {
+    const harness = createFlowHarness();
+
+    const report = await runImageCoverSmokeFlow(harness.options);
+
+    expect(harness.calls[0]).toEqual({ kind: "secrets" });
+    const createTokenCall = harness.calls.find((call) => call.kind === "api" && call.name === "create_api_token");
+    expect(createTokenCall?.args).toEqual({
+      name: "Codex image-cover smoke unit2a",
+      scopes: ["recipes:read", "kitchen:write"],
+    });
+
+    const listToolsIndex = harness.calls.findIndex((call) => call.kind === "mcp-tools-list");
+    const firstMcpIndex = harness.calls.findIndex((call) => call.kind === "mcp");
+    expect(listToolsIndex).toBeGreaterThan(-1);
+    expect(firstMcpIndex).toBeGreaterThan(listToolsIndex);
+
+    const listCoverIndexes = harness.calls
+      .map((call, index) => ({ call, index }))
+      .filter(({ call }) => call.kind === "mcp" && call.name === "list_recipe_covers")
+      .map(({ index }) => index);
+    const uploadIndex = harness.calls.findIndex((call) => call.kind === "api" && call.name === "upload_recipe_image");
+    expect(listCoverIndexes.length).toBeGreaterThanOrEqual(2);
+    expect(uploadIndex).toBeGreaterThan(listCoverIndexes[1]);
+
+    const uploadRecipeCall = harness.calls.find((call) => call.kind === "api" && call.name === "upload_recipe_image");
+    expect(uploadRecipeCall?.args).toMatchObject({
+      filename: "codex-smoke-oriented-unit2a.jpg",
+      mimeType: "image/jpeg",
+    });
+    const uploadedBytes = Buffer.from(String((uploadRecipeCall?.args as { imageBase64: string }).imageBase64), "base64");
+    expect(bytesContainAscii(uploadedBytes, DIRTY_APP1_MARKER)).toBe(true);
+
+    const gifRejection = harness.calls.find((call) => call.kind === "api-failure" && call.name === "upload_recipe_image");
+    expect(gifRejection?.args).toMatchObject({
+      filename: "codex-smoke-rejected-unit2a.gif",
+      mimeType: "image/gif",
+    });
+
+    const mcpToolNames = harness.calls
+      .filter((call) => call.kind === "mcp")
+      .map((call) => call.name);
+    expect(mcpToolNames).toEqual(expect.arrayContaining(IMAGE_COVER_REQUIRED_MCP_TOOLS));
+
+    expect(report.exif).toEqual({
+      sourceOrientation: 6,
+      storedOrientation: 6,
+      dirtyMarkerRemoved: true,
+    });
+    expect(report.provenanceLabels).toEqual(expect.arrayContaining([
+      "AI generated",
+      "Chef photo",
+      "Editorialized chef photo",
+    ]));
+    expect(report.r2.deletedKeys).toEqual(expect.arrayContaining([
+      "recipes/user-1/uploads/oriented.jpg",
+      "spoons/user-1/uploads/spoon.png",
+      "covers/ai-placeholder.jpg",
+      "covers/editorial.jpg",
+      "covers/spoon-editorial.jpg",
+    ]));
+    expect(harness.verifiedDeletedKeys).toEqual(expect.arrayContaining(report.r2.deletedKeys));
+    expect(report.credentialRevocation).toMatchObject({ credentialId: "credential-1", revoked: true });
+  });
+
+  it("refuses to mutate QA before provider preflight succeeds", async () => {
+    const harness = createFlowHarness({
+      listQaSecretNames: vi.fn(async () => {
+        harness.calls.push({ kind: "secrets" });
+        return ["GEMINI_API_KEY"];
+      }),
+    });
+
+    await expect(runImageCoverSmokeFlow(harness.options)).rejects.toThrow(/OPENAI_API_KEY/);
+    expect(harness.calls).toEqual([{ kind: "secrets" }]);
+    expect(harness.deletedKeys).toEqual([]);
+  });
+
+  it("cleans exact observed R2 keys and revokes the credential when the flow fails", async () => {
+    const harness = createFlowHarness();
+    const originalMcpTool = harness.options.mcpTool;
+    harness.options.mcpTool = vi.fn(async (name: string, args: Record<string, unknown>) => {
+      if (name === "create_recipe_cover_from_upload") {
+        throw new Error("cover creation failed");
+      }
+      return originalMcpTool(name, args);
+    });
+
+    await expect(runImageCoverSmokeFlow(harness.options)).rejects.toThrow(/cover creation failed/);
+
+    const revokeCall = harness.calls.find((call) => call.kind === "api" && call.name === "revoke_api_token");
+    expect(revokeCall?.args).toEqual({ credentialId: "credential-1" });
+    expect(harness.deletedKeys).toEqual(expect.arrayContaining([
+      "recipes/user-1/uploads/oriented.jpg",
+      "covers/ai-placeholder.jpg",
+    ]));
+    expect(harness.verifiedDeletedKeys).toEqual(expect.arrayContaining(harness.deletedKeys));
+  });
+
+  it("rejects a missing MCP image-cover tool before running MCP mutations", async () => {
+    const harness = createFlowHarness({
+      mcpToolsList: vi.fn(async () => {
+        harness.calls.push({ kind: "mcp-tools-list" });
+        return { tools: IMAGE_COVER_REQUIRED_MCP_TOOLS.filter((name) => name !== "archive_recipe_cover").map((name) => ({ name })) };
+      }),
+    });
+
+    await expect(runImageCoverSmokeFlow(harness.options)).rejects.toThrow(/archive_recipe_cover/);
+    expect(harness.calls.some((call) => call.kind === "mcp" && call.name === "create_spoon")).toBe(false);
+  });
+});
+
+describe("pollCoverGeneration", () => {
+  it("polls until a cover reaches a succeeded terminal state", async () => {
+    const statuses = [
+      { cover: { id: "cover-1", generationStatus: "processing", status: "processing" } },
+      { cover: { id: "cover-1", generationStatus: "processing", status: "processing" } },
+      { cover: { id: "cover-1", generationStatus: "succeeded", status: "ready" } },
+    ];
+    const wait = vi.fn(async () => undefined);
+    const getStatus = vi.fn(async () => statuses.shift());
+
+    await expect(pollCoverGeneration({
+      recipeId: "recipe-1",
+      coverId: "cover-1",
+      maxAttempts: 3,
+      delayMs: 7,
+      wait,
+      getStatus,
+    })).resolves.toMatchObject({ cover: { generationStatus: "succeeded" } });
+
+    expect(getStatus).toHaveBeenCalledTimes(3);
+    expect(wait).toHaveBeenCalledTimes(2);
+    expect(wait).toHaveBeenCalledWith(7);
+  });
+
+  it("surfaces failed cover generation without extra polling", async () => {
+    await expect(pollCoverGeneration({
+      recipeId: "recipe-1",
+      coverId: "cover-1",
+      maxAttempts: 3,
+      delayMs: 7,
+      wait: vi.fn(async () => undefined),
+      getStatus: vi.fn(async () => ({
+        cover: {
+          id: "cover-1",
+          generationStatus: "failed",
+          status: "ready",
+          failureReason: "provider quota",
+        },
+      })),
+    })).rejects.toThrow(/provider quota/);
+  });
+
+  it("times out after the fixed attempt budget", async () => {
+    const wait = vi.fn(async () => undefined);
+    const getStatus = vi.fn(async () => ({
+      cover: { id: "cover-1", generationStatus: "processing", status: "processing" },
+    }));
+
+    await expect(pollCoverGeneration({
+      recipeId: "recipe-1",
+      coverId: "cover-1",
+      maxAttempts: 2,
+      delayMs: 7,
+      wait,
+      getStatus,
+    })).rejects.toThrow(/timed out/i);
+
+    expect(getStatus).toHaveBeenCalledTimes(2);
+    expect(wait).toHaveBeenCalledTimes(1);
   });
 });

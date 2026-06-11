@@ -1,0 +1,116 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ❯ test/scripts/smoke-image-cover-live.test.ts (17 tests | 7 failed) 38ms
+     ✓ builds an oriented JPEG fixture with a dirty APP1 marker 2ms
+     ✓ handles malformed and little-endian JPEG metadata 1ms
+     ✓ extracts and validates only run-owned upload keys and observed generated cover keys 0ms
+     ✓ builds legacy API tool request shapes with the expected URL, body, and bearer header 1ms
+     ✓ uses explicit smoke token scopes and revokes the created credential through the session 0ms
+     ✓ builds MCP tools/call request shapes with JSON-RPC body and bearer header 0ms
+     ✓ builds MCP tools/list as its own JSON-RPC method 0ms
+     ✓ parses API and MCP tool payloads while surfacing failures 0ms
+     ✓ parses QA secret output and enforces placeholder plus edit-provider prerequisites 1ms
+     ✓ names every MCP tool the image-cover smoke must prove 0ms
+     × runs preflight before mutation, proves API/MCP operations, provenance, and exact cleanup 3ms
+     × refuses to mutate QA before provider preflight succeeds 0ms
+     × cleans exact observed R2 keys and revokes the credential when the flow fails 0ms
+     × rejects a missing MCP image-cover tool before running MCP mutations 0ms
+     × polls until a cover reaches a succeeded terminal state 0ms
+     × surfaces failed cover generation without extra polling 0ms
+     × times out after the fixed attempt budget 0ms
+ ✓ test/scripts/deployment-preflight.test.ts (67 tests) 85ms
+ ✓ test/scripts/smoke-live-helpers.test.ts (21 tests) 29ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/scripts/smoke-image-cover-live.test.ts > image-cover live smoke flow > runs preflight before mutation, proves API/MCP operations, provenance, and exact cleanup
+TypeError: (0 , __vite_ssr_import_3__.runImageCoverSmokeFlow) is not a function
+ ❯ test/scripts/smoke-image-cover-live.test.ts:452:26
+    450|     const harness = createFlowHarness();
+    451| 
+    452|     const report = await runImageCoverSmokeFlow(harness.options);
+       |                          ^
+    453| 
+    454|     expect(harness.calls[0]).toEqual({ kind: "secrets" });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  test/scripts/smoke-image-cover-live.test.ts > image-cover live smoke flow > refuses to mutate QA before provider preflight succeeds
+TypeError: (0 , __vite_ssr_import_3__.runImageCoverSmokeFlow) is not a function
+ ❯ test/scripts/smoke-image-cover-live.test.ts:522:18
+    520|     });
+    521| 
+    522|     await expect(runImageCoverSmokeFlow(harness.options)).rejects.toTh…
+       |                  ^
+    523|     expect(harness.calls).toEqual([{ kind: "secrets" }]);
+    524|     expect(harness.deletedKeys).toEqual([]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  test/scripts/smoke-image-cover-live.test.ts > image-cover live smoke flow > cleans exact observed R2 keys and revokes the credential when the flow fails
+TypeError: (0 , __vite_ssr_import_3__.runImageCoverSmokeFlow) is not a function
+ ❯ test/scripts/smoke-image-cover-live.test.ts:537:18
+    535|     });
+    536| 
+    537|     await expect(runImageCoverSmokeFlow(harness.options)).rejects.toTh…
+       |                  ^
+    538| 
+    539|     const revokeCall = harness.calls.find((call) => call.kind === "api…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  test/scripts/smoke-image-cover-live.test.ts > image-cover live smoke flow > rejects a missing MCP image-cover tool before running MCP mutations
+TypeError: (0 , __vite_ssr_import_3__.runImageCoverSmokeFlow) is not a function
+ ❯ test/scripts/smoke-image-cover-live.test.ts:556:18
+    554|     });
+    555| 
+    556|     await expect(runImageCoverSmokeFlow(harness.options)).rejects.toTh…
+       |                  ^
+    557|     expect(harness.calls.some((call) => call.kind === "mcp" && call.na…
+    558|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  test/scripts/smoke-image-cover-live.test.ts > pollCoverGeneration > polls until a cover reaches a succeeded terminal state
+TypeError: (0 , __vite_ssr_import_3__.pollCoverGeneration) is not a function
+ ❯ test/scripts/smoke-image-cover-live.test.ts:571:18
+    569|     const getStatus = vi.fn(async () => statuses.shift());
+    570| 
+    571|     await expect(pollCoverGeneration({
+       |                  ^
+    572|       recipeId: "recipe-1",
+    573|       coverId: "cover-1",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  test/scripts/smoke-image-cover-live.test.ts > pollCoverGeneration > surfaces failed cover generation without extra polling
+TypeError: (0 , __vite_ssr_import_3__.pollCoverGeneration) is not a function
+ ❯ test/scripts/smoke-image-cover-live.test.ts:586:18
+    584| 
+    585|   it("surfaces failed cover generation without extra polling", async (…
+    586|     await expect(pollCoverGeneration({
+       |                  ^
+    587|       recipeId: "recipe-1",
+    588|       coverId: "cover-1",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+ FAIL  test/scripts/smoke-image-cover-live.test.ts > pollCoverGeneration > times out after the fixed attempt budget
+TypeError: (0 , __vite_ssr_import_3__.pollCoverGeneration) is not a function
+ ❯ test/scripts/smoke-image-cover-live.test.ts:609:18
+    607|     }));
+    608| 
+    609|     await expect(pollCoverGeneration({
+       |                  ^
+    610|       recipeId: "recipe-1",
+    611|       coverId: "cover-1",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯
+
+
+ Test Files  1 failed | 2 passed (3)
+      Tests  7 failed | 98 passed (105)
+   Start at  13:10:26
+   Duration  1.32s (transform 113ms, setup 202ms, import 120ms, tests 152ms, environment 474ms)
+
