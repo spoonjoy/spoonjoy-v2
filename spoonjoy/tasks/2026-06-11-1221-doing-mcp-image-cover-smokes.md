@@ -1,6 +1,6 @@
 # Doing: MCP/API Image Cover Smokes
 
-**Status**: READY_FOR_EXECUTION
+**Status**: in-progress
 **Execution Mode**: direct
 **Created**: 2026-06-11 13:08
 **Planning**: ./2026-06-11-1221-planning-mcp-image-cover-smokes.md
@@ -152,3 +152,4 @@ Add a QA-targeted live smoke mode that proves Spoonjoy's remote API/MCP image an
 - 2026-06-11 13:17 Addressed ambiguity-review findings: exact contract files, test files, helper module, MCP tool matrix, fixture constants, provider secret names, verification commands, artifact filenames, split final merge/deploy/cleanup units, and commit/push cadence.
 - 2026-06-11 13:20 Addressed granularity-review findings by splitting live smoke implementation into auth/API upload, MCP cover/spoon, and cleanup/artifact units.
 - 2026-06-11 13:24 Unit 0 complete: planning approved, branch/artifacts confirmed, contract files inspected, and autopilot state updated.
+- 2026-06-11 13:27 Quality review converged with one minor lifecycle fix; marked doing status `in-progress`.
