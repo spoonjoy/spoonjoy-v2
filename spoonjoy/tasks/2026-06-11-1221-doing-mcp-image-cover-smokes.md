@@ -78,17 +78,17 @@ Add a QA-targeted live smoke mode that proves Spoonjoy's remote API/MCP image an
 **Output**: `test/scripts/smoke-image-cover-live.test.ts` proves the flow refuses mutation before QA/provider safety checks, polls the browser-created AI placeholder before upload/spoon cover mutations, polls `get_cover_generation_status` to `succeeded`/`failed`/timeout with fixed attempts and delay, collects/deletes/verifies exact upload and generated-cover R2 keys, revokes the created credential, and requires `Chef photo`, `Editorialized chef photo`, and `AI generated`.
 **Acceptance**: Tests fail red because the image-cover smoke flow is not integrated yet or does not call the expected injected operations.
 
-### ⬜ Unit 2b: Live Smoke Auth And API Upload Integration
+### ✅ Unit 2b: Live Smoke Auth And API Upload Integration
 **What**: Integrate `--include-image-cover-smoke` into `scripts/smoke-live.mjs` up to the API surface.
 **Output**: With the flag present, the existing QA browser smoke runs pre-mutation safety checks, mints a scoped token through `POST /api/tools/create_api_token` with scopes `["recipes:read","kitchen:write"]`, polls the browser-created no-photo placeholder until `AI generated` is visible before later cover mutations, uploads the generated Orientation-6 JPEG through `POST /api/tools/upload_recipe_image`, rejects the GIF fixture through `POST /api/tools/upload_recipe_image`, uploads a spoon photo through `POST /api/tools/upload_spoon_photo`, downloads the stored JPEG, and validates dirty APP1 removal plus Orientation `6`.
 **Acceptance**: The auth/API/upload portions of Unit 2a tests pass; existing smoke behavior is unchanged when the new flag is absent.
 
-### ⬜ Unit 2c: Live Smoke MCP Cover And Spoon Integration
+### ✅ Unit 2c: Live Smoke MCP Cover And Spoon Integration
 **What**: Add the MCP JSON-RPC image-cover operation sequence to the flagged smoke path.
 **Output**: The flagged smoke calls `/mcp` JSON-RPC `tools/list` as its own method, then calls `/mcp` JSON-RPC `tools/call` with `{ "jsonrpc": "2.0", "method": "tools/call", "params": { "name": "<tool>", "arguments": { ... } } }` for `create_spoon`, `list_recipe_spoon_images`, `create_recipe_cover_from_upload`, `create_recipe_cover_from_spoon`, `regenerate_recipe_cover`, `get_cover_generation_status`, `set_active_recipe_cover`, `archive_recipe_cover`, and `list_recipe_covers`; it polls generation status and validates `Chef photo`, `Editorialized chef photo`, and `AI generated`.
 **Acceptance**: The MCP/provenance/polling portions of Unit 2a tests pass.
 
-### ⬜ Unit 2d: Live Smoke Cleanup And Artifact Integration
+### ✅ Unit 2d: Live Smoke Cleanup And Artifact Integration
 **What**: Wire exact run-scoped cleanup and reporting into the flagged smoke path.
 **Output**: The flagged smoke records created ids, the API credential id, image URLs, cover IDs, operation names, provenance labels, generation polling history, canonical upload R2 keys, and generated `covers/*` keys observed on this run's cover records; deletes/verifies exact QA R2 objects in `finally`; revokes the credential through the browser session; cleans D1 by exact disposable email; reports unrelated `codex-smoke-%` residue without broad cleanup; writes `qa-image-cover-smoke-artifacts/smoke-results.json`.
 **Acceptance**: The cleanup/artifact portions of Unit 2a tests pass, including cleanup-on-error.
@@ -158,3 +158,4 @@ Add a QA-targeted live smoke mode that proves Spoonjoy's remote API/MCP image an
 - 2026-06-11 13:38 Unit 1b complete: helper module, smoke flag/R2 helpers, package script, preflight requirement, and coverage config implemented; focused tests passed in `unit-1b-green.log`.
 - 2026-06-11 13:04 Unit 1c complete: focused helper/preflight coverage saved to `unit-1c-coverage.log` with 100% statements/branches/functions/lines for `scripts/smoke-live-helpers.mjs` and `scripts/smoke-image-cover-live.mjs`; build saved to `unit-1c-build.log` with no warnings.
 - 2026-06-11 13:10 Unit 2a complete: red flow tests saved to `unit-2a-red.log`; failures are missing `runImageCoverSmokeFlow` and `pollCoverGeneration` implementation, while existing helper/preflight tests remain green. Unit review skipped because this is a tests-only red unit with intentional missing-function failures.
+- 2026-06-11 13:15 Units 2b, 2c, and 2d complete: `scripts/smoke-live.mjs` now wires `--include-image-cover-smoke` through QA provider preflight, session-created scoped token, API uploads/GIF rejection/EXIF verification, MCP cover and spoon operations, generation polling, provenance checks, exact R2 cleanup, credential revocation, and smoke-result artifact reporting. Focused green tests saved to `unit-2bcd-green.log`; build saved to `unit-2bcd-build.log`; no warnings.
