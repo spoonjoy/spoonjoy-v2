@@ -73,7 +73,7 @@ Add a real Spoonjoy QA deployment target with separate Cloudflare state so live/
 ### ⬜ Unit 1a: Static QA Contract — Tests
 **What**: Add failing tests for static QA configuration: `wrangler.json` `env.qa`, distinct D1/R2/rate-limit namespaces, QA base URL, and QA package scripts.
 **Output**: Updated preflight/package tests plus red-run output saved under the artifacts directory.
-**Acceptance**: Focused preflight tests fail because the QA environment/scripts/docs do not exist yet.
+**Acceptance**: Focused preflight tests fail because the QA environment/scripts do not exist yet.
 
 ### ⬜ Unit 1b: Static QA Contract — Implementation
 **What**: Add the `env.qa` Wrangler config, package scripts, and static deployment-preflight validation needed for the tests.
@@ -172,3 +172,4 @@ Add a real Spoonjoy QA deployment target with separate Cloudflare state so live/
 ## Progress Log
 - 2026-06-11 09:45 America/Los_Angeles Created from approved planning doc.
 - 2026-06-11 09:53 America/Los_Angeles Addressed doing-doc reviewer findings: added missing outputs, moved docs tests out of Unit 1, clarified red-test commit handling, made QA secret blocker handling explicit, and strengthened cleanup verification.
+- 2026-06-11 09:56 America/Los_Angeles Removed stale Unit 1a docs wording after reviewer re-check.
