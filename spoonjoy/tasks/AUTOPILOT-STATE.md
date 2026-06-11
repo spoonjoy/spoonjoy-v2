@@ -1,6 +1,6 @@
 # Autopilot State
 
-Updated: 2026-06-11 09:45 America/Los_Angeles
+Updated: 2026-06-11 09:58 America/Los_Angeles
 Branch: `spoonjoy/qa-environment`
 Objective: Execute `SJ-043` dedicated QA/test environment, merge it, verify auto-deploy, smoke production, clean test data, and continue to the next obvious queued work.
 
@@ -10,11 +10,11 @@ Objective: Execute `SJ-043` dedicated QA/test environment, merge it, verify auto
 - Planning status: `APPROVED`
 - Reviewer gate: converged after QA seed, R2 round-trip, and smoke-cleanup criteria were added.
 - Doing doc: `spoonjoy/tasks/2026-06-11-0923-doing-qa-environment.md`
-- Doing status: `drafting`
+- Doing status: `READY_FOR_EXECUTION`
 
 ## Next Action
 
-Run doing-doc review gates, mark the doing doc `READY_FOR_EXECUTION` once converged, then execute Unit 0 and continue sequentially through implementation, QA deploy/smoke, merge, production deploy verification, production smoke, cleanup, Slugger notification, and branch/PR cleanup.
+Execute Unit 0, then continue sequentially through implementation, QA deploy/smoke, merge, production deploy verification, production smoke, cleanup, Slugger notification, and branch/PR cleanup.
 
 ## Known External State
 

@@ -1,6 +1,6 @@
 # Doing: Dedicated QA Environment
 
-**Status**: drafting
+**Status**: READY_FOR_EXECUTION
 **Execution Mode**: direct
 **Created**: 2026-06-11 09:45 America/Los_Angeles
 **Planning**: ./2026-06-11-0923-planning-qa-environment.md
@@ -173,3 +173,4 @@ Add a real Spoonjoy QA deployment target with separate Cloudflare state so live/
 - 2026-06-11 09:45 America/Los_Angeles Created from approved planning doc.
 - 2026-06-11 09:53 America/Los_Angeles Addressed doing-doc reviewer findings: added missing outputs, moved docs tests out of Unit 1, clarified red-test commit handling, made QA secret blocker handling explicit, and strengthened cleanup verification.
 - 2026-06-11 09:56 America/Los_Angeles Removed stale Unit 1a docs wording after reviewer re-check.
+- 2026-06-11 09:58 America/Los_Angeles Doing-doc review gates converged; marked ready for execution.
