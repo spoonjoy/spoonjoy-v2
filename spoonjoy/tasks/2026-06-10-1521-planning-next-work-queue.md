@@ -20,11 +20,11 @@ Ari wants Spoonjoy to have a queued set of obvious next moves so future agents d
 
 ## Queue Order
 
-1. `SJ-043` - Dedicated QA/test environment.
+1. `SJ-043` - Dedicated QA/test environment. **Done 2026-06-11.**
    - Separate Worker/base URL, D1, R2, rate-limit namespaces, vars/secrets, preflight, seed, and origin-sensitive auth docs.
    - Done means live/manual/e2e verification can target QA without touching production user data.
 
-2. `SJ-044` - Environment-aware smoke, cleanup, and preflight harness.
+2. `SJ-044` - Environment-aware smoke, cleanup, and preflight harness. **Partially advanced by `SJ-043`; broader QA cleanup harness still open.**
    - Shared resolver for `local`, `qa`, `production`.
    - Refuse ambiguous destructive remote cleanup.
    - Include database and R2 teardown for QA disposable data.
@@ -38,7 +38,8 @@ Ari wants Spoonjoy to have a queued set of obvious next moves so future agents d
    - Benchmark Gemini/OpenAI and optional BFL/fal/Stability candidates with a controlled scorecard.
 
 5. `SJ-047` - Resolve `feat/profile-photo-crop`.
-   - Review the local unique branch and either merge/deploy it or delete it with a recorded reason.
+   - Review the local unique branch and either replay/deploy its square-crop commit on fresh `main` or delete it with a recorded reason.
+   - 2026-06-11 state: the branch is stale/unsafe to merge directly, but unique commit `3400c19a` remains candidate source material.
 
 6. `SJ-036` - Finish PostHog server-side error tracking.
    - Image-generation alerting exists; broader Worker/server error capture and verification still needs completion.
@@ -77,14 +78,11 @@ Local Stranger With Candy pass:
 
 ## Thin Slice
 
-Start `SJ-043` by adding a QA environment contract and preflight:
+`SJ-043` is complete. Next execution should start with `SJ-045` unless the operator deliberately chooses to replay `SJ-047` first:
 
-- choose the concrete Cloudflare resource names;
-- add `wrangler` environment/config support without disturbing production;
-- document QA vars/secrets;
-- add `pnpm qa:preflight` or equivalent;
-- prove QA D1 migrations and R2 read/write;
-- run one QA live smoke and cleanup;
+- use QA rather than production for live MCP/API image-cover smokes;
+- include EXIF and unsupported GIF assertions;
+- clean all created QA records and R2 keys in the same run;
 - merge and verify production deploy because this repo auto-deploys all main changes.
 
 ## Non-Goals
@@ -96,7 +94,7 @@ Start `SJ-043` by adding a QA environment contract and preflight:
 
 ## Planner Handoff
 
-Goal: Plan and execute `SJ-043`, then continue through the queue without asking "what's next" unless a task hits genuine human-judgment territory.
+Goal: Continue through the queue without asking "what's next" unless a task hits genuine human-judgment territory.
 
 Likely files:
 

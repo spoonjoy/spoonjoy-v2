@@ -1085,7 +1085,7 @@ Execution plan (atomic PRs, top-down):
 
 Priority: `P0`
 Lane: `qa`, `cloudflare`, `agent-trust`, `deployment`
-Status: `ready`
+Status: `done`
 
 Problem: Live/manual/e2e verification currently either uses local D1 or production-like remote state. Even with cleanup scripts, agents must be careful about disposable recipes, users, spoons, R2 objects, OAuth clients, and generated covers. That makes thorough verification slower and raises the risk of production data residue.
 
@@ -1099,6 +1099,8 @@ Acceptance criteria:
 - Ensure OAuth/WebAuthn origin-sensitive behavior is documented for QA, including callback URLs and RP origin expectations.
 - Verify `pnpm run smoke:live` or its successor can target QA without touching production.
 
+Completion note (2026-06-11): Shipped in PR #179 and final-verified after PR #181 at `c6a6c58d`. QA has distinct Worker, D1, R2, rate-limit bindings, base URL, seed, preflight, smoke, docs, and cleanup verification. Production deploy, health, smoke, QA residue, and production residue were verified after merge.
+
 Non-goals:
 
 - Do not make production cleanup more permissive.
@@ -1109,7 +1111,7 @@ Non-goals:
 
 Priority: `P0`
 Lane: `qa`, `testing`, `safety`, `agent-trust`
-Status: `ready`
+Status: `partially-done`
 
 Problem: Current smoke and cleanup commands have useful behavior, but the target environment is implicit in several places. `cleanup:qa` is deliberately local-only; live smoke can target non-local URLs and remote-delete its own smoke user; production residue checks are ad hoc. A dedicated QA environment will only help if the scripts print their target, refuse ambiguous destructive actions, and clean both database rows and stored image objects.
 
@@ -1122,6 +1124,8 @@ Acceptance criteria:
 - Production cleanup remains read-first and narrow; no broad remote destructive cleanup path is added.
 - Smoke artifacts include environment, base URL, branch/commit, created record IDs, cleanup result, and any retained R2 keys.
 - Tests cover refusal behavior, local cleanup, QA cleanup intent, and production read-only defaults.
+
+Progress note (2026-06-11): Advanced with `SJ-043`: QA preflight/smoke are target-explicit, QA smoke cleanup uses `--env qa`, production smoke cleanup remains narrow, and disposable smoke residue checks are documented. Still open: a broader environment-aware cleanup harness for QA disposable image objects/OAuth clients beyond the narrow smoke-created user path.
 
 ### SJ-045 - MCP/API Image And Cover E2E Smokes
 
@@ -1163,9 +1167,11 @@ Acceptance criteria:
 
 Priority: `P1`
 Lane: `repo-hygiene`, `profile`, `ui`, `deployment`
-Status: `ready`
+Status: `needs-replay`
 
 Problem: Local branch `feat/profile-photo-crop` contains a unique unmerged commit (`3400c19a`, "feat: crop profile photos to a square on upload"). It is not stale residue, but leaving it local-only increases drift and future merge risk.
+
+State note (2026-06-11): The branch itself is stale and unsafe to merge because it is 48 commits behind `main` and would revert/delete substantial shipped work. Keep or rebuild only the unique profile-crop commit contents on fresh `main`, then delete the stale local branch after the replay is merged or a durable discard reason is recorded.
 
 Acceptance criteria:
 

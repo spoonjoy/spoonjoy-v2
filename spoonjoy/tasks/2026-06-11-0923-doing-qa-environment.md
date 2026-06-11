@@ -1,6 +1,6 @@
 # Doing: Dedicated QA Environment
 
-**Status**: READY_FOR_EXECUTION
+**Status**: COMPLETED
 **Execution Mode**: direct
 **Created**: 2026-06-11 09:45 America/Los_Angeles
 **Planning**: ./2026-06-11-0923-planning-qa-environment.md
@@ -23,17 +23,17 @@ Add a real Spoonjoy QA deployment target with separate Cloudflare state so live/
 
 ## Completion Criteria
 
-- [ ] `wrangler.json` has a `qa` environment with distinct QA D1/R2/rate-limit/base URL settings.
-- [ ] `pnpm run qa:preflight` proves QA config exists, is not aliased to production resources, resolves to the QA Worker URL, verifies QA secret presence with `wrangler secret list --env qa` when authenticated, and checks QA migrations with `--env qa`.
-- [ ] QA D1 migrations can be listed/applied with `--env qa` without touching production.
+- [x] `wrangler.json` has a `qa` environment with distinct QA D1/R2/rate-limit/base URL settings.
+- [x] `pnpm run qa:preflight` proves QA config exists, is not aliased to production resources, resolves to the QA Worker URL, verifies QA secret presence with `wrangler secret list --env qa` when authenticated, and checks QA migrations with `--env qa`.
+- [x] QA D1 migrations can be listed/applied with `--env qa` without touching production.
 - [x] QA R2 bucket exists and `pnpm run qa:preflight` or QA smoke performs an actual QA R2 write/read/delete verification.
-- [ ] QA seed command is idempotent, creates only disposable/demo data, runs with `--env qa`, and refuses production resources.
+- [x] QA seed command is idempotent, creates only disposable/demo data, runs with `--env qa`, and refuses production resources.
 - [x] QA deploy command builds and deploys `spoonjoy-v2-qa`.
 - [x] QA smoke command targets the QA base URL, requires the QA Wrangler environment for remote cleanup, and does not default to production.
 - [x] QA smoke skips or adapts the production-only Apple OAuth guard instead of hitting production as part of QA verification.
 - [x] QA smoke creates disposable QA data and verifies that cleanup removed that data from QA D1.
-- [ ] QA docs cover telemetry defaults, image-provider policy, OAuth callback expectations, WebAuthn/RP-origin expectations, QA seed data, and disposable data naming.
-- [ ] Docs make it clear future agents should verify QA before production-risky live flows.
+- [x] QA docs cover telemetry defaults, image-provider policy, OAuth callback expectations, WebAuthn/RP-origin expectations, QA seed data, and disposable data naming.
+- [x] Docs make it clear future agents should verify QA before production-risky live flows.
 - [x] `pnpm run deploy:preflight`, `pnpm test:coverage`, and `pnpm typecheck` pass.
 - [x] Work is merged to `main`, auto-deployment is verified, production smoke passes, and disposable test data is cleaned.
 - [x] 100% test coverage on all new code
@@ -186,3 +186,4 @@ Add a real Spoonjoy QA deployment target with separate Cloudflare state so live/
 - 2026-06-11 10:12 America/Los_Angeles Unit 6b complete: documented QA deploy succeeded, `/health` returned ok, `pnpm run smoke:qa` passed, QA D1 `codex-smoke-%` residue count is 0, and QA R2 write/read/delete preflight passed. Smoke JSON and screenshots are saved under the artifact directory.
 - 2026-06-11 10:21 America/Los_Angeles Fresh Unit 6b reviewer converged. Unit 6c local gates passed: `pnpm run deploy:preflight`, `pnpm typecheck`, `pnpm run test:coverage` (300 files, 5,871 tests, 100% coverage), and `pnpm run build`.
 - 2026-06-11 10:43 America/Los_Angeles Unit 6c complete: PR #179 merged to `main`, production auto-deploy passed for merge commit `39979853`, production and custom-domain health checks returned ok, production smoke rerun passed with cleanup verification, QA/prod `codex-smoke-%` residue counts are 0, and post-merge main CI/Storybook passed.
+- 2026-06-11 11:19 America/Los_Angeles Post-merge evidence PR #180 was merged, then final main CI exposed an unrelated fellow-chefs random email collision. PR #181 fixed that flake with deterministic fellow-chef test users and merged to `main` as `c6a6c58d`. Production Deploy, Storybook, and CI passed for `c6a6c58d`; both production health URLs returned ok; QA and production `codex-smoke-%` residue counts are 0; local disposable-data dry run shows 0 active suspicious recipes/users/spoons/oauth clients.
