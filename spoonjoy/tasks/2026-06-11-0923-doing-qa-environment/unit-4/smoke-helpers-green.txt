@@ -1,0 +1,10 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ✓ test/scripts/smoke-live-helpers.test.ts (10 tests) 71ms
+
+ Test Files  1 passed (1)
+      Tests  10 passed (10)
+   Start at  09:59:18
+   Duration  573ms (transform 49ms, setup 129ms, import 13ms, tests 71ms, environment 226ms)
+

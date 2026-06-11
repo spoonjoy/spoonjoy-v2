@@ -4,19 +4,17 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
+import {
+  buildCleanupD1Args,
+  buildUserCountD1Args,
+  parseD1CountOutput,
+  parseSmokeArgs,
+  shouldRunAppleOAuthCheck,
+} from './smoke-live-helpers.mjs'
 
 const execFileAsync = promisify(execFile)
 const requireFromCwd = createRequire(join(process.cwd(), 'package.json'))
 const { chromium, expect } = requireFromCwd('@playwright/test')
-
-function arg(name, fallback) {
-  const index = process.argv.indexOf(name)
-  return index === -1 ? fallback : process.argv[index + 1]
-}
-
-function sqlString(value) {
-  return `'${value.replaceAll("'", "''")}'`
-}
 
 async function screenshot(page, outDir, name) {
   await page.waitForLoadState('load').catch(() => null)
@@ -70,30 +68,29 @@ async function checkAppleOAuth(page, report) {
   expect(body.includes('Sign in to Apple')).toBe(true)
 }
 
-function usesLocalD1(baseUrl) {
-  const hostname = new URL(baseUrl).hostname
-  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
-}
-
-async function cleanupD1(email, { remote }) {
-  const command = `DELETE FROM "User" WHERE email = ${sqlString(email)};`
-  const args = ['exec', 'wrangler', 'd1', 'execute', 'DB']
-  if (remote) {
-    args.push('--remote')
-  }
-  args.push('--command', command)
+async function cleanupD1(email, { targetEnv }) {
+  const args = buildCleanupD1Args(email, { targetEnv })
   const { stdout, stderr } = await execFileAsync(
     'pnpm',
     args,
     { encoding: 'utf8', maxBuffer: 1024 * 1024 * 4 }
   )
-  return { target: remote ? 'remote D1' : 'local D1', stdout, stderr }
+  return { target: `${targetEnv} D1`, stdout, stderr }
+}
+
+async function verifyUserDeleted(email, { targetEnv }) {
+  const args = buildUserCountD1Args(email, { targetEnv })
+  const { stdout, stderr } = await execFileAsync(
+    'pnpm',
+    args,
+    { encoding: 'utf8', maxBuffer: 1024 * 1024 * 4 }
+  )
+  const remaining = parseD1CountOutput(stdout)
+  return { target: `${targetEnv} D1`, remaining, stdout, stderr }
 }
 
 async function main() {
-  const baseUrl = arg('--base-url', process.env.SPOONJOY_SMOKE_BASE_URL ?? 'https://spoonjoy-v2.mendelow-studio.workers.dev')
-  const outDir = arg('--out', 'live-smoke-artifacts')
-  const shouldCleanup = !process.argv.includes('--keep-smoke-data')
+  const { baseUrl, outDir, shouldCleanup, targetEnv } = parseSmokeArgs(process.argv.slice(2), process.env)
   const stamp = Date.now().toString(36)
   const email = `codex-smoke-${stamp}@example.com`
   const username = `codex_smoke_${stamp}`
@@ -109,6 +106,8 @@ async function main() {
     consoleErrors: [],
     pageErrors: [],
     cleanup: null,
+    cleanupVerification: null,
+    targetEnv,
   }
 
   mkdirSync(outDir, { recursive: true })
@@ -198,15 +197,20 @@ async function main() {
     const isLocalhost = new URL(baseUrl).hostname === 'localhost'
     expect(pushResponse.ok() || (isLocalhost && pushResponse.status() === 500)).toBe(true)
 
-    // Sign in with Apple regression guard (hits Apple's real authorize endpoint).
-    await checkAppleOAuth(page, report)
+    if (shouldRunAppleOAuthCheck(targetEnv)) {
+      // Sign in with Apple regression guard (hits Apple's real authorize endpoint).
+      await checkAppleOAuth(page, report)
+    } else {
+      report.apple = { skipped: true, reason: `${targetEnv} smoke does not run production Apple OAuth guard` }
+    }
   } finally {
     await context.close()
     await browser.close()
 
     if (shouldCleanup) {
       try {
-        report.cleanup = await cleanupD1(email, { remote: !usesLocalD1(baseUrl) })
+        report.cleanup = await cleanupD1(email, { targetEnv })
+        report.cleanupVerification = await verifyUserDeleted(email, { targetEnv })
       } catch (error) {
         report.cleanup = {
           error: error instanceof Error ? error.message : String(error),
@@ -227,6 +231,12 @@ async function main() {
 
   if (shouldCleanup && report.cleanup?.error) {
     console.error(`Live smoke passed, but cleanup failed: ${report.cleanup.error}`)
+    process.exitCode = 1
+    return
+  }
+
+  if (shouldCleanup && report.cleanupVerification?.remaining !== 0) {
+    console.error(`Live smoke passed, but cleanup verification found ${report.cleanupVerification?.remaining} remaining smoke user(s).`)
     process.exitCode = 1
     return
   }

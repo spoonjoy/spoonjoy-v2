@@ -115,17 +115,17 @@ Add a real Spoonjoy QA deployment target with separate Cloudflare state so live/
 **Output**: Targeted coverage/test output saved under the artifacts directory and any seed helper cleanup needed.
 **Acceptance**: New seed code has 100% coverage and focused tests remain green.
 
-### ⬜ Unit 4a: QA-Safe Smoke Cleanup — Tests
+### ✅ Unit 4a: QA-Safe Smoke Cleanup — Tests
 **What**: Add failing tests around `scripts/smoke-live.mjs` helpers so QA cleanup uses `--env qa`, production cleanup is explicit, and Apple OAuth guard runs only for production.
 **Output**: New smoke helper tests plus red-run output saved under the artifacts directory.
 **Acceptance**: Focused smoke tests fail against the current hardcoded behavior.
 
-### ⬜ Unit 4b: QA-Safe Smoke Cleanup — Implementation
+### ✅ Unit 4b: QA-Safe Smoke Cleanup — Implementation
 **What**: Refactor `scripts/smoke-live.mjs` to export testable helpers, support explicit `--target-env local|qa|production`, wire `smoke:qa`, and verify smoke cleanup removed the QA user.
 **Output**: Updated smoke script, package script wiring, and passing focused smoke tests.
 **Acceptance**: Focused smoke tests pass; `smoke:qa` cannot default to production and skips the production-only Apple OAuth check.
 
-### ⬜ Unit 4c: QA-Safe Smoke Cleanup — Coverage & Refactor
+### ✅ Unit 4c: QA-Safe Smoke Cleanup — Coverage & Refactor
 **What**: Cover local, QA, production, missing target env, cleanup failure, and post-cleanup verification branches.
 **Output**: Targeted coverage/test output saved under the artifacts directory and any smoke helper cleanup needed.
 **Acceptance**: New smoke helper code has 100% coverage and focused tests remain green.
@@ -179,3 +179,4 @@ Add a real Spoonjoy QA deployment target with separate Cloudflare state so live/
 - 2026-06-11 10:50 America/Los_Angeles Units 2a-2c complete: added failing QA preflight tests, then implemented `scripts/qa-preflight.ts` with QA D1 migration checks, QA secret checks, and QA R2 write/read/delete verification. Focused preflight tests pass.
 - 2026-06-11 10:55 America/Los_Angeles Addressed Unit 1 reviewer findings: `deploy:qa` now builds with `CLOUDFLARE_ENV=qa`, QA preflight can validate generated `build/server/wrangler.json`, and static validation requires expected unique QA rate-limit bindings.
 - 2026-06-11 10:57 America/Los_Angeles Units 3a-3c complete: added failing seed tests, then implemented `scripts/seed-qa.mjs` with idempotent disposable QA SQL and hard `--target-env qa` refusal. Focused scripts suite passes.
+- 2026-06-11 11:00 America/Los_Angeles Units 4a-4c complete: added failing smoke-helper tests, then made live smoke cleanup target-explicit, QA cleanup use `--env qa`, production smoke explicit, Apple OAuth guard production-only, and cleanup verification query the same target environment. Focused scripts suite passes.
