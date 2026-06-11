@@ -73,7 +73,7 @@ Add a QA-targeted live smoke mode that proves Spoonjoy's remote API/MCP image an
 **Output**: Clean focused test output saved in artifacts.
 **Acceptance**: Focused tests pass; no warnings; helper error paths for unsafe target env, invalid R2 key, missing JSON response, and failed tool response are tested.
 
-### ⬜ Unit 2a: Live Smoke Flow Tests
+### ✅ Unit 2a: Live Smoke Flow Tests
 **What**: Add failing tests for live smoke flow composition where it can be injected without a browser: provider preflight sequencing, R2 cleanup-on-error, bounded generation polling, and provenance assertions.
 **Output**: `test/scripts/smoke-image-cover-live.test.ts` proves the flow refuses mutation before QA/provider safety checks, polls the browser-created AI placeholder before upload/spoon cover mutations, polls `get_cover_generation_status` to `succeeded`/`failed`/timeout with fixed attempts and delay, collects/deletes/verifies exact upload and generated-cover R2 keys, revokes the created credential, and requires `Chef photo`, `Editorialized chef photo`, and `AI generated`.
 **Acceptance**: Tests fail red because the image-cover smoke flow is not integrated yet or does not call the expected injected operations.
@@ -157,3 +157,4 @@ Add a QA-targeted live smoke mode that proves Spoonjoy's remote API/MCP image an
 - 2026-06-11 13:34 Unit 1a complete: focused red test run saved to `unit-1a-red.log`; failures are missing helper module/exports, package script/preflight requirement, and coverage instrumentation.
 - 2026-06-11 13:38 Unit 1b complete: helper module, smoke flag/R2 helpers, package script, preflight requirement, and coverage config implemented; focused tests passed in `unit-1b-green.log`.
 - 2026-06-11 13:04 Unit 1c complete: focused helper/preflight coverage saved to `unit-1c-coverage.log` with 100% statements/branches/functions/lines for `scripts/smoke-live-helpers.mjs` and `scripts/smoke-image-cover-live.mjs`; build saved to `unit-1c-build.log` with no warnings.
+- 2026-06-11 13:10 Unit 2a complete: red flow tests saved to `unit-2a-red.log`; failures are missing `runImageCoverSmokeFlow` and `pollCoverGeneration` implementation, while existing helper/preflight tests remain green. Unit review skipped because this is a tests-only red unit with intentional missing-function failures.
