@@ -22,6 +22,7 @@ Add a real Spoonjoy QA deployment target with separate Cloudflare state so live/
 - Configure QA to use separate D1, R2, rate-limit namespaces, and base URL values from production.
 - Add package scripts for QA preflight, migration application, deploy, and live smoke entrypoints.
 - Extend deployment preflight checks to verify the QA environment contract without weakening production checks.
+- Add the minimal QA-aware smoke targeting needed so a QA smoke cannot accidentally clean production D1 or run production-only Apple OAuth assertions.
 - Document QA resource creation, secret setup, migration, deploy, smoke, and cleanup expectations.
 - Create/apply the actual QA Cloudflare D1/R2 resources when Wrangler authentication permits it.
 - Run a QA deploy/smoke where the environment has enough secrets to support the existing smoke path.
@@ -29,7 +30,7 @@ Add a real Spoonjoy QA deployment target with separate Cloudflare state so live/
 
 ### Out Of Scope
 
-- Broad environment-aware cleanup refactor; that is `SJ-044`.
+- Broad environment-aware cleanup refactor beyond the minimum QA smoke safety layer; that is `SJ-044`.
 - MCP/API image and cover e2e smokes; that is `SJ-045`.
 - Image provider benchmark/canary work; that is `SJ-046`.
 - Changing the current Mendelow-style editorial image prompt.
@@ -38,11 +39,13 @@ Add a real Spoonjoy QA deployment target with separate Cloudflare state so live/
 ## Completion Criteria
 
 - `wrangler.json` has a `qa` environment with distinct QA D1/R2/rate-limit/base URL settings.
-- `pnpm run qa:preflight` proves QA config exists and is not aliased to production resources.
+- `pnpm run qa:preflight` proves QA config exists, is not aliased to production resources, resolves to the QA Worker URL, verifies QA secret presence with `wrangler secret list --env qa` when authenticated, and checks QA migrations with `--env qa`.
 - QA D1 migrations can be listed/applied with `--env qa` without touching production.
-- QA R2 bucket exists or the creation command is documented and preflight-visible.
+- QA R2 bucket exists and can be verified through documented create/list or smoke-time write/read/delete checks.
 - QA deploy command builds and deploys `spoonjoy-v2-qa`.
-- QA smoke command targets the QA base URL and does not default to production.
+- QA smoke command targets the QA base URL, requires the QA Wrangler environment for remote cleanup, and does not default to production.
+- QA smoke skips or adapts the production-only Apple OAuth guard instead of hitting production as part of QA verification.
+- QA docs cover telemetry defaults, image-provider policy, OAuth callback expectations, WebAuthn/RP-origin expectations, QA seed data, and disposable data naming.
 - Docs make it clear future agents should verify QA before production-risky live flows.
 - `pnpm run deploy:preflight`, `pnpm test:coverage`, and `pnpm typecheck` pass.
 - Work is merged to `main`, auto-deployment is verified, production smoke passes, and disposable test data is cleaned.
@@ -51,6 +54,7 @@ Add a real Spoonjoy QA deployment target with separate Cloudflare state so live/
 
 - Add or update unit coverage for QA-specific deployment preflight parsing and validation.
 - Cover failure cases where QA env is missing, QA D1/R2 aliases production, QA base URL is absent, and QA scripts are absent.
+- Cover the smoke cleanup argument builder so remote QA cleanup includes `--env qa` and production cleanup is explicit.
 - Keep total coverage at 100% statements, branches, functions, and lines with zero warnings.
 
 ## Open Questions
@@ -62,6 +66,8 @@ Add a real Spoonjoy QA deployment target with separate Cloudflare state so live/
 - Use Wrangler named environment `qa`; Cloudflare will deploy it as `spoonjoy-v2-qa`.
 - Use QA resource names `spoonjoy-qa` for D1 and `spoonjoy-photos-qa` for R2.
 - Use distinct rate-limit namespace IDs from production for all QA limiter bindings.
+- Require QA smoke callers to pass an explicit target environment; non-local remote cleanup must include a Wrangler `--env` value unless it is intentionally production.
+- Treat production Apple OAuth callback validation as production-smoke-only; QA smoke should not use a production OAuth assertion as a proxy for QA readiness.
 - Keep production deploy automation unchanged and verify it after merge.
 - Keep the current Mendelow Cooking editorial cover prompt unchanged.
 
@@ -72,6 +78,8 @@ Add a real Spoonjoy QA deployment target with separate Cloudflare state so live/
 - Current production Worker: `spoonjoy-v2`.
 - Current production D1: `spoonjoy` / `32cb0e04-c45b-4cd2-a798-556556ae288d`.
 - Current production R2: `spoonjoy-photos`.
+- QA D1 created during planning: `spoonjoy-qa` / `c6c99e80-bd51-4cf2-b7c7-b7a6e27d3f34`.
+- QA R2 created during planning: `spoonjoy-photos-qa`.
 - Current smoke script defaults to `https://spoonjoy-v2.mendelow-studio.workers.dev` and currently treats any non-localhost URL as remote D1 cleanup; this is intentionally left for `SJ-044`.
 
 ## Notes
@@ -79,7 +87,9 @@ Add a real Spoonjoy QA deployment target with separate Cloudflare state so live/
 - Do not use production D1/R2 as a fake QA environment.
 - Do not make `smoke:qa` silently fall back to production if QA vars are missing.
 - If QA secret setup blocks a full smoke, land the environment contract and document the exact missing secret state, then continue into `SJ-044` harness work rather than touching production data.
+- Do not claim `SJ-043` complete from docs alone; the QA resources must exist and be verified.
 
 ## Progress Log
 
 - 2026-06-11 09:23 - Created planning doc after checking the next-work queue, Wrangler config, deployment preflight, production readiness, and live smoke scripts.
+- 2026-06-11 09:32 - Incorporated reviewer findings: QA smoke must be minimally environment-aware, QA preflight must prove secrets/migrations/base URL/resource isolation, and resource creation cannot be doc-only.
