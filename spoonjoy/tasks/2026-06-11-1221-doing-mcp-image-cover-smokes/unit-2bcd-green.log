@@ -1,0 +1,12 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ✓ test/scripts/deployment-preflight.test.ts (67 tests) 84ms
+ ✓ test/scripts/smoke-image-cover-live.test.ts (17 tests) 38ms
+ ✓ test/scripts/smoke-live-helpers.test.ts (21 tests) 29ms
+
+ Test Files  3 passed (3)
+      Tests  105 passed (105)
+   Start at  13:15:23
+   Duration  1.33s (transform 115ms, setup 204ms, import 123ms, tests 151ms, environment 477ms)
+

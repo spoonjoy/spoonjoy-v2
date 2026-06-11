@@ -1,11 +1,23 @@
 #!/usr/bin/env node
 import { execFile } from 'node:child_process'
 import { mkdirSync, writeFileSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import {
+  buildApiToolRequest,
+  buildMcpToolRequest,
+  buildMcpToolsListRequest,
+  parseApiToolPayload,
+  parseMcpToolPayload,
+  parseWranglerSecretNames,
+  runImageCoverSmokeFlow,
+} from './smoke-image-cover-live.mjs'
+import {
   buildCleanupD1Args,
+  buildQaR2DeleteArgs,
+  buildQaR2GetArgs,
   buildUserCountD1Args,
   parseD1CountOutput,
   parseSmokeArgs,
@@ -89,8 +101,102 @@ async function verifyUserDeleted(email, { targetEnv }) {
   return { target: `${targetEnv} D1`, remaining, stdout, stderr }
 }
 
+async function responseJson(response, label) {
+  const text = await response.text()
+  try {
+    return JSON.parse(text)
+  } catch {
+    throw new Error(`${label} did not return JSON: ${text.slice(0, 200)}`)
+  }
+}
+
+function createImageCoverAdapters(page, baseUrl) {
+  let mcpId = 1
+
+  return {
+    async apiTool(operation, args, bearerToken) {
+      const request = buildApiToolRequest(baseUrl, operation, args, bearerToken)
+      const response = await page.request.post(request.url, request.options)
+      const payload = await responseJson(response, `API tool ${operation}`)
+      return parseApiToolPayload(payload)
+    },
+    async expectApiToolFailure(operation, args, bearerToken) {
+      const request = buildApiToolRequest(baseUrl, operation, args, bearerToken)
+      const response = await page.request.post(request.url, request.options)
+      const payload = await responseJson(response, `API tool ${operation}`)
+      if (response.ok() && payload?.ok !== false) {
+        throw new Error(`Expected API tool ${operation} to fail, but it succeeded.`)
+      }
+      return {
+        status: response.status(),
+        payload,
+        message: payload?.error?.message ?? payload?.message ?? response.statusText(),
+      }
+    },
+    async mcpToolsList(bearerToken) {
+      const request = buildMcpToolsListRequest(baseUrl, bearerToken, mcpId++)
+      const response = await page.request.post(request.url, request.options)
+      const payload = await responseJson(response, 'MCP tools/list')
+      if (!response.ok() || payload?.error) {
+        throw new Error(payload?.error?.message ?? `MCP tools/list failed with status ${response.status()}.`)
+      }
+      return payload.result
+    },
+    async mcpTool(name, args, bearerToken) {
+      const request = buildMcpToolRequest(baseUrl, bearerToken, mcpId++, name, args)
+      const response = await page.request.post(request.url, request.options)
+      const payload = await responseJson(response, `MCP tool ${name}`)
+      if (!response.ok()) {
+        throw new Error(`MCP tool ${name} failed with status ${response.status()}.`)
+      }
+      return parseMcpToolPayload(payload)
+    },
+    async downloadPhotoBytes(imageUrl) {
+      const response = await page.request.get(new URL(imageUrl, baseUrl).toString())
+      if (!response.ok()) {
+        throw new Error(`Could not download stored image ${imageUrl}: ${response.status()}`)
+      }
+      return new Uint8Array(await response.body())
+    },
+  }
+}
+
+async function listQaSecretNames() {
+  const { stdout } = await execFileAsync(
+    'pnpm',
+    ['exec', 'wrangler', 'secret', 'list', '--env', 'qa'],
+    { encoding: 'utf8', maxBuffer: 1024 * 1024 * 4 },
+  )
+  return parseWranglerSecretNames(stdout)
+}
+
+async function deleteQaR2Object(key) {
+  await execFileAsync(
+    'pnpm',
+    buildQaR2DeleteArgs(key),
+    { encoding: 'utf8', maxBuffer: 1024 * 1024 * 4 },
+  )
+}
+
+async function verifyQaR2ObjectDeleted(key) {
+  let found = false
+  try {
+    await execFileAsync(
+      'pnpm',
+      buildQaR2GetArgs(key),
+      { encoding: 'buffer', maxBuffer: 1024 * 1024 * 8 },
+    )
+    found = true
+  } catch {
+    return
+  }
+  if (found) {
+    throw new Error(`QA R2 object still exists after cleanup: ${key}`)
+  }
+}
+
 async function main() {
-  const { baseUrl, outDir, shouldCleanup, targetEnv } = parseSmokeArgs(process.argv.slice(2), process.env)
+  const { baseUrl, includeImageCoverSmoke, outDir, shouldCleanup, targetEnv } = parseSmokeArgs(process.argv.slice(2), process.env)
   const stamp = Date.now().toString(36)
   const email = `codex-smoke-${stamp}@example.com`
   const username = `codex_smoke_${stamp}`
@@ -107,6 +213,7 @@ async function main() {
     pageErrors: [],
     cleanup: null,
     cleanupVerification: null,
+    imageCoverSmoke: null,
     targetEnv,
   }
 
@@ -166,6 +273,26 @@ async function main() {
     report.recipeId = recipeId
     await expect(page.getByRole('heading', { name: recipeTitle })).toBeVisible({ timeout: 10_000 })
     report.screenshots.push(await screenshot(page, outDir, '02-recipe-detail'))
+
+    if (includeImageCoverSmoke) {
+      const adapters = createImageCoverAdapters(page, baseUrl)
+      report.imageCoverSmoke = await runImageCoverSmokeFlow({
+        baseUrl,
+        email,
+        recipeId,
+        recipeTitle,
+        stamp,
+        listQaSecretNames,
+        apiTool: adapters.apiTool,
+        expectApiToolFailure: adapters.expectApiToolFailure,
+        mcpToolsList: adapters.mcpToolsList,
+        mcpTool: adapters.mcpTool,
+        readFileBytes: async (path) => new Uint8Array(await readFile(path)),
+        downloadPhotoBytes: adapters.downloadPhotoBytes,
+        deleteQaR2Object,
+        verifyQaR2ObjectDeleted,
+      })
+    }
 
     await gotoApp(page, new URL(`/recipes/${recipeId}#cook`, baseUrl).toString())
     await expect(page.getByTestId('cook-mode-panel')).toBeVisible({ timeout: 10_000 })
