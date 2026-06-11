@@ -1,0 +1,37 @@
+{
+  "baseUrl": "https://spoonjoy-v2.mendelow-studio.workers.dev",
+  "generatedAt": "2026-06-11T17:35:24.572Z",
+  "email": "codex-smoke-mq9s36vw@example.com",
+  "username": "codex_smoke_mq9s36vw",
+  "recipeTitle": "Codex smoke skillet mq9s36vw",
+  "screenshots": [
+    "live-smoke-artifacts/01-recipes-after-signup.png",
+    "live-smoke-artifacts/02-recipe-detail.png",
+    "live-smoke-artifacts/03-cook-mode.png",
+    "live-smoke-artifacts/04-shopping-list.png",
+    "live-smoke-artifacts/05-account-settings.png"
+  ],
+  "consoleErrors": [],
+  "pageErrors": [],
+  "cleanup": {
+    "target": "production D1",
+    "stdout": "\n ⛅️ wrangler 4.90.0 (update available 4.100.0)\n──────────────────────────────────────────────\nResource location: remote \n\n🌀 Executing on remote database DB (32cb0e04-c45b-4cd2-a798-556556ae288d):\n🌀 To execute on your local development database, remove the --remote flag from your wrangler command.\n🚣 Executed 1 command in 1.46ms\n[\n  {\n    \"results\": [],\n    \"success\": true,\n    \"meta\": {\n      \"served_by\": \"v3-prod\",\n      \"served_by_region\": \"WNAM\",\n      \"served_by_colo\": \"SEA\",\n      \"served_by_primary\": true,\n      \"timings\": {\n        \"sql_duration_ms\": 1.4616\n      },\n      \"duration\": 1.4616,\n      \"changes\": 8,\n      \"last_row_id\": 29,\n      \"changed_db\": true,\n      \"size_after\": 4755456,\n      \"rows_read\": 29,\n      \"rows_written\": 8,\n      \"total_attempts\": 1\n    }\n  }\n]\n",
+    "stderr": ""
+  },
+  "cleanupVerification": {
+    "target": "production D1",
+    "remaining": 0,
+    "stdout": "\n ⛅️ wrangler 4.90.0 (update available 4.100.0)\n──────────────────────────────────────────────\nResource location: remote \n\n🌀 Executing on remote database DB (32cb0e04-c45b-4cd2-a798-556556ae288d):\n🌀 To execute on your local development database, remove the --remote flag from your wrangler command.\n🚣 Executed 1 command in 0.19ms\n[\n  {\n    \"results\": [\n      {\n        \"count\": 0\n      }\n    ],\n    \"success\": true,\n    \"meta\": {\n      \"served_by\": \"v3-prod\",\n      \"served_by_region\": \"WNAM\",\n      \"served_by_colo\": \"SEA\",\n      \"served_by_primary\": true,\n      \"timings\": {\n        \"sql_duration_ms\": 0.1851\n      },\n      \"duration\": 0.1851,\n      \"changes\": 0,\n      \"last_row_id\": 29,\n      \"changed_db\": false,\n      \"size_after\": 4755456,\n      \"rows_read\": 0,\n      \"rows_written\": 0,\n      \"total_attempts\": 1\n    }\n  }\n]\n",
+    "stderr": ""
+  },
+  "targetEnv": "production",
+  "recipeId": "bad5908a-6428-4568-8c74-7f35f8c822d8",
+  "pushPublicKeyStatus": 200,
+  "apple": {
+    "authorizeHost": "appleid.apple.com",
+    "redirectUri": "https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithApple",
+    "scope": "name email",
+    "responseMode": "form_post",
+    "appleAccepts": true
+  }
+}

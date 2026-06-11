@@ -1,0 +1,30 @@
+{
+  "baseUrl": "https://spoonjoy-v2.mendelow-studio.workers.dev",
+  "generatedAt": "2026-06-11T17:34:20.884Z",
+  "email": "codex-smoke-mq9s1tqs@example.com",
+  "username": "codex_smoke_mq9s1tqs",
+  "recipeTitle": "Codex smoke skillet mq9s1tqs",
+  "screenshots": [
+    "live-smoke-artifacts/01-recipes-after-signup.png",
+    "live-smoke-artifacts/02-recipe-detail.png",
+    "live-smoke-artifacts/03-cook-mode.png",
+    "live-smoke-artifacts/04-shopping-list.png",
+    "live-smoke-artifacts/05-account-settings.png"
+  ],
+  "consoleErrors": [],
+  "pageErrors": [],
+  "cleanup": {
+    "error": "Command failed: pnpm exec wrangler d1 execute DB --remote --command DELETE FROM \"User\" WHERE email = 'codex-smoke-mq9s1tqs@example.com';\n\u001b[31m✘ \u001b[41;31m[\u001b[41;97mERROR\u001b[41;31m]\u001b[0m \u001b[1mA request to the Cloudflare API (/accounts/4b157323bc7b08c0f6b0dc9c23b1e2b1/d1/database/32cb0e04-c45b-4cd2-a798-556556ae288d/query) failed.\u001b[0m\n\n  Authentication error [code: 10000]\n\n\n🪵  Logs were written to \"/Users/arimendelow/.wrangler/logs/wrangler-2026-06-11_17-34-36_009.log\"\n"
+  },
+  "cleanupVerification": null,
+  "targetEnv": "production",
+  "recipeId": "e70e249e-6dc4-40ad-8d05-8382950fd23e",
+  "pushPublicKeyStatus": 200,
+  "apple": {
+    "authorizeHost": "appleid.apple.com",
+    "redirectUri": "https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithApple",
+    "scope": "name email",
+    "responseMode": "form_post",
+    "appleAccepts": true
+  }
+}

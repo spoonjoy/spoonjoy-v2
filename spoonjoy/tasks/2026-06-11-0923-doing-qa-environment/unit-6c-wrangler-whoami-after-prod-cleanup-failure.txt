@@ -1,0 +1,38 @@
+
+ ⛅️ wrangler 4.90.0 (update available 4.100.0)
+──────────────────────────────────────────────
+Getting User settings...
+👋 You are logged in with an OAuth Token, associated with the email ari@mendelow.me.
+┌─────────────────┬──────────────────────────────────┐
+│ Account Name    │ Account ID                       │
+├─────────────────┼──────────────────────────────────┤
+│ Mendelow Studio │ 4b157323bc7b08c0f6b0dc9c23b1e2b1 │
+└─────────────────┴──────────────────────────────────┘
+🔓 Token Permissions:
+Scope (Access)
+- account (read)
+- user (read)
+- workers (write)
+- workers_kv (write)
+- workers_routes (write)
+- workers_scripts (write)
+- workers_tail (read)
+- d1 (write)
+- pages (write)
+- zone (read)
+- ssl_certs (write)
+- ai (write)
+- ai-search (write)
+- ai-search (run)
+- queues (write)
+- pipelines (write)
+- secrets_store (write)
+- artifacts (write)
+- flagship (write)
+- containers (write)
+- cloudchamber (write)
+- connectivity (admin)
+- email_routing (write)
+- email_sending (write)
+- browser (write)
+- offline_access 

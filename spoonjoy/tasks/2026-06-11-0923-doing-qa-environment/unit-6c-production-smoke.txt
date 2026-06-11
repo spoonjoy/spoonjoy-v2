@@ -1,0 +1,13 @@
+
+> spoonjoy-v2@1.0.0 smoke:live /Users/arimendelow/Projects/spoonjoy-v2
+> node scripts/smoke-live.mjs --target-env production --base-url https://spoonjoy-v2.mendelow-studio.workers.dev
+
+Live smoke passed, but cleanup failed: Command failed: pnpm exec wrangler d1 execute DB --remote --command DELETE FROM "User" WHERE email = 'codex-smoke-mq9s1tqs@example.com';
+[31m✘ [41;31m[[41;97mERROR[41;31m][0m [1mA request to the Cloudflare API (/accounts/4b157323bc7b08c0f6b0dc9c23b1e2b1/d1/database/32cb0e04-c45b-4cd2-a798-556556ae288d/query) failed.[0m
+
+  Authentication error [code: 10000]
+
+
+🪵  Logs were written to "/Users/arimendelow/.wrangler/logs/wrangler-2026-06-11_17-34-36_009.log"
+
+ ELIFECYCLE  Command failed with exit code 1.

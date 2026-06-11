@@ -1,0 +1,9 @@
+Post-merge verification summary
+- PR #179 merged to main at 2026-06-11T17:32:41Z with merge commit 39979853630aaf49aa4eed4e2deb4f61b17de257.
+- PR checks passed before merge: coverage, e2e, build-storybook; deploy-storybook skipped on PR as expected.
+- Main Production Deploy run 27365522394 passed for commit 39979853630aaf49aa4eed4e2deb4f61b17de257.
+- Main CI run 27365522343 passed for commit 39979853630aaf49aa4eed4e2deb4f61b17de257: e2e and coverage jobs passed; coverage job also ran build.
+- Production health returned ok on https://spoonjoy-v2.mendelow-studio.workers.dev/health and https://spoonjoy.app/health.
+- First production smoke passed app flow but hit a transient local Wrangler auth cleanup failure; the exact leftover codex-smoke user was counted, deleted, and verified at count 0.
+- Production smoke rerun passed and verified cleanup remaining=0 in production D1.
+- Final QA and production codex-smoke-* residue checks both returned count 0.

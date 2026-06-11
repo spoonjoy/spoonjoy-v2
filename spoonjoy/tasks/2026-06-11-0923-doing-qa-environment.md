@@ -35,7 +35,7 @@ Add a real Spoonjoy QA deployment target with separate Cloudflare state so live/
 - [ ] QA docs cover telemetry defaults, image-provider policy, OAuth callback expectations, WebAuthn/RP-origin expectations, QA seed data, and disposable data naming.
 - [ ] Docs make it clear future agents should verify QA before production-risky live flows.
 - [x] `pnpm run deploy:preflight`, `pnpm test:coverage`, and `pnpm typecheck` pass.
-- [ ] Work is merged to `main`, auto-deployment is verified, production smoke passes, and disposable test data is cleaned.
+- [x] Work is merged to `main`, auto-deployment is verified, production smoke passes, and disposable test data is cleaned.
 - [x] 100% test coverage on all new code
 - [x] All tests pass
 - [x] No warnings
@@ -155,7 +155,7 @@ Add a real Spoonjoy QA deployment target with separate Cloudflare state so live/
 **Output**: QA deploy, health, smoke, cleanup-verification, and R2 round-trip logs saved under the artifacts directory.
 **Acceptance**: QA Worker is reachable, QA smoke passes, QA disposable user is gone after cleanup, and artifacts show the exact URL and environment.
 
-### ⬜ Unit 6c: Full Verification, Merge, Deploy
+### ✅ Unit 6c: Full Verification, Merge, Deploy
 **What**: Run full `deploy:preflight`, `typecheck`, `test:coverage`, create/merge PR, verify main CI and auto-deploy, run production smoke, verify no disposable QA D1/R2 residue and no production smoke residue remain, close stale branch state, and notify Slugger without adding broader production cleanup powers.
 **Output**: Full verification logs, PR/merge/deploy evidence, production smoke artifacts, QA/prod residue checks, and Slugger notification output saved under the artifacts directory.
 **Acceptance**: `main` contains the work, production auto-deploy is verified for the merge commit, production smoke passes, no Codex QA/prod smoke residue remains, and no stale PR/branch remains for this task.
@@ -185,3 +185,4 @@ Add a real Spoonjoy QA deployment target with separate Cloudflare state so live/
 - 2026-06-11 10:10 America/Los_Angeles Addressed fresh reviewer findings before QA smoke: smoke target env and base URL now must match, and QA R2 preflight fails if the delete probe cannot be removed. Red/green evidence saved as `unit-review-fixes-red.txt` and `unit-review-fixes-green.txt`.
 - 2026-06-11 10:12 America/Los_Angeles Unit 6b complete: documented QA deploy succeeded, `/health` returned ok, `pnpm run smoke:qa` passed, QA D1 `codex-smoke-%` residue count is 0, and QA R2 write/read/delete preflight passed. Smoke JSON and screenshots are saved under the artifact directory.
 - 2026-06-11 10:21 America/Los_Angeles Fresh Unit 6b reviewer converged. Unit 6c local gates passed: `pnpm run deploy:preflight`, `pnpm typecheck`, `pnpm run test:coverage` (300 files, 5,871 tests, 100% coverage), and `pnpm run build`.
+- 2026-06-11 10:43 America/Los_Angeles Unit 6c complete: PR #179 merged to `main`, production auto-deploy passed for merge commit `39979853`, production and custom-domain health checks returned ok, production smoke rerun passed with cleanup verification, QA/prod `codex-smoke-%` residue counts are 0, and post-merge main CI/Storybook passed.
