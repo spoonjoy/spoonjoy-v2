@@ -100,17 +100,17 @@ Add a real Spoonjoy QA deployment target with separate Cloudflare state so live/
 **Output**: Targeted coverage/test output saved under the artifacts directory and any helper cleanup needed.
 **Acceptance**: New QA preflight code has 100% coverage and focused tests remain green.
 
-### ⬜ Unit 3a: QA Seed — Tests
+### ✅ Unit 3a: QA Seed — Tests
 **What**: Add failing tests for an idempotent QA seed command that builds SQL for disposable/demo data, includes `--env qa`, and refuses production or non-QA targets.
 **Output**: New QA seed tests plus red-run output saved under the artifacts directory.
 **Acceptance**: Focused QA seed tests fail before the seed script exists.
 
-### ⬜ Unit 3b: QA Seed — Implementation
+### ✅ Unit 3b: QA Seed — Implementation
 **What**: Add `scripts/seed-qa.mjs` with exported testable SQL/argument helpers and a CLI that applies the seed to QA D1.
 **Output**: `scripts/seed-qa.mjs`, package script wiring, and passing focused seed tests.
 **Acceptance**: Focused seed tests pass; the seed helper cannot construct production D1 arguments.
 
-### ⬜ Unit 3c: QA Seed — Coverage & Refactor
+### ✅ Unit 3c: QA Seed — Coverage & Refactor
 **What**: Cover idempotency SQL fragments, shell args, dry-run behavior, and refusal branches.
 **Output**: Targeted coverage/test output saved under the artifacts directory and any seed helper cleanup needed.
 **Acceptance**: New seed code has 100% coverage and focused tests remain green.
@@ -178,3 +178,4 @@ Add a real Spoonjoy QA deployment target with separate Cloudflare state so live/
 - 2026-06-11 10:45 America/Los_Angeles Units 1a-1c complete: added failing static QA tests, then implemented `env.qa`, QA scripts, and static deployment preflight checks. Focused tests pass; targeted coverage artifact saved with local thresholds because repo-wide coverage thresholds require the full suite.
 - 2026-06-11 10:50 America/Los_Angeles Units 2a-2c complete: added failing QA preflight tests, then implemented `scripts/qa-preflight.ts` with QA D1 migration checks, QA secret checks, and QA R2 write/read/delete verification. Focused preflight tests pass.
 - 2026-06-11 10:55 America/Los_Angeles Addressed Unit 1 reviewer findings: `deploy:qa` now builds with `CLOUDFLARE_ENV=qa`, QA preflight can validate generated `build/server/wrangler.json`, and static validation requires expected unique QA rate-limit bindings.
+- 2026-06-11 10:57 America/Los_Angeles Units 3a-3c complete: added failing seed tests, then implemented `scripts/seed-qa.mjs` with idempotent disposable QA SQL and hard `--target-env qa` refusal. Focused scripts suite passes.

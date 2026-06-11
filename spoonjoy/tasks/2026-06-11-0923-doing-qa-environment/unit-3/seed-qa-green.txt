@@ -1,0 +1,10 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ✓ test/scripts/seed-qa.test.ts (4 tests) 73ms
+
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+   Start at  09:56:22
+   Duration  548ms (transform 53ms, setup 123ms, import 12ms, tests 73ms, environment 208ms)
+
