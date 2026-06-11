@@ -1,0 +1,155 @@
+# Doing: Dedicated QA Environment
+
+**Status**: drafting
+**Execution Mode**: direct
+**Created**: 2026-06-11 09:45 America/Los_Angeles
+**Planning**: ./2026-06-11-0923-planning-qa-environment.md
+**Artifacts**: ./2026-06-11-0923-doing-qa-environment/
+
+## Execution Mode
+
+- **pending**: Awaiting user approval before each unit starts (non-autopilot interactive mode only; autopilot must convert this to `spawn` or `direct` unless a hard exception is present)
+- **spawn**: Spawn sub-agent for each unit (parallel/autonomous)
+- **direct**: Execute units sequentially in current session (default)
+
+## Objective
+
+Add a real Spoonjoy QA deployment target with separate Cloudflare state so live/manual/e2e verification can create disposable users, recipes, images, and spoons without touching production data.
+
+## Upstream Work Items
+
+- `BACKLOG.md` `SJ-043`: Build a dedicated QA/test environment with separate Cloudflare state.
+- `spoonjoy/tasks/2026-06-10-1521-planning-next-work-queue.md`: Current next-work queue and thin-slice handoff.
+
+## Completion Criteria
+
+- [ ] `wrangler.json` has a `qa` environment with distinct QA D1/R2/rate-limit/base URL settings.
+- [ ] `pnpm run qa:preflight` proves QA config exists, is not aliased to production resources, resolves to the QA Worker URL, verifies QA secret presence with `wrangler secret list --env qa` when authenticated, and checks QA migrations with `--env qa`.
+- [ ] QA D1 migrations can be listed/applied with `--env qa` without touching production.
+- [ ] QA R2 bucket exists and `pnpm run qa:preflight` or QA smoke performs an actual QA R2 write/read/delete verification.
+- [ ] QA seed command is idempotent, creates only disposable/demo data, runs with `--env qa`, and refuses production resources.
+- [ ] QA deploy command builds and deploys `spoonjoy-v2-qa`.
+- [ ] QA smoke command targets the QA base URL, requires the QA Wrangler environment for remote cleanup, and does not default to production.
+- [ ] QA smoke skips or adapts the production-only Apple OAuth guard instead of hitting production as part of QA verification.
+- [ ] QA smoke creates disposable QA data and verifies that cleanup removed that data from QA D1.
+- [ ] QA docs cover telemetry defaults, image-provider policy, OAuth callback expectations, WebAuthn/RP-origin expectations, QA seed data, and disposable data naming.
+- [ ] Docs make it clear future agents should verify QA before production-risky live flows.
+- [ ] `pnpm run deploy:preflight`, `pnpm test:coverage`, and `pnpm typecheck` pass.
+- [ ] Work is merged to `main`, auto-deployment is verified, production smoke passes, and disposable test data is cleaned.
+- [ ] 100% test coverage on all new code
+- [ ] All tests pass
+- [ ] No warnings
+
+## Code Coverage Requirements
+
+**MANDATORY: 100% coverage on all new code.**
+- No `[ExcludeFromCodeCoverage]` or equivalent on new code
+- All branches covered (if/else, switch, try/catch)
+- All error paths tested
+- Edge cases: null, empty, boundary values
+
+## TDD Requirements
+
+**Strict TDD — no exceptions:**
+1. **Tests first**: Write failing tests BEFORE any implementation
+2. **Verify failure**: Run tests, confirm they FAIL (red)
+3. **Minimal implementation**: Write just enough code to pass
+4. **Verify pass**: Run tests, confirm they PASS (green)
+5. **Refactor**: Clean up, keep tests green
+6. **No skipping**: Never write implementation without failing test first
+
+## Work Units
+
+### Legend
+⬜ Not started · 🔄 In progress · ✅ Done · ❌ Blocked
+
+**CRITICAL: Every unit header MUST start with status emoji (⬜ for new units).**
+
+### ⬜ Unit 0: Setup/Research
+**What**: Verify branch/worktree state, existing Cloudflare auth, QA resource names, current deploy scripts, and current smoke cleanup behavior.
+**Output**: Durable notes in the progress log and artifact directory where useful.
+**Acceptance**: Branch is `spoonjoy/qa-environment`; QA D1/R2 resource existence is known; no unrelated worktree changes are overwritten.
+
+### ⬜ Unit 1a: Static QA Contract — Tests
+**What**: Add failing tests for static QA configuration: `wrangler.json` `env.qa`, distinct D1/R2/rate-limit namespaces, QA base URL, QA package scripts, and QA docs requirements.
+**Acceptance**: Focused preflight tests fail because the QA environment/scripts/docs do not exist yet.
+
+### ⬜ Unit 1b: Static QA Contract — Implementation
+**What**: Add the `env.qa` Wrangler config, package scripts, and static deployment-preflight validation needed for the tests.
+**Acceptance**: Focused static QA contract tests pass with no warnings.
+
+### ⬜ Unit 1c: Static QA Contract — Coverage & Refactor
+**What**: Refactor static preflight helpers only where needed and run targeted coverage.
+**Acceptance**: New static validation branches are covered and focused tests remain green.
+
+### ⬜ Unit 2a: QA Remote Preflight — Tests
+**What**: Add failing tests for `qa:preflight`: `--env qa` migration check, secret-list check, R2 write/read/delete argument construction, auth-warning behavior, and failure behavior for non-QA aliases.
+**Acceptance**: Focused QA preflight tests fail before the new script/helpers exist.
+
+### ⬜ Unit 2b: QA Remote Preflight — Implementation
+**What**: Add a testable `scripts/qa-preflight.ts` that runs static config validation plus QA remote migration, secret, and R2 round-trip checks.
+**Acceptance**: Focused QA preflight tests pass; no production `--remote` call is constructed without `--env qa`.
+
+### ⬜ Unit 2c: QA Remote Preflight — Coverage & Refactor
+**What**: Cover success, auth-warning, parse/failure, and cleanup-after-R2-failure branches.
+**Acceptance**: New QA preflight code has 100% coverage and focused tests remain green.
+
+### ⬜ Unit 3a: QA Seed — Tests
+**What**: Add failing tests for an idempotent QA seed command that builds SQL for disposable/demo data, includes `--env qa`, and refuses production or non-QA targets.
+**Acceptance**: Focused QA seed tests fail before the seed script exists.
+
+### ⬜ Unit 3b: QA Seed — Implementation
+**What**: Add `scripts/seed-qa.mjs` with exported testable SQL/argument helpers and a CLI that applies the seed to QA D1.
+**Acceptance**: Focused seed tests pass; the seed helper cannot construct production D1 arguments.
+
+### ⬜ Unit 3c: QA Seed — Coverage & Refactor
+**What**: Cover idempotency SQL fragments, shell args, dry-run behavior, and refusal branches.
+**Acceptance**: New seed code has 100% coverage and focused tests remain green.
+
+### ⬜ Unit 4a: QA-Safe Smoke Cleanup — Tests
+**What**: Add failing tests around `scripts/smoke-live.mjs` helpers so QA cleanup uses `--env qa`, production cleanup is explicit, and Apple OAuth guard runs only for production.
+**Acceptance**: Focused smoke tests fail against the current hardcoded behavior.
+
+### ⬜ Unit 4b: QA-Safe Smoke Cleanup — Implementation
+**What**: Refactor `scripts/smoke-live.mjs` to export testable helpers, support explicit `--target-env local|qa|production`, wire `smoke:qa`, and verify smoke cleanup removed the QA user.
+**Acceptance**: Focused smoke tests pass; `smoke:qa` cannot default to production and skips the production-only Apple OAuth check.
+
+### ⬜ Unit 4c: QA-Safe Smoke Cleanup — Coverage & Refactor
+**What**: Cover local, QA, production, missing target env, cleanup failure, and post-cleanup verification branches.
+**Acceptance**: New smoke helper code has 100% coverage and focused tests remain green.
+
+### ⬜ Unit 5a: Documentation — Tests
+**What**: Add failing tests or extend existing docs tests for QA resource setup, secrets, telemetry/image-provider policy, OAuth/WebAuthn origin expectations, seed data, disposable naming, and verification commands.
+**Acceptance**: Docs tests fail before README/DEPLOY/docs updates are made.
+
+### ⬜ Unit 5b: Documentation — Implementation
+**What**: Update deployment docs, README/DEPLOY where appropriate, backlog/task docs, and autopilot state with the QA environment contract.
+**Acceptance**: Docs tests pass and the docs describe exact QA commands without suggesting production cleanup.
+
+### ⬜ Unit 5c: Documentation — Coverage & Refactor
+**What**: Run focused docs/preflight tests and simplify wording or helper assertions if needed.
+**Acceptance**: Docs-related tests remain green with no warnings.
+
+### ⬜ Unit 6a: Remote QA Verification — Tests/Preflight
+**What**: Run local targeted tests, create or verify QA Cloudflare resources, apply QA migrations, set/verify required QA secrets where possible, run QA seed, and run QA preflight.
+**Acceptance**: Command outputs are saved in the artifact directory; failures are actionable and do not touch production.
+
+### ⬜ Unit 6b: Remote QA Verification — Implementation
+**What**: Deploy QA, run QA smoke, verify QA smoke cleanup in QA D1, and run R2 round-trip verification if not already covered by preflight.
+**Acceptance**: QA Worker is reachable, QA smoke passes, QA disposable user is gone after cleanup, and artifacts show the exact URL and environment.
+
+### ⬜ Unit 6c: Full Verification, Merge, Deploy
+**What**: Run full `deploy:preflight`, `typecheck`, `test:coverage`, create/merge PR, verify main CI and auto-deploy, run production smoke, clean disposable test data, close stale branch state, and notify Slugger.
+**Acceptance**: `main` contains the work, production auto-deploy is verified for the merge commit, production smoke passes, no Codex QA residue remains, and no stale PR/branch remains for this task.
+
+## Execution
+- **TDD strictly enforced**: tests → red → implement → green → refactor
+- Commit after each phase (1a, 1b, 1c)
+- Push after each unit complete
+- Run full test suite before marking unit done
+- **All artifacts**: Save outputs, logs, data to `./2026-06-11-0923-doing-qa-environment/` directory
+- **Fixes/blockers**: Spawn sub-agent immediately — don't ask, just do it
+- **Decisions made**: Update docs immediately, commit right away
+
+## Progress Log
+- 2026-06-11 09:45 America/Los_Angeles Created from approved planning doc.
