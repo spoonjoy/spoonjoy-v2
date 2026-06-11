@@ -4,7 +4,7 @@
 **Created**: 2026-06-11 12:21
 
 ## Goal
-Add a QA-targeted live smoke that proves Spoonjoy's remote API/MCP image and cover operations work end to end without touching production data or leaving disposable residue.
+Add a QA-targeted live smoke mode that proves Spoonjoy's remote API/MCP image and cover operations work end to end without touching production data or leaving disposable residue.
 
 ## Upstream Work Items
 - `SJ-045`
@@ -12,7 +12,7 @@ Add a QA-targeted live smoke that proves Spoonjoy's remote API/MCP image and cov
 ## Scope
 
 ### In Scope
-- Add an environment-aware script for QA image/cover smoke coverage.
+- Add a QA-only opt-in image/cover mode to `scripts/smoke-live.mjs` plus a `smoke:qa:image-cover` package command.
 - Bootstrap a disposable QA chef through browser signup, then mint a scoped API token through the same session.
 - Exercise `/api/tools/*` and `/mcp` for recipe-image upload, spoon-photo upload, recipe creation, spoon creation, cover listing, spoon-image browsing, cover creation from upload, cover creation from spoon, active-cover swap, cover archive, and GIF rejection.
 - Include a JPEG-with-EXIF upload and verify the stored object is still retrievable and no longer contains the original dirty APP1 payload.
@@ -48,6 +48,7 @@ Add a QA-targeted live smoke that proves Spoonjoy's remote API/MCP image and cov
 - None. Autopilot decision: use QA only for live mutation coverage; production verification remains health/deploy-only unless a future task explicitly asks for production mutation smokes.
 
 ## Decisions Made
+- Extend `scripts/smoke-live.mjs` instead of `scripts/smoke-api-live.mjs`; the API smoke is public/read-only and should not grow mutating QA checks.
 - Use browser signup for auth bootstrap because `scripts/smoke-live.mjs` already proves the QA signup flow and deletes the disposable user by D1 email.
 - Mint a short-lived smoke token through `/api/tools/create_api_token` using the session, then use that bearer for both `/api/tools/*` and `/mcp`.
 - Use the existing food image allow-list (`image/jpeg`, `image/png`, `image/webp`) as the GIF rejection contract.
