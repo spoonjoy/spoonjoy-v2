@@ -103,12 +103,12 @@ Add a QA-targeted live smoke mode that proves Spoonjoy's remote API/MCP image an
 **Output**: Tests assert `.github/workflows/qa-image-cover-smoke.yml` exists, runs only on `workflow_dispatch` and `schedule`, guards `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, checks QA Cloudflare secrets before mutation with `wrangler secret list --env qa`, requires `OPENAI_API_KEY` for no-photo placeholders and at least one image-edit provider key among `OPENAI_API_KEY`, `GEMINI_API_KEY`, or `GOOGLE_API_KEY`, installs dependencies, and runs `pnpm run smoke:qa:image-cover`.
 **Acceptance**: Tests fail red until the workflow exists and matches the expected guarded command shape.
 
-### ⬜ Unit 3b: Scheduled QA Workflow Implementation
+### ✅ Unit 3b: Scheduled QA Workflow Implementation
 **What**: Add the credential-gated scheduled/manual QA image-cover smoke workflow and update `docs/deployment.md` if the smoke command or required QA secrets need documenting.
 **Output**: `.github/workflows/qa-image-cover-smoke.yml` exists and skips cleanly when GitHub or QA Cloudflare credentials are not configured.
 **Acceptance**: Unit 3a tests pass; workflow command includes `--target-env qa` and `https://spoonjoy-v2-qa.mendelow-studio.workers.dev`; workflow contains no production smoke/deploy command; workflow cannot run mutation steps without `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `OPENAI_API_KEY` in QA secrets, and one configured edit-provider key.
 
-### ⬜ Unit 3c: Scheduled QA Workflow Coverage And Refactor
+### ✅ Unit 3c: Scheduled QA Workflow Coverage And Refactor
 **What**: Run workflow/preflight tests and refactor the assertions if they are brittle.
 **Output**: Focused test output saved in artifacts.
 **Acceptance**: Focused tests pass with no warnings.
@@ -161,3 +161,4 @@ Add a QA-targeted live smoke mode that proves Spoonjoy's remote API/MCP image an
 - 2026-06-11 13:15 Units 2b, 2c, and 2d complete: `scripts/smoke-live.mjs` now wires `--include-image-cover-smoke` through QA provider preflight, session-created scoped token, API uploads/GIF rejection/EXIF verification, MCP cover and spoon operations, generation polling, provenance checks, exact R2 cleanup, credential revocation, and smoke-result artifact reporting. Focused green tests saved to `unit-2bcd-green.log`; build saved to `unit-2bcd-build.log`; no warnings.
 - 2026-06-11 13:21 Unit 2e complete: focused coverage saved to `unit-2e-coverage.log` with 100% statements/branches/functions/lines for `scripts/smoke-live-helpers.mjs` and `scripts/smoke-image-cover-live.mjs`; build saved to `unit-2e-build.log`; no warnings. Addressed implementation-review findings by failing the smoke if token revocation does not revoke and by recording operation names, cover IDs, image URLs, and generation polling history in `imageCoverSmoke`.
 - 2026-06-11 13:25 Unit 3a complete: red workflow tests saved to `unit-3a-red.log`; failures are missing `QA image-cover smoke workflow` preflight check and missing `.github/workflows/qa-image-cover-smoke.yml`. Unit review skipped because this is a tests-only red unit with intentional missing-workflow failures.
+- 2026-06-11 13:30 Units 3b and 3c complete: added `.github/workflows/qa-image-cover-smoke.yml` with manual/scheduled triggers, Cloudflare credential skip gate, QA provider-secret skip gate, QA-only smoke command, and artifact upload; deployment preflight now checks the workflow. Focused tests saved to `unit-3bc-green.log`; build saved to `unit-3bc-build.log`; no warnings.
