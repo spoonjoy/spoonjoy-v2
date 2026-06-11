@@ -1,29 +1,30 @@
 # Autopilot State
 
-Updated: 2026-06-11 11:58 America/Los_Angeles
-Branch: `spoonjoy/profile-photo-crop-replay`
-Objective: Continue the Spoonjoy next-work queue after completing the dedicated QA/test environment, verifying production deployment, cleaning disposable data, resolving the final CI flake, and retiring the stale profile-photo-crop branch.
+Updated: 2026-06-11 13:08 America/Los_Angeles
+Branch: `spoonjoy/mcp-image-cover-smokes`
+Objective: Implement `SJ-045` by adding a QA-only MCP/API image and cover live smoke, validating it end to end, merging it to main, verifying deployment, and cleaning all disposable data.
 
 ## Current Gate
 
-- Completed doing doc: `spoonjoy/tasks/2026-06-11-0923-doing-qa-environment.md`
-- Merged PRs: #179 dedicated QA environment, #180 post-merge verification artifacts, #181 fellow-chefs deterministic test-user flake fix, #182 final QA verification state.
-- Final verified main SHA: `1ac13795459267d06a69149452155aeea8c60aba`.
-- Final gates for `1ac13795`: Production Deploy passed, Storybook passed, CI passed (`e2e`, `coverage`, `typecheck`, `build`), production health passed on both `spoonjoy-v2.mendelow-studio.workers.dev` and `spoonjoy.app`.
-- Cleanup state: QA and production `codex-smoke-%` users are both `0`; local `pnpm cleanup:qa` dry run shows `0` active suspicious recipes, disposable users, disposable spoons, and e2e oauth clients.
+- Planning doc: `spoonjoy/tasks/2026-06-11-1221-planning-mcp-image-cover-smokes.md`
+- Doing doc: `spoonjoy/tasks/2026-06-11-1221-doing-mcp-image-cover-smokes.md`
+- Artifacts: `spoonjoy/tasks/2026-06-11-1221-doing-mcp-image-cover-smokes/`
+- Planning gate: approved by sub-agent reviewer convergence on 2026-06-11 13:05.
+- Doing gate: drafting; converting to `READY_FOR_EXECUTION` after doing-doc reviewer passes.
+- No human gates remain under the user's explicit no-human-gates mandate unless a true human-only credential/capability blocker or genuinely unrecoverable destructive shared-state action appears.
 
 ## Next Action
 
-Next queued work from `spoonjoy/tasks/2026-06-10-1521-planning-next-work-queue.md`:
+Current execution queue:
 
-1. `SJ-045` - MCP/API image and cover e2e smokes against QA.
-2. `SJ-046` - Image provider canary and visual benchmark workbench.
-3. `SJ-036` - Finish PostHog server-side error tracking and alert verification.
-
-Current branch inventory:
-
-- No open GitHub PRs before this documentation branch.
-- `SJ-047` resolution: focused profile-photo proof passed on current `main` with `pnpm exec vitest run test/components/account/ProfilePhotoField.test.tsx test/components/account/ProfilePhotoCropper.test.tsx test/lib/image-crop.test.ts test/routes/account-settings.test.tsx test/storybook-sync.test.ts` (197 tests). The current main implementation already includes square crop behavior, so stale local branch `feat/profile-photo-crop` was deleted locally rather than merged.
+1. Finish doing-doc reviewer gate and mark `READY_FOR_EXECUTION`.
+2. Unit 0: complete setup/current-state capture.
+3. Unit 1a/1b/1c: helper and adapter tests/implementation/refactor.
+4. Unit 2a/2b/2c: live smoke flow tests/implementation/refactor.
+5. Unit 3a/3b/3c: scheduled QA workflow tests/implementation/refactor.
+6. Unit 4: local verification.
+7. Unit 5: remote QA image-cover smoke.
+8. Unit 6: implementation review, PR merge, production deploy verification, cleanup, Slugger notification.
 
 ## Known External State
 
