@@ -310,11 +310,14 @@ function coverValuesFrom(payload) {
 
 function addObservedCoverArtifacts(payload, state) {
   for (const cover of coverValuesFrom(payload)) {
+    if (typeof cover.id !== "string" || cover.id.length === 0) continue;
+    state.coverIds.add(cover.id);
     if (typeof cover.provenanceLabel === "string" && cover.provenanceLabel.length > 0) {
       state.provenanceLabels.add(cover.provenanceLabel);
     }
     for (const value of [cover.imageUrl, cover.stylizedImageUrl, cover.displayUrl]) {
       if (typeof value !== "string" || !value.startsWith("/photos/")) continue;
+      state.imageUrls.add(value);
       const key = photoKeyFromImageUrl(value);
       if (key.startsWith("covers/")) {
         state.generatedCoverKeys.add(key);
@@ -355,15 +358,18 @@ async function cleanupSmokeArtifacts(options, state) {
     const revokePayload = await options.apiTool("revoke_api_token", { credentialId: state.credentialId });
     state.credentialRevocation = {
       credentialId: state.credentialId,
-      revoked: revokePayload?.revoked === true || Boolean(revokePayload?.credential?.revokedAt),
+      revoked: revokePayload?.revoked === true,
       payload: revokePayload,
     };
+    if (!state.credentialRevocation.revoked) {
+      throw new Error(`Image-cover smoke credential was not revoked: ${state.credentialId}`);
+    }
   }
 
   const keys = [...state.r2Keys];
   for (const key of keys) {
     const safeKey = validateSmokePhotoKey(key, {
-      ownerId: state.ownerId ?? "unknown",
+      ownerId: state.ownerId,
       generatedCoverKeys: state.generatedCoverKeys,
     });
     await options.deleteQaR2Object(safeKey);
@@ -382,6 +388,10 @@ function buildFlowReport(options, providerPreflight, state, exif) {
     recipeTitle: options.recipeTitle,
     providerPreflight,
     tokenScopes: SMOKE_TOKEN_SCOPES,
+    operations: state.operations,
+    coverIds: [...state.coverIds],
+    imageUrls: [...state.imageUrls],
+    generationPolling: state.generationPolling,
     exif,
     provenanceLabels: [...state.provenanceLabels],
     r2: {
@@ -394,14 +404,18 @@ function buildFlowReport(options, providerPreflight, state, exif) {
 }
 
 export async function runImageCoverSmokeFlow(options) {
-  const wait = options.wait ?? defaultWait;
-  const maxPollAttempts = options.maxPollAttempts ?? 20;
-  const pollDelayMs = options.pollDelayMs ?? 3_000;
+  const wait = options.wait;
+  const maxPollAttempts = options.maxPollAttempts;
+  const pollDelayMs = options.pollDelayMs;
   const state = {
     credentialId: null,
     credentialRevocation: null,
+    coverIds: new Set(),
     deletedKeys: [],
     generatedCoverKeys: new Set(),
+    generationPolling: [],
+    imageUrls: new Set(),
+    operations: [],
     ownerId: null,
     provenanceLabels: new Set(),
     r2Keys: new Set(),
@@ -416,12 +430,13 @@ export async function runImageCoverSmokeFlow(options) {
 
     const tokenPayload = await options.apiTool("create_api_token", buildCreateSmokeTokenArgs(options.stamp));
     const bearerToken = tokenPayload?.token;
-    state.credentialId = tokenPayload?.credential?.id ?? null;
+    state.credentialId = tokenPayload?.credential?.id;
     if (!bearerToken || !state.credentialId) {
       throw new Error("Image-cover smoke could not create a scoped API token.");
     }
 
     validateRequiredMcpTools(await options.mcpToolsList(bearerToken));
+    state.operations.push("tools/list");
     await waitForAiPlaceholder({
       recipeId: options.recipeId,
       mcpTool: (name, args) => options.mcpTool(name, args, bearerToken),
@@ -438,6 +453,7 @@ export async function runImageCoverSmokeFlow(options) {
       mimeType: "image/jpeg",
       filename: `codex-smoke-oriented-${options.stamp}.jpg`,
     }, bearerToken);
+    state.operations.push("upload_recipe_image");
     const recipeImageUrl = recipeUpload?.imageUrl;
     const recipeKey = photoKeyFromImageUrl(recipeImageUrl);
     state.ownerId = ownerIdFromUploadKey(recipeKey);
@@ -451,6 +467,7 @@ export async function runImageCoverSmokeFlow(options) {
       mimeType: "image/gif",
       filename: `codex-smoke-rejected-${options.stamp}.gif`,
     }, bearerToken);
+    state.operations.push("upload_recipe_image:gif_rejected");
 
     const storedBytes = await options.downloadPhotoBytes(recipeImageUrl);
     exif = {
@@ -468,6 +485,7 @@ export async function runImageCoverSmokeFlow(options) {
       mimeType: "image/png",
       filename: `codex-smoke-spoon-${options.stamp}.png`,
     }, bearerToken);
+    state.operations.push("upload_spoon_photo");
     const spoonImageUrl = spoonUpload?.imageUrl;
     const spoonKey = photoKeyFromImageUrl(spoonImageUrl);
     state.r2Keys.add(validateSmokePhotoKey(spoonKey, {
@@ -476,6 +494,7 @@ export async function runImageCoverSmokeFlow(options) {
     }));
 
     const callMcp = async (name, args) => {
+      state.operations.push(name);
       const payload = await options.mcpTool(name, args, bearerToken);
       addObservedCoverArtifacts(payload, state);
       return payload;
@@ -486,7 +505,16 @@ export async function runImageCoverSmokeFlow(options) {
       maxAttempts: maxPollAttempts,
       delayMs: pollDelayMs,
       wait,
-      getStatus: (args) => callMcp("get_cover_generation_status", args),
+      getStatus: async (args) => {
+        const payload = await callMcp("get_cover_generation_status", args);
+        if (!payload?.cover) throw new Error(`Missing generation status cover payload for ${coverId}.`);
+        state.generationPolling.push({
+          coverId,
+          status: payload.cover.status,
+          generationStatus: payload.cover.generationStatus,
+        });
+        return payload;
+      },
     });
 
     const spoonPayload = await callMcp("create_spoon", {

@@ -1,0 +1,21 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+      Coverage enabled with istanbul
+
+ ✓ test/scripts/deployment-preflight.test.ts (67 tests) 83ms
+ ✓ test/scripts/smoke-image-cover-live.test.ts (33 tests) 54ms
+ ✓ test/scripts/smoke-live-helpers.test.ts (21 tests) 36ms
+
+ Test Files  3 passed (3)
+      Tests  121 passed (121)
+   Start at  13:21:05
+   Duration  1.62s (transform 367ms, setup 210ms, import 381ms, tests 173ms, environment 465ms)
+
+ % Coverage report from istanbul
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |     100 |      100 |     100 |     100 |                   
+ ...cover-live.mjs |     100 |      100 |     100 |     100 |                   
+ ...ve-helpers.mjs |     100 |      100 |     100 |     100 |                   
+-------------------|---------|----------|---------|---------|-------------------

@@ -500,6 +500,38 @@ describe("image-cover live smoke flow", () => {
       "Chef photo",
       "Editorialized chef photo",
     ]));
+    expect(report.operations).toEqual(expect.arrayContaining([
+      "tools/list",
+      "upload_recipe_image",
+      "upload_recipe_image:gif_rejected",
+      "upload_spoon_photo",
+      "create_spoon",
+      "list_recipe_spoon_images",
+      "create_recipe_cover_from_upload",
+      "create_recipe_cover_from_spoon",
+      "regenerate_recipe_cover",
+      "get_cover_generation_status",
+      "set_active_recipe_cover",
+      "archive_recipe_cover",
+      "list_recipe_covers",
+    ]));
+    expect(report.coverIds).toEqual(expect.arrayContaining([
+      "cover-ai",
+      "cover-chef",
+      "cover-editorial",
+      "cover-spoon",
+    ]));
+    expect(report.imageUrls).toEqual(expect.arrayContaining([
+      "/photos/recipes/user-1/uploads/oriented.jpg",
+      "/photos/spoons/user-1/uploads/spoon.png",
+      "/photos/covers/ai-placeholder.jpg",
+      "/photos/covers/editorial.jpg",
+      "/photos/covers/spoon-editorial.jpg",
+    ]));
+    expect(report.generationPolling).toEqual(expect.arrayContaining([
+      { coverId: "cover-editorial", status: "ready", generationStatus: "succeeded" },
+      { coverId: "cover-spoon", status: "ready", generationStatus: "succeeded" },
+    ]));
     expect(report.r2.deletedKeys).toEqual(expect.arrayContaining([
       "recipes/user-1/uploads/oriented.jpg",
       "spoons/user-1/uploads/spoon.png",
@@ -522,6 +554,93 @@ describe("image-cover live smoke flow", () => {
     await expect(runImageCoverSmokeFlow(harness.options)).rejects.toThrow(/OPENAI_API_KEY/);
     expect(harness.calls).toEqual([{ kind: "secrets" }]);
     expect(harness.deletedKeys).toEqual([]);
+  });
+
+  it("fails before image mutation when token creation does not return a bearer token", async () => {
+    const harness = createFlowHarness({
+      apiTool: vi.fn(async (name: string, args: Record<string, unknown>) => {
+        harness.calls.push({ kind: "api", name, args });
+        if (name === "create_api_token") return { credential: { id: "credential-1" } };
+        if (name === "revoke_api_token") return { revoked: true, credential: { id: args.credentialId } };
+        throw new Error(`Unexpected API tool ${name}`);
+      }),
+    });
+
+    await expect(runImageCoverSmokeFlow(harness.options)).rejects.toThrow(/scoped API token/);
+    expect(harness.calls.some((call) => call.kind === "api" && call.name === "upload_recipe_image")).toBe(false);
+  });
+
+  it("times out waiting for the browser-created AI placeholder before uploads", async () => {
+    const harness = createFlowHarness();
+    harness.options.mcpTool = vi.fn(async (name: string, args: Record<string, unknown>) => {
+      harness.calls.push({ kind: "mcp", name, args });
+      if (name === "list_recipe_covers") return {};
+      throw new Error(`Unexpected MCP tool ${name}`);
+    });
+
+    await expect(runImageCoverSmokeFlow(harness.options)).rejects.toThrow(/AI generated placeholder/);
+    expect(harness.calls.some((call) => call.kind === "api" && call.name === "upload_recipe_image")).toBe(false);
+  });
+
+  it("ignores malformed cover rows while waiting for the AI placeholder", async () => {
+    const harness = createFlowHarness();
+    const originalMcpTool = harness.options.mcpTool;
+    let listCalls = 0;
+    harness.options.mcpTool = vi.fn(async (name: string, args: Record<string, unknown>) => {
+      if (name === "list_recipe_covers") {
+        listCalls += 1;
+        if (listCalls === 1) {
+          harness.calls.push({ kind: "mcp", name, args });
+          return { covers: [{ provenanceLabel: "AI generated", imageUrl: "/photos/covers/malformed.jpg" }] };
+        }
+      }
+      return originalMcpTool(name, args);
+    });
+
+    const report = await runImageCoverSmokeFlow(harness.options);
+
+    expect(report.coverIds).not.toContain(undefined);
+    expect(report.r2.deletedKeys).toEqual(expect.arrayContaining(["covers/ai-placeholder.jpg"]));
+  });
+
+  it("rejects upload URLs outside owner upload namespaces", async () => {
+    const harness = createFlowHarness();
+    const originalApiTool = harness.options.apiTool;
+    harness.options.apiTool = vi.fn(async (name: string, args: Record<string, unknown>, bearerToken: string) => {
+      harness.calls.push({ kind: "api", name, args });
+      if (name === "upload_recipe_image") {
+        return { imageUrl: "/photos/profiles/user-1/photo.jpg", mimeType: "image/jpeg", sizeBytes: 1024 };
+      }
+      return originalApiTool(name, args, bearerToken);
+    });
+
+    await expect(runImageCoverSmokeFlow(harness.options)).rejects.toThrow(/unsafe smoke photo key/);
+  });
+
+  it("rejects stored images that keep dirty metadata or lose orientation", async () => {
+    const harness = createFlowHarness({
+      downloadPhotoBytes: vi.fn(async () => addDirtyApp1Marker(new Uint8Array(await readFile(ORIENTED_JPEG_FIXTURE_PATH)))),
+    });
+
+    await expect(runImageCoverSmokeFlow(harness.options)).rejects.toThrow(/preserve orientation/);
+    expect(harness.deletedKeys).toEqual(expect.arrayContaining([
+      "recipes/user-1/uploads/oriented.jpg",
+      "covers/ai-placeholder.jpg",
+    ]));
+  });
+
+  it("rejects generation status responses without a cover payload", async () => {
+    const harness = createFlowHarness();
+    const originalMcpTool = harness.options.mcpTool;
+    harness.options.mcpTool = vi.fn(async (name: string, args: Record<string, unknown>) => {
+      if (name === "get_cover_generation_status") {
+        harness.calls.push({ kind: "mcp", name, args });
+        return {};
+      }
+      return originalMcpTool(name, args);
+    });
+
+    await expect(runImageCoverSmokeFlow(harness.options)).rejects.toThrow(/generation status cover payload/);
   });
 
   it("cleans exact observed R2 keys and revokes the credential when the flow fails", async () => {
@@ -549,16 +668,136 @@ describe("image-cover live smoke flow", () => {
     const harness = createFlowHarness({
       mcpToolsList: vi.fn(async () => {
         harness.calls.push({ kind: "mcp-tools-list" });
-        return { tools: IMAGE_COVER_REQUIRED_MCP_TOOLS.filter((name) => name !== "archive_recipe_cover").map((name) => ({ name })) };
+        return {};
       }),
     });
 
     await expect(runImageCoverSmokeFlow(harness.options)).rejects.toThrow(/archive_recipe_cover/);
     expect(harness.calls.some((call) => call.kind === "mcp" && call.name === "create_spoon")).toBe(false);
   });
+
+  it.each([
+    {
+      label: "spoon id",
+      expected: /could not create a spoon/i,
+      mutate: (name: string) => name === "create_spoon",
+    },
+    {
+      label: "chef-photo cover id",
+      expected: /chef-photo cover/i,
+      mutate: (name: string, args: Record<string, unknown>) =>
+        name === "create_recipe_cover_from_upload" && args.generateEditorial === false,
+    },
+    {
+      label: "editorial upload cover id",
+      expected: /editorial upload cover/i,
+      mutate: (name: string, args: Record<string, unknown>) =>
+        name === "create_recipe_cover_from_upload" && args.generateEditorial === true,
+    },
+    {
+      label: "editorial spoon cover id",
+      expected: /editorial spoon cover/i,
+      mutate: (name: string) => name === "create_recipe_cover_from_spoon",
+    },
+  ])("fails cleanly when MCP omits $label", async ({ expected, mutate }) => {
+    const harness = createFlowHarness();
+    const originalMcpTool = harness.options.mcpTool;
+    harness.options.mcpTool = vi.fn(async (name: string, args: Record<string, unknown>) => {
+      if (mutate(name, args)) {
+        harness.calls.push({ kind: "mcp", name, args });
+        return {};
+      }
+      return originalMcpTool(name, args);
+    });
+
+    await expect(runImageCoverSmokeFlow(harness.options)).rejects.toThrow(expected);
+    expect(harness.deletedKeys).toEqual(expect.arrayContaining([
+      "recipes/user-1/uploads/oriented.jpg",
+      "spoons/user-1/uploads/spoon.png",
+      "covers/ai-placeholder.jpg",
+    ]));
+  });
+
+  it("fails if the final cover state does not prove every provenance label", async () => {
+    const harness = createFlowHarness();
+    const originalMcpTool = harness.options.mcpTool;
+    harness.options.mcpTool = vi.fn(async (name: string, args: Record<string, unknown>) => {
+      const payload = await originalMcpTool(name, args);
+      const scrub = (cover: Record<string, unknown> | null | undefined) =>
+        cover?.provenanceLabel === "Editorialized chef photo" ? { ...cover, provenanceLabel: null } : cover;
+      return {
+        ...payload,
+        covers: Array.isArray(payload?.covers) ? payload.covers.map(scrub) : payload?.covers,
+        cover: scrub(payload?.cover),
+        activeCover: scrub(payload?.activeCover),
+        createdCover: scrub(payload?.createdCover),
+        archivedCover: scrub(payload?.archivedCover),
+        previousActiveCover: scrub(payload?.previousActiveCover),
+      };
+    });
+
+    await expect(runImageCoverSmokeFlow(harness.options)).rejects.toThrow(/Editorialized chef photo/);
+  });
+
+  it("surfaces cleanup failures when the flow itself succeeds", async () => {
+    const harness = createFlowHarness({
+      deleteQaR2Object: vi.fn(async (key: string) => {
+        throw new Error(`delete failed for ${key}`);
+      }),
+    });
+
+    await expect(runImageCoverSmokeFlow(harness.options)).rejects.toThrow(/delete failed/);
+  });
+
+  it("fails when credential revocation does not revoke the smoke token", async () => {
+    const harness = createFlowHarness();
+    const originalApiTool = harness.options.apiTool;
+    harness.options.apiTool = vi.fn(async (name: string, args: Record<string, unknown>, bearerToken: string) => {
+      if (name === "revoke_api_token") {
+        harness.calls.push({ kind: "api", name, args });
+        return { revoked: false, credential: { id: args.credentialId, revokedAt: null } };
+      }
+      return originalApiTool(name, args, bearerToken);
+    });
+
+    await expect(runImageCoverSmokeFlow(harness.options)).rejects.toThrow(/credential was not revoked/);
+  });
+
+  it("preserves the original flow error when cleanup also fails", async () => {
+    const harness = createFlowHarness({
+      deleteQaR2Object: vi.fn(async () => {
+        throw new Error("cleanup failed too");
+      }),
+    });
+    const originalMcpTool = harness.options.mcpTool;
+    harness.options.mcpTool = vi.fn(async (name: string, args: Record<string, unknown>) => {
+      if (name === "create_recipe_cover_from_upload") {
+        throw new Error("cover creation failed");
+      }
+      return originalMcpTool(name, args);
+    });
+
+    await expect(runImageCoverSmokeFlow(harness.options)).rejects.toThrow(/cover creation failed/);
+  });
 });
 
 describe("pollCoverGeneration", () => {
+  it("uses default polling settings when they are omitted", async () => {
+    vi.useFakeTimers();
+    const getStatus = vi.fn()
+      .mockResolvedValueOnce({ cover: { id: "cover-1", generationStatus: "processing", status: "processing" } })
+      .mockResolvedValueOnce({ cover: { id: "cover-1", status: "ready" } });
+
+    const promise = pollCoverGeneration({
+      recipeId: "recipe-1",
+      coverId: "cover-1",
+      getStatus,
+    });
+    await vi.advanceTimersByTimeAsync(3_000);
+    await expect(promise).resolves.toMatchObject({ cover: { status: "ready" } });
+    vi.useRealTimers();
+  });
+
   it("polls until a cover reaches a succeeded terminal state", async () => {
     const statuses = [
       { cover: { id: "cover-1", generationStatus: "processing", status: "processing" } },
@@ -598,6 +837,19 @@ describe("pollCoverGeneration", () => {
         },
       })),
     })).rejects.toThrow(/provider quota/);
+  });
+
+  it("uses a fallback failure message when the provider omits a reason", async () => {
+    await expect(pollCoverGeneration({
+      recipeId: "recipe-1",
+      coverId: "cover-1",
+      maxAttempts: 3,
+      delayMs: 7,
+      wait: vi.fn(async () => undefined),
+      getStatus: vi.fn(async () => ({
+        cover: { id: "cover-1", generationStatus: "failed", status: "failed" },
+      })),
+    })).rejects.toThrow(/Cover generation failed for cover-1/);
   });
 
   it("times out after the fixed attempt budget", async () => {

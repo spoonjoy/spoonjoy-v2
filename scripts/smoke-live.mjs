@@ -282,6 +282,8 @@ async function main() {
         recipeId,
         recipeTitle,
         stamp,
+        maxPollAttempts: 30,
+        pollDelayMs: 3_000,
         listQaSecretNames,
         apiTool: adapters.apiTool,
         expectApiToolFailure: adapters.expectApiToolFailure,
@@ -291,6 +293,7 @@ async function main() {
         downloadPhotoBytes: adapters.downloadPhotoBytes,
         deleteQaR2Object,
         verifyQaR2ObjectDeleted,
+        wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
       })
     }
 
