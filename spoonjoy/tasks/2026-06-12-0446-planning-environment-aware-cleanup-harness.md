@@ -1,6 +1,6 @@
 # Planning: Environment-Aware Cleanup Harness
 
-**Status**: drafting
+**Status**: NEEDS_REVIEW
 **Created**: 2026-06-12 04:46 America/Los_Angeles
 
 ## Goal
@@ -18,7 +18,7 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 - Refactor live smoke argument parsing and QA preflight constants to use the shared resolver instead of duplicated environment facts.
 - Replace the local-only `cleanup:qa` behavior with an environment-aware cleanup harness that dry-runs by default, prints the resolved target before work, allows local mutation with `--apply`, allows broad remote mutation only for explicit `--target-env qa --apply`, and keeps production broad cleanup read-only/refused.
 - Extend QA cleanup SQL to cover disposable users, recipes, spoons, OAuth clients/codes/tokens, API credentials/idempotency keys, generated covers, and related owned rows while preserving non-disposable data.
-- Add a pre-mutation dependency-blocker query for non-disposable recipes whose `sourceRecipeId` points at a disposable recipe. QA apply must report those blockers and refuse broad D1/R2 mutation rather than nulling non-disposable fork attribution or triggering `Recipe.sourceRecipeId` restrictive delete failures.
+- Add pre-mutation dependency-blocker queries for non-disposable rows that reference the disposable cleanup target set. At minimum cover non-disposable recipe forks via `Recipe.sourceRecipeId`, non-disposable spoons on disposable recipes via `RecipeSpoon.recipeId`, non-disposable cookbook membership through `RecipeInCookbook.recipeId` / `addedById` / cookbook author ownership, and non-disposable recipes whose `activeCoverId` points at a disposable cover. QA apply must report those blockers and refuse broad D1/R2 mutation rather than mutating non-disposable user state or triggering FK failures.
 - Handle disposable-to-disposable recipe fork chains explicitly after the blocker query succeeds: either topologically delete disposable fork leaves first or clear `sourceRecipeId` only for recipes inside the disposable cleanup target set. Tests must cover disposable-only fork chains and mixed chains with a non-disposable blocker.
 - Add QA R2 cleanup planning and execution for disposable `/photos/` keys discovered from disposable users, recipes, spoons, and recipe covers; production must list potential keys only and refuse deletion.
 - Ensure live smoke artifacts record environment metadata, git branch/commit, created record ids already available to the smoke, cleanup verification, and retained/deleted R2 keys when image-cover smoke runs.
@@ -37,7 +37,7 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 - [ ] Cleanup commands print resolved environment, base URL, D1 target, R2 target, and destructive-operation scope before any mutation.
 - [ ] Cleanup refuses ambiguous remote mutation and refuses broad production mutation; production cleanup remains read-first and narrow.
 - [ ] QA cleanup can remove disposable users, recipes, spoons, OAuth clients/codes/tokens, API credentials/idempotency keys, generated covers, and related QA R2 objects.
-- [ ] QA cleanup reports and refuses mutation when non-disposable fork/provenance rows still reference disposable recipes.
+- [ ] QA cleanup reports and refuses mutation when any non-disposable row still references disposable cleanup targets.
 - [ ] QA cleanup safely handles disposable recipe fork chains without mutating non-disposable fork attribution.
 - [ ] Smoke artifacts include environment, base URL, branch/commit, created record ids, cleanup result, and retained/deleted R2 keys where available.
 - [ ] Docs and preflight checks encode the explicit cleanup/smoke target contract.
@@ -52,7 +52,7 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 - All branches covered (if/else, switch, try/catch)
 - All error paths tested
 - Edge cases: null, empty, boundary values
-- Cover local, QA, production, missing env, mismatched URL/env, remote mutation refusal, QA apply intent, production read-only/refusal, restrictive fork blockers, disposable fork chains, mixed fork chains, cascade/direct cleanup surfaces, R2 key extraction/validation, and artifact metadata branches.
+- Cover local, QA, production, missing env, mismatched URL/env, remote mutation refusal, QA apply intent, production read-only/refusal, cross-boundary reference blockers, restrictive fork blockers, disposable fork chains, mixed fork chains, cascade/direct cleanup surfaces, R2 key extraction/validation, and artifact metadata branches.
 
 ## Open Questions
 - None. Repo-local planning defaults require human approval, but the active user mandate explicitly disables human gates for this workstream; under the refreshed work-suite contract this converts approval and safety checks into sub-agent reviewer gates unless a true human-only credential/capability blocker or unrecoverable destructive shared-production action appears.
@@ -62,8 +62,9 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 - Keep `pnpm cleanup:qa` as a backwards-compatible local dry-run alias only if retained; add explicit commands for local and QA cleanup so the script name no longer implies remote QA mutation.
 - Treat `qa` as the only broad remote cleanup environment, and require both explicit `--target-env qa` and `--apply` before deleting remote QA D1/R2 state.
 - Treat production cleanup as read-first: it may report disposable residue and exact smoke-created users, but this task will not add a broad production delete path.
-- Do not use the test helper's whole-database `sourceRecipeId = null` pattern in live cleanup. For live local/QA cleanup, non-disposable forks pointing at disposable recipes are blockers: report them and refuse broad apply before D1/R2 deletion.
+- Do not use the test helper's whole-database deletion patterns in live cleanup. For live local/QA cleanup, cross-boundary references from non-disposable rows into the disposable target set are blockers: report them and refuse broad apply before D1/R2 deletion.
 - Disposable recipes may reference each other through `sourceRecipeId`; after the non-disposable blocker count is zero, live cleanup may clear `sourceRecipeId` only where both referencing and referenced recipes are in the disposable target set, then delete disposable recipe rows. It must not clear `sourceRecipeId` on non-disposable recipes.
+- Disposable recipe deletion may cascade through dependent rows only when the dependent rows are also inside the disposable target set. Non-disposable spoons, cookbook membership, cookbook author ownership, and active-cover pointers must be blocker-reported instead of silently deleted or nulled.
 - A broad QA apply is destructive but staged and scoped to disposable QA state, so it is not a hard human exception under the active mandate. Broad production mutation remains a hard refusal in the shipped script.
 - Discover R2 cleanup keys from persisted `/photos/` URLs in `User.photoUrl`, `RecipeSpoon.photoUrl`, and `RecipeCover.imageUrl` / `stylizedImageUrl` / `sourceImageUrl`; delete only keys that pass a disposable-owner or generated-cover safety check.
 - Collect and persist the candidate R2 key list before deleting D1 rows so QA cleanup cannot erase the database evidence it needs to clean stored objects.
@@ -77,7 +78,7 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 - `scripts/smoke-image-cover-live.mjs` validates `/photos/` keys, deletes exact QA upload/generated-cover keys, and records deleted/verified keys for one smoke run.
 - `scripts/cleanup-local-qa-data.mjs` is local-only today, dry-runs by default, and already has SQL predicates for suspicious recipes, disposable users, disposable spoons, and E2E OAuth clients.
 - `scripts/qa-preflight.ts` duplicates QA base URL/R2 constants and runs QA remote migration/secret/R2 checks.
-- `prisma/schema.prisma` relevant cleanup tables and relations: `User`, `ApiCredential`, `ApiIdempotencyKey`, `AgentConnectionRequest`, `OAuth`, `OAuthClient`, `OAuthAuthCode`, `OAuthRefreshToken`, `Recipe`, `RecipeSpoon`, `RecipeCover`, `RecipeInCookbook`, `Cookbook`, `ShoppingList`, `ShoppingListItem`, `UserCredential`, `ImageGenLedger`, `PushSubscription`, `NotificationEvent`, and `NotificationPreference`. Some should be direct deletes, some cascade-verified, and some count-only depending on ownership and FK direction.
+- `prisma/schema.prisma` relevant cleanup tables and relations: `User`, `ApiCredential`, `ApiIdempotencyKey`, `AgentConnectionRequest`, `OAuth`, `OAuthClient`, `OAuthAuthCode`, `OAuthRefreshToken`, `Recipe`, `RecipeSpoon`, `RecipeCover`, `RecipeInCookbook`, `Cookbook`, `ShoppingList`, `ShoppingListItem`, `UserCredential`, `ImageGenLedger`, `PushSubscription`, `NotificationEvent`, and `NotificationPreference`. Some should be direct deletes, some cascade-verified, some count-only, and some pre-mutation blockers depending on ownership and FK direction.
 - `test/helpers/cleanup.ts` clears all fork attribution before deleting all recipes because it owns the entire local test DB; the live cleanup harness must not copy that broad pattern.
 - SQLite FTS/search helper tables `SearchDocument` and `SearchIndexMetadata` are not Prisma models but appear in test cleanup; this task should either clear disposable search rows safely or document/count why the live harness does not manage them.
 - `package.json` current scripts include `cleanup:qa`, `smoke:qa`, `smoke:qa:image-cover`, `qa:preflight`, and `deploy:preflight`.
@@ -87,8 +88,8 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 - The cleanup script should print target summaries in both dry-run and apply modes so CI logs/artifacts are self-describing.
 - R2 deletes should be exact key deletes via Wrangler, never prefix-wide deletes.
 - QA cleanup should report retained keys when a row matched disposable DB cleanup but an image URL failed key validation; those retained keys become evidence, not silently ignored state.
-- QA cleanup should report dependency blockers as retained DB residue. A clean apply is allowed only after blocker count is zero.
-- Dependency blocker tests must include a disposable child/parent chain that succeeds and a non-disposable child of a disposable parent that refuses mutation.
+- QA cleanup should report dependency blockers as retained DB residue. A clean broad apply is allowed only after every blocker count is zero.
+- Dependency blocker tests must include a disposable child/parent chain that succeeds, a non-disposable child recipe of a disposable parent that refuses mutation, a non-disposable spoon on a disposable recipe, non-disposable cookbook membership around a disposable recipe, and a non-disposable recipe active-cover pointer to a disposable cover.
 - Production broad cleanup refusal is a feature, not a blocker.
 - Keep implementation slices small enough to preserve the work-suite dogfood cadence and commit/push after each logical unit.
 
@@ -97,3 +98,4 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 - 2026-06-12 04:46 Tinfoil pass tightened R2 cleanup ordering and retained-key reporting.
 - 2026-06-12 04:48 Addressed planning reviewer findings: added restrictive `sourceRecipeId` blocker policy/tests and completed the cleanup-surface reference list.
 - 2026-06-12 04:51 Addressed Round 2 reviewer findings: added disposable fork-chain cleanup policy/tests and clarified that the active no-human-gates mandate maps repo approval gates to reviewer gates while broad production mutation remains refused.
+- 2026-06-12 04:53 Addressed Round 3 reviewer findings: generalized cleanup blockers to all cross-boundary non-disposable references into disposable targets and set status to `NEEDS_REVIEW` during the reviewer gate.
