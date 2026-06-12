@@ -1793,6 +1793,30 @@ describe("Storybook deploy warning cleanup", () => {
     const missingPullRequestMain = validateDeploymentConfig(
       inputsWithStorybookWorkflow(validStorybookWorkflow().replace("  pull_request:\n    branches: [main]\n", "")),
     );
+    const extraPullRequestTarget = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(
+        validStorybookWorkflow().replace(
+          "  workflow_dispatch:\n",
+          "  pull_request_target:\n    branches: [main]\n  workflow_dispatch:\n",
+        ),
+      ),
+    );
+    const quotedExtraPullRequestTarget = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(
+        validStorybookWorkflow().replace(
+          "  workflow_dispatch:\n",
+          "  \"pull_request_target\":\n    branches: [main]\n  workflow_dispatch:\n",
+        ),
+      ),
+    );
+    const singleQuotedExtraPullRequestTarget = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(
+        validStorybookWorkflow().replace(
+          "  workflow_dispatch:\n",
+          "  'pull_request_target':\n    branches: [main]\n  workflow_dispatch:\n",
+        ),
+      ),
+    );
     const missingGitConfig = validateDeploymentConfig(
       inputsWithStorybookWorkflow(
         validStorybookWorkflow().replace(
@@ -1805,6 +1829,9 @@ describe("Storybook deploy warning cleanup", () => {
     expect(missingOnBlock.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
     expect(missingPushMain.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
     expect(missingPullRequestMain.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
+    expect(extraPullRequestTarget.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
+    expect(quotedExtraPullRequestTarget.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
+    expect(singleQuotedExtraPullRequestTarget.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
     expect(missingGitConfig.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
   });
 

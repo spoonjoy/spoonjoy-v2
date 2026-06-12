@@ -210,12 +210,16 @@ function childBlock(lines: WorkflowLine[], start: number, end: number, key: stri
   const childIndent = lines[start].indent + 2;
   for (let index = start + 1; index < end; index += 1) {
     if (lines[index].indent !== childIndent) continue;
-    const text = lines[index].text;
-    if (text === `${key}:` || text.startsWith(`${key}: `)) {
+    if (yamlMappingKey(lines[index].text) === key) {
       return [index, blockEnd(lines, index)];
     }
   }
   return null;
+}
+
+function yamlMappingKey(text: string): string | null {
+  const key = text.match(/^(['"]?)([A-Za-z0-9_-]+)\1:/);
+  return key ? key[2] : null;
 }
 
 function immediateChildKeys(lines: WorkflowLine[], start: number, end: number): string[] {
@@ -223,8 +227,8 @@ function immediateChildKeys(lines: WorkflowLine[], start: number, end: number): 
   const keys: string[] = [];
   for (let index = start + 1; index < end; index += 1) {
     if (lines[index].indent !== childIndent) continue;
-    const key = lines[index].text.match(/^([A-Za-z0-9_-]+):/);
-    if (key) keys.push(key[1]);
+    const key = yamlMappingKey(lines[index].text);
+    if (key) keys.push(key);
   }
   return keys;
 }
@@ -260,6 +264,16 @@ function workflowDeploysPushesToMain(workflow: string): boolean {
   return Boolean(workflowDispatch) && workflowTriggerTargetsMain(lines, onIndex, onEnd, "push");
 }
 
+function workflowHasOnlyTriggers(lines: WorkflowLine[], onIndex: number, onEnd: number, allowed: string[]): boolean {
+  const triggers = immediateChildKeys(lines, onIndex, onEnd);
+  const uniqueTriggers = new Set(triggers);
+  return (
+    triggers.length === allowed.length &&
+    uniqueTriggers.size === allowed.length &&
+    allowed.every((trigger) => uniqueTriggers.has(trigger))
+  );
+}
+
 function workflowBuildsPullRequestsAndDeploysPushesToMain(workflow: string): boolean {
   const lines = workflowLines(workflow);
   const onIndex = lines.findIndex((line) => line.indent === 0 && line.text === "on:");
@@ -267,6 +281,7 @@ function workflowBuildsPullRequestsAndDeploysPushesToMain(workflow: string): boo
   const onEnd = blockEnd(lines, onIndex);
   const workflowDispatch = childBlock(lines, onIndex, onEnd, "workflow_dispatch");
   return (
+    workflowHasOnlyTriggers(lines, onIndex, onEnd, ["push", "pull_request", "workflow_dispatch"]) &&
     Boolean(workflowDispatch) &&
     workflowTriggerTargetsMain(lines, onIndex, onEnd, "push") &&
     workflowTriggerTargetsMain(lines, onIndex, onEnd, "pull_request")
@@ -435,14 +450,7 @@ function workflowTriggersOnlyDispatchAndSchedule(workflow: string): boolean {
   const onIndex = lines.findIndex((line) => line.indent === 0 && line.text === "on:");
   if (onIndex === -1) return false;
   const onEnd = blockEnd(lines, onIndex);
-  const triggers = immediateChildKeys(lines, onIndex, onEnd);
-  const allowed = new Set(["workflow_dispatch", "schedule"]);
-  const uniqueTriggers = new Set(triggers);
-  return (
-    triggers.length === allowed.size &&
-    uniqueTriggers.size === allowed.size &&
-    [...allowed].every((trigger) => uniqueTriggers.has(trigger))
-  );
+  return workflowHasOnlyTriggers(lines, onIndex, onEnd, ["workflow_dispatch", "schedule"]);
 }
 
 function normalizedWorkflowCondition(value: string): string {
