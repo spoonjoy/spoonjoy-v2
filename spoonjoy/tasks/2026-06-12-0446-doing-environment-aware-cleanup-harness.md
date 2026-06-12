@@ -59,7 +59,7 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 
 ### ⬜ Unit 0: Setup/Research
 **What**: Verify branch/worktree state, current script/test files, current local cleanup residue, and exact schema relationships that the cleanup harness must respect.
-**Output**: `unit-0-setup.log` with branch, status, current cleanup dry-run, and confirmation that these files were inspected: `scripts/smoke-live-helpers.mjs`, `scripts/smoke-live.mjs`, `scripts/smoke-image-cover-live.mjs`, `scripts/cleanup-local-qa-data.mjs`, `scripts/qa-preflight.ts`, `scripts/deployment-preflight.ts`, `test/helpers/cleanup.ts`, `test/scripts/cleanup-local-qa-data.test.ts`, `test/scripts/smoke-live-helpers.test.ts`, `test/scripts/deployment-preflight.test.ts`, `prisma/schema.prisma`, `package.json`, `README.md`, and `docs/deployment.md`.
+**Output**: `unit-0-setup.log` with branch, status, current cleanup dry-run, and confirmation that these files were inspected: `scripts/smoke-live-helpers.mjs`, `scripts/smoke-live.mjs`, `scripts/smoke-api-live.mjs`, `scripts/smoke-image-cover-live.mjs`, `scripts/cleanup-local-qa-data.mjs`, `scripts/qa-preflight.ts`, `scripts/deployment-preflight.ts`, `test/helpers/cleanup.ts`, `test/scripts/cleanup-local-qa-data.test.ts`, `test/scripts/smoke-live-helpers.test.ts`, `test/scripts/deployment-preflight.test.ts`, `prisma/schema.prisma`, `package.json`, `README.md`, and `docs/deployment.md`.
 **Acceptance**: Branch is `spoonjoy/sj-044-cleanup-harness`; no unrelated dirty work is overwritten; cleanup starting state is recorded.
 
 ### ⬜ Unit 1a: Shared Environment Resolver — Tests
@@ -68,9 +68,9 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 **Acceptance**: Tests fail for missing resolver behavior, not for test syntax/import errors.
 
 ### ⬜ Unit 1b: Shared Environment Resolver — Implementation
-**What**: Add runtime-compatible `scripts/script-environment.mjs` and refactor `scripts/smoke-live-helpers.mjs` and `scripts/qa-preflight.ts` to consume it without changing their current accepted smoke/preflight behavior. Keep smoke scripts runnable with plain `node` package scripts; do not make `.mjs` scripts import a `.ts` module.
+**What**: Add runtime-compatible `scripts/script-environment.mjs` and refactor `scripts/smoke-live-helpers.mjs`, `scripts/smoke-api-live.mjs`, and `scripts/qa-preflight.ts` to consume it without changing their current accepted smoke/preflight behavior except that `smoke-api-live.mjs` must become target-explicit. Keep smoke scripts runnable with plain `node` package scripts; do not make `.mjs` scripts import a `.ts` module.
 **Output**: Resolver module, updated imports/constants, and green focused resolver/smoke/preflight test output in `unit-1b-green.log`.
-**Acceptance**: Unit 1a tests plus existing smoke/preflight helper tests pass with no warnings.
+**Acceptance**: Unit 1a tests plus existing smoke/API/preflight helper tests pass with no warnings.
 
 ### ⬜ Unit 1c: Shared Environment Resolver — Coverage & Refactor
 **What**: Verify new resolver coverage, add edge-case tests for empty base URL and invalid URL parsing if needed, and keep existing smoke/preflight behavior intact.
@@ -123,12 +123,12 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 **Acceptance**: R2 cleanup new code reaches 100% coverage; focused tests remain green.
 
 ### ⬜ Unit 5a: Smoke Artifact Metadata — Tests
-**What**: Add failing tests for a `buildSmokeReport` or `finalizeSmokeReport` helper used by `scripts/smoke-live.mjs` so `smoke-results.json` reports `environment.targetEnv`, `environment.baseUrl`, `environment.d1Target`, `environment.r2Target`, `environment.destructiveScope`, `git.branch`, `git.commit`, `created.email`, `created.username`, `created.recipeTitle`, `created.recipeId`, cleanup result, and `r2.retainedKeys` / `r2.deletedKeys` / `r2.verifiedDeletedKeys`. For normal smoke, R2 arrays must exist and be empty; for image-cover smoke, top-level R2 arrays must mirror `imageCoverSmoke.r2`.
-**Output**: Tests in `test/scripts/smoke-live-helpers.test.ts` and `test/scripts/smoke-image-cover-live.test.ts` plus red output in `unit-5a-red.log`.
+**What**: Add failing tests for a `buildSmokeReport` or `finalizeSmokeReport` helper used by `scripts/smoke-live.mjs` so `smoke-results.json` reports `environment.targetEnv`, `environment.baseUrl`, `environment.d1Target`, `environment.r2Target`, `environment.destructiveScope`, `git.branch`, `git.commit`, `created.email`, `created.username`, `created.recipeTitle`, `created.recipeId`, cleanup result, and `r2.retainedKeys` / `r2.deletedKeys` / `r2.verifiedDeletedKeys`. For normal smoke, R2 arrays must exist and be empty; for image-cover smoke, top-level R2 arrays must mirror `imageCoverSmoke.r2`. Add failing tests for `scripts/smoke-api-live.mjs` target parsing so it requires `--target-env qa|production` for remote URLs, validates URL/env pairs through the shared resolver, and writes environment/git metadata into its artifact.
+**Output**: Tests in `test/scripts/smoke-live-helpers.test.ts`, `test/scripts/smoke-image-cover-live.test.ts`, and `test/scripts/smoke-api-live.test.ts` plus red output in `unit-5a-red.log`.
 **Acceptance**: Tests fail on missing artifact metadata behavior, not on unrelated smoke setup.
 
 ### ⬜ Unit 5b: Smoke Artifact Metadata — Implementation
-**What**: Wire resolver metadata and git branch/commit detection into `scripts/smoke-live.mjs` / helpers, without breaking existing exact-run cleanup or image-cover smoke cleanup.
+**What**: Wire resolver metadata and git branch/commit detection into `scripts/smoke-live.mjs`, `scripts/smoke-api-live.mjs`, and helpers, without breaking existing exact-run cleanup or image-cover smoke cleanup.
 **Output**: Updated smoke artifact code and green focused smoke tests in `unit-5b-green.log`.
 **Acceptance**: Focused smoke helper/image-cover tests pass; report JSON keeps existing fields and adds the new metadata.
 
@@ -138,12 +138,12 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 **Acceptance**: New metadata code has 100% coverage and no warnings.
 
 ### ⬜ Unit 6a: Docs, Package Scripts, And Preflight — Tests
-**What**: Add failing tests that require explicit cleanup package scripts, deployment preflight contract, docs text for local dry-run, local apply, QA dry-run/apply, production read-only/refusal, no broad production cleanup, coverage instrumentation for `scripts/script-environment.mjs`, `scripts/cleanup-local-qa-data.mjs`, `scripts/qa-preflight.ts`, and `scripts/deployment-preflight.ts`, and a script typecheck command for modified TypeScript scripts.
+**What**: Add failing tests that require explicit cleanup package scripts, target-explicit `smoke:api`, deployment preflight contract, docs text for local dry-run, local apply, QA dry-run/apply, production read-only/refusal, no broad production cleanup, coverage instrumentation for `scripts/script-environment.mjs`, `scripts/cleanup-local-qa-data.mjs`, `scripts/smoke-api-live.mjs`, `scripts/qa-preflight.ts`, and `scripts/deployment-preflight.ts`, and a script typecheck command for modified TypeScript scripts.
 **Output**: Updated `test/scripts/deployment-preflight.test.ts` plus red output in `unit-6a-red.log`.
 **Acceptance**: Tests fail on current ambiguous `cleanup:qa` contract.
 
 ### ⬜ Unit 6b: Docs, Package Scripts, And Preflight — Implementation
-**What**: Update `package.json`, `scripts/deployment-preflight.ts`, `vitest.config.ts`, `README.md`, and `docs/deployment.md` so the explicit cleanup/smoke target contract is encoded for future agents. Add `typecheck:scripts` package script and `tsconfig.scripts.json` if needed so modified TypeScript scripts are typechecked outside the app-only `tsconfig.json`.
+**What**: Update `package.json`, `scripts/deployment-preflight.ts`, `vitest.config.ts`, `README.md`, and `docs/deployment.md` so the explicit cleanup/smoke target contract is encoded for future agents. Keep `cleanup:qa` as a backwards-compatible local dry-run alias to `cleanup:local`; add `cleanup:local`, `cleanup:local:apply`, `cleanup:remote:qa`, `cleanup:remote:qa:apply`, and `cleanup:production`; make `smoke:api` pass `--target-env production`. Add `typecheck:scripts` package script and `tsconfig.scripts.json` if needed so modified TypeScript scripts are typechecked outside the app-only `tsconfig.json`.
 **Output**: Updated docs/scripts and green focused deployment preflight tests in `unit-6b-green.log`.
 **Acceptance**: Focused preflight/docs tests pass with no warnings.
 
@@ -158,7 +158,7 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 **Acceptance**: Commands pass with no warnings; no disposable local residue remains.
 
 ### ⬜ Unit 8: Live Safe Cleanup Dogfood
-**What**: Run these commands and save their output: `pnpm run cleanup:qa`; if it reports disposable QA residue and zero blockers, run `pnpm run cleanup:qa:apply` and rerun `pnpm run cleanup:qa`; `pnpm run cleanup:production`; `pnpm run cleanup:production -- --apply` with nonzero exit expected and captured as production broad-apply refusal evidence; `pnpm run qa:preflight`.
+**What**: Run these commands and save their output: `pnpm run cleanup:remote:qa`; if it reports disposable QA residue and zero blockers, run `pnpm run cleanup:remote:qa:apply` and rerun `pnpm run cleanup:remote:qa`; `pnpm run cleanup:production`; `pnpm run cleanup:production -- --apply` with nonzero exit expected and captured as production broad-apply refusal evidence; `pnpm run qa:preflight`.
 **Output**: `cleanup-qa-dry-run.log`, `cleanup-production-readonly.log`, and `qa-preflight.log`.
 **Acceptance**: QA cleanup and QA preflight commands pass with no warnings; QA/prod cleanup commands print resolved targets; production read-only command passes; production `--apply` command refuses broad apply with the expected nonzero exit and no mutation.
 
@@ -183,7 +183,7 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 **Acceptance**: PR is merged; main checks pass; deployed production commit/version corresponds to the merge or the provider's deploy run for the merge is green.
 
 ### ⬜ Unit 13: Production Smoke And Final Cleanup
-**What**: Run production health/custom-domain checks with `curl -fsS https://spoonjoy-v2.mendelow-studio.workers.dev/health` and `curl -fsS https://spoonjoy.app/health`; run production live smoke with `pnpm run smoke:live`; run final cleanup checks with `pnpm run cleanup:local`, `pnpm run cleanup:qa`, and `pnpm run cleanup:production`; save evidence.
+**What**: Run production health/custom-domain checks with `curl -fsS https://spoonjoy-v2.mendelow-studio.workers.dev/health` and `curl -fsS https://spoonjoy.app/health`; run production live smoke with `pnpm run smoke:live`; run API smoke with `pnpm run smoke:api`; run final cleanup checks with `pnpm run cleanup:local`, `pnpm run cleanup:remote:qa`, and `pnpm run cleanup:production`; save evidence.
 **Output**: `production-smoke.log` and `final-cleanup.log`.
 **Acceptance**: Production smoke passes; cleanup checks are clean; no disposable local/QA/prod residue remains from this run.
 

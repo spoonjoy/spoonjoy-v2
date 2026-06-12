@@ -16,6 +16,7 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 ### In Scope
 - Add a shared script environment resolver for `local`, `qa`, and `production` targets with base URL, D1 target, R2 target, and destructive-operation scope metadata.
 - Refactor live smoke argument parsing and QA preflight constants to use the shared resolver instead of duplicated environment facts.
+- Make `scripts/smoke-api-live.mjs` target-explicit through the shared resolver because it is also exposed as a smoke command.
 - Replace the local-only `cleanup:qa` behavior with an environment-aware cleanup harness that dry-runs by default, prints the resolved target before work, allows local mutation with `--apply`, allows broad remote mutation only for explicit `--target-env qa --apply`, and keeps production broad cleanup read-only/refused.
 - Extend QA cleanup SQL to cover disposable users, recipes, spoons, OAuth clients/codes/tokens, API credentials/idempotency keys, generated covers, and related owned rows while preserving non-disposable data.
 - Add pre-mutation dependency-blocker queries for non-disposable rows that reference the disposable cleanup target set. At minimum cover non-disposable recipe forks via `Recipe.sourceRecipeId`, non-disposable spoons on disposable recipes via `RecipeSpoon.recipeId`, non-disposable cookbook membership through `RecipeInCookbook.recipeId` / `addedById` / cookbook author ownership, and non-disposable recipes whose `activeCoverId` points at a disposable cover. QA apply must report those blockers and refuse broad D1/R2 mutation rather than mutating non-disposable user state or triggering FK failures.
@@ -59,7 +60,7 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 
 ## Decisions Made
 - Use `--target-env local|qa|production` consistently for cleanup and smoke; local may still be inferred only from localhost smoke URLs for the existing developer convenience path.
-- Keep `pnpm cleanup:qa` as a backwards-compatible local dry-run alias only if retained; add explicit commands for local and QA cleanup so the script name no longer implies remote QA mutation.
+- Keep `pnpm cleanup:qa` as a backwards-compatible local dry-run alias only if retained; add explicit commands for local and remote QA cleanup so the script name no longer implies remote QA mutation.
 - Treat `qa` as the only broad remote cleanup environment, and require both explicit `--target-env qa` and `--apply` before deleting remote QA D1/R2 state.
 - Treat production cleanup as read-first: it may report disposable residue and exact smoke-created users, but this task will not add a broad production delete path.
 - Do not use the test helper's whole-database deletion patterns in live cleanup. For live local/QA cleanup, cross-boundary references from non-disposable rows into the disposable target set are blockers: report them and refuse broad apply before D1/R2 deletion.
@@ -75,13 +76,14 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 - `scripts/smoke-live-helpers.mjs` already validates smoke `--target-env`, QA/production base URLs, D1 cleanup args, and QA R2 get/delete arg builders.
 - `scripts/smoke-image-cover-live.mjs` contains the current `/photos/` key validation before one-run QA R2 deletion.
 - `scripts/smoke-live.mjs` writes `smoke-results.json`, cleans the exact smoke user, and delegates flagged image-cover R2 cleanup to `scripts/smoke-image-cover-live.mjs`.
+- `scripts/smoke-api-live.mjs` is a read-only smoke command and must still be target-explicit so future agents do not accidentally hit production while believing the smoke harness is environment-scoped.
 - `scripts/smoke-image-cover-live.mjs` validates `/photos/` keys, deletes exact QA upload/generated-cover keys, and records deleted/verified keys for one smoke run.
 - `scripts/cleanup-local-qa-data.mjs` is local-only today, dry-runs by default, and already has SQL predicates for suspicious recipes, disposable users, disposable spoons, and E2E OAuth clients.
 - `scripts/qa-preflight.ts` duplicates QA base URL/R2 constants and runs QA remote migration/secret/R2 checks.
 - `prisma/schema.prisma` relevant cleanup tables and relations: `User`, `ApiCredential`, `ApiIdempotencyKey`, `AgentConnectionRequest`, `OAuth`, `OAuthClient`, `OAuthAuthCode`, `OAuthRefreshToken`, `Recipe`, `RecipeSpoon`, `RecipeCover`, `RecipeInCookbook`, `Cookbook`, `ShoppingList`, `ShoppingListItem`, `UserCredential`, `ImageGenLedger`, `PushSubscription`, `NotificationEvent`, and `NotificationPreference`. The doing doc assigns concrete direct-delete, hard-delete, soft-delete, cascade-verified, search-delete, and pre-mutation-blocker behavior for each surface.
 - `test/helpers/cleanup.ts` clears all fork attribution before deleting all recipes because it owns the entire local test DB; the live cleanup harness must not copy that broad pattern.
 - SQLite FTS/search helper tables `SearchDocument` and `SearchIndexMetadata` are not Prisma models but appear in test cleanup; this task should either clear disposable search rows safely or document/count why the live harness does not manage them.
-- `package.json` current scripts include `cleanup:qa`, `smoke:qa`, `smoke:qa:image-cover`, `qa:preflight`, and `deploy:preflight`.
+- `package.json` current scripts include `cleanup:qa`, `smoke:api`, `smoke:qa`, `smoke:qa:image-cover`, `qa:preflight`, and `deploy:preflight`.
 - `docs/deployment.md` currently says broad production cleanup must not be run and production smoke cleanup must stay narrow.
 
 ## Notes
