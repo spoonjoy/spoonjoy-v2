@@ -169,6 +169,7 @@ async function checkStaticConfig(rootDir: string): Promise<PreflightCheck> {
   const [
     wrangler,
     packageJson,
+    ciWorkflow,
     productionDeployWorkflow,
     qaImageCoverSmokeWorkflow,
     storybookWorkflow,
@@ -181,6 +182,7 @@ async function checkStaticConfig(rootDir: string): Promise<PreflightCheck> {
   ] = await Promise.all([
       readJsonFile(path.join(rootDir, "wrangler.json")),
       readJsonFile(path.join(rootDir, "package.json")),
+      readFile(path.join(rootDir, ".github/workflows/ci.yml"), "utf8"),
       readFile(path.join(rootDir, ".github/workflows/production-deploy.yml"), "utf8"),
       readFile(path.join(rootDir, ".github/workflows/qa-image-cover-smoke.yml"), "utf8"),
       readFile(path.join(rootDir, ".github/workflows/storybook.yml"), "utf8"),
@@ -195,6 +197,7 @@ async function checkStaticConfig(rootDir: string): Promise<PreflightCheck> {
   const result = validateDeploymentConfig({
     wrangler,
     packageJson,
+    ciWorkflow,
     productionDeployWorkflow,
     qaImageCoverSmokeWorkflow,
     storybookWorkflow,
