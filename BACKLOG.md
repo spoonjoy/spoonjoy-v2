@@ -35,22 +35,25 @@ Status meanings:
 
 ## Current Next Queue
 
-Updated: 2026-06-10 after the image-provider, cover-lifecycle, deploy-autopilot, branch-cleanup, and stale MCP token resilience work.
+Updated: 2026-06-11 after the QA environment, MCP image-cover smoke, profile-photo branch cleanup, and final smoke cleanup work.
 
 The next wave should make future autonomous verification less delicate first, then deepen image/MCP coverage, then return to production hardening and product polish.
 
-1. `SJ-043`: Build a dedicated QA/test environment with separate Cloudflare state.
-2. `SJ-044`: Make smoke, cleanup, and preflight scripts environment-aware and refusal-safe.
-3. `SJ-045`: Add MCP/API image and cover e2e smokes against the QA environment.
-4. `SJ-046`: Add provider canaries and a visual benchmark workbench for editorial covers.
-5. `SJ-047`: Resolve the local `feat/profile-photo-crop` branch by reviewing, rebasing, merging, deploying, or explicitly deleting it. Completed 2026-06-11: current `main` already contains the square-crop implementation, focused proof tests passed, and the stale local branch was retired.
-6. `SJ-036`: Finish PostHog server-side error tracking and alert verification. Recent image-generation alerting advanced this, but the broader server error capture item is still open.
-7. `SJ-037`: Rate-limit `/api/*` and the MCP bearer surface, with telemetry from `SJ-036`.
-8. `SJ-048`: Add an autopilot release verifier so merged work cannot sit undeployed or unsmoked.
-9. `SJ-049`: Polish recipe cover provenance, cover-library browsing, and spoon-image browsing for web and MCP/AX.
-10. `SJ-040`: Finish real claude.ai one-click connector verification.
-11. `SJ-038`: Polish PWA install prompt and offline fallback.
-12. `SJ-035`: Resolve the lone `fellow-chefs.server.ts:26` performance TODO.
+1. `SJ-044`: Make smoke, cleanup, and preflight scripts environment-aware and refusal-safe. Partially advanced by `SJ-043`/`SJ-045`; broader QA cleanup harness remains the next ready seed.
+2. `SJ-046`: Add provider canaries and a visual benchmark workbench for editorial covers.
+3. `SJ-036`: Finish PostHog server-side error tracking and alert verification. Recent image-generation alerting advanced this, but the broader server error capture item is still open.
+4. `SJ-037`: Rate-limit `/api/*` and the MCP bearer surface, with telemetry from `SJ-036`.
+5. `SJ-048`: Add an autopilot release verifier so merged work cannot sit undeployed or unsmoked.
+6. `SJ-049`: Polish recipe cover provenance, cover-library browsing, and spoon-image browsing for web and MCP/AX.
+7. `SJ-040`: Finish real claude.ai one-click connector verification.
+8. `SJ-038`: Polish PWA install prompt and offline fallback.
+9. `SJ-035`: Resolve the lone `fellow-chefs.server.ts:26` performance TODO.
+
+Recently completed and removed from the active queue:
+
+- `SJ-043`: Dedicated QA/test environment. Completed 2026-06-11 in PR #179, with follow-up verification through PR #181.
+- `SJ-045`: MCP/API image and cover e2e smokes against QA. Completed 2026-06-11 in PR #184, with follow-up evidence PR #185 and final cleanup PR #186.
+- `SJ-047`: Profile-photo crop branch cleanup. Completed 2026-06-11: current `main` already contains the square-crop implementation, focused proof tests passed, and the stale local branch was retired.
 
 Older sequence note: the previous run-through (SJ-001 through SJ-026) is complete. `SJ-034`, `SJ-032`, and the WebAuthn portion of `SJ-016` have already moved substantially forward or finished; use the queue above for near-term ordering.
 
@@ -1131,7 +1134,7 @@ Progress note (2026-06-11): Advanced with `SJ-043`: QA preflight/smoke are targe
 
 Priority: `P1`
 Lane: `mcp`, `api`, `images`, `qa`, `agent-trust`
-Status: `ready`
+Status: `done`
 
 Problem: The MCP tool surface exposes recipe image upload, spoon photo upload, cover creation from upload/spoon, cover regeneration, cover listing, active-cover swapping, archive, and spoon-image browsing. Unit and protocol tests cover tool listing and many server paths, but there is not yet a live QA smoke that proves the whole image/cover flow end to end without risking production clutter.
 
@@ -1144,6 +1147,8 @@ Acceptance criteria:
 - Prove cover provenance distinguishes verbatim chef upload, editorialized photo, and purely AI generated cover.
 - Record all created IDs and R2 keys in the smoke artifact and remove them in QA cleanup.
 - Run in CI or a scheduled QA workflow only when QA credentials are configured.
+
+Completion note (2026-06-11): Shipped in PR #184 and follow-up evidence PR #185, with final cleanup recorded in PR #186. The QA smoke now exercises browser signup, scoped API token minting, API image uploads, GIF rejection, EXIF orientation normalization, remote MCP cover/spoon operations, provenance labels for `Chef photo`, `Editorialized chef photo`, and `AI generated`, exact QA R2 object cleanup, API credential revocation, exact disposable user cleanup, and a credential-gated scheduled/manual QA workflow.
 
 ### SJ-046 - Image Provider Canary And Visual Benchmark Workbench
 

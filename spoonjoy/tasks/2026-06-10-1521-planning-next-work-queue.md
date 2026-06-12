@@ -12,9 +12,9 @@ Ari wants Spoonjoy to have a queued set of obvious next moves so future agents d
 ## Observed Terrain
 
 - `BACKLOG.md` is the canonical backlog, but its old next sequence predates the recent image provider, cover lifecycle, deploy-autopilot, Storybook, and MCP resilience work.
-- `wrangler.json` currently has one production-shaped Worker, D1 binding, R2 bucket, and rate-limit namespace set.
-- `pnpm cleanup:qa` is deliberately local-only.
-- `pnpm smoke:live` creates disposable data and cleans its smoke account, but environment targeting and broad remote cleanup safety need to be explicit.
+- `wrangler.json` now has distinct production and QA Worker/D1/R2/rate-limit bindings after `SJ-043`.
+- `pnpm cleanup:qa` is deliberately local-only; the broader remote QA cleanup harness remains open under `SJ-044`.
+- `pnpm smoke:live`, `pnpm smoke:qa`, and `pnpm smoke:qa:image-cover` are target-explicit for their own narrow cleanup paths, but broader environment-aware cleanup and residue reporting still need to be centralized.
 - Recent production verification relied on a manual sequence: PR checks, merge, main CI, Production Deploy, Storybook deploy, readiness, health, smoke, remote data counters, local cleanup.
 - A Tinfoil Hat critique flagged that "QA environment" is fake unless it includes separate Cloudflare state, separate cleanup contracts, environment-aware preflight, and R2/database teardown.
 
@@ -29,9 +29,10 @@ Ari wants Spoonjoy to have a queued set of obvious next moves so future agents d
    - Refuse ambiguous destructive remote cleanup.
    - Include database and R2 teardown for QA disposable data.
 
-3. `SJ-045` - MCP/API image and cover e2e smokes.
-   - Exercise the real image/cover MCP tools against QA.
-   - Upload recipe images and spoon photos, create/list/swap/archive covers, browse spoon images, prove EXIF and GIF behavior.
+3. `SJ-045` - MCP/API image and cover e2e smokes. **Done 2026-06-11.**
+   - Exercised the real image/cover MCP tools against QA.
+   - Uploads recipe images and spoon photos, creates/lists/swaps/archives covers, browses spoon images, and proves EXIF and GIF behavior.
+   - Credential-gated scheduled/manual QA workflow now runs the smoke when QA secrets are configured.
 
 4. `SJ-046` - Image provider canary and visual benchmark workbench.
    - Detect all-provider image failures before users do.
@@ -78,11 +79,11 @@ Local Stranger With Candy pass:
 
 ## Thin Slice
 
-`SJ-043` and `SJ-047` are complete. Next execution should start with `SJ-045`:
+`SJ-043`, `SJ-045`, and `SJ-047` are complete. Next execution should start with `SJ-044`:
 
-- use QA rather than production for live MCP/API image-cover smokes;
-- include EXIF and unsupported GIF assertions;
-- clean all created QA records and R2 keys in the same run;
+- add a broader environment-aware cleanup harness for QA disposable users, recipes, spoons, OAuth clients/API credentials, generated covers, and related R2 objects;
+- keep production cleanup read-first and narrow;
+- print the resolved environment, base URL, D1 target, R2 target, and destructive-operation scope before any cleanup action;
 - merge and verify production deploy because this repo auto-deploys all main changes.
 
 ## Non-Goals
