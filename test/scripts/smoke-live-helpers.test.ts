@@ -5,6 +5,7 @@ import {
   buildQaR2GetArgs,
   buildCleanupD1Args,
   buildUserCountD1Args,
+  isQaR2ObjectMissingError,
   parseD1CountOutput,
   parseSmokeArgs,
   shouldRunAppleOAuthCheck,
@@ -184,6 +185,23 @@ describe("smoke-live helpers", () => {
       "--remote",
       "--force",
     ]);
+  });
+
+  it("only treats known Wrangler R2 missing-key errors as deleted-object proof", () => {
+    expect(isQaR2ObjectMissingError(Object.assign(new Error("wrangler failed"), {
+      stderr: "\u001b[31mERROR\u001b[0m The specified key does not exist.",
+    }))).toBe(true);
+    expect(isQaR2ObjectMissingError({
+      stdout: new TextEncoder().encode("NoSuchKey: missing object"),
+    })).toBe(true);
+    expect(isQaR2ObjectMissingError(Object.assign(new Error("wrangler failed"), {
+      stderr: "Authentication failed: invalid API token",
+    }))).toBe(false);
+    expect(isQaR2ObjectMissingError({ stderr: 403 })).toBe(false);
+    expect(isQaR2ObjectMissingError(Object.assign(new Error("network failed"), {
+      code: "ENOTFOUND",
+    }))).toBe(false);
+    expect(isQaR2ObjectMissingError("The specified key does not exist.")).toBe(true);
   });
 
   it("allows explicit production smoke args for the production Worker URL", () => {

@@ -359,7 +359,12 @@ function workflowTriggersOnlyDispatchAndSchedule(workflow: string): boolean {
   const onEnd = blockEnd(lines, onIndex);
   const triggers = immediateChildKeys(lines, onIndex, onEnd);
   const allowed = new Set(["workflow_dispatch", "schedule"]);
-  return triggers.length === allowed.size && triggers.every((trigger) => allowed.has(trigger));
+  const uniqueTriggers = new Set(triggers);
+  return (
+    triggers.length === allowed.size &&
+    uniqueTriggers.size === allowed.size &&
+    [...allowed].every((trigger) => uniqueTriggers.has(trigger))
+  );
 }
 
 function normalizedWorkflowCondition(value: string): string {
@@ -397,18 +402,25 @@ function qaSmokeStepOrderIsValid(order: Record<string, number>): boolean {
   );
 }
 
-function includesOrdered(text: string, parts: string[]): boolean {
+function includesOrdered(values: string[], parts: string[]): boolean {
   let offset = 0;
   for (const part of parts) {
-    const index = text.indexOf(part, offset);
+    const index = values.findIndex((value, valueIndex) => valueIndex >= offset && value === part);
     if (index === -1) return false;
-    offset = index + part.length;
+    offset = index + 1;
   }
   return true;
 }
 
+function runCommandLines(run: string): string[] {
+  return run
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.startsWith("#"));
+}
+
 function cloudflareGateRunIsSafe(run: string): boolean {
-  return includesOrdered(run, [
+  return includesOrdered(runCommandLines(run), [
     'if [ -z "${CLOUDFLARE_API_TOKEN:-}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then',
     'echo "ready=false" >> "$GITHUB_OUTPUT"',
     "exit 0",
@@ -418,12 +430,17 @@ function cloudflareGateRunIsSafe(run: string): boolean {
 }
 
 function qaProviderGateRunIsSafe(run: string): boolean {
-  return includesOrdered(run, [
-    "wrangler secret list --env qa",
-    "grep -Eq",
-    "OPENAI_API_KEY",
-    "GEMINI_API_KEY",
-    "GOOGLE_API_KEY",
+  const commands = runCommandLines(run);
+  if (!commands.some((command) => command.includes("wrangler secret list --env qa"))) return false;
+  if (!commands.some((command) =>
+    command.includes("grep -Eq") &&
+    command.includes("OPENAI_API_KEY") &&
+    command.includes("GEMINI_API_KEY") &&
+    command.includes("GOOGLE_API_KEY")
+  )) {
+    return false;
+  }
+  return includesOrdered(commands, [
     'echo "ready=false" >> "$GITHUB_OUTPUT"',
     "exit 0",
     "fi",

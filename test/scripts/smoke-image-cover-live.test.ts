@@ -769,6 +769,35 @@ describe("image-cover live smoke flow", () => {
     });
 
     await expect(runImageCoverSmokeFlow(harness.options)).rejects.toThrow(/credential was not revoked/);
+    expect(harness.deletedKeys.length).toBeGreaterThan(0);
+    expect(harness.verifiedDeletedKeys).toEqual(expect.arrayContaining(harness.deletedKeys));
+  });
+
+  it("still cleans R2 objects when credential revocation throws", async () => {
+    const harness = createFlowHarness();
+    const originalApiTool = harness.options.apiTool;
+    harness.options.apiTool = vi.fn(async (name: string, args: Record<string, unknown>, bearerToken: string) => {
+      if (name === "revoke_api_token") {
+        harness.calls.push({ kind: "api", name, args });
+        throw new Error("revocation failed");
+      }
+      return originalApiTool(name, args, bearerToken);
+    });
+
+    await expect(runImageCoverSmokeFlow(harness.options)).rejects.toThrow(/revocation failed/);
+    expect(harness.deletedKeys.length).toBeGreaterThan(0);
+    expect(harness.verifiedDeletedKeys).toEqual(expect.arrayContaining(harness.deletedKeys));
+  });
+
+  it("surfaces R2 verification failures after deleting the recorded keys", async () => {
+    const harness = createFlowHarness({
+      verifyQaR2ObjectDeleted: vi.fn(async () => {
+        throw new Error("verify failed");
+      }),
+    });
+
+    await expect(runImageCoverSmokeFlow(harness.options)).rejects.toThrow(/verify failed/);
+    expect(harness.deletedKeys.length).toBeGreaterThan(0);
   });
 
   it("preserves the original flow error when cleanup also fails", async () => {

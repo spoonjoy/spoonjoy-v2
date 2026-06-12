@@ -549,6 +549,18 @@ describe("deployment preflight", () => {
     expect(result.errors.map((item) => item.name)).toContain("QA image-cover smoke workflow");
   });
 
+  it("rejects QA image-cover workflows with duplicate allowed triggers but missing workflow dispatch", () => {
+    const inputs = validInputs();
+    inputs.qaImageCoverSmokeWorkflow = validQaImageCoverSmokeWorkflow().replace(
+      "  workflow_dispatch:\n  schedule:",
+      "  schedule:\n  schedule:",
+    );
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("QA image-cover smoke workflow");
+  });
+
   it("rejects QA image-cover workflows with echo-only Cloudflare gates", () => {
     const inputs = validInputs();
     inputs.qaImageCoverSmokeWorkflow = validQaImageCoverSmokeWorkflow().replace(
@@ -565,6 +577,18 @@ describe("deployment preflight", () => {
         "          echo \"ready=false\" >> \"$GITHUB_OUTPUT\"",
         "          echo \"ready=true\" >> \"$GITHUB_OUTPUT\"",
       ].join("\n"),
+    );
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("QA image-cover smoke workflow");
+  });
+
+  it("rejects QA image-cover workflows that echo exit commands instead of executing them", () => {
+    const inputs = validInputs();
+    inputs.qaImageCoverSmokeWorkflow = validQaImageCoverSmokeWorkflow().replaceAll(
+      "            exit 0",
+      "            echo \"exit 0\"",
     );
 
     const result = validateDeploymentConfig(inputs);

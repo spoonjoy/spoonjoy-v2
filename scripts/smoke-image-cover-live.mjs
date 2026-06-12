@@ -357,31 +357,52 @@ async function waitForAiPlaceholder({ recipeId, mcpTool, maxAttempts, delayMs, w
 }
 
 async function cleanupSmokeArtifacts(options, state) {
+  let cleanupError = null;
+
   if (state.credentialId) {
-    const revokePayload = await options.apiTool("revoke_api_token", { credentialId: state.credentialId });
-    state.credentialRevocation = {
-      credentialId: state.credentialId,
-      revoked: revokePayload?.revoked === true,
-      payload: revokePayload,
-    };
-    if (!state.credentialRevocation.revoked) {
-      throw new Error(`Image-cover smoke credential was not revoked: ${state.credentialId}`);
+    try {
+      const revokePayload = await options.apiTool("revoke_api_token", { credentialId: state.credentialId });
+      state.credentialRevocation = {
+        credentialId: state.credentialId,
+        revoked: revokePayload?.revoked === true,
+        payload: revokePayload,
+      };
+      if (!state.credentialRevocation.revoked) {
+        cleanupError = new Error(`Image-cover smoke credential was not revoked: ${state.credentialId}`);
+      }
+    } catch (error) {
+      state.credentialRevocation = {
+        credentialId: state.credentialId,
+        revoked: false,
+        error: String(error),
+      };
+      cleanupError = error;
     }
   }
 
   const keys = [...state.r2Keys];
   for (const key of keys) {
-    const safeKey = validateSmokePhotoKey(key, {
-      ownerId: state.ownerId,
-      generatedCoverKeys: state.generatedCoverKeys,
-    });
-    await options.deleteQaR2Object(safeKey);
-    state.deletedKeys.push(safeKey);
+    try {
+      const safeKey = validateSmokePhotoKey(key, {
+        ownerId: state.ownerId,
+        generatedCoverKeys: state.generatedCoverKeys,
+      });
+      await options.deleteQaR2Object(safeKey);
+      state.deletedKeys.push(safeKey);
+    } catch (error) {
+      cleanupError ??= error;
+    }
   }
   for (const key of state.deletedKeys) {
-    await options.verifyQaR2ObjectDeleted(key);
-    state.verifiedDeletedKeys.push(key);
+    try {
+      await options.verifyQaR2ObjectDeleted(key);
+      state.verifiedDeletedKeys.push(key);
+    } catch (error) {
+      cleanupError ??= error;
+    }
   }
+
+  if (cleanupError) throw cleanupError;
 }
 
 function buildFlowReport(options, providerPreflight, state, exif) {

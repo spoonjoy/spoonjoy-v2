@@ -82,6 +82,24 @@ export function buildQaR2DeleteArgs(key) {
   return ["exec", "wrangler", "r2", "object", "delete", `${QA_R2_BUCKET}/${key}`, "--remote", "--force"];
 }
 
+function errorText(value) {
+  if (typeof value === "string") return value;
+  if (value instanceof Uint8Array) return new TextDecoder().decode(value);
+  return "";
+}
+
+export function isQaR2ObjectMissingError(error) {
+  const parts = [];
+  if (typeof error === "string") parts.push(error);
+  if (error instanceof Error) parts.push(error.message);
+  if (typeof error === "object" && error !== null) {
+    for (const key of ["stdout", "stderr", "output"]) {
+      if (key in error) parts.push(errorText(error[key]));
+    }
+  }
+  return /(?:the specified key does not exist|nosuchkey|not found)/i.test(parts.join("\n"));
+}
+
 export function parseD1CountOutput(output) {
   const start = output.indexOf("[");
   const end = output.lastIndexOf("]");

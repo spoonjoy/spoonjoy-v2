@@ -19,6 +19,7 @@ import {
   buildQaR2DeleteArgs,
   buildQaR2GetArgs,
   buildUserCountD1Args,
+  isQaR2ObjectMissingError,
   parseD1CountOutput,
   parseSmokeArgs,
   shouldRunAppleOAuthCheck,
@@ -187,8 +188,9 @@ async function verifyQaR2ObjectDeleted(key) {
       { encoding: 'buffer', maxBuffer: 1024 * 1024 * 8 },
     )
     found = true
-  } catch {
-    return
+  } catch (error) {
+    if (isQaR2ObjectMissingError(error)) return
+    throw new Error(`Could not verify QA R2 object deletion for ${key}.`, { cause: error })
   }
   if (found) {
     throw new Error(`QA R2 object still exists after cleanup: ${key}`)
