@@ -543,6 +543,7 @@ describe("cleanup-local-qa-data", () => {
     );
     expect(cleanup.photoKeyFromImageUrl("https://example.com/photo.jpg")).toBeNull();
     expect(cleanup.photoKeyFromImageUrl("/images/chef-rj.png")).toBeNull();
+    expect(cleanup.photoKeyFromImageUrl("/photos/")).toBeNull();
     expect(cleanup.photoKeyFromImageUrl(null)).toBeNull();
   });
 
@@ -630,6 +631,37 @@ describe("cleanup-local-qa-data", () => {
     ]);
   });
 
+  it("retains generated cover keys outside disposable namespaces", () => {
+    const plan = cleanup.planQaR2Cleanup({
+      disposableUserIds: ["codex-user"],
+      hardDeleteRecipeIds: ["recipe-1"],
+      generatedCoverKeys: ["recipes/real-user/recipe-9/generated-cover.jpg"],
+    });
+
+    expect(plan.deleteKeys).toEqual([]);
+    expect(plan.retainedKeys).toEqual(["recipes/real-user/recipe-9/generated-cover.jpg"]);
+    expect(plan.blockers).toEqual([]);
+  });
+
+  it("handles default QA R2 planning args, null photo URLs, duplicates, and spoon upload keys", () => {
+    expect(cleanup.planQaR2Cleanup()).toEqual({ deleteKeys: [], retainedKeys: [], blockers: [] });
+
+    const plan = cleanup.planQaR2Cleanup({
+      disposableUserIds: ["codex-user"],
+      references: {
+        users: [{ id: "codex-user", photoUrl: null }],
+      },
+      generatedCoverKeys: [
+        "spoons/codex-user/uploads/spoon.jpg",
+        "spoons/codex-user/uploads/spoon.jpg",
+      ],
+    });
+
+    expect(plan.deleteKeys).toEqual(["spoons/codex-user/uploads/spoon.jpg"]);
+    expect(plan.retainedKeys).toEqual([]);
+    expect(plan.blockers).toEqual([]);
+  });
+
   it("builds QA R2 candidate SQL with retained unsafe keys and surviving-reference blockers", () => {
     const sql = cleanup.buildQaR2CandidateSql();
 
@@ -667,6 +699,10 @@ describe("cleanup-local-qa-data", () => {
                   key: "profiles/codex-user/avatar.jpg",
                   reason: "non-disposable User.photoUrl still references candidate key",
                 },
+                {
+                  action: "blocker_search_imageUrl",
+                  key: "recipes/codex-user/recipe-1/source.jpg",
+                },
               ],
             },
           ]),
@@ -688,6 +724,145 @@ describe("cleanup-local-qa-data", () => {
     expect(runCommand.mock.calls.map((call) => (call[1] as string[]).join(" "))).not.toEqual(
       expect.arrayContaining([expect.stringContaining(buildApplySql())]),
     );
+  });
+
+  it("runs QA apply with no R2 candidates and no R2 delete/get commands", async () => {
+    const stdout = writableBuffer();
+    const stderr = writableBuffer();
+    const runCommand = vi.fn(async (_cmd: string, args: string[]) => {
+      const command = args.join(" ");
+      if (command.includes("candidate_r2_keys")) {
+        return { stdout: "", stderr: "" };
+      }
+      return { stdout: "[]", stderr: "" };
+    });
+
+    await cleanup.runCleanupCli({
+      argv: ["--target-env", "qa", "--apply"],
+      runCommand,
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+    });
+
+    const joinedCalls = runCommand.mock.calls.map((call) => (call[1] as string[]).join(" "));
+    expect(joinedCalls).toEqual(expect.arrayContaining([expect.stringContaining(buildApplySql())]));
+    expect(joinedCalls).not.toEqual(expect.arrayContaining([expect.stringContaining("r2 object")]));
+    expect(stdout.text()).not.toContain("Deleted QA R2 keys");
+    expect(stdout.text()).not.toContain("Verified deleted QA R2 keys");
+  });
+
+  it("handles candidate rows without results and candidates command without stdout", async () => {
+    const stdout = writableBuffer();
+    const stderr = writableBuffer();
+    let candidateCalls = 0;
+    const runCommand = vi.fn(async (_cmd: string, args: string[]) => {
+      const command = args.join(" ");
+      if (command.includes("candidate_r2_keys")) {
+        candidateCalls += 1;
+        return candidateCalls === 1 ? { stdout: JSON.stringify([{}]), stderr: "" } : { stderr: "" };
+      }
+      return { stdout: "[]", stderr: "" };
+    });
+
+    await cleanup.runCleanupCli({
+      argv: ["--target-env", "qa", "--apply"],
+      runCommand,
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+    });
+    await cleanup.runCleanupCli({
+      argv: ["--target-env", "qa", "--apply"],
+      runCommand,
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+    });
+
+    expect(candidateCalls).toBe(2);
+    expect(runCommand.mock.calls.map((call) => (call[1] as string[]).join(" "))).not.toEqual(
+      expect.arrayContaining([expect.stringContaining("r2 object")]),
+    );
+  });
+
+  it("verifies R2 deletion when missing errors are reported as strings or stdout", async () => {
+    const stdout = writableBuffer();
+    const stderr = writableBuffer();
+    let getCalls = 0;
+    const runCommand = vi.fn(async (_cmd: string, args: string[]) => {
+      const command = args.join(" ");
+      if (command.includes("candidate_r2_keys")) {
+        return {
+          stdout: JSON.stringify([
+            {
+              results: [
+                { action: "delete", key: "profiles/codex-user/avatar.jpg" },
+                { action: "delete", key: "spoons/codex-user/uploads/spoon.jpg" },
+              ],
+            },
+          ]),
+          stderr: "",
+        };
+      }
+      if (command.includes("r2 object get")) {
+        getCalls += 1;
+        if (getCalls === 1) throw "NoSuchKey";
+        throw { stdout: "not found" };
+      }
+      return { stdout: "[]", stderr: "" };
+    });
+
+    await cleanup.runCleanupCli({
+      argv: ["--target-env", "qa", "--apply"],
+      runCommand,
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+    });
+
+    expect(stdout.text()).toContain("Verified deleted QA R2 keys: profiles/codex-user/avatar.jpg, spoons/codex-user/uploads/spoon.jpg");
+  });
+
+  it("fails QA apply when R2 verification still fetches a deleted key", async () => {
+    const stdout = writableBuffer();
+    const stderr = writableBuffer();
+    const runCommand = vi.fn(async (_cmd: string, args: string[]) => {
+      const command = args.join(" ");
+      if (command.includes("candidate_r2_keys")) {
+        return { stdout: JSON.stringify([{ results: [{ action: "delete", key: "profiles/codex-user/avatar.jpg" }] }]), stderr: "" };
+      }
+      return { stdout: "[]", stderr: "" };
+    });
+
+    await expect(
+      cleanup.runCleanupCli({
+        argv: ["--target-env", "qa", "--apply"],
+        runCommand,
+        stdout: stdout.stream,
+        stderr: stderr.stream,
+      }),
+    ).rejects.toThrow(/QA R2 object still exists after delete/);
+  });
+
+  it("surfaces unexpected R2 verification failures", async () => {
+    const stdout = writableBuffer();
+    const stderr = writableBuffer();
+    const runCommand = vi.fn(async (_cmd: string, args: string[]) => {
+      const command = args.join(" ");
+      if (command.includes("candidate_r2_keys")) {
+        return { stdout: JSON.stringify([{ results: [{ action: "delete", key: "profiles/codex-user/avatar.jpg" }] }]), stderr: "" };
+      }
+      if (command.includes("r2 object get")) {
+        throw new Error("network timeout");
+      }
+      return { stdout: "[]", stderr: "" };
+    });
+
+    await expect(
+      cleanup.runCleanupCli({
+        argv: ["--target-env", "qa", "--apply"],
+        runCommand,
+        stdout: stdout.stream,
+        stderr: stderr.stream,
+      }),
+    ).rejects.toThrow(/network timeout/);
   });
 
   it("skips every R2 delete/get command when QA D1 apply fails", async () => {
