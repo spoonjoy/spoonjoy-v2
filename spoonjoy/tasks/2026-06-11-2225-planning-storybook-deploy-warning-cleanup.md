@@ -1,6 +1,6 @@
 # Planning: Storybook Deploy Warning Cleanup
 
-**Status**: NEEDS_REVIEW
+**Status**: approved
 **Created**: 2026-06-11 22:25
 
 ## Goal
@@ -89,3 +89,4 @@ Remove the remaining controllable warnings from the Storybook build/deploy workf
 - 2026-06-11 22:30 Planning review Round 1 found the pnpm warning-clean scope incomplete. Updated the plan to classify the full observed dependency build-script set as intentionally ignored and require preflight enforcement for that configuration.
 - 2026-06-11 22:36 Planning review Round 2 found the pnpm config target should be root `pnpm-workspace.yaml`, not `package.json` or lockfile. Updated the plan to require `allowBuilds` false entries in `pnpm-workspace.yaml` for the full observed set.
 - 2026-06-11 22:42 Planning review Round 3 found `--commit-dirty=false` would not silence Wrangler's dirty-worktree warning when generating deploy files in the repo. Updated the plan to require `.gitignore` coverage for the generated deploy directory and `--commit-dirty=true`.
+- 2026-06-11 22:44 Planning review Round 4 converged; status set to approved.
