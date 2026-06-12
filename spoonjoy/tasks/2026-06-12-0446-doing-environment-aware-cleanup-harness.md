@@ -63,12 +63,12 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 **Acceptance**: Branch is `spoonjoy/sj-044-cleanup-harness`; no unrelated dirty work is overwritten; cleanup starting state is recorded.
 
 ### ⬜ Unit 1a: Shared Environment Resolver — Tests
-**What**: Add failing tests for a shared script target resolver covering `local`, `qa`, `production`, missing/invalid env, URL/env mismatch, D1/R2 target metadata, and destructive-operation scope text.
-**Output**: Tests in `test/scripts/script-environment.test.ts` plus red output in `unit-1a-red.log`.
+**What**: Add failing tests for a shared script target resolver covering `local`, `qa`, `production`, missing/invalid env, URL/env mismatch, D1/R2 target metadata, and destructive-operation scope text. Add failing tests for `scripts/smoke-api-live.mjs` target parsing so it requires `--target-env qa|production` for remote URLs, validates URL/env pairs through the shared resolver, and records environment metadata. Add failing package-script tests requiring `smoke:api` to pass `--target-env production`.
+**Output**: Tests in `test/scripts/script-environment.test.ts`, `test/scripts/smoke-api-live.test.ts`, and `test/scripts/deployment-preflight.test.ts` plus red output in `unit-1a-red.log`.
 **Acceptance**: Tests fail for missing resolver behavior, not for test syntax/import errors.
 
 ### ⬜ Unit 1b: Shared Environment Resolver — Implementation
-**What**: Add runtime-compatible `scripts/script-environment.mjs` and refactor `scripts/smoke-live-helpers.mjs`, `scripts/smoke-api-live.mjs`, and `scripts/qa-preflight.ts` to consume it without changing their current accepted smoke/preflight behavior except that `smoke-api-live.mjs` must become target-explicit. Keep smoke scripts runnable with plain `node` package scripts; do not make `.mjs` scripts import a `.ts` module.
+**What**: Add runtime-compatible `scripts/script-environment.mjs`, refactor `scripts/smoke-live-helpers.mjs`, `scripts/smoke-api-live.mjs`, and `scripts/qa-preflight.ts` to consume it, and update `package.json` so `smoke:api` passes `--target-env production`. Keep smoke scripts runnable with plain `node` package scripts; do not make `.mjs` scripts import a `.ts` module.
 **Output**: Resolver module, updated imports/constants, and green focused resolver/smoke/preflight test output in `unit-1b-green.log`.
 **Acceptance**: Unit 1a tests plus existing smoke/API/preflight helper tests pass with no warnings.
 
@@ -78,14 +78,14 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 **Acceptance**: New resolver has 100% statements, branches, functions, and lines; focused tests stay green.
 
 ### ⬜ Unit 2a: Cleanup Target/CLI Safety — Tests
-**What**: Add failing cleanup tests for `--target-env local|qa|production`, missing/invalid target env, target summary output, local dry-run default, local apply args, refusal of remote mutation without explicit `--target-env qa --apply`, production read-only output, and production broad-apply refusal.
+**What**: Add failing cleanup tests for `--target-env local|qa|production`, missing/invalid target env, target summary output, local dry-run default, local apply args, QA remote dry-run args, QA remote apply refusal until D1/R2 cleanup safety is implemented, production read-only output, and production broad-apply refusal.
 **Output**: Updated tests in `test/scripts/cleanup-local-qa-data.test.ts` plus red output in `unit-2a-red.log`.
 **Acceptance**: Tests fail because current `scripts/cleanup-local-qa-data.mjs` is local-only and does not expose the explicit environment-aware CLI contract.
 
 ### ⬜ Unit 2b: Cleanup Target/CLI Safety — Implementation
-**What**: Refactor `scripts/cleanup-local-qa-data.mjs` argument parsing and target summary behavior while preserving backwards-compatible local dry-run behavior for `pnpm cleanup:qa`.
+**What**: Refactor `scripts/cleanup-local-qa-data.mjs` argument parsing and target summary behavior while preserving backwards-compatible local dry-run behavior for `pnpm cleanup:qa`. At this stage, `--target-env qa` dry-run may inspect remote QA, but `--target-env qa --apply` must still refuse with a clear "remote QA apply not enabled until D1/R2 safety checks are installed" message.
 **Output**: Cleanup CLI implementation and green focused cleanup CLI tests in `unit-2b-green.log`.
-**Acceptance**: Unit 2a tests pass with no warnings; no D1 SQL semantics or R2 deletion behavior beyond target selection is changed in this unit.
+**Acceptance**: Unit 2a tests pass with no warnings; no D1 SQL semantics or R2 deletion behavior beyond target selection is changed in this unit; remote QA apply remains refused.
 
 ### ⬜ Unit 2c: Cleanup Target/CLI Safety — Coverage & Refactor
 **What**: Verify target/CLI parser coverage, including help text and invalid argument branches.
@@ -113,7 +113,7 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 **Acceptance**: Tests fail because current broad cleanup does not plan or execute QA R2 cleanup.
 
 ### ⬜ Unit 4b: QA R2 Cleanup Planning — Implementation
-**What**: Implement QA R2 key planning and exact-key deletion/verification for validated disposable keys, collecting candidate keys before D1 mutation and reporting retained invalid or unsafe keys. Include profile photo keys under `profiles/{disposableUserId}/`, browser recipe keys under `recipes/{disposableUserId}/{recipeId}/`, browser spoon keys under `spoons/{disposableUserId}/{recipeId}/`, and API upload keys under `recipes/{disposableUserId}/uploads/` / `spoons/{disposableUserId}/uploads/`; reject those namespaces for non-disposable users. Before deleting any candidate key, blocker-report surviving non-disposable DB/search references to the same `/photos/{key}` in `User.photoUrl`, `RecipeSpoon.photoUrl`, `RecipeCover.imageUrl`, `RecipeCover.stylizedImageUrl`, `RecipeCover.sourceImageUrl`, and `SearchDocument.imageUrl`.
+**What**: Implement QA R2 key planning and exact-key deletion/verification for validated disposable keys, collecting candidate keys before D1 mutation and reporting retained invalid or unsafe keys. Include profile photo keys under `profiles/{disposableUserId}/`, browser recipe keys under `recipes/{disposableUserId}/{recipeId}/`, browser spoon keys under `spoons/{disposableUserId}/{recipeId}/`, and API upload keys under `recipes/{disposableUserId}/uploads/` / `spoons/{disposableUserId}/uploads/`; reject those namespaces for non-disposable users. Before deleting any candidate key, blocker-report surviving non-disposable DB/search references to the same `/photos/{key}` in `User.photoUrl`, `RecipeSpoon.photoUrl`, `RecipeCover.imageUrl`, `RecipeCover.stylizedImageUrl`, `RecipeCover.sourceImageUrl`, and `SearchDocument.imageUrl`. Enable `--target-env qa --apply` only after D1 blockers and R2 surviving-reference blockers both pass.
 **Output**: R2 cleanup implementation and green focused cleanup R2 tests in `unit-4b-green.log`.
 **Acceptance**: Unit 4a tests pass with no warnings; R2 deletes use exact keys only and are unavailable for production broad cleanup.
 
@@ -123,7 +123,7 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 **Acceptance**: R2 cleanup new code reaches 100% coverage; focused tests remain green.
 
 ### ⬜ Unit 5a: Smoke Artifact Metadata — Tests
-**What**: Add failing tests for a `buildSmokeReport` or `finalizeSmokeReport` helper used by `scripts/smoke-live.mjs` so `smoke-results.json` reports `environment.targetEnv`, `environment.baseUrl`, `environment.d1Target`, `environment.r2Target`, `environment.destructiveScope`, `git.branch`, `git.commit`, `created.email`, `created.username`, `created.recipeTitle`, `created.recipeId`, cleanup result, and `r2.retainedKeys` / `r2.deletedKeys` / `r2.verifiedDeletedKeys`. For normal smoke, R2 arrays must exist and be empty; for image-cover smoke, top-level R2 arrays must mirror `imageCoverSmoke.r2`. Add failing tests for `scripts/smoke-api-live.mjs` target parsing so it requires `--target-env qa|production` for remote URLs, validates URL/env pairs through the shared resolver, and writes environment/git metadata into its artifact.
+**What**: Add failing tests for a `buildSmokeReport` or `finalizeSmokeReport` helper used by `scripts/smoke-live.mjs` so `smoke-results.json` reports `environment.targetEnv`, `environment.baseUrl`, `environment.d1Target`, `environment.r2Target`, `environment.destructiveScope`, `git.branch`, `git.commit`, `created.email`, `created.username`, `created.recipeTitle`, `created.recipeId`, cleanup result, and `r2.retainedKeys` / `r2.deletedKeys` / `r2.verifiedDeletedKeys`. For normal smoke, R2 arrays must exist and be empty; for image-cover smoke, top-level R2 arrays must mirror `imageCoverSmoke.r2`. Add tests for `scripts/smoke-api-live.mjs` artifact serialization so its artifact includes environment/git metadata from Unit 1.
 **Output**: Tests in `test/scripts/smoke-live-helpers.test.ts`, `test/scripts/smoke-image-cover-live.test.ts`, and `test/scripts/smoke-api-live.test.ts` plus red output in `unit-5a-red.log`.
 **Acceptance**: Tests fail on missing artifact metadata behavior, not on unrelated smoke setup.
 
@@ -138,7 +138,7 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 **Acceptance**: New metadata code has 100% coverage and no warnings.
 
 ### ⬜ Unit 6a: Docs, Package Scripts, And Preflight — Tests
-**What**: Add failing tests that require explicit cleanup package scripts, target-explicit `smoke:api`, deployment preflight contract, docs text for local dry-run, local apply, QA dry-run/apply, production read-only/refusal, no broad production cleanup, coverage instrumentation for `scripts/script-environment.mjs`, `scripts/cleanup-local-qa-data.mjs`, `scripts/smoke-api-live.mjs`, `scripts/qa-preflight.ts`, and `scripts/deployment-preflight.ts`, and a script typecheck command for modified TypeScript scripts.
+**What**: Add failing tests that require explicit cleanup package scripts, deployment preflight contract, docs text for local dry-run, local apply, QA dry-run/apply, production read-only/refusal, no broad production cleanup, coverage instrumentation for `scripts/script-environment.mjs`, `scripts/cleanup-local-qa-data.mjs`, `scripts/smoke-api-live.mjs`, `scripts/qa-preflight.ts`, and `scripts/deployment-preflight.ts`, and a script typecheck command for modified TypeScript scripts.
 **Output**: Updated `test/scripts/deployment-preflight.test.ts` plus red output in `unit-6a-red.log`.
 **Acceptance**: Tests fail on current ambiguous `cleanup:qa` contract.
 
@@ -153,13 +153,13 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 **Acceptance**: Modified preflight code has 100% coverage and no warnings.
 
 ### ⬜ Unit 7: Local Deterministic Verification
-**What**: Run these commands and save their output: `pnpm exec vitest run test/scripts/script-environment.test.ts test/scripts/cleanup-local-qa-data.test.ts test/scripts/smoke-live-helpers.test.ts test/scripts/smoke-image-cover-live.test.ts test/scripts/deployment-preflight.test.ts`; `pnpm run test:coverage`; `pnpm run typecheck`; `pnpm run typecheck:scripts`; `pnpm run build`; `pnpm run cleanup:local`. If `pnpm run cleanup:local` reports active disposable residue and zero blockers, run `pnpm run cleanup:local:apply` and then rerun `pnpm run cleanup:local`.
+**What**: Run these commands and save their output: `pnpm exec vitest run test/scripts/script-environment.test.ts test/scripts/cleanup-local-qa-data.test.ts test/scripts/smoke-live-helpers.test.ts test/scripts/smoke-image-cover-live.test.ts test/scripts/smoke-api-live.test.ts test/scripts/deployment-preflight.test.ts`; `pnpm run test:coverage`; `pnpm run typecheck`; `pnpm run typecheck:scripts`; `pnpm run build`; `pnpm run cleanup:local`. If `pnpm run cleanup:local` reports active disposable residue and zero blockers, run `pnpm run cleanup:local:apply` and then rerun `pnpm run cleanup:local`.
 **Output**: `focused-tests.log`, `coverage.log`, `typecheck.log`, `build.log`, and `cleanup-local.log`.
 **Acceptance**: Commands pass with no warnings; no disposable local residue remains.
 
 ### ⬜ Unit 8: Live Safe Cleanup Dogfood
 **What**: Run these commands and save their output: `pnpm run cleanup:remote:qa`; if it reports disposable QA residue and zero blockers, run `pnpm run cleanup:remote:qa:apply` and rerun `pnpm run cleanup:remote:qa`; `pnpm run cleanup:production`; `pnpm run cleanup:production -- --apply` with nonzero exit expected and captured as production broad-apply refusal evidence; `pnpm run qa:preflight`.
-**Output**: `cleanup-qa-dry-run.log`, `cleanup-production-readonly.log`, and `qa-preflight.log`.
+**Output**: `cleanup-qa-dry-run.log`, `cleanup-qa-apply.log` when apply runs, `cleanup-qa-post-apply.log` when apply runs, `cleanup-production-readonly.log`, `cleanup-production-apply-refusal.log` with exit code, and `qa-preflight.log`.
 **Acceptance**: QA cleanup and QA preflight commands pass with no warnings; QA/prod cleanup commands print resolved targets; production read-only command passes; production `--apply` command refuses broad apply with the expected nonzero exit and no mutation.
 
 ### ⬜ Unit 9: Implementation Review
