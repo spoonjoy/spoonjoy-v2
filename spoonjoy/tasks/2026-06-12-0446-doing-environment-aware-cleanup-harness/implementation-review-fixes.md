@@ -15,3 +15,6 @@ Verification:
 - `unit-10-cleanup-qa-dry-run.log`: QA dry-run passed with real blocker count.
 - `unit-10-cleanup-production-readonly.log`: production read-only dry-run passed.
 - `unit-10-cleanup-production-apply-refusal.log`: production broad apply refused with exit code 1.
+
+Narrow re-review:
+- Fermat reviewed Unit 10 against the Unit 9 findings after commit `c4f739a8` and returned `CONVERGED`.
