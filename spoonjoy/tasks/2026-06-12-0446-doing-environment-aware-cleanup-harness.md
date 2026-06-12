@@ -64,7 +64,7 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 
 ### ⬜ Unit 1a: Shared Environment Resolver — Tests
 **What**: Add failing tests for a shared script target resolver covering `local`, `qa`, `production`, missing/invalid env, URL/env mismatch, D1/R2 target metadata, and destructive-operation scope text.
-**Output**: Tests in `test/scripts/script-environment.test.ts` or equivalent plus red output in `unit-1a-red.log`.
+**Output**: Tests in `test/scripts/script-environment.test.ts` plus red output in `unit-1a-red.log`.
 **Acceptance**: Tests fail for missing resolver behavior, not for test syntax/import errors.
 
 ### ⬜ Unit 1b: Shared Environment Resolver — Implementation
@@ -93,12 +93,12 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 **Acceptance**: Cleanup target/CLI new code reaches 100% coverage; focused tests remain green.
 
 ### ⬜ Unit 3a: D1 Disposable Cleanup And Blockers — Tests
-**What**: Add failing cleanup tests for D1 dry-run SQL, broad D1 apply order, direct/cascade/count-only cleanup surfaces, cross-boundary blocker queries, disposable-only fork chains, mixed fork chains, and the rule that `sourceRecipeId` may be cleared only inside the disposable target set.
+**What**: Add failing cleanup tests for D1 dry-run SQL, broad D1 apply order, the concrete cleanup surface mapping below, cross-boundary blocker queries, disposable-only fork chains, mixed fork chains, and the rule that `sourceRecipeId` may be cleared only inside the disposable target set. Disposable target predicates are `SUSPICIOUS_RECIPE_WHERE`, `DISPOSABLE_USER_WHERE`, `DISPOSABLE_SPOON_WHERE`, and `OAuthClient.clientName = 'E2E OAuth Client'`.
 **Output**: Updated cleanup SQL tests plus red output in `unit-3a-red.log`.
 **Acceptance**: Tests fail because current SQL lacks the full D1 blocker/fork-chain cleanup contract.
 
 ### ⬜ Unit 3b: D1 Disposable Cleanup And Blockers — Implementation
-**What**: Implement the D1 cleanup query builders and apply sequencing for disposable rows. Block broad apply when cross-boundary non-disposable references exist; clear `sourceRecipeId` only where referencing and referenced recipes are both disposable; keep production broad mutation unavailable.
+**What**: Implement the D1 cleanup query builders and apply sequencing for disposable rows. Block broad apply when cross-boundary non-disposable references exist; clear `sourceRecipeId` only where referencing and referenced recipes are both disposable; keep production broad mutation unavailable. Cleanup surface mapping: direct delete `OAuthAuthCode`, `OAuthRefreshToken`, `OAuthClient` rows for `E2E OAuth Client`; direct delete `ApiIdempotencyKey`, `AgentConnectionRequest`, `ApiCredential`, `OAuth`, `UserCredential`, `PushSubscription`, `NotificationEvent`, `NotificationPreference`, and `ImageGenLedger` rows owned by disposable users; direct delete `RecipeSpoon` rows in the disposable target set; direct delete `RecipeInCookbook` rows only when the recipe, added-by user, or cookbook author is in the disposable target set and no cross-boundary blocker exists; direct delete `Cookbook` rows authored by disposable users; soft-delete `Recipe` rows in the disposable target set after clearing only in-target `sourceRecipeId` links; cascade-verify `RecipeStep`, `Ingredient`, `StepOutputUse`, `ShoppingList`, and `ShoppingListItem`; count/report `SearchDocument` and `SearchIndexMetadata` rows if those tables exist. Cross-boundary blockers: `Recipe.sourceRecipeId`, `RecipeSpoon.recipeId`, `RecipeInCookbook.recipeId`, `RecipeInCookbook.addedById`, cookbook author ownership, `Recipe.activeCoverId`, and `RecipeCover.sourceSpoonId` when the referencing row is outside the disposable target set and the referenced row is inside it.
 **Output**: D1 cleanup implementation and green focused cleanup SQL tests in `unit-3b-green.log`.
 **Acceptance**: Unit 3a tests pass with no warnings; generated SQL contains no whole-database fork clearing and no production remote delete path.
 
@@ -123,8 +123,8 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 **Acceptance**: R2 cleanup new code reaches 100% coverage; focused tests remain green.
 
 ### ⬜ Unit 5a: Smoke Artifact Metadata — Tests
-**What**: Add failing tests for smoke artifact metadata helpers so live smoke reports resolved environment, base URL, branch, commit, created record ids, cleanup result, and retained/deleted R2 keys where available.
-**Output**: Tests in `test/scripts/smoke-live-helpers.test.ts` and/or `test/scripts/smoke-image-cover-live.test.ts` plus red output in `unit-5a-red.log`.
+**What**: Add failing tests for smoke artifact metadata helpers so `smoke-results.json` reports `environment.targetEnv`, `environment.baseUrl`, `environment.d1Target`, `environment.r2Target`, `environment.destructiveScope`, `git.branch`, `git.commit`, `created.email`, `created.username`, `created.recipeTitle`, `created.recipeId`, cleanup result, and `r2.retainedKeys` / `r2.deletedKeys` / `r2.verifiedDeletedKeys`. For normal smoke, R2 arrays must exist and be empty; for image-cover smoke, top-level R2 arrays must mirror `imageCoverSmoke.r2`.
+**Output**: Tests in `test/scripts/smoke-live-helpers.test.ts` and `test/scripts/smoke-image-cover-live.test.ts` plus red output in `unit-5a-red.log`.
 **Acceptance**: Tests fail on missing artifact metadata behavior, not on unrelated smoke setup.
 
 ### ⬜ Unit 5b: Smoke Artifact Metadata — Implementation
@@ -139,7 +139,7 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 
 ### ⬜ Unit 6a: Docs, Package Scripts, And Preflight — Tests
 **What**: Add failing tests that require explicit cleanup package scripts, deployment preflight contract, and docs text for local dry-run, local apply, QA dry-run/apply, production read-only/refusal, and no broad production cleanup.
-**Output**: Updated `test/scripts/deployment-preflight.test.ts` or focused docs tests plus red output in `unit-6a-red.log`.
+**Output**: Updated `test/scripts/deployment-preflight.test.ts` plus red output in `unit-6a-red.log`.
 **Acceptance**: Tests fail on current ambiguous `cleanup:qa` contract.
 
 ### ⬜ Unit 6b: Docs, Package Scripts, And Preflight — Implementation
@@ -153,14 +153,14 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 **Acceptance**: Modified preflight code has 100% coverage and no warnings.
 
 ### ⬜ Unit 7: Local Deterministic Verification
-**What**: Run focused tests, full coverage, typecheck, build, and local cleanup dry-run/apply only when local disposable residue exists.
+**What**: Run these commands and save their output: `pnpm exec vitest run test/scripts/script-environment.test.ts test/scripts/cleanup-local-qa-data.test.ts test/scripts/smoke-live-helpers.test.ts test/scripts/smoke-image-cover-live.test.ts test/scripts/deployment-preflight.test.ts`; `pnpm run test:coverage`; `pnpm run typecheck`; `pnpm run build`; `pnpm run cleanup:local`. If `pnpm run cleanup:local` reports active disposable residue and zero blockers, run `pnpm run cleanup:local:apply` and then rerun `pnpm run cleanup:local`.
 **Output**: `focused-tests.log`, `coverage.log`, `typecheck.log`, `build.log`, and `cleanup-local.log`.
 **Acceptance**: Commands pass with no warnings; no disposable local residue remains.
 
 ### ⬜ Unit 8: Live Safe Cleanup Dogfood
-**What**: Run QA cleanup dry-run, production read-only cleanup check, and QA preflight; save target summaries and refusal/read-only evidence.
+**What**: Run these commands and save their output: `pnpm run cleanup:qa`; if it reports disposable QA residue and zero blockers, run `pnpm run cleanup:qa:apply` and rerun `pnpm run cleanup:qa`; `pnpm run cleanup:production`; `pnpm run cleanup:production -- --apply` with nonzero exit expected and captured as production broad-apply refusal evidence; `pnpm run qa:preflight`.
 **Output**: `cleanup-qa-dry-run.log`, `cleanup-production-readonly.log`, and `qa-preflight.log`.
-**Acceptance**: Commands pass with no warnings; QA/prod cleanup commands print resolved targets; production command refuses broad apply.
+**Acceptance**: QA cleanup and QA preflight commands pass with no warnings; QA/prod cleanup commands print resolved targets; production read-only command passes; production `--apply` command refuses broad apply with the expected nonzero exit and no mutation.
 
 ### ⬜ Unit 9: Implementation Review
 **What**: Dispatch a cold implementation reviewer with the full diff, unit evidence, safety policy, and cleanup/deploy logs.
@@ -183,7 +183,7 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 **Acceptance**: PR is merged; main checks pass; deployed production commit/version corresponds to the merge or the provider's deploy run for the merge is green.
 
 ### ⬜ Unit 13: Production Smoke And Final Cleanup
-**What**: Run production health/custom-domain checks, production live smoke, final local/QA/prod cleanup checks, and save evidence.
+**What**: Run production health/custom-domain checks with `curl -fsS https://spoonjoy-v2.mendelow-studio.workers.dev/health` and `curl -fsS https://spoonjoy.app/health`; run production live smoke with `pnpm run smoke:live`; run final cleanup checks with `pnpm run cleanup:local`, `pnpm run cleanup:qa`, and `pnpm run cleanup:production`; save evidence.
 **Output**: `production-smoke.log` and `final-cleanup.log`.
 **Acceptance**: Production smoke passes; cleanup checks are clean; no disposable local/QA/prod residue remains from this run.
 
