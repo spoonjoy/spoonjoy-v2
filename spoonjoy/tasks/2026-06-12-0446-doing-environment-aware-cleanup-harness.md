@@ -142,7 +142,7 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 **Output**: Updated `test/scripts/deployment-preflight.test.ts` plus red output in `unit-6a-red.log`.
 **Acceptance**: Tests fail on current ambiguous `cleanup:qa` contract.
 
-### ⬜ Unit 6b: Docs, Package Scripts, And Preflight — Implementation
+### ✅ Unit 6b: Docs, Package Scripts, And Preflight — Implementation
 **What**: Update `package.json`, `scripts/deployment-preflight.ts`, `vitest.config.ts`, `README.md`, and `docs/deployment.md` so the explicit cleanup/smoke target contract is encoded for future agents. Keep `cleanup:qa` as a backwards-compatible local dry-run alias to `cleanup:local`; add `cleanup:local`, `cleanup:local:apply`, `cleanup:remote:qa`, `cleanup:remote:qa:apply`, and `cleanup:production`; make `smoke:api` pass `--target-env production`. Add `typecheck:scripts` package script and `tsconfig.scripts.json` if needed so modified TypeScript scripts are typechecked outside the app-only `tsconfig.json`.
 **Output**: Updated docs/scripts and green focused deployment preflight tests in `unit-6b-green.log`.
 **Acceptance**: Focused preflight/docs tests pass with no warnings.
@@ -226,3 +226,4 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 - 2026-06-12 07:15 Unit 5b complete: added shared smoke report metadata builder, git metadata capture, live smoke environment/created/R2 artifact shape, API smoke git metadata, and image-cover retained R2 arrays. Focused tests/build passed with evidence in `unit-5b-green.log` and `unit-5b-build.log`.
 - 2026-06-12 07:17 Unit 5c complete: added git fallback/default report coverage and verified 100% coverage for `smoke-live-helpers.mjs`, `smoke-image-cover-live.mjs`, and `smoke-api-live.mjs`; build passed with evidence in `unit-5c-coverage.log` and `unit-5c-build.log`.
 - 2026-06-12 07:20 Unit 6a complete: added red tests for explicit cleanup package scripts, cleanup target docs, script coverage instrumentation, and `typecheck:scripts`/`tsconfig.scripts.json`; expected failures captured in `unit-6a-red.log`. Unit review skipped (reason: red-test unit; implementation review follows green unit).
+- 2026-06-12 07:25 Unit 6b complete: added explicit cleanup scripts, script typecheck config, coverage includes, deployment/QA preflight enforcement, and README/deployment cleanup target docs. Focused preflight tests, `typecheck:scripts`, and build passed with evidence in `unit-6b-green.log`, `unit-6b-typecheck-scripts.log`, and `unit-6b-build.log`.
