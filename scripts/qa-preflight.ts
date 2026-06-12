@@ -10,11 +10,17 @@ import {
   type PreflightCheck,
   type RunWrangler,
 } from "./deployment-preflight";
+import {
+  QA_BASE_URL as SHARED_QA_BASE_URL,
+  QA_D1_DATABASE_ID as SHARED_QA_D1_DATABASE_ID,
+  QA_ENV_NAME as SHARED_QA_ENV_NAME,
+  QA_R2_BUCKET as SHARED_QA_R2_BUCKET,
+} from "./script-environment.mjs";
 
-export const QA_ENV_NAME = "qa";
-export const QA_BASE_URL = "https://spoonjoy-v2-qa.mendelow-studio.workers.dev";
-export const QA_R2_BUCKET = "spoonjoy-photos-qa";
-export const QA_D1_DATABASE_ID = "c6c99e80-bd51-4cf2-b7c7-b7a6e27d3f34";
+export const QA_ENV_NAME = SHARED_QA_ENV_NAME;
+export const QA_BASE_URL = SHARED_QA_BASE_URL;
+export const QA_R2_BUCKET = SHARED_QA_R2_BUCKET;
+export const QA_D1_DATABASE_ID = SHARED_QA_D1_DATABASE_ID;
 export const QA_R2_PROBE_BODY = "spoonjoy qa preflight";
 export const REQUIRED_QA_SECRETS = [
   "SESSION_SECRET",

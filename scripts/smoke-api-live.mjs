@@ -2,11 +2,9 @@
 import { writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import assert from "node:assert/strict";
+import { arg, resolveScriptTarget } from "./script-environment.mjs";
 
-function arg(name, fallback) {
-  const index = process.argv.indexOf(name);
-  return index === -1 ? fallback : process.argv[index + 1];
-}
+const DEFAULT_API_SMOKE_BASE_URL = "https://spoonjoy.app";
 
 async function request(baseUrl, path, init = {}) {
   const startedAt = Date.now();
@@ -35,13 +33,26 @@ function expectHeader(result, name) {
 }
 
 async function main() {
-  const baseUrl = arg("--base-url", process.env.SPOONJOY_SMOKE_BASE_URL ?? "https://spoonjoy.app");
-  const outDir = arg("--out", "api-live-smoke-artifacts");
+  const argv = process.argv.slice(2);
+  const target = resolveScriptTarget({
+    argv,
+    env: process.env,
+    defaultBaseUrl: process.env.SPOONJOY_SMOKE_BASE_URL ?? DEFAULT_API_SMOKE_BASE_URL,
+  });
+  const baseUrl = target.baseUrl;
+  const outDir = arg(argv, "--out", "api-live-smoke-artifacts");
   mkdirSync(outDir, { recursive: true });
 
   const report = {
     baseUrl,
     generatedAt: new Date().toISOString(),
+    environment: {
+      targetEnv: target.targetEnv,
+      baseUrl: target.baseUrl,
+      d1Target: target.d1Target,
+      r2Target: target.r2Target,
+      destructiveScope: target.destructiveScope,
+    },
     checks: [],
   };
   const check = async (name, fn) => {

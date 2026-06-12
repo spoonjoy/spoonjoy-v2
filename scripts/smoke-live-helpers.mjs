@@ -1,21 +1,26 @@
-export const DEFAULT_PRODUCTION_BASE_URL = "https://spoonjoy-v2.mendelow-studio.workers.dev";
-export const PRODUCTION_BASE_URLS = [DEFAULT_PRODUCTION_BASE_URL, "https://spoonjoy.app"];
-export const QA_BASE_URL = "https://spoonjoy-v2-qa.mendelow-studio.workers.dev";
-export const QA_R2_BUCKET = "spoonjoy-photos-qa";
-export const IMAGE_COVER_SMOKE_FLAG = "--include-image-cover-smoke";
+import {
+  DEFAULT_PRODUCTION_BASE_URL,
+  PRODUCTION_BASE_URLS,
+  QA_BASE_URL,
+  QA_R2_BUCKET,
+  arg,
+  resolveScriptTarget,
+  usesLocalD1,
+} from "./script-environment.mjs";
 
-export function arg(argv, name, fallback) {
-  const index = argv.indexOf(name);
-  return index === -1 ? fallback : argv[index + 1];
-}
+export {
+  DEFAULT_PRODUCTION_BASE_URL,
+  PRODUCTION_BASE_URLS,
+  QA_BASE_URL,
+  QA_R2_BUCKET,
+  arg,
+  usesLocalD1,
+};
+
+export const IMAGE_COVER_SMOKE_FLAG = "--include-image-cover-smoke";
 
 export function sqlString(value) {
   return `'${value.replaceAll("'", "''")}'`;
-}
-
-export function usesLocalD1(baseUrl) {
-  const hostname = new URL(baseUrl).hostname;
-  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
 }
 
 export function shouldRunAppleOAuthCheck(targetEnv) {
@@ -23,26 +28,13 @@ export function shouldRunAppleOAuthCheck(targetEnv) {
 }
 
 export function parseSmokeArgs(argv = process.argv.slice(2), env = process.env) {
-  const baseUrl = arg(argv, "--base-url", env.SPOONJOY_SMOKE_BASE_URL ?? DEFAULT_PRODUCTION_BASE_URL);
+  const target = resolveScriptTarget({
+    argv,
+    env,
+    defaultBaseUrl: env.SPOONJOY_SMOKE_BASE_URL ?? DEFAULT_PRODUCTION_BASE_URL,
+  });
+  const { baseUrl, targetEnv } = target;
   const outDir = arg(argv, "--out", "live-smoke-artifacts");
-  const explicitTargetEnv = arg(argv, "--target-env", undefined);
-  const targetEnv = explicitTargetEnv ?? (usesLocalD1(baseUrl) ? "local" : undefined);
-
-  if (!targetEnv) {
-    throw new Error("Remote smoke runs require explicit `--target-env qa` or `--target-env production`.");
-  }
-  if (!["local", "qa", "production"].includes(targetEnv)) {
-    throw new Error("Smoke target env must be one of local, qa, or production.");
-  }
-  if (targetEnv === "local" && !usesLocalD1(baseUrl)) {
-    throw new Error("Local smoke must target a localhost or loopback URL.");
-  }
-  if (targetEnv === "qa" && new URL(baseUrl).origin !== QA_BASE_URL) {
-    throw new Error(`QA smoke must target ${QA_BASE_URL}.`);
-  }
-  if (targetEnv === "production" && !PRODUCTION_BASE_URLS.includes(new URL(baseUrl).origin)) {
-    throw new Error(`Production smoke must target one of: ${PRODUCTION_BASE_URLS.join(", ")}.`);
-  }
   const includeImageCoverSmoke = argv.includes(IMAGE_COVER_SMOKE_FLAG);
   if (includeImageCoverSmoke && targetEnv !== "qa") {
     throw new Error("The image-cover smoke is QA-only and must use `--target-env qa`.");
@@ -58,9 +50,9 @@ export function parseSmokeArgs(argv = process.argv.slice(2), env = process.env) 
 }
 
 function d1TargetArgs(targetEnv) {
-  if (targetEnv === "local") return ["--local"];
-  if (targetEnv === "qa") return ["--remote", "--env", "qa"];
-  if (targetEnv === "production") return ["--remote"];
+  if (targetEnv === "local") return resolveScriptTarget({ argv: ["--base-url", "http://localhost"], defaultBaseUrl: "http://localhost" }).d1Args;
+  if (targetEnv === "qa") return resolveScriptTarget({ argv: ["--target-env", "qa", "--base-url", QA_BASE_URL] }).d1Args;
+  if (targetEnv === "production") return resolveScriptTarget({ argv: ["--target-env", "production", "--base-url", DEFAULT_PRODUCTION_BASE_URL] }).d1Args;
   throw new Error("D1 smoke operation requires targetEnv local, qa, or production.");
 }
 
