@@ -1,0 +1,25 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+      Coverage enabled with istanbul
+
+stdout | test/scripts/smoke-api-live.test.ts > API live smoke target handling > writes environment metadata into API smoke artifacts
+/var/folders/md/_fkq3wc92_z55cgtlrfrcfh40000gn/T/spoonjoy-api-smoke-1wS7KQ/api-smoke-results.json
+
+ ✓ test/scripts/smoke-api-live.test.ts (3 tests) 255ms
+ ✓ test/scripts/smoke-live-helpers.test.ts (22 tests) 30ms
+ ✓ test/scripts/script-environment.test.ts (7 tests) 30ms
+
+ Test Files  3 passed (3)
+      Tests  32 passed (32)
+   Start at  06:18:31
+   Duration  1.44s (transform 299ms, setup 200ms, import 65ms, tests 316ms, environment 471ms)
+
+ % Coverage report from istanbul
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |     100 |      100 |     100 |     100 |                   
+ ...nvironment.mjs |     100 |      100 |     100 |     100 |                   
+ ...e-api-live.mjs |     100 |      100 |     100 |     100 |                   
+ ...ve-helpers.mjs |     100 |      100 |     100 |     100 |                   
+-------------------|---------|----------|---------|---------|-------------------

@@ -89,6 +89,8 @@ describe("script target resolver", () => {
   });
 
   it("requires an explicit target env for remote URLs", () => {
+    expect(() => resolveScriptTarget()).toThrow(/--target-env qa or --target-env production/);
+
     expect(() =>
       resolveScriptTarget({
         argv: ["--base-url", "https://spoonjoy-v2-qa.mendelow-studio.workers.dev"],
