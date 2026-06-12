@@ -59,7 +59,7 @@ Remove the deprecated Cloudflare Pages GitHub Action from the Storybook deployme
 **Output**: Evidence saved in the progress log and artifacts directory.
 **Acceptance**: Existing workflow target is understood, `wrangler-action@v4` Node 24 evidence is recorded, and baseline `pnpm build-storybook` passes without leaving tracked changes.
 
-### ⬜ Unit 1a: Workflow Migration — Tests
+### ✅ Unit 1a: Workflow Migration — Tests
 **What**: Extend `test/scripts/deployment-preflight.test.ts` with a Storybook deploy workflow contract that expects `validateDeploymentConfig` to check a `storybookWorkflow` input. The red tests must fail while `scripts/deployment-preflight.ts` does not read/check `.github/workflows/storybook.yml` and while the repo workflow still uses `cloudflare/pages-action@v1`.
 **Output**: Failing test coverage for the Storybook deploy workflow contract in `test/scripts/deployment-preflight.test.ts`.
 **Acceptance**: `pnpm exec vitest run test/scripts/deployment-preflight.test.ts -t "Storybook deploy workflow"` fails before the workflow migration.
@@ -93,3 +93,4 @@ Remove the deprecated Cloudflare Pages GitHub Action from the Storybook deployme
 - 2026-06-11 20:48 Doing review Round 1 required exact validation files/commands and a concrete Storybook workflow syntax parse command.
 - 2026-06-11 20:51 Doing review Round 2 converged; status set to READY_FOR_EXECUTION.
 - 2026-06-11 20:53 Unit 0 complete: verified `cloudflare/wrangler-action@v4.0.0` uses Node 24, `v3` uses Node 20, baseline `pnpm build-storybook` passed, `.github/workflows/storybook.yml` parses with Ruby Psych, and the worktree stayed clean.
+- 2026-06-11 20:55 Unit 1a red confirmed: `pnpm exec vitest run test/scripts/deployment-preflight.test.ts -t "Storybook deploy workflow"` failed because the Storybook deploy preflight check did not exist.
