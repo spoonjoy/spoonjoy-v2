@@ -439,6 +439,35 @@ function qaSmokeStepOrderIsValid(order: Record<string, number>): boolean {
   );
 }
 
+function workflowHasStorybookBuildArtifact(lines: WorkflowLine[]): boolean {
+  for (const [jobStart, jobEnd] of workflowJobBlocks(lines)) {
+    if (lines[jobStart].text !== "build-storybook:") continue;
+    const steps = childBlock(lines, jobStart, jobEnd, "steps");
+    if (!steps) return false;
+
+    let storybookBuildStep = -1;
+    let uploadStorybookArtifactStep = -1;
+    for (const [stepStart, stepEnd] of stepBlocks(lines, steps[0], steps[1])) {
+      if (stepRunText(lines, stepStart, stepEnd) === "pnpm build-storybook") {
+        storybookBuildStep = stepStart;
+      }
+
+      if (
+        stepUses(lines, stepStart, stepEnd, "actions/upload-artifact@") &&
+        stepIfEquals(lines, stepStart, stepEnd, "github.ref == 'refs/heads/main'") &&
+        stepWithValue(lines, stepStart, stepEnd, "name") === "storybook-static" &&
+        stepWithValue(lines, stepStart, stepEnd, "path") === "storybook-static"
+      ) {
+        uploadStorybookArtifactStep = stepStart;
+      }
+    }
+
+    return storybookBuildStep >= 0 && uploadStorybookArtifactStep > storybookBuildStep;
+  }
+
+  return false;
+}
+
 function runCommandLines(run: string): string[] {
   return run
     .split("\n")
@@ -580,6 +609,7 @@ function workflowHasStorybookDeployContract(workflow: string): boolean {
   const activeText = lines.map((line) => line.text).join("\n");
   if (activeText.includes("cloudflare/pages-action@")) return false;
   if (!workflowDeploysPushesToMain(workflow)) return false;
+  if (!workflowHasStorybookBuildArtifact(lines)) return false;
 
   for (const [jobStart, jobEnd] of workflowJobBlocks(lines)) {
     if (lines[jobStart].text !== "deploy-storybook:") continue;
@@ -599,7 +629,7 @@ function workflowHasStorybookDeployContract(workflow: string): boolean {
     const steps = childBlock(lines, jobStart, jobEnd, "steps");
     if (!steps) return false;
 
-    let downloadsStorybookArtifact = false;
+    let downloadStorybookArtifactStep = -1;
     let pnpmSetupStep = -1;
     let wranglerDeployStep = -1;
 
@@ -609,7 +639,7 @@ function workflowHasStorybookDeployContract(workflow: string): boolean {
         stepWithValue(lines, stepStart, stepEnd, "name") === "storybook-static" &&
         stepWithValue(lines, stepStart, stepEnd, "path") === "storybook-static"
       ) {
-        downloadsStorybookArtifact = true;
+        downloadStorybookArtifactStep = stepStart;
       }
 
       if (
@@ -631,7 +661,12 @@ function workflowHasStorybookDeployContract(workflow: string): boolean {
       }
     }
 
-    return downloadsStorybookArtifact && pnpmSetupStep >= 0 && wranglerDeployStep > pnpmSetupStep;
+    return (
+      downloadStorybookArtifactStep >= 0 &&
+      pnpmSetupStep >= 0 &&
+      wranglerDeployStep > downloadStorybookArtifactStep &&
+      wranglerDeployStep > pnpmSetupStep
+    );
   }
 
   return false;

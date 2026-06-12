@@ -1608,6 +1608,14 @@ describe("Storybook deploy workflow", () => {
     expect(result.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
   });
 
+  it("rejects Storybook deploy workflows without deployments write permission", () => {
+    const inputs = inputsWithStorybookWorkflow(validStorybookWorkflow().replace("      deployments: write\n", ""));
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
+  });
+
   it("rejects Storybook deploy workflows without a push-to-main trigger", () => {
     const inputs = inputsWithStorybookWorkflow(
       validStorybookWorkflow().replace("  push:\n    branches: [main]\n", ""),
@@ -1621,6 +1629,29 @@ describe("Storybook deploy workflow", () => {
   it("rejects Storybook deploy workflows without the deploy job", () => {
     const inputs = inputsWithStorybookWorkflow(
       validStorybookWorkflow().replace("  deploy-storybook:", "  preview-storybook:"),
+    );
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
+  });
+
+  it("rejects Storybook deploy workflows without the build job", () => {
+    const inputs = inputsWithStorybookWorkflow(
+      validStorybookWorkflow().replace("  build-storybook:", "  compile-storybook:"),
+    );
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
+  });
+
+  it("rejects Storybook build jobs without steps", () => {
+    const inputs = inputsWithStorybookWorkflow(
+      validStorybookWorkflow().replace(
+        "    steps:\n      - uses: actions/checkout@v6",
+        "    no_steps:\n      - uses: actions/checkout@v6",
+      ),
     );
 
     const result = validateDeploymentConfig(inputs);
@@ -1675,6 +1706,29 @@ describe("Storybook deploy workflow", () => {
 
     expect(missingSteps.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
     expect(missingDownload.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
+  });
+
+  it("rejects Storybook artifact steps without the expected with keys", () => {
+    const inputs = inputsWithStorybookWorkflow(
+      validStorybookWorkflow().replace(
+        [
+          "      - uses: actions/download-artifact@v8",
+          "        with:",
+          "          name: storybook-static",
+          "          path: storybook-static",
+        ].join("\n"),
+        [
+          "      - uses: actions/download-artifact@v8",
+          "        with:",
+          "          artifact: storybook-static",
+          "          path: storybook-static",
+        ].join("\n"),
+      ),
+    );
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
   });
 
   it("rejects Storybook deploy workflows that do not upload the built artifact", () => {
