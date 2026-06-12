@@ -11,7 +11,7 @@ Objective: Keep the Spoonjoy autonomous queue durable and continue with the next
 - Last completed bookkeeping branch: `spoonjoy/backlog-queue-state`; PR #187 merged as `06b7c7ad009445af4ff8e345e39aebd4067c426b`.
 - Current side-slice planning doc: `spoonjoy/tasks/2026-06-11-2038-planning-storybook-wrangler-action.md`
 - Current side-slice doing doc: `spoonjoy/tasks/2026-06-11-2038-doing-storybook-wrangler-action.md`
-- Current side-slice PR: #188 (`spoonjoy/storybook-wrangler-action`), head `f507aa33`, pending final reviewer, CI, merge, main Storybook deploy verification, branch cleanup, and continuation scan.
+- Current side-slice PR: #188 (`spoonjoy/storybook-wrangler-action`), pending final reviewer, CI, merge, main Storybook deploy verification, branch cleanup, and continuation scan.
 - Current side-slice goal: migrate Storybook deploy from deprecated `cloudflare/pages-action@v1` to Cloudflare's Wrangler action before starting the broader `SJ-044` harness.
 - No human gates remain under the user's explicit no-human-gates mandate unless a true human-only credential/capability blocker or genuinely unrecoverable destructive shared-state action appears.
 
