@@ -1,6 +1,6 @@
 # Autopilot State
 
-Updated: 2026-06-11 17:46 America/Los_Angeles
+Updated: 2026-06-11 18:10 America/Los_Angeles
 Branch: `spoonjoy/mcp-image-cover-smokes`
 Objective: Implement `SJ-045` by adding a QA-only MCP/API image and cover live smoke, validating it end to end, merging it to main, verifying deployment, and cleaning all disposable data.
 
@@ -10,15 +10,14 @@ Objective: Implement `SJ-045` by adding a QA-only MCP/API image and cover live s
 - Doing doc: `spoonjoy/tasks/2026-06-11-1221-doing-mcp-image-cover-smokes.md`
 - Artifacts: `spoonjoy/tasks/2026-06-11-1221-doing-mcp-image-cover-smokes/`
 - Planning gate: approved by sub-agent reviewer convergence on 2026-06-11 13:05.
-- Doing gate: in progress; Units 0, 1a, 1b, 1c, 2a, 2b, 2c, 2d, 2e, 3a, 3b, 3c, 4, 5, and 6a complete.
+- Doing gate: in progress; Units 0, 1a, 1b, 1c, 2a, 2b, 2c, 2d, 2e, 3a, 3b, 3c, 4, 5, 6a, and 6b complete.
 - No human gates remain under the user's explicit no-human-gates mandate unless a true human-only credential/capability blocker or genuinely unrecoverable destructive shared-state action appears.
 
 ## Next Action
 
 Current execution queue:
 
-1. Unit 6b: PR merge and production deploy verification.
-2. Unit 6c: final branch/data cleanup and Slugger notification.
+1. Unit 6c: final branch/data cleanup and Slugger notification.
 
 ## Known External State
 
@@ -28,5 +27,6 @@ Current execution queue:
 - QA Worker URL: `https://spoonjoy-v2-qa.mendelow-studio.workers.dev`.
 - QA image-cover smoke passed on version `11bb68e0-494e-4fd7-be4b-b780a0782edb` with Gemini/Google provider coverage and exact R2/D1 cleanup verified.
 - Implementation review converged at branch head `6b877cf0` after workflow and cleanup hardening fixes.
+- PR #184 merged as `85da85da1417e29c34f91e81ab8ace0f575bd111`; post-merge CI, Storybook, Production Deploy, and both production health endpoints passed.
 - Production Worker URL: `https://spoonjoy-v2.mendelow-studio.workers.dev`.
 - Production custom domain: `https://spoonjoy.app`.

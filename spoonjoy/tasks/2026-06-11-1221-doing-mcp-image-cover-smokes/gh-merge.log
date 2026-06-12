@@ -1,0 +1,60 @@
+From https://github.com/arimendelow/spoonjoy-v2
+ * branch              main       -> FETCH_HEAD
+   ecfb7117..85da85da  main       -> origin/main
+Updating ecfb7117..85da85da
+Fast-forward
+ .github/workflows/qa-image-cover-smoke.yml         |  89 ++
+ app/lib/ai-placeholder-cover.server.ts             | 112 ++-
+ app/lib/image-gen.server.ts                        |   3 +-
+ app/lib/spoon-cover-stylization.server.ts          |  13 +-
+ package.json                                       |   1 +
+ scripts/deployment-preflight.ts                    | 251 +++++-
+ scripts/qa-preflight.ts                            |  14 +-
+ scripts/smoke-image-cover-live.mjs                 | 630 ++++++++++++++
+ scripts/smoke-live-helpers.mjs                     |  33 +
+ scripts/smoke-live.mjs                             | 134 ++-
+ ...2026-06-11-1221-doing-mcp-image-cover-smokes.md | 167 ++++
+ .../implementation-review.md                       |  38 +
+ .../qa-image-cover-smoke-results.json              | 154 ++++
+ .../unit-1a-red.log                                | 264 ++++++
+ .../unit-1b-green.log                              |  12 +
+ .../unit-1c-build.log                              | 170 ++++
+ .../unit-1c-coverage.log                           |  21 +
+ .../unit-2a-red.log                                | 116 +++
+ .../unit-2bcd-build.log                            | 170 ++++
+ .../unit-2bcd-green.log                            |  12 +
+ .../unit-2e-build.log                              | 170 ++++
+ .../unit-2e-coverage.log                           |  21 +
+ .../unit-3a-red.log                                | 106 +++
+ .../unit-3bc-build.log                             | 170 ++++
+ .../unit-3bc-green.log                             |  10 +
+ ...6-06-11-1221-planning-mcp-image-cover-smokes.md | 117 +++
+ spoonjoy/tasks/AUTOPILOT-STATE.md                  |  31 +-
+ test/lib/ai-placeholder-cover.server.test.ts       | 218 ++++-
+ test/lib/image-gen.server.test.ts                  |  15 +
+ test/lib/spoon-cover-stylization.server.test.ts    |  23 +
+ test/routes/recipes-new.test.tsx                   |   2 +-
+ test/scripts/deployment-preflight.test.ts          | 377 ++++++++-
+ test/scripts/smoke-image-cover-live.test.ts        | 910 +++++++++++++++++++++
+ test/scripts/smoke-live-helpers.test.ts            | 113 +++
+ vitest.config.ts                                   |  10 +-
+ 35 files changed, 4647 insertions(+), 50 deletions(-)
+ create mode 100644 .github/workflows/qa-image-cover-smoke.yml
+ create mode 100644 scripts/smoke-image-cover-live.mjs
+ create mode 100644 spoonjoy/tasks/2026-06-11-1221-doing-mcp-image-cover-smokes.md
+ create mode 100644 spoonjoy/tasks/2026-06-11-1221-doing-mcp-image-cover-smokes/implementation-review.md
+ create mode 100644 spoonjoy/tasks/2026-06-11-1221-doing-mcp-image-cover-smokes/qa-image-cover-smoke-results.json
+ create mode 100644 spoonjoy/tasks/2026-06-11-1221-doing-mcp-image-cover-smokes/unit-1a-red.log
+ create mode 100644 spoonjoy/tasks/2026-06-11-1221-doing-mcp-image-cover-smokes/unit-1b-green.log
+ create mode 100644 spoonjoy/tasks/2026-06-11-1221-doing-mcp-image-cover-smokes/unit-1c-build.log
+ create mode 100644 spoonjoy/tasks/2026-06-11-1221-doing-mcp-image-cover-smokes/unit-1c-coverage.log
+ create mode 100644 spoonjoy/tasks/2026-06-11-1221-doing-mcp-image-cover-smokes/unit-2a-red.log
+ create mode 100644 spoonjoy/tasks/2026-06-11-1221-doing-mcp-image-cover-smokes/unit-2bcd-build.log
+ create mode 100644 spoonjoy/tasks/2026-06-11-1221-doing-mcp-image-cover-smokes/unit-2bcd-green.log
+ create mode 100644 spoonjoy/tasks/2026-06-11-1221-doing-mcp-image-cover-smokes/unit-2e-build.log
+ create mode 100644 spoonjoy/tasks/2026-06-11-1221-doing-mcp-image-cover-smokes/unit-2e-coverage.log
+ create mode 100644 spoonjoy/tasks/2026-06-11-1221-doing-mcp-image-cover-smokes/unit-3a-red.log
+ create mode 100644 spoonjoy/tasks/2026-06-11-1221-doing-mcp-image-cover-smokes/unit-3bc-build.log
+ create mode 100644 spoonjoy/tasks/2026-06-11-1221-doing-mcp-image-cover-smokes/unit-3bc-green.log
+ create mode 100644 spoonjoy/tasks/2026-06-11-1221-planning-mcp-image-cover-smokes.md
+ create mode 100644 test/scripts/smoke-image-cover-live.test.ts
