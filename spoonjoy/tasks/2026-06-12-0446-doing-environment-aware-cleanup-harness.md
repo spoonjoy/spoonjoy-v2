@@ -172,17 +172,17 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 **Output**: `implementation-review-fixes.md` with fixes, verification commands, and re-review verdict.
 **Acceptance**: No BLOCKER/MAJOR implementation-review findings remain.
 
-### ⬜ Unit 11: PR Creation And Checks
+### ✅ Unit 11: PR Creation And Checks
 **What**: Push current branch, create the PR, and wait for required PR checks.
 **Output**: `pr.log` and `pr-checks.log`.
 **Acceptance**: PR exists, branch is pushed, and required PR checks are green or explicitly non-applicable.
 
-### ⬜ Unit 12: Merge And Auto-Deploy Verification
+### ✅ Unit 12: Merge And Auto-Deploy Verification
 **What**: Merge the PR to `main`, wait for main CI/Storybook/Production Deploy, and verify auto-deploy for the merge commit.
 **Output**: `main-checks.log` and `deploy-smoke.log`.
 **Acceptance**: PR is merged; main checks pass; deployed production commit/version corresponds to the merge or the provider's deploy run for the merge is green.
 
-### ⬜ Unit 13: Production Smoke And Final Cleanup
+### ✅ Unit 13: Production Smoke And Final Cleanup
 **What**: Run production health/custom-domain checks with `curl -fsS https://spoonjoy-v2.mendelow-studio.workers.dev/health` and `curl -fsS https://spoonjoy.app/health`; run production live smoke with `pnpm run smoke:live`; run API smoke with `pnpm run smoke:api`; copy or record the produced `live-smoke-artifacts/smoke-results.json` and `api-live-smoke-artifacts/api-smoke-results.json` paths/contents into this task's artifact directory; run final cleanup checks with `pnpm run cleanup:local`, `pnpm run cleanup:remote:qa`, and `pnpm run cleanup:production`; save evidence.
 **Output**: `production-smoke.log`, `production-smoke-results.json`, `api-smoke-results.json`, and `final-cleanup.log`.
 **Acceptance**: Production smoke passes; cleanup checks are clean; no disposable local/QA/prod residue remains from this run.
@@ -233,3 +233,7 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 - 2026-06-12 08:04 Unit 8 complete: dogfooded live cleanup contract. QA cleanup dry-run resolved QA D1/R2 targets and reported all disposable counts at zero with zero blockers, so no QA apply was needed; production read-only cleanup resolved production D1/R2 targets and reported zero disposable counts; production broad apply refused with exit code 1; QA preflight passed D1 migrations, secrets, R2 round trip, and static config. Evidence in `cleanup-qa-dry-run.log`, `cleanup-production-readonly.log`, `cleanup-production-apply-refusal.log`, and `qa-preflight.log`. Unit review skipped (reason: live verification-only unit; no code changed).
 - 2026-06-12 08:05 Unit 9 complete: Parfit returned FINDINGS with one BLOCKER, three MAJOR findings, and one MINOR: unsafe note-matched spoon R2 deletion, missing generated `covers/...` cleanup, hardcoded dry-run blocker zero, mutating blocker preflight SQL, and artifact whitespace. Findings recorded in `implementation-review.md`.
 - 2026-06-12 08:14 Unit 10 complete: added red tests for all implementation-review findings, fixed QA R2 spoon namespace safety, generated cover cleanup, real dry-run blocker counts, read-only blocker preflight SQL, D1 compound-select compatibility, and artifact hygiene. Focused tests, 100% cleanup coverage, build, local/QA/prod cleanup dry-runs, and production broad-apply refusal passed with evidence in `unit-10-review-fixes-*.log` and `unit-10-cleanup-*.log`; fix summary recorded in `implementation-review-fixes.md`. Narrow re-review returned `CONVERGED`.
+- 2026-06-12 09:06 Unit 11 complete: PR #193 initially passed checks but GitHub kept it pinned to stale head `30ced73c`; after pre-merge review found a MAJOR absent-search-table gap, fixed in `9ffa098d`, closed stale PR #193, opened replacement PR #194 on the fixed head, and watched PR checks green: Storybook, e2e, and coverage. Evidence in `unit-11-pr-checks.log`, `unit-11-replacement-pr-checks.log`, `premerge-review.md`, and `unit-11-premerge-search-*.log`.
+- 2026-06-12 09:19 Unit 12 complete: PR #194 merged as `bf6ea6b13d16666d575d4483599a59619308acc2`; main CI, Storybook, and Production Deploy passed for that exact merge commit. Production Deploy run `27427777080` published Worker version `a7c13623-f833-43ec-ae4d-a5e76f819b58`. Evidence in `unit-12-main-checks.log` and `unit-13-production-health.log`.
+- 2026-06-12 09:21 Unit 13 complete: production workers.dev and custom-domain health returned ok; `pnpm run smoke:live` and `pnpm run smoke:api` passed; smoke artifacts copied to `unit-13-production-smoke-results.json` and `unit-13-api-smoke-results.json`; final local, QA, and production cleanup checks passed with zero blockers. Evidence in `unit-13-*.log` and copied smoke JSON artifacts.
+- 2026-06-12 09:22 Unit 14 partial: stale original branch `spoonjoy/sj-044-cleanup-harness` removed locally and remotely after PR #194 squash merge. Active terminal-verification branch remains only long enough to land this durable evidence and will be cleaned after its PR merges. Evidence in `unit-14-branch-cleanup.log`.

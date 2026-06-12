@@ -1,0 +1,7 @@
+merge_commit=bf6ea6b13d16666d575d4483599a59619308acc2
+production_deploy_run=27427777080
+worker_version=a7c13623-f833-43ec-ae4d-a5e76f819b58
+workers_dev_health:
+{"status":"ok","service":"spoonjoy"}
+custom_domain_health:
+{"status":"ok","service":"spoonjoy"}

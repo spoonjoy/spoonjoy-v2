@@ -1,0 +1,5 @@
+
+> spoonjoy-v2@1.0.0 smoke:live /Users/arimendelow/Projects/spoonjoy-v2
+> node scripts/smoke-live.mjs --target-env production --base-url https://spoonjoy-v2.mendelow-studio.workers.dev
+
+live-smoke-artifacts/smoke-results.json

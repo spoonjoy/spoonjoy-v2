@@ -1,0 +1,49 @@
+{
+  "baseUrl": "https://spoonjoy.app",
+  "generatedAt": "2026-06-12T16:19:52.601Z",
+  "environment": {
+    "targetEnv": "production",
+    "baseUrl": "https://spoonjoy.app",
+    "d1Target": "production D1 spoonjoy (--remote)",
+    "r2Target": "production R2 spoonjoy-photos (--remote)",
+    "destructiveScope": "production read-only by default; exact smoke cleanup only"
+  },
+  "git": {
+    "branch": "spoonjoy/sj-044-cleanup-harness",
+    "commit": "9ffa098de051"
+  },
+  "checks": [
+    {
+      "name": "api docs route",
+      "elapsedMs": 830
+    },
+    {
+      "name": "playground alias route",
+      "elapsedMs": 111
+    },
+    {
+      "name": "request id echo and stable error envelope",
+      "elapsedMs": 55
+    },
+    {
+      "name": "OpenAPI path parity and dynamic server",
+      "elapsedMs": 111
+    },
+    {
+      "name": "SDK profile includes token lifecycle",
+      "elapsedMs": 341
+    },
+    {
+      "name": "OAuth token CORS preflight",
+      "elapsedMs": 36
+    },
+    {
+      "name": "DELETE mutation header CORS preflight",
+      "elapsedMs": 360
+    },
+    {
+      "name": "public cache headers",
+      "elapsedMs": 463
+    }
+  ]
+}

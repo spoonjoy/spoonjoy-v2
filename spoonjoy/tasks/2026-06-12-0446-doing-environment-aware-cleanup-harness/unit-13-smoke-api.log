@@ -1,0 +1,5 @@
+
+> spoonjoy-v2@1.0.0 smoke:api /Users/arimendelow/Projects/spoonjoy-v2
+> node scripts/smoke-api-live.mjs --target-env production
+
+api-live-smoke-artifacts/api-smoke-results.json
