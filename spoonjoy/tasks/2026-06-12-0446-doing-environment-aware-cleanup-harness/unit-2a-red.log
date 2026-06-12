@@ -1,0 +1,114 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ❯ test/scripts/cleanup-local-qa-data.test.ts (10 tests | 7 failed) 79ms
+     ✓ dry-runs the disposable Spoonjoy QA data patterns 1ms
+     ✓ soft-deletes recipes and deletes only disposable local support rows on apply 0ms
+     ✓ builds local-only Wrangler D1 args 1ms
+     × parses explicit local, QA, and production target environments 3ms
+     × keeps the backwards-compatible missing-target default as a local dry-run 0ms
+     × rejects missing and invalid target env values 2ms
+     × formats the target summary printed before cleanup commands 0ms
+     × runs local dry-run and local apply with explicit target summaries and local Wrangler args 0ms
+     × runs QA remote dry-run but refuses QA apply until D1/R2 safety is installed 0ms
+     × runs production read-only dry-run and refuses broad production apply 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/scripts/cleanup-local-qa-data.test.ts > cleanup-local-qa-data > parses explicit local, QA, and production target environments
+TypeError: __vite_ssr_import_2__.parseCleanupArgs is not a function
+ ❯ test/scripts/cleanup-local-qa-data.test.ts:61:20
+     59| 
+     60|   it("parses explicit local, QA, and production target environments", …
+     61|     expect(cleanup.parseCleanupArgs(["--target-env", "local"])).toMatc…
+       |                    ^
+     62|       apply: false,
+     63|       dbName: "DB",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  test/scripts/cleanup-local-qa-data.test.ts > cleanup-local-qa-data > keeps the backwards-compatible missing-target default as a local dry-run
+TypeError: __vite_ssr_import_2__.parseCleanupArgs is not a function
+ ❯ test/scripts/cleanup-local-qa-data.test.ts:94:20
+     92| 
+     93|   it("keeps the backwards-compatible missing-target default as a local…
+     94|     expect(cleanup.parseCleanupArgs([])).toMatchObject({
+       |                    ^
+     95|       apply: false,
+     96|       target: {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  test/scripts/cleanup-local-qa-data.test.ts > cleanup-local-qa-data > rejects missing and invalid target env values
+AssertionError: expected [Function] to throw error matching /Missing value for --target-env/ but got '__vite_ssr_import_2__.parseCleanupArg…'
+
+- Expected: 
+/Missing value for --target-env/
+
++ Received: 
+"__vite_ssr_import_2__.parseCleanupArgs is not a function"
+
+ ❯ test/scripts/cleanup-local-qa-data.test.ts:104:62
+    102| 
+    103|   it("rejects missing and invalid target env values", () => {
+    104|     expect(() => cleanup.parseCleanupArgs(["--target-env"])).toThrow(/…
+       |                                                              ^
+    105|     expect(() => cleanup.parseCleanupArgs(["--target-env", "staging"])…
+    106|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  test/scripts/cleanup-local-qa-data.test.ts > cleanup-local-qa-data > formats the target summary printed before cleanup commands
+TypeError: __vite_ssr_import_2__.parseCleanupArgs is not a function
+ ❯ test/scripts/cleanup-local-qa-data.test.ts:109:29
+    107| 
+    108|   it("formats the target summary printed before cleanup commands", () …
+    109|     const options = cleanup.parseCleanupArgs(["--target-env", "qa"]);
+       |                             ^
+    110| 
+    111|     expect(cleanup.formatCleanupTargetSummary(options.target)).toEqual…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  test/scripts/cleanup-local-qa-data.test.ts > cleanup-local-qa-data > runs local dry-run and local apply with explicit target summaries and local Wrangler args
+TypeError: __vite_ssr_import_2__.runCleanupCli is not a function
+ ❯ test/scripts/cleanup-local-qa-data.test.ts:125:19
+    123|     const runCommand = vi.fn(async () => ({ stdout: "[]", stderr: "" }…
+    124| 
+    125|     await cleanup.runCleanupCli({
+       |                   ^
+    126|       argv: ["--target-env", "local"],
+    127|       runCommand,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  test/scripts/cleanup-local-qa-data.test.ts > cleanup-local-qa-data > runs QA remote dry-run but refuses QA apply until D1/R2 safety is installed
+TypeError: __vite_ssr_import_2__.runCleanupCli is not a function
+ ❯ test/scripts/cleanup-local-qa-data.test.ts:160:19
+    158|     const runCommand = vi.fn(async () => ({ stdout: "[]", stderr: "" }…
+    159| 
+    160|     await cleanup.runCleanupCli({
+       |                   ^
+    161|       argv: ["--target-env", "qa"],
+    162|       runCommand,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+ FAIL  test/scripts/cleanup-local-qa-data.test.ts > cleanup-local-qa-data > runs production read-only dry-run and refuses broad production apply
+TypeError: __vite_ssr_import_2__.runCleanupCli is not a function
+ ❯ test/scripts/cleanup-local-qa-data.test.ts:190:19
+    188|     const runCommand = vi.fn(async () => ({ stdout: "[]", stderr: "" }…
+    189| 
+    190|     await cleanup.runCleanupCli({
+       |                   ^
+    191|       argv: ["--target-env", "production"],
+    192|       runCommand,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  7 failed | 3 passed (10)
+   Start at  06:22:00
+   Duration  524ms (transform 51ms, setup 112ms, import 16ms, tests 79ms, environment 187ms)
+
