@@ -110,7 +110,7 @@ function validStorybookWorkflow(): string {
     "          rm -rf storybook-pages-deploy",
     "          mkdir -p storybook-pages-deploy",
     "          mv storybook-static storybook-pages-deploy/storybook-static",
-    "          printf '%s\\n' '{' '  \"pages_build_output_dir\": \"storybook-static\"' '}' > storybook-pages-deploy/wrangler.json",
+    "          printf '%s\\n' '{' '  \"name\": \"spoonjoy-storybook\",' '  \"pages_build_output_dir\": \"storybook-static\"' '}' > storybook-pages-deploy/wrangler.json",
     "      - name: Deploy to Cloudflare Pages",
     "        if: github.ref == 'refs/heads/main'",
     "        uses: cloudflare/wrangler-action@v4",
@@ -1867,7 +1867,7 @@ describe("Storybook deploy warning cleanup", () => {
             "          rm -rf storybook-pages-deploy",
             "          mkdir -p storybook-pages-deploy",
             "          mv storybook-static storybook-pages-deploy/storybook-static",
-            "          printf '%s\\n' '{' '  \"pages_build_output_dir\": \"storybook-static\"' '}' > storybook-pages-deploy/wrangler.json",
+            "          printf '%s\\n' '{' '  \"name\": \"spoonjoy-storybook\",' '  \"pages_build_output_dir\": \"storybook-static\"' '}' > storybook-pages-deploy/wrangler.json",
           ].join("\n"),
           "",
         ),
@@ -1876,7 +1876,7 @@ describe("Storybook deploy warning cleanup", () => {
     const missingWranglerJson = validateDeploymentConfig(
       inputsWithStorybookWorkflow(
         validStorybookWorkflow().replace(
-          "          printf '%s\\n' '{' '  \"pages_build_output_dir\": \"storybook-static\"' '}' > storybook-pages-deploy/wrangler.json\n",
+          "          printf '%s\\n' '{' '  \"name\": \"spoonjoy-storybook\",' '  \"pages_build_output_dir\": \"storybook-static\"' '}' > storybook-pages-deploy/wrangler.json\n",
           "",
         ),
       ),
@@ -1884,10 +1884,19 @@ describe("Storybook deploy warning cleanup", () => {
     const wrongOutputDir = validateDeploymentConfig(
       inputsWithStorybookWorkflow(validStorybookWorkflow().replace("\"pages_build_output_dir\": \"storybook-static\"", "\"pages_build_output_dir\": \"build/client\"")),
     );
+    const missingPagesProjectName = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(
+        validStorybookWorkflow().replace(
+          "          printf '%s\\n' '{' '  \"name\": \"spoonjoy-storybook\",' '  \"pages_build_output_dir\": \"storybook-static\"' '}' > storybook-pages-deploy/wrangler.json",
+          "          printf '%s\\n' '{' '  \"pages_build_output_dir\": \"storybook-static\"' '}' > storybook-pages-deploy/wrangler.json",
+        ),
+      ),
+    );
 
     for (const result of [missingPrepareStep, missingWranglerJson, wrongOutputDir]) {
       expect(result.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
     }
+    expect(missingPagesProjectName.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
   });
 
   it("rejects repo-root deploys and non-npm Wrangler action installs", () => {

@@ -53,7 +53,7 @@ jobs:
           rm -rf storybook-pages-deploy
           mkdir -p storybook-pages-deploy
           mv storybook-static storybook-pages-deploy/storybook-static
-          printf '%s\n' '{' '  "pages_build_output_dir": "storybook-static"' '}' > storybook-pages-deploy/wrangler.json
+          printf '%s\n' '{' '  "name": "spoonjoy-storybook",' '  "pages_build_output_dir": "storybook-static"' '}' > storybook-pages-deploy/wrangler.json
 
       - name: Deploy to Cloudflare Pages
         if: github.ref == 'refs/heads/main'

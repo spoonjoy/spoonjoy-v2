@@ -1,7 +1,7 @@
 # Autopilot State
 
-Updated: 2026-06-11 22:22 America/Los_Angeles
-Branch: `spoonjoy/storybook-deploy-warning-cleanup`
+Updated: 2026-06-12 02:47 America/Los_Angeles
+Branch: `spoonjoy/storybook-pages-wrangler-name`
 Objective: Keep the Spoonjoy autonomous queue durable and continue with the next ready work after the completed QA/image-cover smoke run.
 
 ## Current Gate
@@ -12,12 +12,12 @@ Objective: Keep the Spoonjoy autonomous queue durable and continue with the next
 - Last completed side-slice planning doc: `spoonjoy/tasks/2026-06-11-2038-planning-storybook-wrangler-action.md`
 - Last completed side-slice doing doc: `spoonjoy/tasks/2026-06-11-2038-doing-storybook-wrangler-action.md`
 - Last completed side-slice PR: #188 (`spoonjoy/storybook-wrangler-action`) merged as `03f1a854`.
-- Current side-slice goal: clean up remaining non-Node20 Storybook deploy log warnings before starting the broader `SJ-044` harness.
+- Current side-slice goal: repair the Storybook Pages deploy wrapper discovered during terminal main verification, then finish warning-clean Storybook deploy verification before starting the broader `SJ-044` harness.
 - No human gates remain under the user's explicit no-human-gates mandate unless a true human-only credential/capability blocker or genuinely unrecoverable destructive shared-state action appears.
 
 ## Next Action
 
-1. Complete and merge the Storybook deploy warning-cleanup side-slice.
+1. Complete and merge the `spoonjoy/storybook-pages-wrangler-name` hotfix branch for the Storybook Pages wrapper `name` requirement.
 2. Start `SJ-044`: environment-aware smoke, cleanup, and preflight harness. The next thin slice should focus on a broader QA cleanup harness for disposable users, recipes, spoons, OAuth clients/API credentials, generated covers, and related R2 objects, while keeping production cleanup read-first and narrow.
 
 ## Known External State
@@ -39,5 +39,6 @@ Objective: Keep the Spoonjoy autonomous queue durable and continue with the next
 - Final cold reviewer converged on PR #188 after the artifact-ordering fix. Hosted PR checks passed: Storybook `build-storybook`, CI `coverage`, and CI `e2e`; `deploy-storybook` skipped on PR as expected because Storybook deploy is guarded to `refs/heads/main`.
 - PR #188 merged as `03f1a854`; main CI, Storybook, and Production Deploy passed; production Worker/custom-domain health endpoints returned ok; `https://spoonjoy-storybook.pages.dev/` returned HTTP 200; no open PRs or `spoonjoy/storybook-wrangler-action` branch residue remained; local QA cleanup dry-run showed zero active suspicious recipes, disposable users, disposable spoons, and e2e OAuth clients.
 - Main Storybook deploy log no longer contains `node 20` or `cloudflare/pages-action`; remaining log warnings are git default-branch hints, pnpm ignored-build-script warnings, `actions/download-artifact@v8` Buffer deprecation, and Wrangler Pages config/dirty-worktree warnings.
+- Storybook warning-cleanup PR #189 merged as `7632af57`, Production Deploy passed, and CI e2e passed, but the main Storybook deploy failed because the generated Pages wrapper had only `pages_build_output_dir` and Cloudflare Pages now requires top-level `name`. Hotfix branch `spoonjoy/storybook-pages-wrangler-name` adds `name: spoonjoy-storybook` to the generated wrapper and preflight contract with red/green regression evidence; local full coverage passed with 301 files, 5972 tests, and 100% coverage.
 - Production Worker URL: `https://spoonjoy-v2.mendelow-studio.workers.dev`.
 - Production custom domain: `https://spoonjoy.app`.

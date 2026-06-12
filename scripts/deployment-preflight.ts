@@ -99,6 +99,7 @@ const REQUIRED_RATE_LIMIT_BINDINGS = [
 
 const STORYBOOK_PAGES_DEPLOY_DIR = "storybook-pages-deploy";
 const STORYBOOK_PAGES_OUTPUT_DIR = "storybook-static";
+const STORYBOOK_PAGES_PROJECT_NAME = "spoonjoy-storybook";
 const STORYBOOK_PAGES_DEPLOY_COMMAND =
   "pages deploy --project-name=spoonjoy-storybook --branch=${{ github.ref_name }} --commit-hash=${{ github.sha }} --commit-dirty=true";
 const REQUIRED_IGNORED_BUILD_PACKAGES = [
@@ -645,7 +646,7 @@ function storybookDeployPrepRunIsClean(run: string): boolean {
     `rm -rf ${STORYBOOK_PAGES_DEPLOY_DIR}`,
     `mkdir -p ${STORYBOOK_PAGES_DEPLOY_DIR}`,
     `mv ${STORYBOOK_PAGES_OUTPUT_DIR} ${STORYBOOK_PAGES_DEPLOY_DIR}/${STORYBOOK_PAGES_OUTPUT_DIR}`,
-    `printf '%s\\n' '{' '  "pages_build_output_dir": "${STORYBOOK_PAGES_OUTPUT_DIR}"' '}' > ${STORYBOOK_PAGES_DEPLOY_DIR}/wrangler.json`,
+    `printf '%s\\n' '{' '  "name": "${STORYBOOK_PAGES_PROJECT_NAME}",' '  "pages_build_output_dir": "${STORYBOOK_PAGES_OUTPUT_DIR}"' '}' > ${STORYBOOK_PAGES_DEPLOY_DIR}/wrangler.json`,
   ]);
 }
 
