@@ -1,0 +1,5378 @@
+waiting run 27427776525
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push less than a minute ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  * 🔎 CI preflight - seed backend + migration status
+  * 🌱 Seed local D1 database
+  * 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+* e2e (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  * 🎭 Install Playwright Browsers
+  * 🗄️ Apply D1 migrations
+  * 🌱 Seed local D1 database
+  * 🔐 Configure local Worker secrets
+  * 🎭 Run Playwright tests
+  * 📤 Upload Playwright Report
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push less than a minute ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  * 🌱 Seed local D1 database
+  * 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+* e2e (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  * 🎭 Install Playwright Browsers
+  * 🗄️ Apply D1 migrations
+  * 🌱 Seed local D1 database
+  * 🔐 Configure local Worker secrets
+  * 🎭 Run Playwright tests
+  * 📤 Upload Playwright Report
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push less than a minute ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  * 🌱 Seed local D1 database
+  * 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+* e2e (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  * 🎭 Install Playwright Browsers
+  * 🗄️ Apply D1 migrations
+  * 🌱 Seed local D1 database
+  * 🔐 Configure local Worker secrets
+  * 🎭 Run Playwright tests
+  * 📤 Upload Playwright Report
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push less than a minute ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  * 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+* e2e (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  * 🎭 Install Playwright Browsers
+  * 🗄️ Apply D1 migrations
+  * 🌱 Seed local D1 database
+  * 🔐 Configure local Worker secrets
+  * 🎭 Run Playwright tests
+  * 📤 Upload Playwright Report
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push less than a minute ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  * 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+* e2e (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  * 🎭 Install Playwright Browsers
+  * 🗄️ Apply D1 migrations
+  * 🌱 Seed local D1 database
+  * 🔐 Configure local Worker secrets
+  * 🎭 Run Playwright tests
+  * 📤 Upload Playwright Report
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push less than a minute ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  * 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+* e2e (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  * 🗄️ Apply D1 migrations
+  * 🌱 Seed local D1 database
+  * 🔐 Configure local Worker secrets
+  * 🎭 Run Playwright tests
+  * 📤 Upload Playwright Report
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 1 minute ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+* e2e (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  * 🌱 Seed local D1 database
+  * 🔐 Configure local Worker secrets
+  * 🎭 Run Playwright tests
+  * 📤 Upload Playwright Report
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 1 minute ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+* e2e (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  * 🌱 Seed local D1 database
+  * 🔐 Configure local Worker secrets
+  * 🎭 Run Playwright tests
+  * 📤 Upload Playwright Report
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 1 minute ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+* e2e (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  * 🎭 Run Playwright tests
+  * 📤 Upload Playwright Report
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 1 minute ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+* e2e (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  * 🎭 Run Playwright tests
+  * 📤 Upload Playwright Report
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 1 minute ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+* e2e (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  * 🎭 Run Playwright tests
+  * 📤 Upload Playwright Report
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 1 minute ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+* e2e (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  * 🎭 Run Playwright tests
+  * 📤 Upload Playwright Report
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 1 minute ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+* e2e (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  * 🎭 Run Playwright tests
+  * 📤 Upload Playwright Report
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 1 minute ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+* e2e (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  * 🎭 Run Playwright tests
+  * 📤 Upload Playwright Report
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 1 minute ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+* e2e (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  * 🎭 Run Playwright tests
+  * 📤 Upload Playwright Report
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 1 minute ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+* e2e (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  * 🎭 Run Playwright tests
+  * 📤 Upload Playwright Report
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 1 minute ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+* e2e (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  * 🎭 Run Playwright tests
+  * 📤 Upload Playwright Report
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 1 minute ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+* e2e (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  * 🎭 Run Playwright tests
+  * 📤 Upload Playwright Report
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 1 minute ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+* e2e (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  * 🎭 Run Playwright tests
+  * 📤 Upload Playwright Report
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 2 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+* e2e (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  * 🎭 Run Playwright tests
+  * 📤 Upload Playwright Report
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 2 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+* e2e (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  * 🎭 Run Playwright tests
+  * 📤 Upload Playwright Report
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 2 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+* e2e (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  * 🎭 Run Playwright tests
+  * 📤 Upload Playwright Report
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 2 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+* e2e (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  * 🎭 Run Playwright tests
+  * 📤 Upload Playwright Report
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 2 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+* e2e (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  * 🎭 Run Playwright tests
+  * 📤 Upload Playwright Report
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 2 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+* e2e (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  * 🎭 Run Playwright tests
+  * 📤 Upload Playwright Report
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 2 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+* e2e (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  * 🎭 Run Playwright tests
+  * 📤 Upload Playwright Report
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 2 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+* e2e (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 2 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 2 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 2 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 2 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 2 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 3 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 3 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 3 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 3 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 3 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 3 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 3 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 3 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 3 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 3 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 3 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 3 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 3 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 3 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 4 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 4 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 4 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 4 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 4 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 4 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 4 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 4 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 4 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 4 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 4 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 4 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 4 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 4 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 5 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 5 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 5 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 5 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 5 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 5 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 5 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 5 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 5 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 5 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 5 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 5 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 5 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 5 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 5 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 6 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 6 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 6 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 6 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 6 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 6 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 6 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 6 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 6 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 6 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 6 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 6 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 6 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 6 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 7 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 7 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 7 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 7 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 7 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 7 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 7 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 7 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 7 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 7 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 7 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 7 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 7 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 7 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 8 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 8 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 8 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 8 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 8 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 8 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 8 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 8 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 8 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 8 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 8 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 8 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 8 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 8 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 9 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 9 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 9 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 9 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 9 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 9 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 9 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 9 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 9 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 9 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 9 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  * 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 9 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  ✓ 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 9 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  ✓ 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 9 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  ✓ 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 10 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  ✓ 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 10 minutes ago
+
+JOBS
+* coverage (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  ✓ 🧪 Test & Coverage
+  * 🏗️ Build
+  * Post 📦 Setup Node.js
+  * Post Run actions/checkout@v6
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main CI · 27427776525
+Triggered via push about 10 minutes ago
+
+JOBS
+✓ coverage in 10m5s (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  ✓ 🧪 Test & Coverage
+  ✓ 🏗️ Build
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+✓ main CI · 27427776525
+Triggered via push about 10 minutes ago
+
+JOBS
+✓ coverage in 10m5s (ID 81069953189)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🗄️ Apply D1 migrations (local)
+  ✓ 🗄️ Apply Prisma schema to test database
+  ✓ 🔎 CI preflight - seed backend + migration status
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔍 Typecheck
+  ✓ 🧪 Test & Coverage
+  ✓ 🏗️ Build
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+✓ e2e in 2m24s (ID 81069953247)
+  ✓ Set up job
+  ✓ Run actions/checkout@v6
+  ✓ 📦 Setup Node.js
+  ✓ 📦 Activate pnpm
+  ✓ 📥 Install dependencies
+  ✓ 🔧 Generate Prisma client
+  ✓ 🔒 Verify blake3 override resolution
+  ✓ 🎭 Install Playwright Browsers
+  ✓ 🗄️ Apply D1 migrations
+  ✓ 🌱 Seed local D1 database
+  ✓ 🔐 Configure local Worker secrets
+  ✓ 🎭 Run Playwright tests
+  ✓ 📤 Upload Playwright Report
+  ✓ Post 📦 Setup Node.js
+  ✓ Post Run actions/checkout@v6
+  ✓ Complete job
+waiting run 27427777080
+Run Production Deploy (27427777080) has already completed with 'success'
+waiting run 27427776430
+Run Storybook (27427776430) has already completed with 'success'

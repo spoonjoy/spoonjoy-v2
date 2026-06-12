@@ -1,0 +1,12 @@
+before:
+  spoonjoy/sj-044-cleanup-harness
+* spoonjoy/sj-044-terminal-verification
+9ffa098de05145d9429457705f8bf99b0621e280	refs/heads/spoonjoy/sj-044-cleanup-harness
+To https://github.com/arimendelow/spoonjoy-v2.git
+ - [deleted]           spoonjoy/sj-044-cleanup-harness
+error: the branch 'spoonjoy/sj-044-cleanup-harness' is not fully merged
+hint: If you are sure you want to delete it, run 'git branch -D spoonjoy/sj-044-cleanup-harness'
+hint: Disable this message with "git config set advice.forceDeleteBranch false"
+Deleted branch spoonjoy/sj-044-cleanup-harness (was 9ffa098d).
+after:
+* spoonjoy/sj-044-terminal-verification
