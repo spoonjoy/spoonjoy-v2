@@ -87,7 +87,7 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 **Output**: Cleanup CLI implementation and green focused cleanup CLI tests in `unit-2b-green.log`.
 **Acceptance**: Unit 2a tests pass with no warnings; no D1 SQL semantics or R2 deletion behavior beyond target selection is changed in this unit; remote QA apply remains refused.
 
-### ⬜ Unit 2c: Cleanup Target/CLI Safety — Coverage & Refactor
+### ✅ Unit 2c: Cleanup Target/CLI Safety — Coverage & Refactor
 **What**: Verify target/CLI parser coverage, including help text and invalid argument branches.
 **Output**: Targeted coverage output in `unit-2c-coverage.log`.
 **Acceptance**: Cleanup target/CLI new code reaches 100% coverage; focused tests remain green.
@@ -211,3 +211,5 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 - 2026-06-12 06:20 Unit 1b cold review complete: Peirce returned CONVERGED with no findings; verdict recorded in `unit-1b-review.md`.
 - 2026-06-12 06:22 Unit 2a complete: added cleanup target parser/summary/run-command red tests for local, QA, and production safety behavior; captured expected failures in `unit-2a-red.log`. Unit review skipped (reason: red-test unit; implementation review follows green unit).
 - 2026-06-12 06:24 Unit 2b complete: implemented target-aware cleanup parser, target summary output, local apply, QA remote dry-run, QA apply refusal, production read-only dry-run, and production broad-apply refusal; focused tests and build captured in `unit-2b-green.log` and `unit-2b-build.log`.
+- 2026-06-12 06:29 Unit 2b cold review complete: Raman reported one NIT about remote dry-run output mentioning local D1; verdict recorded in `unit-2b-review.md`.
+- 2026-06-12 06:29 Unit 2c complete: fixed Raman's target-output nit, added CLI default/help/no-output/error-path coverage, verified 100% coverage for `cleanup-local-qa-data.mjs`, and captured focused/build logs in `unit-2c-focused.log`, `unit-2c-coverage.log`, and `unit-2c-build.log`.
