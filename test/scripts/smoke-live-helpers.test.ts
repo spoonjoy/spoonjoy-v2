@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import * as smokeHelpers from "../../scripts/smoke-live-helpers.mjs";
 import {
   buildQaR2DeleteArgs,
   buildQaR2GetArgs,
@@ -264,5 +265,98 @@ describe("smoke-live helpers", () => {
 
   it("rejects unsupported target envs for D1 arg builders", () => {
     expect(() => buildUserCountD1Args("codex@example.com", { targetEnv: "staging" })).toThrow(/targetEnv/);
+  });
+
+  it("builds live smoke artifact metadata with empty R2 arrays for normal smoke", () => {
+    expect(typeof smokeHelpers.buildSmokeReport).toBe("function");
+
+    const report = smokeHelpers.buildSmokeReport({
+      generatedAt: "2026-06-12T14:00:00.000Z",
+      target: {
+        targetEnv: "production",
+        baseUrl: "https://spoonjoy.app",
+        d1Target: "production D1 spoonjoy (--remote)",
+        r2Target: "production R2 spoonjoy-photos (--remote)",
+        destructiveScope: "production read-only by default; exact smoke cleanup only",
+      },
+      git: { branch: "spoonjoy/sj-044-cleanup-harness", commit: "abc1234" },
+      created: {
+        email: "codex-smoke@example.com",
+        username: "codex_smoke",
+        recipeTitle: "Codex smoke skillet",
+        recipeId: "recipe-1",
+      },
+      screenshots: ["01.png"],
+      consoleErrors: [],
+      pageErrors: [],
+      cleanup: { target: "production D1" },
+      cleanupVerification: { remaining: 0 },
+      apple: { skipped: false },
+      imageCoverSmoke: null,
+      pushPublicKeyStatus: 200,
+    });
+
+    expect(report.environment).toEqual({
+      targetEnv: "production",
+      baseUrl: "https://spoonjoy.app",
+      d1Target: "production D1 spoonjoy (--remote)",
+      r2Target: "production R2 spoonjoy-photos (--remote)",
+      destructiveScope: "production read-only by default; exact smoke cleanup only",
+    });
+    expect(report.git).toEqual({ branch: "spoonjoy/sj-044-cleanup-harness", commit: "abc1234" });
+    expect(report.created).toEqual({
+      email: "codex-smoke@example.com",
+      username: "codex_smoke",
+      recipeTitle: "Codex smoke skillet",
+      recipeId: "recipe-1",
+    });
+    expect(report.cleanup).toEqual({ target: "production D1" });
+    expect(report.cleanupVerification).toEqual({ remaining: 0 });
+    expect(report.r2).toEqual({ retainedKeys: [], deletedKeys: [], verifiedDeletedKeys: [] });
+    expect(report).toMatchObject({
+      baseUrl: "https://spoonjoy.app",
+      email: "codex-smoke@example.com",
+      username: "codex_smoke",
+      recipeTitle: "Codex smoke skillet",
+      recipeId: "recipe-1",
+      targetEnv: "production",
+    });
+  });
+
+  it("mirrors image-cover R2 arrays into the top-level live smoke artifact", () => {
+    expect(typeof smokeHelpers.buildSmokeReport).toBe("function");
+
+    const report = smokeHelpers.buildSmokeReport({
+      generatedAt: "2026-06-12T14:00:00.000Z",
+      target: {
+        targetEnv: "qa",
+        baseUrl: "https://spoonjoy-v2-qa.mendelow-studio.workers.dev",
+        d1Target: "QA D1 spoonjoy-qa (--remote --env qa)",
+        r2Target: "QA R2 spoonjoy-photos-qa (--remote)",
+        destructiveScope: "QA disposable test data only",
+      },
+      git: { branch: "spoonjoy/sj-044-cleanup-harness", commit: "def5678" },
+      created: {
+        email: "codex-smoke@example.com",
+        username: "codex_smoke",
+        recipeTitle: "Codex smoke skillet",
+        recipeId: "recipe-1",
+      },
+      imageCoverSmoke: {
+        r2: {
+          retainedKeys: ["recipes/other-user/uploads/keep.jpg"],
+          deletedKeys: ["recipes/user-1/uploads/oriented.jpg"],
+          verifiedDeletedKeys: ["recipes/user-1/uploads/oriented.jpg"],
+          generatedCoverKeys: ["covers/generated.jpg"],
+        },
+      },
+    });
+
+    expect(report.r2).toEqual({
+      retainedKeys: ["recipes/other-user/uploads/keep.jpg"],
+      deletedKeys: ["recipes/user-1/uploads/oriented.jpg"],
+      verifiedDeletedKeys: ["recipes/user-1/uploads/oriented.jpg"],
+      generatedCoverKeys: ["covers/generated.jpg"],
+    });
   });
 });

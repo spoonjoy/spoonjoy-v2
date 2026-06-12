@@ -206,6 +206,7 @@ describe("API live smoke target handling", () => {
 
       const report = JSON.parse(await readFile(join(outDir, "api-smoke-results.json"), "utf8")) as {
         environment?: Record<string, unknown>;
+        git?: Record<string, unknown>;
       };
 
       expect(report.environment).toEqual({
@@ -214,6 +215,10 @@ describe("API live smoke target handling", () => {
         d1Target: "production D1 spoonjoy (--remote)",
         r2Target: "production R2 spoonjoy-photos (--remote)",
         destructiveScope: "production read-only by default; exact smoke cleanup only",
+      });
+      expect(report.git).toEqual({
+        branch: expect.any(String),
+        commit: expect.stringMatching(/^(unknown|[0-9a-f]{7,40})$/),
       });
     } finally {
       await rm(outDir, { recursive: true, force: true });
