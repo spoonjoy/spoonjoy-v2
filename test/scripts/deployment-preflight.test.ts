@@ -1677,6 +1677,74 @@ describe("Storybook deploy workflow", () => {
     expect(missingDownload.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
   });
 
+  it("rejects Storybook deploy workflows that do not upload the built artifact", () => {
+    const inputs = inputsWithStorybookWorkflow(
+      validStorybookWorkflow().replace(
+        [
+          "      - uses: actions/upload-artifact@v7",
+          "        if: github.ref == 'refs/heads/main'",
+          "        with:",
+          "          name: storybook-static",
+          "          path: storybook-static",
+        ].join("\n"),
+        [
+          "      - uses: actions/upload-artifact@v7",
+          "        if: github.ref == 'refs/heads/main'",
+          "        with:",
+          "          name: docs-static",
+          "          path: storybook-static",
+        ].join("\n"),
+      ),
+    );
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
+  });
+
+  it("rejects Storybook deploy workflows that deploy before downloading the artifact", () => {
+    const inputs = inputsWithStorybookWorkflow(
+      validStorybookWorkflow().replace(
+        [
+          "      - uses: actions/download-artifact@v8",
+          "        with:",
+          "          name: storybook-static",
+          "          path: storybook-static",
+          "      - uses: pnpm/action-setup@v6",
+          "        with:",
+          "          version: '10.28.1'",
+          "      - name: Deploy to Cloudflare Pages",
+          "        uses: cloudflare/wrangler-action@v4",
+          "        with:",
+          "          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}",
+          "          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
+          "          command: pages deploy storybook-static --project-name=spoonjoy-storybook",
+          "          gitHubToken: ${{ secrets.GITHUB_TOKEN }}",
+        ].join("\n"),
+        [
+          "      - uses: pnpm/action-setup@v6",
+          "        with:",
+          "          version: '10.28.1'",
+          "      - name: Deploy to Cloudflare Pages",
+          "        uses: cloudflare/wrangler-action@v4",
+          "        with:",
+          "          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}",
+          "          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
+          "          command: pages deploy storybook-static --project-name=spoonjoy-storybook",
+          "          gitHubToken: ${{ secrets.GITHUB_TOKEN }}",
+          "      - uses: actions/download-artifact@v8",
+          "        with:",
+          "          name: storybook-static",
+          "          path: storybook-static",
+        ].join("\n"),
+      ),
+    );
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
+  });
+
   it("rejects Storybook artifact download steps without a with block", () => {
     const inputs = inputsWithStorybookWorkflow(
       validStorybookWorkflow().replace(
