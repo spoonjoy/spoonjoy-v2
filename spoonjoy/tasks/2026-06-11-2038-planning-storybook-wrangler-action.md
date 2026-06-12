@@ -1,6 +1,6 @@
 # Planning: Storybook Wrangler Action Migration
 
-**Status**: drafting
+**Status**: approved
 **Created**: 2026-06-11 20:39
 
 ## Goal
@@ -64,3 +64,4 @@ This is a workflow-only migration. Keep the deploy job scoped to `refs/heads/mai
 ## Progress Log
 - 2026-06-11 20:39 Created
 - 2026-06-11 20:39 Planning review Round 1 found `wrangler-action@v3` still on Node 20, timestamp drift, and missing explicit workflow permission/syntax criteria.
+- 2026-06-11 20:47 Planning review Round 2 converged; status set to approved.
