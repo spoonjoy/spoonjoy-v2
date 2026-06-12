@@ -81,42 +81,78 @@ function validStorybookWorkflow(): string {
     "  pull_request:",
     "    branches: [main]",
     "  workflow_dispatch:",
+    "env:",
+    "  GIT_CONFIG_COUNT: '1'",
+    "  GIT_CONFIG_KEY_0: init.defaultBranch",
+    "  GIT_CONFIG_VALUE_0: main",
     "jobs:",
     "  build-storybook:",
-    "    steps:",
-    "      - uses: actions/checkout@v6",
-    "      - run: pnpm build-storybook",
-    "      - uses: actions/upload-artifact@v7",
-    "        if: github.ref == 'refs/heads/main'",
-    "        with:",
-    "          name: storybook-static",
-    "          path: storybook-static",
-    "  deploy-storybook:",
-    "    if: github.ref == 'refs/heads/main'",
-    "    needs: build-storybook",
+    "    name: build-storybook",
+    "    runs-on: ubuntu-latest",
     "    permissions:",
     "      contents: read",
     "      deployments: write",
     "    steps:",
-    "      - uses: actions/download-artifact@v8",
-    "        with:",
-    "          name: storybook-static",
-    "          path: storybook-static",
+    "      - uses: actions/checkout@v6",
     "      - uses: pnpm/action-setup@v6",
     "        with:",
     "          version: '10.28.1'",
+    "      - uses: actions/setup-node@v6",
+    "        with:",
+    "          node-version: '22'",
+    "          cache: 'pnpm'",
+    "      - run: pnpm install --frozen-lockfile",
+    "      - run: pnpm prisma:generate",
+    "      - run: pnpm build-storybook",
+    "      - name: Prepare Cloudflare Pages deploy directory",
+    "        if: github.ref == 'refs/heads/main'",
+    "        run: |",
+    "          rm -rf storybook-pages-deploy",
+    "          mkdir -p storybook-pages-deploy",
+    "          mv storybook-static storybook-pages-deploy/storybook-static",
+    "          printf '%s\\n' '{' '  \"pages_build_output_dir\": \"storybook-static\"' '}' > storybook-pages-deploy/wrangler.json",
     "      - name: Deploy to Cloudflare Pages",
+    "        if: github.ref == 'refs/heads/main'",
     "        uses: cloudflare/wrangler-action@v4",
     "        with:",
     "          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}",
     "          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
-    "          command: pages deploy storybook-static --project-name=spoonjoy-storybook",
+    "          workingDirectory: storybook-pages-deploy",
+    "          packageManager: npm",
+    "          command: pages deploy --project-name=spoonjoy-storybook --branch=${{ github.ref_name }} --commit-hash=${{ github.sha }} --commit-dirty=true",
     "          gitHubToken: ${{ secrets.GITHUB_TOKEN }}",
   ].join("\n");
 }
 
-function inputsWithStorybookWorkflow(workflow: string): DeploymentPreflightInputs {
-  return { ...validInputs(), storybookWorkflow: workflow };
+function validGitignore(): string {
+  return [
+    "node_modules",
+    "storybook-static",
+    "storybook-pages-deploy/",
+  ].join("\n");
+}
+
+function validPnpmWorkspace(): string {
+  return [
+    "allowBuilds:",
+    "  \"@prisma/client\": false",
+    "  \"@prisma/engines\": false",
+    "  \"@swc/core\": false",
+    "  core-js: false",
+    "  esbuild: false",
+    "  prisma: false",
+    "  protobufjs: false",
+    "  sharp: false",
+    "  unrs-resolver: false",
+    "  workerd: false",
+  ].join("\n");
+}
+
+function inputsWithStorybookWorkflow(
+  workflow: string,
+  overrides: Partial<DeploymentPreflightInputs> = {},
+): DeploymentPreflightInputs {
+  return { ...validInputs(), storybookWorkflow: workflow, ...overrides };
 }
 
 function validInputs(): DeploymentPreflightInputs {
@@ -198,6 +234,8 @@ function validInputs(): DeploymentPreflightInputs {
     ].join("\n"),
     qaImageCoverSmokeWorkflow: validQaImageCoverSmokeWorkflow(),
     storybookWorkflow: validStorybookWorkflow(),
+    gitignore: validGitignore(),
+    pnpmWorkspace: validPnpmWorkspace(),
     cloudflareEnvDts: "DB?: D1Database; PHOTOS?: R2Bucket; SESSION_SECRET?: string; OPENAI_API_KEY?: string; GOOGLE_API_KEY?: string; GEMINI_API_KEY?: string; GEMINI_IMAGE_MODEL?: string; GEMINI_IMAGE_TIMEOUT_MS?: string; IMAGE_PROVIDER_PRIMARY?: string; IMAGE_PROVIDER_FALLBACKS?: string; GOOGLE_CLIENT_ID?: string; GOOGLE_CLIENT_SECRET?: string; GITHUB_CLIENT_ID?: string; GITHUB_CLIENT_SECRET?: string; APPLE_CLIENT_ID?: string; APPLE_TEAM_ID?: string; APPLE_KEY_ID?: string; APPLE_PRIVATE_KEY?: string; VAPID_PUBLIC_KEY?: string; VAPID_PRIVATE_KEY?: string; VAPID_SUBJECT?: string; POSTHOG_KEY?: string; POSTHOG_HOST?: string; POSTHOG_DISABLED?: string;",
     readme: "pnpm run deploy:preflight wrangler d1 migrations apply DB --remote wrangler r2 bucket create spoonjoy-photos wrangler secret put SESSION_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET APPLE_CLIENT_ID APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY OPENAI_API_KEY GOOGLE_API_KEY VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY VAPID_SUBJECT GEMINI_API_KEY GEMINI_IMAGE_MODEL GEMINI_IMAGE_TIMEOUT_MS gemini-3.1-flash-image IMAGE_PROVIDER_PRIMARY IMAGE_PROVIDER_FALLBACKS VITE_POSTHOG_KEY VITE_POSTHOG_HOST VITE_POSTHOG_DISABLED POSTHOG_KEY POSTHOG_HOST POSTHOG_DISABLED server lifecycle telemetry docs/analytics-privacy.md",
     deploymentDoc: "pnpm run deploy:preflight smoke:api wrangler d1 migrations apply DB --remote wrangler r2 bucket create spoonjoy-photos wrangler secret put SESSION_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET APPLE_CLIENT_ID APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY OPENAI_API_KEY GOOGLE_API_KEY VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY VAPID_SUBJECT GEMINI_API_KEY GEMINI_IMAGE_MODEL GEMINI_IMAGE_TIMEOUT_MS gemini-3.1-flash-image IMAGE_PROVIDER_PRIMARY IMAGE_PROVIDER_FALLBACKS wrangler secret put POSTHOG_KEY VITE_POSTHOG_KEY VITE_POSTHOG_HOST VITE_POSTHOG_DISABLED POSTHOG_KEY POSTHOG_HOST POSTHOG_DISABLED server lifecycle telemetry",
@@ -1575,315 +1613,532 @@ describe("QA image-cover smoke workflow", () => {
   });
 });
 
-describe("Storybook deploy workflow", () => {
-  it("requires a Wrangler-action Storybook deploy workflow in preflight", () => {
+describe("Storybook deploy warning cleanup", () => {
+  it("accepts a single-job warning-clean Storybook deploy workflow", () => {
     const result = validateDeploymentConfig(inputsWithStorybookWorkflow(validStorybookWorkflow()));
 
     expect(result.errors.map((item) => item.name)).not.toContain("Storybook deploy workflow");
+    expect(result.errors.map((item) => item.name)).not.toContain("Storybook generated deploy ignore");
+    expect(result.errors.map((item) => item.name)).not.toContain("pnpm build script policy");
     expect(result.checks.find((item) => item.name === "Storybook deploy workflow")?.ok).toBe(true);
   });
 
-  it("rejects deprecated Pages action deployments", () => {
-    const inputs = inputsWithStorybookWorkflow(
-      validStorybookWorkflow()
-        .replace("cloudflare/wrangler-action@v4", "cloudflare/pages-action@v1")
-        .replace("command: pages deploy storybook-static --project-name=spoonjoy-storybook", "directory: storybook-static"),
+  it("rejects deprecated Pages action, artifact actions, or a separate deploy job", () => {
+    const pagesAction = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(validStorybookWorkflow().replace("cloudflare/wrangler-action@v4", "cloudflare/pages-action@v1")),
     );
-
-    const result = validateDeploymentConfig(inputs);
-
-    expect(result.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
-  });
-
-  it("requires deployment permissions, main-branch deploy guard, and GitHub deployment token", () => {
-    const inputs = inputsWithStorybookWorkflow(
-      validStorybookWorkflow()
-        .replace("      deployments: write\n", "")
-        .replace("    if: github.ref == 'refs/heads/main'\n", "")
-        .replace("          gitHubToken: ${{ secrets.GITHUB_TOKEN }}\n", ""),
+    const mixedCasePagesAction = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(validStorybookWorkflow().replace("cloudflare/wrangler-action@v4", "Cloudflare/pages-action@v1")),
     );
-
-    const result = validateDeploymentConfig(inputs);
-
-    expect(result.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
-  });
-
-  it("rejects Storybook deploy workflows without deployments write permission", () => {
-    const inputs = inputsWithStorybookWorkflow(validStorybookWorkflow().replace("      deployments: write\n", ""));
-
-    const result = validateDeploymentConfig(inputs);
-
-    expect(result.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
-  });
-
-  it("rejects Storybook deploy workflows without a push-to-main trigger", () => {
-    const inputs = inputsWithStorybookWorkflow(
-      validStorybookWorkflow().replace("  push:\n    branches: [main]\n", ""),
-    );
-
-    const result = validateDeploymentConfig(inputs);
-
-    expect(result.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
-  });
-
-  it("rejects Storybook deploy workflows without the deploy job", () => {
-    const inputs = inputsWithStorybookWorkflow(
-      validStorybookWorkflow().replace("  deploy-storybook:", "  preview-storybook:"),
-    );
-
-    const result = validateDeploymentConfig(inputs);
-
-    expect(result.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
-  });
-
-  it("rejects Storybook deploy workflows without the build job", () => {
-    const inputs = inputsWithStorybookWorkflow(
-      validStorybookWorkflow().replace("  build-storybook:", "  compile-storybook:"),
-    );
-
-    const result = validateDeploymentConfig(inputs);
-
-    expect(result.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
-  });
-
-  it("rejects Storybook build jobs without steps", () => {
-    const inputs = inputsWithStorybookWorkflow(
-      validStorybookWorkflow().replace(
-        "    steps:\n      - uses: actions/checkout@v6",
-        "    no_steps:\n      - uses: actions/checkout@v6",
-      ),
-    );
-
-    const result = validateDeploymentConfig(inputs);
-
-    expect(result.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
-  });
-
-  it("rejects Storybook deploy workflows without a build dependency or main ref guard", () => {
-    const missingNeeds = validateDeploymentConfig(
-      inputsWithStorybookWorkflow(validStorybookWorkflow().replace("    needs: build-storybook\n", "")),
-    );
-    const missingIf = validateDeploymentConfig(
+    const uploadArtifact = validateDeploymentConfig(
       inputsWithStorybookWorkflow(
         validStorybookWorkflow().replace(
-          "  deploy-storybook:\n    if: github.ref == 'refs/heads/main'\n    needs: build-storybook",
-          "  deploy-storybook:\n    needs: build-storybook",
-        ),
-      ),
-    );
-
-    expect(missingNeeds.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
-    expect(missingIf.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
-  });
-
-  it("rejects Storybook deploy workflows without deploy steps or artifact download", () => {
-    const missingSteps = validateDeploymentConfig(
-      inputsWithStorybookWorkflow(
-        validStorybookWorkflow().replace(
-          "    permissions:\n      contents: read\n      deployments: write\n    steps:",
-          "    permissions:\n      contents: read\n      deployments: write\n    no_steps:",
-        ),
-      ),
-    );
-    const missingDownload = validateDeploymentConfig(
-      inputsWithStorybookWorkflow(
-        validStorybookWorkflow().replace(
+          "      - name: Prepare Cloudflare Pages deploy directory",
           [
-            "      - uses: actions/download-artifact@v8",
+            "      - uses: actions/upload-artifact@v7",
+            "        if: github.ref == 'refs/heads/main'",
             "        with:",
             "          name: storybook-static",
             "          path: storybook-static",
-          ].join("\n"),
-          [
-            "      - uses: actions/download-artifact@v8",
-            "        with:",
-            "          name: wrong-artifact",
-            "          path: storybook-static",
+            "      - name: Prepare Cloudflare Pages deploy directory",
           ].join("\n"),
         ),
       ),
     );
-
-    expect(missingSteps.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
-    expect(missingDownload.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
-  });
-
-  it("rejects Storybook artifact steps without the expected with keys", () => {
-    const inputs = inputsWithStorybookWorkflow(
-      validStorybookWorkflow().replace(
-        [
-          "      - uses: actions/download-artifact@v8",
-          "        with:",
-          "          name: storybook-static",
-          "          path: storybook-static",
-        ].join("\n"),
-        [
-          "      - uses: actions/download-artifact@v8",
-          "        with:",
-          "          artifact: storybook-static",
-          "          path: storybook-static",
-        ].join("\n"),
+    const mixedCaseUploadArtifact = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(
+        validStorybookWorkflow().replace(
+          "      - name: Prepare Cloudflare Pages deploy directory",
+          [
+            "      - uses: Actions/upload-artifact@v7",
+            "        if: github.ref == 'refs/heads/main'",
+            "        with:",
+            "          name: storybook-static",
+            "          path: storybook-static",
+            "      - name: Prepare Cloudflare Pages deploy directory",
+          ].join("\n"),
+        ),
       ),
     );
-
-    const result = validateDeploymentConfig(inputs);
-
-    expect(result.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
-  });
-
-  it("rejects Storybook deploy workflows that do not upload the built artifact", () => {
-    const inputs = inputsWithStorybookWorkflow(
-      validStorybookWorkflow().replace(
-        [
-          "      - uses: actions/upload-artifact@v7",
-          "        if: github.ref == 'refs/heads/main'",
-          "        with:",
-          "          name: storybook-static",
-          "          path: storybook-static",
-        ].join("\n"),
-        [
-          "      - uses: actions/upload-artifact@v7",
-          "        if: github.ref == 'refs/heads/main'",
-          "        with:",
-          "          name: docs-static",
-          "          path: storybook-static",
-        ].join("\n"),
-      ),
-    );
-
-    const result = validateDeploymentConfig(inputs);
-
-    expect(result.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
-  });
-
-  it("rejects Storybook deploy workflows that deploy before downloading the artifact", () => {
-    const inputs = inputsWithStorybookWorkflow(
-      validStorybookWorkflow().replace(
-        [
-          "      - uses: actions/download-artifact@v8",
-          "        with:",
-          "          name: storybook-static",
-          "          path: storybook-static",
-          "      - uses: pnpm/action-setup@v6",
-          "        with:",
-          "          version: '10.28.1'",
+    const downloadArtifact = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(
+        validStorybookWorkflow().replace(
           "      - name: Deploy to Cloudflare Pages",
-          "        uses: cloudflare/wrangler-action@v4",
-          "        with:",
-          "          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}",
-          "          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
-          "          command: pages deploy storybook-static --project-name=spoonjoy-storybook",
-          "          gitHubToken: ${{ secrets.GITHUB_TOKEN }}",
-        ].join("\n"),
-        [
-          "      - uses: pnpm/action-setup@v6",
-          "        with:",
-          "          version: '10.28.1'",
+          [
+            "      - uses: actions/download-artifact@v8",
+            "        if: github.ref == 'refs/heads/main'",
+            "        with:",
+            "          name: storybook-static",
+            "          path: storybook-static",
+            "      - name: Deploy to Cloudflare Pages",
+          ].join("\n"),
+        ),
+      ),
+    );
+    const mixedCaseDownloadArtifact = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(
+        validStorybookWorkflow().replace(
           "      - name: Deploy to Cloudflare Pages",
-          "        uses: cloudflare/wrangler-action@v4",
-          "        with:",
-          "          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}",
-          "          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
-          "          command: pages deploy storybook-static --project-name=spoonjoy-storybook",
+          [
+            "      - uses: Actions/download-artifact@v8",
+            "        if: github.ref == 'refs/heads/main'",
+            "        with:",
+            "          name: storybook-static",
+            "          path: storybook-static",
+            "      - name: Deploy to Cloudflare Pages",
+          ].join("\n"),
+        ),
+      ),
+    );
+    const separateDeployJob = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(
+        validStorybookWorkflow() + "\n  deploy-storybook:\n    if: github.ref == 'refs/heads/main'\n    needs: build-storybook\n    steps:\n      - run: echo deploy",
+      ),
+    );
+    const renamedDeployJob = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(
+        validStorybookWorkflow() +
+          [
+            "",
+            "  other-deploy:",
+            "    if: github.ref == 'refs/heads/main'",
+            "    needs: build-storybook",
+            "    steps:",
+            "      - uses: cloudflare/wrangler-action@v4",
+            "        with:",
+            "          command: pages deploy storybook-static --project-name=spoonjoy-storybook",
+          ].join("\n"),
+      ),
+    );
+    const quotedRenamedDeployJob = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(
+        validStorybookWorkflow() +
+          [
+            "",
+            '  "other-deploy":',
+            "    if: github.ref == 'refs/heads/main'",
+            "    needs: build-storybook",
+            "    steps:",
+            "      - uses: cloudflare/wrangler-action@v4",
+          ].join("\n"),
+      ),
+    );
+    const singleQuotedRenamedDeployJob = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(
+        validStorybookWorkflow() +
+          [
+            "",
+            "  'other-deploy':",
+            "    if: github.ref == 'refs/heads/main'",
+            "    needs: build-storybook",
+            "    steps:",
+            "      - uses: cloudflare/wrangler-action@v4",
+          ].join("\n"),
+      ),
+    );
+
+    for (const result of [
+      pagesAction,
+      mixedCasePagesAction,
+      uploadArtifact,
+      mixedCaseUploadArtifact,
+      downloadArtifact,
+      mixedCaseDownloadArtifact,
+      separateDeployJob,
+      renamedDeployJob,
+      quotedRenamedDeployJob,
+      singleQuotedRenamedDeployJob,
+    ]) {
+      expect(result.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
+    }
+  });
+
+  it("requires deployment permissions, main-only deploy steps, and the GitHub deployment token", () => {
+    const missingDeployPermission = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(validStorybookWorkflow().replace("      deployments: write\n", "")),
+    );
+    const missingPrepareGuard = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(
+        validStorybookWorkflow().replace(
+          "      - name: Prepare Cloudflare Pages deploy directory\n        if: github.ref == 'refs/heads/main'",
+          "      - name: Prepare Cloudflare Pages deploy directory",
+        ),
+      ),
+    );
+    const missingDeployGuard = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(
+        validStorybookWorkflow().replace(
+          "      - name: Deploy to Cloudflare Pages\n        if: github.ref == 'refs/heads/main'",
+          "      - name: Deploy to Cloudflare Pages",
+        ),
+      ),
+    );
+    const missingToken = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(validStorybookWorkflow().replace("          gitHubToken: ${{ secrets.GITHUB_TOKEN }}", "")),
+    );
+
+    expect(missingDeployPermission.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
+    expect(missingPrepareGuard.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
+    expect(missingDeployGuard.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
+    expect(missingToken.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
+  });
+
+  it("requires push-to-main trigger and workflow-level Git default-branch config", () => {
+    const missingOnBlock = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(validStorybookWorkflow().replace("on:\n  push:\n    branches: [main]\n  pull_request:\n    branches: [main]\n  workflow_dispatch:\n", "")),
+    );
+    const missingPushMain = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(validStorybookWorkflow().replace("  push:\n    branches: [main]\n", "")),
+    );
+    const missingPullRequestMain = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(validStorybookWorkflow().replace("  pull_request:\n    branches: [main]\n", "")),
+    );
+    const extraPullRequestTarget = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(
+        validStorybookWorkflow().replace(
+          "  workflow_dispatch:\n",
+          "  pull_request_target:\n    branches: [main]\n  workflow_dispatch:\n",
+        ),
+      ),
+    );
+    const quotedExtraPullRequestTarget = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(
+        validStorybookWorkflow().replace(
+          "  workflow_dispatch:\n",
+          "  \"pull_request_target\":\n    branches: [main]\n  workflow_dispatch:\n",
+        ),
+      ),
+    );
+    const singleQuotedExtraPullRequestTarget = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(
+        validStorybookWorkflow().replace(
+          "  workflow_dispatch:\n",
+          "  'pull_request_target':\n    branches: [main]\n  workflow_dispatch:\n",
+        ),
+      ),
+    );
+    const missingGitConfig = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(
+        validStorybookWorkflow().replace(
+          "env:\n  GIT_CONFIG_COUNT: '1'\n  GIT_CONFIG_KEY_0: init.defaultBranch\n  GIT_CONFIG_VALUE_0: main\n",
+          "",
+        ),
+      ),
+    );
+
+    expect(missingOnBlock.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
+    expect(missingPushMain.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
+    expect(missingPullRequestMain.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
+    expect(extraPullRequestTarget.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
+    expect(quotedExtraPullRequestTarget.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
+    expect(singleQuotedExtraPullRequestTarget.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
+    expect(missingGitConfig.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
+  });
+
+  it("rejects missing Storybook build job, steps, or build command", () => {
+    const missingJob = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(validStorybookWorkflow().replace("  build-storybook:", "  compile-storybook:")),
+    );
+    const missingSteps = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(
+        validStorybookWorkflow().replace(
+          "    steps:\n      - uses: actions/checkout@v6",
+          "    no_steps:\n      - uses: actions/checkout@v6",
+        ),
+      ),
+    );
+    const missingBuildCommand = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(validStorybookWorkflow().replace("      - run: pnpm build-storybook\n", "")),
+    );
+
+    for (const result of [missingJob, missingSteps, missingBuildCommand]) {
+      expect(result.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
+    }
+  });
+
+  it("requires clean deploy directory preparation and generated Pages wrangler config", () => {
+    const missingPrepareStep = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(
+        validStorybookWorkflow().replace(
+          [
+            "      - name: Prepare Cloudflare Pages deploy directory",
+            "        if: github.ref == 'refs/heads/main'",
+            "        run: |",
+            "          rm -rf storybook-pages-deploy",
+            "          mkdir -p storybook-pages-deploy",
+            "          mv storybook-static storybook-pages-deploy/storybook-static",
+            "          printf '%s\\n' '{' '  \"pages_build_output_dir\": \"storybook-static\"' '}' > storybook-pages-deploy/wrangler.json",
+          ].join("\n"),
+          "",
+        ),
+      ),
+    );
+    const missingWranglerJson = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(
+        validStorybookWorkflow().replace(
+          "          printf '%s\\n' '{' '  \"pages_build_output_dir\": \"storybook-static\"' '}' > storybook-pages-deploy/wrangler.json\n",
+          "",
+        ),
+      ),
+    );
+    const wrongOutputDir = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(validStorybookWorkflow().replace("\"pages_build_output_dir\": \"storybook-static\"", "\"pages_build_output_dir\": \"build/client\"")),
+    );
+
+    for (const result of [missingPrepareStep, missingWranglerJson, wrongOutputDir]) {
+      expect(result.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
+    }
+  });
+
+  it("rejects repo-root deploys and non-npm Wrangler action installs", () => {
+    const missingWorkingDirectory = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(validStorybookWorkflow().replace("          workingDirectory: storybook-pages-deploy\n", "")),
+    );
+    const wrongWorkingDirectory = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(validStorybookWorkflow().replace("workingDirectory: storybook-pages-deploy", "workingDirectory: .")),
+    );
+    const wrongPackageManager = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(validStorybookWorkflow().replace("packageManager: npm", "packageManager: pnpm")),
+    );
+    const misleadingWranglerActionVersion = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(validStorybookWorkflow().replace("cloudflare/wrangler-action@v4", "cloudflare/wrangler-action@v40")),
+    );
+    const extraRepoRootDeployStep = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(
+        validStorybookWorkflow().replace(
           "          gitHubToken: ${{ secrets.GITHUB_TOKEN }}",
-          "      - uses: actions/download-artifact@v8",
-          "        with:",
-          "          name: storybook-static",
-          "          path: storybook-static",
-        ].join("\n"),
+          [
+            "          gitHubToken: ${{ secrets.GITHUB_TOKEN }}",
+            "      - name: Legacy repo-root deploy",
+            "        if: github.ref == 'refs/heads/main'",
+            "        uses: cloudflare/wrangler-action@v4",
+            "        with:",
+            "          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}",
+            "          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
+            "          command: pages deploy storybook-static --project-name=spoonjoy-storybook",
+          ].join("\n"),
+        ),
+      ),
+    );
+    const extraLegacyWranglerActionVersion = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(
+        validStorybookWorkflow().replace(
+          "          gitHubToken: ${{ secrets.GITHUB_TOKEN }}",
+          [
+            "          gitHubToken: ${{ secrets.GITHUB_TOKEN }}",
+            "      - name: Legacy repo-root deploy",
+            "        if: github.ref == 'refs/heads/main'",
+            "        uses: cloudflare/wrangler-action@v3",
+            "        with:",
+            "          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}",
+            "          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
+            "          command: pages deploy storybook-static --project-name=spoonjoy-storybook",
+          ].join("\n"),
+        ),
+      ),
+    );
+    const extraQuotedLegacyWranglerActionVersion = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(
+        validStorybookWorkflow().replace(
+          "          gitHubToken: ${{ secrets.GITHUB_TOKEN }}",
+          [
+            "          gitHubToken: ${{ secrets.GITHUB_TOKEN }}",
+            "      - name: Legacy repo-root deploy",
+            "        if: github.ref == 'refs/heads/main'",
+            "        uses: \"cloudflare/wrangler-action@v3\"",
+            "        with:",
+            "          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}",
+            "          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
+            "          command: pages deploy storybook-static --project-name=spoonjoy-storybook",
+          ].join("\n"),
+        ),
+      ),
+    );
+    const duplicateCleanDeployStep = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(
+        validStorybookWorkflow().replace(
+          "      - name: Deploy to Cloudflare Pages",
+          "      - name: Deploy to Cloudflare Pages again\n        if: github.ref == 'refs/heads/main'\n        uses: cloudflare/wrangler-action@v4\n        with:\n          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}\n          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}\n          workingDirectory: storybook-pages-deploy\n          packageManager: npm\n          command: pages deploy --project-name=spoonjoy-storybook --branch=${{ github.ref_name }} --commit-hash=${{ github.sha }} --commit-dirty=true\n          gitHubToken: ${{ secrets.GITHUB_TOKEN }}\n      - name: Deploy to Cloudflare Pages",
+        ),
+      ),
+    );
+    const extraRunDeployStep = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(
+        validStorybookWorkflow().replace(
+          "      - name: Deploy to Cloudflare Pages",
+          "      - name: Legacy shell deploy\n        if: github.ref == 'refs/heads/main'\n        run: pnpm exec wrangler pages deploy storybook-static --project-name=spoonjoy-storybook\n      - name: Deploy to Cloudflare Pages",
+        ),
+      ),
+    );
+    const extraRunDeployStepWithShellWhitespace = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(
+        validStorybookWorkflow().replace(
+          "      - name: Deploy to Cloudflare Pages",
+          "      - name: Legacy shell deploy\n        if: github.ref == 'refs/heads/main'\n        run: pnpm exec wrangler pages  deploy storybook-static --project-name=spoonjoy-storybook\n      - name: Deploy to Cloudflare Pages",
+        ),
+      ),
+    );
+    const extraRunDeployStepWithQuotedShellTokens = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(
+        validStorybookWorkflow().replace(
+          "      - name: Deploy to Cloudflare Pages",
+          "      - name: Legacy shell deploy\n        if: github.ref == 'refs/heads/main'\n        run: pnpm exec wrangler \"pages\" 'deploy' storybook-static --project-name=spoonjoy-storybook\n      - name: Deploy to Cloudflare Pages",
+        ),
+      ),
+    );
+    const extraRunDeployStepWithLineContinuation = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(
+        validStorybookWorkflow().replace(
+          "      - name: Deploy to Cloudflare Pages",
+          "      - name: Legacy shell deploy\n        if: github.ref == 'refs/heads/main'\n        run: |\n          pnpm exec wrangler pages \\\n            deploy storybook-static --project-name=spoonjoy-storybook\n      - name: Deploy to Cloudflare Pages",
+        ),
+      ),
+    );
+    const extraRunDeployStepWithFoldedScalar = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(
+        validStorybookWorkflow().replace(
+          "      - name: Deploy to Cloudflare Pages",
+          "      - name: Legacy shell deploy\n        if: github.ref == 'refs/heads/main'\n        run: >\n          pnpm exec wrangler pages\n          deploy storybook-static --project-name=spoonjoy-storybook\n      - name: Deploy to Cloudflare Pages",
+        ),
       ),
     );
 
-    const result = validateDeploymentConfig(inputs);
-
-    expect(result.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
+    for (const result of [
+      missingWorkingDirectory,
+      wrongWorkingDirectory,
+      wrongPackageManager,
+      misleadingWranglerActionVersion,
+      extraRepoRootDeployStep,
+      extraLegacyWranglerActionVersion,
+      extraQuotedLegacyWranglerActionVersion,
+      duplicateCleanDeployStep,
+      extraRunDeployStep,
+      extraRunDeployStepWithShellWhitespace,
+      extraRunDeployStepWithQuotedShellTokens,
+      extraRunDeployStepWithLineContinuation,
+      extraRunDeployStepWithFoldedScalar,
+    ]) {
+      expect(result.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
+    }
   });
 
-  it("rejects Storybook artifact download steps without a with block", () => {
-    const inputs = inputsWithStorybookWorkflow(
-      validStorybookWorkflow().replace(
-        [
-          "      - uses: actions/download-artifact@v8",
-          "        with:",
-          "          name: storybook-static",
-          "          path: storybook-static",
-        ].join("\n"),
-        "      - uses: actions/download-artifact@v8",
+  it("rejects a Storybook Wrangler deploy action without a with block", () => {
+    const missingWith = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(
+        validStorybookWorkflow().replace(
+          [
+            "        with:",
+            "          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}",
+            "          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
+            "          workingDirectory: storybook-pages-deploy",
+            "          packageManager: npm",
+            "          command: pages deploy --project-name=spoonjoy-storybook --branch=${{ github.ref_name }} --commit-hash=${{ github.sha }} --commit-dirty=true",
+            "          gitHubToken: ${{ secrets.GITHUB_TOKEN }}",
+          ].join("\n"),
+          "",
+        ),
       ),
     );
 
-    const result = validateDeploymentConfig(inputs);
-
-    expect(result.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
+    expect(missingWith.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
   });
 
-  it("requires pnpm setup before the Storybook Wrangler action can infer the package manager", () => {
-    const inputs = inputsWithStorybookWorkflow(
-      validStorybookWorkflow().replace(
-        [
-          "      - uses: pnpm/action-setup@v6",
-          "        with:",
-          "          version: '10.28.1'",
-        ].join("\n"),
-        "",
-      ),
+  it("requires explicit Pages commit metadata and dirty-state intent", () => {
+    const missingBranch = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(validStorybookWorkflow().replace(" --branch=${{ github.ref_name }}", "")),
+    );
+    const missingCommitHash = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(validStorybookWorkflow().replace(" --commit-hash=${{ github.sha }}", "")),
+    );
+    const missingDirtyFlag = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(validStorybookWorkflow().replace(" --commit-dirty=true", "")),
+    );
+    const dirtyFalse = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(validStorybookWorkflow().replace("--commit-dirty=true", "--commit-dirty=false")),
     );
 
-    const result = validateDeploymentConfig(inputs);
-
-    expect(result.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
+    for (const result of [missingBranch, missingCommitHash, missingDirtyFlag, dirtyFalse]) {
+      expect(result.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
+    }
   });
 
-  it("accepts quoted Storybook workflow scalar values", () => {
+  it("requires .gitignore coverage for the generated Storybook Pages deploy directory", () => {
+    const missingIgnore = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(validStorybookWorkflow(), { gitignore: "node_modules\nstorybook-static\n" }),
+    );
+
+    expect(missingIgnore.errors.map((item) => item.name)).toContain("Storybook generated deploy ignore");
+  });
+
+  it("requires root pnpm-workspace allowBuilds false entries for all ignored build-script packages", () => {
+    const missingWorkspace = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(validStorybookWorkflow(), { pnpmWorkspace: "" }),
+    );
+    const missingPackage = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(validStorybookWorkflow(), {
+        pnpmWorkspace: validPnpmWorkspace().replace("  protobufjs: false\n", ""),
+      }),
+    );
+    const truePackage = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(validStorybookWorkflow(), {
+        pnpmWorkspace: validPnpmWorkspace().replace("  sharp: false", "  sharp: true"),
+      }),
+    );
+
+    for (const result of [missingWorkspace, missingPackage, truePackage]) {
+      expect(result.errors.map((item) => item.name)).toContain("pnpm build script policy");
+    }
+  });
+
+  it("ignores malformed and nested pnpm-workspace allowBuilds noise around required package entries", () => {
+    const noisyWorkspace = validPnpmWorkspace().replace(
+      "  core-js: false",
+      "  malformed-entry\n  core-js: false\n    nested: false",
+    );
+
+    const result = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(validStorybookWorkflow(), { pnpmWorkspace: noisyWorkspace }),
+    );
+
+    expect(result.errors.map((item) => item.name)).not.toContain("pnpm build script policy");
+  });
+
+  it("accepts quoted Storybook workflow scalar values and nested with-block entries", () => {
     const inputs = inputsWithStorybookWorkflow(
       validStorybookWorkflow()
-        .replaceAll("name: storybook-static", "name: 'storybook-static'")
-        .replaceAll("path: storybook-static", 'path: "storybook-static"')
+        .replaceAll("workingDirectory: storybook-pages-deploy", "workingDirectory: 'storybook-pages-deploy'")
+        .replaceAll("packageManager: npm", 'packageManager: "npm"')
         .replace("apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}", "apiToken: '${{ secrets.CLOUDFLARE_API_TOKEN }}'")
         .replace("accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}", "accountId: '${{ secrets.CLOUDFLARE_ACCOUNT_ID }}'")
         .replace(
-          "command: pages deploy storybook-static --project-name=spoonjoy-storybook",
-          'command: "pages deploy storybook-static --project-name=spoonjoy-storybook"',
+          "command: pages deploy --project-name=spoonjoy-storybook --branch=${{ github.ref_name }} --commit-hash=${{ github.sha }} --commit-dirty=true",
+          'command: "pages deploy --project-name=spoonjoy-storybook --branch=${{ github.ref_name }} --commit-hash=${{ github.sha }} --commit-dirty=true"',
         )
-        .replace("gitHubToken: ${{ secrets.GITHUB_TOKEN }}", "gitHubToken: '${{ secrets.GITHUB_TOKEN }}'"),
+        .replace("gitHubToken: ${{ secrets.GITHUB_TOKEN }}", "gitHubToken: '${{ secrets.GITHUB_TOKEN }}'")
+        .replace(
+          "          workingDirectory: 'storybook-pages-deploy'",
+          "          metadata:\n            ignored: true\n          workingDirectory: 'storybook-pages-deploy'",
+        ),
     );
 
     const result = validateDeploymentConfig(inputs);
 
     expect(result.errors.map((item) => item.name)).not.toContain("Storybook deploy workflow");
-    expect(result.checks.find((item) => item.name === "Storybook deploy workflow")?.ok).toBe(true);
+    expect(result.errors.map((item) => item.name)).not.toContain("Storybook generated deploy ignore");
+    expect(result.errors.map((item) => item.name)).not.toContain("pnpm build script policy");
   });
 
-  it("ignores nested Storybook with-block entries while reading scalar keys", () => {
-    const inputs = inputsWithStorybookWorkflow(
-      validStorybookWorkflow().replace(
-        [
-          "      - uses: actions/download-artifact@v8",
-          "        with:",
-          "          name: storybook-static",
-          "          path: storybook-static",
-        ].join("\n"),
-        [
-          "      - uses: actions/download-artifact@v8",
-          "        with:",
-          "          metadata:",
-          "            ignored: true",
-          "          name: storybook-static",
-          "          path: storybook-static",
-        ].join("\n"),
-      ),
-    );
-
-    const result = validateDeploymentConfig(inputs);
+  it("checks the current repository Storybook warning cleanup contract", async () => {
+    const [workflow, gitignore, pnpmWorkspace] = await Promise.all([
+      readFile(process.cwd() + "/.github/workflows/storybook.yml", "utf8"),
+      readFile(process.cwd() + "/.gitignore", "utf8"),
+      readFile(process.cwd() + "/pnpm-workspace.yaml", "utf8"),
+    ]);
+    const result = validateDeploymentConfig(inputsWithStorybookWorkflow(workflow, { gitignore, pnpmWorkspace }));
 
     expect(result.errors.map((item) => item.name)).not.toContain("Storybook deploy workflow");
-  });
-
-  it("checks the current repository Storybook workflow", async () => {
-    const workflow = await readFile(`${process.cwd()}/.github/workflows/storybook.yml`, "utf8");
-    const result = validateDeploymentConfig(inputsWithStorybookWorkflow(workflow));
-
-    expect(result.errors.map((item) => item.name)).not.toContain("Storybook deploy workflow");
+    expect(result.errors.map((item) => item.name)).not.toContain("Storybook generated deploy ignore");
+    expect(result.errors.map((item) => item.name)).not.toContain("pnpm build script policy");
     expect(result.checks.find((item) => item.name === "Storybook deploy workflow")?.ok).toBe(true);
   });
 });

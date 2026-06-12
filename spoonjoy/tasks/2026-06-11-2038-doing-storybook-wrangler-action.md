@@ -1,6 +1,6 @@
 # Doing: Storybook Wrangler Action Migration
 
-**Status**: IN_PROGRESS
+**Status**: COMPLETE
 **Execution Mode**: direct
 **Created**: 2026-06-11 20:44
 **Planning**: ./2026-06-11-2038-planning-storybook-wrangler-action.md
@@ -25,7 +25,7 @@ Remove the deprecated Cloudflare Pages GitHub Action from the Storybook deployme
 - [x] Existing `deployments: write` permission is preserved for GitHub deployment records.
 - [x] Workflow syntax is validated before merge.
 - [x] Local Storybook build passes with no warnings caused by this change.
-- [ ] Merged `main` Storybook workflow passes after the change.
+- [x] Merged `main` Storybook workflow passes after the change.
 - [x] 100% test coverage on all new code
 - [x] All tests pass
 - [x] No warnings
@@ -74,7 +74,7 @@ Remove the deprecated Cloudflare Pages GitHub Action from the Storybook deployme
 **Output**: Passing verification evidence and any cleanup committed.
 **Acceptance**: New workflow validation logic has 100% coverage, `git diff --check` passes, and the branch is ready for reviewer/merge.
 
-### 🔄 Unit 2: Merge/Deploy Verification
+### ✅ Unit 2: Merge/Deploy Verification
 **What**: Open the PR, run cold implementation review, merge after checks pass, wait for `main` Storybook workflow success, and clean the branch/PR state.
 **Output**: Merged PR, successful main Storybook run, clean local and remote branch state.
 **Acceptance**: `main` contains the migration, Storybook workflow passes on the merge commit, no open PR or stale `spoonjoy/storybook-wrangler-action` branch remains, and `spoonjoy/tasks/AUTOPILOT-STATE.md` records `SJ-044` as the next queued seed.
@@ -100,3 +100,4 @@ Remove the deprecated Cloudflare Pages GitHub Action from the Storybook deployme
 - 2026-06-11 21:29 Unit 2 in progress: full `pnpm run test:coverage` rerun passed after the pnpm setup fix with 301 files, 5969 tests, and 100% statements/branches/functions/lines.
 - 2026-06-11 21:48 Implementation review Round 2 found the preflight did not prove the build job uploads `storybook-static` or that the deploy job downloads it before Wrangler. Added red regressions for missing upload and deploy-before-download, enforced build upload plus download-before-Wrangler ordering, and reran targeted coverage plus full verification: `pnpm run deploy:preflight`, `pnpm run qa:preflight`, `pnpm run typecheck`, `pnpm run build`, `pnpm build-storybook`, Ruby Psych parse, `git diff --check`, and full `pnpm run test:coverage` passed with 301 files, 5975 tests, and 100% coverage.
 - 2026-06-11 21:59 Final cold reviewer converged on PR #188 after the artifact-ordering fix. Hosted PR checks passed: Storybook `build-storybook`, CI `coverage`, and CI `e2e`; `deploy-storybook` correctly skipped on PR because the workflow deploy job is main-only. Remaining Unit 2 gate is merge, main Storybook deploy verification, branch cleanup, and continuation into `SJ-044`.
+- 2026-06-11 22:22 Unit 2 complete: PR #188 merged via squash as `03f1a854`; local `main` fast-forwarded, remote/local `spoonjoy/storybook-wrangler-action` branches removed, main CI/Storybook/Production Deploy passed, production Worker and custom-domain health endpoints returned ok, Storybook Pages returned HTTP 200, local QA cleanup dry-run showed zero active disposable residue, and the main Storybook log had no `node 20` or `cloudflare/pages-action` matches. Follow-up branch `spoonjoy/storybook-deploy-warning-cleanup` is handling remaining non-Node20 deploy log warnings before moving to `SJ-044`.

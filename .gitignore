@@ -41,6 +41,7 @@ test.db
 
 *storybook.log
 storybook-static
+storybook-pages-deploy/
 
 # Playwright
 playwright-report/

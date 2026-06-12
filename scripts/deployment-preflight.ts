@@ -19,6 +19,8 @@ export interface DeploymentPreflightInputs {
   productionDeployWorkflow: string;
   qaImageCoverSmokeWorkflow: string;
   storybookWorkflow: string;
+  gitignore: string;
+  pnpmWorkspace: string;
   cloudflareEnvDts: string;
   readme: string;
   deploymentDoc: string;
@@ -93,6 +95,23 @@ const REQUIRED_RATE_LIMIT_BINDINGS = [
   "API_TOKEN_RATE_LIMITER",
   "API_IP_RATE_LIMITER",
   "AUTH_IP_RATE_LIMITER",
+] as const;
+
+const STORYBOOK_PAGES_DEPLOY_DIR = "storybook-pages-deploy";
+const STORYBOOK_PAGES_OUTPUT_DIR = "storybook-static";
+const STORYBOOK_PAGES_DEPLOY_COMMAND =
+  "pages deploy --project-name=spoonjoy-storybook --branch=${{ github.ref_name }} --commit-hash=${{ github.sha }} --commit-dirty=true";
+const REQUIRED_IGNORED_BUILD_PACKAGES = [
+  "@prisma/client",
+  "@prisma/engines",
+  "@swc/core",
+  "core-js",
+  "esbuild",
+  "prisma",
+  "protobufjs",
+  "sharp",
+  "unrs-resolver",
+  "workerd",
 ] as const;
 
 function hasBinding(
@@ -191,12 +210,16 @@ function childBlock(lines: WorkflowLine[], start: number, end: number, key: stri
   const childIndent = lines[start].indent + 2;
   for (let index = start + 1; index < end; index += 1) {
     if (lines[index].indent !== childIndent) continue;
-    const text = lines[index].text;
-    if (text === `${key}:` || text.startsWith(`${key}: `)) {
+    if (yamlMappingKey(lines[index].text) === key) {
       return [index, blockEnd(lines, index)];
     }
   }
   return null;
+}
+
+function yamlMappingKey(text: string): string | null {
+  const key = text.match(/^(['"]?)([A-Za-z0-9_-]+)\1:/);
+  return key ? key[2] : null;
 }
 
 function immediateChildKeys(lines: WorkflowLine[], start: number, end: number): string[] {
@@ -204,8 +227,8 @@ function immediateChildKeys(lines: WorkflowLine[], start: number, end: number): 
   const keys: string[] = [];
   for (let index = start + 1; index < end; index += 1) {
     if (lines[index].indent !== childIndent) continue;
-    const key = lines[index].text.match(/^([A-Za-z0-9_-]+):/);
-    if (key) keys.push(key[1]);
+    const key = yamlMappingKey(lines[index].text);
+    if (key) keys.push(key);
   }
   return keys;
 }
@@ -225,16 +248,44 @@ function blockHasMainBranch(lines: WorkflowLine[], branchesStart: number, branch
   return false;
 }
 
+function workflowTriggerTargetsMain(lines: WorkflowLine[], onIndex: number, onEnd: number, trigger: string): boolean {
+  const triggerBlock = childBlock(lines, onIndex, onEnd, trigger);
+  if (!triggerBlock) return false;
+  const branches = childBlock(lines, triggerBlock[0], triggerBlock[1], "branches");
+  return branches ? blockHasMainBranch(lines, branches[0], branches[1]) : false;
+}
+
 function workflowDeploysPushesToMain(workflow: string): boolean {
   const lines = workflowLines(workflow);
   const onIndex = lines.findIndex((line) => line.indent === 0 && line.text === "on:");
   if (onIndex === -1) return false;
   const onEnd = blockEnd(lines, onIndex);
   const workflowDispatch = childBlock(lines, onIndex, onEnd, "workflow_dispatch");
-  const push = childBlock(lines, onIndex, onEnd, "push");
-  if (!workflowDispatch || !push) return false;
-  const branches = childBlock(lines, push[0], push[1], "branches");
-  return branches ? blockHasMainBranch(lines, branches[0], branches[1]) : false;
+  return Boolean(workflowDispatch) && workflowTriggerTargetsMain(lines, onIndex, onEnd, "push");
+}
+
+function workflowHasOnlyTriggers(lines: WorkflowLine[], onIndex: number, onEnd: number, allowed: string[]): boolean {
+  const triggers = immediateChildKeys(lines, onIndex, onEnd);
+  const uniqueTriggers = new Set(triggers);
+  return (
+    triggers.length === allowed.length &&
+    uniqueTriggers.size === allowed.length &&
+    allowed.every((trigger) => uniqueTriggers.has(trigger))
+  );
+}
+
+function workflowBuildsPullRequestsAndDeploysPushesToMain(workflow: string): boolean {
+  const lines = workflowLines(workflow);
+  const onIndex = lines.findIndex((line) => line.indent === 0 && line.text === "on:");
+  if (onIndex === -1) return false;
+  const onEnd = blockEnd(lines, onIndex);
+  const workflowDispatch = childBlock(lines, onIndex, onEnd, "workflow_dispatch");
+  return (
+    workflowHasOnlyTriggers(lines, onIndex, onEnd, ["push", "pull_request", "workflow_dispatch"]) &&
+    Boolean(workflowDispatch) &&
+    workflowTriggerTargetsMain(lines, onIndex, onEnd, "push") &&
+    workflowTriggerTargetsMain(lines, onIndex, onEnd, "pull_request")
+  );
 }
 
 function stepBlocks(lines: WorkflowLine[], stepsStart: number, stepsEnd: number): Array<[number, number]> {
@@ -253,9 +304,10 @@ function workflowJobBlocks(lines: WorkflowLine[]): Array<[number, number]> {
   if (jobsIndex === -1) return [];
   const jobsEnd = blockEnd(lines, jobsIndex);
   const jobIndent = lines[jobsIndex].indent + 2;
+  const jobKey = /^(?:[A-Za-z0-9_-]+|"[A-Za-z0-9_-]+"|'[A-Za-z0-9_-]+'):/;
   const blocks: Array<[number, number]> = [];
   for (let index = jobsIndex + 1; index < jobsEnd; index += 1) {
-    if (lines[index].indent === jobIndent && /^[A-Za-z0-9_-]+:/.test(lines[index].text)) {
+    if (lines[index].indent === jobIndent && jobKey.test(lines[index].text)) {
       blocks.push([index, blockEnd(lines, index)]);
     }
   }
@@ -286,23 +338,13 @@ function stepRunsDeployAuto(lines: WorkflowLine[], stepStart: number, stepEnd: n
 
 function stepPropertyValue(lines: WorkflowLine[], stepStart: number, stepEnd: number, key: string): string | null {
   const inline = lines[stepStart].text.match(new RegExp(`^-\\s+${key}:\\s*(.*)$`));
-  if (inline) return inline[1].trim();
+  if (inline) return unquoteYamlScalar(inline[1]);
 
   const propertyIndent = lines[stepStart].indent + 2;
   for (let index = stepStart + 1; index < stepEnd; index += 1) {
     if (lines[index].indent !== propertyIndent) continue;
     const value = lines[index].text.match(new RegExp(`^${key}:\\s*(.*)$`));
-    if (value) return value[1].trim();
-  }
-  return null;
-}
-
-function blockPropertyValue(lines: WorkflowLine[], blockStart: number, blockEnd: number, key: string): string | null {
-  const propertyIndent = lines[blockStart].indent + 2;
-  for (let index = blockStart + 1; index < blockEnd; index += 1) {
-    if (lines[index].indent !== propertyIndent) continue;
-    const value = lines[index].text.match(new RegExp(`^${key}:\\s*(.*)$`));
-    if (value) return value[1].trim();
+    if (value) return unquoteYamlScalar(value[1]);
   }
   return null;
 }
@@ -326,6 +368,20 @@ function blockScalarChildValue(lines: WorkflowLine[], blockStart: number, blockE
     if (value) return unquoteYamlScalar(value[1]);
   }
   return null;
+}
+
+function blockScalarChildMap(lines: WorkflowLine[], blockStart: number, blockEnd: number): Map<string, string> {
+  const childIndent = lines[blockStart].indent + 2;
+  const values = new Map<string, string>();
+  for (let index = blockStart + 1; index < blockEnd; index += 1) {
+    if (lines[index].indent !== childIndent) continue;
+    const separator = lines[index].text.indexOf(":");
+    if (separator === -1) continue;
+    const key = unquoteYamlScalar(lines[index].text.slice(0, separator));
+    const value = unquoteYamlScalar(lines[index].text.slice(separator + 1));
+    values.set(key, value);
+  }
+  return values;
 }
 
 function stepWithValue(lines: WorkflowLine[], stepStart: number, stepEnd: number, key: string): string | null {
@@ -394,14 +450,7 @@ function workflowTriggersOnlyDispatchAndSchedule(workflow: string): boolean {
   const onIndex = lines.findIndex((line) => line.indent === 0 && line.text === "on:");
   if (onIndex === -1) return false;
   const onEnd = blockEnd(lines, onIndex);
-  const triggers = immediateChildKeys(lines, onIndex, onEnd);
-  const allowed = new Set(["workflow_dispatch", "schedule"]);
-  const uniqueTriggers = new Set(triggers);
-  return (
-    triggers.length === allowed.size &&
-    uniqueTriggers.size === allowed.size &&
-    [...allowed].every((trigger) => uniqueTriggers.has(trigger))
-  );
+  return workflowHasOnlyTriggers(lines, onIndex, onEnd, ["workflow_dispatch", "schedule"]);
 }
 
 function normalizedWorkflowCondition(value: string): string {
@@ -415,7 +464,12 @@ function stepIfEquals(lines: WorkflowLine[], stepStart: number, stepEnd: number,
 
 function stepUses(lines: WorkflowLine[], stepStart: number, stepEnd: number, action: string): boolean {
   const value = stepPropertyValue(lines, stepStart, stepEnd, "uses");
-  return typeof value === "string" && value.startsWith(action);
+  return typeof value === "string" && value.toLowerCase().startsWith(action.toLowerCase());
+}
+
+function stepUsesExactly(lines: WorkflowLine[], stepStart: number, stepEnd: number, action: string): boolean {
+  const value = stepPropertyValue(lines, stepStart, stepEnd, "uses");
+  return typeof value === "string" && value.toLowerCase() === action.toLowerCase();
 }
 
 function stepHasId(lines: WorkflowLine[], stepStart: number, stepEnd: number, id: string): boolean {
@@ -437,35 +491,6 @@ function qaSmokeStepOrderIsValid(order: Record<string, number>): boolean {
     order.smoke > order.providerSecrets &&
     order.artifact > order.smoke
   );
-}
-
-function workflowHasStorybookBuildArtifact(lines: WorkflowLine[]): boolean {
-  for (const [jobStart, jobEnd] of workflowJobBlocks(lines)) {
-    if (lines[jobStart].text !== "build-storybook:") continue;
-    const steps = childBlock(lines, jobStart, jobEnd, "steps");
-    if (!steps) return false;
-
-    let storybookBuildStep = -1;
-    let uploadStorybookArtifactStep = -1;
-    for (const [stepStart, stepEnd] of stepBlocks(lines, steps[0], steps[1])) {
-      if (stepRunText(lines, stepStart, stepEnd) === "pnpm build-storybook") {
-        storybookBuildStep = stepStart;
-      }
-
-      if (
-        stepUses(lines, stepStart, stepEnd, "actions/upload-artifact@") &&
-        stepIfEquals(lines, stepStart, stepEnd, "github.ref == 'refs/heads/main'") &&
-        stepWithValue(lines, stepStart, stepEnd, "name") === "storybook-static" &&
-        stepWithValue(lines, stepStart, stepEnd, "path") === "storybook-static"
-      ) {
-        uploadStorybookArtifactStep = stepStart;
-      }
-    }
-
-    return storybookBuildStep >= 0 && uploadStorybookArtifactStep > storybookBuildStep;
-  }
-
-  return false;
 }
 
 function runCommandLines(run: string): string[] {
@@ -604,23 +629,78 @@ function workflowHasQaImageCoverSmokeGuards(workflow: string): boolean {
   return false;
 }
 
+function workflowHasStorybookGitDefaultBranchConfig(lines: WorkflowLine[]): boolean {
+  const envIndex = lines.findIndex((line) => line.indent === 0 && line.text === "env:");
+  if (envIndex === -1) return false;
+  const envEnd = blockEnd(lines, envIndex);
+  return (
+    blockScalarChildValue(lines, envIndex, envEnd, "GIT_CONFIG_COUNT") === "1" &&
+    blockScalarChildValue(lines, envIndex, envEnd, "GIT_CONFIG_KEY_0") === "init.defaultBranch" &&
+    blockScalarChildValue(lines, envIndex, envEnd, "GIT_CONFIG_VALUE_0") === "main"
+  );
+}
+
+function storybookDeployPrepRunIsClean(run: string): boolean {
+  return commandLinesEqual(run, [
+    `rm -rf ${STORYBOOK_PAGES_DEPLOY_DIR}`,
+    `mkdir -p ${STORYBOOK_PAGES_DEPLOY_DIR}`,
+    `mv ${STORYBOOK_PAGES_OUTPUT_DIR} ${STORYBOOK_PAGES_DEPLOY_DIR}/${STORYBOOK_PAGES_OUTPUT_DIR}`,
+    `printf '%s\\n' '{' '  "pages_build_output_dir": "${STORYBOOK_PAGES_OUTPUT_DIR}"' '}' > ${STORYBOOK_PAGES_DEPLOY_DIR}/wrangler.json`,
+  ]);
+}
+
+function storybookWranglerDeployStepIsClean(lines: WorkflowLine[], stepStart: number, stepEnd: number): boolean {
+  return (
+    stepUsesExactly(lines, stepStart, stepEnd, "cloudflare/wrangler-action@v4") &&
+    stepWithValue(lines, stepStart, stepEnd, "apiToken") === "${{ secrets.CLOUDFLARE_API_TOKEN }}" &&
+    stepWithValue(lines, stepStart, stepEnd, "accountId") === "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" &&
+    stepWithValue(lines, stepStart, stepEnd, "workingDirectory") === STORYBOOK_PAGES_DEPLOY_DIR &&
+    stepWithValue(lines, stepStart, stepEnd, "packageManager") === "npm" &&
+    stepWithValue(lines, stepStart, stepEnd, "command") === STORYBOOK_PAGES_DEPLOY_COMMAND &&
+    stepWithValue(lines, stepStart, stepEnd, "gitHubToken") === "${{ secrets.GITHUB_TOKEN }}"
+  );
+}
+
+function runTextIncludesPagesDeploy(runText: string): boolean {
+  const joinedContinuations = runText.replace(/\\\s*\r?\n\s*/g, " ");
+  return /(?:^|\s)["']?pages["']?\s+["']?deploy["']?(?:\s|$)/.test(joinedContinuations);
+}
+
+function gitignoreIgnoresStorybookPagesDeployDir(gitignore: string): boolean {
+  return gitignore
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line !== "" && !line.startsWith("#"))
+    .map((line) => line.replace(/^\//, ""))
+    .some((line) => line === `${STORYBOOK_PAGES_DEPLOY_DIR}/`);
+}
+
+function pnpmWorkspaceHasIgnoredBuildPolicy(pnpmWorkspace: string): boolean {
+  const lines = workflowLines(pnpmWorkspace);
+  const allowBuildsStart = lines.findIndex((line) => line.indent === 0 && line.text === "allowBuilds:");
+  if (allowBuildsStart === -1) return false;
+  const allowBuilds = blockScalarChildMap(lines, allowBuildsStart, blockEnd(lines, allowBuildsStart));
+  return REQUIRED_IGNORED_BUILD_PACKAGES.every((packageName) => allowBuilds.get(packageName) === "false");
+}
+
 function workflowHasStorybookDeployContract(workflow: string): boolean {
   const lines = workflowLines(workflow);
-  const activeText = lines.map((line) => line.text).join("\n");
-  if (activeText.includes("cloudflare/pages-action@")) return false;
-  if (!workflowDeploysPushesToMain(workflow)) return false;
-  if (!workflowHasStorybookBuildArtifact(lines)) return false;
+  const activeText = lines.map((line) => line.text).join("\n").toLowerCase();
+  if (
+    activeText.includes("cloudflare/pages-action@") ||
+    activeText.includes("actions/upload-artifact@") ||
+    activeText.includes("actions/download-artifact@")
+  ) {
+    return false;
+  }
+  if (!workflowBuildsPullRequestsAndDeploysPushesToMain(workflow)) return false;
+  if (!workflowHasStorybookGitDefaultBranchConfig(lines)) return false;
 
-  for (const [jobStart, jobEnd] of workflowJobBlocks(lines)) {
-    if (lines[jobStart].text !== "deploy-storybook:") continue;
-    if (blockPropertyValue(lines, jobStart, jobEnd, "needs") !== "build-storybook") return false;
-    if (
-      normalizedWorkflowCondition(blockPropertyValue(lines, jobStart, jobEnd, "if") ?? "") !==
-      "github.ref == 'refs/heads/main'"
-    ) {
-      return false;
-    }
+  const jobs = workflowJobBlocks(lines);
+  if (jobs.length !== 1) return false;
 
+  for (const [jobStart, jobEnd] of jobs) {
+    if (lines[jobStart].text !== "build-storybook:") continue;
     const permissions = childBlock(lines, jobStart, jobEnd, "permissions");
     if (!permissions || blockScalarChildValue(lines, permissions[0], permissions[1], "deployments") !== "write") {
       return false;
@@ -629,43 +709,41 @@ function workflowHasStorybookDeployContract(workflow: string): boolean {
     const steps = childBlock(lines, jobStart, jobEnd, "steps");
     if (!steps) return false;
 
-    let downloadStorybookArtifactStep = -1;
-    let pnpmSetupStep = -1;
+    let storybookBuildStep = -1;
+    let prepareDeployDirStep = -1;
+    let prepareDeployDirStepCount = 0;
     let wranglerDeployStep = -1;
+    let wranglerDeployStepCount = 0;
 
     for (const [stepStart, stepEnd] of stepBlocks(lines, steps[0], steps[1])) {
-      if (
-        stepUses(lines, stepStart, stepEnd, "actions/download-artifact@") &&
-        stepWithValue(lines, stepStart, stepEnd, "name") === "storybook-static" &&
-        stepWithValue(lines, stepStart, stepEnd, "path") === "storybook-static"
-      ) {
-        downloadStorybookArtifactStep = stepStart;
+      const runText = stepRunText(lines, stepStart, stepEnd);
+      if (runTextIncludesPagesDeploy(runText)) return false;
+
+      if (runText === "pnpm build-storybook") {
+        storybookBuildStep = stepStart;
       }
 
       if (
-        stepUses(lines, stepStart, stepEnd, "pnpm/action-setup@v6") &&
-        stepWithValue(lines, stepStart, stepEnd, "version") === "10.28.1"
+        stepIfEquals(lines, stepStart, stepEnd, "github.ref == 'refs/heads/main'") &&
+        storybookDeployPrepRunIsClean(runText)
       ) {
-        pnpmSetupStep = stepStart;
+        prepareDeployDirStepCount += 1;
+        prepareDeployDirStep = stepStart;
       }
 
-      if (
-        stepUses(lines, stepStart, stepEnd, "cloudflare/wrangler-action@v4") &&
-        stepWithValue(lines, stepStart, stepEnd, "apiToken") === "${{ secrets.CLOUDFLARE_API_TOKEN }}" &&
-        stepWithValue(lines, stepStart, stepEnd, "accountId") === "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" &&
-        stepWithValue(lines, stepStart, stepEnd, "command") ===
-          "pages deploy storybook-static --project-name=spoonjoy-storybook" &&
-        stepWithValue(lines, stepStart, stepEnd, "gitHubToken") === "${{ secrets.GITHUB_TOKEN }}"
-      ) {
-        wranglerDeployStep = stepStart;
-      }
+      if (!stepUses(lines, stepStart, stepEnd, "cloudflare/wrangler-action@")) continue;
+      if (!stepIfEquals(lines, stepStart, stepEnd, "github.ref == 'refs/heads/main'")) return false;
+      if (!storybookWranglerDeployStepIsClean(lines, stepStart, stepEnd)) return false;
+      wranglerDeployStepCount += 1;
+      wranglerDeployStep = stepStart;
     }
 
     return (
-      downloadStorybookArtifactStep >= 0 &&
-      pnpmSetupStep >= 0 &&
-      wranglerDeployStep > downloadStorybookArtifactStep &&
-      wranglerDeployStep > pnpmSetupStep
+      storybookBuildStep >= 0 &&
+      prepareDeployDirStepCount === 1 &&
+      wranglerDeployStepCount === 1 &&
+      prepareDeployDirStep > storybookBuildStep &&
+      wranglerDeployStep > prepareDeployDirStep
     );
   }
 
@@ -795,7 +873,17 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
     check(
       "Storybook deploy workflow",
       workflowHasStorybookDeployContract(inputs.storybookWorkflow),
-      ".github/workflows/storybook.yml must deploy main-branch Storybook artifacts through cloudflare/wrangler-action@v4 after setting up pnpm, with Cloudflare credentials, deployments: write, and GITHUB_TOKEN wiring."
+      ".github/workflows/storybook.yml must build Storybook and deploy main-branch Pages from a clean generated deploy directory through cloudflare/wrangler-action@v4 with npm package manager, commit metadata, dirty-state intent, Cloudflare credentials, deployments: write, and GITHUB_TOKEN wiring."
+    ),
+    check(
+      "Storybook generated deploy ignore",
+      gitignoreIgnoresStorybookPagesDeployDir(inputs.gitignore),
+      `.gitignore must ignore the generated ${STORYBOOK_PAGES_DEPLOY_DIR}/ directory used for Storybook Pages deploys.`
+    ),
+    check(
+      "pnpm build script policy",
+      pnpmWorkspaceHasIgnoredBuildPolicy(inputs.pnpmWorkspace),
+      `pnpm-workspace.yaml must set allowBuilds false for intentionally ignored dependency build scripts: ${REQUIRED_IGNORED_BUILD_PACKAGES.join(", ")}.`
     ),
     check(
       "Cloudflare Env typing",
@@ -1024,6 +1112,8 @@ export async function runDeploymentPreflight(
     productionDeployWorkflow,
     qaImageCoverSmokeWorkflow,
     storybookWorkflow,
+    gitignore,
+    pnpmWorkspace,
     cloudflareEnvDts,
     readme,
     deploymentDoc,
@@ -1034,6 +1124,8 @@ export async function runDeploymentPreflight(
     readFile(path.join(rootDir, ".github/workflows/production-deploy.yml"), "utf8"),
     readFile(path.join(rootDir, ".github/workflows/qa-image-cover-smoke.yml"), "utf8"),
     readFile(path.join(rootDir, ".github/workflows/storybook.yml"), "utf8"),
+    readFile(path.join(rootDir, ".gitignore"), "utf8"),
+    readFile(path.join(rootDir, "pnpm-workspace.yaml"), "utf8"),
     readFile(path.join(rootDir, "app/cloudflare-env.d.ts"), "utf8"),
     readFile(path.join(rootDir, "README.md"), "utf8"),
     readFile(path.join(rootDir, "docs/deployment.md"), "utf8"),
@@ -1046,6 +1138,8 @@ export async function runDeploymentPreflight(
     productionDeployWorkflow,
     qaImageCoverSmokeWorkflow,
     storybookWorkflow,
+    gitignore,
+    pnpmWorkspace,
     cloudflareEnvDts,
     readme,
     deploymentDoc,

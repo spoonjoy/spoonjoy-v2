@@ -1,3 +1,6 @@
+import { copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
   QA_BASE_URL,
@@ -91,6 +94,92 @@ function qaGeneratedBuildConfig() {
       { name: "AUTH_IP_RATE_LIMITER", namespace_id: "2003" },
     ],
   };
+}
+
+function warningCleanStorybookWorkflow(): string {
+  return [
+    "name: Storybook",
+    "on:",
+    "  push:",
+    "    branches: [main]",
+    "  pull_request:",
+    "    branches: [main]",
+    "  workflow_dispatch:",
+    "env:",
+    "  GIT_CONFIG_COUNT: '1'",
+    "  GIT_CONFIG_KEY_0: init.defaultBranch",
+    "  GIT_CONFIG_VALUE_0: main",
+    "jobs:",
+    "  build-storybook:",
+    "    name: build-storybook",
+    "    runs-on: ubuntu-latest",
+    "    permissions:",
+    "      contents: read",
+    "      deployments: write",
+    "    steps:",
+    "      - uses: actions/checkout@v6",
+    "      - uses: pnpm/action-setup@v6",
+    "        with:",
+    "          version: '10.28.1'",
+    "      - run: pnpm install --frozen-lockfile",
+    "      - run: pnpm prisma:generate",
+    "      - run: pnpm build-storybook",
+    "      - name: Prepare Cloudflare Pages deploy directory",
+    "        if: github.ref == 'refs/heads/main'",
+    "        run: |",
+    "          rm -rf storybook-pages-deploy",
+    "          mkdir -p storybook-pages-deploy",
+    "          mv storybook-static storybook-pages-deploy/storybook-static",
+    "          printf '%s\\n' '{' '  \"pages_build_output_dir\": \"storybook-static\"' '}' > storybook-pages-deploy/wrangler.json",
+    "      - name: Deploy to Cloudflare Pages",
+    "        if: github.ref == 'refs/heads/main'",
+    "        uses: cloudflare/wrangler-action@v4",
+    "        with:",
+    "          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}",
+    "          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
+    "          workingDirectory: storybook-pages-deploy",
+    "          packageManager: npm",
+    "          command: pages deploy --project-name=spoonjoy-storybook --branch=${{ github.ref_name }} --commit-hash=${{ github.sha }} --commit-dirty=true",
+    "          gitHubToken: ${{ secrets.GITHUB_TOKEN }}",
+  ].join("\n");
+}
+
+async function createStaticConfigRoot(overrides: {
+  gitignore?: string;
+  pnpmWorkspace?: string;
+  storybookWorkflow?: string;
+} = {}): Promise<string> {
+  const root = await mkdtemp(path.join(tmpdir(), "spoonjoy-qa-static-"));
+  await Promise.all([
+    mkdir(path.join(root, ".github/workflows"), { recursive: true }),
+    mkdir(path.join(root, "app"), { recursive: true }),
+    mkdir(path.join(root, "docs"), { recursive: true }),
+    mkdir(path.join(root, "migrations"), { recursive: true }),
+  ]);
+  await Promise.all([
+    copyFile(path.join(process.cwd(), "wrangler.json"), path.join(root, "wrangler.json")),
+    copyFile(path.join(process.cwd(), "package.json"), path.join(root, "package.json")),
+    copyFile(
+      path.join(process.cwd(), ".github/workflows/production-deploy.yml"),
+      path.join(root, ".github/workflows/production-deploy.yml"),
+    ),
+    copyFile(
+      path.join(process.cwd(), ".github/workflows/qa-image-cover-smoke.yml"),
+      path.join(root, ".github/workflows/qa-image-cover-smoke.yml"),
+    ),
+    copyFile(path.join(process.cwd(), "app/cloudflare-env.d.ts"), path.join(root, "app/cloudflare-env.d.ts")),
+    copyFile(path.join(process.cwd(), "README.md"), path.join(root, "README.md")),
+    copyFile(path.join(process.cwd(), "docs/deployment.md"), path.join(root, "docs/deployment.md")),
+    writeFile(path.join(root, "migrations/0000_init.sql"), "-- migration\n", "utf8"),
+    writeFile(
+      path.join(root, ".github/workflows/storybook.yml"),
+      overrides.storybookWorkflow ?? warningCleanStorybookWorkflow(),
+      "utf8",
+    ),
+    writeFile(path.join(root, ".gitignore"), overrides.gitignore ?? "node_modules\nstorybook-static\n", "utf8"),
+    writeFile(path.join(root, "pnpm-workspace.yaml"), overrides.pnpmWorkspace ?? "allowBuilds:\n  esbuild: false\n", "utf8"),
+  ]);
+  return root;
 }
 
 describe("validateQaGeneratedBuildConfig", () => {
@@ -321,5 +410,26 @@ describe("runQaPreflight", () => {
     });
 
     expect(result.checks.find((check) => check.name === "QA static config")?.message).toContain(QA_BASE_URL);
+  });
+
+  it("propagates Storybook deploy warning cleanup static-config failures", async () => {
+    const root = await createStaticConfigRoot();
+    try {
+      const result = await runQaPreflight(root, {
+        env: { SPOONJOY_PREFLIGHT_SKIP_REMOTE: "1" },
+        runWrangler: async () => ({ stdout: "", stderr: "Authentication error [code: 10000]", exitCode: 1 }),
+        createProbeFile: async () => ({
+          path: "/tmp/spoonjoy-qa-preflight.txt",
+          body: "spoonjoy qa preflight",
+          cleanup: async () => undefined,
+        }),
+      });
+
+      const staticCheck = result.errors.find((check) => check.name === "QA static config");
+      expect(staticCheck?.message).toContain("Storybook generated deploy ignore");
+      expect(staticCheck?.message).toContain("pnpm build script policy");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });
