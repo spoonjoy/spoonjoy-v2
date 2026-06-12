@@ -58,7 +58,7 @@ Remove the remaining controllable warnings from the Storybook build/deploy workf
 
 **CRITICAL: Every unit header MUST start with status emoji (⬜ for new units).**
 
-### ⬜ Unit 0: Setup/Research
+### ✅ Unit 0: Setup/Research
 **What**: Verify current warning sources, pnpm `allowBuilds` behavior, Wrangler Pages deploy flags, and existing workflow/preflight parser shape.
 **Output**: Evidence saved in the progress log.
 **Acceptance**: Current warning strings and package names are recorded, temp-copy `pnpm-workspace.yaml` `allowBuilds: false` install probe emits no `Ignored build scripts` warning, and no tracked files are modified by research.
@@ -95,3 +95,5 @@ Remove the remaining controllable warnings from the Storybook build/deploy workf
 
 ## Progress Log
 - 2026-06-11 22:45 Created from approved planning doc.
+- 2026-06-11 22:58 Doing-doc review Round 1 found red-only commit/push risk and missing QA static-config test scope. Updated Unit 1a/1b so red tests stay local until the paired green commit, and added `test/scripts/qa-preflight.test.ts` coverage to the test unit.
+- 2026-06-11 23:03 Unit 0 complete: main Storybook run `27395969794` still shows checkout default-branch hints, `actions/upload-artifact@v7`, `actions/download-artifact@v8`, pnpm `Ignored build scripts`, Wrangler Pages `wrangler.json` support warning, and Wrangler dirty-worktree warning with `--commit-dirty=true` guidance. The ignored-build package names are `@prisma/client`, `@prisma/engines`, `@swc/core`, `core-js`, `esbuild`, `prisma`, `protobufjs`, `sharp`, `unrs-resolver`, and `workerd`. A temp repo copy with root `pnpm-workspace.yaml` `allowBuilds: false` entries for that package set ran `pnpm install --frozen-lockfile` with no `Ignored build scripts` warning; research left no tracked source files modified.
