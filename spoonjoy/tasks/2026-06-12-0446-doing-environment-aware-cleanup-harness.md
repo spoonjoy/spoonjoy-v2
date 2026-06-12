@@ -29,9 +29,9 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 - [x] QA cleanup safely handles disposable recipe fork chains without mutating non-disposable fork attribution.
 - [x] Smoke artifacts include environment, base URL, branch/commit, created record ids, cleanup result, and retained/deleted R2 keys where available.
 - [x] Docs and preflight checks encode the explicit cleanup/smoke target contract.
-- [ ] 100% test coverage on all new code
-- [ ] All tests pass
-- [ ] No warnings
+- [x] 100% test coverage on all new code
+- [x] All tests pass
+- [x] No warnings
 - [ ] Work is merged to `main`, auto-deployment is verified, production smoke passes, and disposable local/QA/prod test data is clean.
 
 ## Code Coverage Requirements
@@ -152,7 +152,7 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 **Output**: Targeted deployment preflight coverage output in `unit-6c-coverage.log`.
 **Acceptance**: Modified preflight code has 100% coverage and no warnings.
 
-### ⬜ Unit 7: Local Deterministic Verification
+### ✅ Unit 7: Local Deterministic Verification
 **What**: Run these commands and save their output: `pnpm exec vitest run test/scripts/script-environment.test.ts test/scripts/cleanup-local-qa-data.test.ts test/scripts/smoke-live-helpers.test.ts test/scripts/smoke-image-cover-live.test.ts test/scripts/smoke-api-live.test.ts test/scripts/deployment-preflight.test.ts`; `pnpm run test:coverage`; `pnpm run typecheck`; `pnpm run typecheck:scripts`; `pnpm run build`; `pnpm run cleanup:local`. If `pnpm run cleanup:local` reports active disposable residue and zero blockers, run `pnpm run cleanup:local:apply` and then rerun `pnpm run cleanup:local`.
 **Output**: `focused-tests.log`, `coverage.log`, `typecheck.log`, `build.log`, and `cleanup-local.log`.
 **Acceptance**: Commands pass with no warnings; no disposable local residue remains.
@@ -228,3 +228,5 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 - 2026-06-12 07:20 Unit 6a complete: added red tests for explicit cleanup package scripts, cleanup target docs, script coverage instrumentation, and `typecheck:scripts`/`tsconfig.scripts.json`; expected failures captured in `unit-6a-red.log`. Unit review skipped (reason: red-test unit; implementation review follows green unit).
 - 2026-06-12 07:25 Unit 6b complete: added explicit cleanup scripts, script typecheck config, coverage includes, deployment/QA preflight enforcement, and README/deployment cleanup target docs. Focused preflight tests, `typecheck:scripts`, and build passed with evidence in `unit-6b-green.log`, `unit-6b-typecheck-scripts.log`, and `unit-6b-build.log`.
 - 2026-06-12 07:38 Unit 6c complete: hardened QA preflight CLI testability, added branch coverage for generated config validation, migration parsing, R2 failure cleanup, and CLI entry handling; deployment/QA preflight coverage is 100% statements/branches/functions/lines and build passed with evidence in `unit-6c-coverage.log`, `unit-6c-qa-preflight-green.log`, and `unit-6c-build.log`.
+- 2026-06-12 07:52 Unit 6c review fix complete: Lagrange found one NIT for trailing whitespace/blank EOF in generated logs; normalized Unit 6c logs, suppressed intentional QA preflight CLI stdout in the default-failure test, reran 100% preflight coverage and build, and recorded the result in `unit-6c-review.md`. Narrow review satisfied by `git diff --check` and clean verification logs.
+- 2026-06-12 08:00 Unit 7 complete: focused script tests, full 100% coverage, app typecheck, script typecheck, build, and local cleanup dry-run passed with evidence in `focused-tests.log`, `coverage.log`, `typecheck.log`, `typecheck-scripts.log`, `build.log`, and `cleanup-local.log`. Local cleanup reported zero active disposable users/spoons/OAuth clients, zero active suspicious recipes, and zero blockers; only already-deleted suspicious recipes remain, so no local apply was needed. Unit review skipped (reason: verification-only unit; no behavior changed beyond Unit 6c review fix already reviewed).
