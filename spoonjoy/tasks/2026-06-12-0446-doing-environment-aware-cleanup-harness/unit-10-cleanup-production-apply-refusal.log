@@ -1,0 +1,12 @@
+
+> spoonjoy-v2@1.0.0 cleanup:production /Users/arimendelow/Projects/spoonjoy-v2
+> node scripts/cleanup-local-qa-data.mjs --target-env production -- --apply
+
+Target environment: production
+Base URL: https://spoonjoy.app
+D1 target: production D1 spoonjoy (--remote)
+R2 target: production R2 spoonjoy-photos (--remote)
+Destructive scope: production read-only by default; exact smoke cleanup only
+Refusing broad production cleanup. Production cleanup is read-only outside exact smoke cleanup.
+ ELIFECYCLE  Command failed with exit code 1.
+exit_code=1

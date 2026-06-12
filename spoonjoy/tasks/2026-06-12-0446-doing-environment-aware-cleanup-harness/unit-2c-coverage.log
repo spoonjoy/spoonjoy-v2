@@ -1,0 +1,18 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+      Coverage enabled with istanbul
+
+ ✓ test/scripts/cleanup-local-qa-data.test.ts (18 tests) 85ms
+
+ Test Files  1 passed (1)
+      Tests  18 passed (18)
+   Start at  06:28:48
+   Duration  605ms (transform 179ms, setup 83ms, import 153ms, tests 85ms, environment 150ms)
+
+ % Coverage report from istanbul
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s
+-------------------|---------|----------|---------|---------|-------------------
+All files          |     100 |      100 |     100 |     100 |
+ ...al-qa-data.mjs |     100 |      100 |     100 |     100 |
+-------------------|---------|----------|---------|---------|-------------------

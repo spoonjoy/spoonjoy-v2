@@ -419,6 +419,7 @@ function buildFlowReport(options, providerPreflight, state, exif) {
     exif,
     provenanceLabels: [...state.provenanceLabels],
     r2: {
+      retainedKeys: [],
       deletedKeys: state.deletedKeys,
       verifiedDeletedKeys: state.verifiedDeletedKeys,
       generatedCoverKeys: [...state.generatedCoverKeys],

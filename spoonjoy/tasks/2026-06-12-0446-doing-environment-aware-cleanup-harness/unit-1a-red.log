@@ -1,0 +1,317 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ❯ test/scripts/deployment-preflight.test.ts (121 tests | 1 failed) 186ms
+     ✓ passes against the current repository configuration 7ms
+     ✓ surfaces remote-migration failures as errors 2ms
+     ✓ surfaces remote-migration auth errors as warnings only 2ms
+     ✓ uses createWranglerRunner by default when no runWrangler dep is provided 2ms
+     ✓ uses process.cwd as the default preflight root directory 3ms
+     ✓ flags missing production-critical bindings and docs 1ms
+     ✓ ignores malformed binding entries when valid production bindings are present 1ms
+     ✓ requires deploy:auto in REQUIRED_PACKAGE_SCRIPTS 1ms
+     ✓ flags missing package scripts when package.json has no scripts object 1ms
+     ✓ requires deploy:auto to apply migrations before the full remote preflight 0ms
+     ✓ requires the production deploy workflow to run on pushes to main 0ms
+     ✓ rejects production deploy workflows without an on block 0ms
+     ✓ requires production push workflows to name the main branch explicitly 0ms
+     ✓ rejects production deploy workflows without jobs 0ms
+     ✓ does not accept commented or misplaced push-to-main workflow text 0ms
+     ✓ does not accept inline branch names that merely contain main 0ms
+     ✓ does not accept multiline branch names that merely contain main 0ms
+     ✓ accepts deploy:auto from a block-style production workflow run step 0ms
+     ✓ requires warning-clean CI workflow setup 3ms
+     ✓ rejects a block-style production workflow run step that does not deploy 0ms
+     ✓ requires deploy:auto and Cloudflare credentials on a real deploy step 1ms
+     ✓ rejects a production deploy workflow whose deploy job has no steps 0ms
+     ✓ rejects production deploy workflow setup that can emit checkout or pnpm setup warnings 1ms
+     ✓ ignores nested or malformed env lines when checking production deploy credentials 1ms
+     ✓ reports NODE_ENV as a warning instead of a hard failure 0ms
+     ✓ flags missing telemetry typing, documentation, and deployment commands 0ms
+     ✓ flags missing image provider typing and documentation 0ms
+     ✓ flags a missing isolated QA Wrangler environment and QA scripts 0ms
+     ✓ requires the QA image-cover smoke package script 0ms
+     ✓ requires a credential-gated scheduled QA image-cover smoke workflow in preflight 0ms
+     ✓ rejects QA image-cover smoke workflow setup that can emit checkout or pnpm setup warnings 2ms
+     ✓ accepts QA image-cover block run steps followed by additional step properties 0ms
+     ✓ rejects QA image-cover workflows with mutation triggers or deploy commands 0ms
+     ✓ rejects QA image-cover workflows with deploy commands even when triggers are allowed 0ms
+     ✓ rejects QA image-cover workflows missing credential and provider secret gates 0ms
+     ✓ rejects QA image-cover workflows without job steps 0ms
+     ✓ rejects QA image-cover workflows that only echo required provider words 0ms
+     ✓ rejects QA image-cover workflows without an on block 0ms
+     ✓ rejects QA image-cover workflows with unsupported triggers beyond dispatch and schedule 0ms
+     ✓ ignores non-key trigger lines in QA image-cover workflow trigger parsing 0ms
+     ✓ rejects QA image-cover workflows with duplicate allowed triggers but missing workflow dispatch 0ms
+     ✓ rejects QA image-cover workflows with echo-only Cloudflare gates 0ms
+     ✓ rejects QA image-cover workflows that echo exit commands instead of executing them 0ms
+     ✓ rejects QA image-cover workflows that echo provider gate commands instead of executing them 0ms
+     ✓ rejects QA image-cover workflows that hide provider gate commands in a heredoc 0ms
+     ✓ rejects QA image-cover workflows that set provider ready true after skip branches 0ms
+     ✓ rejects QA image-cover workflows with disjunctive mutation or artifact gates 0ms
+     ✓ rejects QA image-cover workflows whose artifact step omits the smoke artifact path 0ms
+     ✓ rejects QA image-cover workflows whose artifact step has no with block 0ms
+     ✓ flags QA resources that alias production resources 0ms
+     ✓ flags misnamed or duplicated QA rate-limit bindings 0ms
+     ✓ flags non-array and malformed QA rate-limit bindings 1ms
+     ✓ returns PASS when remote D1 reports no pending migrations 1ms
+     ✓ returns PASS when current Wrangler text output reports no pending migrations 0ms
+     ✓ FAILS when one migration is pending and includes its name in the message 0ms
+     ✓ FAILS and lists every pending migration name 0ms
+     ✓ FAILS and lists pending migration names from current Wrangler text output 0ms
+     ✓ WARNS instead of failing when wrangler emits an auth-keyed stderr with non-zero exit 0ms
+     ✓ WARNS when wrangler reports it needs a non-interactive API token 0ms
+     ✓ FAILS with a parse-error message when stdout is neither JSON nor current Wrangler text 0ms
+     ✓ FAILS with a parse-error message when wrangler emits malformed JSON 0ms
+     ✓ FAILS with a shape-error message when JSON is a top-level object instead of an array 1ms
+     ✓ FAILS with a shape-error message when JSON is an array of strings 0ms
+     ✓ FAILS with a shape-error message when JSON objects use lowercase name instead of Name 0ms
+     ✓ FAILS with a clear message when wrangler exits non-zero without an auth-keyed stderr 0ms
+     ✓ FAILS with stdout text when wrangler exits non-zero without stderr 0ms
+     ✓ FAILS when the runWrangler promise rejects (spawn/binary error) 0ms
+     ✓ FAILS with a string representation when runWrangler rejects with a non-Error value 0ms
+     ✓ FAILS with a string representation when JSON.parse throws a non-Error 0ms
+     ✓ returns a warning PASS when SPOONJOY_PREFLIGHT_SKIP_REMOTE=1 even if the fake would have reported pending migrations 0ms
+     ✓ falls back to process.env when no env is provided in deps 0ms
+     ✓ docs/deployment.md mentions pnpm deploy:auto 0ms
+     ✓ docs/deployment.md documents SPOONJOY_PREFLIGHT_SKIP_REMOTE 0ms
+     ✓ DEPLOY.md mentions pnpm deploy:auto 0ms
+     ✓ DEPLOY.md documents SPOONJOY_PREFLIGHT_SKIP_REMOTE 0ms
+     ✓ documents the full PostHog client and server telemetry setup 1ms
+     ✓ documents the QA environment setup and safe verification flow 0ms
+     ✓ deploy chains preflight then build then wrangler deploy via pnpm exec 0ms
+     ✓ deploy:auto skips only the first remote preflight, then builds, migrates, fully preflights, and deploys 0ms
+     ✓ exposes QA preflight, migration, seed, deploy, and smoke scripts 0ms
+     × runs API smoke against the explicit production target 6ms
+     ✓ includes live-smoke script helpers in coverage instrumentation 0ms
+     ✓ runs image-cover smoke after UI screenshot checks so R2 cleanup cannot break later page loads 1ms
+     ✓ runs only on manual dispatch and schedule with credential and QA secret gates 1ms
+     ✓ accepts a single-job warning-clean Storybook deploy workflow 0ms
+     ✓ rejects deprecated Pages action, artifact actions, or a separate deploy job 3ms
+     ✓ requires deployment permissions, main-only deploy steps, and the GitHub deployment token 2ms
+     ✓ requires push-to-main trigger and workflow-level Git default-branch config 2ms
+     ✓ rejects Storybook pnpm setup through pnpm/action-setup instead of Corepack 1ms
+     ✓ rejects missing Storybook build job, steps, or build command 1ms
+     ✓ requires clean deploy directory preparation and generated Pages wrangler config 1ms
+     ✓ rejects repo-root deploys and non-npm Wrangler action installs 3ms
+     ✓ rejects a Storybook Wrangler deploy action without a with block 0ms
+     ✓ requires explicit Pages commit metadata and dirty-state intent 1ms
+     ✓ requires .gitignore coverage for the generated Storybook Pages deploy directory 0ms
+     ✓ requires root pnpm-workspace allowBuilds false entries for all ignored build-script packages 1ms
+     ✓ ignores malformed and nested pnpm-workspace allowBuilds noise around required package entries 0ms
+     ✓ accepts quoted Storybook workflow scalar values and nested with-block entries 0ms
+     ✓ checks the current repository Storybook warning cleanup contract 3ms
+     ✓ defines an isolated Cloudflare QA environment 0ms
+     ✓ invokes the configured wrangler binary with pnpm exec and forwards args 0ms
+     ✓ resolves with stdout/stderr/exitCode when execFile callback signals success 0ms
+     ✓ resolves with non-zero exitCode and stderr when execFile callback signals a process error 0ms
+     ✓ rejects with the underlying error when execFile reports a spawn failure (no numeric exit code) 1ms
+     ✓ exposes a default factory that uses node:child_process execFile 0ms
+     ✓ prefixes passing checks with PASS 0ms
+     ✓ prefixes warning checks with WARN 0ms
+     ✓ prefixes failing error checks with FAIL 0ms
+     ✓ prints WARN line and a passed-with-warnings summary when wrangler reports an auth-keyed soft failure 1ms
+     ✓ prints a passed summary without warning suffix when everything is OK 1ms
+     ✓ calls io.error and io.exit(1) when there is a hard failure 1ms
+     ✓ uses real console.log/console.error/process.exit when io is not injected 2ms
+     ✓ returns false when argv1 is undefined 0ms
+     ✓ returns false when argv1 does not resolve to the module url 0ms
+     ✓ returns true when argv1 resolves to the same path as moduleUrl 0ms
+     ✓ returns false and does not invoke runMain when argv1 is not the module 0ms
+     ✓ returns true and invokes runMain when argv1 matches the moduleUrl 0ms
+     ✓ routes runMain errors through onError 0ms
+     ✓ uses default onError that prints and calls process.exit(1) when runMain rejects with an Error 1ms
+     ✓ uses default onError that stringifies non-Error rejections 0ms
+     ✓ uses default main when runMain is not provided 32ms
+stdout | test/scripts/smoke-api-live.test.ts > API live smoke target handling > writes environment metadata into API smoke artifacts
+/var/folders/md/_fkq3wc92_z55cgtlrfrcfh40000gn/T/spoonjoy-api-smoke-HVqpDI/api-smoke-results.json
+
+ ❯ test/scripts/smoke-api-live.test.ts (3 tests | 3 failed) 50ms
+     × rejects remote API smoke URLs without an explicit target before making requests 11ms
+     × rejects mismatched API smoke target env and URL before making requests 5ms
+     × writes environment metadata into API smoke artifacts 11ms
+ ❯ test/scripts/script-environment.test.ts (7 tests | 6 failed) 32ms
+     ✓ declares the only supported target environments 1ms
+     × infers local for localhost URLs and returns D1/R2/destructive-scope metadata 2ms
+     × resolves QA metadata from an explicit target and exact QA URL 0ms
+     × resolves production metadata for the Worker and custom-domain origins 0ms
+     × requires an explicit target env for remote URLs 2ms
+     × rejects invalid target envs, empty base URLs, invalid URLs, and URL/env mismatches 0ms
+     × formats the resolved target summary agents see before destructive commands 0ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 10 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/scripts/deployment-preflight.test.ts > package.json deploy scripts > runs API smoke against the explicit production target
+AssertionError: expected 'node scripts/smoke-api-live.mjs' to be 'node scripts/smoke-api-live.mjs --tar…' // Object.is equality
+
+Expected: "node scripts/smoke-api-live.mjs --target-env production"
+Received: "node scripts/smoke-api-live.mjs"
+
+ ❯ test/scripts/deployment-preflight.test.ts:1819:38
+    1817|     const pkg = JSON.parse(pkgRaw) as { scripts: Record<string, string…
+    1818|
+    1819|     expect(pkg.scripts["smoke:api"]).toBe("node scripts/smoke-api-live…
+       |                                      ^
+    1820|   });
+    1821|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/10]⎯
+
+ FAIL  test/scripts/script-environment.test.ts > script target resolver > infers local for localhost URLs and returns D1/R2/destructive-scope metadata
+Error: Script target resolver not implemented.
+ ❯ resolveScriptTarget scripts/script-environment.mjs:4:9
+      2|
+      3| export function resolveScriptTarget() {
+      4|   throw new Error("Script target resolver not implemented.");
+       |         ^
+      5| }
+      6|
+ ❯ test/scripts/script-environment.test.ts:16:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/10]⎯
+
+ FAIL  test/scripts/script-environment.test.ts > script target resolver > resolves QA metadata from an explicit target and exact QA URL
+Error: Script target resolver not implemented.
+ ❯ resolveScriptTarget scripts/script-environment.mjs:4:9
+      2|
+      3| export function resolveScriptTarget() {
+      4|   throw new Error("Script target resolver not implemented.");
+       |         ^
+      5| }
+      6|
+ ❯ test/scripts/script-environment.test.ts:35:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/10]⎯
+
+ FAIL  test/scripts/script-environment.test.ts > script target resolver > resolves production metadata for the Worker and custom-domain origins
+Error: Script target resolver not implemented.
+ ❯ resolveScriptTarget scripts/script-environment.mjs:4:9
+      2|
+      3| export function resolveScriptTarget() {
+      4|   throw new Error("Script target resolver not implemented.");
+       |         ^
+      5| }
+      6|
+ ❯ test/scripts/script-environment.test.ts:59:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/10]⎯
+
+ FAIL  test/scripts/script-environment.test.ts > script target resolver > requires an explicit target env for remote URLs
+AssertionError: expected [Function] to throw error matching /--target-env qa or --target-env produ…/ but got 'Script target resolver not implemente…'
+
+- Expected:
+/--target-env qa or --target-env production/
+
++ Received:
+"Script target resolver not implemented."
+
+ ❯ test/scripts/script-environment.test.ts:98:7
+     96|         defaultBaseUrl: "https://spoonjoy.app",
+     97|       }),
+     98|     ).toThrow(/--target-env qa or --target-env production/);
+       |       ^
+     99|   });
+    100|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/10]⎯
+
+ FAIL  test/scripts/script-environment.test.ts > script target resolver > rejects invalid target envs, empty base URLs, invalid URLs, and URL/env mismatches
+AssertionError: expected [Function] to throw error matching /local, qa, or production/ but got 'Script target resolver not implemente…'
+
+- Expected:
+/local, qa, or production/
+
++ Received:
+"Script target resolver not implemented."
+
+ ❯ test/scripts/script-environment.test.ts:108:7
+    106|         defaultBaseUrl: "https://spoonjoy.app",
+    107|       }),
+    108|     ).toThrow(/local, qa, or production/);
+       |       ^
+    109|
+    110|     expect(() =>
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/10]⎯
+
+ FAIL  test/scripts/script-environment.test.ts > script target resolver > formats the resolved target summary agents see before destructive commands
+Error: Script target resolver not implemented.
+ ❯ resolveScriptTarget scripts/script-environment.mjs:4:9
+      2|
+      3| export function resolveScriptTarget() {
+      4|   throw new Error("Script target resolver not implemented.");
+       |         ^
+      5| }
+      6|
+ ❯ test/scripts/script-environment.test.ts:144:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/10]⎯
+
+ FAIL  test/scripts/smoke-api-live.test.ts > API live smoke target handling > rejects remote API smoke URLs without an explicit target before making requests
+AssertionError: expected [Function] to throw error matching /--target-env qa or --target-env produ…/ but got 'fetch should not run before target va…'
+
+- Expected:
+/--target-env qa or --target-env production/
+
++ Received:
+"fetch should not run before target validation"
+
+ ❯ test/scripts/smoke-api-live.test.ts:170:5
+    168|     );
+    169|
+    170|     await expect(importSmokeApi(["--base-url", "https://spoonjoy.app"]…
+       |     ^
+    171|       /--target-env qa or --target-env production/,
+    172|     );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/10]⎯
+
+ FAIL  test/scripts/smoke-api-live.test.ts > API live smoke target handling > rejects mismatched API smoke target env and URL before making requests
+AssertionError: expected [Function] to throw error matching /QA target/ but got 'fetch should not run before target va…'
+
+- Expected:
+/QA target/
+
++ Received:
+"fetch should not run before target validation"
+
+ ❯ test/scripts/smoke-api-live.test.ts:183:5
+    181|     );
+    182|
+    183|     await expect(
+       |     ^
+    184|       importSmokeApi([
+    185|         "--target-env",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/10]⎯
+
+ FAIL  test/scripts/smoke-api-live.test.ts > API live smoke target handling > writes environment metadata into API smoke artifacts
+AssertionError: expected undefined to deeply equal { targetEnv: 'production', …(4) }
+
+- Expected:
+{
+  "baseUrl": "https://spoonjoy.app",
+  "d1Target": "production D1 spoonjoy (--remote)",
+  "destructiveScope": "production read-only by default; exact smoke cleanup only",
+  "r2Target": "production R2 spoonjoy-photos (--remote)",
+  "targetEnv": "production",
+}
+
++ Received:
+undefined
+
+ ❯ test/scripts/smoke-api-live.test.ts:211:34
+    209|       };
+    210|
+    211|       expect(report.environment).toEqual({
+       |                                  ^
+    212|         targetEnv: "production",
+    213|         baseUrl: "https://spoonjoy.app",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/10]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  10 failed | 121 passed (131)
+   Start at  06:13:24
+   Duration  1.44s (transform 139ms, setup 213ms, import 137ms, tests 268ms, environment 456ms)

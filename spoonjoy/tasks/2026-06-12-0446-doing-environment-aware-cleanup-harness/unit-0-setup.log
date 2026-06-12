@@ -1,0 +1,46 @@
+Branch/status:
+## spoonjoy/sj-044-cleanup-harness...origin/spoonjoy/sj-044-cleanup-harness
+
+Head:
+cb64c0eb92272bd1e1aed1ed57eed7a742004852 docs(doing): ready after reviewer convergence
+
+Starting cleanup dry-run:
+Command: pnpm run cleanup:qa
+Result: pass
+- active suspicious recipes: 0
+- already deleted suspicious recipes: 144
+- disposable users: 0
+- disposable spoons: 0
+- e2e oauth clients: 0
+
+Inspected files:
+- scripts/smoke-live-helpers.mjs
+- scripts/smoke-live.mjs
+- scripts/smoke-api-live.mjs
+- scripts/smoke-image-cover-live.mjs
+- scripts/cleanup-local-qa-data.mjs
+- scripts/qa-preflight.ts
+- scripts/deployment-preflight.ts
+- test/helpers/cleanup.ts
+- test/scripts/cleanup-local-qa-data.test.ts
+- test/scripts/smoke-live-helpers.test.ts
+- test/scripts/deployment-preflight.test.ts
+- prisma/schema.prisma
+- package.json
+- README.md
+- docs/deployment.md
+
+Schema relationship checkpoints:
+- ApiCredential.oauthClientId is an indexed string, not an OAuthClient FK.
+- ApiIdempotencyKey.credentialId is nullable and onDelete SetNull.
+- AgentConnectionRequest.credentialId is nullable and onDelete SetNull.
+- Recipe.activeCoverId is nullable and onDelete SetNull.
+- Recipe.sourceRecipeId is nullable and onDelete Restrict.
+- RecipeCover.sourceSpoonId is nullable and onDelete SetNull.
+- RecipeCover.createdById is a plain string.
+- NotificationEvent.payload is string JSON and can retain IDs without FK protection.
+
+Unit 0 acceptance:
+- Branch is spoonjoy/sj-044-cleanup-harness.
+- No unrelated dirty work was overwritten.
+- Cleanup starting state recorded.

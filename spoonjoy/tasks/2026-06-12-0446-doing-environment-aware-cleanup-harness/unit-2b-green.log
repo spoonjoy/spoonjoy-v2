@@ -1,0 +1,9 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ✓ test/scripts/cleanup-local-qa-data.test.ts (10 tests) 32ms
+
+ Test Files  1 passed (1)
+      Tests  10 passed (10)
+   Start at  06:23:32
+   Duration  408ms (transform 52ms, setup 90ms, import 19ms, tests 32ms, environment 147ms)

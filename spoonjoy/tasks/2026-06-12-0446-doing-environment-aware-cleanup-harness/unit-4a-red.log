@@ -1,0 +1,88 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ❯ test/scripts/cleanup-local-qa-data.test.ts (28 tests | 4 failed) 93ms
+     ✓ dry-runs the disposable Spoonjoy QA data patterns 1ms
+     ✓ soft-deletes recipes and deletes only disposable local support rows on apply 0ms
+     ✓ builds local-only Wrangler D1 args 1ms
+     ✓ parses explicit local, QA, and production target environments 1ms
+     ✓ keeps the backwards-compatible missing-target default as a local dry-run 0ms
+     ✓ can parse cleanup args from process argv by default 0ms
+     ✓ rejects missing and invalid target env values 1ms
+     ✓ formats the target summary printed before cleanup commands 0ms
+     ✓ runs local dry-run and local apply with explicit target summaries and local Wrangler args 1ms
+     ✓ prints help without executing a cleanup command 0ms
+     ✓ prints help from default process argv/stdout options 1ms
+     ✓ forwards Wrangler stderr from successful cleanup checks 0ms
+     ✓ does not write stderr when Wrangler returns no stderr field 0ms
+     ✓ does not write stdout or stderr when Wrangler returns no output fields 0ms
+     × runs QA remote dry-run and, on apply, cleans exact validated R2 keys after D1 succeeds 4ms
+     ✓ runs production read-only dry-run and refuses broad production apply 1ms
+     ✓ detects CLI entrypoints and routes CLI errors 53ms
+     ✓ prints default CLI error output for Error and non-Error failures 0ms
+     ✓ dry-runs the full D1 disposable target surface with hard/soft split and OAuth redirect signature 0ms
+     ✓ applies cleanup from explicit disposable target snapshots before any mutation 0ms
+     ✓ blocker-reports every non-disposable cross-boundary D1 reference before mutation 0ms
+     ✓ orders credential, OAuth, cookbook, cover, spoon, recipe, user, and cascade cleanup safely 0ms
+     ✓ clears recipe forks only inside the disposable hard-delete target set 0ms
+     ✓ handles absent or present search tables without failing cleanup 0ms
+     ✓ distinguishes direct disposable NotificationEvent cleanup from non-disposable payload blockers 0ms
+     × extracts only Spoonjoy photo keys from /photos/ URLs 1ms
+     × plans QA R2 cleanup keys, retained keys, and non-disposable surviving-reference blockers 0ms
+     × skips every R2 delete/get command when QA D1 apply fails 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/scripts/cleanup-local-qa-data.test.ts > cleanup-local-qa-data > runs QA remote dry-run and, on apply, cleans exact validated R2 keys after D1 succeeds
+Error: remote QA apply not enabled until D1/R2 safety checks are installed.
+ ❯ Module.runCleanupCli scripts/cleanup-local-qa-data.mjs:454:11
+    452|
+    453|   if (options.apply && options.target.targetEnv === "qa") {
+    454|     throw new Error("remote QA apply not enabled until D1/R2 safety ch…
+       |           ^
+    455|   }
+    456|   if (options.apply && options.target.targetEnv === "production") {
+ ❯ test/scripts/cleanup-local-qa-data.test.ts:309:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  test/scripts/cleanup-local-qa-data.test.ts > cleanup-local-qa-data > extracts only Spoonjoy photo keys from /photos/ URLs
+TypeError: __vite_ssr_import_2__.photoKeyFromImageUrl is not a function
+ ❯ test/scripts/cleanup-local-qa-data.test.ts:533:20
+    531|
+    532|   it("extracts only Spoonjoy photo keys from /photos/ URLs", () => {
+    533|     expect(cleanup.photoKeyFromImageUrl("/photos/profiles/codex-user/a…
+       |                    ^
+    534|       "profiles/codex-user/avatar.jpg",
+    535|     );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  test/scripts/cleanup-local-qa-data.test.ts > cleanup-local-qa-data > plans QA R2 cleanup keys, retained keys, and non-disposable surviving-reference blockers
+TypeError: __vite_ssr_import_2__.planQaR2Cleanup is not a function
+ ❯ test/scripts/cleanup-local-qa-data.test.ts:542:26
+    540|
+    541|   it("plans QA R2 cleanup keys, retained keys, and non-disposable surv…
+    542|     const plan = cleanup.planQaR2Cleanup({
+       |                          ^
+    543|       disposableUserIds: ["codex-user"],
+    544|       hardDeleteRecipeIds: ["recipe-1"],
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  test/scripts/cleanup-local-qa-data.test.ts > cleanup-local-qa-data > skips every R2 delete/get command when QA D1 apply fails
+AssertionError: expected [Function] to throw error matching /D1 apply failed/ but got 'remote QA apply not enabled until D1/…'
+
+- Expected:
+/D1 apply failed/
+
++ Received:
+"remote QA apply not enabled until D1/R2 safety checks are installed."
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 24 passed (28)
+   Start at  06:44:46
+   Duration  495ms (transform 64ms, setup 91ms, import 38ms, tests 93ms, environment 148ms)

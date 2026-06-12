@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "types": ["node"],
+    "noEmit": true
+  },
+  "include": [
+    "scripts/script-environment.mjs",
+    "scripts/deployment-preflight.ts",
+    "scripts/qa-preflight.ts"
+  ]
+}

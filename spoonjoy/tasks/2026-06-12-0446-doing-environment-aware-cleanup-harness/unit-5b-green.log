@@ -1,0 +1,14 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+stdout | test/scripts/smoke-api-live.test.ts > API live smoke target handling > writes environment metadata into API smoke artifacts
+/var/folders/md/_fkq3wc92_z55cgtlrfrcfh40000gn/T/spoonjoy-api-smoke-GmxtGo/api-smoke-results.json
+
+ ✓ test/scripts/smoke-api-live.test.ts (3 tests) 82ms
+ ✓ test/scripts/smoke-image-cover-live.test.ts (35 tests) 52ms
+ ✓ test/scripts/smoke-live-helpers.test.ts (24 tests) 30ms
+
+ Test Files  3 passed (3)
+      Tests  62 passed (62)
+   Start at  07:14:19
+   Duration  1.23s (transform 96ms, setup 189ms, import 60ms, tests 164ms, environment 455ms)

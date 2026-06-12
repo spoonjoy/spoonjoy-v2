@@ -1,0 +1,152 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+stdout | test/scripts/smoke-api-live.test.ts > API live smoke target handling > writes environment metadata into API smoke artifacts
+/var/folders/md/_fkq3wc92_z55cgtlrfrcfh40000gn/T/spoonjoy-api-smoke-ARiygf/api-smoke-results.json
+
+ ❯ test/scripts/smoke-api-live.test.ts (3 tests | 1 failed) 59ms
+     ✓ rejects remote API smoke URLs without an explicit target before making requests 12ms
+     ✓ rejects mismatched API smoke target env and URL before making requests 4ms
+     × writes environment metadata into API smoke artifacts 13ms
+ ❯ test/scripts/smoke-image-cover-live.test.ts (35 tests | 1 failed) 56ms
+     ✓ builds an oriented JPEG fixture with a dirty APP1 marker 2ms
+     ✓ handles malformed and little-endian JPEG metadata 1ms
+     ✓ extracts and validates only run-owned upload keys and observed generated cover keys 1ms
+     ✓ builds legacy API tool request shapes with the expected URL, body, and bearer header 1ms
+     ✓ uses explicit smoke token scopes and revokes the created credential through the session 0ms
+     ✓ builds MCP tools/call request shapes with JSON-RPC body and bearer header 0ms
+     ✓ builds MCP tools/list as its own JSON-RPC method 0ms
+     ✓ parses API and MCP tool payloads while surfacing failures 1ms
+     ✓ parses QA secret output and enforces placeholder plus edit-provider prerequisites 1ms
+     ✓ names every MCP tool the image-cover smoke must prove 0ms
+     × runs preflight before mutation, proves API/MCP operations, provenance, and exact cleanup 9ms
+     ✓ refuses to mutate QA before provider preflight succeeds 1ms
+     ✓ fails before image mutation when token creation does not return a bearer token 0ms
+     ✓ times out waiting for the browser-created AI placeholder before uploads 0ms
+     ✓ ignores malformed cover rows while waiting for the AI placeholder 1ms
+     ✓ rejects upload URLs outside owner upload namespaces 1ms
+     ✓ rejects stored images that keep dirty metadata or lose orientation 1ms
+     ✓ rejects generation status responses without a cover payload 1ms
+     ✓ cleans exact observed R2 keys and revokes the credential when the flow fails 1ms
+     ✓ rejects a missing MCP image-cover tool before running MCP mutations 0ms
+     ✓ fails cleanly when MCP omits 'spoon id' 1ms
+     ✓ fails cleanly when MCP omits 'chef-photo cover id' 1ms
+     ✓ fails cleanly when MCP omits 'editorial upload cover id' 1ms
+     ✓ fails cleanly when MCP omits 'editorial spoon cover id' 1ms
+     ✓ fails if the final cover state does not prove every provenance label 1ms
+     ✓ surfaces cleanup failures when the flow itself succeeds 1ms
+     ✓ fails when credential revocation does not revoke the smoke token 2ms
+     ✓ still cleans R2 objects when credential revocation throws 1ms
+     ✓ surfaces R2 verification failures after deleting the recorded keys 1ms
+     ✓ preserves the original flow error when cleanup also fails 1ms
+     ✓ uses default polling settings when they are omitted 2ms
+     ✓ polls until a cover reaches a succeeded terminal state 0ms
+     ✓ surfaces failed cover generation without extra polling 0ms
+     ✓ uses a fallback failure message when the provider omits a reason 0ms
+     ✓ times out after the fixed attempt budget 0ms
+ ❯ test/scripts/smoke-live-helpers.test.ts (24 tests | 2 failed) 35ms
+     ✓ detects local D1 targets from localhost base URLs 1ms
+     ✓ builds local cleanup args for local smoke targets 1ms
+     ✓ builds QA cleanup args with --env qa 0ms
+     ✓ builds explicit production cleanup args without --env qa 1ms
+     ✓ builds QA user-count verification args with --env qa 0ms
+     ✓ only runs the production Apple OAuth guard for production smoke 0ms
+     ✓ requires explicit target env for remote smoke URLs 0ms
+     ✓ uses process argv defaults when no args are provided 0ms
+     ✓ allows local smoke URLs to infer local target env 1ms
+     ✓ parses explicit QA smoke args 0ms
+     ✓ parses the QA-only image-cover smoke flag 0ms
+     ✓ refuses image-cover smoke outside QA 0ms
+     ✓ builds QA R2 object get and delete args 0ms
+     ✓ only treats known Wrangler R2 missing-key errors as deleted-object proof 0ms
+     ✓ allows explicit production smoke args for the production Worker URL 0ms
+     ✓ allows explicit production smoke args for the production custom domain 0ms
+     ✓ refuses mismatched QA target env and production URL 0ms
+     ✓ refuses mismatched production target env and QA URL 0ms
+     ✓ refuses mismatched local target env and remote URL 0ms
+     ✓ refuses unknown target envs 0ms
+     ✓ parses D1 count output variants and rejects malformed output 0ms
+     ✓ rejects unsupported target envs for D1 arg builders 0ms
+     × builds live smoke artifact metadata with empty R2 arrays for normal smoke 4ms
+     × mirrors image-cover R2 arrays into the top-level live smoke artifact 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/scripts/smoke-api-live.test.ts > API live smoke target handling > writes environment metadata into API smoke artifacts
+AssertionError: expected undefined to deeply equal { branch: Any<String>, …(1) }
+
+- Expected:
+{
+  "branch": Any<String>,
+  "commit": StringMatching /^(unknown|[0-9a-f]{7,40})$/,
+}
+
++ Received:
+undefined
+
+ ❯ test/scripts/smoke-api-live.test.ts:219:26
+    217|         destructiveScope: "production read-only by default; exact smok…
+    218|       });
+    219|       expect(report.git).toEqual({
+       |                          ^
+    220|         branch: expect.any(String),
+    221|         commit: expect.stringMatching(/^(unknown|[0-9a-f]{7,40})$/),
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  test/scripts/smoke-image-cover-live.test.ts > image-cover live smoke flow > runs preflight before mutation, proves API/MCP operations, provenance, and exact cleanup
+AssertionError: expected undefined to deeply equal []
+
+- Expected:
+[]
+
++ Received:
+undefined
+
+ ❯ test/scripts/smoke-image-cover-live.test.ts:550:36
+    548|       "covers/spoon-editorial.jpg",
+    549|     ]));
+    550|     expect(report.r2.retainedKeys).toEqual([]);
+       |                                    ^
+    551|     expect(harness.verifiedDeletedKeys).toEqual(expect.arrayContaining…
+    552|     expect(report.credentialRevocation).toMatchObject({ credentialId: …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > builds live smoke artifact metadata with empty R2 arrays for normal smoke
+AssertionError: expected 'undefined' to be 'function' // Object.is equality
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ test/scripts/smoke-live-helpers.test.ts:271:50
+    269|
+    270|   it("builds live smoke artifact metadata with empty R2 arrays for nor…
+    271|     expect(typeof smokeHelpers.buildSmokeReport).toBe("function");
+       |                                                  ^
+    272|
+    273|     const report = smokeHelpers.buildSmokeReport({
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > mirrors image-cover R2 arrays into the top-level live smoke artifact
+AssertionError: expected 'undefined' to be 'function' // Object.is equality
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ test/scripts/smoke-live-helpers.test.ts:327:50
+    325|
+    326|   it("mirrors image-cover R2 arrays into the top-level live smoke arti…
+    327|     expect(typeof smokeHelpers.buildSmokeReport).toBe("function");
+       |                                                  ^
+    328|
+    329|     const report = smokeHelpers.buildSmokeReport({
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  4 failed | 58 passed (62)
+   Start at  07:12:33
+   Duration  1.24s (transform 98ms, setup 196ms, import 66ms, tests 150ms, environment 465ms)

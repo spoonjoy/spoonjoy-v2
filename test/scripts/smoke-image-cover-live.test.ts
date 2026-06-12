@@ -547,6 +547,7 @@ describe("image-cover live smoke flow", () => {
       "covers/editorial.jpg",
       "covers/spoon-editorial.jpg",
     ]));
+    expect(report.r2.retainedKeys).toEqual([]);
     expect(harness.verifiedDeletedKeys).toEqual(expect.arrayContaining(report.r2.deletedKeys));
     expect(report.credentialRevocation).toMatchObject({ credentialId: "credential-1", revoked: true });
   });

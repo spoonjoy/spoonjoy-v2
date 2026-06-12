@@ -1,0 +1,425 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ❯ test/scripts/cleanup-local-qa-data.test.ts (25 tests | 7 failed) 135ms
+     ✓ dry-runs the disposable Spoonjoy QA data patterns 1ms
+     ✓ soft-deletes recipes and deletes only disposable local support rows on apply 0ms
+     ✓ builds local-only Wrangler D1 args 1ms
+     ✓ parses explicit local, QA, and production target environments 1ms
+     ✓ keeps the backwards-compatible missing-target default as a local dry-run 0ms
+     ✓ can parse cleanup args from process argv by default 0ms
+     ✓ rejects missing and invalid target env values 1ms
+     ✓ formats the target summary printed before cleanup commands 0ms
+     ✓ runs local dry-run and local apply with explicit target summaries and local Wrangler args 1ms
+     ✓ prints help without executing a cleanup command 0ms
+     ✓ prints help from default process argv/stdout options 1ms
+     ✓ forwards Wrangler stderr from successful cleanup checks 0ms
+     ✓ does not write stderr when Wrangler returns no stderr field 0ms
+     ✓ does not write stdout or stderr when Wrangler returns no output fields 0ms
+     ✓ runs QA remote dry-run but refuses QA apply until D1/R2 safety is installed 1ms
+     ✓ runs production read-only dry-run and refuses broad production apply 0ms
+     ✓ detects CLI entrypoints and routes CLI errors 53ms
+     ✓ prints default CLI error output for Error and non-Error failures 0ms
+     × dry-runs the full D1 disposable target surface with hard/soft split and OAuth redirect signature 8ms
+     × applies cleanup from explicit disposable target snapshots before any mutation 0ms
+     × blocker-reports every non-disposable cross-boundary D1 reference before mutation 3ms
+     × orders credential, OAuth, cookbook, cover, spoon, recipe, user, and cascade cleanup safely 0ms
+     × clears recipe forks only inside the disposable hard-delete target set 1ms
+     × handles absent or present search tables without failing cleanup 1ms
+     × distinguishes direct disposable NotificationEvent cleanup from non-disposable payload blockers 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/scripts/cleanup-local-qa-data.test.ts > cleanup-local-qa-data > dry-runs the full D1 disposable target surface with hard/soft split and OAuth redirect signature
+AssertionError: expected 'SELECT \'active suspicious recipes\' …' to contain '\'hard-delete recipes owned by dispos…'
+
+- Expected
++ Received
+
+- 'hard-delete recipes owned by disposable users'
++ SELECT 'active suspicious recipes' AS item, COUNT(*) AS count
++ FROM Recipe
++ WHERE deletedAt IS NULL AND (lower(title) LIKE 'e2e %'
++     OR lower(title) LIKE 'mobile dock save%'
++     OR lower(title) LIKE '%(variation %'
++     OR lower(title) LIKE 'codex %'
++     OR lower(title) LIKE 'codex-smoke-%');
++
++ SELECT 'already deleted suspicious recipes' AS item, COUNT(*) AS count
++ FROM Recipe
++ WHERE deletedAt IS NOT NULL AND (lower(title) LIKE 'e2e %'
++     OR lower(title) LIKE 'mobile dock save%'
++     OR lower(title) LIKE '%(variation %'
++     OR lower(title) LIKE 'codex %'
++     OR lower(title) LIKE 'codex-smoke-%');
++
++ SELECT 'disposable users' AS item, COUNT(*) AS count
++ FROM User
++ WHERE email LIKE 'codex-%'
++     OR email LIKE 'e2e-passkey-%'
++     OR username LIKE 'codex_%'
++     OR username LIKE 'e2e_passkey_%';
++
++ SELECT 'disposable spoons' AS item, COUNT(*) AS count
++ FROM RecipeSpoon
++ WHERE lower(coalesce(note,'')) LIKE 'e2e %'
++     OR lower(coalesce(note,'')) LIKE 'codex %'
++     OR lower(coalesce(note,'')) LIKE 'playwright%';
++
++ SELECT 'e2e oauth clients' AS item, COUNT(*) AS count
++ FROM OAuthClient
++ WHERE clientName = 'E2E OAuth Client';
+
+ ❯ expectAll test/scripts/cleanup-local-qa-data.test.ts:34:18
+     32| function expectAll(text: string, fragments: string[]) {
+     33|   for (const fragment of fragments) {
+     34|     expect(text).toContain(fragment);
+       |                  ^
+     35|   }
+     36| }
+ ❯ test/scripts/cleanup-local-qa-data.test.ts:380:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  test/scripts/cleanup-local-qa-data.test.ts > cleanup-local-qa-data > applies cleanup from explicit disposable target snapshots before any mutation
+AssertionError: Expected "CREATE TEMP TABLE disposable_users" after index -1: expected -1 to be greater than -1
+ ❯ expectInOrder test/scripts/cleanup-local-qa-data.test.ts:27:80
+     25|   for (const fragment of fragments) {
+     26|     const next = text.indexOf(fragment, cursor + 1);
+     27|     expect(next, `Expected ${JSON.stringify(fragment)} after index ${c…
+       |                                                                                ^
+     28|     cursor = next;
+     29|   }
+ ❯ test/scripts/cleanup-local-qa-data.test.ts:400:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  test/scripts/cleanup-local-qa-data.test.ts > cleanup-local-qa-data > blocker-reports every non-disposable cross-boundary D1 reference before mutation
+AssertionError: expected 'PRAGMA foreign_keys=ON;\n\nDELETE FRO…' to contain 'blocker_recipe_sourceRecipeId'
+
+- Expected
++ Received
+
+- blocker_recipe_sourceRecipeId
++ PRAGMA foreign_keys=ON;
++
++ DELETE FROM RecipeInCookbook
++ WHERE recipeId IN (
++   SELECT id FROM Recipe WHERE lower(title) LIKE 'e2e %'
++     OR lower(title) LIKE 'mobile dock save%'
++     OR lower(title) LIKE '%(variation %'
++     OR lower(title) LIKE 'codex %'
++     OR lower(title) LIKE 'codex-smoke-%'
++ )
++ OR recipeId IN (
++   SELECT id FROM Recipe WHERE chefId IN (SELECT id FROM User WHERE email LIKE 'codex-%'
++     OR email LIKE 'e2e-passkey-%'
++     OR username LIKE 'codex_%'
++     OR username LIKE 'e2e_passkey_%')
++ )
++ OR addedById IN (
++   SELECT id FROM User WHERE email LIKE 'codex-%'
++     OR email LIKE 'e2e-passkey-%'
++     OR username LIKE 'codex_%'
++     OR username LIKE 'e2e_passkey_%'
++ );
++
++ UPDATE Recipe
++ SET deletedAt = CURRENT_TIMESTAMP
++ WHERE deletedAt IS NULL AND (lower(title) LIKE 'e2e %'
++     OR lower(title) LIKE 'mobile dock save%'
++     OR lower(title) LIKE '%(variation %'
++     OR lower(title) LIKE 'codex %'
++     OR lower(title) LIKE 'codex-smoke-%');
++
++ DELETE FROM RecipeSpoon
++ WHERE lower(coalesce(note,'')) LIKE 'e2e %'
++     OR lower(coalesce(note,'')) LIKE 'codex %'
++     OR lower(coalesce(note,'')) LIKE 'playwright%';
++
++ DELETE FROM OAuthAuthCode
++ WHERE clientId IN (SELECT id FROM OAuthClient WHERE clientName = 'E2E OAuth Client');
++
++ DELETE FROM OAuthClient
++ WHERE clientName = 'E2E OAuth Client';
++
++ DELETE FROM OAuth
++ WHERE userId IN (SELECT id FROM User WHERE email LIKE 'codex-%'
++     OR email LIKE 'e2e-passkey-%'
++     OR username LIKE 'codex_%'
++     OR username LIKE 'e2e_passkey_%');
++
++ DELETE FROM UserCredential
++ WHERE userId IN (SELECT id FROM User WHERE email LIKE 'codex-%'
++     OR email LIKE 'e2e-passkey-%'
++     OR username LIKE 'codex_%'
++     OR username LIKE 'e2e_passkey_%');
++
++ DELETE FROM User
++ WHERE email LIKE 'codex-%'
++     OR email LIKE 'e2e-passkey-%'
++     OR username LIKE 'codex_%'
++     OR username LIKE 'e2e_passkey_%';
+
+ ❯ expectAll test/scripts/cleanup-local-qa-data.test.ts:34:18
+     32| function expectAll(text: string, fragments: string[]) {
+     33|   for (const fragment of fragments) {
+     34|     expect(text).toContain(fragment);
+       |                  ^
+     35|   }
+     36| }
+ ❯ test/scripts/cleanup-local-qa-data.test.ts:421:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  test/scripts/cleanup-local-qa-data.test.ts > cleanup-local-qa-data > orders credential, OAuth, cookbook, cover, spoon, recipe, user, and cascade cleanup safely
+AssertionError: Expected "INSERT INTO disposable_credentials" after index -1: expected -1 to be greater than -1
+ ❯ expectInOrder test/scripts/cleanup-local-qa-data.test.ts:27:80
+     25|   for (const fragment of fragments) {
+     26|     const next = text.indexOf(fragment, cursor + 1);
+     27|     expect(next, `Expected ${JSON.stringify(fragment)} after index ${c…
+       |                                                                                ^
+     28|     cursor = next;
+     29|   }
+ ❯ test/scripts/cleanup-local-qa-data.test.ts:445:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  test/scripts/cleanup-local-qa-data.test.ts > cleanup-local-qa-data > clears recipe forks only inside the disposable hard-delete target set
+AssertionError: expected 'PRAGMA foreign_keys=ON;\n\nDELETE FRO…' to contain 'UPDATE Recipe\nSET sourceRecipeId = N…'
+
+- Expected
++ Received
+
++ PRAGMA foreign_keys=ON;
++
++ DELETE FROM RecipeInCookbook
++ WHERE recipeId IN (
++   SELECT id FROM Recipe WHERE lower(title) LIKE 'e2e %'
++     OR lower(title) LIKE 'mobile dock save%'
++     OR lower(title) LIKE '%(variation %'
++     OR lower(title) LIKE 'codex %'
++     OR lower(title) LIKE 'codex-smoke-%'
++ )
++ OR recipeId IN (
++   SELECT id FROM Recipe WHERE chefId IN (SELECT id FROM User WHERE email LIKE 'codex-%'
++     OR email LIKE 'e2e-passkey-%'
++     OR username LIKE 'codex_%'
++     OR username LIKE 'e2e_passkey_%')
++ )
++ OR addedById IN (
++   SELECT id FROM User WHERE email LIKE 'codex-%'
++     OR email LIKE 'e2e-passkey-%'
++     OR username LIKE 'codex_%'
++     OR username LIKE 'e2e_passkey_%'
++ );
++
+  UPDATE Recipe
+- SET sourceRecipeId = NULL
++ SET deletedAt = CURRENT_TIMESTAMP
++ WHERE deletedAt IS NULL AND (lower(title) LIKE 'e2e %'
++     OR lower(title) LIKE 'mobile dock save%'
++     OR lower(title) LIKE '%(variation %'
++     OR lower(title) LIKE 'codex %'
++     OR lower(title) LIKE 'codex-smoke-%');
++
++ DELETE FROM RecipeSpoon
++ WHERE lower(coalesce(note,'')) LIKE 'e2e %'
++     OR lower(coalesce(note,'')) LIKE 'codex %'
++     OR lower(coalesce(note,'')) LIKE 'playwright%';
++
++ DELETE FROM OAuthAuthCode
++ WHERE clientId IN (SELECT id FROM OAuthClient WHERE clientName = 'E2E OAuth Client');
++
++ DELETE FROM OAuthClient
++ WHERE clientName = 'E2E OAuth Client';
++
++ DELETE FROM OAuth
++ WHERE userId IN (SELECT id FROM User WHERE email LIKE 'codex-%'
++     OR email LIKE 'e2e-passkey-%'
++     OR username LIKE 'codex_%'
++     OR username LIKE 'e2e_passkey_%');
++
++ DELETE FROM UserCredential
++ WHERE userId IN (SELECT id FROM User WHERE email LIKE 'codex-%'
++     OR email LIKE 'e2e-passkey-%'
++     OR username LIKE 'codex_%'
++     OR username LIKE 'e2e_passkey_%');
++
++ DELETE FROM User
++ WHERE email LIKE 'codex-%'
++     OR email LIKE 'e2e-passkey-%'
++     OR username LIKE 'codex_%'
++     OR username LIKE 'e2e_passkey_%';
+
+ ❯ test/scripts/cleanup-local-qa-data.test.ts:467:17
+    465|     const sql = buildApplySql();
+    466|
+    467|     expect(sql).toContain("UPDATE Recipe\nSET sourceRecipeId = NULL");
+       |                 ^
+    468|     expect(sql).toContain("WHERE id IN (SELECT id FROM hard_delete_rec…
+    469|     expect(sql).toContain("sourceRecipeId IN (SELECT id FROM hard_dele…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  test/scripts/cleanup-local-qa-data.test.ts > cleanup-local-qa-data > handles absent or present search tables without failing cleanup
+AssertionError: expected 'PRAGMA foreign_keys=ON;\n\nDELETE FRO…' to contain 'sqlite_master'
+
+- Expected
++ Received
+
+- sqlite_master
++ PRAGMA foreign_keys=ON;
++
++ DELETE FROM RecipeInCookbook
++ WHERE recipeId IN (
++   SELECT id FROM Recipe WHERE lower(title) LIKE 'e2e %'
++     OR lower(title) LIKE 'mobile dock save%'
++     OR lower(title) LIKE '%(variation %'
++     OR lower(title) LIKE 'codex %'
++     OR lower(title) LIKE 'codex-smoke-%'
++ )
++ OR recipeId IN (
++   SELECT id FROM Recipe WHERE chefId IN (SELECT id FROM User WHERE email LIKE 'codex-%'
++     OR email LIKE 'e2e-passkey-%'
++     OR username LIKE 'codex_%'
++     OR username LIKE 'e2e_passkey_%')
++ )
++ OR addedById IN (
++   SELECT id FROM User WHERE email LIKE 'codex-%'
++     OR email LIKE 'e2e-passkey-%'
++     OR username LIKE 'codex_%'
++     OR username LIKE 'e2e_passkey_%'
++ );
++
++ UPDATE Recipe
++ SET deletedAt = CURRENT_TIMESTAMP
++ WHERE deletedAt IS NULL AND (lower(title) LIKE 'e2e %'
++     OR lower(title) LIKE 'mobile dock save%'
++     OR lower(title) LIKE '%(variation %'
++     OR lower(title) LIKE 'codex %'
++     OR lower(title) LIKE 'codex-smoke-%');
++
++ DELETE FROM RecipeSpoon
++ WHERE lower(coalesce(note,'')) LIKE 'e2e %'
++     OR lower(coalesce(note,'')) LIKE 'codex %'
++     OR lower(coalesce(note,'')) LIKE 'playwright%';
++
++ DELETE FROM OAuthAuthCode
++ WHERE clientId IN (SELECT id FROM OAuthClient WHERE clientName = 'E2E OAuth Client');
++
++ DELETE FROM OAuthClient
++ WHERE clientName = 'E2E OAuth Client';
++
++ DELETE FROM OAuth
++ WHERE userId IN (SELECT id FROM User WHERE email LIKE 'codex-%'
++     OR email LIKE 'e2e-passkey-%'
++     OR username LIKE 'codex_%'
++     OR username LIKE 'e2e_passkey_%');
++
++ DELETE FROM UserCredential
++ WHERE userId IN (SELECT id FROM User WHERE email LIKE 'codex-%'
++     OR email LIKE 'e2e-passkey-%'
++     OR username LIKE 'codex_%'
++     OR username LIKE 'e2e_passkey_%');
++
++ DELETE FROM User
++ WHERE email LIKE 'codex-%'
++     OR email LIKE 'e2e-passkey-%'
++     OR username LIKE 'codex_%'
++     OR username LIKE 'e2e_passkey_%';
+
+ ❯ expectAll test/scripts/cleanup-local-qa-data.test.ts:34:18
+     32| function expectAll(text: string, fragments: string[]) {
+     33|   for (const fragment of fragments) {
+     34|     expect(text).toContain(fragment);
+       |                  ^
+     35|   }
+     36| }
+ ❯ test/scripts/cleanup-local-qa-data.test.ts:476:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+ FAIL  test/scripts/cleanup-local-qa-data.test.ts > cleanup-local-qa-data > distinguishes direct disposable NotificationEvent cleanup from non-disposable payload blockers
+AssertionError: expected 'PRAGMA foreign_keys=ON;\n\nDELETE FRO…' to contain 'DELETE FROM NotificationEvent'
+
+- Expected
++ Received
+
+- DELETE FROM NotificationEvent
++ PRAGMA foreign_keys=ON;
++
++ DELETE FROM RecipeInCookbook
++ WHERE recipeId IN (
++   SELECT id FROM Recipe WHERE lower(title) LIKE 'e2e %'
++     OR lower(title) LIKE 'mobile dock save%'
++     OR lower(title) LIKE '%(variation %'
++     OR lower(title) LIKE 'codex %'
++     OR lower(title) LIKE 'codex-smoke-%'
++ )
++ OR recipeId IN (
++   SELECT id FROM Recipe WHERE chefId IN (SELECT id FROM User WHERE email LIKE 'codex-%'
++     OR email LIKE 'e2e-passkey-%'
++     OR username LIKE 'codex_%'
++     OR username LIKE 'e2e_passkey_%')
++ )
++ OR addedById IN (
++   SELECT id FROM User WHERE email LIKE 'codex-%'
++     OR email LIKE 'e2e-passkey-%'
++     OR username LIKE 'codex_%'
++     OR username LIKE 'e2e_passkey_%'
++ );
++
++ UPDATE Recipe
++ SET deletedAt = CURRENT_TIMESTAMP
++ WHERE deletedAt IS NULL AND (lower(title) LIKE 'e2e %'
++     OR lower(title) LIKE 'mobile dock save%'
++     OR lower(title) LIKE '%(variation %'
++     OR lower(title) LIKE 'codex %'
++     OR lower(title) LIKE 'codex-smoke-%');
++
++ DELETE FROM RecipeSpoon
++ WHERE lower(coalesce(note,'')) LIKE 'e2e %'
++     OR lower(coalesce(note,'')) LIKE 'codex %'
++     OR lower(coalesce(note,'')) LIKE 'playwright%';
++
++ DELETE FROM OAuthAuthCode
++ WHERE clientId IN (SELECT id FROM OAuthClient WHERE clientName = 'E2E OAuth Client');
++
++ DELETE FROM OAuthClient
++ WHERE clientName = 'E2E OAuth Client';
++
++ DELETE FROM OAuth
++ WHERE userId IN (SELECT id FROM User WHERE email LIKE 'codex-%'
++     OR email LIKE 'e2e-passkey-%'
++     OR username LIKE 'codex_%'
++     OR username LIKE 'e2e_passkey_%');
++
++ DELETE FROM UserCredential
++ WHERE userId IN (SELECT id FROM User WHERE email LIKE 'codex-%'
++     OR email LIKE 'e2e-passkey-%'
++     OR username LIKE 'codex_%'
++     OR username LIKE 'e2e_passkey_%');
++
++ DELETE FROM User
++ WHERE email LIKE 'codex-%'
++     OR email LIKE 'e2e-passkey-%'
++     OR username LIKE 'codex_%'
++     OR username LIKE 'e2e_passkey_%';
+
+ ❯ expectAll test/scripts/cleanup-local-qa-data.test.ts:34:18
+     32| function expectAll(text: string, fragments: string[]) {
+     33|   for (const fragment of fragments) {
+     34|     expect(text).toContain(fragment);
+       |                  ^
+     35|   }
+     36| }
+ ❯ test/scripts/cleanup-local-qa-data.test.ts:493:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  7 failed | 18 passed (25)
+   Start at  06:31:06
+   Duration  610ms (transform 58ms, setup 109ms, import 26ms, tests 135ms, environment 206ms)

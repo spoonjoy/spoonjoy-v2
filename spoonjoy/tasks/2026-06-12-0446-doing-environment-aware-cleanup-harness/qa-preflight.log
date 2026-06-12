@@ -1,0 +1,9 @@
+
+> spoonjoy-v2@1.0.0 qa:preflight /Users/arimendelow/Projects/spoonjoy-v2
+> tsx scripts/qa-preflight.ts
+
+PASS QA static config: QA static config targets https://spoonjoy-v2-qa.mendelow-studio.workers.dev.
+PASS QA D1 migrations: QA D1 has no pending migrations.
+PASS QA secrets: QA Worker has required runtime secrets.
+PASS QA R2 round trip: QA R2 write/read/delete probe passed.
+QA preflight passed.

@@ -1,0 +1,289 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ❯ test/scripts/cleanup-local-qa-data.test.ts (40 tests | 5 failed) 150ms
+     ✓ dry-runs the disposable Spoonjoy QA data patterns 1ms
+     ✓ soft-deletes recipes and deletes only disposable local support rows on apply 0ms
+     ✓ builds local-only Wrangler D1 args 1ms
+     ✓ parses explicit local, QA, and production target environments 1ms
+     ✓ keeps the backwards-compatible missing-target default as a local dry-run 0ms
+     ✓ can parse cleanup args from process argv by default 0ms
+     ✓ rejects missing and invalid target env values 1ms
+     ✓ formats the target summary printed before cleanup commands 0ms
+     ✓ runs local dry-run and local apply with explicit target summaries and local Wrangler args 1ms
+     ✓ prints help without executing a cleanup command 0ms
+     ✓ prints help from default process argv/stdout options 1ms
+     ✓ forwards Wrangler stderr from successful cleanup checks 0ms
+     ✓ does not write stderr when Wrangler returns no stderr field 0ms
+     ✓ does not write stdout or stderr when Wrangler returns no output fields 0ms
+     × runs QA remote dry-run and, on apply, cleans exact validated R2 keys after D1 succeeds 4ms
+     ✓ runs production read-only dry-run and refuses broad production apply 1ms
+     ✓ detects CLI entrypoints and routes CLI errors 53ms
+     ✓ prints default CLI error output for Error and non-Error failures 0ms
+     ✓ dry-runs the full D1 disposable target surface with hard/soft split and OAuth redirect signature 0ms
+     ✓ applies cleanup from explicit disposable target snapshots before any mutation 0ms
+     ✓ blocker-reports every non-disposable cross-boundary D1 reference before mutation 0ms
+     ✓ orders credential, OAuth, cookbook, cover, spoon, recipe, user, and cascade cleanup safely 0ms
+     ✓ clears recipe forks only inside the disposable hard-delete target set 0ms
+     ✓ handles absent or present search tables without failing cleanup 0ms
+     ✓ distinguishes direct disposable NotificationEvent cleanup from non-disposable payload blockers 0ms
+     ✓ extracts only Spoonjoy photo keys from /photos/ URLs 0ms
+     ✓ plans QA R2 cleanup keys, retained keys, and non-disposable surviving-reference blockers 0ms
+     ✓ retains generated cover keys outside disposable namespaces 0ms
+     ✓ handles default QA R2 planning args, null photo URLs, duplicates, and spoon upload keys 0ms
+     × builds QA R2 candidate SQL with retained unsafe keys and surviving-reference blockers 7ms
+     × builds the SearchDocument R2 blocker SQL separately from base candidate collection 1ms
+     ✓ refuses QA apply before D1 mutation when R2 candidates have surviving non-disposable references 0ms
+     × refuses QA apply before D1 mutation when search documents reference candidate R2 keys 1ms
+     × reports D1 cleanup blockers before running the apply mutation 0ms
+     ✓ runs QA apply with no R2 candidates and no R2 delete/get commands 0ms
+     ✓ handles candidate rows without results and candidates command without stdout 0ms
+     ✓ verifies R2 deletion when missing errors are reported as strings or stdout 0ms
+     ✓ fails QA apply when R2 verification still fetches a deleted key 0ms
+     ✓ surfaces unexpected R2 verification failures 0ms
+     ✓ skips every R2 delete/get command when QA D1 apply fails 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/scripts/cleanup-local-qa-data.test.ts > cleanup-local-qa-data > runs QA remote dry-run and, on apply, cleans exact validated R2 keys after D1 succeeds
+TypeError: __vite_ssr_import_2__.buildBlockerReportSql is not a function
+ ❯ test/scripts/cleanup-local-qa-data.test.ts:326:46
+    324|     expect(joinedCalls[2]).toContain("sqlite_master");
+    325|     expect(joinedCalls[2]).toContain("SearchDocument");
+    326|     expect(joinedCalls[3]).toContain(cleanup.buildBlockerReportSql());
+       |                                              ^
+    327|     expect(joinedCalls[4]).toContain(buildApplySql());
+    328|     expect(joinedCalls.slice(1, 4)).not.toEqual(expect.arrayContaining…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  test/scripts/cleanup-local-qa-data.test.ts > cleanup-local-qa-data > builds QA R2 candidate SQL with retained unsafe keys and surviving-reference blockers
+AssertionError: expected 'WITH\n  disposable_users AS (\n    SE…' not to contain 'FROM SearchDocument'
+
+- Expected
++ Received
+
+- FROM SearchDocument
++ WITH
++   disposable_users AS (
++     SELECT id FROM User WHERE email LIKE 'codex-%'
++     OR email LIKE 'e2e-passkey-%'
++     OR username LIKE 'codex_%'
++     OR username LIKE 'e2e_passkey_%'
++   ),
++   hard_delete_recipes AS (
++     SELECT id, chefId FROM Recipe WHERE chefId IN (SELECT id FROM disposable_users)
++   ),
++   soft_delete_recipes AS (
++     SELECT id FROM Recipe
++     WHERE lower(title) LIKE 'e2e %'
++     OR lower(title) LIKE 'mobile dock save%'
++     OR lower(title) LIKE '%(variation %'
++     OR lower(title) LIKE 'codex %'
++     OR lower(title) LIKE 'codex-smoke-%'
++       AND chefId NOT IN (SELECT id FROM disposable_users)
++   ),
++   disposable_spoons AS (
++     SELECT id, chefId, recipeId, photoUrl FROM RecipeSpoon
++     WHERE chefId IN (SELECT id FROM disposable_users)
++        OR lower(coalesce(note,'')) LIKE 'e2e %'
++     OR lower(coalesce(note,'')) LIKE 'codex %'
++     OR lower(coalesce(note,'')) LIKE 'playwright%'
++   ),
++   disposable_covers AS (
++     SELECT id, recipeId, imageUrl, stylizedImageUrl, sourceImageUrl
++     FROM RecipeCover
++     WHERE recipeId IN (SELECT id FROM hard_delete_recipes)
++   ),
++   candidate_r2_keys AS (
++     SELECT 'delete' AS action, substr(photoUrl, length('/photos/') + 1) AS key, NULL AS reason
++     FROM User
++     WHERE id IN (SELECT id FROM disposable_users)
++       AND photoUrl LIKE '/photos/profiles/' || id || '/%'
++     UNION
++     SELECT 'retain', substr(photoUrl, length('/photos/') + 1), 'unsafe disposable user photo namespace'
++     FROM User
++     WHERE id IN (SELECT id FROM disposable_users)
++       AND photoUrl LIKE '/photos/%'
++       AND photoUrl NOT LIKE '/photos/profiles/' || id || '/%'
++     UNION
++     SELECT 'delete', substr(photoUrl, length('/photos/') + 1), NULL
++     FROM disposable_spoons
++     WHERE photoUrl LIKE '/photos/spoons/' || chefId || '/' || recipeId || '/%'
++        OR photoUrl LIKE '/photos/spoons/' || chefId || '/uploads/%'
++     UNION
++     SELECT 'retain', substr(photoUrl, length('/photos/') + 1), 'unsafe disposable spoon photo namespace'
++     FROM disposable_spoons
++     WHERE photoUrl LIKE '/photos/%'
++       AND NOT (
++         photoUrl LIKE '/photos/spoons/' || chefId || '/' || recipeId || '/%'
++         OR photoUrl LIKE '/photos/spoons/' || chefId || '/uploads/%'
++       )
++     UNION
++     SELECT 'delete', substr(imageUrl, length('/photos/') + 1), NULL
++     FROM disposable_covers dc
++     JOIN Recipe r ON r.id = dc.recipeId
++     WHERE imageUrl LIKE '/photos/recipes/' || r.chefId || '/' || dc.recipeId || '/%'
++        OR imageUrl LIKE '/photos/recipes/' || r.chefId || '/uploads/%'
++     UNION
++     SELECT 'retain', substr(imageUrl, length('/photos/') + 1), 'unsafe disposable cover imageUrl namespace'
++     FROM disposable_covers dc
++     JOIN Recipe r ON r.id = dc.recipeId
++     WHERE imageUrl LIKE '/photos/%'
++       AND NOT (
++         imageUrl LIKE '/photos/recipes/' || r.chefId || '/' || dc.recipeId || '/%'
++         OR imageUrl LIKE '/photos/recipes/' || r.chefId || '/uploads/%'
++       )
++     UNION
++     SELECT 'delete', substr(stylizedImageUrl, length('/photos/') + 1), NULL
++     FROM disposable_covers dc
++     JOIN Recipe r ON r.id = dc.recipeId
++     WHERE stylizedImageUrl LIKE '/photos/recipes/' || r.chefId || '/' || dc.recipeId || '/%'
++        OR stylizedImageUrl LIKE '/photos/recipes/' || r.chefId || '/uploads/%'
++     UNION
++     SELECT 'retain', substr(stylizedImageUrl, length('/photos/') + 1), 'unsafe disposable cover stylizedImageUrl namespace'
++     FROM disposable_covers dc
++     JOIN Recipe r ON r.id = dc.recipeId
++     WHERE stylizedImageUrl LIKE '/photos/%'
++       AND NOT (
++         stylizedImageUrl LIKE '/photos/recipes/' || r.chefId || '/' || dc.recipeId || '/%'
++         OR stylizedImageUrl LIKE '/photos/recipes/' || r.chefId || '/uploads/%'
++       )
++     UNION
++     SELECT 'delete', substr(sourceImageUrl, length('/photos/') + 1), NULL
++     FROM disposable_covers dc
++     JOIN Recipe r ON r.id = dc.recipeId
++     WHERE sourceImageUrl LIKE '/photos/recipes/' || r.chefId || '/' || dc.recipeId || '/%'
++        OR sourceImageUrl LIKE '/photos/recipes/' || r.chefId || '/uploads/%'
++     UNION
++     SELECT 'retain', substr(sourceImageUrl, length('/photos/') + 1), 'unsafe disposable cover sourceImageUrl namespace'
++     FROM disposable_covers dc
++     JOIN Recipe r ON r.id = dc.recipeId
++     WHERE sourceImageUrl LIKE '/photos/%'
++       AND NOT (
++         sourceImageUrl LIKE '/photos/recipes/' || r.chefId || '/' || dc.recipeId || '/%'
++         OR sourceImageUrl LIKE '/photos/recipes/' || r.chefId || '/uploads/%'
++       )
++   ),
++   r2_reference_blockers AS (
++     SELECT 'blocker_user_photoUrl' AS action,
++       substr(u.photoUrl, length('/photos/') + 1) AS key,
++       'non-disposable User.photoUrl still references candidate key' AS reason
++     FROM User u
++     JOIN candidate_r2_keys c ON c.action = 'delete' AND c.key = substr(u.photoUrl, length('/photos/') + 1)
++     WHERE u.id NOT IN (SELECT id FROM disposable_users)
++     UNION
++     SELECT 'blocker_spoon_photoUrl',
++       substr(rs.photoUrl, length('/photos/') + 1),
++       'non-disposable RecipeSpoon.photoUrl still references candidate key'
++     FROM RecipeSpoon rs
++     JOIN candidate_r2_keys c ON c.action = 'delete' AND c.key = substr(rs.photoUrl, length('/photos/') + 1)
++     WHERE rs.id NOT IN (SELECT id FROM disposable_spoons)
++       AND rs.chefId NOT IN (SELECT id FROM disposable_users)
++     UNION
++     SELECT 'blocker_cover_imageUrl',
++       substr(rc.imageUrl, length('/photos/') + 1),
++       'non-disposable RecipeCover.imageUrl still references candidate key'
++     FROM RecipeCover rc
++     JOIN candidate_r2_keys c ON c.action = 'delete' AND c.key = substr(rc.imageUrl, length('/photos/') + 1)
++     WHERE rc.recipeId NOT IN (SELECT id FROM hard_delete_recipes)
++     UNION
++     SELECT 'blocker_cover_stylizedImageUrl',
++       substr(rc.stylizedImageUrl, length('/photos/') + 1),
++       'non-disposable RecipeCover.stylizedImageUrl still references candidate key'
++     FROM RecipeCover rc
++     JOIN candidate_r2_keys c ON c.action = 'delete' AND c.key = substr(rc.stylizedImageUrl, length('/photos/') + 1)
++     WHERE rc.recipeId NOT IN (SELECT id FROM hard_delete_recipes)
++     UNION
++     SELECT 'blocker_cover_sourceImageUrl',
++       substr(rc.sourceImageUrl, length('/photos/') + 1),
++       'non-disposable RecipeCover.sourceImageUrl still references candidate key'
++     FROM RecipeCover rc
++     JOIN candidate_r2_keys c ON c.action = 'delete' AND c.key = substr(rc.sourceImageUrl, length('/photos/') + 1)
++     WHERE rc.recipeId NOT IN (SELECT id FROM hard_delete_recipes)
++     UNION
++     SELECT 'blocker_search_imageUrl',
++       substr(sd.imageUrl, length('/photos/') + 1),
++       'SearchDocument.imageUrl still references candidate key'
++     FROM SearchDocument sd
++     JOIN candidate_r2_keys c ON c.action = 'delete' AND c.key = substr(sd.imageUrl, length('/photos/') + 1)
++     WHERE (sd.ownerId IS NULL OR sd.ownerId NOT IN (SELECT id FROM disposable_users))
++       AND (sd.entityId IS NULL OR sd.entityId NOT IN (SELECT id FROM hard_delete_recipes))
++       AND (sd.entityId IS NULL OR sd.entityId NOT IN (SELECT id FROM soft_delete_recipes))
++       AND (sd.entityId IS NULL OR sd.entityId NOT IN (SELECT id FROM disposable_spoons))
++       AND (sd.entityId IS NULL OR sd.entityId NOT IN (SELECT id FROM disposable_covers))
++   )
++ SELECT action, key, reason
++ FROM candidate_r2_keys
++ WHERE key IS NOT NULL AND key != ''
++ UNION
++ SELECT action, key, reason
++ FROM r2_reference_blockers
++ WHERE key IS NOT NULL AND key != '';
+
+ ❯ test/scripts/cleanup-local-qa-data.test.ts:687:21
+    685|       "WHERE key IS NOT NULL AND key != ''",
+    686|     ]);
+    687|     expect(sql).not.toContain("FROM SearchDocument");
+       |                     ^
+    688|   });
+    689|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  test/scripts/cleanup-local-qa-data.test.ts > cleanup-local-qa-data > builds the SearchDocument R2 blocker SQL separately from base candidate collection
+AssertionError: expected 'undefined' to be 'function' // Object.is equality
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ test/scripts/cleanup-local-qa-data.test.ts:691:56
+    689|
+    690|   it("builds the SearchDocument R2 blocker SQL separately from base ca…
+    691|     expect(typeof cleanup.buildQaR2SearchReferenceSql).toBe("function"…
+       |                                                        ^
+    692|     const sql = cleanup.buildQaR2SearchReferenceSql([
+    693|       "profiles/codex-user/avatar.jpg",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  test/scripts/cleanup-local-qa-data.test.ts > cleanup-local-qa-data > refuses QA apply before D1 mutation when search documents reference candidate R2 keys
+AssertionError: expected [Function] to throw error matching /blocker_search_imageUrl:pr…/codex-user\ but got 'QA R2 object still exists after delet…'
+
+- Expected:
+/blocker_search_imageUrl:profiles\/codex-user\/avatar\.jpg/
+
++ Received:
+"QA R2 object still exists after delete: profiles/codex-user/avatar.jpg"
+
+ ❯ test/scripts/cleanup-local-qa-data.test.ts:779:5
+    777|     });
+    778|
+    779|     await expect(
+       |     ^
+    780|       cleanup.runCleanupCli({
+    781|         argv: ["--target-env", "qa", "--apply"],
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  test/scripts/cleanup-local-qa-data.test.ts > cleanup-local-qa-data > reports D1 cleanup blockers before running the apply mutation
+AssertionError: expected 'undefined' to be 'function' // Object.is equality
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ test/scripts/cleanup-local-qa-data.test.ts:794:50
+    792|
+    793|   it("reports D1 cleanup blockers before running the apply mutation", …
+    794|     expect(typeof cleanup.buildBlockerReportSql).toBe("function");
+       |                                                  ^
+    795|     const stdout = writableBuffer();
+    796|     const stderr = writableBuffer();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  5 failed | 35 passed (40)
+   Start at  07:05:53
+   Duration  664ms (transform 74ms, setup 117ms, import 43ms, tests 150ms, environment 219ms)

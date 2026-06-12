@@ -25,6 +25,8 @@ export interface DeploymentPreflightInputs {
   cloudflareEnvDts: string;
   readme: string;
   deploymentDoc: string;
+  vitestConfig: string;
+  tsconfigScripts: string;
   migrationFiles: string[];
 }
 
@@ -90,6 +92,28 @@ const REQUIRED_QA_PACKAGE_SCRIPTS = [
   "deploy:qa",
   "smoke:qa",
   "smoke:qa:image-cover",
+] as const;
+
+const REQUIRED_CLEANUP_PACKAGE_SCRIPTS = {
+  "cleanup:qa": "node scripts/cleanup-local-qa-data.mjs --target-env local",
+  "cleanup:local": "node scripts/cleanup-local-qa-data.mjs --target-env local",
+  "cleanup:local:apply": "node scripts/cleanup-local-qa-data.mjs --target-env local --apply",
+  "cleanup:remote:qa": "node scripts/cleanup-local-qa-data.mjs --target-env qa",
+  "cleanup:remote:qa:apply": "node scripts/cleanup-local-qa-data.mjs --target-env qa --apply",
+  "cleanup:production": "node scripts/cleanup-local-qa-data.mjs --target-env production",
+} as const;
+
+const REQUIRED_SCRIPT_COVERAGE_INCLUDES = [
+  "scripts/script-environment.mjs",
+  "scripts/cleanup-local-qa-data.mjs",
+  "scripts/smoke-api-live.mjs",
+  "scripts/qa-preflight.ts",
+  "scripts/deployment-preflight.ts",
+] as const;
+
+const REQUIRED_SCRIPT_TYPECHECK_INCLUDES = [
+  "scripts/deployment-preflight.ts",
+  "scripts/qa-preflight.ts",
 ] as const;
 
 const REQUIRED_RATE_LIMIT_BINDINGS = [
@@ -897,6 +921,17 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
       `package.json must include QA scripts: ${REQUIRED_QA_PACKAGE_SCRIPTS.join(", ")}.`
     ),
     check(
+      "cleanup package scripts",
+      Object.entries(REQUIRED_CLEANUP_PACKAGE_SCRIPTS).every(([script, command]) => scripts[script] === command),
+      "package.json must expose explicit local, QA, and production cleanup scripts with --target-env; cleanup:qa must remain a local alias."
+    ),
+    check(
+      "script typecheck",
+      scripts["typecheck:scripts"] === "tsc -p tsconfig.scripts.json" &&
+        REQUIRED_SCRIPT_TYPECHECK_INCLUDES.every((file) => inputs.tsconfigScripts.includes(file)),
+      "package.json must expose typecheck:scripts and tsconfig.scripts.json must include modified TypeScript scripts."
+    ),
+    check(
       "deploy script",
       typeof scripts.deploy === "string" && scripts.deploy.includes("pnpm run build") && scripts.deploy.includes("wrangler deploy"),
       "package.json deploy script must build first and deploy with wrangler. Use pnpm run deploy; bare pnpm deploy is pnpm's workspace deploy command."
@@ -1000,6 +1035,21 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
       "Deployment docs must show how to enable or intentionally disable PostHog without printing secret values."
     ),
     check(
+      "cleanup documentation",
+      [
+        "cleanup:local",
+        "cleanup:local:apply",
+        "cleanup:remote:qa",
+        "cleanup:remote:qa:apply",
+        "cleanup:production",
+        "target-env local",
+        "target-env qa",
+        "target-env production",
+        "broad production cleanup is read-only",
+      ].every((item) => readmeAndDeploymentDoc.includes(item)),
+      "README/deployment docs must document explicit cleanup target scripts and production broad-cleanup refusal."
+    ),
+    check(
       "image provider documentation",
       [
         ...IMAGE_PROVIDER_ENV_NAMES,
@@ -1008,6 +1058,11 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
         "gemini-3.1-flash-image",
       ].every((item) => readmeAndDeploymentDoc.includes(item)),
       "README/deployment docs must explain image provider fallback env and Gemini setup."
+    ),
+    check(
+      "script coverage instrumentation",
+      REQUIRED_SCRIPT_COVERAGE_INCLUDES.every((file) => inputs.vitestConfig.includes(file)),
+      `vitest.config.ts coverage include must cover script harness files: ${REQUIRED_SCRIPT_COVERAGE_INCLUDES.join(", ")}.`
     ),
     check(
       "migration files",
@@ -1188,6 +1243,8 @@ export async function runDeploymentPreflight(
     cloudflareEnvDts,
     readme,
     deploymentDoc,
+    vitestConfig,
+    tsconfigScripts,
     migrationFiles,
   ] = await Promise.all([
     readJsonFile(path.join(rootDir, "wrangler.json")),
@@ -1201,6 +1258,8 @@ export async function runDeploymentPreflight(
     readFile(path.join(rootDir, "app/cloudflare-env.d.ts"), "utf8"),
     readFile(path.join(rootDir, "README.md"), "utf8"),
     readFile(path.join(rootDir, "docs/deployment.md"), "utf8"),
+    readFile(path.join(rootDir, "vitest.config.ts"), "utf8"),
+    readFile(path.join(rootDir, "tsconfig.scripts.json"), "utf8"),
     readdir(path.join(rootDir, "migrations")),
   ]);
 
@@ -1216,6 +1275,8 @@ export async function runDeploymentPreflight(
     cloudflareEnvDts,
     readme,
     deploymentDoc,
+    vitestConfig,
+    tsconfigScripts,
     migrationFiles,
   });
 

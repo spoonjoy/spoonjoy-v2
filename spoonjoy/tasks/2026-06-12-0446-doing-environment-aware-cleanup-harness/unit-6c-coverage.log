@@ -1,0 +1,26 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+      Coverage enabled with istanbul
+
+stdout | test/scripts/qa-preflight.test.ts > qa-preflight CLI > uses default console IO and exit for failed main runs
+PASS QA static config: QA static config targets https://spoonjoy-v2-qa.mendelow-studio.workers.dev.
+FAIL QA D1 migrations: Could not verify QA D1 migrations: database unavailable
+PASS QA secrets: QA Worker has required runtime secrets.
+PASS QA R2 round trip: QA R2 write/read/delete probe passed.
+
+ ✓ test/scripts/qa-preflight.test.ts (49 tests) 259ms
+ ✓ test/scripts/deployment-preflight.test.ts (127 tests) 159ms
+
+ Test Files  2 passed (2)
+      Tests  176 passed (176)
+   Start at  07:37:45
+   Duration  1.73s (transform 541ms, setup 140ms, import 586ms, tests 418ms, environment 308ms)
+
+ % Coverage report from istanbul
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s
+-------------------|---------|----------|---------|---------|-------------------
+All files          |     100 |      100 |     100 |     100 |
+ ...t-preflight.ts |     100 |      100 |     100 |     100 |
+ qa-preflight.ts   |     100 |      100 |     100 |     100 |
+-------------------|---------|----------|---------|---------|-------------------

@@ -1,0 +1,228 @@
+
+> spoonjoy-v2@1.0.0 cleanup:remote:qa /Users/arimendelow/Projects/spoonjoy-v2
+> node scripts/cleanup-local-qa-data.mjs --target-env qa
+
+Target environment: qa
+Base URL: https://spoonjoy-v2-qa.mendelow-studio.workers.dev
+D1 target: QA D1 spoonjoy-qa (--remote --env qa)
+R2 target: QA R2 spoonjoy-photos-qa (--remote)
+Destructive scope: QA disposable test data only
+Dry run only. Pass --apply to mutate exact validated disposable QA D1/R2 data.
+
+ ⛅️ wrangler 4.90.0 (update available 4.100.0)
+──────────────────────────────────────────────
+Resource location: remote
+
+🌀 Executing on remote database DB (c6c99e80-bd51-4cf2-b7c7-b7a6e27d3f34):
+🌀 To execute on your local development database, remove the --remote flag from your wrangler command.
+🚣 Executed 8 commands in 2.02ms
+[
+  {
+    "results": [
+      {
+        "item": "hard-delete recipes owned by disposable users",
+        "count": 0
+      }
+    ],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "WNAM",
+      "served_by_colo": "SEA",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.4093
+      },
+      "duration": 0.4093,
+      "changes": 0,
+      "last_row_id": 0,
+      "changed_db": false,
+      "size_after": 577536,
+      "rows_read": 6,
+      "rows_written": 0,
+      "total_attempts": 1
+    }
+  },
+  {
+    "results": [
+      {
+        "item": "soft-delete suspicious recipes owned by non-disposable users",
+        "count": 0
+      }
+    ],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "WNAM",
+      "served_by_colo": "SEA",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.4119
+      },
+      "duration": 0.4119,
+      "changes": 0,
+      "last_row_id": 0,
+      "changed_db": false,
+      "size_after": 577536,
+      "rows_read": 9,
+      "rows_written": 0,
+      "total_attempts": 1
+    }
+  },
+  {
+    "results": [
+      {
+        "item": "active suspicious recipes",
+        "count": 0
+      }
+    ],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "WNAM",
+      "served_by_colo": "SEA",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.1454
+      },
+      "duration": 0.1454,
+      "changes": 0,
+      "last_row_id": 0,
+      "changed_db": false,
+      "size_after": 577536,
+      "rows_read": 9,
+      "rows_written": 0,
+      "total_attempts": 1
+    }
+  },
+  {
+    "results": [
+      {
+        "item": "already deleted suspicious recipes",
+        "count": 0
+      }
+    ],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "WNAM",
+      "served_by_colo": "SEA",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.1247
+      },
+      "duration": 0.1247,
+      "changes": 0,
+      "last_row_id": 0,
+      "changed_db": false,
+      "size_after": 577536,
+      "rows_read": 9,
+      "rows_written": 0,
+      "total_attempts": 1
+    }
+  },
+  {
+    "results": [
+      {
+        "item": "disposable users",
+        "count": 0
+      }
+    ],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "WNAM",
+      "served_by_colo": "SEA",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.135
+      },
+      "duration": 0.135,
+      "changes": 0,
+      "last_row_id": 0,
+      "changed_db": false,
+      "size_after": 577536,
+      "rows_read": 5,
+      "rows_written": 0,
+      "total_attempts": 1
+    }
+  },
+  {
+    "results": [
+      {
+        "item": "disposable spoons by chef or note",
+        "count": 0
+      }
+    ],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "WNAM",
+      "served_by_colo": "SEA",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.4025
+      },
+      "duration": 0.4025,
+      "changes": 0,
+      "last_row_id": 0,
+      "changed_db": false,
+      "size_after": 577536,
+      "rows_read": 1,
+      "rows_written": 0,
+      "total_attempts": 1
+    }
+  },
+  {
+    "results": [
+      {
+        "item": "e2e oauth clients with test redirect signature",
+        "count": 0
+      }
+    ],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "WNAM",
+      "served_by_colo": "SEA",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.3492
+      },
+      "duration": 0.3492,
+      "changes": 0,
+      "last_row_id": 0,
+      "changed_db": false,
+      "size_after": 577536,
+      "rows_read": 1,
+      "rows_written": 0,
+      "total_attempts": 1
+    }
+  },
+  {
+    "results": [
+      {
+        "item": "cross-boundary cleanup blockers",
+        "count": 0
+      }
+    ],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "WNAM",
+      "served_by_colo": "SEA",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.0456
+      },
+      "duration": 0.0456,
+      "changes": 0,
+      "last_row_id": 0,
+      "changed_db": false,
+      "size_after": 577536,
+      "rows_read": 0,
+      "rows_written": 0,
+      "total_attempts": 1
+    }
+  }
+]

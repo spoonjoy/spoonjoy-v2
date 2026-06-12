@@ -1,0 +1,16 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ✓ test/scripts/deployment-preflight.test.ts (121 tests) 178ms
+stdout | test/scripts/smoke-api-live.test.ts > API live smoke target handling > writes environment metadata into API smoke artifacts
+/var/folders/md/_fkq3wc92_z55cgtlrfrcfh40000gn/T/spoonjoy-api-smoke-zBeZi5/api-smoke-results.json
+
+ ✓ test/scripts/smoke-api-live.test.ts (3 tests) 49ms
+ ✓ test/scripts/script-environment.test.ts (7 tests) 29ms
+ ✓ test/scripts/qa-preflight.test.ts (15 tests) 49ms
+ ✓ test/scripts/smoke-live-helpers.test.ts (22 tests) 31ms
+
+ Test Files  5 passed (5)
+      Tests  168 passed (168)
+   Start at  06:15:59
+   Duration  2.27s (transform 164ms, setup 313ms, import 195ms, tests 336ms, environment 809ms)

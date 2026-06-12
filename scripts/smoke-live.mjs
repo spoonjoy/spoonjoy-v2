@@ -18,10 +18,12 @@ import {
   buildCleanupD1Args,
   buildQaR2DeleteArgs,
   buildQaR2GetArgs,
+  buildSmokeReport,
   buildUserCountD1Args,
   isQaR2ObjectMissingError,
   parseD1CountOutput,
   parseSmokeArgs,
+  readGitMetadata,
   shouldRunAppleOAuthCheck,
 } from './smoke-live-helpers.mjs'
 
@@ -198,7 +200,7 @@ async function verifyQaR2ObjectDeleted(key) {
 }
 
 async function main() {
-  const { baseUrl, includeImageCoverSmoke, outDir, shouldCleanup, targetEnv } = parseSmokeArgs(process.argv.slice(2), process.env)
+  const { baseUrl, includeImageCoverSmoke, outDir, shouldCleanup, targetEnv, target } = parseSmokeArgs(process.argv.slice(2), process.env)
   const stamp = Date.now().toString(36)
   const email = `codex-smoke-${stamp}@example.com`
   const username = `codex_smoke_${stamp}`
@@ -352,7 +354,26 @@ async function main() {
       report.cleanup = { skipped: true, reason: '--keep-smoke-data' }
     }
 
-    writeFileSync(join(outDir, 'smoke-results.json'), JSON.stringify(report, null, 2))
+    const artifact = buildSmokeReport({
+      generatedAt: report.generatedAt,
+      target,
+      git: readGitMetadata(),
+      created: {
+        email,
+        username,
+        recipeTitle,
+        recipeId: report.recipeId,
+      },
+      screenshots: report.screenshots,
+      consoleErrors: report.consoleErrors,
+      pageErrors: report.pageErrors,
+      cleanup: report.cleanup,
+      cleanupVerification: report.cleanupVerification,
+      imageCoverSmoke: report.imageCoverSmoke,
+      apple: report.apple,
+      pushPublicKeyStatus: report.pushPublicKeyStatus,
+    })
+    writeFileSync(join(outDir, 'smoke-results.json'), JSON.stringify(artifact, null, 2))
   }
 
   if (report.pageErrors.length > 0 || report.consoleErrors.length > 0) {
