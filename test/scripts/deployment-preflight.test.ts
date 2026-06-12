@@ -1829,8 +1829,48 @@ describe("Storybook deploy warning cleanup", () => {
     const wrongPackageManager = validateDeploymentConfig(
       inputsWithStorybookWorkflow(validStorybookWorkflow().replace("packageManager: npm", "packageManager: pnpm")),
     );
+    const extraRepoRootDeployStep = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(
+        validStorybookWorkflow().replace(
+          "          gitHubToken: ${{ secrets.GITHUB_TOKEN }}",
+          [
+            "          gitHubToken: ${{ secrets.GITHUB_TOKEN }}",
+            "      - name: Legacy repo-root deploy",
+            "        if: github.ref == 'refs/heads/main'",
+            "        uses: cloudflare/wrangler-action@v4",
+            "        with:",
+            "          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}",
+            "          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
+            "          command: pages deploy storybook-static --project-name=spoonjoy-storybook",
+          ].join("\n"),
+        ),
+      ),
+    );
+    const duplicateCleanDeployStep = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(
+        validStorybookWorkflow().replace(
+          "      - name: Deploy to Cloudflare Pages",
+          "      - name: Deploy to Cloudflare Pages again\n        if: github.ref == 'refs/heads/main'\n        uses: cloudflare/wrangler-action@v4\n        with:\n          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}\n          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}\n          workingDirectory: storybook-pages-deploy\n          packageManager: npm\n          command: pages deploy --project-name=spoonjoy-storybook --branch=${{ github.ref_name }} --commit-hash=${{ github.sha }} --commit-dirty=true\n          gitHubToken: ${{ secrets.GITHUB_TOKEN }}\n      - name: Deploy to Cloudflare Pages",
+        ),
+      ),
+    );
+    const extraRunDeployStep = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(
+        validStorybookWorkflow().replace(
+          "      - name: Deploy to Cloudflare Pages",
+          "      - name: Legacy shell deploy\n        if: github.ref == 'refs/heads/main'\n        run: pnpm exec wrangler pages deploy storybook-static --project-name=spoonjoy-storybook\n      - name: Deploy to Cloudflare Pages",
+        ),
+      ),
+    );
 
-    for (const result of [missingWorkingDirectory, wrongWorkingDirectory, wrongPackageManager]) {
+    for (const result of [
+      missingWorkingDirectory,
+      wrongWorkingDirectory,
+      wrongPackageManager,
+      extraRepoRootDeployStep,
+      duplicateCleanDeployStep,
+      extraRunDeployStep,
+    ]) {
       expect(result.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
     }
   });

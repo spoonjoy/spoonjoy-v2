@@ -676,30 +676,37 @@ function workflowHasStorybookDeployContract(workflow: string): boolean {
 
     let storybookBuildStep = -1;
     let prepareDeployDirStep = -1;
+    let prepareDeployDirStepCount = 0;
     let wranglerDeployStep = -1;
+    let wranglerDeployStepCount = 0;
 
     for (const [stepStart, stepEnd] of stepBlocks(lines, steps[0], steps[1])) {
-      if (stepRunText(lines, stepStart, stepEnd) === "pnpm build-storybook") {
+      const runText = stepRunText(lines, stepStart, stepEnd);
+      if (runText.includes("pages deploy")) return false;
+
+      if (runText === "pnpm build-storybook") {
         storybookBuildStep = stepStart;
       }
 
       if (
         stepIfEquals(lines, stepStart, stepEnd, "github.ref == 'refs/heads/main'") &&
-        storybookDeployPrepRunIsClean(stepRunText(lines, stepStart, stepEnd))
+        storybookDeployPrepRunIsClean(runText)
       ) {
+        prepareDeployDirStepCount += 1;
         prepareDeployDirStep = stepStart;
       }
 
-      if (
-        stepIfEquals(lines, stepStart, stepEnd, "github.ref == 'refs/heads/main'") &&
-        storybookWranglerDeployStepIsClean(lines, stepStart, stepEnd)
-      ) {
-        wranglerDeployStep = stepStart;
-      }
+      if (!stepUses(lines, stepStart, stepEnd, "cloudflare/wrangler-action@v4")) continue;
+      if (!stepIfEquals(lines, stepStart, stepEnd, "github.ref == 'refs/heads/main'")) return false;
+      if (!storybookWranglerDeployStepIsClean(lines, stepStart, stepEnd)) return false;
+      wranglerDeployStepCount += 1;
+      wranglerDeployStep = stepStart;
     }
 
     return (
       storybookBuildStep >= 0 &&
+      prepareDeployDirStepCount === 1 &&
+      wranglerDeployStepCount === 1 &&
       prepareDeployDirStep > storybookBuildStep &&
       wranglerDeployStep > prepareDeployDirStep
     );
