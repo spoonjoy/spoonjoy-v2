@@ -13,7 +13,10 @@ import {
   buildQaR2GetArgs,
   buildQaR2PutArgs,
   buildQaSecretListArgs,
+  isCliEntry,
+  main,
   parseWranglerSecretNames,
+  runCliIfEntry,
   runQaPreflight,
   validateQaGeneratedBuildConfig,
 } from "../../scripts/qa-preflight";
@@ -75,10 +78,22 @@ describe("parseWranglerSecretNames", () => {
     ]);
   });
 
+  it("reports invalid JSON output", () => {
+    const parsed = parseWranglerSecretNames("[not-json]");
+
+    expect(parsed).toEqual({ error: expect.stringContaining("Could not parse Wrangler secret JSON") });
+  });
+
   it("returns a parse error for non-array output", () => {
     const parsed = parseWranglerSecretNames("{}");
 
     expect(parsed).toEqual({ error: expect.stringContaining("array") });
+  });
+
+  it("filters malformed secret rows", () => {
+    expect(parseWranglerSecretNames(JSON.stringify([null, "bad", { name: "" }, { name: "SESSION_SECRET" }]))).toEqual([
+      "SESSION_SECRET",
+    ]);
   });
 });
 
@@ -178,14 +193,38 @@ async function createStaticConfigRoot(overrides: {
     copyFile(path.join(process.cwd(), "app/cloudflare-env.d.ts"), path.join(root, "app/cloudflare-env.d.ts")),
     copyFile(path.join(process.cwd(), "README.md"), path.join(root, "README.md")),
     copyFile(path.join(process.cwd(), "docs/deployment.md"), path.join(root, "docs/deployment.md")),
+    copyFile(path.join(process.cwd(), "vitest.config.ts"), path.join(root, "vitest.config.ts")),
+    copyFile(path.join(process.cwd(), "tsconfig.scripts.json"), path.join(root, "tsconfig.scripts.json")),
     writeFile(path.join(root, "migrations/0000_init.sql"), "-- migration\n", "utf8"),
     writeFile(
       path.join(root, ".github/workflows/storybook.yml"),
       overrides.storybookWorkflow ?? warningCleanStorybookWorkflow(),
       "utf8",
     ),
-    writeFile(path.join(root, ".gitignore"), overrides.gitignore ?? "node_modules\nstorybook-static\n", "utf8"),
-    writeFile(path.join(root, "pnpm-workspace.yaml"), overrides.pnpmWorkspace ?? "allowBuilds:\n  esbuild: false\n", "utf8"),
+    writeFile(
+      path.join(root, ".gitignore"),
+      overrides.gitignore ?? "node_modules\nstorybook-static\nstorybook-pages-deploy/\n",
+      "utf8",
+    ),
+    writeFile(
+      path.join(root, "pnpm-workspace.yaml"),
+      overrides.pnpmWorkspace ??
+        [
+          "allowBuilds:",
+          '  "@prisma/client": false',
+          '  "@prisma/engines": false',
+          '  "@swc/core": false',
+          "  core-js: false",
+          "  esbuild: false",
+          "  prisma: false",
+          "  protobufjs: false",
+          "  sharp: false",
+          "  unrs-resolver: false",
+          "  workerd: false",
+          "",
+        ].join("\n"),
+      "utf8",
+    ),
   ]);
   return root;
 }
@@ -195,6 +234,56 @@ describe("validateQaGeneratedBuildConfig", () => {
     const check = validateQaGeneratedBuildConfig(qaGeneratedBuildConfig());
 
     expect(check.ok).toBe(true);
+  });
+
+  it("accepts valid bindings after malformed generated config entries", () => {
+    const check = validateQaGeneratedBuildConfig({
+      ...qaGeneratedBuildConfig(),
+      d1_databases: [
+        null,
+        "bad",
+        { binding: "OTHER", database_name: "spoonjoy-qa", database_id: QA_D1_DATABASE_ID },
+        { binding: "DB", database_name: "spoonjoy-qa", database_id: QA_D1_DATABASE_ID },
+      ],
+      r2_buckets: [
+        null,
+        "bad",
+        { binding: "OTHER", bucket_name: QA_R2_BUCKET },
+        { binding: "PHOTOS", bucket_name: QA_R2_BUCKET },
+      ],
+      ratelimits: [
+        null,
+        "bad",
+        { name: "", namespace_id: "" },
+        { name: "API_TOKEN_RATE_LIMITER", namespace_id: "2001" },
+        { name: "API_IP_RATE_LIMITER", namespace_id: "2002" },
+        { name: "AUTH_IP_RATE_LIMITER", namespace_id: "2003" },
+      ],
+    });
+
+    expect(check.ok).toBe(true);
+  });
+
+  it("fails closed for malformed generated config shapes", () => {
+    const check = validateQaGeneratedBuildConfig({
+      name: "spoonjoy-v2-qa",
+      vars: [],
+      d1_databases: null,
+      r2_buckets: null,
+      ratelimits: null,
+    });
+
+    expect(check.ok).toBe(false);
+  });
+
+  it("fails closed when generated config arrays do not contain the required bindings", () => {
+    const check = validateQaGeneratedBuildConfig({
+      ...qaGeneratedBuildConfig(),
+      d1_databases: [{ binding: "OTHER", database_name: "spoonjoy-qa", database_id: QA_D1_DATABASE_ID }],
+      r2_buckets: [{ binding: "OTHER", bucket_name: QA_R2_BUCKET }],
+    });
+
+    expect(check.ok).toBe(false);
   });
 
   it("fails for a generated production Worker config", () => {
@@ -216,10 +305,18 @@ describe("validateQaGeneratedBuildConfig", () => {
 });
 
 describe("runQaPreflight", () => {
-  it("passes static, migration, secret, and R2 checks against QA", async () => {
-    const cleanup = vi.fn(async () => undefined);
-    const runWrangler = vi.fn(async (args: string[]) => {
+  function successfulProbeFile() {
+    return {
+      path: "/tmp/spoonjoy-qa-preflight.txt",
+      body: "spoonjoy qa preflight",
+      cleanup: async () => undefined,
+    };
+  }
+
+  function successfulWrangler(overrides: Record<string, { stdout: string; stderr: string; exitCode: number }> = {}) {
+    return vi.fn(async (args: string[]) => {
       const command = args.join(" ");
+      if (command in overrides) return overrides[command];
       if (command === buildQaMigrationListArgs().join(" ")) {
         return { stdout: "[]", stderr: "", exitCode: 0 };
       }
@@ -237,6 +334,11 @@ describe("runQaPreflight", () => {
       }
       throw new Error(`unexpected wrangler args: ${command}`);
     });
+  }
+
+  it("passes static, migration, secret, and R2 checks against QA", async () => {
+    const cleanup = vi.fn(async () => undefined);
+    const runWrangler = successfulWrangler();
 
     const result = await runQaPreflight(process.cwd(), {
       runWrangler,
@@ -254,6 +356,15 @@ describe("runQaPreflight", () => {
     expect(runWrangler).toHaveBeenCalledWith(buildQaMigrationListArgs());
     expect(runWrangler).toHaveBeenCalledWith(buildQaSecretListArgs());
     expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses the default probe file helper when no probe dependency is injected", async () => {
+    const runWrangler = successfulWrangler();
+
+    const result = await runQaPreflight(process.cwd(), { runWrangler });
+
+    expect(result.errors).toEqual([]);
+    expect(runWrangler.mock.calls.some(([args]) => args[0] === "r2" && args[2] === "put")).toBe(true);
   });
 
   it("validates generated QA build config when requested", async () => {
@@ -281,6 +392,50 @@ describe("runQaPreflight", () => {
     expect(result.checks.find((check) => check.name === "QA generated build config")?.ok).toBe(true);
   });
 
+  it("validates the default generated QA build config file when requested", async () => {
+    const root = await createStaticConfigRoot();
+    try {
+      await mkdir(path.join(root, "build/server"), { recursive: true });
+      await writeFile(path.join(root, "build/server/wrangler.json"), JSON.stringify(qaGeneratedBuildConfig()), "utf8");
+
+      const result = await runQaPreflight(root, {
+        env: {
+          SPOONJOY_PREFLIGHT_SKIP_REMOTE: "1",
+          SPOONJOY_QA_PREFLIGHT_EXPECT_BUILD_CONFIG: "1",
+        },
+      });
+
+      expect(result.errors).toEqual([]);
+      expect(result.checks.find((check) => check.name === "QA generated build config")?.ok).toBe(true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("uses default dependencies safely when remote checks are skipped", async () => {
+    const originalSkip = process.env.SPOONJOY_PREFLIGHT_SKIP_REMOTE;
+    try {
+      process.env.SPOONJOY_PREFLIGHT_SKIP_REMOTE = "1";
+      const result = await runQaPreflight();
+
+      expect(result.errors).toEqual([]);
+      expect(result.warnings).toEqual([]);
+      expect(
+        result.checks
+          .filter((check) => check.severity === "warning")
+          .map((check) => check.name),
+      ).toEqual(
+        expect.arrayContaining(["QA D1 migrations", "QA secrets", "QA R2 round trip"]),
+      );
+    } finally {
+      if (originalSkip === undefined) {
+        delete process.env.SPOONJOY_PREFLIGHT_SKIP_REMOTE;
+      } else {
+        process.env.SPOONJOY_PREFLIGHT_SKIP_REMOTE = originalSkip;
+      }
+    }
+  });
+
   it("fails closed when QA secrets are missing", async () => {
     const runWrangler = vi.fn(async (args: string[]) => {
       const command = args.join(" ");
@@ -306,6 +461,117 @@ describe("runQaPreflight", () => {
     expect(result.errors.find((check) => check.name === "QA secrets")?.message).toContain("VAPID_PUBLIC_KEY");
   });
 
+  it("reports QA secret parse errors", async () => {
+    const result = await runQaPreflight(process.cwd(), {
+      runWrangler: successfulWrangler({
+        [buildQaSecretListArgs().join(" ")]: { stdout: "[not-json]", stderr: "", exitCode: 0 },
+      }),
+      createProbeFile: async () => successfulProbeFile(),
+    });
+
+    expect(result.errors.find((check) => check.name === "QA secrets")?.message).toContain(
+      "Could not parse Wrangler secret JSON",
+    );
+  });
+
+  it("reports pending migrations from JSON output", async () => {
+    const result = await runQaPreflight(process.cwd(), {
+      runWrangler: successfulWrangler({
+        [buildQaMigrationListArgs().join(" ")]: {
+          stdout: JSON.stringify([{ Name: "0007_pending.sql" }, null, { Name: "" }, { Other: "ignored.sql" }]),
+          stderr: "",
+          exitCode: 0,
+        },
+      }),
+      createProbeFile: async () => successfulProbeFile(),
+    });
+
+    const migrationCheck = result.errors.find((check) => check.name === "QA D1 migrations");
+    expect(migrationCheck?.message).toContain("0007_pending.sql");
+  });
+
+  it("treats Wrangler no-pending text as a clean migration state", async () => {
+    const result = await runQaPreflight(process.cwd(), {
+      runWrangler: successfulWrangler({
+        [buildQaMigrationListArgs().join(" ")]: {
+          stdout: "No migrations to apply.",
+          stderr: "",
+          exitCode: 0,
+        },
+      }),
+      createProbeFile: async () => successfulProbeFile(),
+    });
+
+    expect(result.errors.map((check) => check.name)).not.toContain("QA D1 migrations");
+  });
+
+  it("reports malformed Wrangler migration JSON", async () => {
+    const result = await runQaPreflight(process.cwd(), {
+      runWrangler: successfulWrangler({
+        [buildQaMigrationListArgs().join(" ")]: { stdout: "[not-json]", stderr: "", exitCode: 0 },
+      }),
+      createProbeFile: async () => successfulProbeFile(),
+    });
+
+    expect(result.errors.find((check) => check.name === "QA D1 migrations")?.message).toContain(
+      "Could not parse Wrangler migration JSON",
+    );
+  });
+
+  it("reports non-array Wrangler migration JSON", async () => {
+    const result = await runQaPreflight(process.cwd(), {
+      runWrangler: successfulWrangler({
+        [buildQaMigrationListArgs().join(" ")]: { stdout: "{}", stderr: "", exitCode: 0 },
+      }),
+      createProbeFile: async () => successfulProbeFile(),
+    });
+
+    expect(result.errors.find((check) => check.name === "QA D1 migrations")?.message).toContain("not an array");
+  });
+
+  it("reports pending migrations from text output", async () => {
+    const result = await runQaPreflight(process.cwd(), {
+      runWrangler: successfulWrangler({
+        [buildQaMigrationListArgs().join(" ")]: {
+          stdout: "Pending: 0008_remote_pending.sql and 0008_remote_pending.sql",
+          stderr: "",
+          exitCode: 0,
+        },
+      }),
+      createProbeFile: async () => successfulProbeFile(),
+    });
+
+    expect(result.errors.find((check) => check.name === "QA D1 migrations")?.message).toContain(
+      "0008_remote_pending.sql",
+    );
+  });
+
+  it("reports unparseable Wrangler migration output", async () => {
+    const result = await runQaPreflight(process.cwd(), {
+      runWrangler: successfulWrangler({
+        [buildQaMigrationListArgs().join(" ")]: { stdout: "migrations are mysterious today", stderr: "", exitCode: 0 },
+      }),
+      createProbeFile: async () => successfulProbeFile(),
+    });
+
+    expect(result.errors.find((check) => check.name === "QA D1 migrations")?.message).toContain(
+      "Could not parse Wrangler migration output",
+    );
+  });
+
+  it("uses stdout as the failure message when Wrangler migration stderr is empty", async () => {
+    const result = await runQaPreflight(process.cwd(), {
+      runWrangler: successfulWrangler({
+        [buildQaMigrationListArgs().join(" ")]: { stdout: "database unreachable", stderr: "", exitCode: 1 },
+      }),
+      createProbeFile: async () => successfulProbeFile(),
+    });
+
+    const migrationCheck = result.errors.find((check) => check.name === "QA D1 migrations");
+    expect(migrationCheck?.message).toContain("database unreachable");
+    expect(migrationCheck?.severity).toBe("error");
+  });
+
   it("warns instead of hard failing when Wrangler auth prevents remote checks", async () => {
     const runWrangler = vi.fn(async () => ({
       stdout: "",
@@ -326,6 +592,80 @@ describe("runQaPreflight", () => {
     expect(result.warnings.map((check) => check.name)).toEqual(
       expect.arrayContaining(["QA D1 migrations", "QA secrets", "QA R2 round trip"]),
     );
+  });
+
+  it("uses stdout as the failure message when Wrangler secret stderr is empty", async () => {
+    const result = await runQaPreflight(process.cwd(), {
+      runWrangler: successfulWrangler({
+        [buildQaSecretListArgs().join(" ")]: { stdout: "secret list unavailable", stderr: "", exitCode: 1 },
+      }),
+      createProbeFile: async () => successfulProbeFile(),
+    });
+
+    const secretCheck = result.errors.find((check) => check.name === "QA secrets");
+    expect(secretCheck?.message).toContain("secret list unavailable");
+    expect(secretCheck?.severity).toBe("error");
+  });
+
+  it("uses stdout as the failure message when the R2 probe write stderr is empty", async () => {
+    const runWrangler = vi.fn(async (args: string[]) => {
+      const command = args.join(" ");
+      if (command === buildQaMigrationListArgs().join(" ")) return { stdout: "[]", stderr: "", exitCode: 0 };
+      if (command === buildQaSecretListArgs().join(" ")) return { stdout: secretListStdout(), stderr: "", exitCode: 0 };
+      if (command.startsWith("r2 object put")) return { stdout: "put denied", stderr: "", exitCode: 1 };
+      throw new Error(`unexpected wrangler args: ${command}`);
+    });
+
+    const result = await runQaPreflight(process.cwd(), {
+      runWrangler,
+      createProbeFile: async () => successfulProbeFile(),
+    });
+
+    const r2Check = result.errors.find((check) => check.name === "QA R2 round trip");
+    expect(r2Check?.message).toContain("put denied");
+    expect(r2Check?.severity).toBe("error");
+  });
+
+  it("reports R2 probe read failures after deleting the probe", async () => {
+    const runWrangler = vi.fn(async (args: string[]) => {
+      const command = args.join(" ");
+      if (command === buildQaMigrationListArgs().join(" ")) return { stdout: "[]", stderr: "", exitCode: 0 };
+      if (command === buildQaSecretListArgs().join(" ")) return { stdout: secretListStdout(), stderr: "", exitCode: 0 };
+      if (command.startsWith("r2 object put")) return { stdout: "", stderr: "", exitCode: 0 };
+      if (command.startsWith("r2 object get")) return { stdout: "read denied", stderr: "", exitCode: 1 };
+      if (command.startsWith("r2 object delete")) return { stdout: "", stderr: "", exitCode: 0 };
+      throw new Error(`unexpected wrangler args: ${command}`);
+    });
+
+    const result = await runQaPreflight(process.cwd(), {
+      runWrangler,
+      createProbeFile: async () => successfulProbeFile(),
+    });
+
+    const r2Check = result.errors.find((check) => check.name === "QA R2 round trip");
+    expect(r2Check?.message).toContain("Could not read QA R2 probe");
+    expect(r2Check?.message).toContain("read denied");
+  });
+
+  it("reports R2 probe delete failures after read failures", async () => {
+    const runWrangler = vi.fn(async (args: string[]) => {
+      const command = args.join(" ");
+      if (command === buildQaMigrationListArgs().join(" ")) return { stdout: "[]", stderr: "", exitCode: 0 };
+      if (command === buildQaSecretListArgs().join(" ")) return { stdout: secretListStdout(), stderr: "", exitCode: 0 };
+      if (command.startsWith("r2 object put")) return { stdout: "", stderr: "", exitCode: 0 };
+      if (command.startsWith("r2 object get")) return { stdout: "read denied", stderr: "", exitCode: 1 };
+      if (command.startsWith("r2 object delete")) return { stdout: "delete denied", stderr: "", exitCode: 1 };
+      throw new Error(`unexpected wrangler args: ${command}`);
+    });
+
+    const result = await runQaPreflight(process.cwd(), {
+      runWrangler,
+      createProbeFile: async () => successfulProbeFile(),
+    });
+
+    const r2Check = result.errors.find((check) => check.name === "QA R2 round trip");
+    expect(r2Check?.message).toContain("after read failure");
+    expect(r2Check?.message).toContain("delete denied");
   });
 
   it("deletes the R2 probe when the readback fails", async () => {
@@ -372,6 +712,27 @@ describe("runQaPreflight", () => {
     ).toBe(true);
   });
 
+  it("reports R2 probe delete failures after readback mismatches", async () => {
+    const runWrangler = vi.fn(async (args: string[]) => {
+      const command = args.join(" ");
+      if (command === buildQaMigrationListArgs().join(" ")) return { stdout: "[]", stderr: "", exitCode: 0 };
+      if (command === buildQaSecretListArgs().join(" ")) return { stdout: secretListStdout(), stderr: "", exitCode: 0 };
+      if (command.startsWith("r2 object put")) return { stdout: "", stderr: "", exitCode: 0 };
+      if (command.startsWith("r2 object get")) return { stdout: "wrong body", stderr: "", exitCode: 0 };
+      if (command.startsWith("r2 object delete")) return { stdout: "delete denied", stderr: "", exitCode: 1 };
+      throw new Error(`unexpected wrangler args: ${command}`);
+    });
+
+    const result = await runQaPreflight(process.cwd(), {
+      runWrangler,
+      createProbeFile: async () => successfulProbeFile(),
+    });
+
+    const r2Check = result.errors.find((check) => check.name === "QA R2 round trip");
+    expect(r2Check?.message).toContain("after readback mismatch");
+    expect(r2Check?.message).toContain("delete denied");
+  });
+
   it("fails when the R2 probe delete fails after a successful readback", async () => {
     const runWrangler = vi.fn(async (args: string[]) => {
       const command = args.join(" ");
@@ -407,6 +768,46 @@ describe("runQaPreflight", () => {
     expect(r2Check?.message).toContain("delete denied");
   });
 
+  it("uses stdout as the failure message when final R2 probe delete stderr is empty", async () => {
+    const runWrangler = vi.fn(async (args: string[]) => {
+      const command = args.join(" ");
+      if (command === buildQaMigrationListArgs().join(" ")) return { stdout: "[]", stderr: "", exitCode: 0 };
+      if (command === buildQaSecretListArgs().join(" ")) return { stdout: secretListStdout(), stderr: "", exitCode: 0 };
+      if (command.startsWith("r2 object put")) return { stdout: "", stderr: "", exitCode: 0 };
+      if (command.startsWith("r2 object get")) return { stdout: "spoonjoy qa preflight", stderr: "", exitCode: 0 };
+      if (command.startsWith("r2 object delete")) return { stdout: "oauth delete denied", stderr: "", exitCode: 1 };
+      throw new Error(`unexpected wrangler args: ${command}`);
+    });
+
+    const result = await runQaPreflight(process.cwd(), {
+      runWrangler,
+      createProbeFile: async () => successfulProbeFile(),
+    });
+
+    const r2Check = result.warnings.find((check) => check.name === "QA R2 round trip");
+    expect(r2Check?.message).toContain("oauth delete denied");
+  });
+
+  it("attempts final R2 cleanup when the read command throws after upload", async () => {
+    const runWrangler = vi.fn(async (args: string[]) => {
+      const command = args.join(" ");
+      if (command === buildQaMigrationListArgs().join(" ")) return { stdout: "[]", stderr: "", exitCode: 0 };
+      if (command === buildQaSecretListArgs().join(" ")) return { stdout: secretListStdout(), stderr: "", exitCode: 0 };
+      if (command.startsWith("r2 object put")) return { stdout: "", stderr: "", exitCode: 0 };
+      if (command.startsWith("r2 object get")) throw new Error("r2 get crashed");
+      if (command.startsWith("r2 object delete")) return { stdout: "", stderr: "", exitCode: 0 };
+      throw new Error(`unexpected wrangler args: ${command}`);
+    });
+
+    await expect(
+      runQaPreflight(process.cwd(), {
+        runWrangler,
+        createProbeFile: async () => successfulProbeFile(),
+      }),
+    ).rejects.toThrow("r2 get crashed");
+    expect(runWrangler.mock.calls.some(([args]) => args[0] === "r2" && args[2] === "delete")).toBe(true);
+  });
+
   it("reports the QA base URL in the static check message", async () => {
     const result = await runQaPreflight(process.cwd(), {
       runWrangler: async () => ({ stdout: "", stderr: "Authentication error [code: 10000]", exitCode: 1 }),
@@ -421,7 +822,10 @@ describe("runQaPreflight", () => {
   });
 
   it("propagates Storybook deploy warning cleanup static-config failures", async () => {
-    const root = await createStaticConfigRoot();
+    const root = await createStaticConfigRoot({
+      gitignore: "node_modules\nstorybook-static\n",
+      pnpmWorkspace: "allowBuilds:\n  esbuild: false\n",
+    });
     try {
       const result = await runQaPreflight(root, {
         env: { SPOONJOY_PREFLIGHT_SKIP_REMOTE: "1" },
@@ -439,5 +843,193 @@ describe("runQaPreflight", () => {
     } finally {
       await rm(root, { recursive: true, force: true });
     }
+  });
+});
+
+describe("qa-preflight CLI", () => {
+  const resolved = path.resolve(process.cwd(), "scripts/qa-preflight.ts");
+  const url = new URL(`file://${resolved}`).href;
+
+  it("identifies CLI entrypoints", () => {
+    expect(isCliEntry(undefined, url)).toBe(false);
+    expect(isCliEntry("/tmp/other.ts", url)).toBe(false);
+    expect(isCliEntry(resolved, url)).toBe(true);
+  });
+
+  it("returns false without running main when not the CLI entry", () => {
+    const runMain = vi.fn(async () => undefined);
+
+    expect(runCliIfEntry({ argv1: "/tmp/other.ts", moduleUrl: url, runMain })).toBe(false);
+    expect(runMain).not.toHaveBeenCalled();
+  });
+
+  it("runs injected main and returns true for CLI entry", () => {
+    const runMain = vi.fn(async () => undefined);
+
+    expect(runCliIfEntry({ argv1: resolved, moduleUrl: url, runMain })).toBe(true);
+    expect(runMain).toHaveBeenCalledTimes(1);
+  });
+
+  it("routes injected CLI failures to an injected error handler", async () => {
+    const onError = vi.fn();
+    const runMain = vi.fn(async () => {
+      throw new Error("qa boom");
+    });
+
+    expect(runCliIfEntry({ argv1: resolved, moduleUrl: url, runMain, onError })).toBe(true);
+    await vi.waitFor(() => expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: "qa boom" })));
+  });
+
+  it("logs passing checks with injected dependencies", async () => {
+    const log = vi.fn();
+    const error = vi.fn();
+    const exit = vi.fn();
+
+    await main({
+      io: { log, error, exit },
+      runWrangler: async () => ({ stdout: "", stderr: "Authentication error [code: 10000]", exitCode: 1 }),
+      env: { SPOONJOY_PREFLIGHT_SKIP_REMOTE: "1" },
+      createProbeFile: async () => ({
+        path: "/tmp/spoonjoy-qa-preflight.txt",
+        body: "spoonjoy qa preflight",
+        cleanup: async () => undefined,
+      }),
+    });
+
+    expect(error).not.toHaveBeenCalled();
+    expect(exit).not.toHaveBeenCalled();
+    expect(log).toHaveBeenCalledWith("QA preflight passed.");
+  });
+
+  it("logs failures with injected dependencies", async () => {
+    const log = vi.fn();
+    const error = vi.fn();
+    const exit = vi.fn();
+
+    await main({
+      io: { log, error, exit },
+      runWrangler: async (args) => {
+        if (args.join(" ") === buildQaMigrationListArgs().join(" ")) {
+          return { stdout: "", stderr: "database unavailable", exitCode: 1 };
+        }
+        if (args.join(" ") === buildQaSecretListArgs().join(" ")) {
+          return { stdout: secretListStdout(), stderr: "", exitCode: 0 };
+        }
+        if (args[0] === "r2" && args[2] === "get") {
+          return { stdout: "spoonjoy qa preflight", stderr: "", exitCode: 0 };
+        }
+        return { stdout: "", stderr: "", exitCode: 0 };
+      },
+      createProbeFile: async () => ({
+        path: "/tmp/spoonjoy-qa-preflight.txt",
+        body: "spoonjoy qa preflight",
+        cleanup: async () => undefined,
+      }),
+    });
+
+    expect(error).toHaveBeenCalledWith("QA preflight failed with 1 error(s).");
+    expect(exit).toHaveBeenCalledWith(1);
+  });
+
+  it("uses default console IO for successful main runs", async () => {
+    const originalSkip = process.env.SPOONJOY_PREFLIGHT_SKIP_REMOTE;
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      process.env.SPOONJOY_PREFLIGHT_SKIP_REMOTE = "1";
+      await main();
+
+      expect(log).toHaveBeenCalledWith("QA preflight passed.");
+    } finally {
+      log.mockRestore();
+      if (originalSkip === undefined) {
+        delete process.env.SPOONJOY_PREFLIGHT_SKIP_REMOTE;
+      } else {
+        process.env.SPOONJOY_PREFLIGHT_SKIP_REMOTE = originalSkip;
+      }
+    }
+  });
+
+  it("uses default console IO and exit for failed main runs", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation((() => {
+      throw new Error("exit 1");
+    }) as never);
+    try {
+      await expect(
+        main({
+          runWrangler: async (args) => {
+            if (args.join(" ") === buildQaMigrationListArgs().join(" ")) {
+              return { stdout: "", stderr: "database unavailable", exitCode: 1 };
+            }
+            if (args.join(" ") === buildQaSecretListArgs().join(" ")) {
+              return { stdout: secretListStdout(), stderr: "", exitCode: 0 };
+            }
+            if (args[0] === "r2" && args[2] === "get") {
+              return { stdout: "spoonjoy qa preflight", stderr: "", exitCode: 0 };
+            }
+            return { stdout: "", stderr: "", exitCode: 0 };
+          },
+          createProbeFile: async () => ({
+            path: "/tmp/spoonjoy-qa-preflight.txt",
+            body: "spoonjoy qa preflight",
+            cleanup: async () => undefined,
+          }),
+        }),
+      ).rejects.toThrow("exit 1");
+
+      expect(errorSpy).toHaveBeenCalledWith("QA preflight failed with 1 error(s).");
+      expect(exitSpy).toHaveBeenCalledWith(1);
+    } finally {
+      errorSpy.mockRestore();
+      exitSpy.mockRestore();
+    }
+  });
+
+  it("uses the default CLI error handler", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation((() => undefined) as never);
+    const runMain = vi.fn(async () => {
+      throw "string failure";
+    });
+
+    expect(runCliIfEntry({ argv1: resolved, moduleUrl: url, runMain })).toBe(true);
+    await vi.waitFor(() => expect(errorSpy).toHaveBeenCalledWith("QA preflight failed: string failure"));
+    expect(exitSpy).toHaveBeenCalledWith(1);
+
+    errorSpy.mockRestore();
+    exitSpy.mockRestore();
+  });
+
+  it("uses the default CLI main runner", async () => {
+    const originalSkip = process.env.SPOONJOY_PREFLIGHT_SKIP_REMOTE;
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      process.env.SPOONJOY_PREFLIGHT_SKIP_REMOTE = "1";
+      expect(runCliIfEntry({ argv1: resolved, moduleUrl: url })).toBe(true);
+      await vi.waitFor(() => expect(log).toHaveBeenCalledWith("QA preflight passed."));
+    } finally {
+      log.mockRestore();
+      if (originalSkip === undefined) {
+        delete process.env.SPOONJOY_PREFLIGHT_SKIP_REMOTE;
+      } else {
+        process.env.SPOONJOY_PREFLIGHT_SKIP_REMOTE = originalSkip;
+      }
+    }
+  });
+
+  it("prints a warning suffix when QA preflight has warning findings", async () => {
+    const log = vi.fn();
+
+    await main({
+      io: { log, error: vi.fn(), exit: vi.fn() },
+      runWrangler: async () => ({ stdout: "", stderr: "Authentication error [code: 10000]", exitCode: 1 }),
+      createProbeFile: async () => ({
+        path: "/tmp/spoonjoy-qa-preflight.txt",
+        body: "spoonjoy qa preflight",
+        cleanup: async () => undefined,
+      }),
+    });
+
+    expect(log).toHaveBeenCalledWith("QA preflight passed with 3 warning(s).");
   });
 });

@@ -1,0 +1,16 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+stdout | test/scripts/qa-preflight.test.ts > qa-preflight CLI > uses default console IO and exit for failed main runs
+PASS QA static config: QA static config targets https://spoonjoy-v2-qa.mendelow-studio.workers.dev.
+FAIL QA D1 migrations: Could not verify QA D1 migrations: database unavailable
+PASS QA secrets: QA Worker has required runtime secrets.
+PASS QA R2 round trip: QA R2 write/read/delete probe passed.
+
+ ✓ test/scripts/qa-preflight.test.ts (49 tests) 287ms
+
+ Test Files  1 passed (1)
+      Tests  49 passed (49)
+   Start at  07:37:45
+   Duration  851ms (transform 106ms, setup 114ms, import 96ms, tests 287ms, environment 220ms)
+

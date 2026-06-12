@@ -55,6 +55,10 @@ function check(name: string, ok: boolean, message: string, severity: "error" | "
   return { name, ok, message, severity };
 }
 
+function severityForRemoteMessage(message: string): "error" | "warning" {
+  return AUTH_ERROR_PATTERN.test(message) ? "warning" : "error";
+}
+
 function objectRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
@@ -117,15 +121,11 @@ export function parseWranglerSecretNames(stdout: string): string[] | { error: st
   try {
     parsed = JSON.parse(stdout.slice(start, end + 1));
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = String(error);
     return { error: `Could not parse Wrangler secret JSON: ${message}` };
   }
 
-  if (!Array.isArray(parsed)) {
-    return { error: "Wrangler secret output JSON was not an array." };
-  }
-
-  const names = parsed
+  const names = (parsed as unknown[])
     .map((row) => (row && typeof row === "object" && "name" in row ? row.name : null))
     .filter((name): name is string => typeof name === "string" && name !== "");
   return names;
@@ -141,7 +141,7 @@ function parsePendingMigrations(stdout: string): string[] | { error: string } {
     try {
       parsed = JSON.parse(trimmed);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = String(error);
       return { error: `Could not parse Wrangler migration JSON: ${message}` };
     }
     if (!Array.isArray(parsed)) {
@@ -278,7 +278,7 @@ async function checkQaMigrations(runWrangler: RunWrangler, env: NodeJS.ProcessEn
       "QA D1 migrations",
       false,
       `Could not verify QA D1 migrations: ${message}`,
-      AUTH_ERROR_PATTERN.test(message) ? "warning" : "error",
+      severityForRemoteMessage(message),
     );
   }
 
@@ -306,7 +306,7 @@ async function checkQaSecrets(runWrangler: RunWrangler, env: NodeJS.ProcessEnv):
       "QA secrets",
       false,
       `Could not verify QA secrets: ${message}`,
-      AUTH_ERROR_PATTERN.test(message) ? "warning" : "error",
+      severityForRemoteMessage(message),
     );
   }
 
@@ -340,7 +340,7 @@ async function checkQaR2RoundTrip(runWrangler: RunWrangler, createProbeFile: () 
         "QA R2 round trip",
         false,
         `Could not write QA R2 probe: ${message}`,
-        AUTH_ERROR_PATTERN.test(message) ? "warning" : "error",
+        severityForRemoteMessage(message),
       );
     }
     uploaded = true;
@@ -356,14 +356,14 @@ async function checkQaR2RoundTrip(runWrangler: RunWrangler, createProbeFile: () 
           "QA R2 round trip",
           false,
           `Could not delete QA R2 probe after read failure: ${deleteMessage}`,
-          AUTH_ERROR_PATTERN.test(deleteMessage) ? "warning" : "error",
+          severityForRemoteMessage(deleteMessage),
         );
       }
       return check(
         "QA R2 round trip",
         false,
         `Could not read QA R2 probe: ${message}`,
-        AUTH_ERROR_PATTERN.test(message) ? "warning" : "error",
+        severityForRemoteMessage(message),
       );
     }
     if (get.stdout !== probe.body) {
@@ -375,7 +375,7 @@ async function checkQaR2RoundTrip(runWrangler: RunWrangler, createProbeFile: () 
           "QA R2 round trip",
           false,
           `Could not delete QA R2 probe after readback mismatch: ${deleteMessage}`,
-          AUTH_ERROR_PATTERN.test(deleteMessage) ? "warning" : "error",
+          severityForRemoteMessage(deleteMessage),
         );
       }
       return check("QA R2 round trip", false, "QA R2 readback did not match the uploaded probe body.");
@@ -389,7 +389,7 @@ async function checkQaR2RoundTrip(runWrangler: RunWrangler, createProbeFile: () 
         "QA R2 round trip",
         false,
         `Could not delete QA R2 probe: ${message}`,
-        AUTH_ERROR_PATTERN.test(message) ? "warning" : "error",
+        severityForRemoteMessage(message),
       );
     }
     return check("QA R2 round trip", true, "QA R2 write/read/delete probe passed.");
@@ -430,14 +430,23 @@ export interface QaCliIO {
   exit: (code: number) => void;
 }
 
-export async function main(
-  io: QaCliIO = {
+export interface QaMainDeps extends QaPreflightDeps {
+  io?: QaCliIO;
+}
+
+export async function main(deps: QaMainDeps = {}): Promise<void> {
+  const io: QaCliIO = deps.io ?? {
     log: (message) => console.log(message),
     error: (message) => console.error(message),
     exit: (code) => process.exit(code),
-  },
-): Promise<void> {
-  const result = await runQaPreflight();
+  };
+
+  const result = await runQaPreflight(process.cwd(), {
+    runWrangler: deps.runWrangler,
+    createProbeFile: deps.createProbeFile,
+    readGeneratedBuildConfig: deps.readGeneratedBuildConfig,
+    env: deps.env,
+  });
   for (const item of result.checks) {
     io.log(formatCheck(item));
   }
@@ -452,15 +461,32 @@ export async function main(
   io.log(`QA preflight passed${warningSuffix}.`);
 }
 
-function isCliEntry(argv1: string | undefined, moduleUrl: string): boolean {
+export function isCliEntry(argv1: string | undefined, moduleUrl: string): boolean {
   if (!argv1) return false;
   return path.resolve(argv1) === fileURLToPath(moduleUrl);
 }
 
-if (isCliEntry(process.argv[1], import.meta.url)) {
-  main().catch((error: unknown) => {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`QA preflight failed: ${message}`);
-    process.exit(1);
-  });
+export interface RunQaCliIfEntryDeps {
+  argv1?: string;
+  moduleUrl: string;
+  runMain?: () => Promise<void>;
+  onError?: (error: unknown) => void;
 }
+
+export function runCliIfEntry(deps: RunQaCliIfEntryDeps): boolean {
+  if (!isCliEntry(deps.argv1, deps.moduleUrl)) {
+    return false;
+  }
+  const runMain = deps.runMain ?? main;
+  const onError =
+    deps.onError ??
+    ((error: unknown) => {
+      const message = String(error);
+      console.error(`QA preflight failed: ${message}`);
+      process.exit(1);
+    });
+  runMain().catch(onError);
+  return true;
+}
+
+runCliIfEntry({ argv1: process.argv[1], moduleUrl: import.meta.url });

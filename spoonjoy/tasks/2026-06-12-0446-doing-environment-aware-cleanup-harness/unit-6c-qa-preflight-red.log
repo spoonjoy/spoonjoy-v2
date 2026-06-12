@@ -1,0 +1,260 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ❯ test/scripts/qa-preflight.test.ts (46 tests | 11 failed) 15099ms
+     ✓ targets QA for D1 migration checks 1ms
+     ✓ targets QA for Worker secret checks 0ms
+     ✓ targets the QA bucket for R2 object checks 0ms
+     ✓ parses current Wrangler JSON output even when banners precede it 0ms
+     ✓ reports invalid JSON output 0ms
+     ✓ returns a parse error for non-array output 0ms
+     ✓ filters malformed secret rows 0ms
+     ✓ passes for a generated QA Worker config 0ms
+     ✓ accepts valid bindings after malformed generated config entries 0ms
+     ✓ fails closed for malformed generated config shapes 0ms
+     ✓ fails for a generated production Worker config 0ms
+     ✓ passes static, migration, secret, and R2 checks against QA 6ms
+     ✓ uses the default probe file helper when no probe dependency is injected 4ms
+     ✓ validates generated QA build config when requested 2ms
+     × validates the default generated QA build config file when requested 10ms
+     × uses default dependencies safely when remote checks are skipped 2ms
+     ✓ fails closed when QA secrets are missing 2ms
+     ✓ reports QA secret parse errors 1ms
+     ✓ reports pending migrations from JSON output 1ms
+     ✓ treats Wrangler no-pending text as a clean migration state 2ms
+     ✓ reports malformed Wrangler migration JSON 1ms
+     ✓ reports non-array Wrangler migration JSON 1ms
+     ✓ reports pending migrations from text output 2ms
+     ✓ reports unparseable Wrangler migration output 1ms
+     ✓ uses stdout as the failure message when Wrangler migration stderr is empty 1ms
+     ✓ warns instead of hard failing when Wrangler auth prevents remote checks 1ms
+     ✓ uses stdout as the failure message when Wrangler secret stderr is empty 2ms
+     ✓ reports R2 probe write failures 1ms
+     ✓ uses stdout as the failure message when the R2 probe write stderr is empty 1ms
+     ✓ reports R2 probe read failures after deleting the probe 1ms
+     ✓ reports R2 probe delete failures after read failures 1ms
+     ✓ deletes the R2 probe when the readback fails 1ms
+     ✓ reports R2 probe delete failures after readback mismatches 1ms
+     ✓ fails when the R2 probe delete fails after a successful readback 1ms
+     ✓ attempts final R2 cleanup when the read command throws after upload 2ms
+     ✓ reports the QA base URL in the static check message 1ms
+     ✓ propagates Storybook deploy warning cleanup static-config failures 4ms
+     × identifies CLI entrypoints 1ms
+     × returns false without running main when not the CLI entry 0ms
+     × runs injected main and returns true for CLI entry 0ms
+     × routes injected CLI failures to an injected error handler 0ms
+     × logs passing checks with injected dependencies 5006ms
+     × logs failures with injected dependencies 5003ms
+     × uses default console IO for successful main runs 4ms
+     × uses default console IO and exit for failed main runs 5001ms
+     × uses the default CLI error handler 0ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 11 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/scripts/qa-preflight.test.ts > runQaPreflight > validates the default generated QA build config file when requested
+AssertionError: expected [ { name: 'QA static config', …(3) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "message": "Static deployment config has 2 error(s): Storybook generated deploy ignore, pnpm build script policy",
++     "name": "QA static config",
++     "ok": false,
++     "severity": "error",
++   },
++ ]
+
+ ❯ test/scripts/qa-preflight.test.ts:376:29
+    374|       });
+    375| 
+    376|       expect(result.errors).toEqual([]);
+       |                             ^
+    377|       expect(result.checks.find((check) => check.name === "QA generate…
+    378|     } finally {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/11]⎯
+
+ FAIL  test/scripts/qa-preflight.test.ts > runQaPreflight > uses default dependencies safely when remote checks are skipped
+AssertionError: expected [] to deeply equal ArrayContaining{…}
+
+- Expected
++ Received
+
+- ArrayContaining [
+-   "QA D1 migrations",
+-   "QA secrets",
+-   "QA R2 round trip",
+- ]
++ []
+
+ ❯ test/scripts/qa-preflight.test.ts:389:56
+    387| 
+    388|     expect(result.errors).toEqual([]);
+    389|     expect(result.warnings.map((check) => check.name)).toEqual(
+       |                                                        ^
+    390|       expect.arrayContaining(["QA D1 migrations", "QA secrets", "QA R2…
+    391|     );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/11]⎯
+
+ FAIL  test/scripts/qa-preflight.test.ts > qa-preflight CLI > identifies CLI entrypoints
+TypeError: (0 , __vite_ssr_import_4__.isCliEntry) is not a function
+ ❯ test/scripts/qa-preflight.test.ts:798:12
+    796| 
+    797|   it("identifies CLI entrypoints", () => {
+    798|     expect(isCliEntry(undefined, url)).toBe(false);
+       |            ^
+    799|     expect(isCliEntry("/tmp/other.ts", url)).toBe(false);
+    800|     expect(isCliEntry(resolved, url)).toBe(true);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/11]⎯
+
+ FAIL  test/scripts/qa-preflight.test.ts > qa-preflight CLI > returns false without running main when not the CLI entry
+TypeError: (0 , __vite_ssr_import_4__.runCliIfEntry) is not a function
+ ❯ test/scripts/qa-preflight.test.ts:806:12
+    804|     const runMain = vi.fn(async () => undefined);
+    805| 
+    806|     expect(runCliIfEntry({ argv1: "/tmp/other.ts", moduleUrl: url, run…
+       |            ^
+    807|     expect(runMain).not.toHaveBeenCalled();
+    808|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/11]⎯
+
+ FAIL  test/scripts/qa-preflight.test.ts > qa-preflight CLI > runs injected main and returns true for CLI entry
+TypeError: (0 , __vite_ssr_import_4__.runCliIfEntry) is not a function
+ ❯ test/scripts/qa-preflight.test.ts:813:12
+    811|     const runMain = vi.fn(async () => undefined);
+    812| 
+    813|     expect(runCliIfEntry({ argv1: resolved, moduleUrl: url, runMain })…
+       |            ^
+    814|     expect(runMain).toHaveBeenCalledTimes(1);
+    815|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/11]⎯
+
+ FAIL  test/scripts/qa-preflight.test.ts > qa-preflight CLI > routes injected CLI failures to an injected error handler
+TypeError: (0 , __vite_ssr_import_4__.runCliIfEntry) is not a function
+ ❯ test/scripts/qa-preflight.test.ts:823:12
+    821|     });
+    822| 
+    823|     expect(runCliIfEntry({ argv1: resolved, moduleUrl: url, runMain, o…
+       |            ^
+    824|     await vi.waitFor(() => expect(onError).toHaveBeenCalledWith(expect…
+    825|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/11]⎯
+
+ FAIL  test/scripts/qa-preflight.test.ts > qa-preflight CLI > logs passing checks with injected dependencies
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ test/scripts/qa-preflight.test.ts:827:3
+    825|   });
+    826| 
+    827|   it("logs passing checks with injected dependencies", async () => {
+       |   ^
+    828|     const log = vi.fn();
+    829|     const error = vi.fn();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/11]⎯
+
+ FAIL  test/scripts/qa-preflight.test.ts > qa-preflight CLI > logs failures with injected dependencies
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ test/scripts/qa-preflight.test.ts:848:3
+    846|   });
+    847| 
+    848|   it("logs failures with injected dependencies", async () => {
+       |   ^
+    849|     const log = vi.fn();
+    850|     const error = vi.fn();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/11]⎯
+
+ FAIL  test/scripts/qa-preflight.test.ts > qa-preflight CLI > uses default console IO for successful main runs
+AssertionError: expected "log" to be called with arguments: [ StringContaining{…} ]
+
+Received: 
+
+  1st log call:
+
+  [
+-   StringContaining "QA preflight passed with 3 warning(s).",
++   "PASS QA static config: QA static config targets https://spoonjoy-v2-qa.mendelow-studio.workers.dev.",
+  ]
+
+  2nd log call:
+
+  [
+-   StringContaining "QA preflight passed with 3 warning(s).",
++   "PASS QA D1 migrations: Skipped QA D1 migration check (SPOONJOY_PREFLIGHT_SKIP_REMOTE=1).",
+  ]
+
+  3rd log call:
+
+  [
+-   StringContaining "QA preflight passed with 3 warning(s).",
++   "PASS QA secrets: Skipped QA secret check (SPOONJOY_PREFLIGHT_SKIP_REMOTE=1).",
+  ]
+
+  4th log call:
+
+  [
+-   StringContaining "QA preflight passed with 3 warning(s).",
++   "PASS QA R2 round trip: Skipped QA R2 round trip (SPOONJOY_PREFLIGHT_SKIP_REMOTE=1).",
+  ]
+
+  5th log call:
+
+  [
+-   StringContaining "QA preflight passed with 3 warning(s).",
++   "QA preflight passed.",
+  ]
+
+
+Number of calls: 5
+
+ ❯ test/scripts/qa-preflight.test.ts:879:19
+    877|       await main();
+    878| 
+    879|       expect(log).toHaveBeenCalledWith(expect.stringContaining("QA pre…
+       |                   ^
+    880|     } finally {
+    881|       log.mockRestore();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/11]⎯
+
+ FAIL  test/scripts/qa-preflight.test.ts > qa-preflight CLI > uses default console IO and exit for failed main runs
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ test/scripts/qa-preflight.test.ts:890:3
+    888|   });
+    889| 
+    890|   it("uses default console IO and exit for failed main runs", async ()…
+       |   ^
+    891|     const errorSpy = vi.spyOn(console, "error").mockImplementation(() …
+    892|     const exitSpy = vi.spyOn(process, "exit").mockImplementation((() =…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/11]⎯
+
+ FAIL  test/scripts/qa-preflight.test.ts > qa-preflight CLI > uses the default CLI error handler
+TypeError: (0 , __vite_ssr_import_4__.runCliIfEntry) is not a function
+ ❯ test/scripts/qa-preflight.test.ts:929:12
+    927|     });
+    928| 
+    929|     expect(runCliIfEntry({ argv1: resolved, moduleUrl: url, runMain })…
+       |            ^
+    930|     await vi.waitFor(() => expect(errorSpy).toHaveBeenCalledWith("QA p…
+    931|     expect(exitSpy).toHaveBeenCalledWith(1);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/11]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  11 failed | 35 passed (46)
+   Start at  07:32:33
+   Duration  15.57s (transform 100ms, setup 93ms, import 93ms, tests 15.10s, environment 159ms)
+
