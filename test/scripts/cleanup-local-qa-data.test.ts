@@ -321,8 +321,12 @@ describe("cleanup-local-qa-data", () => {
     const calls = runCommand.mock.calls.map((call) => call[1] as string[]);
     const joinedCalls = calls.map((args) => args.join(" "));
     expect(joinedCalls[1]).toContain("candidate_r2_keys");
-    expect(joinedCalls[2]).toContain(buildApplySql());
-    expect(calls.slice(3)).toEqual([
+    expect(joinedCalls[2]).toContain("sqlite_master");
+    expect(joinedCalls[2]).toContain("SearchDocument");
+    expect(joinedCalls[3]).toContain(cleanup.buildBlockerReportSql());
+    expect(joinedCalls[4]).toContain(buildApplySql());
+    expect(joinedCalls.slice(1, 4)).not.toEqual(expect.arrayContaining([expect.stringContaining("FROM SearchDocument")]));
+    expect(calls.slice(5)).toEqual([
       cleanup.buildQaR2DeleteArgs("profiles/codex-user/avatar.jpg"),
       cleanup.buildQaR2GetArgs("profiles/codex-user/avatar.jpg"),
       cleanup.buildQaR2DeleteArgs("recipes/codex-user/recipe-1/source.jpg"),
@@ -678,10 +682,33 @@ describe("cleanup-local-qa-data", () => {
       "blocker_cover_imageUrl",
       "blocker_cover_stylizedImageUrl",
       "blocker_cover_sourceImageUrl",
-      "blocker_search_imageUrl",
-      "SearchDocument.imageUrl still references candidate key",
       "WHERE key IS NOT NULL AND key != ''",
     ]);
+    expect(sql).not.toContain("FROM SearchDocument");
+  });
+
+  it("builds the SearchDocument R2 blocker SQL separately from base candidate collection", () => {
+    expect(typeof cleanup.buildQaR2SearchReferenceSql).toBe("function");
+    const sql = cleanup.buildQaR2SearchReferenceSql([
+      "profiles/codex-user/avatar.jpg",
+      "recipes/codex-user/recipe-1/source.jpg",
+    ]);
+
+    expectAll(sql, [
+      "FROM SearchDocument",
+      "blocker_search_imageUrl",
+      "SearchDocument.imageUrl still references candidate key",
+      "profiles/codex-user/avatar.jpg",
+      "recipes/codex-user/recipe-1/source.jpg",
+      "sd.ownerId IS NULL OR sd.ownerId NOT IN (SELECT id FROM disposable_users)",
+    ]);
+  });
+
+  it("builds an empty SearchDocument R2 blocker query safely", () => {
+    const sql = cleanup.buildQaR2SearchReferenceSql();
+
+    expect(sql).toContain("SELECT NULL AS key WHERE 0");
+    expect(sql).toContain("FROM SearchDocument");
   });
 
   it("refuses QA apply before D1 mutation when R2 candidates have surviving non-disposable references", async () => {
@@ -726,6 +753,81 @@ describe("cleanup-local-qa-data", () => {
     );
   });
 
+  it("refuses QA apply before D1 mutation when search documents reference candidate R2 keys", async () => {
+    const stdout = writableBuffer();
+    const stderr = writableBuffer();
+    const runCommand = vi.fn(async (_cmd: string, args: string[]) => {
+      const command = args.join(" ");
+      if (command.includes("candidate_r2_keys")) {
+        return { stdout: JSON.stringify([{ results: [{ action: "delete", key: "profiles/codex-user/avatar.jpg" }] }]), stderr: "" };
+      }
+      if (command.includes("sqlite_master") && command.includes("SearchDocument")) {
+        return { stdout: JSON.stringify([{ results: [{ name: "SearchDocument" }] }]), stderr: "" };
+      }
+      if (command.includes("FROM SearchDocument")) {
+        return {
+          stdout: JSON.stringify([
+            {
+              results: [
+                {
+                  action: "blocker_search_imageUrl",
+                  key: "profiles/codex-user/avatar.jpg",
+                  reason: "SearchDocument.imageUrl still references candidate key",
+                },
+              ],
+            },
+          ]),
+          stderr: "",
+        };
+      }
+      return { stdout: "[]", stderr: "" };
+    });
+
+    await expect(
+      cleanup.runCleanupCli({
+        argv: ["--target-env", "qa", "--apply"],
+        runCommand,
+        stdout: stdout.stream,
+        stderr: stderr.stream,
+      }),
+    ).rejects.toThrow(/blocker_search_imageUrl:profiles\/codex-user\/avatar\.jpg/);
+
+    expect(runCommand.mock.calls.map((call) => (call[1] as string[]).join(" "))).not.toEqual(
+      expect.arrayContaining([expect.stringContaining(buildApplySql())]),
+    );
+  });
+
+  it("reports D1 cleanup blockers before running the apply mutation", async () => {
+    expect(typeof cleanup.buildBlockerReportSql).toBe("function");
+    const stdout = writableBuffer();
+    const stderr = writableBuffer();
+    const runCommand = vi.fn(async (_cmd: string, args: string[]) => {
+      const command = args.join(" ");
+      if (command.includes("cleanup_blockers") && command.includes("SELECT blocker, rowId FROM cleanup_blockers")) {
+        return {
+          stdout: JSON.stringify([
+            { results: [{ blocker: "blocker_recipe_activeCoverId", rowId: "recipe-1" }] },
+          ]),
+          stderr: "",
+        };
+      }
+      return { stdout: "[]", stderr: "" };
+    });
+
+    await expect(
+      cleanup.runCleanupCli({
+        argv: ["--target-env", "local", "--apply"],
+        runCommand,
+        stdout: stdout.stream,
+        stderr: stderr.stream,
+      }),
+    ).rejects.toThrow(/blocker_recipe_activeCoverId:recipe-1/);
+
+    expect(runCommand.mock.calls.map((call) => (call[1] as string[]).join(" "))).not.toEqual(
+      expect.arrayContaining([expect.stringContaining(buildApplySql())]),
+    );
+  });
+
   it("runs QA apply with no R2 candidates and no R2 delete/get commands", async () => {
     const stdout = writableBuffer();
     const stderr = writableBuffer();
@@ -749,6 +851,72 @@ describe("cleanup-local-qa-data", () => {
     expect(joinedCalls).not.toEqual(expect.arrayContaining([expect.stringContaining("r2 object")]));
     expect(stdout.text()).not.toContain("Deleted QA R2 keys");
     expect(stdout.text()).not.toContain("Verified deleted QA R2 keys");
+  });
+
+  it("treats missing stdout from the search-table existence check as absent search", async () => {
+    const stdout = writableBuffer();
+    const stderr = writableBuffer();
+    const runCommand = vi.fn(async (_cmd: string, args: string[]) => {
+      const command = args.join(" ");
+      if (command.includes("candidate_r2_keys")) {
+        return { stdout: JSON.stringify([{ results: [{ action: "delete", key: "profiles/codex-user/avatar.jpg" }] }]), stderr: "" };
+      }
+      if (command.includes("sqlite_master") && command.includes("SearchDocument")) {
+        return { stderr: "" };
+      }
+      if (command.includes("r2 object get")) {
+        throw "NoSuchKey";
+      }
+      return { stdout: "[]", stderr: "" };
+    });
+
+    await cleanup.runCleanupCli({
+      argv: ["--target-env", "qa", "--apply"],
+      runCommand,
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+    });
+
+    expect(runCommand.mock.calls.map((call) => (call[1] as string[]).join(" "))).not.toEqual(
+      expect.arrayContaining([expect.stringContaining("blocker_search_imageUrl")]),
+    );
+  });
+
+  it("treats missing stdout from search blocker and D1 blocker preflights as empty", async () => {
+    const stdout = writableBuffer();
+    const stderr = writableBuffer();
+    const runCommand = vi.fn(async (_cmd: string, args: string[]) => {
+      const command = args.join(" ");
+      if (command.includes("candidate_r2_keys")) {
+        return { stdout: JSON.stringify([{ results: [{ action: "delete", key: "profiles/codex-user/avatar.jpg" }] }]), stderr: "" };
+      }
+      if (command.includes("sqlite_master") && command.includes("SearchDocument")) {
+        return { stdout: JSON.stringify([{ results: [{ name: "SearchDocument" }] }]), stderr: "" };
+      }
+      if (command.includes("FROM SearchDocument")) {
+        return { stderr: "" };
+      }
+      if (command.includes("cleanup_blockers") && command.includes("SELECT blocker, rowId FROM cleanup_blockers")) {
+        return { stderr: "" };
+      }
+      if (command.includes("r2 object get")) {
+        throw "NoSuchKey";
+      }
+      return { stdout: "[]", stderr: "" };
+    });
+
+    await cleanup.runCleanupCli({
+      argv: ["--target-env", "qa", "--apply"],
+      runCommand,
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+    });
+
+    const joinedCalls = runCommand.mock.calls.map((call) => (call[1] as string[]).join(" "));
+    expect(joinedCalls).toEqual(expect.arrayContaining([
+      expect.stringContaining("FROM SearchDocument"),
+      expect.stringContaining(buildApplySql()),
+    ]));
   });
 
   it("handles candidate rows without results and candidates command without stdout", async () => {

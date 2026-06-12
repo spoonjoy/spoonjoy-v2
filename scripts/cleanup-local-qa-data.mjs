@@ -59,6 +59,10 @@ function unique(values) {
   return [...new Set(values.filter((value) => typeof value === "string" && value !== ""))];
 }
 
+function sqlString(value) {
+  return `'${String(value).replaceAll("'", "''")}'`;
+}
+
 function addKey(map, key, source) {
   if (!key) return;
   if (!map.has(key)) map.set(key, source);
@@ -161,11 +165,6 @@ WITH
   ),
   hard_delete_recipes AS (
     SELECT id, chefId FROM Recipe WHERE chefId IN (SELECT id FROM disposable_users)
-  ),
-  soft_delete_recipes AS (
-    SELECT id FROM Recipe
-    WHERE ${SUSPICIOUS_RECIPE_WHERE}
-      AND chefId NOT IN (SELECT id FROM disposable_users)
   ),
   disposable_spoons AS (
     SELECT id, chefId, recipeId, photoUrl FROM RecipeSpoon
@@ -283,22 +282,66 @@ WITH
     FROM RecipeCover rc
     JOIN candidate_r2_keys c ON c.action = 'delete' AND c.key = substr(rc.sourceImageUrl, length('/photos/') + 1)
     WHERE rc.recipeId NOT IN (SELECT id FROM hard_delete_recipes)
-    UNION
-    SELECT 'blocker_search_imageUrl',
-      substr(sd.imageUrl, length('/photos/') + 1),
-      'SearchDocument.imageUrl still references candidate key'
+  )
+SELECT action, key, reason
+FROM candidate_r2_keys
+WHERE key IS NOT NULL AND key != ''
+UNION
+SELECT action, key, reason
+FROM r2_reference_blockers
+WHERE key IS NOT NULL AND key != '';
+`.trim();
+}
+
+export function buildQaR2SearchTableExistsSql() {
+  return `
+SELECT name
+FROM sqlite_master
+WHERE type IN ('table', 'virtual table')
+  AND name = 'SearchDocument';
+`.trim();
+}
+
+export function buildQaR2SearchReferenceSql(keys = []) {
+  const values = unique(keys).map((key) => `(${sqlString(key)})`).join(", ");
+  const searchKeysCte = values === "" ? "SELECT NULL AS key WHERE 0" : `VALUES ${values}`;
+  return `
+WITH
+  disposable_users AS (
+    SELECT id FROM User WHERE ${DISPOSABLE_USER_WHERE}
+  ),
+  hard_delete_recipes AS (
+    SELECT id FROM Recipe WHERE chefId IN (SELECT id FROM disposable_users)
+  ),
+  soft_delete_recipes AS (
+    SELECT id FROM Recipe
+    WHERE ${SUSPICIOUS_RECIPE_WHERE}
+      AND chefId NOT IN (SELECT id FROM disposable_users)
+  ),
+  disposable_spoons AS (
+    SELECT id FROM RecipeSpoon
+    WHERE chefId IN (SELECT id FROM disposable_users)
+       OR ${DISPOSABLE_SPOON_WHERE}
+  ),
+  disposable_covers AS (
+    SELECT id FROM RecipeCover
+    WHERE recipeId IN (SELECT id FROM hard_delete_recipes)
+  ),
+  search_r2_keys(key) AS (
+    ${searchKeysCte}
+  ),
+  r2_reference_blockers AS (
+    SELECT 'blocker_search_imageUrl' AS action,
+      substr(sd.imageUrl, length('/photos/') + 1) AS key,
+      'SearchDocument.imageUrl still references candidate key' AS reason
     FROM SearchDocument sd
-    JOIN candidate_r2_keys c ON c.action = 'delete' AND c.key = substr(sd.imageUrl, length('/photos/') + 1)
+    JOIN search_r2_keys c ON c.key = substr(sd.imageUrl, length('/photos/') + 1)
     WHERE (sd.ownerId IS NULL OR sd.ownerId NOT IN (SELECT id FROM disposable_users))
       AND (sd.entityId IS NULL OR sd.entityId NOT IN (SELECT id FROM hard_delete_recipes))
       AND (sd.entityId IS NULL OR sd.entityId NOT IN (SELECT id FROM soft_delete_recipes))
       AND (sd.entityId IS NULL OR sd.entityId NOT IN (SELECT id FROM disposable_spoons))
       AND (sd.entityId IS NULL OR sd.entityId NOT IN (SELECT id FROM disposable_covers))
   )
-SELECT action, key, reason
-FROM candidate_r2_keys
-WHERE key IS NOT NULL AND key != ''
-UNION
 SELECT action, key, reason
 FROM r2_reference_blockers
 WHERE key IS NOT NULL AND key != '';
@@ -323,22 +366,45 @@ function isR2ObjectMissingError(error) {
   return /(?:the specified key does not exist|nosuchkey|not found)/i.test(text);
 }
 
+function r2BlockerError(blockers) {
+  const details = blockers
+    .map((row) => `${row.action}:${row.key}${row.reason ? ` (${row.reason})` : ""}`)
+    .join(", ");
+  return new Error(`Refusing QA R2 cleanup because non-disposable rows still reference candidate keys: ${details}`);
+}
+
+function assertNoR2Blockers(rows) {
+  const blockers = rows.filter((row) => typeof row.action === "string" && row.action.startsWith("blocker"));
+  if (blockers.length > 0) throw r2BlockerError(blockers);
+}
+
+async function qaSearchDocumentExists({ dbName, target, runCommand }) {
+  const result = await runCommand("pnpm", wranglerD1Args(dbName, buildQaR2SearchTableExistsSql(), target), {
+    encoding: "utf8",
+    maxBuffer: MAX_WRANGLER_BUFFER,
+  });
+  return parseWranglerRows(result.stdout ?? "").some((row) => row.name === "SearchDocument");
+}
+
 async function collectQaR2Candidates({ dbName, target, runCommand }) {
   const result = await runCommand("pnpm", wranglerD1Args(dbName, buildQaR2CandidateSql(), target), {
     encoding: "utf8",
     maxBuffer: MAX_WRANGLER_BUFFER,
   });
   const rows = parseWranglerRows(result.stdout ?? "");
-  const blockers = rows.filter((row) => typeof row.action === "string" && row.action.startsWith("blocker"));
-  if (blockers.length > 0) {
-    const details = blockers
-      .map((row) => `${row.action}:${row.key}${row.reason ? ` (${row.reason})` : ""}`)
-      .join(", ");
-    throw new Error(`Refusing QA R2 cleanup because non-disposable rows still reference candidate keys: ${details}`);
+  assertNoR2Blockers(rows);
+  const deleteKeys = unique(rows.filter((row) => row.action === "delete").map((row) => row.key));
+  const retainedKeys = unique(rows.filter((row) => row.action === "retain").map((row) => row.key));
+  if (deleteKeys.length > 0 && await qaSearchDocumentExists({ dbName, target, runCommand })) {
+    const searchResult = await runCommand("pnpm", wranglerD1Args(dbName, buildQaR2SearchReferenceSql(deleteKeys), target), {
+      encoding: "utf8",
+      maxBuffer: MAX_WRANGLER_BUFFER,
+    });
+    assertNoR2Blockers(parseWranglerRows(searchResult.stdout ?? ""));
   }
   return {
-    deleteKeys: unique(rows.filter((row) => row.action === "delete").map((row) => row.key)),
-    retainedKeys: unique(rows.filter((row) => row.action === "retain").map((row) => row.key)),
+    deleteKeys,
+    retainedKeys,
   };
 }
 
@@ -711,6 +777,28 @@ DELETE FROM disposable_users;
 `.trim();
 }
 
+function cleanupHelperTablesSql() {
+  return `
+DELETE FROM cleanup_blockers;
+DELETE FROM existing_search_tables;
+DELETE FROM disposable_credentials;
+DELETE FROM disposable_cover_image_urls;
+DELETE FROM disposable_covers;
+DELETE FROM e2e_oauth_clients;
+DELETE FROM disposable_spoons;
+DELETE FROM soft_delete_recipes;
+DELETE FROM hard_delete_recipes;
+DELETE FROM disposable_users;
+`.trim();
+}
+
+export function buildBlockerReportSql() {
+  const sql = buildApplySql();
+  const marker = "\nSELECT CASE WHEN EXISTS (SELECT 1 FROM cleanup_blockers)";
+  const markerIndex = sql.indexOf(marker);
+  return `${sql.slice(0, markerIndex)}\n${cleanupHelperTablesSql()}`.trim();
+}
+
 export function wranglerLocalD1Args(dbName, sql) {
   return ["exec", "wrangler", "d1", "execute", dbName, "--local", "--command", sql];
 }
@@ -781,6 +869,19 @@ function cleanupResultMessage(options) {
   return "Dry run only. Production broad cleanup is read-only.\n";
 }
 
+async function assertNoCleanupBlockers({ dbName, target, runCommand }) {
+  const result = await runCommand("pnpm", wranglerD1Args(dbName, buildBlockerReportSql(), target), {
+    encoding: "utf8",
+    maxBuffer: MAX_WRANGLER_BUFFER,
+  });
+  const blockers = parseWranglerRows(result.stdout ?? "").filter(
+    (row) => typeof row.blocker === "string" && typeof row.rowId === "string",
+  );
+  if (blockers.length === 0) return;
+  const details = blockers.map((row) => `${row.blocker}:${row.rowId}`).join(", ");
+  throw new Error(`Refusing cleanup because non-disposable rows still reference disposable targets: ${details}`);
+}
+
 export async function runCleanupCli({
   argv = process.argv.slice(2),
   runCommand = execFileAsync,
@@ -817,6 +918,14 @@ export async function runCleanupCli({
     if (qaR2Candidates.retainedKeys.length > 0) {
       stdout.write(`Retained QA R2 keys: ${qaR2Candidates.retainedKeys.join(", ")}\n`);
     }
+  }
+
+  if (options.apply) {
+    await assertNoCleanupBlockers({
+      dbName: options.dbName,
+      target: options.target,
+      runCommand,
+    });
   }
 
   const result = await runCommand("pnpm", args, {

@@ -1,0 +1,118 @@
+
+> spoonjoy-v2@1.0.0 cleanup:qa /Users/arimendelow/Projects/spoonjoy-v2
+> node scripts/cleanup-local-qa-data.mjs
+
+Target environment: local
+Base URL: http://localhost:5173
+D1 target: local D1 (--local)
+R2 target: local photos binding
+Destructive scope: local disposable test data only
+Dry run only. Pass --apply to mutate local D1.
+
+ ⛅️ wrangler 4.90.0 (update available 4.100.0)
+──────────────────────────────────────────────
+Resource location: local 
+
+Use --remote if you want to access the remote instance.
+
+🌀 Executing on local database DB (32cb0e04-c45b-4cd2-a798-556556ae288d) from .wrangler/state/v3/d1:
+🌀 To execute on your remote database, add a --remote flag to your wrangler command.
+🚣 8 commands executed successfully.
+[
+  {
+    "results": [
+      {
+        "item": "hard-delete recipes owned by disposable users",
+        "count": 0
+      }
+    ],
+    "success": true,
+    "meta": {
+      "duration": 1
+    }
+  },
+  {
+    "results": [
+      {
+        "item": "soft-delete suspicious recipes owned by non-disposable users",
+        "count": 144
+      }
+    ],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [
+      {
+        "item": "active suspicious recipes",
+        "count": 0
+      }
+    ],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [
+      {
+        "item": "already deleted suspicious recipes",
+        "count": 144
+      }
+    ],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [
+      {
+        "item": "disposable users",
+        "count": 0
+      }
+    ],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [
+      {
+        "item": "disposable spoons by chef or note",
+        "count": 0
+      }
+    ],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [
+      {
+        "item": "e2e oauth clients with test redirect signature",
+        "count": 0
+      }
+    ],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [
+      {
+        "item": "cross-boundary cleanup blockers",
+        "count": 0
+      }
+    ],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  }
+]
