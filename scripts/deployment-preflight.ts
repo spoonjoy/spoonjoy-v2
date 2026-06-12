@@ -103,6 +103,7 @@ const STORYBOOK_PAGES_OUTPUT_DIR = "storybook-static";
 const STORYBOOK_PAGES_PROJECT_NAME = "spoonjoy-storybook";
 const STORYBOOK_PAGES_DEPLOY_COMMAND =
   "pages deploy --project-name=spoonjoy-storybook --branch=${{ github.ref_name }} --commit-hash=${{ github.sha }} --commit-dirty=true";
+const REQUIRED_PNPM_PACKAGE_MANAGER = "pnpm@10.28.1";
 const REQUIRED_IGNORED_BUILD_PACKAGES = [
   "@prisma/client",
   "@prisma/engines",
@@ -471,20 +472,45 @@ function workflowHasGitDefaultBranchConfig(workflow: string): boolean {
   );
 }
 
-function workflowPnpmSetupUsesPackageManagerVersion(workflow: string): boolean {
+function corepackPnpmRunIsClean(run: string): boolean {
+  return commandLinesEqual(run, [
+    "corepack enable",
+    `corepack prepare ${REQUIRED_PNPM_PACKAGE_MANAGER} --activate`,
+  ]);
+}
+
+function workflowUsesCorepackPnpmSetup(workflow: string): boolean {
   const lines = workflowLines(workflow);
-  let pnpmSetupCount = 0;
+  const activeText = lines.map((line) => line.text).join("\n").toLowerCase();
+  if (activeText.includes("pnpm/action-setup@")) return false;
+
+  const jobs = workflowJobBlocks(lines);
+  if (jobs.length === 0) return false;
+
   for (const [jobStart, jobEnd] of workflowJobBlocks(lines)) {
     const steps = childBlock(lines, jobStart, jobEnd, "steps");
     if (!steps) return false;
 
+    let nodeSetupStep = -1;
+    let corepackStep = -1;
+
     for (const [stepStart, stepEnd] of stepBlocks(lines, steps[0], steps[1])) {
-      if (!stepUsesExactly(lines, stepStart, stepEnd, "pnpm/action-setup@v6")) continue;
-      pnpmSetupCount += 1;
-      if (stepWithValue(lines, stepStart, stepEnd, "version") !== null) return false;
+      if (
+        stepUsesExactly(lines, stepStart, stepEnd, "actions/setup-node@v6") &&
+        stepWithValue(lines, stepStart, stepEnd, "node-version") === "22"
+      ) {
+        nodeSetupStep = stepStart;
+      }
+
+      if (corepackPnpmRunIsClean(stepRunText(lines, stepStart, stepEnd))) {
+        corepackStep = stepStart;
+      }
     }
+
+    if (nodeSetupStep < 0 || corepackStep <= nodeSetupStep) return false;
   }
-  return pnpmSetupCount > 0;
+
+  return true;
 }
 
 function workflowTriggersOnlyDispatchAndSchedule(workflow: string): boolean {
@@ -775,7 +801,7 @@ function workflowHasStorybookDeployContract(workflow: string): boolean {
       wranglerDeployStepCount === 1 &&
       prepareDeployDirStep > storybookBuildStep &&
       wranglerDeployStep > prepareDeployDirStep &&
-      workflowPnpmSetupUsesPackageManagerVersion(workflow)
+      workflowUsesCorepackPnpmSetup(workflow)
     );
   }
 
@@ -895,24 +921,24 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
       "CI workflow",
       workflowBuildsPushesAndPullRequestsToMain(inputs.ciWorkflow) &&
         workflowHasGitDefaultBranchConfig(inputs.ciWorkflow) &&
-        workflowPnpmSetupUsesPackageManagerVersion(inputs.ciWorkflow),
-      ".github/workflows/ci.yml must validate pushes and pull requests to main with checkout warning suppression and pnpm/action-setup@v6 reading the packageManager version."
+        workflowUsesCorepackPnpmSetup(inputs.ciWorkflow),
+      ".github/workflows/ci.yml must validate pushes and pull requests to main with checkout warning suppression and Corepack pnpm activation."
     ),
     check(
       "production deploy workflow",
       workflowDeploysPushesToMain(inputs.productionDeployWorkflow) &&
         workflowHasCloudflareDeployAutoStep(inputs.productionDeployWorkflow) &&
         workflowHasGitDefaultBranchConfig(inputs.productionDeployWorkflow) &&
-        workflowPnpmSetupUsesPackageManagerVersion(inputs.productionDeployWorkflow),
-      ".github/workflows/production-deploy.yml must auto-deploy pushes to main with deploy:auto while keeping manual dispatch, Cloudflare credentials, checkout warning suppression, and packageManager-driven pnpm setup wired."
+        workflowUsesCorepackPnpmSetup(inputs.productionDeployWorkflow),
+      ".github/workflows/production-deploy.yml must auto-deploy pushes to main with deploy:auto while keeping manual dispatch, Cloudflare credentials, checkout warning suppression, and Corepack pnpm activation wired."
     ),
     check(
       "QA image-cover smoke workflow",
       workflowTriggersOnlyDispatchAndSchedule(inputs.qaImageCoverSmokeWorkflow) &&
         workflowHasQaImageCoverSmokeGuards(inputs.qaImageCoverSmokeWorkflow) &&
         workflowHasGitDefaultBranchConfig(inputs.qaImageCoverSmokeWorkflow) &&
-        workflowPnpmSetupUsesPackageManagerVersion(inputs.qaImageCoverSmokeWorkflow),
-      ".github/workflows/qa-image-cover-smoke.yml must run only on schedule/manual dispatch, guard Cloudflare and QA image-provider credentials, suppress checkout warnings, use packageManager-driven pnpm setup, and run the QA-only image-cover smoke without deploy commands."
+        workflowUsesCorepackPnpmSetup(inputs.qaImageCoverSmokeWorkflow),
+      ".github/workflows/qa-image-cover-smoke.yml must run only on schedule/manual dispatch, guard Cloudflare and QA image-provider credentials, suppress checkout warnings, use Corepack pnpm activation, and run the QA-only image-cover smoke without deploy commands."
     ),
     check(
       "Storybook deploy workflow",
