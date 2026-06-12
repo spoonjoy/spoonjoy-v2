@@ -1,7 +1,7 @@
 # Planning: Storybook Wrangler Action Migration
 
 **Status**: drafting
-**Created**: 2026-06-11 20:38
+**Created**: 2026-06-11 20:39
 
 ## Goal
 Remove the deprecated Cloudflare Pages GitHub Action from the Storybook deployment workflow so the verification pipeline stays warning-free and does not depend on the Node 20 action runtime cutoff.
@@ -25,8 +25,10 @@ Remove the deprecated Cloudflare Pages GitHub Action from the Storybook deployme
 
 ## Completion Criteria
 - [ ] `.github/workflows/storybook.yml` no longer references `cloudflare/pages-action@v1`.
-- [ ] Storybook deployment uses Cloudflare's Wrangler action with `pages deploy storybook-static --project-name=spoonjoy-storybook`.
+- [ ] Storybook deployment uses `cloudflare/wrangler-action@v4` with `pages deploy storybook-static --project-name=spoonjoy-storybook`.
 - [ ] Existing secret names and main-branch deploy behavior are preserved.
+- [ ] Existing `deployments: write` permission is preserved for GitHub deployment records.
+- [ ] Workflow syntax is validated before merge.
 - [ ] Local Storybook build passes with no warnings caused by this change.
 - [ ] Merged `main` Storybook workflow passes after the change.
 - [ ] 100% test coverage on all new code
@@ -45,18 +47,20 @@ Remove the deprecated Cloudflare Pages GitHub Action from the Storybook deployme
 - None.
 
 ## Decisions Made
-- Use `cloudflare/wrangler-action@v3` because Cloudflare's Pages continuous-integration docs show it as the current GitHub Actions deployment path for direct uploads.
+- Use `cloudflare/wrangler-action@v4` because the action source shows `v4.0.0` runs on `node24`, while `v3` still runs on `node20`.
 - Keep `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` unchanged to avoid secret churn.
 - Run this as a small pre-`SJ-044` autopilot slice because it surfaced during terminal verification and has a dated runtime cutoff.
 
 ## Context / References
 - `.github/workflows/storybook.yml`
 - `package.json` script `build-storybook`
-- Cloudflare Pages "Use Direct Upload with continuous integration" docs: `cloudflare/wrangler-action@v3` plus `pages deploy`.
+- Cloudflare Pages "Use Direct Upload with continuous integration" docs: Wrangler action plus `pages deploy`.
+- `cloudflare/wrangler-action@v4.0.0` `action.yml` uses `node24`; `v3` uses `node20`.
 - Storybook verification run `27392454076` succeeded but warned that `cloudflare/pages-action@v1` uses the Node 20 action runtime.
 
 ## Notes
-This is a workflow-only migration. Keep the deploy job scoped to `refs/heads/main` exactly as it is today.
+This is a workflow-only migration. Keep the deploy job scoped to `refs/heads/main` exactly as it is today, and keep `permissions.deployments: write`.
 
 ## Progress Log
-- 2026-06-11 20:38 Created
+- 2026-06-11 20:39 Created
+- 2026-06-11 20:39 Planning review Round 1 found `wrangler-action@v3` still on Node 20, timestamp drift, and missing explicit workflow permission/syntax criteria.
