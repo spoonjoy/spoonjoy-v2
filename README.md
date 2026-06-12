@@ -96,6 +96,11 @@ For Ouroboros agent integration, see [`docs/ouroboros-mcp.md`](docs/ouroboros-mc
 | `pnpm run qa:preflight` | Verify the isolated `spoonjoy-v2-qa` Worker config, QA D1/R2, required QA secrets, and QA R2 round trip |
 | `pnpm run deploy:qa` | Build with `CLOUDFLARE_ENV=qa`, migrate `spoonjoy-qa`, validate generated config with `SPOONJOY_QA_PREFLIGHT_EXPECT_BUILD_CONFIG`, and deploy QA |
 | `pnpm run smoke:qa` | Run the live smoke against `spoonjoy-v2-qa.mendelow-studio.workers.dev` with `--target-env qa` cleanup |
+| `pnpm run cleanup:local` | Dry-run disposable cleanup against local D1 with `--target-env local` |
+| `pnpm run cleanup:local:apply` | Apply disposable cleanup to local D1 only |
+| `pnpm run cleanup:remote:qa` | Dry-run disposable cleanup against QA D1/R2 with `--target-env qa` |
+| `pnpm run cleanup:remote:qa:apply` | Apply exact validated disposable cleanup to QA D1/R2 |
+| `pnpm run cleanup:production` | Read-only broad disposable cleanup check with `--target-env production` |
 
 ## Generated Artifacts
 
@@ -134,11 +139,15 @@ pnpm test:e2e --headed
 Before reporting manual/e2e work complete, inspect disposable local QA residue:
 
 ```bash
-pnpm cleanup:qa
-pnpm cleanup:qa -- --apply
+pnpm run cleanup:local
+pnpm run cleanup:local:apply
 ```
 
-The cleanup command is dry-run by default and uses local D1 only. It is for Codex/e2e residue such as `codex-*`, `codex-smoke-*`, `e2e *`, passkey test users, and `E2E OAuth Client` rows; do not use it for remote/prod cleanup.
+The legacy `pnpm run cleanup:qa` command remains a local-only alias for `pnpm run cleanup:local` and passes `--target-env local`.
+
+For remote QA, use `pnpm run cleanup:remote:qa` first. If it reports disposable QA residue and zero blockers, use `pnpm run cleanup:remote:qa:apply`; that path targets `--target-env qa`, cleans exact validated disposable D1 rows and QA R2 objects, and refuses non-disposable references.
+
+Production broad cleanup is read-only. `pnpm run cleanup:production` targets `--target-env production` for inspection, and broad production cleanup is read-only by design; production smoke scripts may only clean the exact `codex-smoke-` user they create.
 
 ## Database Management
 

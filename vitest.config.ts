@@ -26,8 +26,13 @@ export default defineConfig({
         "app/routes/**/*.tsx",
         "app/components/**/*.tsx",
         "app/hooks/**/*.ts",
+        "scripts/script-environment.mjs",
+        "scripts/cleanup-local-qa-data.mjs",
         "scripts/smoke-live-helpers.mjs",
         "scripts/smoke-image-cover-live.mjs",
+        "scripts/smoke-api-live.mjs",
+        "scripts/qa-preflight.ts",
+        "scripts/deployment-preflight.ts",
       ],
       exclude: ["node_modules/**", "test/**", "**/*.config.ts", "**/*.d.ts", "**/types/**"],
       thresholds: {

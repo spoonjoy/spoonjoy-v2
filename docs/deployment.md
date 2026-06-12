@@ -72,6 +72,30 @@ pnpm run smoke:qa
 
 `pnpm run smoke:qa` passes `--target-env qa`, creates a `codex-smoke-` user, cleans it from QA D1 with `--env qa`, and verifies the user count returns to zero. Do not run broad production cleanup. Production smoke cleanup must stay narrow to the one disposable `codex-smoke-` account created by that smoke run.
 
+## Cleanup Target Contract
+
+Cleanup commands are dry-run unless their script name ends in `:apply`, and every command pins an explicit script target:
+
+```bash
+pnpm run cleanup:local
+pnpm run cleanup:local:apply
+pnpm run cleanup:remote:qa
+pnpm run cleanup:remote:qa:apply
+pnpm run cleanup:production
+```
+
+Target mapping:
+
+| Command | Target | Mutation scope |
+| --- | --- | --- |
+| `pnpm run cleanup:local` | `--target-env local` | Read-only local D1 dry-run |
+| `pnpm run cleanup:local:apply` | `--target-env local --apply` | Local disposable D1 rows only |
+| `pnpm run cleanup:remote:qa` | `--target-env qa` | Read-only QA D1/R2 dry-run |
+| `pnpm run cleanup:remote:qa:apply` | `--target-env qa --apply` | Exact validated disposable QA D1 rows and QA R2 objects, after blocker checks |
+| `pnpm run cleanup:production` | `--target-env production` | Read-only broad production inspection |
+
+The legacy `pnpm run cleanup:qa` script is a backwards-compatible local alias for `pnpm run cleanup:local`; it still passes `--target-env local`. Production broad cleanup is read-only and `--target-env production --apply` is refused. Production smoke cleanup must remain exact-run cleanup for the one `codex-smoke-` user created by that smoke run.
+
 ## Required Secrets
 
 Set production secrets with `wrangler secret put`:

@@ -184,21 +184,25 @@ async function checkStaticConfig(rootDir: string): Promise<PreflightCheck> {
     cloudflareEnvDts,
     readme,
     deploymentDoc,
+    vitestConfig,
+    tsconfigScripts,
     migrationFiles,
   ] = await Promise.all([
-      readJsonFile(path.join(rootDir, "wrangler.json")),
-      readJsonFile(path.join(rootDir, "package.json")),
-      readFile(path.join(rootDir, ".github/workflows/ci.yml"), "utf8"),
-      readFile(path.join(rootDir, ".github/workflows/production-deploy.yml"), "utf8"),
-      readFile(path.join(rootDir, ".github/workflows/qa-image-cover-smoke.yml"), "utf8"),
-      readFile(path.join(rootDir, ".github/workflows/storybook.yml"), "utf8"),
-      readFile(path.join(rootDir, ".gitignore"), "utf8"),
-      readFile(path.join(rootDir, "pnpm-workspace.yaml"), "utf8"),
-      readFile(path.join(rootDir, "app/cloudflare-env.d.ts"), "utf8"),
-      readFile(path.join(rootDir, "README.md"), "utf8"),
-      readFile(path.join(rootDir, "docs/deployment.md"), "utf8"),
-      readdir(path.join(rootDir, "migrations")),
-    ]);
+    readJsonFile(path.join(rootDir, "wrangler.json")),
+    readJsonFile(path.join(rootDir, "package.json")),
+    readFile(path.join(rootDir, ".github/workflows/ci.yml"), "utf8"),
+    readFile(path.join(rootDir, ".github/workflows/production-deploy.yml"), "utf8"),
+    readFile(path.join(rootDir, ".github/workflows/qa-image-cover-smoke.yml"), "utf8"),
+    readFile(path.join(rootDir, ".github/workflows/storybook.yml"), "utf8"),
+    readFile(path.join(rootDir, ".gitignore"), "utf8"),
+    readFile(path.join(rootDir, "pnpm-workspace.yaml"), "utf8"),
+    readFile(path.join(rootDir, "app/cloudflare-env.d.ts"), "utf8"),
+    readFile(path.join(rootDir, "README.md"), "utf8"),
+    readFile(path.join(rootDir, "docs/deployment.md"), "utf8"),
+    readFile(path.join(rootDir, "vitest.config.ts"), "utf8"),
+    readFile(path.join(rootDir, "tsconfig.scripts.json"), "utf8"),
+    readdir(path.join(rootDir, "migrations")),
+  ]);
 
   const result = validateDeploymentConfig({
     wrangler,
@@ -212,6 +216,8 @@ async function checkStaticConfig(rootDir: string): Promise<PreflightCheck> {
     cloudflareEnvDts,
     readme,
     deploymentDoc,
+    vitestConfig,
+    tsconfigScripts,
     migrationFiles,
   });
 
