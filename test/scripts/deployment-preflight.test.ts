@@ -72,6 +72,50 @@ function validQaImageCoverSmokeWorkflow(): string {
   ].join("\n");
 }
 
+function validStorybookWorkflow(): string {
+  return [
+    "name: Storybook",
+    "on:",
+    "  push:",
+    "    branches: [main]",
+    "  pull_request:",
+    "    branches: [main]",
+    "  workflow_dispatch:",
+    "jobs:",
+    "  build-storybook:",
+    "    steps:",
+    "      - uses: actions/checkout@v6",
+    "      - run: pnpm build-storybook",
+    "      - uses: actions/upload-artifact@v7",
+    "        if: github.ref == 'refs/heads/main'",
+    "        with:",
+    "          name: storybook-static",
+    "          path: storybook-static",
+    "  deploy-storybook:",
+    "    if: github.ref == 'refs/heads/main'",
+    "    needs: build-storybook",
+    "    permissions:",
+    "      contents: read",
+    "      deployments: write",
+    "    steps:",
+    "      - uses: actions/download-artifact@v8",
+    "        with:",
+    "          name: storybook-static",
+    "          path: storybook-static",
+    "      - name: Deploy to Cloudflare Pages",
+    "        uses: cloudflare/wrangler-action@v4",
+    "        with:",
+    "          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}",
+    "          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
+    "          command: pages deploy storybook-static --project-name=spoonjoy-storybook",
+    "          gitHubToken: ${{ secrets.GITHUB_TOKEN }}",
+  ].join("\n");
+}
+
+function inputsWithStorybookWorkflow(workflow: string): DeploymentPreflightInputs {
+  return { ...validInputs(), storybookWorkflow: workflow };
+}
+
 function validInputs(): DeploymentPreflightInputs {
   return {
     wrangler: {
@@ -1186,6 +1230,48 @@ describe("QA image-cover smoke workflow", () => {
 
     expect(result.errors.map((item) => item.name)).not.toContain("QA image-cover smoke workflow");
     expect(result.checks.find((item) => item.name === "QA image-cover smoke workflow")?.ok).toBe(true);
+  });
+});
+
+describe("Storybook deploy workflow", () => {
+  it("requires a Wrangler-action Storybook deploy workflow in preflight", () => {
+    const result = validateDeploymentConfig(inputsWithStorybookWorkflow(validStorybookWorkflow()));
+
+    expect(result.errors.map((item) => item.name)).not.toContain("Storybook deploy workflow");
+    expect(result.checks.find((item) => item.name === "Storybook deploy workflow")?.ok).toBe(true);
+  });
+
+  it("rejects deprecated Pages action deployments", () => {
+    const inputs = inputsWithStorybookWorkflow(
+      validStorybookWorkflow()
+        .replace("cloudflare/wrangler-action@v4", "cloudflare/pages-action@v1")
+        .replace("command: pages deploy storybook-static --project-name=spoonjoy-storybook", "directory: storybook-static"),
+    );
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
+  });
+
+  it("requires deployment permissions, main-branch deploy guard, and GitHub deployment token", () => {
+    const inputs = inputsWithStorybookWorkflow(
+      validStorybookWorkflow()
+        .replace("      deployments: write\n", "")
+        .replace("    if: github.ref == 'refs/heads/main'\n", "")
+        .replace("          gitHubToken: ${{ secrets.GITHUB_TOKEN }}\n", ""),
+    );
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
+  });
+
+  it("checks the current repository Storybook workflow", async () => {
+    const workflow = await readFile(`${process.cwd()}/.github/workflows/storybook.yml`, "utf8");
+    const result = validateDeploymentConfig(inputsWithStorybookWorkflow(workflow));
+
+    expect(result.errors.map((item) => item.name)).not.toContain("Storybook deploy workflow");
+    expect(result.checks.find((item) => item.name === "Storybook deploy workflow")?.ok).toBe(true);
   });
 });
 
