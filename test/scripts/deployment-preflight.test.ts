@@ -262,7 +262,7 @@ function validInputs(): DeploymentPreflightInputs {
         typecheck: "react-router typegen && tsc",
         "test:coverage": "vitest run --coverage",
         "test:e2e": "env -u FORCE_COLOR -u NO_COLOR playwright test",
-        "smoke:api": "node scripts/smoke-api-live.mjs",
+        "smoke:api": "node scripts/smoke-api-live.mjs --target-env production",
         "smoke:qa":
           "node scripts/smoke-live.mjs --target-env qa --base-url https://spoonjoy-v2-qa.mendelow-studio.workers.dev --out qa-live-smoke-artifacts",
         "smoke:qa:image-cover":
@@ -1808,6 +1808,15 @@ describe("package.json deploy scripts", () => {
     expect(pkg.scripts["smoke:qa:image-cover"]).toBe(
       "node scripts/smoke-live.mjs --target-env qa --base-url https://spoonjoy-v2-qa.mendelow-studio.workers.dev --out qa-image-cover-smoke-artifacts --include-image-cover-smoke",
     );
+  });
+
+  it("runs API smoke against the explicit production target", async () => {
+    const pkgRaw = await import("node:fs/promises").then((mod) =>
+      mod.readFile(`${process.cwd()}/package.json`, "utf8"),
+    );
+    const pkg = JSON.parse(pkgRaw) as { scripts: Record<string, string> };
+
+    expect(pkg.scripts["smoke:api"]).toBe("node scripts/smoke-api-live.mjs --target-env production");
   });
 
   it("includes live-smoke script helpers in coverage instrumentation", async () => {
