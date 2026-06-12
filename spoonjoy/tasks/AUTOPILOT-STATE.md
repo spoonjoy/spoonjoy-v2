@@ -1,7 +1,7 @@
 # Autopilot State
 
-Updated: 2026-06-11 21:59 America/Los_Angeles
-Branch: `spoonjoy/storybook-wrangler-action`
+Updated: 2026-06-11 22:22 America/Los_Angeles
+Branch: `spoonjoy/storybook-deploy-warning-cleanup`
 Objective: Keep the Spoonjoy autonomous queue durable and continue with the next ready work after the completed QA/image-cover smoke run.
 
 ## Current Gate
@@ -9,15 +9,15 @@ Objective: Keep the Spoonjoy autonomous queue durable and continue with the next
 - Last completed planning doc: `spoonjoy/tasks/2026-06-11-1221-planning-mcp-image-cover-smokes.md`
 - Last completed doing doc: `spoonjoy/tasks/2026-06-11-1221-doing-mcp-image-cover-smokes.md`
 - Last completed bookkeeping branch: `spoonjoy/backlog-queue-state`; PR #187 merged as `06b7c7ad009445af4ff8e345e39aebd4067c426b`.
-- Current side-slice planning doc: `spoonjoy/tasks/2026-06-11-2038-planning-storybook-wrangler-action.md`
-- Current side-slice doing doc: `spoonjoy/tasks/2026-06-11-2038-doing-storybook-wrangler-action.md`
-- Current side-slice PR: #188 (`spoonjoy/storybook-wrangler-action`), pending merge, main Storybook deploy verification, branch cleanup, and continuation scan.
-- Current side-slice goal: migrate Storybook deploy from deprecated `cloudflare/pages-action@v1` to Cloudflare's Wrangler action before starting the broader `SJ-044` harness.
+- Last completed side-slice planning doc: `spoonjoy/tasks/2026-06-11-2038-planning-storybook-wrangler-action.md`
+- Last completed side-slice doing doc: `spoonjoy/tasks/2026-06-11-2038-doing-storybook-wrangler-action.md`
+- Last completed side-slice PR: #188 (`spoonjoy/storybook-wrangler-action`) merged as `03f1a854`.
+- Current side-slice goal: clean up remaining non-Node20 Storybook deploy log warnings before starting the broader `SJ-044` harness.
 - No human gates remain under the user's explicit no-human-gates mandate unless a true human-only credential/capability blocker or genuinely unrecoverable destructive shared-state action appears.
 
 ## Next Action
 
-1. Complete and merge the Storybook Wrangler action migration side-slice, then verify the Storybook workflow on `main`.
+1. Complete and merge the Storybook deploy warning-cleanup side-slice.
 2. Start `SJ-044`: environment-aware smoke, cleanup, and preflight harness. The next thin slice should focus on a broader QA cleanup harness for disposable users, recipes, spoons, OAuth clients/API credentials, generated covers, and related R2 objects, while keeping production cleanup read-first and narrow.
 
 ## Known External State
@@ -37,5 +37,7 @@ Objective: Keep the Spoonjoy autonomous queue durable and continue with the next
 - Slugger was notified successfully.
 - Storybook Wrangler side-slice local verification passed after reviewer fixes for pnpm setup and artifact ordering: focused Storybook workflow tests red/green, targeted `scripts/deployment-preflight.ts` coverage at 100%, `pnpm run deploy:preflight`, `pnpm run qa:preflight`, `pnpm run typecheck`, `pnpm run build`, `pnpm build-storybook`, Ruby Psych workflow parse, `git diff --check`, and full `pnpm run test:coverage` with 301 files, 5975 tests, and 100% coverage.
 - Final cold reviewer converged on PR #188 after the artifact-ordering fix. Hosted PR checks passed: Storybook `build-storybook`, CI `coverage`, and CI `e2e`; `deploy-storybook` skipped on PR as expected because Storybook deploy is guarded to `refs/heads/main`.
+- PR #188 merged as `03f1a854`; main CI, Storybook, and Production Deploy passed; production Worker/custom-domain health endpoints returned ok; `https://spoonjoy-storybook.pages.dev/` returned HTTP 200; no open PRs or `spoonjoy/storybook-wrangler-action` branch residue remained; local QA cleanup dry-run showed zero active suspicious recipes, disposable users, disposable spoons, and e2e OAuth clients.
+- Main Storybook deploy log no longer contains `node 20` or `cloudflare/pages-action`; remaining log warnings are git default-branch hints, pnpm ignored-build-script warnings, `actions/download-artifact@v8` Buffer deprecation, and Wrangler Pages config/dirty-worktree warnings.
 - Production Worker URL: `https://spoonjoy-v2.mendelow-studio.workers.dev`.
 - Production custom domain: `https://spoonjoy.app`.
