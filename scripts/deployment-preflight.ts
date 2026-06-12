@@ -220,7 +220,6 @@ function blockHasMainBranch(lines: WorkflowLine[], branchesStart: number, branch
       .some((item) => item === "main");
   }
   for (let index = branchesStart + 1; index < branchesEnd; index += 1) {
-    if (lines[index].indent <= lines[branchesStart].indent) break;
     if (lines[index].text === "- main") return true;
   }
   return false;
