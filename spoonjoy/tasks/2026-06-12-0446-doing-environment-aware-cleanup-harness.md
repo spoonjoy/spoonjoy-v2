@@ -117,7 +117,7 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 **Output**: R2 cleanup implementation and green focused cleanup R2 tests in `unit-4b-green.log`.
 **Acceptance**: Unit 4a tests pass with no warnings; R2 deletes use exact keys only and are unavailable for production broad cleanup.
 
-### ⬜ Unit 4c: QA R2 Cleanup Planning — Coverage & Refactor
+### ✅ Unit 4c: QA R2 Cleanup Planning — Coverage & Refactor
 **What**: Verify R2 cleanup helper coverage and cover Wrangler R2 delete/get failure branches.
 **Output**: Targeted coverage output in `unit-4c-coverage.log`.
 **Acceptance**: R2 cleanup new code reaches 100% coverage; focused tests remain green.
@@ -219,3 +219,4 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 - 2026-06-12 06:42 Unit 3b cold review complete: Tesla reported one BLOCKER, two MAJOR findings, and one MINOR around duplicate credential snapshots, notification payload blockers, search-image cleanup ordering, and blocker reporting. Verdict recorded in `unit-3b-review.md`; fixes are required before QA R2 apply is enabled.
 - 2026-06-12 06:45 Unit 4a complete: added QA R2 red tests for photo-key extraction, candidate planning, QA apply D1-before-R2 ordering, exact R2 delete/get commands, retained-key reporting, and D1-failure skip behavior; expected failures captured in `unit-4a-red.log`. Unit review skipped (reason: red-test unit; implementation review follows green unit).
 - 2026-06-12 06:55 Unit 4b complete: implemented QA R2 candidate collection, retained-key reporting, surviving-reference blockers, exact R2 delete/get verification, QA apply enablement after D1 success, and Tesla's Unit 3b cleanup fixes. Focused tests/build/local dogfood passed with evidence in `unit-4b-green.log`, `unit-4b-build.log`, `unit-4b-local-dry-run.log`, `unit-4b-local-apply.log`, and `unit-4b-local-post-apply-dry-run.log`.
+- 2026-06-12 07:01 Unit 4c complete: added R2 planner/parser/delete-verification edge coverage and verified `scripts/cleanup-local-qa-data.mjs` at 100% statements, branches, functions, and lines; build passed with evidence in `unit-4c-coverage.log` and `unit-4c-build.log`.
