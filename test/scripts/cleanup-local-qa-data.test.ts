@@ -287,6 +287,11 @@ describe("cleanup-local-qa-data", () => {
           stderr: "",
         };
       }
+      if (command.includes("r2 object get")) {
+        const error = new Error("NoSuchKey");
+        Object.assign(error, { stderr: "The specified key does not exist." });
+        throw error;
+      }
       return { stdout: "[]", stderr: "" };
     });
 
@@ -298,7 +303,7 @@ describe("cleanup-local-qa-data", () => {
     });
 
     expect(stdout.text()).toContain("Target environment: qa");
-    expect(stdout.text()).toContain("Remote QA apply is disabled until D1/R2 safety checks are installed");
+    expect(stdout.text()).toContain("Pass --apply to mutate exact validated disposable QA D1/R2 data");
     expect(stdout.text()).not.toContain("mutate local D1");
     expect(runCommand).toHaveBeenLastCalledWith(
       "pnpm",
@@ -326,6 +331,8 @@ describe("cleanup-local-qa-data", () => {
       cleanup.buildQaR2GetArgs("spoons/codex-user/recipe-1/spoon.jpg"),
     ]);
     expect(stdout.text()).toContain("Retained QA R2 keys: recipes/not-disposable/recipe-1/source.jpg");
+    expect(stdout.text()).toContain("Applied QA D1 cleanup.");
+    expect(stdout.text()).toContain("Verified deleted QA R2 keys: profiles/codex-user/avatar.jpg");
   });
 
   it("runs production read-only dry-run and refuses broad production apply", async () => {
@@ -521,10 +528,11 @@ describe("cleanup-local-qa-data", () => {
 
     expectAll(sql, [
       "DELETE FROM NotificationEvent",
-      "userId IN (SELECT id FROM disposable_users)",
-      "payload LIKE '%' || (SELECT id FROM hard_delete_recipes",
-      "payload LIKE '%' || (SELECT id FROM disposable_spoons",
-      "payload LIKE '%' || (SELECT id FROM disposable_covers",
+      "recipientId IN (SELECT id FROM disposable_users)",
+      "EXISTS (SELECT 1 FROM disposable_users WHERE NotificationEvent.payload LIKE '%' || disposable_users.id || '%')",
+      "EXISTS (SELECT 1 FROM hard_delete_recipes WHERE NotificationEvent.payload LIKE '%' || hard_delete_recipes.id || '%')",
+      "EXISTS (SELECT 1 FROM disposable_spoons WHERE NotificationEvent.payload LIKE '%' || disposable_spoons.id || '%')",
+      "EXISTS (SELECT 1 FROM disposable_covers WHERE NotificationEvent.payload LIKE '%' || disposable_covers.id || '%')",
       "blocker_notification_payload",
     ]);
   });
@@ -620,6 +628,66 @@ describe("cleanup-local-qa-data", () => {
         rowId: "search-1",
       },
     ]);
+  });
+
+  it("builds QA R2 candidate SQL with retained unsafe keys and surviving-reference blockers", () => {
+    const sql = cleanup.buildQaR2CandidateSql();
+
+    expectAll(sql, [
+      "candidate_r2_keys",
+      "unsafe disposable user photo namespace",
+      "unsafe disposable spoon photo namespace",
+      "unsafe disposable cover imageUrl namespace",
+      "unsafe disposable cover stylizedImageUrl namespace",
+      "unsafe disposable cover sourceImageUrl namespace",
+      "r2_reference_blockers",
+      "blocker_user_photoUrl",
+      "blocker_spoon_photoUrl",
+      "blocker_cover_imageUrl",
+      "blocker_cover_stylizedImageUrl",
+      "blocker_cover_sourceImageUrl",
+      "blocker_search_imageUrl",
+      "SearchDocument.imageUrl still references candidate key",
+      "WHERE key IS NOT NULL AND key != ''",
+    ]);
+  });
+
+  it("refuses QA apply before D1 mutation when R2 candidates have surviving non-disposable references", async () => {
+    const stdout = writableBuffer();
+    const stderr = writableBuffer();
+    const runCommand = vi.fn(async (_cmd: string, args: string[]) => {
+      const command = args.join(" ");
+      if (command.includes("candidate_r2_keys")) {
+        return {
+          stdout: JSON.stringify([
+            {
+              results: [
+                {
+                  action: "blocker_user_photoUrl",
+                  key: "profiles/codex-user/avatar.jpg",
+                  reason: "non-disposable User.photoUrl still references candidate key",
+                },
+              ],
+            },
+          ]),
+          stderr: "",
+        };
+      }
+      return { stdout: "[]", stderr: "" };
+    });
+
+    await expect(
+      cleanup.runCleanupCli({
+        argv: ["--target-env", "qa", "--apply"],
+        runCommand,
+        stdout: stdout.stream,
+        stderr: stderr.stream,
+      }),
+    ).rejects.toThrow(/non-disposable rows still reference candidate keys/);
+
+    expect(runCommand.mock.calls.map((call) => (call[1] as string[]).join(" "))).not.toEqual(
+      expect.arrayContaining([expect.stringContaining(buildApplySql())]),
+    );
   });
 
   it("skips every R2 delete/get command when QA D1 apply fails", async () => {

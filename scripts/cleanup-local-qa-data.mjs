@@ -4,6 +4,7 @@ import { promisify } from "node:util";
 import { pathToFileURL } from "node:url";
 import {
   QA_BASE_URL,
+  QA_R2_BUCKET,
   arg,
   resolveScriptTarget,
   scriptTargetSummary,
@@ -39,6 +40,335 @@ export const E2E_OAUTH_CLIENT_WHERE = [
   "clientName = 'E2E OAuth Client'",
   "(redirectUris LIKE '%codex%' OR redirectUris LIKE '%e2e%' OR redirectUris LIKE '%localhost%' OR redirectUris LIKE '%127.0.0.1%')",
 ].join("\n    AND ");
+
+export function photoKeyFromImageUrl(imageUrl) {
+  if (typeof imageUrl !== "string" || !imageUrl.startsWith("/photos/")) return null;
+  const key = imageUrl.slice("/photos/".length);
+  return key === "" ? null : key;
+}
+
+export function buildQaR2DeleteArgs(key) {
+  return ["exec", "wrangler", "r2", "object", "delete", `${QA_R2_BUCKET}/${key}`, "--remote", "--force"];
+}
+
+export function buildQaR2GetArgs(key) {
+  return ["exec", "wrangler", "r2", "object", "get", `${QA_R2_BUCKET}/${key}`, "--remote", "--pipe"];
+}
+
+function unique(values) {
+  return [...new Set(values.filter((value) => typeof value === "string" && value !== ""))];
+}
+
+function addKey(map, key, source) {
+  if (!key) return;
+  if (!map.has(key)) map.set(key, source);
+}
+
+function isAllowedDisposableKey(key, { disposableUserIds, hardDeleteRecipeIds }) {
+  for (const userId of disposableUserIds) {
+    if (key.startsWith(`profiles/${userId}/`)) return true;
+    if (key.startsWith(`recipes/${userId}/uploads/`)) return true;
+    if (key.startsWith(`spoons/${userId}/uploads/`)) return true;
+    for (const recipeId of hardDeleteRecipeIds) {
+      if (key.startsWith(`recipes/${userId}/${recipeId}/`)) return true;
+      if (key.startsWith(`spoons/${userId}/${recipeId}/`)) return true;
+    }
+  }
+  return false;
+}
+
+export function planQaR2Cleanup({
+  disposableUserIds = [],
+  hardDeleteRecipeIds = [],
+  disposableSpoonIds = [],
+  generatedCoverKeys = [],
+  references = {},
+} = {}) {
+  const disposableUsers = new Set(disposableUserIds);
+  const hardDeleteRecipes = new Set(hardDeleteRecipeIds);
+  const disposableSpoons = new Set(disposableSpoonIds);
+  const candidateSources = new Map();
+  const retainedKeys = [];
+
+  for (const user of references.users ?? []) {
+    if (!disposableUsers.has(user.id)) continue;
+    addKey(candidateSources, photoKeyFromImageUrl(user.photoUrl), `User:${user.id}`);
+  }
+  for (const spoon of references.spoons ?? []) {
+    if (!disposableSpoons.has(spoon.id) && !disposableUsers.has(spoon.chefId)) continue;
+    addKey(candidateSources, photoKeyFromImageUrl(spoon.photoUrl), `RecipeSpoon:${spoon.id}`);
+  }
+  for (const cover of references.covers ?? []) {
+    if (!hardDeleteRecipes.has(cover.recipeId)) continue;
+    for (const field of ["imageUrl", "stylizedImageUrl", "sourceImageUrl"]) {
+      addKey(candidateSources, photoKeyFromImageUrl(cover[field]), `RecipeCover:${cover.id}`);
+    }
+  }
+  for (const key of generatedCoverKeys) {
+    addKey(candidateSources, key, "generated-cover");
+  }
+
+  const deleteKeys = [];
+  for (const key of candidateSources.keys()) {
+    if (isAllowedDisposableKey(key, { disposableUserIds, hardDeleteRecipeIds })) {
+      deleteKeys.push(key);
+    } else {
+      retainedKeys.push(key);
+    }
+  }
+
+  const blockers = [];
+  const deleteKeySet = new Set(deleteKeys);
+  const addBlocker = (key, reason, rowId) => {
+    if (!deleteKeySet.has(key)) return;
+    blockers.push({ key, reason, rowId });
+  };
+
+  for (const user of references.users ?? []) {
+    if (disposableUsers.has(user.id)) continue;
+    addBlocker(photoKeyFromImageUrl(user.photoUrl), "non-disposable User.photoUrl still references candidate key", user.id);
+  }
+  for (const spoon of references.spoons ?? []) {
+    if (disposableSpoons.has(spoon.id) || disposableUsers.has(spoon.chefId)) continue;
+    addBlocker(
+      photoKeyFromImageUrl(spoon.photoUrl),
+      "non-disposable RecipeSpoon.photoUrl still references candidate key",
+      spoon.id,
+    );
+  }
+  for (const cover of references.covers ?? []) {
+    if (hardDeleteRecipes.has(cover.recipeId)) continue;
+    for (const field of ["imageUrl", "stylizedImageUrl", "sourceImageUrl"]) {
+      addBlocker(photoKeyFromImageUrl(cover[field]), "non-disposable RecipeCover image field still references candidate key", cover.id);
+    }
+  }
+  for (const document of references.searchDocuments ?? []) {
+    addBlocker(
+      photoKeyFromImageUrl(document.imageUrl),
+      "non-disposable SearchDocument.imageUrl still references candidate key",
+      document.id,
+    );
+  }
+
+  return { deleteKeys, retainedKeys, blockers };
+}
+
+export function buildQaR2CandidateSql() {
+  return `
+WITH
+  disposable_users AS (
+    SELECT id FROM User WHERE ${DISPOSABLE_USER_WHERE}
+  ),
+  hard_delete_recipes AS (
+    SELECT id, chefId FROM Recipe WHERE chefId IN (SELECT id FROM disposable_users)
+  ),
+  soft_delete_recipes AS (
+    SELECT id FROM Recipe
+    WHERE ${SUSPICIOUS_RECIPE_WHERE}
+      AND chefId NOT IN (SELECT id FROM disposable_users)
+  ),
+  disposable_spoons AS (
+    SELECT id, chefId, recipeId, photoUrl FROM RecipeSpoon
+    WHERE chefId IN (SELECT id FROM disposable_users)
+       OR ${DISPOSABLE_SPOON_WHERE}
+  ),
+  disposable_covers AS (
+    SELECT id, recipeId, imageUrl, stylizedImageUrl, sourceImageUrl
+    FROM RecipeCover
+    WHERE recipeId IN (SELECT id FROM hard_delete_recipes)
+  ),
+  candidate_r2_keys AS (
+    SELECT 'delete' AS action, substr(photoUrl, length('/photos/') + 1) AS key, NULL AS reason
+    FROM User
+    WHERE id IN (SELECT id FROM disposable_users)
+      AND photoUrl LIKE '/photos/profiles/' || id || '/%'
+    UNION
+    SELECT 'retain', substr(photoUrl, length('/photos/') + 1), 'unsafe disposable user photo namespace'
+    FROM User
+    WHERE id IN (SELECT id FROM disposable_users)
+      AND photoUrl LIKE '/photos/%'
+      AND photoUrl NOT LIKE '/photos/profiles/' || id || '/%'
+    UNION
+    SELECT 'delete', substr(photoUrl, length('/photos/') + 1), NULL
+    FROM disposable_spoons
+    WHERE photoUrl LIKE '/photos/spoons/' || chefId || '/' || recipeId || '/%'
+       OR photoUrl LIKE '/photos/spoons/' || chefId || '/uploads/%'
+    UNION
+    SELECT 'retain', substr(photoUrl, length('/photos/') + 1), 'unsafe disposable spoon photo namespace'
+    FROM disposable_spoons
+    WHERE photoUrl LIKE '/photos/%'
+      AND NOT (
+        photoUrl LIKE '/photos/spoons/' || chefId || '/' || recipeId || '/%'
+        OR photoUrl LIKE '/photos/spoons/' || chefId || '/uploads/%'
+      )
+    UNION
+    SELECT 'delete', substr(imageUrl, length('/photos/') + 1), NULL
+    FROM disposable_covers dc
+    JOIN Recipe r ON r.id = dc.recipeId
+    WHERE imageUrl LIKE '/photos/recipes/' || r.chefId || '/' || dc.recipeId || '/%'
+       OR imageUrl LIKE '/photos/recipes/' || r.chefId || '/uploads/%'
+    UNION
+    SELECT 'retain', substr(imageUrl, length('/photos/') + 1), 'unsafe disposable cover imageUrl namespace'
+    FROM disposable_covers dc
+    JOIN Recipe r ON r.id = dc.recipeId
+    WHERE imageUrl LIKE '/photos/%'
+      AND NOT (
+        imageUrl LIKE '/photos/recipes/' || r.chefId || '/' || dc.recipeId || '/%'
+        OR imageUrl LIKE '/photos/recipes/' || r.chefId || '/uploads/%'
+      )
+    UNION
+    SELECT 'delete', substr(stylizedImageUrl, length('/photos/') + 1), NULL
+    FROM disposable_covers dc
+    JOIN Recipe r ON r.id = dc.recipeId
+    WHERE stylizedImageUrl LIKE '/photos/recipes/' || r.chefId || '/' || dc.recipeId || '/%'
+       OR stylizedImageUrl LIKE '/photos/recipes/' || r.chefId || '/uploads/%'
+    UNION
+    SELECT 'retain', substr(stylizedImageUrl, length('/photos/') + 1), 'unsafe disposable cover stylizedImageUrl namespace'
+    FROM disposable_covers dc
+    JOIN Recipe r ON r.id = dc.recipeId
+    WHERE stylizedImageUrl LIKE '/photos/%'
+      AND NOT (
+        stylizedImageUrl LIKE '/photos/recipes/' || r.chefId || '/' || dc.recipeId || '/%'
+        OR stylizedImageUrl LIKE '/photos/recipes/' || r.chefId || '/uploads/%'
+      )
+    UNION
+    SELECT 'delete', substr(sourceImageUrl, length('/photos/') + 1), NULL
+    FROM disposable_covers dc
+    JOIN Recipe r ON r.id = dc.recipeId
+    WHERE sourceImageUrl LIKE '/photos/recipes/' || r.chefId || '/' || dc.recipeId || '/%'
+       OR sourceImageUrl LIKE '/photos/recipes/' || r.chefId || '/uploads/%'
+    UNION
+    SELECT 'retain', substr(sourceImageUrl, length('/photos/') + 1), 'unsafe disposable cover sourceImageUrl namespace'
+    FROM disposable_covers dc
+    JOIN Recipe r ON r.id = dc.recipeId
+    WHERE sourceImageUrl LIKE '/photos/%'
+      AND NOT (
+        sourceImageUrl LIKE '/photos/recipes/' || r.chefId || '/' || dc.recipeId || '/%'
+        OR sourceImageUrl LIKE '/photos/recipes/' || r.chefId || '/uploads/%'
+      )
+  ),
+  r2_reference_blockers AS (
+    SELECT 'blocker_user_photoUrl' AS action,
+      substr(u.photoUrl, length('/photos/') + 1) AS key,
+      'non-disposable User.photoUrl still references candidate key' AS reason
+    FROM User u
+    JOIN candidate_r2_keys c ON c.action = 'delete' AND c.key = substr(u.photoUrl, length('/photos/') + 1)
+    WHERE u.id NOT IN (SELECT id FROM disposable_users)
+    UNION
+    SELECT 'blocker_spoon_photoUrl',
+      substr(rs.photoUrl, length('/photos/') + 1),
+      'non-disposable RecipeSpoon.photoUrl still references candidate key'
+    FROM RecipeSpoon rs
+    JOIN candidate_r2_keys c ON c.action = 'delete' AND c.key = substr(rs.photoUrl, length('/photos/') + 1)
+    WHERE rs.id NOT IN (SELECT id FROM disposable_spoons)
+      AND rs.chefId NOT IN (SELECT id FROM disposable_users)
+    UNION
+    SELECT 'blocker_cover_imageUrl',
+      substr(rc.imageUrl, length('/photos/') + 1),
+      'non-disposable RecipeCover.imageUrl still references candidate key'
+    FROM RecipeCover rc
+    JOIN candidate_r2_keys c ON c.action = 'delete' AND c.key = substr(rc.imageUrl, length('/photos/') + 1)
+    WHERE rc.recipeId NOT IN (SELECT id FROM hard_delete_recipes)
+    UNION
+    SELECT 'blocker_cover_stylizedImageUrl',
+      substr(rc.stylizedImageUrl, length('/photos/') + 1),
+      'non-disposable RecipeCover.stylizedImageUrl still references candidate key'
+    FROM RecipeCover rc
+    JOIN candidate_r2_keys c ON c.action = 'delete' AND c.key = substr(rc.stylizedImageUrl, length('/photos/') + 1)
+    WHERE rc.recipeId NOT IN (SELECT id FROM hard_delete_recipes)
+    UNION
+    SELECT 'blocker_cover_sourceImageUrl',
+      substr(rc.sourceImageUrl, length('/photos/') + 1),
+      'non-disposable RecipeCover.sourceImageUrl still references candidate key'
+    FROM RecipeCover rc
+    JOIN candidate_r2_keys c ON c.action = 'delete' AND c.key = substr(rc.sourceImageUrl, length('/photos/') + 1)
+    WHERE rc.recipeId NOT IN (SELECT id FROM hard_delete_recipes)
+    UNION
+    SELECT 'blocker_search_imageUrl',
+      substr(sd.imageUrl, length('/photos/') + 1),
+      'SearchDocument.imageUrl still references candidate key'
+    FROM SearchDocument sd
+    JOIN candidate_r2_keys c ON c.action = 'delete' AND c.key = substr(sd.imageUrl, length('/photos/') + 1)
+    WHERE (sd.ownerId IS NULL OR sd.ownerId NOT IN (SELECT id FROM disposable_users))
+      AND (sd.entityId IS NULL OR sd.entityId NOT IN (SELECT id FROM hard_delete_recipes))
+      AND (sd.entityId IS NULL OR sd.entityId NOT IN (SELECT id FROM soft_delete_recipes))
+      AND (sd.entityId IS NULL OR sd.entityId NOT IN (SELECT id FROM disposable_spoons))
+      AND (sd.entityId IS NULL OR sd.entityId NOT IN (SELECT id FROM disposable_covers))
+  )
+SELECT action, key, reason
+FROM candidate_r2_keys
+WHERE key IS NOT NULL AND key != ''
+UNION
+SELECT action, key, reason
+FROM r2_reference_blockers
+WHERE key IS NOT NULL AND key != '';
+`.trim();
+}
+
+function parseWranglerRows(stdout) {
+  const start = stdout.indexOf("[");
+  const end = stdout.lastIndexOf("]");
+  if (start === -1 || end === -1 || end < start) return [];
+  const parsed = JSON.parse(stdout.slice(start, end + 1));
+  return parsed.flatMap((entry) => (Array.isArray(entry?.results) ? entry.results : []));
+}
+
+function isR2ObjectMissingError(error) {
+  const text = [
+    typeof error === "string" ? error : "",
+    error instanceof Error ? error.message : "",
+    typeof error?.stdout === "string" ? error.stdout : "",
+    typeof error?.stderr === "string" ? error.stderr : "",
+  ].join("\n");
+  return /(?:the specified key does not exist|nosuchkey|not found)/i.test(text);
+}
+
+async function collectQaR2Candidates({ dbName, target, runCommand }) {
+  const result = await runCommand("pnpm", wranglerD1Args(dbName, buildQaR2CandidateSql(), target), {
+    encoding: "utf8",
+    maxBuffer: MAX_WRANGLER_BUFFER,
+  });
+  const rows = parseWranglerRows(result.stdout ?? "");
+  const blockers = rows.filter((row) => typeof row.action === "string" && row.action.startsWith("blocker"));
+  if (blockers.length > 0) {
+    const details = blockers
+      .map((row) => `${row.action}:${row.key}${row.reason ? ` (${row.reason})` : ""}`)
+      .join(", ");
+    throw new Error(`Refusing QA R2 cleanup because non-disposable rows still reference candidate keys: ${details}`);
+  }
+  return {
+    deleteKeys: unique(rows.filter((row) => row.action === "delete").map((row) => row.key)),
+    retainedKeys: unique(rows.filter((row) => row.action === "retain").map((row) => row.key)),
+  };
+}
+
+async function deleteAndVerifyQaR2Keys({ deleteKeys, runCommand, stdout }) {
+  const deletedKeys = [];
+  const verifiedDeletedKeys = [];
+  for (const key of deleteKeys) {
+    await runCommand("pnpm", buildQaR2DeleteArgs(key), {
+      encoding: "utf8",
+      maxBuffer: MAX_WRANGLER_BUFFER,
+    });
+    deletedKeys.push(key);
+    try {
+      await runCommand("pnpm", buildQaR2GetArgs(key), {
+        encoding: "buffer",
+        maxBuffer: MAX_WRANGLER_BUFFER,
+      });
+    } catch (error) {
+      if (isR2ObjectMissingError(error)) {
+        verifiedDeletedKeys.push(key);
+        continue;
+      }
+      throw error;
+    }
+    throw new Error(`QA R2 object still exists after delete: ${key}`);
+  }
+  if (deletedKeys.length > 0) stdout.write(`Deleted QA R2 keys: ${deletedKeys.join(", ")}\n`);
+  if (verifiedDeletedKeys.length > 0) stdout.write(`Verified deleted QA R2 keys: ${verifiedDeletedKeys.join(", ")}\n`);
+  return { deletedKeys, verifiedDeletedKeys };
+}
 
 export function buildDryRunSql() {
   return `
@@ -132,14 +462,24 @@ INSERT INTO disposable_covers
 SELECT id FROM RecipeCover
 WHERE recipeId IN (SELECT id FROM hard_delete_recipes);
 
+CREATE TABLE IF NOT EXISTS disposable_cover_image_urls (imageUrl TEXT PRIMARY KEY);
+DELETE FROM disposable_cover_image_urls;
+INSERT OR IGNORE INTO disposable_cover_image_urls
+SELECT imageUrl FROM RecipeCover
+WHERE id IN (SELECT id FROM disposable_covers)
+  AND imageUrl LIKE '/photos/%';
+INSERT OR IGNORE INTO disposable_cover_image_urls
+SELECT stylizedImageUrl FROM RecipeCover
+WHERE id IN (SELECT id FROM disposable_covers)
+  AND stylizedImageUrl LIKE '/photos/%';
+INSERT OR IGNORE INTO disposable_cover_image_urls
+SELECT sourceImageUrl FROM RecipeCover
+WHERE id IN (SELECT id FROM disposable_covers)
+  AND sourceImageUrl LIKE '/photos/%';
+
 -- CREATE TEMP TABLE disposable_credentials
 CREATE TABLE IF NOT EXISTS disposable_credentials (id TEXT PRIMARY KEY);
 DELETE FROM disposable_credentials;
-INSERT INTO disposable_credentials
-SELECT id FROM ApiCredential
-WHERE userId IN (SELECT id FROM disposable_users)
-   OR oauthClientId IN (SELECT id FROM e2e_oauth_clients);
-
 INSERT INTO disposable_credentials
 SELECT id FROM ApiCredential
 WHERE userId IN (SELECT id FROM disposable_users)
@@ -261,13 +601,15 @@ INSERT INTO cleanup_blockers (blocker, rowId)
 SELECT 'blocker_notification_payload', id FROM NotificationEvent
 WHERE recipientId NOT IN (SELECT id FROM disposable_users)
   AND (
-    payload LIKE '%' || (SELECT id FROM hard_delete_recipes LIMIT 1) || '%'
-    OR payload LIKE '%' || (SELECT id FROM disposable_spoons LIMIT 1) || '%'
-    OR payload LIKE '%' || (SELECT id FROM disposable_covers LIMIT 1) || '%'
+    EXISTS (SELECT 1 FROM disposable_users WHERE NotificationEvent.payload LIKE '%' || disposable_users.id || '%')
+    OR EXISTS (SELECT 1 FROM hard_delete_recipes WHERE NotificationEvent.payload LIKE '%' || hard_delete_recipes.id || '%')
+    OR EXISTS (SELECT 1 FROM disposable_spoons WHERE NotificationEvent.payload LIKE '%' || disposable_spoons.id || '%')
+    OR EXISTS (SELECT 1 FROM disposable_covers WHERE NotificationEvent.payload LIKE '%' || disposable_covers.id || '%')
   );
 
 -- The literal abort shape is kept here for reviewer/search visibility:
 -- SELECT CASE WHEN EXISTS (SELECT 1 FROM cleanup_blockers) THEN RAISE(ABORT, 'Refusing cleanup because non-disposable rows still reference disposable targets') END;
+SELECT blocker, rowId FROM cleanup_blockers;
 SELECT CASE WHEN EXISTS (SELECT 1 FROM cleanup_blockers)
   THEN json_extract('Refusing cleanup because non-disposable rows still reference disposable targets', '$')
   ELSE 0
@@ -307,9 +649,6 @@ WHERE userId IN (SELECT id FROM disposable_users);
 DELETE FROM NotificationEvent
 WHERE recipientId IN (SELECT id FROM disposable_users);
 
-DELETE FROM NotificationEvent
-WHERE recipientId IN (SELECT id FROM disposable_users);
-
 DELETE FROM NotificationPreference
 WHERE userId IN (SELECT id FROM disposable_users);
 
@@ -345,7 +684,13 @@ DELETE FROM SearchDocument
 WHERE ownerId IN (SELECT id FROM disposable_users)
    OR entityId IN (SELECT id FROM hard_delete_recipes)
    OR entityId IN (SELECT id FROM soft_delete_recipes)
-   OR imageUrl IN (SELECT imageUrl FROM RecipeCover WHERE id IN (SELECT id FROM disposable_covers));
+   OR entityId IN (SELECT id FROM disposable_spoons)
+   OR entityId IN (SELECT id FROM disposable_covers)
+   OR imageUrl IN (SELECT imageUrl FROM disposable_cover_image_urls)
+   OR EXISTS (SELECT 1 FROM disposable_users WHERE SearchDocument.href LIKE '%' || disposable_users.id || '%')
+   OR EXISTS (SELECT 1 FROM hard_delete_recipes WHERE SearchDocument.href LIKE '%' || hard_delete_recipes.id || '%')
+   OR EXISTS (SELECT 1 FROM disposable_spoons WHERE SearchDocument.href LIKE '%' || disposable_spoons.id || '%')
+   OR EXISTS (SELECT 1 FROM disposable_covers WHERE SearchDocument.href LIKE '%' || disposable_covers.id || '%');
 
 DELETE FROM SearchIndexMetadata
 WHERE EXISTS (SELECT 1 FROM existing_search_tables WHERE name = 'SearchIndexMetadata');
@@ -356,6 +701,7 @@ WHERE id IN (SELECT id FROM disposable_users);
 DELETE FROM cleanup_blockers;
 DELETE FROM existing_search_tables;
 DELETE FROM disposable_credentials;
+DELETE FROM disposable_cover_image_urls;
 DELETE FROM disposable_covers;
 DELETE FROM e2e_oauth_clients;
 DELETE FROM disposable_spoons;
@@ -419,17 +765,18 @@ function printHelp(stdout) {
   stdout.write(`Usage: node scripts/cleanup-local-qa-data.mjs [--target-env local|qa|production] [--apply] [--db DB]
 
 Dry-runs by default. Missing --target-env remains a backwards-compatible local
-dry-run. Local apply mutates only local disposable QA data. QA apply is disabled
-until D1/R2 safety checks are installed. Production broad cleanup is read-only
-and refuses --apply.
+dry-run. Local apply mutates only local disposable QA data. QA apply mutates
+only exact validated disposable QA D1/R2 data. Production broad cleanup is
+read-only and refuses --apply.
   `);
 }
 
 function cleanupResultMessage(options) {
+  if (options.apply && options.target.targetEnv === "qa") return "Applied QA D1 cleanup.\n";
   if (options.apply) return "Applied local QA cleanup.\n";
   if (options.target.targetEnv === "local") return "Dry run only. Pass --apply to mutate local D1.\n";
   if (options.target.targetEnv === "qa") {
-    return "Dry run only. Remote QA apply is disabled until D1/R2 safety checks are installed.\n";
+    return "Dry run only. Pass --apply to mutate exact validated disposable QA D1/R2 data.\n";
   }
   return "Dry run only. Production broad cleanup is read-only.\n";
 }
@@ -450,9 +797,6 @@ export async function runCleanupCli({
     stdout.write(`${line}\n`);
   }
 
-  if (options.apply && options.target.targetEnv === "qa") {
-    throw new Error("remote QA apply not enabled until D1/R2 safety checks are installed.");
-  }
   if (options.apply && options.target.targetEnv === "production") {
     throw new Error("Refusing broad production cleanup. Production cleanup is read-only outside exact smoke cleanup.");
   }
@@ -462,6 +806,19 @@ export async function runCleanupCli({
 
   const sql = options.apply ? buildApplySql() : buildDryRunSql();
   const args = wranglerD1Args(options.dbName, sql, options.target);
+
+  let qaR2Candidates = { deleteKeys: [], retainedKeys: [] };
+  if (options.apply && options.target.targetEnv === "qa") {
+    qaR2Candidates = await collectQaR2Candidates({
+      dbName: options.dbName,
+      target: options.target,
+      runCommand,
+    });
+    if (qaR2Candidates.retainedKeys.length > 0) {
+      stdout.write(`Retained QA R2 keys: ${qaR2Candidates.retainedKeys.join(", ")}\n`);
+    }
+  }
+
   const result = await runCommand("pnpm", args, {
     encoding: "utf8",
     maxBuffer: MAX_WRANGLER_BUFFER,
@@ -470,6 +827,14 @@ export async function runCleanupCli({
   stdout.write(cleanupResultMessage(options));
   if (result.stdout) stdout.write(result.stdout);
   if (result.stderr) stderr.write(result.stderr);
+
+  if (options.apply && options.target.targetEnv === "qa") {
+    await deleteAndVerifyQaR2Keys({
+      deleteKeys: qaR2Candidates.deleteKeys,
+      runCommand,
+      stdout,
+    });
+  }
 }
 
 export function isCliEntry(moduleUrl, argv1 = process.argv[1]) {
