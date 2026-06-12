@@ -1,6 +1,6 @@
 # Planning: MCP/API Image Cover Smokes
 
-**Status**: approved
+**Status**: done
 **Created**: 2026-06-11 12:21
 
 ## Goal
@@ -32,16 +32,16 @@ Add a QA-targeted live smoke mode that proves Spoonjoy's remote API/MCP image an
 - UI polish for recipe cover browsing.
 
 ## Completion Criteria
-- [ ] `pnpm smoke:qa:image-cover` targets only the QA base URL and remote QA D1/R2 state.
-- [ ] Smoke uploads a recipe image and spoon photo, rejects GIF uploads, creates a recipe, creates a spoon, lists/switches/archives covers, regenerates a cover, reads generation status, and browses spoon images.
-- [ ] Smoke verifies EXIF metadata normalization with a downloaded stored object from `/photos/*`: dirty APP1 marker removed and sanitized Orientation equals the source fixture's intended orientation.
-- [ ] Smoke proves `Chef photo`, `Editorialized chef photo`, and `AI generated` provenance labels through QA API/MCP-visible recipe-cover state.
-- [ ] Smoke records and deletes every created QA R2 object key, refuses to delete upload keys outside `recipes/{ownerId}/uploads/` or `spoons/{ownerId}/uploads/`, refuses to delete `covers/*` keys unless they were observed on this run's cover records, verifies those exact objects are gone, revokes its smoke credential, cleans its disposable QA chef, and verifies the exact run-scoped email remains at count zero.
-- [ ] MCP `/mcp` JSON-RPC is exercised with the minted bearer token for the critical cover/spoon operations, not just for token/list/ping checks.
-- [ ] CI/scheduled QA smoke exists and is credential-gated so it never mutates production and never fails forks or unconfigured environments just because QA secrets are absent.
-- [ ] 100% test coverage on all new code.
-- [ ] All tests pass.
-- [ ] No warnings.
+- [x] `pnpm smoke:qa:image-cover` targets only the QA base URL and remote QA D1/R2 state.
+- [x] Smoke uploads a recipe image and spoon photo, rejects GIF uploads, creates a recipe, creates a spoon, lists/switches/archives covers, regenerates a cover, reads generation status, and browses spoon images.
+- [x] Smoke verifies EXIF metadata normalization with a downloaded stored object from `/photos/*`: dirty APP1 marker removed and sanitized Orientation equals the source fixture's intended orientation.
+- [x] Smoke proves `Chef photo`, `Editorialized chef photo`, and `AI generated` provenance labels through QA API/MCP-visible recipe-cover state.
+- [x] Smoke records and deletes every created QA R2 object key, refuses to delete upload keys outside `recipes/{ownerId}/uploads/` or `spoons/{ownerId}/uploads/`, refuses to delete `covers/*` keys unless they were observed on this run's cover records, verifies those exact objects are gone, revokes its smoke credential, cleans its disposable QA chef, and verifies the exact run-scoped email remains at count zero.
+- [x] MCP `/mcp` JSON-RPC is exercised with the minted bearer token for the critical cover/spoon operations, not just for token/list/ping checks.
+- [x] CI/scheduled QA smoke exists and is credential-gated so it never mutates production and never fails forks or unconfigured environments just because QA secrets are absent.
+- [x] 100% test coverage on all new code.
+- [x] All tests pass.
+- [x] No warnings.
 
 ## Code Coverage Requirements
 **MANDATORY: 100% coverage on all new code.**

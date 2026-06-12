@@ -1,0 +1,13 @@
+git branch --format=%(refname:short)
+main
+
+open PRs
+[]
+
+remote spoonjoy branches
+
+origin/main
+8fd4968b4654afb640d4637443bea2a98f500fbc
+
+local HEAD
+8fd4968b4654afb640d4637443bea2a98f500fbc

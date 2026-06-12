@@ -1,6 +1,6 @@
 # Doing: MCP/API Image Cover Smokes
 
-**Status**: in-progress
+**Status**: done
 **Execution Mode**: direct
 **Created**: 2026-06-11 13:08
 **Planning**: ./2026-06-11-1221-planning-mcp-image-cover-smokes.md
@@ -133,7 +133,7 @@ Add a QA-targeted live smoke mode that proves Spoonjoy's remote API/MCP image an
 **Output**: Save `gh-pr.log`, `gh-checks.log`, and `production-health.log`.
 **Acceptance**: PR is merged; `main` is at the merge commit; Production Deploy for that commit succeeds; `https://spoonjoy-v2.mendelow-studio.workers.dev/health` and `https://spoonjoy.app/health` both return `{"status":"ok","service":"spoonjoy"}`.
 
-### ⬜ Unit 6c: Final Cleanup And Notification
+### ✅ Unit 6c: Final Cleanup And Notification
 **What**: Verify no stale PRs/branches remain for this work, run local/remote disposable-data checks, and notify Slugger.
 **Output**: Save `branch-cleanup.log`, `final-cleanup-local.log`, `final-cleanup-qa-prod.log`, and Slugger notification output.
 **Acceptance**: `gh pr list --state open` has no stale PR for this branch; local branch is deleted after merge; `pnpm cleanup:qa` is clean locally; QA and production D1 exact disposable residue checks are clean; `ouro msg --to slugger "Done: ..."` succeeds.
@@ -166,3 +166,5 @@ Add a QA-targeted live smoke mode that proves Spoonjoy's remote API/MCP image an
 - 2026-06-11 16:47 Unit 5 complete: deployed QA version `11bb68e0-494e-4fd7-be4b-b780a0782edb`, passed `pnpm run qa:preflight`, confirmed QA has `GOOGLE_API_KEY` image-provider coverage, and passed `pnpm run smoke:qa:image-cover`. Evidence saved to `qa-preflight.log`, `qa-secrets.log`, `qa-image-cover-smoke.log`, and `qa-image-cover-smoke-results.json`; the smoke artifact has zero console/page errors, all required API/MCP operations, EXIF Orientation `6`, all three provenance labels, verified R2 deletes, revoked credential, and exact QA user cleanup count zero.
 - 2026-06-11 17:46 Unit 6a complete: Feynman and Hegel review gates converged after fixes for R2 cleanup ordering, strict R2 delete verification, exact workflow trigger validation, exact shell-gate command validation, and heredoc spoof rejection. Reviewer summary saved to `implementation-review.md`; focused tests, full coverage, typecheck, build, QA preflight, and strict QA image-cover smoke evidence are current.
 - 2026-06-11 18:10 Unit 6b complete: PR #184 merged as `85da85da1417e29c34f91e81ab8ace0f575bd111`; post-merge CI, Storybook, and Production Deploy all passed; `https://spoonjoy-v2.mendelow-studio.workers.dev/health` and `https://spoonjoy.app/health` both returned `{"status":"ok","service":"spoonjoy"}`. Evidence saved to `gh-pr.log`, `gh-checks.log`, `gh-merge.log`, `post-merge-runs.json`, `post-merge-ci-watch.log`, `production-deploy-watch.log`, and `production-health.log`.
+- 2026-06-11 18:41 Follow-up docs/evidence PR #185 merged as `8fd4968b4654afb640d4637443bea2a98f500fbc`; CI, Storybook, Production Deploy, and both production health endpoints passed for that commit.
+- 2026-06-11 18:41 Unit 6c complete: final branch cleanup shows only local `main`, no open PRs, no remote `spoonjoy/*` branches, and local/origin at `8fd4968b4654afb640d4637443bea2a98f500fbc`; local QA cleanup shows zero active disposable residue; remote QA and production D1 checks show zero Codex smoke users and no Codex/e2e recipe rows; Slugger notification succeeded. Evidence saved to `branch-cleanup.log`, `final-cleanup-local.log`, `final-cleanup-qa-prod.log`, and `slugger-notification.log`. Independent final auditor Helmholtz returned CONVERGED.
