@@ -54,7 +54,7 @@ Remove the deprecated Cloudflare Pages GitHub Action from the Storybook deployme
 
 **CRITICAL: Every unit header MUST start with status emoji (⬜ for new units).**
 
-### ⬜ Unit 0: Setup/Research
+### ✅ Unit 0: Setup/Research
 **What**: Verify the current Storybook workflow, Cloudflare Wrangler action runtime, local Storybook build baseline, and generated artifact cleanliness.
 **Output**: Evidence saved in the progress log and artifacts directory.
 **Acceptance**: Existing workflow target is understood, `wrangler-action@v4` Node 24 evidence is recorded, and baseline `pnpm build-storybook` passes without leaving tracked changes.
@@ -92,3 +92,4 @@ Remove the deprecated Cloudflare Pages GitHub Action from the Storybook deployme
 - 2026-06-11 20:44 Created from planning doc
 - 2026-06-11 20:48 Doing review Round 1 required exact validation files/commands and a concrete Storybook workflow syntax parse command.
 - 2026-06-11 20:51 Doing review Round 2 converged; status set to READY_FOR_EXECUTION.
+- 2026-06-11 20:53 Unit 0 complete: verified `cloudflare/wrangler-action@v4.0.0` uses Node 24, `v3` uses Node 20, baseline `pnpm build-storybook` passed, `.github/workflows/storybook.yml` parses with Ruby Psych, and the worktree stayed clean.
