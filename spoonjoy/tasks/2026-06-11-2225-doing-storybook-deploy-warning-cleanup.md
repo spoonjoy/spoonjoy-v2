@@ -64,14 +64,14 @@ Remove the remaining controllable warnings from the Storybook build/deploy workf
 **Acceptance**: Current warning strings and package names are recorded, temp-copy `pnpm-workspace.yaml` `allowBuilds: false` install probe emits no `Ignored build scripts` warning, and no tracked files are modified by research.
 
 ### ⬜ Unit 1a: Warning-Clean Storybook Contract — Tests
-**What**: Extend `test/scripts/deployment-preflight.test.ts` with red tests requiring the warning-clean Storybook workflow contract and root `pnpm-workspace.yaml` config. Extend the deployment-preflight input shape as tests require.
-**Output**: Failing tests covering artifact-action reintroduction, missing clean deploy directory setup, missing `.gitignore` rule, repo-root Wrangler deploy, wrong package manager, missing commit metadata, missing `--commit-dirty=true`, missing Git config env, and missing `allowBuilds: false` package entries.
-**Acceptance**: `pnpm exec vitest run test/scripts/deployment-preflight.test.ts -t "Storybook deploy warning cleanup"` fails before implementation for the new contract gaps.
+**What**: Extend `test/scripts/deployment-preflight.test.ts` and `test/scripts/qa-preflight.test.ts` with red tests requiring the warning-clean Storybook workflow contract, root `pnpm-workspace.yaml` config, `.gitignore` coverage, and QA static-config read path updates. Extend the deployment-preflight input shape as tests require.
+**Output**: Failing tests covering artifact-action reintroduction, missing clean deploy directory setup, missing `.gitignore` rule, repo-root Wrangler deploy, wrong package manager, missing commit metadata, missing `--commit-dirty=true`, missing Git config env, missing `allowBuilds: false` package entries, and QA preflight static-config propagation.
+**Acceptance**: `pnpm exec vitest run test/scripts/deployment-preflight.test.ts test/scripts/qa-preflight.test.ts -t "Storybook deploy warning cleanup|QA static config"` fails before implementation for the new contract gaps. This is a local TDD checkpoint only; do not commit or push the deliberately red state.
 
 ### ⬜ Unit 1b: Warning-Clean Storybook Contract — Implementation
 **What**: Update `.github/workflows/storybook.yml`, `.gitignore`, `pnpm-workspace.yaml`, `scripts/deployment-preflight.ts`, and `scripts/qa-preflight.ts` to satisfy the red tests.
 **Output**: Single-job Storybook workflow, ignored generated deploy wrapper directory, root pnpm workspace build-script decisions, and preflight validation for the warning-clean contract.
-**Acceptance**: Focused Storybook warning-cleanup tests pass, `pnpm install --frozen-lockfile` emits no `Ignored build scripts` warning, Ruby Psych parses `.github/workflows/storybook.yml`, and `pnpm build-storybook` passes.
+**Acceptance**: Focused Storybook warning-cleanup and QA static-config tests pass, `pnpm install --frozen-lockfile` emits no `Ignored build scripts` warning, Ruby Psych parses `.github/workflows/storybook.yml` and `pnpm-workspace.yaml`, and `pnpm build-storybook` passes. Commit and push the paired 1a/1b green state as the first code commit.
 
 ### ⬜ Unit 1c: Warning-Clean Storybook Contract — Coverage & Full Local Verification
 **What**: Run targeted coverage, preflights, typecheck, build, Storybook build, full coverage, and whitespace checks; add missing parser edge tests until coverage is 100%.
@@ -85,7 +85,8 @@ Remove the remaining controllable warnings from the Storybook build/deploy workf
 
 ## Execution
 - **TDD strictly enforced**: tests → red → implement → green → refactor
-- Commit after each phase (1a, 1b, 1c, Unit 2 docs/terminal state)
+- Unit 1a is a red-only TDD checkpoint; save output to artifacts but do not commit or push it until Unit 1b makes the paired test+implementation state green.
+- Commit after each committable phase (paired 1a/1b green state, 1c, Unit 2 docs/terminal state)
 - Push after each atomic commit
 - Run full test suite before marking implementation done
 - **All artifacts**: Save outputs, logs, data to `./2026-06-11-2225-doing-storybook-deploy-warning-cleanup/` directory when they are too large for progress log
