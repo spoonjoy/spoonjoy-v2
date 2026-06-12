@@ -77,7 +77,7 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 **Output**: Targeted coverage output in `unit-1c-coverage.log`.
 **Acceptance**: New resolver has 100% statements, branches, functions, and lines; focused tests stay green.
 
-### ⬜ Unit 2a: Cleanup Target/CLI Safety — Tests
+### ✅ Unit 2a: Cleanup Target/CLI Safety — Tests
 **What**: Add failing cleanup tests for `--target-env local|qa|production`, missing/invalid target env, target summary output, local dry-run default, local apply args, QA remote dry-run args, QA remote apply refusal until D1/R2 cleanup safety is implemented, production read-only output, and production broad-apply refusal.
 **Output**: Updated tests in `test/scripts/cleanup-local-qa-data.test.ts` plus red output in `unit-2a-red.log`.
 **Acceptance**: Tests fail because current `scripts/cleanup-local-qa-data.mjs` is local-only and does not expose the explicit environment-aware CLI contract.
@@ -209,3 +209,4 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 - 2026-06-12 06:16 Unit 1b complete: implemented shared script target resolver, wired live/API smoke and QA preflight constants to it, updated `smoke:api` to explicit production target, and captured focused green tests plus build logs in `unit-1b-green.log` and `unit-1b-build.log`.
 - 2026-06-12 06:19 Unit 1c complete: added default-call resolver coverage, verified 100% coverage for `script-environment.mjs`, `smoke-api-live.mjs`, and `smoke-live-helpers.mjs`, and captured build output in `unit-1c-build.log`.
 - 2026-06-12 06:20 Unit 1b cold review complete: Peirce returned CONVERGED with no findings; verdict recorded in `unit-1b-review.md`.
+- 2026-06-12 06:22 Unit 2a complete: added cleanup target parser/summary/run-command red tests for local, QA, and production safety behavior; captured expected failures in `unit-2a-red.log`. Unit review skipped (reason: red-test unit; implementation review follows green unit).
