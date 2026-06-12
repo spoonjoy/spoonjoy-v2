@@ -72,7 +72,7 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 **Output**: Resolver module, updated imports/constants, and green focused resolver/smoke/preflight test output in `unit-1b-green.log`.
 **Acceptance**: Unit 1a tests plus existing smoke/API/preflight helper tests pass with no warnings.
 
-### ⬜ Unit 1c: Shared Environment Resolver — Coverage & Refactor
+### ✅ Unit 1c: Shared Environment Resolver — Coverage & Refactor
 **What**: Verify new resolver coverage, add edge-case tests for empty base URL and invalid URL parsing if needed, and keep existing smoke/preflight behavior intact.
 **Output**: Targeted coverage output in `unit-1c-coverage.log`.
 **Acceptance**: New resolver has 100% statements, branches, functions, and lines; focused tests stay green.
@@ -207,3 +207,4 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 - 2026-06-12 05:23 Unit 0 complete: branch/status, cleanup dry-run counts, inspected files, and cleanup-sensitive schema relationships recorded in `unit-0-setup.log`. Unit review skipped (reason: setup/research evidence only; no code behavior changed).
 - 2026-06-12 06:13 Unit 1a complete: added resolver/API-smoke/package-script red tests and captured `unit-1a-red.log`; failures are missing resolver behavior, API target validation/metadata, and `smoke:api` package target contract. Unit review skipped (reason: red-test unit; implementation review follows green unit).
 - 2026-06-12 06:16 Unit 1b complete: implemented shared script target resolver, wired live/API smoke and QA preflight constants to it, updated `smoke:api` to explicit production target, and captured focused green tests plus build logs in `unit-1b-green.log` and `unit-1b-build.log`.
+- 2026-06-12 06:19 Unit 1c complete: added default-call resolver coverage, verified 100% coverage for `script-environment.mjs`, `smoke-api-live.mjs`, and `smoke-live-helpers.mjs`, and captured build output in `unit-1c-build.log`.
