@@ -69,7 +69,7 @@ AssertionError: expected [ { name: 'QA static config', …(3) } ] to deeply equa
 
  ❯ test/scripts/qa-preflight.test.ts:376:29
     374|       });
-    375| 
+    375|
     376|       expect(result.errors).toEqual([]);
        |                             ^
     377|       expect(result.checks.find((check) => check.name === "QA generate…
@@ -91,7 +91,7 @@ AssertionError: expected [] to deeply equal ArrayContaining{…}
 + []
 
  ❯ test/scripts/qa-preflight.test.ts:389:56
-    387| 
+    387|
     388|     expect(result.errors).toEqual([]);
     389|     expect(result.warnings.map((check) => check.name)).toEqual(
        |                                                        ^
@@ -103,7 +103,7 @@ AssertionError: expected [] to deeply equal ArrayContaining{…}
  FAIL  test/scripts/qa-preflight.test.ts > qa-preflight CLI > identifies CLI entrypoints
 TypeError: (0 , __vite_ssr_import_4__.isCliEntry) is not a function
  ❯ test/scripts/qa-preflight.test.ts:798:12
-    796| 
+    796|
     797|   it("identifies CLI entrypoints", () => {
     798|     expect(isCliEntry(undefined, url)).toBe(false);
        |            ^
@@ -116,7 +116,7 @@ TypeError: (0 , __vite_ssr_import_4__.isCliEntry) is not a function
 TypeError: (0 , __vite_ssr_import_4__.runCliIfEntry) is not a function
  ❯ test/scripts/qa-preflight.test.ts:806:12
     804|     const runMain = vi.fn(async () => undefined);
-    805| 
+    805|
     806|     expect(runCliIfEntry({ argv1: "/tmp/other.ts", moduleUrl: url, run…
        |            ^
     807|     expect(runMain).not.toHaveBeenCalled();
@@ -128,7 +128,7 @@ TypeError: (0 , __vite_ssr_import_4__.runCliIfEntry) is not a function
 TypeError: (0 , __vite_ssr_import_4__.runCliIfEntry) is not a function
  ❯ test/scripts/qa-preflight.test.ts:813:12
     811|     const runMain = vi.fn(async () => undefined);
-    812| 
+    812|
     813|     expect(runCliIfEntry({ argv1: resolved, moduleUrl: url, runMain })…
        |            ^
     814|     expect(runMain).toHaveBeenCalledTimes(1);
@@ -140,7 +140,7 @@ TypeError: (0 , __vite_ssr_import_4__.runCliIfEntry) is not a function
 TypeError: (0 , __vite_ssr_import_4__.runCliIfEntry) is not a function
  ❯ test/scripts/qa-preflight.test.ts:823:12
     821|     });
-    822| 
+    822|
     823|     expect(runCliIfEntry({ argv1: resolved, moduleUrl: url, runMain, o…
        |            ^
     824|     await vi.waitFor(() => expect(onError).toHaveBeenCalledWith(expect…
@@ -153,7 +153,7 @@ Error: Test timed out in 5000ms.
 If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
  ❯ test/scripts/qa-preflight.test.ts:827:3
     825|   });
-    826| 
+    826|
     827|   it("logs passing checks with injected dependencies", async () => {
        |   ^
     828|     const log = vi.fn();
@@ -166,7 +166,7 @@ Error: Test timed out in 5000ms.
 If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
  ❯ test/scripts/qa-preflight.test.ts:848:3
     846|   });
-    847| 
+    847|
     848|   it("logs failures with injected dependencies", async () => {
        |   ^
     849|     const log = vi.fn();
@@ -177,7 +177,7 @@ If this is a long-running test, pass a timeout value as the last argument or con
  FAIL  test/scripts/qa-preflight.test.ts > qa-preflight CLI > uses default console IO for successful main runs
 AssertionError: expected "log" to be called with arguments: [ StringContaining{…} ]
 
-Received: 
+Received:
 
   1st log call:
 
@@ -219,7 +219,7 @@ Number of calls: 5
 
  ❯ test/scripts/qa-preflight.test.ts:879:19
     877|       await main();
-    878| 
+    878|
     879|       expect(log).toHaveBeenCalledWith(expect.stringContaining("QA pre…
        |                   ^
     880|     } finally {
@@ -232,7 +232,7 @@ Error: Test timed out in 5000ms.
 If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
  ❯ test/scripts/qa-preflight.test.ts:890:3
     888|   });
-    889| 
+    889|
     890|   it("uses default console IO and exit for failed main runs", async ()…
        |   ^
     891|     const errorSpy = vi.spyOn(console, "error").mockImplementation(() …
@@ -244,7 +244,7 @@ If this is a long-running test, pass a timeout value as the last argument or con
 TypeError: (0 , __vite_ssr_import_4__.runCliIfEntry) is not a function
  ❯ test/scripts/qa-preflight.test.ts:929:12
     927|     });
-    928| 
+    928|
     929|     expect(runCliIfEntry({ argv1: resolved, moduleUrl: url, runMain })…
        |            ^
     930|     await vi.waitFor(() => expect(errorSpy).toHaveBeenCalledWith("QA p…
@@ -257,4 +257,3 @@ TypeError: (0 , __vite_ssr_import_4__.runCliIfEntry) is not a function
       Tests  11 failed | 35 passed (46)
    Start at  07:32:33
    Duration  15.57s (transform 100ms, setup 93ms, import 93ms, tests 15.10s, environment 159ms)
-

@@ -950,6 +950,7 @@ describe("qa-preflight CLI", () => {
   });
 
   it("uses default console IO and exit for failed main runs", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const exitSpy = vi.spyOn(process, "exit").mockImplementation((() => {
       throw new Error("exit 1");
@@ -980,6 +981,7 @@ describe("qa-preflight CLI", () => {
       expect(errorSpy).toHaveBeenCalledWith("QA preflight failed with 1 error(s).");
       expect(exitSpy).toHaveBeenCalledWith(1);
     } finally {
+      logSpy.mockRestore();
       errorSpy.mockRestore();
       exitSpy.mockRestore();
     }

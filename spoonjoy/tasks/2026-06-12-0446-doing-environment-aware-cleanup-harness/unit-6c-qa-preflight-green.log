@@ -13,4 +13,3 @@ PASS QA R2 round trip: QA R2 write/read/delete probe passed.
       Tests  49 passed (49)
    Start at  07:37:45
    Duration  851ms (transform 106ms, setup 114ms, import 96ms, tests 287ms, environment 220ms)
-
