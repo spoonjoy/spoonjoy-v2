@@ -1,8 +1,8 @@
 # Autopilot State
 
-Updated: 2026-06-12 09:22 America/Los_Angeles
-Branch: `spoonjoy/sj-044-terminal-verification`
-Objective: Keep the Spoonjoy autonomous queue durable and continue with the next ready work after the completed QA/image-cover smoke run.
+Updated: 2026-06-12 10:08 America/Los_Angeles
+Branch: post-merge `main` terminal state; the self-referential closure branch/PR used to land this line is excluded from stale-branch accounting.
+Objective: Record that the `SJ-044` cleanup-harness dogfood run is complete once this state lands on `main`, and leave the Spoonjoy autonomous queue in a truthful idle state.
 
 ## Current Gate
 
@@ -14,18 +14,17 @@ Objective: Keep the Spoonjoy autonomous queue durable and continue with the next
 - Last completed side-slice PR: #188 (`spoonjoy/storybook-wrangler-action`) merged as `03f1a854`.
 - Last completed warning-cleanup doing doc: `spoonjoy/tasks/2026-06-11-2225-doing-storybook-deploy-warning-cleanup.md`
 - Last completed warning-cleanup PR: #191 (`spoonjoy/workflow-warning-cleanup`) merged as `3c1b15e40e6ddbc5c2070d4c83674d96e657b9ff`.
-- Current side-slice goal: finish `SJ-044` terminal verification bookkeeping after the environment-aware smoke, cleanup, and preflight harness shipped.
+- Current side-slice goal: `SJ-044` is complete after the environment-aware smoke, cleanup, and preflight harness shipped and terminal evidence was merged.
 - Active planning doc: `spoonjoy/tasks/2026-06-12-0446-planning-environment-aware-cleanup-harness.md` (approved after reviewer convergence).
 - Active doing doc: `spoonjoy/tasks/2026-06-12-0446-doing-environment-aware-cleanup-harness.md`.
-- Current gate: implementation PR #194 merged and deployed; terminal-verification evidence branch is being prepared so post-merge smoke/cleanup/deploy proof is durable on `main`.
+- Current gate: implementation PR #194 and terminal evidence PR #195 are merged, deployed, smoked, cleaned, and branch-cleanup verified; this final state correction records the post-merge `main` truth after PR #196 lands and its temporary branch is removed.
 - No human gates remain under the user's explicit no-human-gates mandate unless a true human-only credential/capability blocker or genuinely unrecoverable destructive shared-state action appears.
-- Work-suite continuation contract was hardened in `ouroboros-skills` PR #105, merged as `80496563`, then refreshed into local `.agents` / `.codex` installed skill roots. The active dogfood run is this Spoonjoy PR #191: no final/status response until PR merge, main deploy/log smoke, cleanup, and continuation scan are complete.
+- Work-suite continuation contract was hardened in `ouroboros-skills` PR #105, merged as `80496563`, then refreshed into local `.agents` / `.codex` installed skill roots. The `SJ-044` dogfood run followed that contract through implementation merge, evidence merge, deploy verification, production smoke, cleanup, stale-branch cleanup, and continuation scan.
 
 ## Next Action
 
-1. Commit and merge the terminal-verification evidence branch.
-2. Verify main CI, Storybook, and Production Deploy for that evidence commit, then smoke production health endpoints.
-3. Delete the terminal-verification branch, notify Slugger, and run the continuation scan.
+1. No `SJ-044` action remains after this final state correction lands on `main`.
+2. For the next autonomous queue run, pick a distinct backlog or feedback item and start a fresh work-planner/work-doer cycle instead of reopening this completed cleanup-harness slice.
 
 ## Known External State
 
@@ -60,3 +59,9 @@ Objective: Keep the Spoonjoy autonomous queue durable and continue with the next
 - `pnpm run smoke:live` and `pnpm run smoke:api` passed against production; smoke artifacts were copied into the SJ-044 task artifact directory.
 - Final cleanup checks passed after smoke: local, remote QA, and production all reported zero cross-boundary cleanup blockers; production broad cleanup remained read-only.
 - The stale original branch `spoonjoy/sj-044-cleanup-harness` was deleted locally and remotely after PR #194 merged.
+- Terminal evidence PR #195 (`spoonjoy/sj-044-terminal-verification`) merged as `9c4552323fc035dcdfb2bed0de9cd0134accc952`.
+- Main runs for terminal evidence commit `9c4552323fc035dcdfb2bed0de9cd0134accc952` passed: CI `27429795683`, Storybook `27429795716`, and Production Deploy `27429795680`.
+- Production Deploy `27429795680` published Worker version `16dfb7d9-460e-48cc-a30e-0fe790406e16` to `https://spoonjoy-v2.mendelow-studio.workers.dev`.
+- Fresh production workers.dev and custom-domain health checks returned `{"status":"ok","service":"spoonjoy"}` after PR #195 deployed.
+- Final post-PR #195 cleanup checks passed: local, remote QA, and production all reported zero cross-boundary cleanup blockers.
+- Final continuation scan after PR #195 found no open PRs and no local or remote `spoonjoy/*` branches; this statement intentionally excludes the temporary PR #196 closure branch carrying this post-merge state correction.
