@@ -137,7 +137,7 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 **Output**: Targeted coverage output in `unit-5c-coverage.log`.
 **Acceptance**: New metadata code has 100% coverage and no warnings.
 
-### ⬜ Unit 6a: Docs, Package Scripts, And Preflight — Tests
+### ✅ Unit 6a: Docs, Package Scripts, And Preflight — Tests
 **What**: Add failing tests that require explicit cleanup package scripts, deployment preflight contract, docs text for local dry-run, local apply, QA dry-run/apply, production read-only/refusal, no broad production cleanup, coverage instrumentation for `scripts/script-environment.mjs`, `scripts/cleanup-local-qa-data.mjs`, `scripts/smoke-api-live.mjs`, `scripts/qa-preflight.ts`, and `scripts/deployment-preflight.ts`, and a script typecheck command for modified TypeScript scripts.
 **Output**: Updated `test/scripts/deployment-preflight.test.ts` plus red output in `unit-6a-red.log`.
 **Acceptance**: Tests fail on current ambiguous `cleanup:qa` contract.
@@ -225,3 +225,4 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 - 2026-06-12 07:15 Unit 4b narrow re-review complete: Aquinas returned CONVERGED; verdict recorded in `unit-4b-review-round2.md`.
 - 2026-06-12 07:15 Unit 5b complete: added shared smoke report metadata builder, git metadata capture, live smoke environment/created/R2 artifact shape, API smoke git metadata, and image-cover retained R2 arrays. Focused tests/build passed with evidence in `unit-5b-green.log` and `unit-5b-build.log`.
 - 2026-06-12 07:17 Unit 5c complete: added git fallback/default report coverage and verified 100% coverage for `smoke-live-helpers.mjs`, `smoke-image-cover-live.mjs`, and `smoke-api-live.mjs`; build passed with evidence in `unit-5c-coverage.log` and `unit-5c-build.log`.
+- 2026-06-12 07:20 Unit 6a complete: added red tests for explicit cleanup package scripts, cleanup target docs, script coverage instrumentation, and `typecheck:scripts`/`tsconfig.scripts.json`; expected failures captured in `unit-6a-red.log`. Unit review skipped (reason: red-test unit; implementation review follows green unit).
