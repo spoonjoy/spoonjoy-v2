@@ -69,6 +69,7 @@ function addKey(map, key, source) {
 }
 
 function isAllowedDisposableKey(key, { disposableUserIds, hardDeleteRecipeIds }) {
+  if (key.startsWith("covers/")) return true;
   for (const userId of disposableUserIds) {
     if (key.startsWith(`profiles/${userId}/`)) return true;
     if (key.startsWith(`recipes/${userId}/uploads/`)) return true;
@@ -190,15 +191,21 @@ WITH
     UNION
     SELECT 'delete', substr(photoUrl, length('/photos/') + 1), NULL
     FROM disposable_spoons
-    WHERE photoUrl LIKE '/photos/spoons/' || chefId || '/' || recipeId || '/%'
-       OR photoUrl LIKE '/photos/spoons/' || chefId || '/uploads/%'
+    WHERE chefId IN (SELECT id FROM disposable_users)
+      AND (
+        photoUrl LIKE '/photos/spoons/' || chefId || '/' || recipeId || '/%'
+        OR photoUrl LIKE '/photos/spoons/' || chefId || '/uploads/%'
+      )
     UNION
     SELECT 'retain', substr(photoUrl, length('/photos/') + 1), 'unsafe disposable spoon photo namespace'
     FROM disposable_spoons
     WHERE photoUrl LIKE '/photos/%'
       AND NOT (
-        photoUrl LIKE '/photos/spoons/' || chefId || '/' || recipeId || '/%'
-        OR photoUrl LIKE '/photos/spoons/' || chefId || '/uploads/%'
+        chefId IN (SELECT id FROM disposable_users)
+        AND (
+          photoUrl LIKE '/photos/spoons/' || chefId || '/' || recipeId || '/%'
+          OR photoUrl LIKE '/photos/spoons/' || chefId || '/uploads/%'
+        )
       )
     UNION
     SELECT 'delete', substr(imageUrl, length('/photos/') + 1), NULL
@@ -206,6 +213,7 @@ WITH
     JOIN Recipe r ON r.id = dc.recipeId
     WHERE imageUrl LIKE '/photos/recipes/' || r.chefId || '/' || dc.recipeId || '/%'
        OR imageUrl LIKE '/photos/recipes/' || r.chefId || '/uploads/%'
+       OR imageUrl LIKE '/photos/covers/%'
     UNION
     SELECT 'retain', substr(imageUrl, length('/photos/') + 1), 'unsafe disposable cover imageUrl namespace'
     FROM disposable_covers dc
@@ -214,6 +222,7 @@ WITH
       AND NOT (
         imageUrl LIKE '/photos/recipes/' || r.chefId || '/' || dc.recipeId || '/%'
         OR imageUrl LIKE '/photos/recipes/' || r.chefId || '/uploads/%'
+        OR imageUrl LIKE '/photos/covers/%'
       )
     UNION
     SELECT 'delete', substr(stylizedImageUrl, length('/photos/') + 1), NULL
@@ -221,6 +230,7 @@ WITH
     JOIN Recipe r ON r.id = dc.recipeId
     WHERE stylizedImageUrl LIKE '/photos/recipes/' || r.chefId || '/' || dc.recipeId || '/%'
        OR stylizedImageUrl LIKE '/photos/recipes/' || r.chefId || '/uploads/%'
+       OR stylizedImageUrl LIKE '/photos/covers/%'
     UNION
     SELECT 'retain', substr(stylizedImageUrl, length('/photos/') + 1), 'unsafe disposable cover stylizedImageUrl namespace'
     FROM disposable_covers dc
@@ -229,6 +239,7 @@ WITH
       AND NOT (
         stylizedImageUrl LIKE '/photos/recipes/' || r.chefId || '/' || dc.recipeId || '/%'
         OR stylizedImageUrl LIKE '/photos/recipes/' || r.chefId || '/uploads/%'
+        OR stylizedImageUrl LIKE '/photos/covers/%'
       )
     UNION
     SELECT 'delete', substr(sourceImageUrl, length('/photos/') + 1), NULL
@@ -236,6 +247,7 @@ WITH
     JOIN Recipe r ON r.id = dc.recipeId
     WHERE sourceImageUrl LIKE '/photos/recipes/' || r.chefId || '/' || dc.recipeId || '/%'
        OR sourceImageUrl LIKE '/photos/recipes/' || r.chefId || '/uploads/%'
+       OR sourceImageUrl LIKE '/photos/covers/%'
     UNION
     SELECT 'retain', substr(sourceImageUrl, length('/photos/') + 1), 'unsafe disposable cover sourceImageUrl namespace'
     FROM disposable_covers dc
@@ -244,6 +256,7 @@ WITH
       AND NOT (
         sourceImageUrl LIKE '/photos/recipes/' || r.chefId || '/' || dc.recipeId || '/%'
         OR sourceImageUrl LIKE '/photos/recipes/' || r.chefId || '/uploads/%'
+        OR sourceImageUrl LIKE '/photos/covers/%'
       )
   ),
   r2_reference_blockers AS (
@@ -345,7 +358,159 @@ WITH
 SELECT action, key, reason
 FROM r2_reference_blockers
 WHERE key IS NOT NULL AND key != '';
+  `.trim();
+}
+
+function cleanupTargetCtesSql() {
+  return `
+WITH
+  disposable_users AS (
+    SELECT id FROM User WHERE ${DISPOSABLE_USER_WHERE}
+  ),
+  hard_delete_recipes AS (
+    SELECT id FROM Recipe WHERE chefId IN (SELECT id FROM disposable_users)
+  ),
+  soft_delete_recipes AS (
+    SELECT id FROM Recipe
+    WHERE (${SUSPICIOUS_RECIPE_WHERE})
+      AND chefId NOT IN (SELECT id FROM disposable_users)
+  ),
+  disposable_spoons AS (
+    SELECT id FROM RecipeSpoon
+    WHERE chefId IN (SELECT id FROM disposable_users)
+       OR ${DISPOSABLE_SPOON_WHERE}
+  ),
+  e2e_oauth_clients AS (
+    SELECT id FROM OAuthClient
+    WHERE ${E2E_OAUTH_CLIENT_WHERE}
+  ),
+  disposable_covers AS (
+    SELECT id FROM RecipeCover
+    WHERE recipeId IN (SELECT id FROM hard_delete_recipes)
+  ),
+  disposable_credentials AS (
+    SELECT id FROM ApiCredential
+    WHERE userId IN (SELECT id FROM disposable_users)
+       OR oauthClientId IN (SELECT id FROM e2e_oauth_clients)
+  )
 `.trim();
+}
+
+function cleanupBlockerQueries() {
+  return [
+    {
+      blocker: "blocker_recipe_sourceRecipeId",
+      rowId: "id",
+      fromWhere: `FROM Recipe
+WHERE sourceRecipeId IN (SELECT id FROM hard_delete_recipes)
+  AND id NOT IN (SELECT id FROM hard_delete_recipes)`,
+    },
+    {
+      blocker: "blocker_recipe_activeCoverId",
+      rowId: "id",
+      fromWhere: `FROM Recipe
+WHERE activeCoverId IN (SELECT id FROM disposable_covers)
+  AND id NOT IN (SELECT id FROM hard_delete_recipes)`,
+    },
+    {
+      blocker: "blocker_spoon_recipeId",
+      rowId: "id",
+      fromWhere: `FROM RecipeSpoon
+WHERE recipeId IN (SELECT id FROM hard_delete_recipes)
+  AND id NOT IN (SELECT id FROM disposable_spoons)`,
+    },
+    {
+      blocker: "blocker_recipe_in_non_disposable_cookbook",
+      rowId: "ric.id",
+      fromWhere: `FROM RecipeInCookbook ric
+JOIN Cookbook c ON c.id = ric.cookbookId
+WHERE ric.recipeId IN (SELECT id FROM hard_delete_recipes)
+  AND c.authorId NOT IN (SELECT id FROM disposable_users)`,
+    },
+    {
+      blocker: "blocker_recipe_in_cookbook_addedById",
+      rowId: "ric.id",
+      fromWhere: `FROM RecipeInCookbook ric
+JOIN Cookbook c ON c.id = ric.cookbookId
+WHERE ric.addedById IN (SELECT id FROM disposable_users)
+  AND c.authorId NOT IN (SELECT id FROM disposable_users)`,
+    },
+    {
+      blocker: "blocker_cover_sourceSpoonId",
+      rowId: "id",
+      fromWhere: `FROM RecipeCover
+WHERE sourceSpoonId IN (SELECT id FROM disposable_spoons)
+  AND recipeId NOT IN (SELECT id FROM hard_delete_recipes)`,
+    },
+    {
+      blocker: "blocker_cover_createdById",
+      rowId: "id",
+      fromWhere: `FROM RecipeCover
+WHERE createdById IN (SELECT id FROM disposable_users)
+  AND recipeId NOT IN (SELECT id FROM hard_delete_recipes)`,
+    },
+    {
+      blocker: "blocker_agent_connection_approvedById",
+      rowId: "id",
+      fromWhere: `FROM AgentConnectionRequest
+WHERE approvedById NOT IN (SELECT id FROM disposable_users)
+  AND credentialId IN (SELECT id FROM disposable_credentials)`,
+    },
+    {
+      blocker: "blocker_agent_connection_credentialId",
+      rowId: "id",
+      fromWhere: `FROM AgentConnectionRequest
+WHERE credentialId IN (SELECT id FROM disposable_credentials)
+  AND approvedById NOT IN (SELECT id FROM disposable_users)`,
+    },
+    {
+      blocker: "blocker_api_idempotency_credentialId",
+      rowId: "id",
+      fromWhere: `FROM ApiIdempotencyKey
+WHERE credentialId IN (SELECT id FROM disposable_credentials)
+  AND userId NOT IN (SELECT id FROM disposable_users)`,
+    },
+    {
+      blocker: "blocker_api_credential_oauthClientId",
+      rowId: "id",
+      fromWhere: `FROM ApiCredential
+WHERE oauthClientId IN (SELECT id FROM e2e_oauth_clients)
+  AND userId NOT IN (SELECT id FROM disposable_users)`,
+    },
+    {
+      blocker: "blocker_oauth_code_userId",
+      rowId: "id",
+      fromWhere: `FROM OAuthAuthCode
+WHERE clientId IN (SELECT id FROM e2e_oauth_clients)
+  AND userId NOT IN (SELECT id FROM disposable_users)`,
+    },
+    {
+      blocker: "blocker_oauth_refresh_token_userId",
+      rowId: "id",
+      fromWhere: `FROM OAuthRefreshToken
+WHERE clientId IN (SELECT id FROM e2e_oauth_clients)
+  AND userId NOT IN (SELECT id FROM disposable_users)`,
+    },
+    {
+      blocker: "blocker_ambiguous_oauth_client",
+      rowId: "id",
+      fromWhere: `FROM OAuthClient
+WHERE clientName = 'E2E OAuth Client'
+  AND id NOT IN (SELECT id FROM e2e_oauth_clients)`,
+    },
+    {
+      blocker: "blocker_notification_payload",
+      rowId: "id",
+      fromWhere: `FROM NotificationEvent
+WHERE recipientId NOT IN (SELECT id FROM disposable_users)
+  AND (
+    EXISTS (SELECT 1 FROM disposable_users WHERE NotificationEvent.payload LIKE '%' || disposable_users.id || '%')
+    OR EXISTS (SELECT 1 FROM hard_delete_recipes WHERE NotificationEvent.payload LIKE '%' || hard_delete_recipes.id || '%')
+    OR EXISTS (SELECT 1 FROM disposable_spoons WHERE NotificationEvent.payload LIKE '%' || disposable_spoons.id || '%')
+    OR EXISTS (SELECT 1 FROM disposable_covers WHERE NotificationEvent.payload LIKE '%' || disposable_covers.id || '%')
+  )`,
+    },
+  ];
 }
 
 function parseWranglerRows(stdout) {
@@ -477,7 +642,9 @@ SELECT 'e2e oauth clients with test redirect signature' AS item, COUNT(*) AS cou
 FROM OAuthClient
 WHERE ${E2E_OAUTH_CLIENT_WHERE};
 
-SELECT 'cross-boundary cleanup blockers' AS item, 0 AS count;
+${cleanupTargetCtesSql()}
+SELECT 'cross-boundary cleanup blockers' AS item,
+  ${cleanupBlockerQueries().map((query) => `/* ${query.blocker} */ (SELECT COUNT(*) ${query.fromWhere})`).join("\n  + ")} AS count;
 `.trim();
 }
 
@@ -777,26 +944,14 @@ DELETE FROM disposable_users;
 `.trim();
 }
 
-function cleanupHelperTablesSql() {
-  return `
-DELETE FROM cleanup_blockers;
-DELETE FROM existing_search_tables;
-DELETE FROM disposable_credentials;
-DELETE FROM disposable_cover_image_urls;
-DELETE FROM disposable_covers;
-DELETE FROM e2e_oauth_clients;
-DELETE FROM disposable_spoons;
-DELETE FROM soft_delete_recipes;
-DELETE FROM hard_delete_recipes;
-DELETE FROM disposable_users;
-`.trim();
-}
-
 export function buildBlockerReportSql() {
-  const sql = buildApplySql();
-  const marker = "\nSELECT CASE WHEN EXISTS (SELECT 1 FROM cleanup_blockers)";
-  const markerIndex = sql.indexOf(marker);
-  return `${sql.slice(0, markerIndex)}\n${cleanupHelperTablesSql()}`.trim();
+  return cleanupBlockerQueries()
+    .map((query) => `
+${cleanupTargetCtesSql()}
+SELECT ${sqlString(query.blocker)} AS blocker, ${query.rowId} AS rowId
+${query.fromWhere};
+`.trim())
+    .join("\n\n");
 }
 
 export function wranglerLocalD1Args(dbName, sql) {

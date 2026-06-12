@@ -227,7 +227,7 @@ AssertionError: expected 'WITH\n  disposable_users AS (\n    SE…' not to conta
     687|     expect(sql).not.toContain("FROM SearchDocument");
        |                     ^
     688|   });
-    689| 
+    689|
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
 
@@ -238,7 +238,7 @@ Expected: "function"
 Received: "undefined"
 
  ❯ test/scripts/cleanup-local-qa-data.test.ts:691:56
-    689| 
+    689|
     690|   it("builds the SearchDocument R2 blocker SQL separately from base ca…
     691|     expect(typeof cleanup.buildQaR2SearchReferenceSql).toBe("function"…
        |                                                        ^
@@ -250,15 +250,15 @@ Received: "undefined"
  FAIL  test/scripts/cleanup-local-qa-data.test.ts > cleanup-local-qa-data > refuses QA apply before D1 mutation when search documents reference candidate R2 keys
 AssertionError: expected [Function] to throw error matching /blocker_search_imageUrl:pr…/codex-user\ but got 'QA R2 object still exists after delet…'
 
-- Expected: 
+- Expected:
 /blocker_search_imageUrl:profiles\/codex-user\/avatar\.jpg/
 
-+ Received: 
++ Received:
 "QA R2 object still exists after delete: profiles/codex-user/avatar.jpg"
 
  ❯ test/scripts/cleanup-local-qa-data.test.ts:779:5
     777|     });
-    778| 
+    778|
     779|     await expect(
        |     ^
     780|       cleanup.runCleanupCli({
@@ -273,7 +273,7 @@ Expected: "function"
 Received: "undefined"
 
  ❯ test/scripts/cleanup-local-qa-data.test.ts:794:50
-    792| 
+    792|
     793|   it("reports D1 cleanup blockers before running the apply mutation", …
     794|     expect(typeof cleanup.buildBlockerReportSql).toBe("function");
        |                                                  ^
@@ -287,4 +287,3 @@ Received: "undefined"
       Tests  5 failed | 35 passed (40)
    Start at  07:05:53
    Duration  664ms (transform 74ms, setup 117ms, import 43ms, tests 150ms, environment 219ms)
-

@@ -162,12 +162,12 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 **Output**: `cleanup-qa-dry-run.log`, `cleanup-qa-apply.log` when apply runs, `cleanup-qa-post-apply.log` when apply runs, `cleanup-production-readonly.log`, `cleanup-production-apply-refusal.log` with exit code, and `qa-preflight.log`.
 **Acceptance**: QA cleanup and QA preflight commands pass with no warnings; QA/prod cleanup commands print resolved targets; production read-only command passes; production `--apply` command refuses broad apply with the expected nonzero exit and no mutation.
 
-### ⬜ Unit 9: Implementation Review
+### ✅ Unit 9: Implementation Review
 **What**: Dispatch a cold implementation reviewer with the full diff, unit evidence, safety policy, and cleanup/deploy logs.
 **Output**: `implementation-review.md` with reviewer verdict.
 **Acceptance**: Reviewer returns CONVERGED or lists BLOCKER/MAJOR/MINOR/NIT findings with exact file/test references.
 
-### ⬜ Unit 10: Review Fixes
+### ✅ Unit 10: Review Fixes
 **What**: If Unit 9 has BLOCKER/MAJOR findings, add explicit fix commits for those findings and dispatch a narrow re-review; if Unit 9 converges, record that no fix commits were needed.
 **Output**: `implementation-review-fixes.md` with fixes, verification commands, and re-review verdict.
 **Acceptance**: No BLOCKER/MAJOR implementation-review findings remain.
@@ -231,3 +231,5 @@ Make Spoonjoy smoke and cleanup scripts explicit about their target environment,
 - 2026-06-12 07:52 Unit 6c review fix complete: Lagrange found one NIT for trailing whitespace/blank EOF in generated logs; normalized Unit 6c logs, suppressed intentional QA preflight CLI stdout in the default-failure test, reran 100% preflight coverage and build, and recorded the result in `unit-6c-review.md`. Narrow review satisfied by `git diff --check` and clean verification logs.
 - 2026-06-12 08:00 Unit 7 complete: focused script tests, full 100% coverage, app typecheck, script typecheck, build, and local cleanup dry-run passed with evidence in `focused-tests.log`, `coverage.log`, `typecheck.log`, `typecheck-scripts.log`, `build.log`, and `cleanup-local.log`. Local cleanup reported zero active disposable users/spoons/OAuth clients, zero active suspicious recipes, and zero blockers; only already-deleted suspicious recipes remain, so no local apply was needed. Unit review skipped (reason: verification-only unit; no behavior changed beyond Unit 6c review fix already reviewed).
 - 2026-06-12 08:04 Unit 8 complete: dogfooded live cleanup contract. QA cleanup dry-run resolved QA D1/R2 targets and reported all disposable counts at zero with zero blockers, so no QA apply was needed; production read-only cleanup resolved production D1/R2 targets and reported zero disposable counts; production broad apply refused with exit code 1; QA preflight passed D1 migrations, secrets, R2 round trip, and static config. Evidence in `cleanup-qa-dry-run.log`, `cleanup-production-readonly.log`, `cleanup-production-apply-refusal.log`, and `qa-preflight.log`. Unit review skipped (reason: live verification-only unit; no code changed).
+- 2026-06-12 08:05 Unit 9 complete: Parfit returned FINDINGS with one BLOCKER, three MAJOR findings, and one MINOR: unsafe note-matched spoon R2 deletion, missing generated `covers/...` cleanup, hardcoded dry-run blocker zero, mutating blocker preflight SQL, and artifact whitespace. Findings recorded in `implementation-review.md`.
+- 2026-06-12 08:14 Unit 10 complete: added red tests for all implementation-review findings, fixed QA R2 spoon namespace safety, generated cover cleanup, real dry-run blocker counts, read-only blocker preflight SQL, D1 compound-select compatibility, and artifact hygiene. Focused tests, 100% cleanup coverage, build, local/QA/prod cleanup dry-runs, and production broad-apply refusal passed with evidence in `unit-10-review-fixes-*.log` and `unit-10-cleanup-*.log`; fix summary recorded in `implementation-review-fixes.md`. Narrow re-review dispatched.

@@ -16,10 +16,10 @@ stdout | test/scripts/smoke-api-live.test.ts > API live smoke target handling > 
 
  % Coverage report from istanbul
 -------------------|---------|----------|---------|---------|-------------------
-File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s
 -------------------|---------|----------|---------|---------|-------------------
-All files          |     100 |      100 |     100 |     100 |                   
- ...e-api-live.mjs |     100 |      100 |     100 |     100 |                   
- ...cover-live.mjs |     100 |      100 |     100 |     100 |                   
- ...ve-helpers.mjs |     100 |      100 |     100 |     100 |                   
+All files          |     100 |      100 |     100 |     100 |
+ ...e-api-live.mjs |     100 |      100 |     100 |     100 |
+ ...cover-live.mjs |     100 |      100 |     100 |     100 |
+ ...ve-helpers.mjs |     100 |      100 |     100 |     100 |
 -------------------|---------|----------|---------|---------|-------------------

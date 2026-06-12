@@ -75,13 +75,13 @@ stdout | test/scripts/smoke-api-live.test.ts > API live smoke target handling > 
  FAIL  test/scripts/smoke-api-live.test.ts > API live smoke target handling > writes environment metadata into API smoke artifacts
 AssertionError: expected undefined to deeply equal { branch: Any<String>, …(1) }
 
-- Expected: 
+- Expected:
 {
   "branch": Any<String>,
   "commit": StringMatching /^(unknown|[0-9a-f]{7,40})$/,
 }
 
-+ Received: 
++ Received:
 undefined
 
  ❯ test/scripts/smoke-api-live.test.ts:219:26
@@ -97,10 +97,10 @@ undefined
  FAIL  test/scripts/smoke-image-cover-live.test.ts > image-cover live smoke flow > runs preflight before mutation, proves API/MCP operations, provenance, and exact cleanup
 AssertionError: expected undefined to deeply equal []
 
-- Expected: 
+- Expected:
 []
 
-+ Received: 
++ Received:
 undefined
 
  ❯ test/scripts/smoke-image-cover-live.test.ts:550:36
@@ -120,11 +120,11 @@ Expected: "function"
 Received: "undefined"
 
  ❯ test/scripts/smoke-live-helpers.test.ts:271:50
-    269| 
+    269|
     270|   it("builds live smoke artifact metadata with empty R2 arrays for nor…
     271|     expect(typeof smokeHelpers.buildSmokeReport).toBe("function");
        |                                                  ^
-    272| 
+    272|
     273|     const report = smokeHelpers.buildSmokeReport({
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
@@ -136,11 +136,11 @@ Expected: "function"
 Received: "undefined"
 
  ❯ test/scripts/smoke-live-helpers.test.ts:327:50
-    325| 
+    325|
     326|   it("mirrors image-cover R2 arrays into the top-level live smoke arti…
     327|     expect(typeof smokeHelpers.buildSmokeReport).toBe("function");
        |                                                  ^
-    328| 
+    328|
     329|     const report = smokeHelpers.buildSmokeReport({
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
@@ -150,4 +150,3 @@ Received: "undefined"
       Tests  4 failed | 58 passed (62)
    Start at  07:12:33
    Duration  1.24s (transform 98ms, setup 196ms, import 66ms, tests 150ms, environment 465ms)
-

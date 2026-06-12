@@ -12,4 +12,3 @@ stdout | test/scripts/smoke-api-live.test.ts > API live smoke target handling > 
       Tests  62 passed (62)
    Start at  07:14:19
    Duration  1.23s (transform 96ms, setup 189ms, import 60ms, tests 164ms, environment 455ms)
-

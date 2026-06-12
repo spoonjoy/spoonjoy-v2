@@ -1,6 +1,6 @@
 
-> spoonjoy-v2@1.0.0 cleanup:qa /Users/arimendelow/Projects/spoonjoy-v2
-> node scripts/cleanup-local-qa-data.mjs
+> spoonjoy-v2@1.0.0 cleanup:local /Users/arimendelow/Projects/spoonjoy-v2
+> node scripts/cleanup-local-qa-data.mjs --target-env local
 
 Target environment: local
 Base URL: http://localhost:5173
@@ -28,7 +28,7 @@ Use --remote if you want to access the remote instance.
     ],
     "success": true,
     "meta": {
-      "duration": 0
+      "duration": 1
     }
   },
   {
@@ -100,7 +100,7 @@ Use --remote if you want to access the remote instance.
     ],
     "success": true,
     "meta": {
-      "duration": 1
+      "duration": 0
     }
   },
   {
@@ -112,7 +112,7 @@ Use --remote if you want to access the remote instance.
     ],
     "success": true,
     "meta": {
-      "duration": 0
+      "duration": 3
     }
   }
 ]

@@ -434,6 +434,17 @@ describe("cleanup-local-qa-data", () => {
     ]);
   });
 
+  it("dry-run blocker count is computed from real cross-boundary blocker queries", () => {
+    const sql = buildDryRunSql();
+
+    expect(sql).toContain("SELECT 'cross-boundary cleanup blockers' AS item,");
+    expect(sql).toContain("AS count");
+    expect(sql).toContain("(SELECT COUNT(*) FROM Recipe");
+    expect(sql).toContain("blocker_recipe_activeCoverId");
+    expect(sql).toContain("blocker_notification_payload");
+    expect(sql).not.toContain("SELECT 'cross-boundary cleanup blockers' AS item, 0 AS count");
+  });
+
   it("applies cleanup from explicit disposable target snapshots before any mutation", () => {
     const sql = buildApplySql();
 
@@ -647,6 +658,16 @@ describe("cleanup-local-qa-data", () => {
     expect(plan.blockers).toEqual([]);
   });
 
+  it("plans generated cover keys from the app covers namespace for deletion", () => {
+    const plan = cleanup.planQaR2Cleanup({
+      generatedCoverKeys: ["covers/1760000000000-generated.png"],
+    });
+
+    expect(plan.deleteKeys).toEqual(["covers/1760000000000-generated.png"]);
+    expect(plan.retainedKeys).toEqual([]);
+    expect(plan.blockers).toEqual([]);
+  });
+
   it("handles default QA R2 planning args, null photo URLs, duplicates, and spoon upload keys", () => {
     expect(cleanup.planQaR2Cleanup()).toEqual({ deleteKeys: [], retainedKeys: [], blockers: [] });
 
@@ -685,6 +706,25 @@ describe("cleanup-local-qa-data", () => {
       "WHERE key IS NOT NULL AND key != ''",
     ]);
     expect(sql).not.toContain("FROM SearchDocument");
+  });
+
+  it("does not delete spoon R2 keys for note-matched spoons owned by non-disposable users", () => {
+    const sql = cleanup.buildQaR2CandidateSql();
+
+    expect(sql).toMatch(/SELECT 'delete', substr\(photoUrl, length\('\/photos\/'\) \+ 1\), NULL\s+FROM disposable_spoons\s+WHERE chefId IN \(SELECT id FROM disposable_users\)/s);
+    expect(sql).toContain("photoUrl LIKE '/photos/spoons/' || chefId || '/' || recipeId || '/%'");
+    expect(sql).toContain("photoUrl LIKE '/photos/spoons/' || chefId || '/uploads/%'");
+    expect(sql).toContain("'unsafe disposable spoon photo namespace'");
+  });
+
+  it("deletes generated cover R2 keys under the app's covers namespace for hard-delete recipes", () => {
+    const sql = cleanup.buildQaR2CandidateSql();
+
+    expectAll(sql, [
+      "imageUrl LIKE '/photos/covers/%'",
+      "stylizedImageUrl LIKE '/photos/covers/%'",
+      "sourceImageUrl LIKE '/photos/covers/%'",
+    ]);
   });
 
   it("builds the SearchDocument R2 blocker SQL separately from base candidate collection", () => {
@@ -799,11 +839,19 @@ describe("cleanup-local-qa-data", () => {
 
   it("reports D1 cleanup blockers before running the apply mutation", async () => {
     expect(typeof cleanup.buildBlockerReportSql).toBe("function");
+    const blockerSql = cleanup.buildBlockerReportSql();
+    expect(blockerSql).toMatch(/WITH\s+disposable_users AS/s);
+    expect(blockerSql).toContain("'blocker_recipe_activeCoverId' AS blocker");
+    expect(blockerSql).toContain("id AS rowId");
+    expect(blockerSql).not.toContain("CREATE TABLE");
+    expect(blockerSql).not.toContain("CREATE VIRTUAL TABLE");
+    expect(blockerSql).not.toContain("DELETE FROM");
+    expect(blockerSql).not.toContain("SearchDocument");
     const stdout = writableBuffer();
     const stderr = writableBuffer();
     const runCommand = vi.fn(async (_cmd: string, args: string[]) => {
       const command = args.join(" ");
-      if (command.includes("cleanup_blockers") && command.includes("SELECT blocker, rowId FROM cleanup_blockers")) {
+      if (command.includes("'blocker_recipe_activeCoverId' AS blocker")) {
         return {
           stdout: JSON.stringify([
             { results: [{ blocker: "blocker_recipe_activeCoverId", rowId: "recipe-1" }] },
@@ -896,7 +944,7 @@ describe("cleanup-local-qa-data", () => {
       if (command.includes("FROM SearchDocument")) {
         return { stderr: "" };
       }
-      if (command.includes("cleanup_blockers") && command.includes("SELECT blocker, rowId FROM cleanup_blockers")) {
+      if (command.includes("'blocker_recipe_activeCoverId' AS blocker")) {
         return { stderr: "" };
       }
       if (command.includes("r2 object get")) {

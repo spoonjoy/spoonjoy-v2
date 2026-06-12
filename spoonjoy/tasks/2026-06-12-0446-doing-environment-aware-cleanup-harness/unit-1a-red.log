@@ -149,23 +149,23 @@ Received: "node scripts/smoke-api-live.mjs"
 
  ❯ test/scripts/deployment-preflight.test.ts:1819:38
     1817|     const pkg = JSON.parse(pkgRaw) as { scripts: Record<string, string…
-    1818| 
+    1818|
     1819|     expect(pkg.scripts["smoke:api"]).toBe("node scripts/smoke-api-live…
        |                                      ^
     1820|   });
-    1821| 
+    1821|
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/10]⎯
 
  FAIL  test/scripts/script-environment.test.ts > script target resolver > infers local for localhost URLs and returns D1/R2/destructive-scope metadata
 Error: Script target resolver not implemented.
  ❯ resolveScriptTarget scripts/script-environment.mjs:4:9
-      2| 
+      2|
       3| export function resolveScriptTarget() {
       4|   throw new Error("Script target resolver not implemented.");
        |         ^
       5| }
-      6| 
+      6|
  ❯ test/scripts/script-environment.test.ts:16:7
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/10]⎯
@@ -173,12 +173,12 @@ Error: Script target resolver not implemented.
  FAIL  test/scripts/script-environment.test.ts > script target resolver > resolves QA metadata from an explicit target and exact QA URL
 Error: Script target resolver not implemented.
  ❯ resolveScriptTarget scripts/script-environment.mjs:4:9
-      2| 
+      2|
       3| export function resolveScriptTarget() {
       4|   throw new Error("Script target resolver not implemented.");
        |         ^
       5| }
-      6| 
+      6|
  ❯ test/scripts/script-environment.test.ts:35:7
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/10]⎯
@@ -186,12 +186,12 @@ Error: Script target resolver not implemented.
  FAIL  test/scripts/script-environment.test.ts > script target resolver > resolves production metadata for the Worker and custom-domain origins
 Error: Script target resolver not implemented.
  ❯ resolveScriptTarget scripts/script-environment.mjs:4:9
-      2| 
+      2|
       3| export function resolveScriptTarget() {
       4|   throw new Error("Script target resolver not implemented.");
        |         ^
       5| }
-      6| 
+      6|
  ❯ test/scripts/script-environment.test.ts:59:7
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/10]⎯
@@ -199,10 +199,10 @@ Error: Script target resolver not implemented.
  FAIL  test/scripts/script-environment.test.ts > script target resolver > requires an explicit target env for remote URLs
 AssertionError: expected [Function] to throw error matching /--target-env qa or --target-env produ…/ but got 'Script target resolver not implemente…'
 
-- Expected: 
+- Expected:
 /--target-env qa or --target-env production/
 
-+ Received: 
++ Received:
 "Script target resolver not implemented."
 
  ❯ test/scripts/script-environment.test.ts:98:7
@@ -211,17 +211,17 @@ AssertionError: expected [Function] to throw error matching /--target-env qa or 
      98|     ).toThrow(/--target-env qa or --target-env production/);
        |       ^
      99|   });
-    100| 
+    100|
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/10]⎯
 
  FAIL  test/scripts/script-environment.test.ts > script target resolver > rejects invalid target envs, empty base URLs, invalid URLs, and URL/env mismatches
 AssertionError: expected [Function] to throw error matching /local, qa, or production/ but got 'Script target resolver not implemente…'
 
-- Expected: 
+- Expected:
 /local, qa, or production/
 
-+ Received: 
++ Received:
 "Script target resolver not implemented."
 
  ❯ test/scripts/script-environment.test.ts:108:7
@@ -229,7 +229,7 @@ AssertionError: expected [Function] to throw error matching /local, qa, or produ
     107|       }),
     108|     ).toThrow(/local, qa, or production/);
        |       ^
-    109| 
+    109|
     110|     expect(() =>
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/10]⎯
@@ -237,12 +237,12 @@ AssertionError: expected [Function] to throw error matching /local, qa, or produ
  FAIL  test/scripts/script-environment.test.ts > script target resolver > formats the resolved target summary agents see before destructive commands
 Error: Script target resolver not implemented.
  ❯ resolveScriptTarget scripts/script-environment.mjs:4:9
-      2| 
+      2|
       3| export function resolveScriptTarget() {
       4|   throw new Error("Script target resolver not implemented.");
        |         ^
       5| }
-      6| 
+      6|
  ❯ test/scripts/script-environment.test.ts:144:20
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/10]⎯
@@ -250,15 +250,15 @@ Error: Script target resolver not implemented.
  FAIL  test/scripts/smoke-api-live.test.ts > API live smoke target handling > rejects remote API smoke URLs without an explicit target before making requests
 AssertionError: expected [Function] to throw error matching /--target-env qa or --target-env produ…/ but got 'fetch should not run before target va…'
 
-- Expected: 
+- Expected:
 /--target-env qa or --target-env production/
 
-+ Received: 
++ Received:
 "fetch should not run before target validation"
 
  ❯ test/scripts/smoke-api-live.test.ts:170:5
     168|     );
-    169| 
+    169|
     170|     await expect(importSmokeApi(["--base-url", "https://spoonjoy.app"]…
        |     ^
     171|       /--target-env qa or --target-env production/,
@@ -269,15 +269,15 @@ AssertionError: expected [Function] to throw error matching /--target-env qa or 
  FAIL  test/scripts/smoke-api-live.test.ts > API live smoke target handling > rejects mismatched API smoke target env and URL before making requests
 AssertionError: expected [Function] to throw error matching /QA target/ but got 'fetch should not run before target va…'
 
-- Expected: 
+- Expected:
 /QA target/
 
-+ Received: 
++ Received:
 "fetch should not run before target validation"
 
  ❯ test/scripts/smoke-api-live.test.ts:183:5
     181|     );
-    182| 
+    182|
     183|     await expect(
        |     ^
     184|       importSmokeApi([
@@ -288,7 +288,7 @@ AssertionError: expected [Function] to throw error matching /QA target/ but got 
  FAIL  test/scripts/smoke-api-live.test.ts > API live smoke target handling > writes environment metadata into API smoke artifacts
 AssertionError: expected undefined to deeply equal { targetEnv: 'production', …(4) }
 
-- Expected: 
+- Expected:
 {
   "baseUrl": "https://spoonjoy.app",
   "d1Target": "production D1 spoonjoy (--remote)",
@@ -297,12 +297,12 @@ AssertionError: expected undefined to deeply equal { targetEnv: 'production', �
   "targetEnv": "production",
 }
 
-+ Received: 
++ Received:
 undefined
 
  ❯ test/scripts/smoke-api-live.test.ts:211:34
     209|       };
-    210| 
+    210|
     211|       expect(report.environment).toEqual({
        |                                  ^
     212|         targetEnv: "production",
@@ -315,4 +315,3 @@ undefined
       Tests  10 failed | 121 passed (131)
    Start at  06:13:24
    Duration  1.44s (transform 139ms, setup 213ms, import 137ms, tests 268ms, environment 456ms)
-

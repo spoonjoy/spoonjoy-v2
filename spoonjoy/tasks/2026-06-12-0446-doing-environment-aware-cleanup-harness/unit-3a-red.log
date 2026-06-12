@@ -254,7 +254,7 @@ AssertionError: expected 'PRAGMA foreign_keys=ON;\n\nDELETE FRO…' to contain '
 
  ❯ test/scripts/cleanup-local-qa-data.test.ts:467:17
     465|     const sql = buildApplySql();
-    466| 
+    466|
     467|     expect(sql).toContain("UPDATE Recipe\nSET sourceRecipeId = NULL");
        |                 ^
     468|     expect(sql).toContain("WHERE id IN (SELECT id FROM hard_delete_rec…
@@ -423,4 +423,3 @@ AssertionError: expected 'PRAGMA foreign_keys=ON;\n\nDELETE FRO…' to contain '
       Tests  7 failed | 18 passed (25)
    Start at  06:31:06
    Duration  610ms (transform 58ms, setup 109ms, import 26ms, tests 135ms, environment 206ms)
-

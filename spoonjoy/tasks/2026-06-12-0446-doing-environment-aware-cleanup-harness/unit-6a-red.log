@@ -135,7 +135,7 @@
  FAIL  test/scripts/deployment-preflight.test.ts > deployment preflight > requires explicit cleanup package scripts for local, QA, and production targets
 AssertionError: expected [] to include 'cleanup package scripts'
  ❯ test/scripts/deployment-preflight.test.ts:927:92
-    925| 
+    925|
     926|     expect(valid.errors.map((item) => item.name)).not.toContain("clean…
     927|     expect(validateDeploymentConfig(missingRemoteQaApply).errors.map((…
        |                                                                                            ^
@@ -147,12 +147,12 @@ AssertionError: expected [] to include 'cleanup package scripts'
  FAIL  test/scripts/deployment-preflight.test.ts > deployment preflight > requires cleanup docs to spell out the target-env safety contract
 AssertionError: expected [] to include 'cleanup documentation'
  ❯ test/scripts/deployment-preflight.test.ts:944:83
-    942| 
+    942|
     943|     expect(valid.errors.map((item) => item.name)).not.toContain("clean…
     944|     expect(validateDeploymentConfig(missingDocs).errors.map((item) => …
        |                                                                                   ^
     945|   });
-    946| 
+    946|
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
 
@@ -735,7 +735,7 @@ Received: "node scripts/cleanup-local-qa-data.mjs"
 
  ❯ test/scripts/deployment-preflight.test.ts:1896:39
     1894|     const pkg = JSON.parse(pkgRaw) as { scripts: Record<string, string…
-    1895| 
+    1895|
     1896|     expect(pkg.scripts["cleanup:qa"]).toBe("node scripts/cleanup-local…
        |                                       ^
     1897|     expect(pkg.scripts["cleanup:local"]).toBe("node scripts/cleanup-lo…
@@ -746,7 +746,7 @@ Received: "node scripts/cleanup-local-qa-data.mjs"
  FAIL  test/scripts/deployment-preflight.test.ts > package.json deploy scripts > exposes a dedicated script typecheck command
 Error: ENOENT: no such file or directory, open '/Users/arimendelow/Projects/spoonjoy-v2/tsconfig.scripts.json'
  ❯ test/scripts/deployment-preflight.test.ts:1905:39
-    1903| 
+    1903|
     1904|   it("exposes a dedicated script typecheck command", async () => {
     1905|     const [pkgRaw, tsconfigScripts] = await Promise.all([
        |                                       ^
@@ -826,4 +826,3 @@ AssertionError: expected 'import { defineConfig } from "vitest/…' to contain '
       Tests  7 failed | 120 passed (127)
    Start at  07:20:21
    Duration  751ms (transform 115ms, setup 114ms, import 112ms, tests 182ms, environment 204ms)
-
