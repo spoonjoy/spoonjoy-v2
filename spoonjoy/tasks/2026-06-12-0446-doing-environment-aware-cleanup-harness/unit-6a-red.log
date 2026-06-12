@@ -1,0 +1,829 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ❯ test/scripts/deployment-preflight.test.ts (127 tests | 7 failed) 182ms
+     ✓ passes against the current repository configuration 7ms
+     ✓ surfaces remote-migration failures as errors 2ms
+     ✓ surfaces remote-migration auth errors as warnings only 2ms
+     ✓ uses createWranglerRunner by default when no runWrangler dep is provided 2ms
+     ✓ uses process.cwd as the default preflight root directory 3ms
+     ✓ flags missing production-critical bindings and docs 1ms
+     ✓ ignores malformed binding entries when valid production bindings are present 0ms
+     ✓ requires deploy:auto in REQUIRED_PACKAGE_SCRIPTS 1ms
+     ✓ flags missing package scripts when package.json has no scripts object 1ms
+     ✓ requires deploy:auto to apply migrations before the full remote preflight 0ms
+     ✓ requires the production deploy workflow to run on pushes to main 0ms
+     ✓ rejects production deploy workflows without an on block 0ms
+     ✓ requires production push workflows to name the main branch explicitly 0ms
+     ✓ rejects production deploy workflows without jobs 1ms
+     ✓ does not accept commented or misplaced push-to-main workflow text 1ms
+     ✓ does not accept inline branch names that merely contain main 0ms
+     ✓ does not accept multiline branch names that merely contain main 0ms
+     ✓ accepts deploy:auto from a block-style production workflow run step 0ms
+     ✓ requires warning-clean CI workflow setup 3ms
+     ✓ rejects a block-style production workflow run step that does not deploy 0ms
+     ✓ requires deploy:auto and Cloudflare credentials on a real deploy step 0ms
+     ✓ rejects a production deploy workflow whose deploy job has no steps 0ms
+     ✓ rejects production deploy workflow setup that can emit checkout or pnpm setup warnings 1ms
+     ✓ ignores nested or malformed env lines when checking production deploy credentials 0ms
+     ✓ reports NODE_ENV as a warning instead of a hard failure 0ms
+     ✓ flags missing telemetry typing, documentation, and deployment commands 1ms
+     ✓ flags missing image provider typing and documentation 0ms
+     ✓ flags a missing isolated QA Wrangler environment and QA scripts 0ms
+     ✓ requires the QA image-cover smoke package script 0ms
+     × requires explicit cleanup package scripts for local, QA, and production targets 7ms
+     × requires cleanup docs to spell out the target-env safety contract 1ms
+     × requires script coverage instrumentation and a script typecheck command 1ms
+     ✓ requires a credential-gated scheduled QA image-cover smoke workflow in preflight 0ms
+     ✓ rejects QA image-cover smoke workflow setup that can emit checkout or pnpm setup warnings 1ms
+     ✓ accepts QA image-cover block run steps followed by additional step properties 0ms
+     ✓ rejects QA image-cover workflows with mutation triggers or deploy commands 0ms
+     ✓ rejects QA image-cover workflows with deploy commands even when triggers are allowed 0ms
+     ✓ rejects QA image-cover workflows missing credential and provider secret gates 0ms
+     ✓ rejects QA image-cover workflows without job steps 0ms
+     ✓ rejects QA image-cover workflows that only echo required provider words 0ms
+     ✓ rejects QA image-cover workflows without an on block 0ms
+     ✓ rejects QA image-cover workflows with unsupported triggers beyond dispatch and schedule 0ms
+     ✓ ignores non-key trigger lines in QA image-cover workflow trigger parsing 0ms
+     ✓ rejects QA image-cover workflows with duplicate allowed triggers but missing workflow dispatch 0ms
+     ✓ rejects QA image-cover workflows with echo-only Cloudflare gates 0ms
+     ✓ rejects QA image-cover workflows that echo exit commands instead of executing them 0ms
+     ✓ rejects QA image-cover workflows that echo provider gate commands instead of executing them 0ms
+     ✓ rejects QA image-cover workflows that hide provider gate commands in a heredoc 0ms
+     ✓ rejects QA image-cover workflows that set provider ready true after skip branches 0ms
+     ✓ rejects QA image-cover workflows with disjunctive mutation or artifact gates 0ms
+     ✓ rejects QA image-cover workflows whose artifact step omits the smoke artifact path 0ms
+     ✓ rejects QA image-cover workflows whose artifact step has no with block 0ms
+     ✓ flags QA resources that alias production resources 0ms
+     ✓ flags misnamed or duplicated QA rate-limit bindings 0ms
+     ✓ flags non-array and malformed QA rate-limit bindings 1ms
+     ✓ returns PASS when remote D1 reports no pending migrations 1ms
+     ✓ returns PASS when current Wrangler text output reports no pending migrations 0ms
+     ✓ FAILS when one migration is pending and includes its name in the message 0ms
+     ✓ FAILS and lists every pending migration name 0ms
+     ✓ FAILS and lists pending migration names from current Wrangler text output 0ms
+     ✓ WARNS instead of failing when wrangler emits an auth-keyed stderr with non-zero exit 0ms
+     ✓ WARNS when wrangler reports it needs a non-interactive API token 0ms
+     ✓ FAILS with a parse-error message when stdout is neither JSON nor current Wrangler text 0ms
+     ✓ FAILS with a parse-error message when wrangler emits malformed JSON 0ms
+     ✓ FAILS with a shape-error message when JSON is a top-level object instead of an array 0ms
+     ✓ FAILS with a shape-error message when JSON is an array of strings 0ms
+     ✓ FAILS with a shape-error message when JSON objects use lowercase name instead of Name 0ms
+     ✓ FAILS with a clear message when wrangler exits non-zero without an auth-keyed stderr 0ms
+     ✓ FAILS with stdout text when wrangler exits non-zero without stderr 0ms
+     ✓ FAILS when the runWrangler promise rejects (spawn/binary error) 0ms
+     ✓ FAILS with a string representation when runWrangler rejects with a non-Error value 0ms
+     ✓ FAILS with a string representation when JSON.parse throws a non-Error 0ms
+     ✓ returns a warning PASS when SPOONJOY_PREFLIGHT_SKIP_REMOTE=1 even if the fake would have reported pending migrations 0ms
+     ✓ falls back to process.env when no env is provided in deps 0ms
+     ✓ docs/deployment.md mentions pnpm deploy:auto 1ms
+     ✓ docs/deployment.md documents SPOONJOY_PREFLIGHT_SKIP_REMOTE 0ms
+     ✓ DEPLOY.md mentions pnpm deploy:auto 0ms
+     ✓ DEPLOY.md documents SPOONJOY_PREFLIGHT_SKIP_REMOTE 0ms
+     ✓ documents the full PostHog client and server telemetry setup 1ms
+     ✓ documents the QA environment setup and safe verification flow 0ms
+     × documents cleanup commands and production broad-cleanup refusal 2ms
+     ✓ deploy chains preflight then build then wrangler deploy via pnpm exec 0ms
+     ✓ deploy:auto skips only the first remote preflight, then builds, migrates, fully preflights, and deploys 0ms
+     ✓ exposes QA preflight, migration, seed, deploy, and smoke scripts 0ms
+     × exposes explicit cleanup scripts for every supported environment 1ms
+     × exposes a dedicated script typecheck command 0ms
+     ✓ runs API smoke against the explicit production target 0ms
+     × includes live-smoke script helpers in coverage instrumentation 3ms
+     ✓ runs image-cover smoke after UI screenshot checks so R2 cleanup cannot break later page loads 1ms
+     ✓ runs only on manual dispatch and schedule with credential and QA secret gates 1ms
+     ✓ accepts a single-job warning-clean Storybook deploy workflow 0ms
+     ✓ rejects deprecated Pages action, artifact actions, or a separate deploy job 2ms
+     ✓ requires deployment permissions, main-only deploy steps, and the GitHub deployment token 1ms
+     ✓ requires push-to-main trigger and workflow-level Git default-branch config 2ms
+     ✓ rejects Storybook pnpm setup through pnpm/action-setup instead of Corepack 1ms
+     ✓ rejects missing Storybook build job, steps, or build command 1ms
+     ✓ requires clean deploy directory preparation and generated Pages wrangler config 1ms
+     ✓ rejects repo-root deploys and non-npm Wrangler action installs 5ms
+     ✓ rejects a Storybook Wrangler deploy action without a with block 0ms
+     ✓ requires explicit Pages commit metadata and dirty-state intent 1ms
+     ✓ requires .gitignore coverage for the generated Storybook Pages deploy directory 0ms
+     ✓ requires root pnpm-workspace allowBuilds false entries for all ignored build-script packages 1ms
+     ✓ ignores malformed and nested pnpm-workspace allowBuilds noise around required package entries 0ms
+     ✓ accepts quoted Storybook workflow scalar values and nested with-block entries 0ms
+     ✓ checks the current repository Storybook warning cleanup contract 1ms
+     ✓ defines an isolated Cloudflare QA environment 1ms
+     ✓ invokes the configured wrangler binary with pnpm exec and forwards args 0ms
+     ✓ resolves with stdout/stderr/exitCode when execFile callback signals success 0ms
+     ✓ resolves with non-zero exitCode and stderr when execFile callback signals a process error 0ms
+     ✓ rejects with the underlying error when execFile reports a spawn failure (no numeric exit code) 1ms
+     ✓ exposes a default factory that uses node:child_process execFile 0ms
+     ✓ prefixes passing checks with PASS 0ms
+     ✓ prefixes warning checks with WARN 0ms
+     ✓ prefixes failing error checks with FAIL 0ms
+     ✓ prints WARN line and a passed-with-warnings summary when wrangler reports an auth-keyed soft failure 1ms
+     ✓ prints a passed summary without warning suffix when everything is OK 1ms
+     ✓ calls io.error and io.exit(1) when there is a hard failure 1ms
+     ✓ uses real console.log/console.error/process.exit when io is not injected 1ms
+     ✓ returns false when argv1 is undefined 0ms
+     ✓ returns false when argv1 does not resolve to the module url 0ms
+     ✓ returns true when argv1 resolves to the same path as moduleUrl 0ms
+     ✓ returns false and does not invoke runMain when argv1 is not the module 0ms
+     ✓ returns true and invokes runMain when argv1 matches the moduleUrl 0ms
+     ✓ routes runMain errors through onError 0ms
+     ✓ uses default onError that prints and calls process.exit(1) when runMain rejects with an Error 1ms
+     ✓ uses default onError that stringifies non-Error rejections 0ms
+     ✓ uses default main when runMain is not provided 33ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/scripts/deployment-preflight.test.ts > deployment preflight > requires explicit cleanup package scripts for local, QA, and production targets
+AssertionError: expected [] to include 'cleanup package scripts'
+ ❯ test/scripts/deployment-preflight.test.ts:927:92
+    925| 
+    926|     expect(valid.errors.map((item) => item.name)).not.toContain("clean…
+    927|     expect(validateDeploymentConfig(missingRemoteQaApply).errors.map((…
+       |                                                                                            ^
+    928|     expect(validateDeploymentConfig(ambiguousAlias).errors.map((item) …
+    929|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  test/scripts/deployment-preflight.test.ts > deployment preflight > requires cleanup docs to spell out the target-env safety contract
+AssertionError: expected [] to include 'cleanup documentation'
+ ❯ test/scripts/deployment-preflight.test.ts:944:83
+    942| 
+    943|     expect(valid.errors.map((item) => item.name)).not.toContain("clean…
+    944|     expect(validateDeploymentConfig(missingDocs).errors.map((item) => …
+       |                                                                                   ^
+    945|   });
+    946| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  test/scripts/deployment-preflight.test.ts > deployment preflight > requires script coverage instrumentation and a script typecheck command
+AssertionError: expected [] to include 'script coverage instrumentation'
+ ❯ test/scripts/deployment-preflight.test.ts:958:93
+    956|       expect.arrayContaining(["script coverage instrumentation", "scri…
+    957|     );
+    958|     expect(validateDeploymentConfig(missingScriptCoverage).errors.map(…
+       |                                                                                             ^
+    959|       "script coverage instrumentation",
+    960|     );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  test/scripts/deployment-preflight.test.ts > deployment docs > documents cleanup commands and production broad-cleanup refusal
+AssertionError: expected '# Spoonjoy v2\n\nRecipe management pl…' to contain 'pnpm run cleanup:local'
+
+- Expected
++ Received
+
+- pnpm run cleanup:local
++ # Spoonjoy v2
++
++ Recipe management platform rebuilt with React Router v7 on Cloudflare.
++
++ ## Links
++
++ - **Storybook**: https://spoonjoy-storybook-cp6.pages.dev/
++ - **Getting Started Guide**: [GUIDE.md](./GUIDE.md) — comprehensive walkthrough from clone to delighted
++ - **Cloudflare Deployment Checklist**: [docs/deployment.md](./docs/deployment.md)
++ - **Analytics & Privacy**: [docs/analytics-privacy.md](./docs/analytics-privacy.md)
++
++ ## Tech Stack
++
++ - **Framework**: React Router v7 (Remix)
++ - **Platform**: Cloudflare Pages/Workers
++ - **Database**: Cloudflare D1 (local & production) via Prisma
++ - **Language**: TypeScript
++ - **Styling**: Tailwind CSS
++
++ ## Quick Start
++
++ ```bash
++ # Clone and install
++ git clone https://github.com/arimendelow/spoonjoy-v2.git
++ cd spoonjoy-v2
++ pnpm install
++
++ # Generate Prisma client
++ pnpm prisma:generate
++
++ # Set up local D1 database
++ pnpm exec wrangler d1 migrations apply DB --local
++
++ # Optional: seed demo data into local D1
++ pnpm db:seed
++
++ # Start dev server
++ pnpm dev
++ ```
++
++ Open [http://localhost:5173](http://localhost:5173) — no additional setup required!
++
++ > **Note:** For a detailed walkthrough including creating recipes, exploring Storybook, and running tests, see [GUIDE.md](./GUIDE.md).
++
++ ## Configuration
++
++ All configuration lives in `wrangler.json`:
++
++ | Setting | Purpose |
++ |---------|---------|
++ | `d1_databases` | D1 database bindings |
++ | `r2_buckets` | R2 image storage binding for profile and recipe photos |
++ | `vars` | Environment variables (NODE_ENV, OAuth credentials, etc.) |
++
++ **Local development uses sensible defaults** — no configuration required to get started.
++ When the `PHOTOS` R2 binding is unavailable locally, uploaded images are stored as data URLs so recipe/profile image flows still work.
++
++ For OAuth (Google/GitHub/Apple login), provide credentials through Cloudflare secrets in production or `.dev.vars` locally:
++
++ ```bash
++ GOOGLE_CLIENT_ID=your-google-client-id
++ GOOGLE_CLIENT_SECRET=your-google-client-secret
++ GITHUB_CLIENT_ID=your-github-client-id
++ GITHUB_CLIENT_SECRET=your-github-client-secret
++ APPLE_CLIENT_ID=your-apple-client-id
++ APPLE_TEAM_ID=your-apple-team-id
++ APPLE_KEY_ID=your-apple-key-id
++ APPLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----..."
++ ```
++
++ For production, use `wrangler secret put` for sensitive values.
++
++ For optional PostHog analytics and server lifecycle telemetry, see [`docs/analytics-privacy.md`](docs/analytics-privacy.md). Client analytics stays disabled when `VITE_POSTHOG_KEY` is absent or `VITE_POSTHOG_DISABLED` is true-ish. Worker API/OAuth/MCP telemetry stays disabled when `POSTHOG_KEY` is absent or `POSTHOG_DISABLED` is true-ish.
++
++ For AI-assisted flows, `OPENAI_API_KEY` enables ingredient parsing and the OpenAI recipe-image provider. Recipe-image fallback can use Gemini by setting `GOOGLE_API_KEY` or `GEMINI_API_KEY`; control provider order with `IMAGE_PROVIDER_PRIMARY` and `IMAGE_PROVIDER_FALLBACKS`, use `GEMINI_IMAGE_MODEL=gemini-3.1-flash-image` for the current default Gemini image model, and optionally tune the Gemini request circuit breaker with `GEMINI_IMAGE_TIMEOUT_MS`.
++
++ For Ouroboros agent integration, see [`docs/ouroboros-mcp.md`](docs/ouroboros-mcp.md).
++
++ ## Development Commands
++
++ | Command | Purpose |
++ |---------|---------|
++ | `pnpm dev` | Start dev server |
++ | `pnpm storybook` | Component explorer |
++ | `pnpm test` | Run test suite |
++ | `pnpm test:ui` | Tests with visual UI |
++ | `pnpm test:coverage` | Coverage report |
++ | `pnpm test:e2e` | Run Playwright e2e tests |
++ | `pnpm test:storybook` | Run Storybook interaction tests |
++ | `pnpm prisma:generate` | Regenerate Prisma client |
++ | `pnpm db:seed` | Seed local D1 via Wrangler platform proxy |
++ | `pnpm dev:sync` | Generate Prisma client, run the legacy option2 idempotent migration helper, then start dev |
++ | `pnpm build` | Production build |
++ | `pnpm typecheck` | TypeScript validation |
++ | `pnpm run deploy:preflight` | Verify Cloudflare bindings, secrets docs, scripts, and migrations before production deploy |
++ | `pnpm run qa:preflight` | Verify the isolated `spoonjoy-v2-qa` Worker config, QA D1/R2, required QA secrets, and QA R2 round trip |
++ | `pnpm run deploy:qa` | Build with `CLOUDFLARE_ENV=qa`, migrate `spoonjoy-qa`, validate generated config with `SPOONJOY_QA_PREFLIGHT_EXPECT_BUILD_CONFIG`, and deploy QA |
++ | `pnpm run smoke:qa` | Run the live smoke against `spoonjoy-v2-qa.mendelow-studio.workers.dev` with `--target-env qa` cleanup |
++
++ ## Generated Artifacts
++
++ Builds and tests create local-only directories such as `build/`, `coverage/`, `.react-router/`, `playwright-report/`, `test-results/`, and `storybook-static/`. These paths are intentionally ignored and should not be staged; `pnpm test:coverage` includes a repo-hygiene test that fails if any of them become tracked.
++
++ ## E2E Testing
++
++ End-to-end tests use [Playwright](https://playwright.dev/) and live in the `e2e/` folder.
++
++ ```bash
++ # Install Playwright browsers (first time)
++ pnpm exec playwright install
++
++ # Run all e2e tests
++ pnpm test:e2e
++
++ # Run specific test file
++ pnpm test:e2e e2e/flows/recipes.spec.ts
++
++ # Run with UI mode (interactive)
++ pnpm test:e2e --ui
++
++ # Run headed (see browser)
++ pnpm test:e2e --headed
++ ```
++
++ **Test structure:**
++ - `e2e/auth.setup.ts` — Authentication fixture (logs in as demo user)
++ - `e2e/flows/auth.spec.ts` — Login, logout, protected routes
++ - `e2e/flows/recipes.spec.ts` — Recipe list, detail, navigation
++ - `e2e/flows/cookbooks.spec.ts` — Cookbook CRUD
++ - `e2e/flows/shopping-list.spec.ts` — Shopping list operations
++
++ **Note:** Tests run against `http://localhost:5173`. Start the dev server first with `pnpm dev`.
++
++ Before reporting manual/e2e work complete, inspect disposable local QA residue:
++
++ ```bash
++ pnpm cleanup:qa
++ pnpm cleanup:qa -- --apply
++ ```
++
++ The cleanup command is dry-run by default and uses local D1 only. It is for Codex/e2e residue such as `codex-*`, `codex-smoke-*`, `e2e *`, passkey test users, and `E2E OAuth Client` rows; do not use it for remote/prod cleanup.
++
++ ## Database Management
++
++ Local development uses D1 via the Cloudflare Vite plugin (stored in `.wrangler/`).
++
++ ```bash
++ # Apply schema to local D1
++ pnpm exec wrangler d1 migrations apply DB --local
++
++ # Seed demo data
++ pnpm db:seed
++
++ # Regenerate migration from Prisma schema (if schema changes)
++ pnpm exec prisma migrate diff --from-empty --to-schema-datamodel=./prisma/schema.prisma --script > migrations/000X_descriptive_name.sql
++ ```
++
++ ## Deployment to Cloudflare
++
++ 1. Login to Cloudflare:
++    ```bash
++    wrangler login
++    ```
++
++ 2. Create a D1 database (first time only):
++    ```bash
++    wrangler d1 create spoonjoy
++    # Update wrangler.json with the returned database_id
++    ```
++
++ 3. Create the R2 bucket for uploaded photos (first time only):
++    ```bash
++    wrangler r2 bucket create spoonjoy-photos
++    # wrangler.json binds this bucket as PHOTOS
++    ```
++
++ 4. Apply migrations to production D1:
++    ```bash
++    wrangler d1 migrations apply DB --remote
++    ```
++
++ 5. Set secrets:
++    ```bash
++    wrangler secret put SESSION_SECRET
++    wrangler secret put GOOGLE_CLIENT_ID
++    wrangler secret put GOOGLE_CLIENT_SECRET
++    wrangler secret put GITHUB_CLIENT_ID
++    wrangler secret put GITHUB_CLIENT_SECRET
++    wrangler secret put APPLE_CLIENT_ID
++    wrangler secret put APPLE_TEAM_ID
++    wrangler secret put APPLE_KEY_ID
++    wrangler secret put APPLE_PRIVATE_KEY
++    wrangler secret put OPENAI_API_KEY
++    wrangler secret put GOOGLE_API_KEY
++    wrangler secret put VAPID_PUBLIC_KEY
++    wrangler secret put VAPID_PRIVATE_KEY
++    wrangler secret put VAPID_SUBJECT
++    ```
++
++    Recipe image fallback is configured with `IMAGE_PROVIDER_PRIMARY`, `IMAGE_PROVIDER_FALLBACKS`, `GOOGLE_API_KEY` or `GEMINI_API_KEY`, `GEMINI_IMAGE_MODEL=gemini-3.1-flash-image`, and optionally `GEMINI_IMAGE_TIMEOUT_MS`.
++
++    Optional telemetry: set `POSTHOG_KEY` with `wrangler secret put POSTHOG_KEY` only when you want server lifecycle telemetry/error capture. Build-time client analytics also needs `VITE_POSTHOG_KEY`, `VITE_POSTHOG_HOST`, and optionally `VITE_POSTHOG_DISABLED` in the deploy build environment; do not set those with secret values in source files.
++
++ 6. Run the deployment preflight:
++    ```bash
++    pnpm run deploy:preflight
++    ```
++
++ 7. Deploy:
++    ```bash
++    pnpm run deploy
++    ```
++
++    Use `pnpm run deploy`; bare `pnpm deploy` is pnpm's workspace deploy command and will not run this package script.
++
++ See [docs/deployment.md](./docs/deployment.md) for the full production checklist, local `.dev.vars` guidance, and common failure modes.
++
++ The dedicated QA environment uses D1 `spoonjoy-qa`, R2 `spoonjoy-photos-qa`, seed namespace `sj-qa-demo`, and disposable `codex-smoke-` users. Configure QA secrets with commands such as `wrangler secret put SESSION_SECRET --env qa` and verify them with `wrangler secret list --env qa`. QA docs also cover `POSTHOG_DISABLED=true`, `IMAGE_PROVIDER_PRIMARY=gemini`, OAuth callback setup, WebAuthn origins, and the rule: Do not run broad production cleanup.
++
++ ## Project Structure
++
++ ```
++ app/
++ ├── routes/          # Route modules (loaders, actions, components)
++ ├── components/      # Shared React components
++ ├── lib/             # Utility functions and database client
++ ├── entry.client.tsx # Client entry point
++ ├── entry.server.tsx # Server entry point
++ ├── root.tsx         # Root layout
++ └── routes.ts        # Route configuration
++
++ prisma/
++ └── schema.prisma    # Database schema
++
++ migrations/
++ ├── 0000_init.sql    # Initial D1 migration
++ └── 0005_*.sql       # Ordered follow-up migrations
++ ```
++
++ ## Features
++
++ - **Authentication**: Email/password plus Google/GitHub/Apple OAuth initiation, callback, login, signup, and account-linking routes
++ - **Recipes**: Full CRUD with steps, ingredients, and step dependencies
++ - **Step Dependencies**: Steps can reference outputs from previous steps
++ - **Cookbooks**: Organize recipes into collections
++ - **Shopping List**: Personal shopping list with check-off
++ - **Full Search**: Self-hosted SQLite/D1 FTS5 search across recipes, cookbooks, chefs, and private shopping-list items
++ - **Ouroboros MCP**: Stdio MCP server for agent recipe/search/create/shopping-list/cookbook tools with API-token auth
++ - **Claude Connector**: Remote MCP endpoint at `/mcp` (Streamable HTTP) for Claude Code / claude.ai, sharing the MCP tool surface with delegated bearer auth — see [`docs/claude-connector.md`](docs/claude-connector.md)
++ - **HTTP API**: REST-style JSON API for non-agent clients, sharing the same operation layer as MCP
++
++ ## Database Schema
++
++ Key models:
++
++ - `User` - Accounts with authentication
++ - `Recipe` - Recipe metadata and ownership
++ - `RecipeStep` - Step-by-step instructions with optional titles
++ - `StepOutputUse` - Dependencies between steps (the killer feature!)
++ - `Ingredient` - Ingredients linked to specific steps
++ - `Cookbook` - Recipe collections
++ - `ShoppingList` - Personal shopping lists
++ - `ApiCredential` - Hashed owner-scoped API tokens for REST and MCP clients
++
++ ## Feedback
++
++ Ongoing feedback is tracked in `feedback/YYYY-MM-DD.md` files. Check there for known issues and planned improvements.
++
++ ## Backlog
++
++ The canonical proposed backlog lives in [`BACKLOG.md`](./BACKLOG.md). Historical task snapshots under `.tasks/` are not the source of truth unless they explicitly reference a current `SJ-*` backlog item.
++
++ ## License
++
++ ISC
++
++ # Cloudflare Deployment Checklist
++
++ Spoonjoy v2 deploys to Cloudflare Workers with D1 for data and R2 for uploaded profile/recipe photos. This checklist is intentionally explicit so agents can verify deploy readiness without relying on tribal memory.
++
++ ## Required Bindings
++
++ `wrangler.json` must define these bindings:
++
++ | Binding | Type | Purpose |
++ | --- | --- | --- |
++ | `DB` | D1 database | Prisma-backed application data |
++ | `PHOTOS` | R2 bucket | Profile and recipe image uploads served through `/photos/*` |
++
++ Create first-time production resources with the commands below. R2 must first be enabled in Cloudflare Dashboard > R2 Object Storage; if it is not enabled, Wrangler returns `10042: Please enable R2 through the Cloudflare Dashboard`.
++
++ ```bash
++ wrangler d1 create spoonjoy
++ wrangler r2 bucket create spoonjoy-photos
++ wrangler r2 bucket list
++ ```
++
++ After creating D1, copy the returned `database_id` into `wrangler.json` under the `DB` binding. Verify both D1 and R2 resources live in the same Cloudflare account used by `CLOUDFLARE_ACCOUNT_ID`/Wrangler deploy credentials.
++
++ ## Dedicated QA Environment
++
++ Spoonjoy has a separate QA Worker and separate Cloudflare state for live/manual/e2e verification. Use QA for disposable smoke data, image upload checks, and agent-driven flows before trying anything risky in production.
++
++ QA resources:
++
++ - Worker URL: `https://spoonjoy-v2-qa.mendelow-studio.workers.dev`
++ - D1 database: `spoonjoy-qa`
++ - R2 bucket: `spoonjoy-photos-qa`
++ - Rate-limit namespaces: `2001`, `2002`, `2003`
++ - Disposable seed namespace: `sj-qa-demo`
++ - Disposable smoke users: `codex-smoke-...@example.com`
++
++ First-time QA resource creation:
++
++ ```bash
++ wrangler d1 create spoonjoy-qa
++ wrangler r2 bucket create spoonjoy-photos-qa
++ ```
++
++ Set or verify QA runtime secrets separately from production:
++
++ ```bash
++ wrangler secret list --env qa
++ wrangler secret put SESSION_SECRET --env qa
++ wrangler secret put VAPID_PUBLIC_KEY --env qa
++ wrangler secret put VAPID_PRIVATE_KEY --env qa
++ wrangler secret put VAPID_SUBJECT --env qa
++ ```
++
++ Optional QA secrets and vars:
++
++ - Set `POSTHOG_DISABLED=true` in QA unless you are intentionally testing server telemetry and PostHog alerts.
++ - Use `IMAGE_PROVIDER_PRIMARY=gemini`, `IMAGE_PROVIDER_FALLBACKS=openai`, and `GEMINI_IMAGE_MODEL=gemini-3.1-flash-image` when QA should exercise the same image-provider policy as production.
++ - OAuth callback URLs must include the QA origin for Google/GitHub providers when those providers are enabled in QA. Apple OAuth callback verification remains production-only because the Apple Service ID is registered to the production return URL.
++ - WebAuthn uses the request origin as RP origin, so QA passkey testing must happen on `https://spoonjoy-v2-qa.mendelow-studio.workers.dev`.
++
++ QA verification flow:
++
++ ```bash
++ pnpm run qa:preflight
++ pnpm run qa:migrate
++ pnpm run qa:seed
++ CLOUDFLARE_ENV=qa pnpm run build
++ SPOONJOY_QA_PREFLIGHT_EXPECT_BUILD_CONFIG=1 pnpm run qa:preflight
++ pnpm run deploy:qa
++ pnpm run smoke:qa
++ ```
++
++ `pnpm run smoke:qa` passes `--target-env qa`, creates a `codex-smoke-` user, cleans it from QA D1 with `--env qa`, and verifies the user count returns to zero. Do not run broad production cleanup. Production smoke cleanup must stay narrow to the one disposable `codex-smoke-` account created by that smoke run.
++
++ ## Required Secrets
++
++ Set production secrets with `wrangler secret put`:
++
++ ```bash
++ wrangler secret put SESSION_SECRET
++ wrangler secret put GOOGLE_CLIENT_ID
++ wrangler secret put GOOGLE_CLIENT_SECRET
++ wrangler secret put GITHUB_CLIENT_ID
++ wrangler secret put GITHUB_CLIENT_SECRET
++ wrangler secret put APPLE_CLIENT_ID
++ wrangler secret put APPLE_TEAM_ID
++ wrangler secret put APPLE_KEY_ID
++ wrangler secret put APPLE_PRIVATE_KEY
++ wrangler secret put OPENAI_API_KEY
++ wrangler secret put GOOGLE_API_KEY
++ wrangler secret put VAPID_PUBLIC_KEY
++ wrangler secret put VAPID_PRIVATE_KEY
++ wrangler secret put VAPID_SUBJECT
++ ```
++
++ Notes:
++
++ - `SESSION_SECRET` protects auth sessions and must be high entropy in production.
++ - Google, GitHub, and Apple OAuth secrets are required for the corresponding OAuth login/account-linking provider.
++ - `OPENAI_API_KEY` enables ingredient parsing and the OpenAI recipe-image provider. Missing local keys fall back to deterministic parsing paths where supported, but production should set the secret before enabling AI-assisted flows.
++ - `GOOGLE_API_KEY` or `GEMINI_API_KEY` enables Gemini recipe-image fallback. Prefer `GOOGLE_API_KEY` for production unless a provider-specific alias is needed.
++ - `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` are required for `/api/push/public-key` and web-push subscription flows.
++ - `POSTHOG_KEY` is optional. When set, it enables server lifecycle telemetry for API v1, legacy API, MCP, OAuth, and Worker error capture. Leave it unset, or set `POSTHOG_DISABLED=true`, to keep server telemetry off.
++ - Client analytics is built into the Vite bundle only when `VITE_POSTHOG_KEY` is present during `pnpm run build`. Use `VITE_POSTHOG_HOST` for the ingestion host and `VITE_POSTHOG_DISABLED=true` for an explicit client kill switch. These `VITE_` values are public build-time configuration, not secrets.
++ - Optional ingredient parsing runtime knobs are `INGREDIENT_PARSE_PROVIDER`, `INGREDIENT_PARSE_MODEL`, `INGREDIENT_PARSE_TIMEOUT_MS`, and `INGREDIENT_PARSE_MAX_RETRIES`. The safe default is OpenAI with `gpt-4o-mini`, an 8000ms timeout, and 1 retry.
++ - Optional recipe-image provider runtime knobs are `IMAGE_PROVIDER_PRIMARY`, `IMAGE_PROVIDER_FALLBACKS`, `GEMINI_IMAGE_MODEL`, and `GEMINI_IMAGE_TIMEOUT_MS`. The safe default is configured providers in `openai,gemini` order with a 30000ms Gemini request timeout; set `IMAGE_PROVIDER_PRIMARY=gemini`, `IMAGE_PROVIDER_FALLBACKS=openai`, and `GEMINI_IMAGE_MODEL=gemini-3.1-flash-image` to route image stylization through Gemini first.
++
++ ### Optional PostHog Telemetry
++
++ To enable server lifecycle telemetry and error capture:
++
++ ```bash
++ wrangler secret put POSTHOG_KEY
++ ```
++
++ Configure image-generation email alerts in PostHog, not in Spoonjoy code. Recommended filters:
++
++ - `$exception` where `feature = recipe_image_generation`
++ - `$exception` where `feature = recipe_image_generation` and `provider`, `model`, `errorCode`, `requestId`, or `fallbackAttempted` match the provider failure you want to page on
++ - `spoonjoy.image_generation.provider_fallback` where `provider`, `model`, `errorCode`, `fallbackProvider`, or `fallbackModel` match recovered provider failures that should still alert
++ - `spoonjoy.image_generation.skipped` where `reason` is `missing_image_provider_config`, `missing_runner`, or `quota_exhausted`
++
++ To enable client analytics in the production bundle, provide these public build-time values to the deploy environment without committing the key:
++
++ ```bash
++ VITE_POSTHOG_KEY=...
++ VITE_POSTHOG_HOST=https://us.i.posthog.com
++ VITE_POSTHOG_DISABLED=
++ ```
++
++ ## Local `.dev.vars`
++
++ For local OAuth or AI testing, mirror the same names in `.dev.vars`:
++
++ ```bash
++ SESSION_SECRET=local-dev-secret-change-me
++ GOOGLE_CLIENT_ID=your-google-client-id
++ GOOGLE_CLIENT_SECRET=your-google-client-secret
++ GITHUB_CLIENT_ID=your-github-client-id
++ GITHUB_CLIENT_SECRET=your-github-client-secret
++ APPLE_CLIENT_ID=your-apple-client-id
++ APPLE_TEAM_ID=your-apple-team-id
++ APPLE_KEY_ID=your-apple-key-id
++ APPLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----..."
++ OPENAI_API_KEY=sk-...
++ GOOGLE_API_KEY=...
++ GEMINI_API_KEY=
++ GEMINI_IMAGE_MODEL=gemini-3.1-flash-image
++ GEMINI_IMAGE_TIMEOUT_MS=30000
++ IMAGE_PROVIDER_PRIMARY=gemini
++ IMAGE_PROVIDER_FALLBACKS=openai
++ VAPID_PUBLIC_KEY=...
++ VAPID_PRIVATE_KEY=...
++ VAPID_SUBJECT=mailto:you@example.com
++ POSTHOG_KEY=
++ POSTHOG_HOST=https://us.i.posthog.com
++ POSTHOG_DISABLED=
++ VITE_POSTHOG_KEY=
++ VITE_POSTHOG_HOST=https://us.i.posthog.com
++ VITE_POSTHOG_DISABLED=
++ INGREDIENT_PARSE_PROVIDER=openai
++ INGREDIENT_PARSE_MODEL=gpt-4o-mini
++ INGREDIENT_PARSE_TIMEOUT_MS=8000
++ INGREDIENT_PARSE_MAX_RETRIES=1
++ ```
++
++ Basic local app development does not require these values. The app uses safe local fallbacks for sessions and stores uploaded images as data URLs when the `PHOTOS` binding is unavailable.
++
++ ## Preflight
++
++ Run the machine-checkable preflight before production deploys:
++
++ ```bash
++ pnpm run deploy:preflight
++ ```
++
++ The preflight verifies:
++
++ - `wrangler.json` has the Worker entry, `nodejs_compat`, D1 `DB`, and R2 `PHOTOS`.
++ - `package.json` exposes the expected build, test, e2e, deploy, `deploy:auto`, and preflight scripts.
++ - `package.json` exposes `smoke:api` for live third-party API/docs/playground drift checks.
++ - `app/cloudflare-env.d.ts` types the Cloudflare bindings and documented secrets.
++ - README/deployment docs mention required bindings, secrets, and deploy commands.
++ - README/deployment docs mention optional PostHog client setup, server lifecycle telemetry, `POSTHOG_KEY`, `POSTHOG_DISABLED`, `VITE_POSTHOG_KEY`, and `VITE_POSTHOG_DISABLED`.
++ - Numbered SQL migrations exist in `migrations/`.
++ - **Remote D1 migrations**: the preflight invokes `pnpm exec wrangler d1 migrations list DB --remote` and FAILS if any migrations are pending against the remote database. This guards against deploying application code that depends on a schema the remote database has not yet applied (the failure mode that caused the 2026-05-10 `/search` 500 incident).
++
++ ### Remote check outcomes
++
++ | State | Result |
++ | --- | --- |
++ | Remote D1 reports no pending migrations | PASS |
++ | Remote D1 reports one or more pending migrations | FAIL — names of pending migrations are printed |
++ | Wrangler exits with an auth-keyed stderr (missing login, missing API token, code 10000, etc.) | WARN — preflight does not fail the deploy on missing auth, but the operator must verify manually |
++ | Wrangler exits non-zero for any other reason | FAIL |
++ | Wrangler stdout is not parseable as migration status | FAIL |
++ | Wrangler binary cannot be spawned (`ENOENT`, etc.) | FAIL |
++
++ ### Skipping the remote check
++
++ Set `SPOONJOY_PREFLIGHT_SKIP_REMOTE=1` to skip the remote D1 migration check. The preflight will still emit a WARN line so the skip is visible in CI logs. Use this in:
++
++ - CI runs that do not have wrangler credentials.
++ - Local dev machines without `wrangler login`.
++ - Smoke runs of `pnpm run deploy:preflight` from sandboxes.
++
++ Do not set this in production deploy workflows — the whole point of the check is to catch unapplied migrations before they reach users.
++
++ ## Production Deploy Flow
++
++ `.github/workflows/production-deploy.yml` deploys every push to `main` and also supports manual `workflow_dispatch`. Main should never sit ahead of production; after merging, verify the GitHub Actions run for the exact merge commit and then smoke the production URL. If the workflow is absent, stale, failed, or still pending beyond the normal deploy window, run `pnpm deploy:auto` locally with authenticated Wrangler and record the deployed Worker version.
++
++ The GitHub workflow requires repository secrets:
++
++ - `CLOUDFLARE_ACCOUNT_ID`: the Cloudflare account that owns D1 `spoonjoy`, R2 `spoonjoy-photos`, and Worker `spoonjoy-v2`.
++ - `CLOUDFLARE_API_TOKEN`: a Cloudflare dashboard-created API token scoped to that account. Cloudflare's current Workers GitHub Actions docs recommend the **Edit Cloudflare Workers** policy for Wrangler deploys; Spoonjoy's `deploy:auto` also applies D1 migrations, so include D1 edit access for the same account. Do not use a local Wrangler OAuth token as this secret because it is interactive/user-session auth, not a durable CI token.
++
++ The shortest path for a production release is `pnpm deploy:auto`, which chains:
++
++ ```
++ SPOONJOY_PREFLIGHT_SKIP_REMOTE=1 pnpm run deploy:preflight && pnpm run build && pnpm exec wrangler d1 migrations apply DB --remote && pnpm run deploy:preflight && pnpm exec wrangler deploy
++ ```
++
++ In one command this:
++
++ 1. Runs local deploy preflight checks while skipping only the remote-migration check.
++ 2. Builds the client bundle.
++ 3. Applies any pending remote D1 migrations.
++ 4. Reruns the full preflight, including the remote-migration check.
++ 5. Deploys the Worker.
++
++ For full deploys with the longer test/typecheck gate:
++
++ ```bash
++ pnpm install --frozen-lockfile
++ pnpm prisma:generate
++ pnpm run deploy:preflight
++ pnpm typecheck
++ pnpm test:coverage
++ pnpm test:e2e
++ pnpm deploy:auto
++ ```
++
++ If you prefer the manual two-step (no auto-apply of migrations), use:
++
++ ```bash
++ pnpm run deploy:preflight
++ wrangler d1 migrations apply DB --remote
++ pnpm run deploy
++ ```
++
++ `pnpm run deploy` runs `pnpm run deploy:preflight && pnpm run build && pnpm exec wrangler deploy`; keep that chain so deploys never publish an unbuilt client bundle or skip the remote-migration check. Use `pnpm run deploy`; bare `pnpm deploy` is pnpm's workspace deploy command and will not run this package script.
++
++ ## Failure Modes
++
++ | Symptom | Likely Cause | Fix |
++ | --- | --- | --- |
++ | OAuth buttons redirect back with `oauthError` | Missing or mismatched OAuth secret/callback config | Re-check provider callback URLs and `wrangler secret put` values |
++ | Uploaded images work locally but not in production | Missing `PHOTOS` R2 bucket/binding or R2 is not enabled for the deploy account | Enable R2 in the Dashboard, create `spoonjoy-photos`, and verify `wrangler.json` binding |
++ | Ingredient parsing returns fallback/manual review | Missing or invalid `OPENAI_API_KEY` | Set the secret or keep deterministic fallback behavior |
++ | Production schema is stale | D1 migrations not applied remotely | Run `wrangler d1 migrations apply DB --remote` before deploy, or use `pnpm deploy:auto` to apply + deploy in one step |
++ | `pnpm run deploy:preflight` fails with "Remote D1 has N pending migration(s)" | Local code references a schema change that has not been applied to remote D1 | Run `pnpm exec wrangler d1 migrations apply DB --remote` or `pnpm deploy:auto` (which applies pending migrations, reruns preflight, then deploys) |
++ | Intermittent 1102 / "Worker exceeded CPU time limit" on SSR routes | Worker Free CPU headroom is too close to React Router SSR + Prisma/D1 render cost | Reproduce with `wrangler tail`, then either reduce the hot route's server work or move the Worker to a paid plan before setting `limits.cpu_ms` |
++ | Sessions reset across deploys | Missing/rotating `SESSION_SECRET` | Set a stable high-entropy production secret |
++
+
+ ❯ test/scripts/deployment-preflight.test.ts:1842:20
+    1840|       "Production broad cleanup is read-only",
+    1841|     ]) {
+    1842|       expect(docs).toContain(term);
+       |                    ^
+    1843|     }
+    1844|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  test/scripts/deployment-preflight.test.ts > package.json deploy scripts > exposes explicit cleanup scripts for every supported environment
+AssertionError: expected 'node scripts/cleanup-local-qa-data.mjs' to be 'node scripts/cleanup-local-qa-data.mj…' // Object.is equality
+
+Expected: "node scripts/cleanup-local-qa-data.mjs --target-env local"
+Received: "node scripts/cleanup-local-qa-data.mjs"
+
+ ❯ test/scripts/deployment-preflight.test.ts:1896:39
+    1894|     const pkg = JSON.parse(pkgRaw) as { scripts: Record<string, string…
+    1895| 
+    1896|     expect(pkg.scripts["cleanup:qa"]).toBe("node scripts/cleanup-local…
+       |                                       ^
+    1897|     expect(pkg.scripts["cleanup:local"]).toBe("node scripts/cleanup-lo…
+    1898|     expect(pkg.scripts["cleanup:local:apply"]).toBe("node scripts/clea…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  test/scripts/deployment-preflight.test.ts > package.json deploy scripts > exposes a dedicated script typecheck command
+Error: ENOENT: no such file or directory, open '/Users/arimendelow/Projects/spoonjoy-v2/tsconfig.scripts.json'
+ ❯ test/scripts/deployment-preflight.test.ts:1905:39
+    1903| 
+    1904|   it("exposes a dedicated script typecheck command", async () => {
+    1905|     const [pkgRaw, tsconfigScripts] = await Promise.all([
+       |                                       ^
+    1906|       import("node:fs/promises").then((mod) => mod.readFile(`${process…
+    1907|       import("node:fs/promises").then((mod) => mod.readFile(`${process…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+ FAIL  test/scripts/deployment-preflight.test.ts > package.json deploy scripts > includes live-smoke script helpers in coverage instrumentation
+AssertionError: expected 'import { defineConfig } from "vitest/…' to contain 'scripts/script-environment.mjs'
+
+- Expected
++ Received
+
+- scripts/script-environment.mjs
++ import { defineConfig } from "vitest/config";
++
++ const appDirectory = new URL("./app", import.meta.url).pathname;
++ const componentsDirectory = new URL("./app/components", import.meta.url).pathname;
++
++ export default defineConfig({
++   test: {
++     environment: "happy-dom",
++     globals: true,
++     setupFiles: ["./test/setup.ts"],
++     pool: "forks",
++     // DB-backed route/model tests share test.db and destructive cleanup helpers.
++     // Keep files serial until the suite has per-worker database isolation.
++     maxWorkers: 1,
++     fileParallelism: false,
++     sequence: {
++       shuffle: false,
++     },
++     exclude: ["**/node_modules/**", "**/e2e/**"],
++     coverage: {
++       provider: "istanbul",
++       reporter: ["text", "json", "html"],
++       include: [
++         "app/lib/**/*.ts",
++         "app/routes/**/*.ts",
++         "app/routes/**/*.tsx",
++         "app/components/**/*.tsx",
++         "app/hooks/**/*.ts",
++         "scripts/smoke-live-helpers.mjs",
++         "scripts/smoke-image-cover-live.mjs",
++       ],
++       exclude: ["node_modules/**", "test/**", "**/*.config.ts", "**/*.d.ts", "**/types/**"],
++       thresholds: {
++         statements: 100,
++         branches: 100,
++         functions: 100,
++         lines: 100,
++       },
++     },
++   },
++   resolve: {
++     alias: {
++       "~": appDirectory,
++       "@": componentsDirectory,
++     }
++   }
++ });
++
+
+ ❯ test/scripts/deployment-preflight.test.ts:1932:23
+    1930|     expect(configRaw).toContain("scripts/smoke-live-helpers.mjs");
+    1931|     expect(configRaw).toContain("scripts/smoke-image-cover-live.mjs");
+    1932|     expect(configRaw).toContain("scripts/script-environment.mjs");
+       |                       ^
+    1933|     expect(configRaw).toContain("scripts/cleanup-local-qa-data.mjs");
+    1934|     expect(configRaw).toContain("scripts/smoke-api-live.mjs");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  7 failed | 120 passed (127)
+   Start at  07:20:21
+   Duration  751ms (transform 115ms, setup 114ms, import 112ms, tests 182ms, environment 204ms)
+

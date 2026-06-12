@@ -260,9 +260,16 @@ function validInputs(): DeploymentPreflightInputs {
         "qa:migrate": "pnpm exec wrangler d1 migrations apply DB --remote --env qa",
         "qa:seed": "node scripts/seed-qa.mjs --target-env qa",
         typecheck: "react-router typegen && tsc",
+        "typecheck:scripts": "tsc -p tsconfig.scripts.json",
         "test:coverage": "vitest run --coverage",
         "test:e2e": "env -u FORCE_COLOR -u NO_COLOR playwright test",
         "smoke:api": "node scripts/smoke-api-live.mjs --target-env production",
+        "cleanup:qa": "node scripts/cleanup-local-qa-data.mjs --target-env local",
+        "cleanup:local": "node scripts/cleanup-local-qa-data.mjs --target-env local",
+        "cleanup:local:apply": "node scripts/cleanup-local-qa-data.mjs --target-env local --apply",
+        "cleanup:remote:qa": "node scripts/cleanup-local-qa-data.mjs --target-env qa",
+        "cleanup:remote:qa:apply": "node scripts/cleanup-local-qa-data.mjs --target-env qa --apply",
+        "cleanup:production": "node scripts/cleanup-local-qa-data.mjs --target-env production",
         "smoke:qa":
           "node scripts/smoke-live.mjs --target-env qa --base-url https://spoonjoy-v2-qa.mendelow-studio.workers.dev --out qa-live-smoke-artifacts",
         "smoke:qa:image-cover":
@@ -305,9 +312,11 @@ function validInputs(): DeploymentPreflightInputs {
     gitignore: validGitignore(),
     pnpmWorkspace: validPnpmWorkspace(),
     cloudflareEnvDts: "DB?: D1Database; PHOTOS?: R2Bucket; SESSION_SECRET?: string; OPENAI_API_KEY?: string; GOOGLE_API_KEY?: string; GEMINI_API_KEY?: string; GEMINI_IMAGE_MODEL?: string; GEMINI_IMAGE_TIMEOUT_MS?: string; IMAGE_PROVIDER_PRIMARY?: string; IMAGE_PROVIDER_FALLBACKS?: string; GOOGLE_CLIENT_ID?: string; GOOGLE_CLIENT_SECRET?: string; GITHUB_CLIENT_ID?: string; GITHUB_CLIENT_SECRET?: string; APPLE_CLIENT_ID?: string; APPLE_TEAM_ID?: string; APPLE_KEY_ID?: string; APPLE_PRIVATE_KEY?: string; VAPID_PUBLIC_KEY?: string; VAPID_PRIVATE_KEY?: string; VAPID_SUBJECT?: string; POSTHOG_KEY?: string; POSTHOG_HOST?: string; POSTHOG_DISABLED?: string;",
-    readme: "pnpm run deploy:preflight wrangler d1 migrations apply DB --remote wrangler r2 bucket create spoonjoy-photos wrangler secret put SESSION_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET APPLE_CLIENT_ID APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY OPENAI_API_KEY GOOGLE_API_KEY VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY VAPID_SUBJECT GEMINI_API_KEY GEMINI_IMAGE_MODEL GEMINI_IMAGE_TIMEOUT_MS gemini-3.1-flash-image IMAGE_PROVIDER_PRIMARY IMAGE_PROVIDER_FALLBACKS VITE_POSTHOG_KEY VITE_POSTHOG_HOST VITE_POSTHOG_DISABLED POSTHOG_KEY POSTHOG_HOST POSTHOG_DISABLED server lifecycle telemetry docs/analytics-privacy.md",
-    deploymentDoc: "pnpm run deploy:preflight smoke:api wrangler d1 migrations apply DB --remote wrangler r2 bucket create spoonjoy-photos wrangler secret put SESSION_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET APPLE_CLIENT_ID APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY OPENAI_API_KEY GOOGLE_API_KEY VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY VAPID_SUBJECT GEMINI_API_KEY GEMINI_IMAGE_MODEL GEMINI_IMAGE_TIMEOUT_MS gemini-3.1-flash-image IMAGE_PROVIDER_PRIMARY IMAGE_PROVIDER_FALLBACKS wrangler secret put POSTHOG_KEY VITE_POSTHOG_KEY VITE_POSTHOG_HOST VITE_POSTHOG_DISABLED POSTHOG_KEY POSTHOG_HOST POSTHOG_DISABLED server lifecycle telemetry",
+    readme: "pnpm run deploy:preflight wrangler d1 migrations apply DB --remote wrangler r2 bucket create spoonjoy-photos wrangler secret put SESSION_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET APPLE_CLIENT_ID APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY OPENAI_API_KEY GOOGLE_API_KEY VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY VAPID_SUBJECT GEMINI_API_KEY GEMINI_IMAGE_MODEL GEMINI_IMAGE_TIMEOUT_MS gemini-3.1-flash-image IMAGE_PROVIDER_PRIMARY IMAGE_PROVIDER_FALLBACKS VITE_POSTHOG_KEY VITE_POSTHOG_HOST VITE_POSTHOG_DISABLED POSTHOG_KEY POSTHOG_HOST POSTHOG_DISABLED server lifecycle telemetry docs/analytics-privacy.md cleanup:local cleanup:local:apply cleanup:remote:qa cleanup:remote:qa:apply cleanup:production target-env local target-env qa target-env production broad production cleanup is read-only",
+    deploymentDoc: "pnpm run deploy:preflight smoke:api wrangler d1 migrations apply DB --remote wrangler r2 bucket create spoonjoy-photos wrangler secret put SESSION_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET APPLE_CLIENT_ID APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY OPENAI_API_KEY GOOGLE_API_KEY VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY VAPID_SUBJECT GEMINI_API_KEY GEMINI_IMAGE_MODEL GEMINI_IMAGE_TIMEOUT_MS gemini-3.1-flash-image IMAGE_PROVIDER_PRIMARY IMAGE_PROVIDER_FALLBACKS wrangler secret put POSTHOG_KEY VITE_POSTHOG_KEY VITE_POSTHOG_HOST VITE_POSTHOG_DISABLED POSTHOG_KEY POSTHOG_HOST POSTHOG_DISABLED server lifecycle telemetry cleanup:local cleanup:local:apply cleanup:remote:qa cleanup:remote:qa:apply cleanup:production target-env local target-env qa target-env production broad production cleanup is read-only",
     migrationFiles: ["0000_init.sql"],
+    vitestConfig: "scripts/script-environment.mjs scripts/cleanup-local-qa-data.mjs scripts/smoke-api-live.mjs scripts/qa-preflight.ts scripts/deployment-preflight.ts",
+    tsconfigScripts: "scripts/deployment-preflight.ts scripts/qa-preflight.ts",
   };
 }
 
@@ -904,6 +913,52 @@ describe("deployment preflight", () => {
     const result = validateDeploymentConfig(inputs);
 
     expect(result.errors.map((item) => item.name)).toContain("QA package scripts");
+  });
+
+  it("requires explicit cleanup package scripts for local, QA, and production targets", () => {
+    const valid = validateDeploymentConfig(validInputs());
+    const missingRemoteQaApply = validInputs();
+    delete (missingRemoteQaApply.packageJson.scripts as Record<string, string>)["cleanup:remote:qa:apply"];
+    const ambiguousAlias = validInputs();
+    (ambiguousAlias.packageJson.scripts as Record<string, string>)["cleanup:qa"] =
+      "node scripts/cleanup-local-qa-data.mjs";
+
+    expect(valid.errors.map((item) => item.name)).not.toContain("cleanup package scripts");
+    expect(validateDeploymentConfig(missingRemoteQaApply).errors.map((item) => item.name)).toContain("cleanup package scripts");
+    expect(validateDeploymentConfig(ambiguousAlias).errors.map((item) => item.name)).toContain("cleanup package scripts");
+  });
+
+  it("requires cleanup docs to spell out the target-env safety contract", () => {
+    const valid = validateDeploymentConfig(validInputs());
+    const missingDocs = validInputs();
+    missingDocs.readme = missingDocs.readme.replace(
+      " cleanup:local cleanup:local:apply cleanup:remote:qa cleanup:remote:qa:apply cleanup:production target-env local target-env qa target-env production broad production cleanup is read-only",
+      "",
+    );
+    missingDocs.deploymentDoc = missingDocs.deploymentDoc.replace(
+      " cleanup:local cleanup:local:apply cleanup:remote:qa cleanup:remote:qa:apply cleanup:production target-env local target-env qa target-env production broad production cleanup is read-only",
+      "",
+    );
+
+    expect(valid.errors.map((item) => item.name)).not.toContain("cleanup documentation");
+    expect(validateDeploymentConfig(missingDocs).errors.map((item) => item.name)).toContain("cleanup documentation");
+  });
+
+  it("requires script coverage instrumentation and a script typecheck command", () => {
+    const valid = validateDeploymentConfig(validInputs());
+    const missingScriptCoverage = validInputs();
+    missingScriptCoverage.vitestConfig = "scripts/smoke-live-helpers.mjs";
+    const missingScriptTypecheck = validInputs();
+    delete (missingScriptTypecheck.packageJson.scripts as Record<string, string>)["typecheck:scripts"];
+    missingScriptTypecheck.tsconfigScripts = "";
+
+    expect(valid.errors.map((item) => item.name)).not.toEqual(
+      expect.arrayContaining(["script coverage instrumentation", "script typecheck"]),
+    );
+    expect(validateDeploymentConfig(missingScriptCoverage).errors.map((item) => item.name)).toContain(
+      "script coverage instrumentation",
+    );
+    expect(validateDeploymentConfig(missingScriptTypecheck).errors.map((item) => item.name)).toContain("script typecheck");
   });
 
   it("requires a credential-gated scheduled QA image-cover smoke workflow in preflight", () => {
@@ -1765,6 +1820,28 @@ describe("deployment docs", () => {
       expect(docs).toContain(term);
     }
   });
+
+  it("documents cleanup commands and production broad-cleanup refusal", async () => {
+    const [readme, deploymentDoc] = await Promise.all([
+      readFile(`${process.cwd()}/README.md`, "utf8"),
+      readFile(`${process.cwd()}/docs/deployment.md`, "utf8"),
+    ]);
+    const docs = `${readme}\n${deploymentDoc}`;
+
+    for (const term of [
+      "pnpm run cleanup:local",
+      "pnpm run cleanup:local:apply",
+      "pnpm run cleanup:remote:qa",
+      "pnpm run cleanup:remote:qa:apply",
+      "pnpm run cleanup:production",
+      "--target-env local",
+      "--target-env qa",
+      "--target-env production",
+      "Production broad cleanup is read-only",
+    ]) {
+      expect(docs).toContain(term);
+    }
+  });
 });
 
 describe("package.json deploy scripts", () => {
@@ -1810,6 +1887,32 @@ describe("package.json deploy scripts", () => {
     );
   });
 
+  it("exposes explicit cleanup scripts for every supported environment", async () => {
+    const pkgRaw = await import("node:fs/promises").then((mod) =>
+      mod.readFile(`${process.cwd()}/package.json`, "utf8"),
+    );
+    const pkg = JSON.parse(pkgRaw) as { scripts: Record<string, string> };
+
+    expect(pkg.scripts["cleanup:qa"]).toBe("node scripts/cleanup-local-qa-data.mjs --target-env local");
+    expect(pkg.scripts["cleanup:local"]).toBe("node scripts/cleanup-local-qa-data.mjs --target-env local");
+    expect(pkg.scripts["cleanup:local:apply"]).toBe("node scripts/cleanup-local-qa-data.mjs --target-env local --apply");
+    expect(pkg.scripts["cleanup:remote:qa"]).toBe("node scripts/cleanup-local-qa-data.mjs --target-env qa");
+    expect(pkg.scripts["cleanup:remote:qa:apply"]).toBe("node scripts/cleanup-local-qa-data.mjs --target-env qa --apply");
+    expect(pkg.scripts["cleanup:production"]).toBe("node scripts/cleanup-local-qa-data.mjs --target-env production");
+  });
+
+  it("exposes a dedicated script typecheck command", async () => {
+    const [pkgRaw, tsconfigScripts] = await Promise.all([
+      import("node:fs/promises").then((mod) => mod.readFile(`${process.cwd()}/package.json`, "utf8")),
+      import("node:fs/promises").then((mod) => mod.readFile(`${process.cwd()}/tsconfig.scripts.json`, "utf8")),
+    ]);
+    const pkg = JSON.parse(pkgRaw) as { scripts: Record<string, string> };
+
+    expect(pkg.scripts["typecheck:scripts"]).toBe("tsc -p tsconfig.scripts.json");
+    expect(tsconfigScripts).toContain("scripts/deployment-preflight.ts");
+    expect(tsconfigScripts).toContain("scripts/qa-preflight.ts");
+  });
+
   it("runs API smoke against the explicit production target", async () => {
     const pkgRaw = await import("node:fs/promises").then((mod) =>
       mod.readFile(`${process.cwd()}/package.json`, "utf8"),
@@ -1826,6 +1929,11 @@ describe("package.json deploy scripts", () => {
 
     expect(configRaw).toContain("scripts/smoke-live-helpers.mjs");
     expect(configRaw).toContain("scripts/smoke-image-cover-live.mjs");
+    expect(configRaw).toContain("scripts/script-environment.mjs");
+    expect(configRaw).toContain("scripts/cleanup-local-qa-data.mjs");
+    expect(configRaw).toContain("scripts/smoke-api-live.mjs");
+    expect(configRaw).toContain("scripts/qa-preflight.ts");
+    expect(configRaw).toContain("scripts/deployment-preflight.ts");
   });
 
   it("runs image-cover smoke after UI screenshot checks so R2 cleanup cannot break later page loads", async () => {
