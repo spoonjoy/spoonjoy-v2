@@ -1,6 +1,6 @@
 # Doing: Storybook Wrangler Action Migration
 
-**Status**: READY_FOR_EXECUTION
+**Status**: IN_PROGRESS
 **Execution Mode**: direct
 **Created**: 2026-06-11 20:44
 **Planning**: ./2026-06-11-2038-planning-storybook-wrangler-action.md
@@ -74,7 +74,7 @@ Remove the deprecated Cloudflare Pages GitHub Action from the Storybook deployme
 **Output**: Passing verification evidence and any cleanup committed.
 **Acceptance**: New workflow validation logic has 100% coverage, `git diff --check` passes, and the branch is ready for reviewer/merge.
 
-### ⬜ Unit 2: Merge/Deploy Verification
+### 🔄 Unit 2: Merge/Deploy Verification
 **What**: Open the PR, run cold implementation review, merge after checks pass, wait for `main` Storybook workflow success, and clean the branch/PR state.
 **Output**: Merged PR, successful main Storybook run, clean local and remote branch state.
 **Acceptance**: `main` contains the migration, Storybook workflow passes on the merge commit, no open PR or stale `spoonjoy/storybook-wrangler-action` branch remains, and `spoonjoy/tasks/AUTOPILOT-STATE.md` records `SJ-044` as the next queued seed.
@@ -97,3 +97,4 @@ Remove the deprecated Cloudflare Pages GitHub Action from the Storybook deployme
 - 2026-06-11 20:58 Unit 1b green: Storybook deploy preflight check implemented, `.github/workflows/storybook.yml` migrated to `cloudflare/wrangler-action@v4`, focused Storybook deploy workflow tests passed, Ruby Psych parsed the workflow, `pnpm build-storybook` passed, and `git diff --check` passed.
 - 2026-06-11 21:14 Unit 1c complete: targeted `scripts/deployment-preflight.ts` coverage passed at 100% statements/branches/functions/lines; `pnpm run deploy:preflight`, `pnpm run qa:preflight`, `pnpm run typecheck`, `pnpm run build`, Ruby Psych workflow parse, `git diff --check`, and full `pnpm run test:coverage` passed with 301 files, 5968 tests, and 100% coverage.
 - 2026-06-11 21:20 Implementation review Round 1 found the `deploy-storybook` job checked out the repo without setting up pnpm, so `cloudflare/wrangler-action@v4` could infer pnpm from `pnpm-lock.yaml` and fail. Added deploy-job `pnpm/action-setup@v6`, preflight enforcement, and a red/green regression test; focused Storybook workflow tests, targeted deployment-preflight coverage, Ruby Psych parse, `git diff --check`, `pnpm run deploy:preflight`, and `pnpm run qa:preflight` passed.
+- 2026-06-11 21:29 Unit 2 in progress: full `pnpm run test:coverage` rerun passed after the pnpm setup fix with 301 files, 5969 tests, and 100% statements/branches/functions/lines.
