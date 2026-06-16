@@ -50,6 +50,29 @@ npm run test:coverage # Coverage report
 npm run prisma:studio # Database GUI
 ```
 
+## Work Suite Autopilot
+
+### Default Planning/Execution Workflow
+- Use `$work-planner` for planning and planning-to-doing conversion.
+- Use `$work-doer` for execution.
+- Before invoking planner/doer, verify local skill files are up to date with source-of-truth files in the current repo when available (`subagents/work-planner.md`, `subagents/work-doer.md`).
+  - If those files are absent, continue with the installed local skills and note that the repo-local source files were unavailable.
+  - If those files exist and differ from the installed local skills, update the installed local skills first, then continue.
+- Re-invoke `$work-planner`/`$work-doer` on each turn where that behavior is required.
+
+### Human Gates Are Waived By Default
+- Do not stop for human approval at planning or doing gates unless the user explicitly asks for a human review checkpoint.
+- Do not self-approve. When planner/doer needs approval, use unbiased sub-agent reviewers as the approval gate.
+- Use harsh reviewer sub-agents by default for plans, doing docs, implementation review, design review, test review, and merge readiness.
+- Ask the human only for true human-only blockers: credentials, billing/subscription changes, private account actions, unavailable hardware, secrets, destructive production operations with no safe staged path, or product decisions the user has not already delegated.
+
+### Full-Moon Completion Standard
+- When a task scope is accepted, carry it through to complete, validated implementation. Do not defer known required work just because it is large, cross-cutting, or would require multiple PRs.
+- Prefer many atomic PRs over a partial finish. Keep working until every required follow-up is either completed or blocked by a true human-only blocker.
+- Use stay-in-turn/autopilot patterns for long-running work such as CI, deploys, multi-PR chains, audits, and validation loops.
+- Use sub-agents as implementors and reviewers where parallelism improves completeness or quality.
+- If an autopilot/support skill needed for this workflow is unavailable, install or update it from `ouroboros-skills` before falling back.
+
 ## Code Style
 
 ### General Principles
@@ -163,6 +186,8 @@ When reporting status or issues:
 4. **Foreign key constraints**: When deleting test data, delete in correct order (children before parents).
 
 5. **Unique constraints**: Always use unique suffixes (faker alphanumeric) for test data to avoid collisions.
+
+6. **Canonical domain**: Spoonjoy's canonical domain is `spoonjoy.app`; do not assume ownership of `spoonjoy.com`.
 
 ## Key Files to Know
 
