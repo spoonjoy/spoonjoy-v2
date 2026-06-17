@@ -145,6 +145,14 @@ describe("API v1 profile, chef graph, and search reads", () => {
     });
     await db.recipeSpoon.create({
       data: {
+        chefId: chef.id,
+        recipeId: deletedRecipe.id,
+        note: "deleted recipe spoon",
+        cookedAt: new Date("2026-06-06T10:00:00.000Z"),
+      },
+    });
+    await db.recipeSpoon.create({
+      data: {
         chefId: fellow.id,
         recipeId: recipe.id,
         note: "visitor spoon",
@@ -199,6 +207,7 @@ describe("API v1 profile, chef graph, and search reads", () => {
         coverImageUrl: null,
       }),
     ]);
+    expect(payload.data.recentSpoons.map((item: { recipe: { id: string } }) => item.recipe.id)).not.toContain(deletedRecipe.id);
     expect(payload.data.fellowChefsCount).toBe(1);
     expect(payload.data.kitchenVisitorsCount).toBe(1);
   });
@@ -285,7 +294,8 @@ describe("API v1 profile, chef graph, and search reads", () => {
         categoryKey: "pantry",
       },
     });
-    const token = await createApiCredential(db, chef.id, "Search owner", { scopes: ["public:read"] });
+    const publicOnlyToken = await createApiCredential(db, chef.id, "Public search owner", { scopes: ["public:read"] });
+    const shoppingToken = await createApiCredential(db, chef.id, "Shopping search owner", { scopes: ["public:read", "shopping_list:read"] });
 
     const publicSearch = await loader(routeArgs(new UndiciRequest("http://localhost/api/v1/search?q=tomato&scope=all&limit=20", {
       headers: { "X-Request-Id": "req_search_public" },
@@ -308,6 +318,16 @@ describe("API v1 profile, chef graph, and search reads", () => {
     ]));
     expect(publicPayload.data.results.map((result: { id: string }) => result.id)).not.toContain(shoppingItem.id);
 
+    const publicOnlyAllSearch = await loader(routeArgs(new UndiciRequest("http://localhost/api/v1/search?q=tomato&scope=all", {
+      headers: bearerHeaders(publicOnlyToken.token, "req_search_public_only_all"),
+    }) as unknown as Request, "search"));
+    const publicOnlyAllPayload = await readJson(publicOnlyAllSearch);
+
+    expect(publicOnlyAllSearch.status).toBe(200);
+    expectSuccessEnvelope(publicOnlyAllPayload, "req_search_public_only_all");
+    expect(publicOnlyAllPayload.data.isAuthenticated).toBe(true);
+    expect(publicOnlyAllPayload.data.results.map((result: { id: string }) => result.id)).not.toContain(shoppingItem.id);
+
     for (const [scope, expectedType] of [
       ["recipes", "recipe"],
       ["cookbooks", "cookbook"],
@@ -325,8 +345,16 @@ describe("API v1 profile, chef graph, and search reads", () => {
       expect(scopedPayload.data.results.every((result: { type: string }) => result.type === expectedType)).toBe(true);
     }
 
+    const publicOnlyPrivateSearch = await loader(routeArgs(new UndiciRequest("http://localhost/api/v1/search?q=tomato&scope=shopping", {
+      headers: bearerHeaders(publicOnlyToken.token, "req_search_public_only_private"),
+    }) as unknown as Request, "search"));
+    const publicOnlyPrivatePayload = await readJson(publicOnlyPrivateSearch);
+
+    expect(publicOnlyPrivateSearch.status).toBe(403);
+    expectErrorEnvelope(publicOnlyPrivatePayload, "req_search_public_only_private", "insufficient_scope", 403);
+
     const privateSearch = await loader(routeArgs(new UndiciRequest("http://localhost/api/v1/search?q=tomato&scope=shopping", {
-      headers: bearerHeaders(token.token, "req_search_private"),
+      headers: bearerHeaders(shoppingToken.token, "req_search_private"),
     }) as unknown as Request, "search"));
     const privatePayload = await readJson(privateSearch);
 
@@ -348,7 +376,7 @@ describe("API v1 profile, chef graph, and search reads", () => {
       ],
     });
 
-    const otherToken = await createApiCredential(db, other.id, "Other searcher", { scopes: ["public:read"] });
+    const otherToken = await createApiCredential(db, other.id, "Other searcher", { scopes: ["public:read", "shopping_list:read"] });
     const otherPrivateSearch = await loader(routeArgs(new UndiciRequest("http://localhost/api/v1/search?q=tomato&scope=shopping-list", {
       headers: bearerHeaders(otherToken.token, "req_search_private_other"),
     }) as unknown as Request, "search"));

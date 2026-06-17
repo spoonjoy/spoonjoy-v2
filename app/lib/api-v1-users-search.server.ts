@@ -23,6 +23,12 @@ export type ApiV1UsersSearchResult<T> =
   | { ok: true; status: number; data: T; private?: boolean }
   | { ok: false; code: ApiV1ErrorCode; message: string; details?: unknown };
 
+export interface ApiV1SearchAccess {
+  authenticated: boolean;
+  viewerId: string | null;
+  canReadShoppingList: boolean;
+}
+
 type ProfileUser = NonNullable<Awaited<ReturnType<typeof loadProfileUser>>>;
 
 function apiV1UsersSearchError(
@@ -371,30 +377,37 @@ export async function searchNativeSpoonjoy(
   db: PrismaClient,
   url: URL,
   origin: string,
-  viewerId: string | null,
+  access: ApiV1SearchAccess,
 ): Promise<ApiV1UsersSearchResult<unknown>> {
   const query = (url.searchParams.get("query") ?? url.searchParams.get("q") ?? "").trim();
   const scope: SearchScope = normalizeSearchScope(url.searchParams.get("scope"));
   const limitResult = parseSearchLimit(url);
   if (!limitResult.ok) return limitResult;
+  if (scope === "shopping-list" && !access.canReadShoppingList) {
+    return apiV1UsersSearchError(
+      access.authenticated ? "insufficient_scope" : "authentication_required",
+      access.authenticated ? "Missing required scope: shopping_list:read" : "Authentication required",
+      { scopes: ["shopping_list:read", "kitchen:read"] },
+    );
+  }
 
   const results = await searchSpoonjoy(db, {
     query,
     scope,
     limit: limitResult.data,
-    viewerId,
+    viewerId: access.canReadShoppingList ? access.viewerId : null,
   });
   const containsPrivateShoppingList = results.some((result) => result.type === "shopping-list-item");
 
   return {
     ok: true,
     status: 200,
-    private: Boolean(viewerId) && (scope === "shopping-list" || containsPrivateShoppingList),
+    private: access.canReadShoppingList && (scope === "shopping-list" || containsPrivateShoppingList),
     data: {
       query,
       scope,
       limit: limitResult.data,
-      isAuthenticated: Boolean(viewerId),
+      isAuthenticated: access.authenticated,
       results: results.map((result) => searchResultPayload(result, origin)),
     },
   };

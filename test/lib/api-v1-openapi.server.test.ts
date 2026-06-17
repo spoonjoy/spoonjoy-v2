@@ -637,6 +637,9 @@ describe("API v1 OpenAPI document", () => {
       "x-connector-role": "search",
       "x-display-name": "Search Spoonjoy",
       "x-item-path": "$.data.results",
+      "x-private-scope-policy": {
+        shoppingListResultsRequireAny: ["shopping_list:read", "kitchen:read"],
+      },
     });
     expect(JSON.stringify(connector)).not.toContain('"const"');
     expect(JSON.stringify(connector)).not.toContain('["string","null"]');

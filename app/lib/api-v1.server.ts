@@ -576,6 +576,10 @@ function canSelfRevokeCredential(principal: ApiPrincipal | null, method: string,
   );
 }
 
+function canReadShoppingListSearch(principal: ApiPrincipal | null): boolean {
+  return Boolean(principal?.scopes.includes("shopping_list:read") || principal?.scopes.includes("kitchen:read"));
+}
+
 async function authorizeApiV1Route(args: ApiV1RouteArgs, path: string): Promise<ApiPrincipal | null> {
   const requirement = resolveApiV1ScopeRequirement(args.request.method, path);
   if (!requirement) {
@@ -1934,7 +1938,11 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
       const db = await getRequestDb(args.context);
       const response = apiV1UsersSearchResponse(
         requestId,
-        await searchNativeSpoonjoy(db, new URL(args.request.url), publicContentOrigin(args), principal?.id ?? null),
+        await searchNativeSpoonjoy(db, new URL(args.request.url), publicContentOrigin(args), {
+          authenticated: Boolean(principal),
+          viewerId: principal?.id ?? null,
+          canReadShoppingList: canReadShoppingListSearch(principal),
+        }),
         principal,
       );
       return observeApiV1Response(args, { requestId, path, response, startedAt, principal });

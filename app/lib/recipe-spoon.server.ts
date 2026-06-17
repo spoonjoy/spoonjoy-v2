@@ -287,7 +287,10 @@ export async function listSpoonsByChef(
   const take = normalizeLimit(opts.limit);
   const skip = normalizeOffset(opts.offset);
   const where: Prisma.RecipeSpoonWhereInput = { chefId: user.id };
-  if (!opts.includeDeleted) where.deletedAt = null;
+  if (!opts.includeDeleted) {
+    where.deletedAt = null;
+    where.recipe = { deletedAt: null };
+  }
   return db.recipeSpoon.findMany({
     where,
     orderBy: [{ cookedAt: "desc" }, { id: "desc" }],

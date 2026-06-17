@@ -11318,7 +11318,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "required": false,
           "defaultValue": "all",
           "placeholder": "scope",
-          "description": "Search scope. The legacy shopping alias normalizes to shopping-list.",
+          "description": "Search scope. The legacy shopping alias normalizes to shopping-list. Explicit shopping-list search requires shopping_list:read or kitchen:read; scope=all includes owner shopping-list results only for callers with one of those scopes.",
           "schema": {
             "type": "string"
           }

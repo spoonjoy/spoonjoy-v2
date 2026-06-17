@@ -879,7 +879,7 @@ const pathParameters = {
 const queryParameters = {
   query: { name: "query", in: "query", required: false, description: "Search text. When both query and q are sent, query wins.", schema: { type: "string" } },
   q: { name: "q", in: "query", required: false, description: "Search-text alias for clients that conventionally use q. Ignored when query is also present.", schema: { type: "string" } },
-  scope: { name: "scope", in: "query", required: false, description: "Search scope. The legacy shopping alias normalizes to shopping-list.", schema: { type: "string", enum: ["all", "recipes", "cookbooks", "chefs", "shopping-list", "shopping"], default: "all" } },
+  scope: { name: "scope", in: "query", required: false, description: "Search scope. The legacy shopping alias normalizes to shopping-list. Explicit shopping-list search requires shopping_list:read or kitchen:read; scope=all includes owner shopping-list results only for callers with one of those scopes.", schema: { type: "string", enum: ["all", "recipes", "cookbooks", "chefs", "shopping-list", "shopping"], default: "all" } },
   page: { name: "page", in: "query", required: false, description: "One-based page number for chef graph lists.", schema: { type: "integer", minimum: 1, default: 1 } },
   cursor: { name: "cursor", in: "query", required: false, description: "Opaque pagination cursor returned as nextCursor. Catalog cursors are v1.* values; shopping-list sync also accepts an ISO timestamp only as bootstrap compatibility.", schema: { type: "string" }, examples: { catalog: { value: "v1.cursor_from_nextCursor" }, sync: { value: "v1.cursor_or_iso_bootstrap" } } },
   limit: { name: "limit", in: "query", required: false, description: "Page size from 1 to 50. Defaults to 20.", schema: { type: "integer", minimum: 1, maximum: 50, default: 20 } },
@@ -1822,6 +1822,16 @@ function operationExtensions(path: ResourcePath, method: HttpMethod) {
     ...(path === "/api/v1/tokens/{credentialId}" && method === "DELETE"
       ? {
           "x-self-revoke-exception": "A bearer credential may revoke its own credential id without tokens:write. Revoking any other credential still requires tokens:write.",
+        }
+      : {}),
+    ...(path === "/api/v1/search" && method === "GET"
+      ? {
+          "x-private-scope-policy": {
+            shoppingListResultsRequireAny: ["shopping_list:read", "kitchen:read"],
+            explicitShoppingListWithoutAuth: "401 authentication_required",
+            explicitShoppingListWithoutScope: "403 insufficient_scope",
+            allScopeWithoutPrivateScope: "Public results only; shopping-list items are omitted.",
+          },
         }
       : {}),
   };

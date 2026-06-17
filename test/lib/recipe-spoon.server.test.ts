@@ -569,6 +569,22 @@ describe("recipe-spoon.server", () => {
       expect(list).toHaveLength(0);
     });
 
+    it("excludes spoons for soft-deleted recipes by default", async () => {
+      const chef = await makeUser();
+      const recipe = await makeRecipe(chef.id);
+      await createSpoon(db, {
+        chefId: chef.id,
+        recipeId: recipe.id,
+        photoFile: makePhotoFile(),
+      });
+      await db.recipe.update({
+        where: { id: recipe.id },
+        data: { deletedAt: new Date("2026-06-01T10:00:00.000Z") },
+      });
+      const list = await listSpoonsByChef(db, chef.id);
+      expect(list).toHaveLength(0);
+    });
+
     it("includes soft-deleted spoons when includeDeleted=true", async () => {
       const chef = await makeUser();
       const recipe = await makeRecipe(chef.id);
