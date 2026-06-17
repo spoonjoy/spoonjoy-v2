@@ -1609,8 +1609,9 @@ function successResponse(schemaName: string, options: { publicCache?: boolean; n
 }
 
 function errorMessageFor(code: ApiV1ErrorCode, scopes: readonly string[]) {
-  if (code === "insufficient_scope") return scopes[0] ? `Missing required scope: ${scopes[0]}` : "Missing required scope";
-  return errorMessages[code];
+  return code === "insufficient_scope" && scopes[0]
+    ? `Missing required scope: ${scopes[0]}`
+    : errorMessages[code];
 }
 
 function errorExampleFor(code: ApiV1ErrorCode, scopes: readonly string[]) {

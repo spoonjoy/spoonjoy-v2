@@ -402,6 +402,50 @@ describe("API v1 public telemetry", () => {
       .toBe("openapi.sdk.read");
   });
 
+  it("captures public profile graph and search operation names without leaking identifiers", async () => {
+    const user = await db.user.create({ data: createTestUser() });
+
+    for (const [url, splat, routeTemplate, requestId, operation] of [
+      [
+        `http://localhost/api/v1/users/${user.username}`,
+        `users/${user.username}`,
+        "/api/v1/users/{identifier}",
+        "req_api_user_profile_operation",
+        "profiles.read",
+      ],
+      [
+        `http://localhost/api/v1/users/${user.username}/fellow-chefs`,
+        `users/${user.username}/fellow-chefs`,
+        "/api/v1/users/{identifier}/fellow-chefs",
+        "req_api_user_fellow_chefs_operation",
+        "profiles.fellow-chefs.list",
+      ],
+      [
+        `http://localhost/api/v1/users/${user.username}/kitchen-visitors`,
+        `users/${user.username}/kitchen-visitors`,
+        "/api/v1/users/{identifier}/kitchen-visitors",
+        "req_api_user_kitchen_visitors_operation",
+        "profiles.kitchen-visitors.list",
+      ],
+      [
+        "http://localhost/api/v1/search?q=telemetry",
+        "search",
+        "/api/v1/search",
+        "req_api_search_operation",
+        "search.read",
+      ],
+    ] as const) {
+      const context = routeArgs(publicRequest(url, requestId), splat);
+      const response = await loader(context.args);
+
+      expect(response.status).toBe(200);
+      const event = expectSafeApiV1Event(routeTemplate, requestId);
+      expect(event?.properties?.operation).toBe(operation);
+      expect(JSON.stringify(event)).not.toContain(user.username);
+      expect(JSON.stringify(event)).not.toContain(user.email);
+    }
+  });
+
   it("classifies coarse user-agent families and omits unsafe origin hosts", async () => {
     for (const [userAgent, family, requestId] of [
       ["undici/7.20.0 node", "node", "req_api_ua_node"],

@@ -280,6 +280,103 @@ describe("API v1 profile, chef graph, and search reads", () => {
     });
   });
 
+  it("covers nullable profile covers, graph errors, graph pagination, and private all-search envelopes", async () => {
+    const chef = await createChef(db, "edgeprofilechef");
+    const recipe = await createRecipe(db, chef.id, "Api V1 Edge Coverless Recipe");
+    const coverlessProfile = await loader(routeArgs(new UndiciRequest(`http://localhost/api/v1/users/${chef.username}`, {
+      headers: { "X-Request-Id": "req_user_coverless_profile" },
+    }) as unknown as Request, `users/${chef.username}`));
+    const coverlessPayload = await readJson(coverlessProfile);
+
+    expect(coverlessProfile.status).toBe(200);
+    expectSuccessEnvelope(coverlessPayload, "req_user_coverless_profile");
+    expect(coverlessPayload.data.recipes).toEqual([
+      expect.objectContaining({
+        id: recipe.id,
+        coverImageUrl: null,
+        coverProvenanceLabel: null,
+      }),
+    ]);
+
+    const missingGraph = await loader(routeArgs(new UndiciRequest("http://localhost/api/v1/users/missing-chef/fellow-chefs", {
+      headers: { "X-Request-Id": "req_graph_missing_profile" },
+    }) as unknown as Request, "users/missing-chef/fellow-chefs"));
+    expect(missingGraph.status).toBe(404);
+    expectErrorEnvelope(await readJson(missingGraph), "req_graph_missing_profile", "not_found", 404);
+
+    const invalidPage = await loader(routeArgs(new UndiciRequest(`http://localhost/api/v1/users/${chef.username}/fellow-chefs?page=0`, {
+      headers: { "X-Request-Id": "req_graph_invalid_page" },
+    }) as unknown as Request, `users/${chef.username}/fellow-chefs`));
+    expect(invalidPage.status).toBe(400);
+    expectErrorEnvelope(await readJson(invalidPage), "req_graph_invalid_page", "validation_error", 400);
+
+    const invalidLimit = await loader(routeArgs(new UndiciRequest(`http://localhost/api/v1/users/${chef.username}/kitchen-visitors?limit=51`, {
+      headers: { "X-Request-Id": "req_graph_invalid_limit" },
+    }) as unknown as Request, `users/${chef.username}/kitchen-visitors`));
+    expect(invalidLimit.status).toBe(400);
+    expectErrorEnvelope(await readJson(invalidLimit), "req_graph_invalid_limit", "validation_error", 400);
+
+    const firstFellow = await createChef(db, "edgegraphfirst");
+    const secondFellow = await createChef(db, "edgegraphsecond");
+    const firstRecipe = await createRecipe(db, firstFellow.id, "Api V1 Edge First Fellow Recipe");
+    const secondRecipe = await createRecipe(db, secondFellow.id, "Api V1 Edge Second Fellow Recipe");
+    await db.recipeSpoon.create({
+      data: { chefId: chef.id, recipeId: firstRecipe.id, cookedAt: new Date("2026-06-07T10:00:00.000Z") },
+    });
+    await db.recipeSpoon.create({
+      data: { chefId: chef.id, recipeId: secondRecipe.id, cookedAt: new Date("2026-06-08T10:00:00.000Z") },
+    });
+
+    const pagedGraph = await loader(routeArgs(new UndiciRequest(`http://localhost/api/v1/users/${chef.username}/fellow-chefs?page=1&limit=1`, {
+      headers: { "X-Request-Id": "req_graph_next_cursor" },
+    }) as unknown as Request, `users/${chef.username}/fellow-chefs`));
+    const pagedGraphPayload = await readJson(pagedGraph);
+
+    expect(pagedGraph.status).toBe(200);
+    expectSuccessEnvelope(pagedGraphPayload, "req_graph_next_cursor");
+    expect(pagedGraphPayload.data).toMatchObject({
+      page: 1,
+      pageSize: 1,
+      total: 2,
+      nextCursor: "2",
+    });
+    expect(pagedGraphPayload.data.rows).toHaveLength(1);
+
+    const list = await db.shoppingList.create({ data: { authorId: chef.id } });
+    const ingredientRef = await getOrCreateIngredientRef(db, `edge tomato ${faker.string.alphanumeric(8)}`.toLowerCase());
+    const shoppingItem = await db.shoppingListItem.create({
+      data: {
+        shoppingListId: list.id,
+        ingredientRefId: ingredientRef.id,
+        categoryKey: "produce",
+      },
+    });
+    const shoppingToken = await createApiCredential(db, chef.id, "Private all search owner", { scopes: ["shopping_list:read"] });
+
+    const privateAllSearch = await loader(routeArgs(new UndiciRequest(`http://localhost/api/v1/search?q=${encodeURIComponent(ingredientRef.name)}&scope=all`, {
+      headers: bearerHeaders(shoppingToken.token, "req_search_private_all"),
+    }) as unknown as Request, "search"));
+    const privateAllPayload = await readJson(privateAllSearch);
+
+    expect(privateAllSearch.status).toBe(200);
+    expectPrivateEnvelopeHeaders(privateAllSearch, "req_search_private_all");
+    expectSuccessEnvelope(privateAllPayload, "req_search_private_all");
+    expect(privateAllPayload.data.results).toEqual([
+      expect.objectContaining({
+        type: "shopping-list-item",
+        id: shoppingItem.id,
+      }),
+    ]);
+
+    const unauthenticatedPrivateSearch = await loader(routeArgs(new UndiciRequest("http://localhost/api/v1/search?q=tomato&scope=shopping", {
+      headers: { "X-Request-Id": "req_search_private_unauthenticated" },
+    }) as unknown as Request, "search"));
+    const unauthenticatedPrivatePayload = await readJson(unauthenticatedPrivateSearch);
+
+    expect(unauthenticatedPrivateSearch.status).toBe(401);
+    expectErrorEnvelope(unauthenticatedPrivatePayload, "req_search_private_unauthenticated", "authentication_required", 401);
+  });
+
   it("returns search results for public scopes and keeps shopping-list matches private to the authenticated owner", async () => {
     const chef = await createChef(db, "tomatosearchchef");
     const other = await createChef(db, "othersearchchef");
