@@ -47,6 +47,12 @@ describe("generate-api-playground", () => {
         example: expect.stringContaining("\"clientMutationId\": \"cover-upload-device-uuid-1\""),
       },
     });
+    expect(manifest.operations.find((operation) => operation.id === "POST /api/v1/recipes/{id}/spoons")).toMatchObject({
+      requestBodyVariants: [
+        expect.objectContaining({ contentType: "application/json", fileFields: [] }),
+        expect.objectContaining({ contentType: "multipart/form-data", fileFields: ["photo"] }),
+      ],
+    });
     expect(manifest.operations.find((operation) => operation.id === "GET /api/v1/recipes/{id}")).toMatchObject({
       params: expect.arrayContaining([
         expect.objectContaining({ name: "id", in: "path", placeholder: "recipe_1" }),

@@ -7,6 +7,7 @@ import {
   type ApiV1PlaygroundManifest,
   type ApiV1PlaygroundOperation,
   type ApiV1PlaygroundParam,
+  type ApiV1PlaygroundRequestBody,
 } from "~/lib/generated/api-v1-playground";
 import { captureSafeClientEvent, latencyBucket, responseStatusClass } from "~/lib/analytics";
 import { OG_IMAGE_HEIGHT, OG_IMAGE_WIDTH, PAGE_OG_CARDS, absoluteUrlFromPreferredBase, pageOgPath } from "~/lib/og-metadata";
@@ -70,10 +71,22 @@ function defaultBodies(operations: readonly ApiV1PlaygroundOperation[]): Record<
   );
 }
 
-function requestBodyLabel(operation: ApiV1PlaygroundOperation) {
-  if (operation.requestBody?.contentType === "application/x-www-form-urlencoded") return "Form body";
-  if (operation.requestBody?.contentType === "multipart/form-data") return "Multipart fields";
+function defaultBodyVariants(operations: readonly ApiV1PlaygroundOperation[]): Record<string, string> {
+  return Object.fromEntries(
+    operations.map((operation) => [operation.id, operation.requestBody?.contentType ?? ""]),
+  );
+}
+
+function requestBodyLabel(requestBody: ApiV1PlaygroundRequestBody | null | undefined) {
+  if (requestBody?.contentType === "application/x-www-form-urlencoded") return "Form body";
+  if (requestBody?.contentType === "multipart/form-data") return "Multipart fields";
   return "JSON body";
+}
+
+function requestBodyVariantLabel(requestBody: ApiV1PlaygroundRequestBody) {
+  if (requestBody.contentType === "multipart/form-data") return "Multipart";
+  if (requestBody.contentType === "application/x-www-form-urlencoded") return "Form";
+  return "JSON";
 }
 
 function bodyFieldLabel(name: string) {
@@ -658,6 +671,7 @@ export default function DeveloperPlayground() {
     defaultParamsByOperation(operations)
   ));
   const [bodiesByOperation, setBodiesByOperation] = useState<Record<string, string>>(() => defaultBodies(operations));
+  const [bodyVariantByOperation, setBodyVariantByOperation] = useState<Record<string, string>>(() => defaultBodyVariants(operations));
   const [multipartFilesByOperation, setMultipartFilesByOperation] = useState<Record<string, PlaygroundMultipartFiles>>({});
   const [authMode, setAuthMode] = useState<PlaygroundAuthMode>(() => defaultAuthModeFor(selected, isAuthenticated));
   const [token, setToken] = useState("");
@@ -674,15 +688,21 @@ export default function DeveloperPlayground() {
 
   const params = paramsByOperation[selected.id]!;
   const bodyText = bodiesByOperation[selected.id]!;
+  const selectedRequestBody = selected.requestBodyVariants.find((variant) => (
+    variant.contentType === bodyVariantByOperation[selected.id]
+  )) ?? selected.requestBody;
+  const selectedWithRequestBody = selectedRequestBody === selected.requestBody
+    ? selected
+    : { ...selected, requestBody: selectedRequestBody };
   const multipartFiles = multipartFilesByOperation[selected.id] ?? {};
   const path = useMemo(() => playgroundPath(selected, params), [selected, params]);
   /* istanbul ignore next -- @preserve SSR fallback for non-interactive rendering; playground tests run with a browser-like window. */
   const curlBaseUrl = typeof window === "undefined" ? "https://spoonjoy.app" : window.location.origin;
-  const curl = curlFor(path, selected, authMode, bodyText, curlBaseUrl, params);
+  const curl = curlFor(path, selectedWithRequestBody, authMode, bodyText, curlBaseUrl, params);
   const missingParams = missingRequiredParams(selected, params);
   const authModeAllowed = selected.credentialModes.includes(authMode);
   const bearerError = authMode === "bearer" && !token.trim() ? "Paste a bearer token before sending in Bearer mode." : null;
-  const bodyError = playgroundBodyError(selected, bodyText, multipartFiles);
+  const bodyError = playgroundBodyError(selectedWithRequestBody, bodyText, multipartFiles);
   const riskNeedsConfirmation = selected.risk !== "safe";
   const riskError = riskNeedsConfirmation && !confirmedRisk ? "Confirm this real-data operation before sending." : null;
   const validationErrors = [
@@ -696,8 +716,8 @@ export default function DeveloperPlayground() {
   const canSend = validationErrors.length === 0 && !isSending;
   const visibleAuthModes = allowedAuthModes(selected);
   const validationId = validationErrors.length ? "playground-validation-errors" : undefined;
-  const hasBodyMutationId = (selected.requestBody?.contentType === "application/json" || selected.requestBody?.contentType === "multipart/form-data") && (
-    bodyHasClientMutationId(bodyText) || bodyHasClientMutationId(selected.requestBody.example)
+  const hasBodyMutationId = (selectedRequestBody?.contentType === "application/json" || selectedRequestBody?.contentType === "multipart/form-data") && (
+    bodyHasClientMutationId(bodyText) || bodyHasClientMutationId(selectedRequestBody.example)
   );
   const hasHeaderMutationId = selected.params.some((param) => param.name === "X-Client-Mutation-Id");
   const operationPolicies: Array<[string, Record<string, unknown>]> = [];
@@ -794,6 +814,23 @@ export default function DeveloperPlayground() {
     }));
   }
 
+  function selectBodyVariant(variant: ApiV1PlaygroundRequestBody) {
+    setConfirmedRisk(false);
+    setResponse(null);
+    setBodyVariantByOperation((current) => ({
+      ...current,
+      [selected.id]: variant.contentType,
+    }));
+    setBodiesByOperation((current) => ({
+      ...current,
+      [selected.id]: variant.example,
+    }));
+    setMultipartFilesByOperation((current) => ({
+      ...current,
+      [selected.id]: {},
+    }));
+  }
+
   function updateMultipartFile(name: string, file: File | null) {
     setConfirmedRisk(false);
     setMultipartFilesByOperation((current) => {
@@ -840,7 +877,7 @@ export default function DeveloperPlayground() {
     const startedAt = Date.now();
     try {
       const result = await fetch(path, playgroundFetchOptions(
-        selected,
+        selectedWithRequestBody,
         authMode,
         token,
         bodyText,
@@ -948,7 +985,7 @@ export default function DeveloperPlayground() {
     }
   }
 
-  const bodyLabel = requestBodyLabel(selected);
+  const bodyLabel = requestBodyLabel(selectedRequestBody);
 
   function capturePlaygroundTelemetry(
     event: string,
@@ -1294,7 +1331,7 @@ export default function DeveloperPlayground() {
               </div>
             ) : null}
 
-            {selected.requestBody ? (
+            {selectedWithRequestBody.requestBody ? (
               <div className="mt-5 grid gap-2 font-sj-ui text-sm font-semibold text-[var(--sj-ink)]">
                 <span className="flex flex-wrap items-center justify-between gap-2">
                   {bodyLabel}
@@ -1312,9 +1349,27 @@ export default function DeveloperPlayground() {
                     <CopyButton value={bodyText} label="Copy body" />
                   </span>
                 </span>
-                {selected.requestBody.examples.length > 1 ? (
+                {selected.requestBodyVariants.length > 1 ? (
                   <div className="flex flex-wrap gap-2">
-                    {selected.requestBody.examples.map((example) => (
+                    {selected.requestBodyVariants.map((variant) => (
+                      <button
+                        key={variant.contentType}
+                        type="button"
+                        onClick={() => selectBodyVariant(variant)}
+                        className={`inline-flex min-h-9 items-center justify-center border px-3 font-sj-ui text-xs font-bold transition ${
+                          variant.contentType === selectedWithRequestBody.requestBody?.contentType
+                            ? "border-[var(--sj-brass)] bg-[var(--sj-panel-solid)] text-[var(--sj-ink)]"
+                            : "border-[var(--sj-border)] bg-[var(--sj-paper)] text-[var(--sj-ink)] hover:border-[var(--sj-border-strong)]"
+                        }`}
+                      >
+                        {requestBodyVariantLabel(variant)}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                {selectedWithRequestBody.requestBody.examples.length > 1 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {selectedWithRequestBody.requestBody.examples.map((example) => (
                       <button
                         key={example.name}
                         type="button"
@@ -1326,9 +1381,9 @@ export default function DeveloperPlayground() {
                     ))}
                   </div>
                 ) : null}
-                {isMultipartBody(selected) && selected.requestBody.fileFields.length ? (
+                {isMultipartBody(selectedWithRequestBody) && selectedWithRequestBody.requestBody.fileFields.length ? (
                   <div className="grid gap-3 sm:grid-cols-2">
-                    {selected.requestBody.fileFields.map((field) => {
+                    {selectedWithRequestBody.requestBody.fileFields.map((field) => {
                       const inputId = `multipart-file-${field}`;
                       const selectedFile = multipartFiles[field];
                       return (

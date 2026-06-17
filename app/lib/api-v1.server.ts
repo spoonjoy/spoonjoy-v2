@@ -98,6 +98,23 @@ import {
   uploadNativeRecipeImageCover,
   type ApiV1RecipeCoverResult,
 } from "~/lib/api-v1-recipe-covers.server";
+import {
+  createNativeRecipeSpoon,
+  deleteNativeRecipeSpoon,
+  listNativeRecipeSpoons,
+  nativeSpoonCreateIdempotencyBody,
+  nativeSpoonUpdateIdempotencyBody,
+  parseNativeSpoonCreateBody,
+  parseNativeSpoonCreateRequest,
+  parseNativeSpoonDeleteBody,
+  parseNativeSpoonListUrl,
+  parseNativeSpoonUpdateBody,
+  recoverNativeRecipeSpoonCreate,
+  recoverNativeRecipeSpoonDelete,
+  recoverNativeRecipeSpoonUpdate,
+  updateNativeRecipeSpoon,
+  type ApiV1SpoonResult,
+} from "~/lib/api-v1-spoons.server";
 import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
 import { notifyForkOfMyRecipe } from "~/lib/notification-triggers.server";
 import { enforceRateLimit } from "~/lib/rate-limit.server";
@@ -417,6 +434,14 @@ function apiV1OperationFor(method: string, path: string): string | undefined {
       return "recipes.covers.regenerate";
     case "POST recipe-cover-from-spoon":
       return "recipes.covers.from-spoon";
+    case "GET recipe-spoons":
+      return "recipes.spoons.list";
+    case "POST recipe-spoon-create":
+      return "recipes.spoons.create";
+    case "PATCH recipe-spoon":
+      return "recipes.spoons.update";
+    case "DELETE recipe-spoon":
+      return "recipes.spoons.delete";
     case "GET cookbooks":
       return "cookbooks.list";
     case "GET cookbook":
@@ -947,6 +972,23 @@ function recipeDetail(recipe: RecipeRow, origin: string) {
       href: `/cookbooks/${entry.cookbook.id}`,
       canonicalUrl: canonicalUrl(origin, `/cookbooks/${entry.cookbook.id}`),
     })),
+    recentSpoons: recipe.spoons.map((spoon) => ({
+      id: spoon.id,
+      chefId: spoon.chefId,
+      recipeId: spoon.recipeId,
+      cookedAt: spoon.cookedAt.toISOString(),
+      photoUrl: spoon.photoUrl,
+      note: spoon.note,
+      nextTime: spoon.nextTime,
+      deletedAt: null,
+      createdAt: spoon.createdAt.toISOString(),
+      updatedAt: spoon.updatedAt.toISOString(),
+      chef: {
+        id: spoon.chef.id,
+        username: spoon.chef.username,
+        photoUrl: spoon.chef.photoUrl,
+      },
+    })),
   };
 }
 
@@ -1006,6 +1048,24 @@ async function loadRecipeById(db: Awaited<ReturnType<typeof getRequestDb>>, id: 
       cookbooks: {
         select: { cookbook: { select: { id: true, title: true } } },
         orderBy: { createdAt: "asc" },
+      },
+      spoons: {
+        where: { deletedAt: null },
+        select: {
+          id: true,
+          chefId: true,
+          recipeId: true,
+          cookedAt: true,
+          photoUrl: true,
+          note: true,
+          nextTime: true,
+          deletedAt: true,
+          createdAt: true,
+          updatedAt: true,
+          chef: { select: { id: true, username: true, photoUrl: true } },
+        },
+        orderBy: [{ cookedAt: "desc" }, { id: "desc" }],
+        take: 10,
       },
     },
   });
@@ -1737,6 +1797,15 @@ function recipeStepResultOrThrow<T>(
 
 function recipeCoverResultOrThrow<T>(
   result: ApiV1RecipeCoverResult<T>,
+): { status: number; data: T } {
+  if (!result.ok) {
+    throw new ApiV1Error(result.code, result.message, result.details);
+  }
+  return result;
+}
+
+function spoonResultOrThrow<T>(
+  result: ApiV1SpoonResult<T>,
 ): { status: number; data: T } {
   if (!result.ok) {
     throw new ApiV1Error(result.code, result.message, result.details);
@@ -2812,6 +2881,156 @@ async function handleRecipeCoverFromSpoon(args: ApiV1RouteArgs, requestId: strin
   );
 }
 
+async function handleRecipeSpoonList(
+  args: ApiV1RouteArgs,
+  requestId: string,
+  principal: ApiPrincipal | null,
+  recipeId: string,
+) {
+  const parsed = parseNativeSpoonListUrl(new URL(args.request.url));
+  if (!parsed.ok) {
+    throw new ApiV1Error(parsed.code, parsed.message, parsed.details);
+  }
+  const db = await getRequestDb(args.context);
+  const result = spoonResultOrThrow(await listNativeRecipeSpoons(db, recipeId, parsed.data));
+  return principal
+    ? apiV1PrivateSuccess(requestId, result.data, result.status)
+    : apiV1Success(requestId, result.data, result.status, publicCacheHeaders());
+}
+
+async function handleRecipeSpoonCreate(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string) {
+  const contentType = args.request.headers.get("Content-Type") ?? "";
+  const parsed = contentType.toLowerCase().includes("multipart/form-data")
+    ? await parseNativeSpoonCreateRequest(args.request)
+    : parseNativeSpoonCreateBody(await parseApiV1JsonBody(args.request));
+  if (!parsed.ok) {
+    throw new ApiV1Error(parsed.code, parsed.message, parsed.details);
+  }
+  const body = parsed.data.photoFile
+    ? nativeSpoonCreateIdempotencyBody(parsed.data)
+    : {
+        clientMutationId: parsed.data.clientMutationId,
+        note: parsed.data.note ?? null,
+        nextTime: parsed.data.nextTime ?? null,
+        cookedAt: parsed.data.cookedAt?.toISOString() ?? null,
+        photoUrl: parsed.data.photoUrl ?? null,
+        useAsRecipeCover: parsed.data.useAsRecipeCover,
+      };
+
+  return await runIdempotentApiV1Mutation(
+    args,
+    requestId,
+    principal,
+    body,
+    parsed.data.clientMutationId,
+    "recipes.spoons.create",
+    async (db, reservation) => {
+      const result = spoonResultOrThrow(await createNativeRecipeSpoon(
+        db,
+        args.context.cloudflare?.env ?? null,
+        principal,
+        recipeId,
+        parsed.data,
+        reservation,
+        apiV1WaitUntilFor(args),
+      ));
+      return result.data;
+    },
+    (db, reservation) => recoverNativeRecipeSpoonCreate(db, reservation, {
+      clientMutationId: parsed.data.clientMutationId,
+      principalId: principal.id,
+      recipeId,
+      createInput: parsed.data,
+    }),
+  );
+}
+
+async function handleRecipeSpoonUpdate(
+  args: ApiV1RouteArgs,
+  requestId: string,
+  principal: ApiPrincipal,
+  recipeId: string,
+  spoonId: string,
+) {
+  const body = await parseApiV1JsonBody(args.request);
+  const parsed = parseNativeSpoonUpdateBody(body);
+  if (!parsed.ok) {
+    throw new ApiV1Error(parsed.code, parsed.message, parsed.details);
+  }
+
+  return await runIdempotentApiV1Mutation(
+    args,
+    requestId,
+    principal,
+    nativeSpoonUpdateIdempotencyBody(parsed.data),
+    parsed.data.clientMutationId,
+    "recipes.spoons.update",
+    async (db, reservation) => {
+      const result = spoonResultOrThrow(await updateNativeRecipeSpoon(
+        db,
+        args.context.cloudflare?.env ?? null,
+        principal,
+        recipeId,
+        spoonId,
+        parsed.data,
+        reservation,
+      ));
+      return result.data;
+    },
+    (db, reservation) => recoverNativeRecipeSpoonUpdate(db, reservation, {
+      clientMutationId: parsed.data.clientMutationId,
+      principalId: principal.id,
+      recipeId,
+      spoonId,
+      updateInput: parsed.data,
+    }),
+  );
+}
+
+async function handleRecipeSpoonDelete(
+  args: ApiV1RouteArgs,
+  requestId: string,
+  principal: ApiPrincipal,
+  recipeId: string,
+  spoonId: string,
+) {
+  const body = await parseApiV1JsonBody(args.request);
+  const url = new URL(args.request.url);
+  const parsed = parseNativeSpoonDeleteBody(
+    body,
+    args.request.headers.get("X-Client-Mutation-Id") ?? url.searchParams.get("clientMutationId"),
+  );
+  if (!parsed.ok) {
+    throw new ApiV1Error(parsed.code, parsed.message, parsed.details);
+  }
+
+  return await runIdempotentApiV1Mutation(
+    args,
+    requestId,
+    principal,
+    { clientMutationId: parsed.data.clientMutationId },
+    parsed.data.clientMutationId,
+    "recipes.spoons.delete",
+    async (db, reservation) => {
+      const result = spoonResultOrThrow(await deleteNativeRecipeSpoon(
+        db,
+        principal,
+        recipeId,
+        spoonId,
+        parsed.data,
+        reservation,
+      ));
+      return result.data;
+    },
+    (db, reservation) => recoverNativeRecipeSpoonDelete(db, reservation, {
+      clientMutationId: parsed.data.clientMutationId,
+      principalId: principal.id,
+      recipeId,
+      spoonId,
+    }),
+  );
+}
+
 function credentialMetadata(credential: ApiCredential) {
   return {
     id: credential.id,
@@ -3083,6 +3302,30 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
     if (args.request.method === "DELETE" && segments[0] === "recipes" && segments[2] === "covers" && segments.length === 4) {
       const principal = await authorize(path) as ApiPrincipal;
       const response = await handleRecipeCoverArchive(args, requestId, principal, segments[1], segments[3]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "GET" && segments[0] === "recipes" && segments[2] === "spoons" && segments.length === 3) {
+      const principal = await authorize(path);
+      const response = await handleRecipeSpoonList(args, requestId, principal, segments[1]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "POST" && segments[0] === "recipes" && segments[2] === "spoons" && segments.length === 3) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeSpoonCreate(args, requestId, principal, segments[1]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "PATCH" && segments[0] === "recipes" && segments[2] === "spoons" && segments.length === 4) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeSpoonUpdate(args, requestId, principal, segments[1], segments[3]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "DELETE" && segments[0] === "recipes" && segments[2] === "spoons" && segments.length === 4) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeSpoonDelete(args, requestId, principal, segments[1], segments[3]);
       return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
     }
 

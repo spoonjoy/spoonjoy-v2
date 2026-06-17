@@ -43,6 +43,7 @@ export interface FanoutFellowChefOriginCookDeps extends NotificationDispatchDeps
 
 export interface FanoutFellowChefOriginCookResult {
   recipientsNotified: number;
+  queuedSends: number;
 }
 
 const FANOUT_LIMIT = 100;
@@ -56,9 +57,10 @@ export async function fanoutFellowChefOriginCook(
     const list = deps.listFellowChefs ?? realListFellowChefs;
     const result = await list(db, input.spoonerId, { limit: FANOUT_LIMIT });
     const recipients = result.rows.filter((row) => row.chefId !== input.spoonerId);
+    let queuedSends = 0;
 
     for (const recipient of recipients) {
-      await enqueueNotification(
+      const notification = await enqueueNotification(
         db,
         {
           actorId: input.spoonerId,
@@ -72,11 +74,12 @@ export async function fanoutFellowChefOriginCook(
         },
         deps,
       );
+      queuedSends += notification.queuedSends;
     }
 
-    return { recipientsNotified: recipients.length };
+    return { recipientsNotified: recipients.length, queuedSends };
   } catch {
     // Notifications must never break the originating action.
-    return { recipientsNotified: 0 };
+    return { recipientsNotified: 0, queuedSends: 0 };
   }
 }

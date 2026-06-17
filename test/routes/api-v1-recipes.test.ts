@@ -438,6 +438,35 @@ describe("API v1 public recipe reads", () => {
 
   it("returns recipe detail with steps, ingredients, cookbook links, and scoped bearer success", async () => {
     const fixture = await createRecipeFixture(db, "Api V1 Detail");
+    const recentCook = await db.user.create({ data: createTestUser() });
+    const earlierCook = await db.user.create({ data: createTestUser() });
+    await db.recipeSpoon.create({
+      data: {
+        chefId: earlierCook.id,
+        recipeId: fixture.recipe.id,
+        note: "older cook log",
+        cookedAt: new Date("2026-01-01T00:00:00.000Z"),
+      },
+    });
+    const recentSpoon = await db.recipeSpoon.create({
+      data: {
+        chefId: recentCook.id,
+        recipeId: fixture.recipe.id,
+        note: "newer cook log",
+        nextTime: "more basil",
+        photoUrl: "/photos/spoons/recent/detail.png",
+        cookedAt: new Date("2026-02-01T00:00:00.000Z"),
+      },
+    });
+    await db.recipeSpoon.create({
+      data: {
+        chefId: recentCook.id,
+        recipeId: fixture.recipe.id,
+        note: "deleted cook log",
+        deletedAt: new Date("2026-03-01T00:00:00.000Z"),
+        cookedAt: new Date("2026-03-01T00:00:00.000Z"),
+      },
+    });
     const earlierStep = await db.recipeStep.create({
       data: {
         recipeId: fixture.recipe.id,
@@ -523,6 +552,39 @@ describe("API v1 public recipe reads", () => {
             title: fixture.cookbook.title,
             href: `/cookbooks/${fixture.cookbook.id}`,
             canonicalUrl: `https://spoonjoy.app/cookbooks/${fixture.cookbook.id}`,
+          }],
+          recentSpoons: [{
+            id: recentSpoon.id,
+            chefId: recentCook.id,
+            recipeId: fixture.recipe.id,
+            cookedAt: "2026-02-01T00:00:00.000Z",
+            photoUrl: "/photos/spoons/recent/detail.png",
+            note: "newer cook log",
+            nextTime: "more basil",
+            deletedAt: null,
+            createdAt: expect.any(String),
+            updatedAt: expect.any(String),
+            chef: {
+              id: recentCook.id,
+              username: recentCook.username,
+              photoUrl: recentCook.photoUrl,
+            },
+          }, {
+            id: expect.any(String),
+            chefId: earlierCook.id,
+            recipeId: fixture.recipe.id,
+            cookedAt: "2026-01-01T00:00:00.000Z",
+            photoUrl: null,
+            note: "older cook log",
+            nextTime: null,
+            deletedAt: null,
+            createdAt: expect.any(String),
+            updatedAt: expect.any(String),
+            chef: {
+              id: earlierCook.id,
+              username: earlierCook.username,
+              photoUrl: earlierCook.photoUrl,
+            },
           }],
         },
       },

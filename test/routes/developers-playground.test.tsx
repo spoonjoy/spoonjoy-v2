@@ -741,6 +741,61 @@ describe("/developers/playground", () => {
     expect(await screen.findByText("201 Created")).toBeInTheDocument();
   });
 
+  it("switches generated spoon creation between JSON and multipart body variants", async () => {
+    await renderPlayground();
+    await screen.findByRole("heading", { name: "Spoonjoy API Playground" });
+    fireEvent.change(screen.getByLabelText(/Search operations/i), { target: { value: "Create a spoon" } });
+    fireEvent.click(await screen.findByRole("button", { name: /Create a spoon or cook log/i }));
+
+    expect((screen.getByLabelText("JSON body") as HTMLTextAreaElement).value).toContain("spoon-create-device-uuid-1");
+    expect(screen.getByRole("button", { name: "JSON" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Multipart" }));
+
+    const multipartBody = screen.getByLabelText("Multipart fields");
+    expect((multipartBody as HTMLTextAreaElement).value).toContain("spoon-photo-device-uuid-1");
+    expect(screen.getByLabelText("Photo file")).toBeInTheDocument();
+    expect(screen.getAllByText("@/path/to/photo").length).toBeGreaterThan(0);
+    expect(document.body.textContent).toContain("form.append(\"photo\", photoFile);");
+
+    fireEvent.click(screen.getByRole("button", { name: "JSON" }));
+    expect((screen.getByLabelText("JSON body") as HTMLTextAreaElement).value).toContain("spoon-create-device-uuid-1");
+  });
+
+  it("labels form-encoded request body variants from generated metadata", async () => {
+    const createToken = PLAYGROUND_OPERATIONS.find((operation) => operation.id === "POST /api/v1/tokens")!;
+    const formVariant = {
+      ...createToken.requestBody!,
+      contentType: "application/x-www-form-urlencoded",
+      example: "grant_type=refresh_token&refresh_token=ort_example",
+      examples: [{
+        name: "refresh",
+        label: "Refresh",
+        example: "grant_type=refresh_token&refresh_token=ort_example",
+      }],
+    } as const;
+    const customOperation = {
+      ...createToken,
+      id: "POST /api/v1/form-variant-test",
+      label: "Form variant test",
+      path: "/api/v1/form-variant-test",
+      requestBodyVariants: [createToken.requestBody!, formVariant],
+    };
+
+    await renderPlayground({
+      manifest: {
+        ...API_V1_PLAYGROUND_MANIFEST,
+        operations: [customOperation],
+      },
+      canonicalUrl: "https://spoonjoy.app/api/playground",
+      ogImageUrl: "https://spoonjoy.app/og/pages/api-playground.png",
+      viewer: { isAuthenticated: false },
+    } as PlaygroundLoaderData);
+
+    expect(await screen.findByRole("button", { name: "Form" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Form" }));
+    expect(screen.getByLabelText("Form body")).toHaveValue("grant_type=refresh_token&refresh_token=ort_example");
+  });
+
   it("blocks blank bearer mode before sending private requests", async () => {
     const fetchMock = vi.fn(async () => mockApiResponse({ ok: true }));
     vi.stubGlobal("fetch", fetchMock);
@@ -1001,8 +1056,7 @@ describe("/developers/playground", () => {
     fireEvent.click(screen.getByRole("button", { name: "Copy path" }));
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(2));
     expect(await screen.findByText("Could not copy Copy path")).toBeInTheDocument();
-    await new Promise((resolve) => window.setTimeout(resolve, 1700));
-    expect(screen.queryByText("Could not copy Copy path")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("Could not copy Copy path")).not.toBeInTheDocument(), { timeout: 2200 });
   });
 
   it("supports keyboard roving for surface and auth mode radio groups", async () => {

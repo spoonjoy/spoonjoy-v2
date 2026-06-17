@@ -649,6 +649,7 @@ describe("API v1 OpenAPI document", () => {
       "updatedAt",
       "steps",
       "cookbooks",
+      "recentSpoons",
     ]);
     expect(components.schemas.ShoppingItem.required).toEqual([
       "id",

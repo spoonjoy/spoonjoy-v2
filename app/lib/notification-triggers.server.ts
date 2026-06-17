@@ -12,6 +12,7 @@
 import type { PrismaClient } from "@prisma/client";
 import {
   enqueueNotification,
+  type EnqueueNotificationResult,
   type NotificationDispatchDeps,
 } from "~/lib/notification-dispatch.server";
 
@@ -22,11 +23,13 @@ export interface NotifySpoonOnMyRecipeInput {
   spoonerId: string;
 }
 
+const NO_ENQUEUED_NOTIFICATION = { eventId: null, queuedSends: 0 };
+
 export async function notifySpoonOnMyRecipe(
   db: PrismaClient,
   input: NotifySpoonOnMyRecipeInput,
   deps: NotifySpoonOnMyRecipeDeps,
-): Promise<void> {
+): Promise<EnqueueNotificationResult> {
   try {
     const [recipe, spooner] = await Promise.all([
       db.recipe.findUnique({
@@ -38,10 +41,10 @@ export async function notifySpoonOnMyRecipe(
         select: { id: true, username: true },
       }),
     ]);
-    if (!recipe || !spooner) return;
-    if (recipe.chefId === spooner.id) return;
+    if (!recipe || !spooner) return NO_ENQUEUED_NOTIFICATION;
+    if (recipe.chefId === spooner.id) return NO_ENQUEUED_NOTIFICATION;
 
-    await enqueueNotification(
+    return await enqueueNotification(
       db,
       {
         actorId: spooner.id,
@@ -57,6 +60,7 @@ export async function notifySpoonOnMyRecipe(
     );
   } catch {
     // Notifications must never break the originating action.
+    return NO_ENQUEUED_NOTIFICATION;
   }
 }
 

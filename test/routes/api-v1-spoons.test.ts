@@ -3,8 +3,22 @@ import { faker } from "@faker-js/faker";
 import { FormData as UndiciFormData, Request as UndiciRequest } from "undici";
 import { action, loader } from "~/routes/api.v1.$";
 import { createApiCredential } from "~/lib/api-auth.server";
+import {
+  hashIdempotencyRequest,
+  idempotencyClientKey,
+  reserveIdempotencyKey,
+} from "~/lib/api-idempotency.server";
 import { resolveApiV1ScopeRequirement } from "~/lib/api-v1.server";
+import {
+  nativeSpoonCreateIdempotencyBody,
+  parseNativeSpoonCreateBody,
+  parseNativeSpoonCreateRequest,
+  parseNativeSpoonDeleteBody,
+  parseNativeSpoonListUrl,
+  parseNativeSpoonUpdateBody,
+} from "~/lib/api-v1-spoons.server";
 import { getLocalDb } from "~/lib/db.server";
+import { IMAGE_MAX_FILE_SIZE } from "~/lib/recipe-image";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestRecipe, createTestUser } from "../utils";
 
@@ -14,11 +28,16 @@ type MutationMethod = "POST" | "PATCH" | "DELETE";
 const VALID_PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
 const GIF_BYTES = new Uint8Array([0x47, 0x49, 0x46, 0x38, 1, 2, 3]);
 
-function routeArgs(request: Request, splat: string, env: Record<string, unknown> | null = null) {
+function routeArgs(
+  request: Request,
+  splat: string,
+  env: Record<string, unknown> | null = null,
+  ctx?: { waitUntil?: (promise: Promise<unknown>) => void },
+) {
   return {
     request,
     params: { "*": splat },
-    context: { cloudflare: { env } },
+    context: { cloudflare: { env, ...(ctx ? { ctx } : {}) } },
   } as never;
 }
 
@@ -213,6 +232,37 @@ function expectNotificationShape(notifications: Record<string, unknown>) {
   expect(["queued", "skipped", "unavailable"]).toContain(notifications.fellowChefOriginCook);
 }
 
+function expectSpoonFailure(result: { ok: boolean; code?: string; details?: unknown }, code = "validation_error") {
+  expect(result.ok).toBe(false);
+  expect(result).toMatchObject({ code });
+}
+
+async function reserveSpoonMutation(db: LocalDb, input: {
+  userId: string;
+  credentialId: string;
+  key: string;
+  operation: string;
+  method: MutationMethod;
+  pathSuffix: string;
+  body: Record<string, unknown>;
+}) {
+  const requestHash = await hashIdempotencyRequest({
+    method: input.method,
+    path: `/api/v1/${input.pathSuffix}`,
+    body: input.body,
+  });
+  const reservation = await reserveIdempotencyKey(db, {
+    userId: input.userId,
+    credentialId: input.credentialId,
+    clientKey: idempotencyClientKey({ id: input.userId, source: "bearer", credentialId: input.credentialId }),
+    key: input.key,
+    operation: input.operation,
+    requestHash,
+  });
+  if (reservation.status !== "reserved") throw new Error(`expected reserved idempotency key, got ${reservation.status}`);
+  return reservation.record;
+}
+
 function expectCreateSpoonData(data: Record<string, any>, clientMutationId: string) {
   expectExactKeys(data, ["cover", "isOriginCook", "mutation", "notifications", "spoon"]);
   expectSpoonShape(data.spoon);
@@ -386,6 +436,198 @@ describe("API v1 recipe spoon endpoints", () => {
     expect(invalidCollectionMethod.headers.get("Allow")).toBe("GET, POST");
   });
 
+  it("parses spoon contract edge cases for offline replay-stable native clients", async () => {
+    expect(parseNativeSpoonListUrl(new URL("http://localhost/api/v1/recipes/recipe_1/spoons"))).toMatchObject({
+      ok: true,
+      data: { limit: 20, cursor: null },
+    });
+    expectSpoonFailure(parseNativeSpoonListUrl(new URL("http://localhost/api/v1/recipes/recipe_1/spoons?limit=0")));
+    expectSpoonFailure(parseNativeSpoonListUrl(new URL("http://localhost/api/v1/recipes/recipe_1/spoons?cursor=plain")), "invalid_cursor");
+    expectSpoonFailure(parseNativeSpoonListUrl(new URL("http://localhost/api/v1/recipes/recipe_1/spoons?cursor=v1.%25")), "invalid_cursor");
+    const malformedCursor = `v1.${Buffer.from(JSON.stringify({ cookedAt: "not-a-date", id: "spoon_1" })).toString("base64url")}`;
+    expectSpoonFailure(parseNativeSpoonListUrl(new URL(`http://localhost/api/v1/recipes/recipe_1/spoons?cursor=${malformedCursor}`)), "invalid_cursor");
+    const arrayCursor = `v1.${Buffer.from(JSON.stringify([])).toString("base64url")}`;
+    expectSpoonFailure(parseNativeSpoonListUrl(new URL(`http://localhost/api/v1/recipes/recipe_1/spoons?cursor=${arrayCursor}`)), "invalid_cursor");
+
+    expectSpoonFailure(parseNativeSpoonCreateBody({ clientMutationId: "create-unknown", unexpected: true }));
+    expectSpoonFailure(parseNativeSpoonCreateBody({ clientMutationId: "" }));
+    expectSpoonFailure(parseNativeSpoonCreateBody({ clientMutationId: "create-bad-date", cookedAt: "" }));
+    expectSpoonFailure(parseNativeSpoonCreateBody({ clientMutationId: "create-local-date", cookedAt: "2026-03-01T12:30:00" }));
+    expectSpoonFailure(parseNativeSpoonCreateBody({ clientMutationId: "create-normalized-date", cookedAt: "2026-02-31T12:30:00.000Z" }));
+    expectSpoonFailure(parseNativeSpoonCreateBody({ clientMutationId: "create-bad-offset", cookedAt: "2026-03-01T12:30:00+99:99" }));
+    expectSpoonFailure(parseNativeSpoonCreateBody({ clientMutationId: "create-bad-month", cookedAt: "2026-13-01T12:30:00.000Z" }));
+    expectSpoonFailure(parseNativeSpoonCreateBody({ clientMutationId: "create-bad-photo", photoUrl: 12 }));
+    expectSpoonFailure(parseNativeSpoonCreateBody({ clientMutationId: "create-bad-cover", useAsRecipeCover: "true" }));
+    expect(parseNativeSpoonCreateBody({
+      clientMutationId: "create-normalized",
+      note: "   ",
+      nextTime: null,
+      photoUrl: "   ",
+      useAsRecipeCover: false,
+    })).toMatchObject({
+      ok: true,
+      data: {
+        clientMutationId: "create-normalized",
+        note: null,
+        nextTime: null,
+        photoUrl: null,
+        useAsRecipeCover: false,
+      },
+    });
+
+    expectSpoonFailure(parseNativeSpoonUpdateBody({ clientMutationId: "update-unknown", unexpected: true }));
+    expectSpoonFailure(parseNativeSpoonUpdateBody({ note: "missing mutation id" }));
+    expectSpoonFailure(parseNativeSpoonUpdateBody({ clientMutationId: "update-bad-date", cookedAt: 7 }));
+    expectSpoonFailure(parseNativeSpoonUpdateBody({ clientMutationId: "update-local-date", cookedAt: "2026-03-01T12:30:00" }));
+    expectSpoonFailure(parseNativeSpoonUpdateBody({ clientMutationId: "update-normalized-date", cookedAt: "2026-02-31T12:30:00.000Z" }));
+    expectSpoonFailure(parseNativeSpoonUpdateBody({ clientMutationId: "update-bad-photo", photoUrl: false }));
+
+    expect(parseNativeSpoonDeleteBody({}, "delete-from-header")).toMatchObject({
+      ok: true,
+      data: { clientMutationId: "delete-from-header" },
+    });
+    expectSpoonFailure(parseNativeSpoonDeleteBody({ extra: true }, "delete-extra"));
+    expectSpoonFailure(parseNativeSpoonDeleteBody({}, " "));
+
+    const photoFile = new File([VALID_PNG_BYTES], "spoon.png", { type: "image/png" });
+    expect(nativeSpoonCreateIdempotencyBody({
+      clientMutationId: "create-with-file",
+      photoFile,
+      useAsRecipeCover: false,
+    }).photo).toMatchObject({
+      name: "spoon.png",
+      type: "image/png",
+      size: photoFile.size,
+      sha256: null,
+    });
+    expect(nativeSpoonCreateIdempotencyBody({
+      clientMutationId: "create-without-file",
+      useAsRecipeCover: true,
+    }).photo).toBeNull();
+  });
+
+  it("validates multipart spoon upload parser edge cases before mutation replay", async () => {
+    const invalidJson = await parseNativeSpoonCreateRequest(new UndiciRequest("http://localhost/api/v1/recipes/recipe_1/spoons", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{",
+    }) as unknown as Request);
+    expectSpoonFailure(invalidJson);
+
+    const invalidMultipart = await parseNativeSpoonCreateRequest(new UndiciRequest("http://localhost/api/v1/recipes/recipe_1/spoons", {
+      method: "POST",
+      headers: { "Content-Type": "multipart/form-data; boundary=broken" },
+      body: "not multipart",
+    }) as unknown as Request);
+    expectSpoonFailure(invalidMultipart);
+    expect(invalidMultipart).toMatchObject({ details: { reason: "invalid_form_data" } });
+
+    const noFileData = new UndiciFormData();
+    noFileData.append("clientMutationId", "spoon-no-file");
+    const noFile = await parseNativeSpoonCreateRequest(new UndiciRequest("http://localhost/api/v1/recipes/recipe_1/spoons", {
+      method: "POST",
+      body: noFileData,
+    }) as unknown as Request);
+    expectSpoonFailure(noFile);
+    expect(noFile).toMatchObject({ details: { reason: "no_file" } });
+
+    const noContentType = await parseNativeSpoonCreateRequest(new UndiciRequest("http://localhost/api/v1/recipes/recipe_1/spoons", {
+      method: "POST",
+    }) as unknown as Request);
+    expectSpoonFailure(noContentType);
+
+    const missingMutationId = new UndiciFormData();
+    missingMutationId.append("photo", new File([VALID_PNG_BYTES], "spoon.png", { type: "image/png" }));
+    expectSpoonFailure(await parseNativeSpoonCreateRequest(new UndiciRequest("http://localhost/api/v1/recipes/recipe_1/spoons", {
+      method: "POST",
+      body: missingMutationId,
+    }) as unknown as Request));
+
+    const invalidBoolean = new UndiciFormData();
+    invalidBoolean.append("photo", new File([VALID_PNG_BYTES], "spoon.png", { type: "image/png" }));
+    invalidBoolean.append("clientMutationId", "spoon-bad-cover-flag");
+    invalidBoolean.append("useAsRecipeCover", "yes");
+    expectSpoonFailure(await parseNativeSpoonCreateRequest(new UndiciRequest("http://localhost/api/v1/recipes/recipe_1/spoons", {
+      method: "POST",
+      body: invalidBoolean,
+    }) as unknown as Request));
+
+    const fileNote = new UndiciFormData();
+    fileNote.append("photo", new File([VALID_PNG_BYTES], "spoon.png", { type: "image/png" }));
+    fileNote.append("clientMutationId", "spoon-file-note");
+    fileNote.append("note", new File(["not text"], "note.txt", { type: "text/plain" }));
+    expectSpoonFailure(await parseNativeSpoonCreateRequest(new UndiciRequest("http://localhost/api/v1/recipes/recipe_1/spoons", {
+      method: "POST",
+      body: fileNote,
+    }) as unknown as Request));
+
+    const overlongNote = new UndiciFormData();
+    overlongNote.append("photo", new File([VALID_PNG_BYTES], "spoon.png", { type: "image/png" }));
+    overlongNote.append("clientMutationId", "spoon-long-note");
+    overlongNote.append("note", "x".repeat(161));
+    expectSpoonFailure(await parseNativeSpoonCreateRequest(new UndiciRequest("http://localhost/api/v1/recipes/recipe_1/spoons", {
+      method: "POST",
+      body: overlongNote,
+    }) as unknown as Request));
+
+    const fileNextTime = new UndiciFormData();
+    fileNextTime.append("photo", new File([VALID_PNG_BYTES], "spoon.png", { type: "image/png" }));
+    fileNextTime.append("clientMutationId", "spoon-file-next-time");
+    fileNextTime.append("nextTime", new File(["not text"], "next-time.txt", { type: "text/plain" }));
+    expectSpoonFailure(await parseNativeSpoonCreateRequest(new UndiciRequest("http://localhost/api/v1/recipes/recipe_1/spoons", {
+      method: "POST",
+      body: fileNextTime,
+    }) as unknown as Request));
+
+    const invalidDate = new UndiciFormData();
+    invalidDate.append("photo", new File([VALID_PNG_BYTES], "spoon.png", { type: "image/png" }));
+    invalidDate.append("clientMutationId", "spoon-bad-date");
+    invalidDate.append("cookedAt", "not-a-date");
+    expectSpoonFailure(await parseNativeSpoonCreateRequest(new UndiciRequest("http://localhost/api/v1/recipes/recipe_1/spoons", {
+      method: "POST",
+      body: invalidDate,
+    }) as unknown as Request));
+
+    const localDate = new UndiciFormData();
+    localDate.append("photo", new File([VALID_PNG_BYTES], "spoon.png", { type: "image/png" }));
+    localDate.append("clientMutationId", "spoon-local-date");
+    localDate.append("cookedAt", "2026-06-01T10:00:00");
+    expectSpoonFailure(await parseNativeSpoonCreateRequest(new UndiciRequest("http://localhost/api/v1/recipes/recipe_1/spoons", {
+      method: "POST",
+      body: localDate,
+    }) as unknown as Request));
+
+    const hugeFile = new UndiciFormData();
+    hugeFile.append("photo", new File([VALID_PNG_BYTES, new Uint8Array(IMAGE_MAX_FILE_SIZE)], "huge.png", { type: "image/png" }));
+    hugeFile.append("clientMutationId", "spoon-huge-file");
+    const huge = await parseNativeSpoonCreateRequest(new UndiciRequest("http://localhost/api/v1/recipes/recipe_1/spoons", {
+      method: "POST",
+      body: hugeFile,
+    }) as unknown as Request);
+    expectSpoonFailure(huge);
+    expect(huge).toMatchObject({ details: { reason: "file_too_large" } });
+
+    const headerMutationId = new UndiciFormData();
+    headerMutationId.append("photo", new File([VALID_PNG_BYTES], "spoon.png", { type: "image/png" }));
+    headerMutationId.append("note", "   ");
+    headerMutationId.append("nextTime", "  hotter pan  ");
+    headerMutationId.append("cookedAt", "2026-06-01T10:00:00.000Z");
+    headerMutationId.append("useAsRecipeCover", "false");
+    expect(await parseNativeSpoonCreateRequest(new UndiciRequest("http://localhost/api/v1/recipes/recipe_1/spoons", {
+      method: "POST",
+      headers: { "X-Client-Mutation-Id": "spoon-header-id" },
+      body: headerMutationId,
+    }) as unknown as Request)).toMatchObject({
+      ok: true,
+      data: {
+        clientMutationId: "spoon-header-id",
+        note: null,
+        nextTime: "hotter pan",
+        useAsRecipeCover: false,
+      },
+    });
+  });
+
   it("lists recipe spoons with cursor pagination, deleted-row filtering, active cover context, and public/private cache behavior", async () => {
     const { chefReader, cook, otherCook, recipe } = await createSpoonFixture(db);
     const cover = await db.recipeCover.create({
@@ -488,8 +730,170 @@ describe("API v1 recipe spoon endpoints", () => {
     });
   });
 
+  it("rejects invalid spoon list filters and returns no-cover rows with null cover context", async () => {
+    const { cook, recipe } = await createSpoonFixture(db);
+    await db.recipeSpoon.create({
+      data: {
+        chefId: cook.id,
+        recipeId: recipe.id,
+        note: "no active cover",
+      },
+    });
+
+    const invalidLimit = await loader(routeArgs(
+      readRequest(`recipes/${recipe.id}/spoons?limit=abc`, "req_spoon_bad_limit"),
+      `recipes/${recipe.id}/spoons`,
+    ));
+    expect(invalidLimit.status).toBe(400);
+    expectErrorEnvelope(await readJson(invalidLimit), "req_spoon_bad_limit", "validation_error", 400);
+
+    const missingRecipe = await loader(routeArgs(
+      readRequest("recipes/missing-recipe/spoons", "req_spoon_missing_recipe"),
+      "recipes/missing-recipe/spoons",
+    ));
+    expect(missingRecipe.status).toBe(404);
+    expectErrorEnvelope(await readJson(missingRecipe), "req_spoon_missing_recipe", "not_found", 404);
+
+    const noCover = await loader(routeArgs(
+      readRequest(`recipes/${recipe.id}/spoons`, "req_spoon_no_cover"),
+      `recipes/${recipe.id}/spoons`,
+    ));
+    const noCoverPayload = await readJson(noCover);
+    expect(noCover.status).toBe(200);
+    expect(noCoverPayload.data.spoons).toEqual([
+      expect.objectContaining({
+        note: "no active cover",
+        coverImageUrl: null,
+        coverProvenanceLabel: null,
+        coverSourceType: null,
+        coverVariant: null,
+        coverStatus: null,
+        coverGenerationStatus: null,
+      }),
+    ]);
+
+    const stylizedCoverRecipe = await db.recipe.create({
+      data: {
+        ...createTestRecipe(cook.id),
+        title: `API v1 Spoon Preferred Stylized ${faker.string.alphanumeric(8)}`,
+        chefId: cook.id,
+      },
+    });
+    const stylizedCover = await db.recipeCover.create({
+      data: {
+        recipeId: stylizedCoverRecipe.id,
+        imageUrl: "/photos/covers/preferred-raw.jpg",
+        stylizedImageUrl: "/photos/covers/preferred-stylized.jpg",
+        sourceType: "spoon",
+        status: "ready",
+        generationStatus: "succeeded",
+      },
+    });
+    await db.recipe.update({
+      where: { id: stylizedCoverRecipe.id },
+      data: { activeCoverId: stylizedCover.id, activeCoverVariant: null, coverMode: "manual" },
+    });
+    await db.recipeSpoon.create({
+      data: {
+        chefId: cook.id,
+        recipeId: stylizedCoverRecipe.id,
+        note: "preferred stylized cover",
+      },
+    });
+    const stylizedCoverList = await loader(routeArgs(
+      readRequest(`recipes/${stylizedCoverRecipe.id}/spoons`, "req_spoon_preferred_stylized_cover"),
+      `recipes/${stylizedCoverRecipe.id}/spoons`,
+    ));
+    const stylizedCoverPayload = await readJson(stylizedCoverList);
+    expect(stylizedCoverPayload.data.spoons[0]).toMatchObject({
+      coverImageUrl: "/photos/covers/preferred-stylized.jpg",
+      coverProvenanceLabel: "Editorialized chef photo",
+      coverVariant: "stylized",
+    });
+
+    const emptyCoverRecipe = await db.recipe.create({
+      data: {
+        ...createTestRecipe(cook.id),
+        title: `API v1 Spoon Empty Active Cover ${faker.string.alphanumeric(8)}`,
+        chefId: cook.id,
+      },
+    });
+    const emptyCover = await db.recipeCover.create({
+      data: {
+        recipeId: emptyCoverRecipe.id,
+        imageUrl: "",
+        stylizedImageUrl: null,
+        sourceType: "chef-upload",
+        status: "ready",
+        generationStatus: "none",
+      },
+    });
+    await db.recipe.update({
+      where: { id: emptyCoverRecipe.id },
+      data: { activeCoverId: emptyCover.id, activeCoverVariant: null, coverMode: "manual" },
+    });
+    await db.recipeSpoon.create({
+      data: {
+        chefId: cook.id,
+        recipeId: emptyCoverRecipe.id,
+        note: "empty active cover",
+      },
+    });
+    const emptyCoverList = await loader(routeArgs(
+      readRequest(`recipes/${emptyCoverRecipe.id}/spoons`, "req_spoon_empty_active_cover"),
+      `recipes/${emptyCoverRecipe.id}/spoons`,
+    ));
+    const emptyCoverPayload = await readJson(emptyCoverList);
+    expect(emptyCoverPayload.data.spoons[0]).toMatchObject({
+      coverImageUrl: null,
+      coverProvenanceLabel: null,
+      coverVariant: null,
+    });
+
+    const archivedCoverRecipe = await db.recipe.create({
+      data: {
+        ...createTestRecipe(cook.id),
+        title: `API v1 Spoon Archived Active Cover ${faker.string.alphanumeric(8)}`,
+        chefId: cook.id,
+      },
+    });
+    const archivedCover = await db.recipeCover.create({
+      data: {
+        recipeId: archivedCoverRecipe.id,
+        imageUrl: "/photos/covers/archived-raw.jpg",
+        sourceType: "spoon",
+        status: "archived",
+        generationStatus: "processing",
+        archivedAt: new Date(),
+      },
+    });
+    await db.recipe.update({
+      where: { id: archivedCoverRecipe.id },
+      data: { activeCoverId: archivedCover.id, activeCoverVariant: "image", coverMode: "manual" },
+    });
+    await db.recipeSpoon.create({
+      data: {
+        chefId: cook.id,
+        recipeId: archivedCoverRecipe.id,
+        note: "archived active cover",
+      },
+    });
+    const archivedCoverList = await loader(routeArgs(
+      readRequest(`recipes/${archivedCoverRecipe.id}/spoons`, "req_spoon_archived_active_cover"),
+      `recipes/${archivedCoverRecipe.id}/spoons`,
+    ));
+    const archivedCoverPayload = await readJson(archivedCoverList);
+    expect(archivedCoverPayload.data.spoons[0]).toMatchObject({
+      coverImageUrl: null,
+      coverProvenanceLabel: null,
+      coverVariant: null,
+      coverStatus: null,
+      coverGenerationStatus: null,
+    });
+  });
+
   it("creates JSON cook logs with trimmed fields, cookedAt validation, idempotency metadata, and origin-owner notification flags", async () => {
-    const { chef, cook, cookWriter, recipe } = await createSpoonFixture(db);
+    const { chef, chefWriter, cook, cookWriter, recipe } = await createSpoonFixture(db);
     const clientMutationId = "native-spoon-json-create";
     const response = await action(routeArgs(
       jsonMutationRequest("POST", `recipes/${recipe.id}/spoons`, cookWriter.token, "req_spoon_json_create", {
@@ -511,7 +915,7 @@ describe("API v1 recipe spoon endpoints", () => {
       isOriginCook: false,
       cover: null,
       notifications: {
-        spoonOnMyRecipe: "queued",
+        spoonOnMyRecipe: "skipped",
         fellowChefOriginCook: "skipped",
       },
       spoon: {
@@ -530,6 +934,175 @@ describe("API v1 recipe spoon endpoints", () => {
         payload: expect.stringContaining(cook.username),
       }),
     ]);
+
+    const noVapidResponse = await action(routeArgs(
+      jsonMutationRequest("POST", `recipes/${recipe.id}/spoons`, cookWriter.token, "req_spoon_no_vapid_env", {
+        clientMutationId: "native-spoon-no-vapid-env",
+        note: "no notification config",
+      }),
+      `recipes/${recipe.id}/spoons`,
+    ));
+    const noVapidPayload = await readJson(noVapidResponse);
+    expect(noVapidResponse.status).toBe(201);
+    expect(noVapidPayload.data.notifications).toEqual({
+      spoonOnMyRecipe: "unavailable",
+      fellowChefOriginCook: "skipped",
+    });
+
+    const originResponse = await action(routeArgs(
+      jsonMutationRequest("POST", `recipes/${recipe.id}/spoons`, chefWriter.token, "req_spoon_origin_no_fellows", {
+        clientMutationId: "native-spoon-origin-no-fellows",
+        note: "chef first cook without photo",
+      }),
+      `recipes/${recipe.id}/spoons`,
+      vapidEnv,
+    ));
+    const originPayload = await readJson(originResponse);
+    expect(originResponse.status).toBe(201);
+    expect(originPayload.data).toMatchObject({
+      isOriginCook: true,
+      cover: null,
+      notifications: {
+        spoonOnMyRecipe: "skipped",
+        fellowChefOriginCook: "skipped",
+      },
+    });
+  });
+
+  it("recovers committed incomplete spoon mutations for offline idempotent replay", async () => {
+    const { chef, chefWriter, cook, cookWriter, recipe } = await createSpoonFixture(db);
+
+    const createClientMutationId = "native-spoon-recover-create";
+    const createPath = `recipes/${recipe.id}/spoons`;
+    const createHashBody = {
+      clientMutationId: createClientMutationId,
+      note: "recovered origin spoon",
+      nextTime: null,
+      cookedAt: "2026-03-02T12:00:00.000Z",
+      photoUrl: null,
+      useAsRecipeCover: false,
+    };
+    const createReservation = await reserveSpoonMutation(db, {
+      userId: chef.id,
+      credentialId: chefWriter.credential.id,
+      key: createClientMutationId,
+      operation: "recipes.spoons.create",
+      method: "POST",
+      pathSuffix: createPath,
+      body: createHashBody,
+    });
+    await db.recipeSpoon.create({
+      data: {
+        id: createReservation.id,
+        chefId: chef.id,
+        recipeId: recipe.id,
+        note: "recovered origin spoon",
+        cookedAt: new Date("2026-03-02T12:00:00.000Z"),
+      },
+    });
+
+    const recoveredCreate = await action(routeArgs(
+      jsonMutationRequest("POST", createPath, chefWriter.token, "req_spoon_recover_create", {
+        clientMutationId: createClientMutationId,
+        note: "recovered origin spoon",
+        cookedAt: "2026-03-02T12:00:00.000Z",
+      }),
+      createPath,
+    ));
+    const recoveredCreatePayload = await readJson(recoveredCreate);
+    expect(recoveredCreate.status).toBe(201);
+    expectSuccessEnvelope(recoveredCreatePayload, "req_spoon_recover_create");
+    expect(recoveredCreatePayload.data).toMatchObject({
+      isOriginCook: true,
+      spoon: { id: createReservation.id, chefId: chef.id, recipeId: recipe.id },
+      notifications: { spoonOnMyRecipe: "skipped", fellowChefOriginCook: "skipped" },
+      mutation: { clientMutationId: createClientMutationId, replayed: true },
+    });
+    await expect(db.recipeSpoon.count({ where: { chefId: chef.id, recipeId: recipe.id } })).resolves.toBe(1);
+
+    const updateSpoon = await db.recipeSpoon.create({
+      data: {
+        chefId: cook.id,
+        recipeId: recipe.id,
+        note: "before recovery",
+        nextTime: "later",
+      },
+    });
+    const updateClientMutationId = "native-spoon-recover-update";
+    const updatePath = `recipes/${recipe.id}/spoons/${updateSpoon.id}`;
+    const updateHashBody = {
+      clientMutationId: updateClientMutationId,
+      note: "recovered update",
+      nextTime: null,
+      photoUrl: null,
+    };
+    await reserveSpoonMutation(db, {
+      userId: cook.id,
+      credentialId: cookWriter.credential.id,
+      key: updateClientMutationId,
+      operation: "recipes.spoons.update",
+      method: "PATCH",
+      pathSuffix: updatePath,
+      body: updateHashBody,
+    });
+    await db.recipeSpoon.update({
+      where: { id: updateSpoon.id },
+      data: { note: "recovered update", nextTime: null, photoUrl: null },
+    });
+
+    const recoveredUpdate = await action(routeArgs(
+      jsonMutationRequest("PATCH", updatePath, cookWriter.token, "req_spoon_recover_update", {
+        clientMutationId: updateClientMutationId,
+        note: "recovered update",
+        nextTime: null,
+        photoUrl: null,
+      }),
+      updatePath,
+    ));
+    const recoveredUpdatePayload = await readJson(recoveredUpdate);
+    expect(recoveredUpdate.status).toBe(200);
+    expectSuccessEnvelope(recoveredUpdatePayload, "req_spoon_recover_update");
+    expect(recoveredUpdatePayload.data).toMatchObject({
+      spoon: { id: updateSpoon.id, note: "recovered update", nextTime: null, photoUrl: null },
+      mutation: { clientMutationId: updateClientMutationId, replayed: true },
+    });
+
+    const deleteSpoon = await db.recipeSpoon.create({
+      data: {
+        chefId: cook.id,
+        recipeId: recipe.id,
+        note: "delete recovery",
+      },
+    });
+    const deleteClientMutationId = "native-spoon-recover-delete";
+    const deletePath = `recipes/${recipe.id}/spoons/${deleteSpoon.id}`;
+    const deleteReservation = await reserveSpoonMutation(db, {
+      userId: cook.id,
+      credentialId: cookWriter.credential.id,
+      key: deleteClientMutationId,
+      operation: "recipes.spoons.delete",
+      method: "DELETE",
+      pathSuffix: deletePath,
+      body: { clientMutationId: deleteClientMutationId },
+    });
+    const deletedAt = new Date(deleteReservation.createdAt.getTime() + 1000);
+    await db.recipeSpoon.update({
+      where: { id: deleteSpoon.id },
+      data: { deletedAt },
+    });
+
+    const recoveredDelete = await action(routeArgs(
+      deleteRequest(deletePath, cookWriter.token, "req_spoon_recover_delete", deleteClientMutationId),
+      deletePath,
+    ));
+    const recoveredDeletePayload = await readJson(recoveredDelete);
+    expect(recoveredDelete.status).toBe(200);
+    expectSuccessEnvelope(recoveredDeletePayload, "req_spoon_recover_delete");
+    expect(recoveredDeletePayload.data).toMatchObject({
+      deleted: true,
+      spoon: { id: deleteSpoon.id, deletedAt: deletedAt.toISOString() },
+      mutation: { clientMutationId: deleteClientMutationId, replayed: true },
+    });
   });
 
   it("accepts uploaded spoon photos, auto-seeds owner origin covers, and ignores forged cover opt-ins from non-owners", async () => {
@@ -550,6 +1123,7 @@ describe("API v1 recipe spoon endpoints", () => {
       },
     });
     const ownerClientMutationId = "native-spoon-owner-photo";
+    const waitUntil = vi.fn();
     const ownerResponse = await action(routeArgs(
       multipartSpoonRequest(
         `recipes/${recipe.id}/spoons`,
@@ -561,6 +1135,7 @@ describe("API v1 recipe spoon endpoints", () => {
       ),
       `recipes/${recipe.id}/spoons`,
       { ...vapidEnv, PHOTOS: bucket },
+      { waitUntil },
     ));
     const ownerPayload = await readJson(ownerResponse);
 
@@ -572,7 +1147,7 @@ describe("API v1 recipe spoon endpoints", () => {
       isOriginCook: true,
       notifications: {
         spoonOnMyRecipe: "skipped",
-        fellowChefOriginCook: "queued",
+        fellowChefOriginCook: "skipped",
       },
       spoon: {
         chefId: chef.id,
@@ -596,6 +1171,7 @@ describe("API v1 recipe spoon endpoints", () => {
       expect.any(File),
       { httpMetadata: { contentType: "image/png" } },
     );
+    expect(waitUntil).toHaveBeenCalledWith(expect.any(Promise));
     await expect(db.recipe.findUniqueOrThrow({
       where: { id: recipe.id },
       select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
@@ -685,6 +1261,16 @@ describe("API v1 recipe spoon endpoints", () => {
     ));
     expect(wrongOwnerPhoto.status).toBe(400);
     expectErrorEnvelope(await readJson(wrongOwnerPhoto), "req_spoon_wrong_owner_photo", "validation_error", 400);
+
+    const missingRecipe = await action(routeArgs(
+      jsonMutationRequest("POST", "recipes/missing-recipe/spoons", cookWriter.token, "req_spoon_create_missing_recipe", {
+        clientMutationId: "native-spoon-missing-recipe",
+        note: "lost recipe",
+      }),
+      "recipes/missing-recipe/spoons",
+    ));
+    expect(missingRecipe.status).toBe(404);
+    expectErrorEnvelope(await readJson(missingRecipe), "req_spoon_create_missing_recipe", "not_found", 404);
   });
 
   it("validates note and nextTime payload types and length on create and update", async () => {
@@ -728,7 +1314,7 @@ describe("API v1 recipe spoon endpoints", () => {
   });
 
   it("updates and deletes only owned active spoons on the recipe path while excluding deleted spoons from reads", async () => {
-    const { cook, cookWriter, recipe, otherRecipe, strangerWriter } = await createSpoonFixture(db);
+    const { cook, cookWriter, recipe, otherRecipe, stranger, strangerWriter } = await createSpoonFixture(db);
     const photoKey = `spoons/${cook.id}/updates/final.png`;
     const { bucket } = mockPhotosBucket([photoKey]);
     const spoon = await db.recipeSpoon.create({
@@ -769,6 +1355,26 @@ describe("API v1 recipe spoon endpoints", () => {
       },
     });
 
+    const noOpClientMutationId = "native-spoon-update-noop";
+    const noOpUpdate = await action(routeArgs(
+      jsonMutationRequest("PATCH", `recipes/${recipe.id}/spoons/${spoon.id}`, cookWriter.token, "req_spoon_update_noop", {
+        clientMutationId: noOpClientMutationId,
+      }),
+      `recipes/${recipe.id}/spoons/${spoon.id}`,
+    ));
+    expect(noOpUpdate.status).toBe(200);
+    expectSuccessEnvelope(await readJson(noOpUpdate), "req_spoon_update_noop");
+
+    const omittedVersusClearConflict = await action(routeArgs(
+      jsonMutationRequest("PATCH", `recipes/${recipe.id}/spoons/${spoon.id}`, cookWriter.token, "req_spoon_update_omitted_clear_conflict", {
+        clientMutationId: noOpClientMutationId,
+        photoUrl: null,
+      }),
+      `recipes/${recipe.id}/spoons/${spoon.id}`,
+    ));
+    expect(omittedVersusClearConflict.status).toBe(409);
+    expectErrorEnvelope(await readJson(omittedVersusClearConflict), "req_spoon_update_omitted_clear_conflict", "idempotency_conflict", 409);
+
     const pathMismatch = await action(routeArgs(
       jsonMutationRequest("PATCH", `recipes/${otherRecipe.id}/spoons/${spoon.id}`, cookWriter.token, "req_spoon_path_mismatch", {
         clientMutationId: "native-spoon-path-mismatch",
@@ -788,6 +1394,29 @@ describe("API v1 recipe spoon endpoints", () => {
     ));
     expect(strangerUpdate.status).toBe(403);
     expectErrorEnvelope(await readJson(strangerUpdate), "req_spoon_stranger_update", "insufficient_scope", 403);
+
+    const wrongOwnerPhoto = await action(routeArgs(
+      jsonMutationRequest("PATCH", `recipes/${recipe.id}/spoons/${spoon.id}`, cookWriter.token, "req_spoon_update_wrong_owner_photo", {
+        clientMutationId: "native-spoon-update-wrong-owner-photo",
+        photoUrl: `/photos/spoons/${stranger.id}/updates/foreign.png`,
+      }),
+      `recipes/${recipe.id}/spoons/${spoon.id}`,
+      { PHOTOS: bucket },
+    ));
+    expect(wrongOwnerPhoto.status).toBe(400);
+    expectErrorEnvelope(await readJson(wrongOwnerPhoto), "req_spoon_update_wrong_owner_photo", "validation_error", 400);
+
+    const clearsAllContent = await action(routeArgs(
+      jsonMutationRequest("PATCH", `recipes/${recipe.id}/spoons/${spoon.id}`, cookWriter.token, "req_spoon_update_clears_content", {
+        clientMutationId: "native-spoon-update-clears-content",
+        note: null,
+        nextTime: null,
+        photoUrl: null,
+      }),
+      `recipes/${recipe.id}/spoons/${spoon.id}`,
+    ));
+    expect(clearsAllContent.status).toBe(400);
+    expectErrorEnvelope(await readJson(clearsAllContent), "req_spoon_update_clears_content", "validation_error", 400);
 
     const deletePathMismatch = await action(routeArgs(
       deleteRequest(`recipes/${otherRecipe.id}/spoons/${spoon.id}`, cookWriter.token, "req_spoon_delete_path_mismatch", "native-spoon-delete-path-mismatch"),

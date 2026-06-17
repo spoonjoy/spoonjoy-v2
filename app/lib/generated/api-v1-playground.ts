@@ -20,6 +20,17 @@ export type ApiV1PlaygroundParam = {
     maximum?: number;
   };
 };
+export type ApiV1PlaygroundRequestBody = {
+  required: boolean;
+  contentType: "application/json" | "application/x-www-form-urlencoded" | "multipart/form-data";
+  fileFields: readonly string[];
+  example: string;
+  examples: readonly {
+    name: string;
+    label: string;
+    example: string;
+  }[];
+};
 export type ApiV1PlaygroundOperation = {
   id: string;
   operationId: string;
@@ -43,17 +54,8 @@ export type ApiV1PlaygroundOperation = {
   risk: ApiV1PlaygroundOperationRisk;
   guide: string;
   params: readonly ApiV1PlaygroundParam[];
-  requestBody: null | {
-    required: boolean;
-    contentType: "application/json" | "application/x-www-form-urlencoded" | "multipart/form-data";
-    fileFields: readonly string[];
-    example: string;
-    examples: readonly {
-      name: string;
-      label: string;
-      example: string;
-    }[];
-  };
+  requestBody: null | ApiV1PlaygroundRequestBody;
+  requestBodyVariants: readonly ApiV1PlaygroundRequestBody[];
   responseStatuses: readonly string[];
 	  responseSummaries: readonly {
 	    status: string;
@@ -351,6 +353,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         }
       ],
       "requestBody": null,
+      "requestBodyVariants": [],
       "responseStatuses": [
         "200",
         "400",
@@ -481,6 +484,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         }
       ],
       "requestBody": null,
+      "requestBodyVariants": [],
       "responseStatuses": [
         "200",
         "400",
@@ -610,6 +614,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         }
       ],
       "requestBody": null,
+      "requestBodyVariants": [],
       "responseStatuses": [
         "200",
         "400",
@@ -739,6 +744,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         }
       ],
       "requestBody": null,
+      "requestBodyVariants": [],
       "responseStatuses": [
         "200",
         "400",
@@ -868,6 +874,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         }
       ],
       "requestBody": null,
+      "requestBodyVariants": [],
       "responseStatuses": [
         "200",
         "400",
@@ -1068,6 +1075,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         }
       ],
       "requestBody": null,
+      "requestBodyVariants": [],
       "responseStatuses": [
         "200",
         "400",
@@ -1255,6 +1263,21 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         ]
       },
+      "requestBodyVariants": [
+        {
+          "required": true,
+          "contentType": "application/json",
+          "fileFields": [],
+          "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"title\": \"Pasta\",\n  \"description\": \"Weeknight pasta\",\n  \"servings\": \"4\",\n  \"steps\": [\n    {\n      \"stepTitle\": null,\n      \"description\": \"Boil pasta.\",\n      \"duration\": null,\n      \"ingredients\": [\n        {\n          \"quantity\": 1,\n          \"unit\": \"lb\",\n          \"name\": \"pasta\"\n        }\n      ]\n    }\n  ]\n}",
+          "examples": [
+            {
+              "name": "example",
+              "label": "Example",
+              "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"title\": \"Pasta\",\n  \"description\": \"Weeknight pasta\",\n  \"servings\": \"4\",\n  \"steps\": [\n    {\n      \"stepTitle\": null,\n      \"description\": \"Boil pasta.\",\n      \"duration\": null,\n      \"ingredients\": [\n        {\n          \"quantity\": 1,\n          \"unit\": \"lb\",\n          \"name\": \"pasta\"\n        }\n      ]\n    }\n  ]\n}"
+            }
+          ]
+        }
+      ],
       "responseStatuses": [
         "201",
         "400",
@@ -1309,7 +1332,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "201",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"created\": true,\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": null,\n        \"sourceHost\": null,\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"created\": true,\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": null,\n        \"sourceHost\": null,\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ],\n      \"recentSpoons\": [\n        {\n          \"id\": \"spoon_1\",\n          \"chefId\": \"chef_2\",\n          \"recipeId\": \"recipe_1\",\n          \"cookedAt\": \"2026-06-01T00:00:00.000Z\",\n          \"photoUrl\": \"/photos/spoons/chef_2/recipe_1/cooked.jpg\",\n          \"note\": \"Loved this with extra lemon.\",\n          \"nextTime\": null,\n          \"deletedAt\": null,\n          \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n          \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n          \"chef\": {\n            \"id\": \"chef_2\",\n            \"username\": \"jules\",\n            \"photoUrl\": null\n          }\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -1435,6 +1458,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         }
       ],
       "requestBody": null,
+      "requestBodyVariants": [],
       "responseStatuses": [
         "200",
         "400",
@@ -1484,7 +1508,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    }\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ],\n      \"recentSpoons\": [\n        {\n          \"id\": \"spoon_1\",\n          \"chefId\": \"chef_2\",\n          \"recipeId\": \"recipe_1\",\n          \"cookedAt\": \"2026-06-01T00:00:00.000Z\",\n          \"photoUrl\": \"/photos/spoons/chef_2/recipe_1/cooked.jpg\",\n          \"note\": \"Loved this with extra lemon.\",\n          \"nextTime\": null,\n          \"deletedAt\": null,\n          \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n          \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n          \"chef\": {\n            \"id\": \"chef_2\",\n            \"username\": \"jules\",\n            \"photoUrl\": null\n          }\n        }\n      ]\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -1625,6 +1649,21 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         ]
       },
+      "requestBodyVariants": [
+        {
+          "required": true,
+          "contentType": "application/json",
+          "fileFields": [],
+          "example": "{\n  \"clientMutationId\": \"device-uuid-2\",\n  \"title\": \"Better Pasta\",\n  \"description\": null,\n  \"servings\": \"6\"\n}",
+          "examples": [
+            {
+              "name": "example",
+              "label": "Example",
+              "example": "{\n  \"clientMutationId\": \"device-uuid-2\",\n  \"title\": \"Better Pasta\",\n  \"description\": null,\n  \"servings\": \"6\"\n}"
+            }
+          ]
+        }
+      ],
       "responseStatuses": [
         "200",
         "400",
@@ -1679,7 +1718,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"updated\": true,\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"updated\": true,\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ],\n      \"recentSpoons\": [\n        {\n          \"id\": \"spoon_1\",\n          \"chefId\": \"chef_2\",\n          \"recipeId\": \"recipe_1\",\n          \"cookedAt\": \"2026-06-01T00:00:00.000Z\",\n          \"photoUrl\": \"/photos/spoons/chef_2/recipe_1/cooked.jpg\",\n          \"note\": \"Loved this with extra lemon.\",\n          \"nextTime\": null,\n          \"deletedAt\": null,\n          \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n          \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n          \"chef\": {\n            \"id\": \"chef_2\",\n            \"username\": \"jules\",\n            \"photoUrl\": null\n          }\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -1831,6 +1870,21 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         ]
       },
+      "requestBodyVariants": [
+        {
+          "required": true,
+          "contentType": "application/json",
+          "fileFields": [],
+          "example": "{\n  \"clientMutationId\": \"device-uuid-3\"\n}",
+          "examples": [
+            {
+              "name": "example",
+              "label": "Example",
+              "example": "{\n  \"clientMutationId\": \"device-uuid-3\"\n}"
+            }
+          ]
+        }
+      ],
       "responseStatuses": [
         "200",
         "400",
@@ -2024,6 +2078,21 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         ]
       },
+      "requestBodyVariants": [
+        {
+          "required": true,
+          "contentType": "application/json",
+          "fileFields": [],
+          "example": "{\n  \"clientMutationId\": \"device-uuid-4\",\n  \"title\": \"My Pasta\"\n}",
+          "examples": [
+            {
+              "name": "example",
+              "label": "Example",
+              "example": "{\n  \"clientMutationId\": \"device-uuid-4\",\n  \"title\": \"My Pasta\"\n}"
+            }
+          ]
+        }
+      ],
       "responseStatuses": [
         "201",
         "400",
@@ -2078,7 +2147,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "201",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"fork\": {\n      \"appliedTitle\": \"Pasta (variation 2)\",\n      \"sourceChef\": {\n        \"id\": \"chef_source\",\n        \"username\": \"jules\"\n      },\n      \"sourceRecipeId\": \"recipe_source_1\",\n      \"titleWasSuffixed\": true\n    },\n    \"recipe\": {\n      \"id\": \"recipe_fork_1\",\n      \"title\": \"Pasta (variation 2)\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_fork_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_fork_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta (variation 2) by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_fork_1\",\n        \"sourceUrl\": null,\n        \"sourceHost\": null,\n        \"sourceRecipe\": {\n          \"id\": \"recipe_source_1\",\n          \"title\": \"Pasta\",\n          \"chef\": {\n            \"id\": \"chef_source\",\n            \"username\": \"jules\"\n          },\n          \"href\": \"/recipes/recipe_source_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_source_1\",\n          \"deleted\": false\n        }\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"fork\": {\n      \"appliedTitle\": \"Pasta (variation 2)\",\n      \"sourceChef\": {\n        \"id\": \"chef_source\",\n        \"username\": \"jules\"\n      },\n      \"sourceRecipeId\": \"recipe_source_1\",\n      \"titleWasSuffixed\": true\n    },\n    \"recipe\": {\n      \"id\": \"recipe_fork_1\",\n      \"title\": \"Pasta (variation 2)\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_fork_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_fork_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta (variation 2) by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_fork_1\",\n        \"sourceUrl\": null,\n        \"sourceHost\": null,\n        \"sourceRecipe\": {\n          \"id\": \"recipe_source_1\",\n          \"title\": \"Pasta\",\n          \"chef\": {\n            \"id\": \"chef_source\",\n            \"username\": \"jules\"\n          },\n          \"href\": \"/recipes/recipe_source_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_source_1\",\n          \"deleted\": false\n        }\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ],\n      \"recentSpoons\": [\n        {\n          \"id\": \"spoon_1\",\n          \"chefId\": \"chef_2\",\n          \"recipeId\": \"recipe_1\",\n          \"cookedAt\": \"2026-06-01T00:00:00.000Z\",\n          \"photoUrl\": \"/photos/spoons/chef_2/recipe_1/cooked.jpg\",\n          \"note\": \"Loved this with extra lemon.\",\n          \"nextTime\": null,\n          \"deletedAt\": null,\n          \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n          \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n          \"chef\": {\n            \"id\": \"chef_2\",\n            \"username\": \"jules\",\n            \"photoUrl\": null\n          }\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -2217,6 +2286,21 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         ]
       },
+      "requestBodyVariants": [
+        {
+          "required": true,
+          "contentType": "application/json",
+          "fileFields": [],
+          "example": "{\n  \"clientMutationId\": \"step-device-uuid-1\",\n  \"stepTitle\": \"Sauce\",\n  \"description\": \"Toss pasta with sauce.\",\n  \"duration\": 3,\n  \"ingredients\": [\n    {\n      \"quantity\": 2,\n      \"unit\": \"cloves\",\n      \"name\": \"garlic\"\n    }\n  ],\n  \"outputStepNums\": [\n    1\n  ]\n}",
+          "examples": [
+            {
+              "name": "example",
+              "label": "Example",
+              "example": "{\n  \"clientMutationId\": \"step-device-uuid-1\",\n  \"stepTitle\": \"Sauce\",\n  \"description\": \"Toss pasta with sauce.\",\n  \"duration\": 3,\n  \"ingredients\": [\n    {\n      \"quantity\": 2,\n      \"unit\": \"cloves\",\n      \"name\": \"garlic\"\n    }\n  ],\n  \"outputStepNums\": [\n    1\n  ]\n}"
+            }
+          ]
+        }
+      ],
       "responseStatuses": [
         "201",
         "400",
@@ -2271,7 +2355,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "201",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"created\": true,\n    \"step\": {\n      \"id\": \"step_2\",\n      \"stepNum\": 2,\n      \"stepTitle\": \"Sauce\",\n      \"description\": \"Toss pasta with sauce.\",\n      \"duration\": 3,\n      \"ingredients\": [],\n      \"usingSteps\": [\n        {\n          \"id\": \"step_use_1\",\n          \"inputStepNum\": 2,\n          \"outputStepNum\": 1,\n          \"outputOfStep\": {\n            \"stepNum\": 1,\n            \"stepTitle\": null\n          }\n        }\n      ]\n    },\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"created\": true,\n    \"step\": {\n      \"id\": \"step_2\",\n      \"stepNum\": 2,\n      \"stepTitle\": \"Sauce\",\n      \"description\": \"Toss pasta with sauce.\",\n      \"duration\": 3,\n      \"ingredients\": [],\n      \"usingSteps\": [\n        {\n          \"id\": \"step_use_1\",\n          \"inputStepNum\": 2,\n          \"outputStepNum\": 1,\n          \"outputOfStep\": {\n            \"stepNum\": 1,\n            \"stepTitle\": null\n          }\n        }\n      ]\n    },\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ],\n      \"recentSpoons\": [\n        {\n          \"id\": \"spoon_1\",\n          \"chefId\": \"chef_2\",\n          \"recipeId\": \"recipe_1\",\n          \"cookedAt\": \"2026-06-01T00:00:00.000Z\",\n          \"photoUrl\": \"/photos/spoons/chef_2/recipe_1/cooked.jpg\",\n          \"note\": \"Loved this with extra lemon.\",\n          \"nextTime\": null,\n          \"deletedAt\": null,\n          \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n          \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n          \"chef\": {\n            \"id\": \"chef_2\",\n            \"username\": \"jules\",\n            \"photoUrl\": null\n          }\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -2422,6 +2506,21 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         ]
       },
+      "requestBodyVariants": [
+        {
+          "required": true,
+          "contentType": "application/json",
+          "fileFields": [],
+          "example": "{\n  \"clientMutationId\": \"step-device-uuid-2\",\n  \"stepTitle\": null,\n  \"description\": \"Toss pasta with glossy sauce.\",\n  \"duration\": null,\n  \"outputStepNums\": [\n    1\n  ]\n}",
+          "examples": [
+            {
+              "name": "example",
+              "label": "Example",
+              "example": "{\n  \"clientMutationId\": \"step-device-uuid-2\",\n  \"stepTitle\": null,\n  \"description\": \"Toss pasta with glossy sauce.\",\n  \"duration\": null,\n  \"outputStepNums\": [\n    1\n  ]\n}"
+            }
+          ]
+        }
+      ],
       "responseStatuses": [
         "200",
         "400",
@@ -2476,7 +2575,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"updated\": true,\n    \"step\": {\n      \"id\": \"step_2\",\n      \"stepNum\": 2,\n      \"stepTitle\": \"Sauce\",\n      \"description\": \"Toss pasta with glossy sauce.\",\n      \"duration\": null,\n      \"ingredients\": [],\n      \"usingSteps\": [\n        {\n          \"id\": \"step_use_1\",\n          \"inputStepNum\": 2,\n          \"outputStepNum\": 1,\n          \"outputOfStep\": {\n            \"stepNum\": 1,\n            \"stepTitle\": null\n          }\n        }\n      ]\n    },\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"updated\": true,\n    \"step\": {\n      \"id\": \"step_2\",\n      \"stepNum\": 2,\n      \"stepTitle\": \"Sauce\",\n      \"description\": \"Toss pasta with glossy sauce.\",\n      \"duration\": null,\n      \"ingredients\": [],\n      \"usingSteps\": [\n        {\n          \"id\": \"step_use_1\",\n          \"inputStepNum\": 2,\n          \"outputStepNum\": 1,\n          \"outputOfStep\": {\n            \"stepNum\": 1,\n            \"stepTitle\": null\n          }\n        }\n      ]\n    },\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ],\n      \"recentSpoons\": [\n        {\n          \"id\": \"spoon_1\",\n          \"chefId\": \"chef_2\",\n          \"recipeId\": \"recipe_1\",\n          \"cookedAt\": \"2026-06-01T00:00:00.000Z\",\n          \"photoUrl\": \"/photos/spoons/chef_2/recipe_1/cooked.jpg\",\n          \"note\": \"Loved this with extra lemon.\",\n          \"nextTime\": null,\n          \"deletedAt\": null,\n          \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n          \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n          \"chef\": {\n            \"id\": \"chef_2\",\n            \"username\": \"jules\",\n            \"photoUrl\": null\n          }\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -2651,6 +2750,21 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         ]
       },
+      "requestBodyVariants": [
+        {
+          "required": false,
+          "contentType": "application/json",
+          "fileFields": [],
+          "example": "{\n  \"clientMutationId\": \"step-device-uuid-3\"\n}",
+          "examples": [
+            {
+              "name": "example",
+              "label": "Example",
+              "example": "{\n  \"clientMutationId\": \"step-device-uuid-3\"\n}"
+            }
+          ]
+        }
+      ],
       "responseStatuses": [
         "200",
         "400",
@@ -2705,7 +2819,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"deleted\": true,\n    \"step\": {\n      \"id\": \"step_2\"\n    },\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"deleted\": true,\n    \"step\": {\n      \"id\": \"step_2\"\n    },\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ],\n      \"recentSpoons\": [\n        {\n          \"id\": \"spoon_1\",\n          \"chefId\": \"chef_2\",\n          \"recipeId\": \"recipe_1\",\n          \"cookedAt\": \"2026-06-01T00:00:00.000Z\",\n          \"photoUrl\": \"/photos/spoons/chef_2/recipe_1/cooked.jpg\",\n          \"note\": \"Loved this with extra lemon.\",\n          \"nextTime\": null,\n          \"deletedAt\": null,\n          \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n          \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n          \"chef\": {\n            \"id\": \"chef_2\",\n            \"username\": \"jules\",\n            \"photoUrl\": null\n          }\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -2844,6 +2958,21 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         ]
       },
+      "requestBodyVariants": [
+        {
+          "required": true,
+          "contentType": "application/json",
+          "fileFields": [],
+          "example": "{\n  \"clientMutationId\": \"step-reorder-device-uuid-1\",\n  \"stepId\": \"step_2\",\n  \"toStepNum\": 2\n}",
+          "examples": [
+            {
+              "name": "example",
+              "label": "Example",
+              "example": "{\n  \"clientMutationId\": \"step-reorder-device-uuid-1\",\n  \"stepId\": \"step_2\",\n  \"toStepNum\": 2\n}"
+            }
+          ]
+        }
+      ],
       "responseStatuses": [
         "200",
         "400",
@@ -2898,7 +3027,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"reordered\": true,\n    \"step\": {\n      \"id\": \"step_2\",\n      \"stepNum\": 2,\n      \"stepTitle\": \"Sauce\",\n      \"description\": \"Toss pasta with sauce.\",\n      \"duration\": 3,\n      \"ingredients\": [],\n      \"usingSteps\": [\n        {\n          \"id\": \"step_use_1\",\n          \"inputStepNum\": 2,\n          \"outputStepNum\": 1,\n          \"outputOfStep\": {\n            \"stepNum\": 1,\n            \"stepTitle\": null\n          }\n        }\n      ]\n    },\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"reordered\": true,\n    \"step\": {\n      \"id\": \"step_2\",\n      \"stepNum\": 2,\n      \"stepTitle\": \"Sauce\",\n      \"description\": \"Toss pasta with sauce.\",\n      \"duration\": 3,\n      \"ingredients\": [],\n      \"usingSteps\": [\n        {\n          \"id\": \"step_use_1\",\n          \"inputStepNum\": 2,\n          \"outputStepNum\": 1,\n          \"outputOfStep\": {\n            \"stepNum\": 1,\n            \"stepTitle\": null\n          }\n        }\n      ]\n    },\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ],\n      \"recentSpoons\": [\n        {\n          \"id\": \"spoon_1\",\n          \"chefId\": \"chef_2\",\n          \"recipeId\": \"recipe_1\",\n          \"cookedAt\": \"2026-06-01T00:00:00.000Z\",\n          \"photoUrl\": \"/photos/spoons/chef_2/recipe_1/cooked.jpg\",\n          \"note\": \"Loved this with extra lemon.\",\n          \"nextTime\": null,\n          \"deletedAt\": null,\n          \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n          \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n          \"chef\": {\n            \"id\": \"chef_2\",\n            \"username\": \"jules\",\n            \"photoUrl\": null\n          }\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -3049,6 +3178,21 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         ]
       },
+      "requestBodyVariants": [
+        {
+          "required": true,
+          "contentType": "application/json",
+          "fileFields": [],
+          "example": "{\n  \"clientMutationId\": \"step-ingredient-device-uuid-1\",\n  \"quantity\": 2,\n  \"unit\": \"cloves\",\n  \"name\": \"garlic\"\n}",
+          "examples": [
+            {
+              "name": "example",
+              "label": "Example",
+              "example": "{\n  \"clientMutationId\": \"step-ingredient-device-uuid-1\",\n  \"quantity\": 2,\n  \"unit\": \"cloves\",\n  \"name\": \"garlic\"\n}"
+            }
+          ]
+        }
+      ],
       "responseStatuses": [
         "201",
         "400",
@@ -3103,7 +3247,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "201",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"created\": true,\n    \"ingredient\": {\n      \"id\": \"ingredient_2\",\n      \"name\": \"garlic\",\n      \"quantity\": 2,\n      \"unit\": \"cloves\"\n    },\n    \"step\": {\n      \"id\": \"step_2\",\n      \"stepNum\": 2,\n      \"stepTitle\": \"Sauce\",\n      \"description\": \"Toss pasta with sauce.\",\n      \"duration\": 3,\n      \"ingredients\": [\n        {\n          \"id\": \"ingredient_2\",\n          \"name\": \"garlic\",\n          \"quantity\": 2,\n          \"unit\": \"cloves\"\n        }\n      ],\n      \"usingSteps\": [\n        {\n          \"id\": \"step_use_1\",\n          \"inputStepNum\": 2,\n          \"outputStepNum\": 1,\n          \"outputOfStep\": {\n            \"stepNum\": 1,\n            \"stepTitle\": null\n          }\n        }\n      ]\n    },\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_2\",\n              \"name\": \"garlic\",\n              \"quantity\": 2,\n              \"unit\": \"cloves\"\n            }\n          ],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"created\": true,\n    \"ingredient\": {\n      \"id\": \"ingredient_2\",\n      \"name\": \"garlic\",\n      \"quantity\": 2,\n      \"unit\": \"cloves\"\n    },\n    \"step\": {\n      \"id\": \"step_2\",\n      \"stepNum\": 2,\n      \"stepTitle\": \"Sauce\",\n      \"description\": \"Toss pasta with sauce.\",\n      \"duration\": 3,\n      \"ingredients\": [\n        {\n          \"id\": \"ingredient_2\",\n          \"name\": \"garlic\",\n          \"quantity\": 2,\n          \"unit\": \"cloves\"\n        }\n      ],\n      \"usingSteps\": [\n        {\n          \"id\": \"step_use_1\",\n          \"inputStepNum\": 2,\n          \"outputStepNum\": 1,\n          \"outputOfStep\": {\n            \"stepNum\": 1,\n            \"stepTitle\": null\n          }\n        }\n      ]\n    },\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_2\",\n              \"name\": \"garlic\",\n              \"quantity\": 2,\n              \"unit\": \"cloves\"\n            }\n          ],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ],\n      \"recentSpoons\": [\n        {\n          \"id\": \"spoon_1\",\n          \"chefId\": \"chef_2\",\n          \"recipeId\": \"recipe_1\",\n          \"cookedAt\": \"2026-06-01T00:00:00.000Z\",\n          \"photoUrl\": \"/photos/spoons/chef_2/recipe_1/cooked.jpg\",\n          \"note\": \"Loved this with extra lemon.\",\n          \"nextTime\": null,\n          \"deletedAt\": null,\n          \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n          \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n          \"chef\": {\n            \"id\": \"chef_2\",\n            \"username\": \"jules\",\n            \"photoUrl\": null\n          }\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -3290,6 +3434,21 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         ]
       },
+      "requestBodyVariants": [
+        {
+          "required": false,
+          "contentType": "application/json",
+          "fileFields": [],
+          "example": "{\n  \"clientMutationId\": \"step-ingredient-device-uuid-2\"\n}",
+          "examples": [
+            {
+              "name": "example",
+              "label": "Example",
+              "example": "{\n  \"clientMutationId\": \"step-ingredient-device-uuid-2\"\n}"
+            }
+          ]
+        }
+      ],
       "responseStatuses": [
         "200",
         "400",
@@ -3344,7 +3503,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"deleted\": true,\n    \"ingredient\": {\n      \"id\": \"ingredient_2\"\n    },\n    \"step\": {\n      \"id\": \"step_2\",\n      \"stepNum\": 2,\n      \"stepTitle\": \"Sauce\",\n      \"description\": \"Toss pasta with sauce.\",\n      \"duration\": 3,\n      \"ingredients\": [],\n      \"usingSteps\": [\n        {\n          \"id\": \"step_use_1\",\n          \"inputStepNum\": 2,\n          \"outputStepNum\": 1,\n          \"outputOfStep\": {\n            \"stepNum\": 1,\n            \"stepTitle\": null\n          }\n        }\n      ]\n    },\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"deleted\": true,\n    \"ingredient\": {\n      \"id\": \"ingredient_2\"\n    },\n    \"step\": {\n      \"id\": \"step_2\",\n      \"stepNum\": 2,\n      \"stepTitle\": \"Sauce\",\n      \"description\": \"Toss pasta with sauce.\",\n      \"duration\": 3,\n      \"ingredients\": [],\n      \"usingSteps\": [\n        {\n          \"id\": \"step_use_1\",\n          \"inputStepNum\": 2,\n          \"outputStepNum\": 1,\n          \"outputOfStep\": {\n            \"stepNum\": 1,\n            \"stepTitle\": null\n          }\n        }\n      ]\n    },\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ],\n      \"recentSpoons\": [\n        {\n          \"id\": \"spoon_1\",\n          \"chefId\": \"chef_2\",\n          \"recipeId\": \"recipe_1\",\n          \"cookedAt\": \"2026-06-01T00:00:00.000Z\",\n          \"photoUrl\": \"/photos/spoons/chef_2/recipe_1/cooked.jpg\",\n          \"note\": \"Loved this with extra lemon.\",\n          \"nextTime\": null,\n          \"deletedAt\": null,\n          \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n          \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n          \"chef\": {\n            \"id\": \"chef_2\",\n            \"username\": \"jules\",\n            \"photoUrl\": null\n          }\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -3483,6 +3642,21 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         ]
       },
+      "requestBodyVariants": [
+        {
+          "required": true,
+          "contentType": "application/json",
+          "fileFields": [],
+          "example": "{\n  \"clientMutationId\": \"step-output-device-uuid-1\",\n  \"inputStepId\": \"step_2\",\n  \"outputStepNums\": [\n    1\n  ]\n}",
+          "examples": [
+            {
+              "name": "example",
+              "label": "Example",
+              "example": "{\n  \"clientMutationId\": \"step-output-device-uuid-1\",\n  \"inputStepId\": \"step_2\",\n  \"outputStepNums\": [\n    1\n  ]\n}"
+            }
+          ]
+        }
+      ],
       "responseStatuses": [
         "200",
         "400",
@@ -3537,7 +3711,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"replaced\": true,\n    \"step\": {\n      \"id\": \"step_2\",\n      \"stepNum\": 2,\n      \"stepTitle\": \"Sauce\",\n      \"description\": \"Toss pasta with sauce.\",\n      \"duration\": 3,\n      \"ingredients\": [],\n      \"usingSteps\": [\n        {\n          \"id\": \"step_use_1\",\n          \"inputStepNum\": 2,\n          \"outputStepNum\": 1,\n          \"outputOfStep\": {\n            \"stepNum\": 1,\n            \"stepTitle\": null\n          }\n        }\n      ]\n    },\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"replaced\": true,\n    \"step\": {\n      \"id\": \"step_2\",\n      \"stepNum\": 2,\n      \"stepTitle\": \"Sauce\",\n      \"description\": \"Toss pasta with sauce.\",\n      \"duration\": 3,\n      \"ingredients\": [],\n      \"usingSteps\": [\n        {\n          \"id\": \"step_use_1\",\n          \"inputStepNum\": 2,\n          \"outputStepNum\": 1,\n          \"outputOfStep\": {\n            \"stepNum\": 1,\n            \"stepTitle\": null\n          }\n        }\n      ]\n    },\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ],\n      \"recentSpoons\": [\n        {\n          \"id\": \"spoon_1\",\n          \"chefId\": \"chef_2\",\n          \"recipeId\": \"recipe_1\",\n          \"cookedAt\": \"2026-06-01T00:00:00.000Z\",\n          \"photoUrl\": \"/photos/spoons/chef_2/recipe_1/cooked.jpg\",\n          \"note\": \"Loved this with extra lemon.\",\n          \"nextTime\": null,\n          \"deletedAt\": null,\n          \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n          \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n          \"chef\": {\n            \"id\": \"chef_2\",\n            \"username\": \"jules\",\n            \"photoUrl\": null\n          }\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -3668,6 +3842,23 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         ]
       },
+      "requestBodyVariants": [
+        {
+          "required": true,
+          "contentType": "multipart/form-data",
+          "fileFields": [
+            "image"
+          ],
+          "example": "{\n  \"clientMutationId\": \"cover-upload-device-uuid-1\",\n  \"image\": \"<binary JPG, PNG, or WebP file>\",\n  \"activate\": true,\n  \"generateEditorial\": false\n}",
+          "examples": [
+            {
+              "name": "example",
+              "label": "Example",
+              "example": "{\n  \"clientMutationId\": \"cover-upload-device-uuid-1\",\n  \"image\": \"<binary JPG, PNG, or WebP file>\",\n  \"activate\": true,\n  \"generateEditorial\": false\n}"
+            }
+          ]
+        }
+      ],
       "responseStatuses": [
         "201",
         "202",
@@ -3843,6 +4034,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         }
       ],
       "requestBody": null,
+      "requestBodyVariants": [],
       "responseStatuses": [
         "200",
         "400",
@@ -4021,6 +4213,21 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         ]
       },
+      "requestBodyVariants": [
+        {
+          "required": true,
+          "contentType": "application/json",
+          "fileFields": [],
+          "example": "{\n  \"clientMutationId\": \"cover-url-device-uuid-1\",\n  \"imageUrl\": \"/photos/recipes/chef_1/uploads/raw.png\",\n  \"activate\": true,\n  \"generateEditorial\": false\n}",
+          "examples": [
+            {
+              "name": "example",
+              "label": "Example",
+              "example": "{\n  \"clientMutationId\": \"cover-url-device-uuid-1\",\n  \"imageUrl\": \"/photos/recipes/chef_1/uploads/raw.png\",\n  \"activate\": true,\n  \"generateEditorial\": false\n}"
+            }
+          ]
+        }
+      ],
       "responseStatuses": [
         "201",
         "202",
@@ -4221,6 +4428,21 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         ]
       },
+      "requestBodyVariants": [
+        {
+          "required": true,
+          "contentType": "application/json",
+          "fileFields": [],
+          "example": "{\n  \"clientMutationId\": \"cover-active-device-uuid-1\",\n  \"variant\": \"stylized\"\n}",
+          "examples": [
+            {
+              "name": "example",
+              "label": "Example",
+              "example": "{\n  \"clientMutationId\": \"cover-active-device-uuid-1\",\n  \"variant\": \"stylized\"\n}"
+            }
+          ]
+        }
+      ],
       "responseStatuses": [
         "200",
         "400",
@@ -4440,6 +4662,21 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         ]
       },
+      "requestBodyVariants": [
+        {
+          "required": false,
+          "contentType": "application/json",
+          "fileFields": [],
+          "example": "{\n  \"clientMutationId\": \"cover-archive-device-uuid-1\",\n  \"replacementCoverId\": \"cover_2\",\n  \"replacementVariant\": \"image\",\n  \"confirmNoCover\": false,\n  \"deleteSafeObjects\": false\n}",
+          "examples": [
+            {
+              "name": "example",
+              "label": "Example",
+              "example": "{\n  \"clientMutationId\": \"cover-archive-device-uuid-1\",\n  \"replacementCoverId\": \"cover_2\",\n  \"replacementVariant\": \"image\",\n  \"confirmNoCover\": false,\n  \"deleteSafeObjects\": false\n}"
+            }
+          ]
+        }
+      ],
       "responseStatuses": [
         "200",
         "400",
@@ -4623,6 +4860,21 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         ]
       },
+      "requestBodyVariants": [
+        {
+          "required": true,
+          "contentType": "application/json",
+          "fileFields": [],
+          "example": "{\n  \"clientMutationId\": \"cover-regenerate-device-uuid-1\",\n  \"coverId\": \"cover_1\",\n  \"activateWhenReady\": true\n}",
+          "examples": [
+            {
+              "name": "example",
+              "label": "Example",
+              "example": "{\n  \"clientMutationId\": \"cover-regenerate-device-uuid-1\",\n  \"coverId\": \"cover_1\",\n  \"activateWhenReady\": true\n}"
+            }
+          ]
+        }
+      ],
       "responseStatuses": [
         "200",
         "202",
@@ -4823,6 +5075,21 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         ]
       },
+      "requestBodyVariants": [
+        {
+          "required": true,
+          "contentType": "application/json",
+          "fileFields": [],
+          "example": "{\n  \"clientMutationId\": \"cover-spoon-device-uuid-1\",\n  \"activate\": true,\n  \"generateEditorial\": false\n}",
+          "examples": [
+            {
+              "name": "example",
+              "label": "Example",
+              "example": "{\n  \"clientMutationId\": \"cover-spoon-device-uuid-1\",\n  \"activate\": true,\n  \"generateEditorial\": false\n}"
+            }
+          ]
+        }
+      ],
       "responseStatuses": [
         "201",
         "202",
@@ -5032,6 +5299,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         }
       ],
       "requestBody": null,
+      "requestBodyVariants": [],
       "responseStatuses": [
         "200",
         "400",
@@ -5081,7 +5349,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"recipeId\": \"recipe_1\",\n    \"limit\": 20,\n    \"cursor\": null,\n    \"nextCursor\": null,\n    \"hasMore\": false,\n    \"spoons\": [\n      {\n        \"id\": \"spoon_1\",\n        \"chefId\": \"chef_1\",\n        \"recipeId\": \"recipe_1\",\n        \"cookedAt\": \"2026-06-01T00:00:00.000Z\",\n        \"photoUrl\": \"/photos/spoons/chef_1/recipe_1/cooked.jpg\",\n        \"note\": \"Weeknight win.\",\n        \"nextTime\": \"Add more lemon.\",\n        \"deletedAt\": null,\n        \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n        \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n        \"chef\": {\n          \"id\": \"chef_1\",\n          \"username\": \"ari\",\n          \"photoUrl\": \"/photos/profiles/chef_1/avatar.gif\"\n        },\n        \"coverImageUrl\": \"/photos/recipes/chef_1/recipe_1/editorial.jpg\",\n        \"coverProvenanceLabel\": \"Editorialized chef photo\",\n        \"coverSourceType\": \"spoon\",\n        \"coverVariant\": \"stylized\",\n        \"coverStatus\": \"ready\",\n        \"coverGenerationStatus\": \"succeeded\"\n      }\n    ]\n  }\n}"
         },
         {
           "status": "400",
@@ -5201,15 +5469,45 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "required": true,
         "contentType": "application/json",
         "fileFields": [],
-        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "example": "{\n  \"clientMutationId\": \"spoon-create-device-uuid-1\",\n  \"note\": \"Weeknight win.\",\n  \"nextTime\": \"Add more lemon.\",\n  \"cookedAt\": \"2026-06-01T00:00:00.000Z\",\n  \"photoUrl\": null,\n  \"useAsRecipeCover\": false\n}",
         "examples": [
           {
             "name": "example",
             "label": "Example",
-            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+            "example": "{\n  \"clientMutationId\": \"spoon-create-device-uuid-1\",\n  \"note\": \"Weeknight win.\",\n  \"nextTime\": \"Add more lemon.\",\n  \"cookedAt\": \"2026-06-01T00:00:00.000Z\",\n  \"photoUrl\": null,\n  \"useAsRecipeCover\": false\n}"
           }
         ]
       },
+      "requestBodyVariants": [
+        {
+          "required": true,
+          "contentType": "application/json",
+          "fileFields": [],
+          "example": "{\n  \"clientMutationId\": \"spoon-create-device-uuid-1\",\n  \"note\": \"Weeknight win.\",\n  \"nextTime\": \"Add more lemon.\",\n  \"cookedAt\": \"2026-06-01T00:00:00.000Z\",\n  \"photoUrl\": null,\n  \"useAsRecipeCover\": false\n}",
+          "examples": [
+            {
+              "name": "example",
+              "label": "Example",
+              "example": "{\n  \"clientMutationId\": \"spoon-create-device-uuid-1\",\n  \"note\": \"Weeknight win.\",\n  \"nextTime\": \"Add more lemon.\",\n  \"cookedAt\": \"2026-06-01T00:00:00.000Z\",\n  \"photoUrl\": null,\n  \"useAsRecipeCover\": false\n}"
+            }
+          ]
+        },
+        {
+          "required": true,
+          "contentType": "multipart/form-data",
+          "fileFields": [
+            "photo"
+          ],
+          "example": "{\n  \"clientMutationId\": \"spoon-photo-device-uuid-1\",\n  \"photo\": \"<binary JPG, PNG, or WebP file>\",\n  \"note\": \"First cook photo.\",\n  \"nextTime\": null,\n  \"cookedAt\": \"2026-06-01T00:00:00.000Z\",\n  \"useAsRecipeCover\": true\n}",
+          "examples": [
+            {
+              "name": "example",
+              "label": "Example",
+              "example": "{\n  \"clientMutationId\": \"spoon-photo-device-uuid-1\",\n  \"photo\": \"<binary JPG, PNG, or WebP file>\",\n  \"note\": \"First cook photo.\",\n  \"nextTime\": null,\n  \"cookedAt\": \"2026-06-01T00:00:00.000Z\",\n  \"useAsRecipeCover\": true\n}"
+            }
+          ]
+        }
+      ],
       "responseStatuses": [
         "201",
         "400",
@@ -5264,7 +5562,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "201",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"spoon\": {\n      \"id\": \"spoon_1\",\n      \"chefId\": \"chef_1\",\n      \"recipeId\": \"recipe_1\",\n      \"cookedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"photoUrl\": \"/photos/spoons/chef_1/recipe_1/cooked.jpg\",\n      \"note\": \"Weeknight win.\",\n      \"nextTime\": \"Add more lemon.\",\n      \"deletedAt\": null,\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"isOriginCook\": true,\n    \"cover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"spoon\",\n      \"imageUrl\": \"/photos/recipes/chef_1/recipe_1/raw.jpg\",\n      \"stylizedImageUrl\": \"/photos/recipes/chef_1/recipe_1/editorial.jpg\",\n      \"displayUrl\": \"/photos/recipes/chef_1/recipe_1/editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": \"spoon_1\",\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"/photos/recipes/chef_1/recipe_1/raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"notifications\": {\n      \"spoonOnMyRecipe\": \"skipped\",\n      \"fellowChefOriginCook\": \"queued\"\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -5396,15 +5694,30 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "required": true,
         "contentType": "application/json",
         "fileFields": [],
-        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "example": "{\n  \"clientMutationId\": \"spoon-update-device-uuid-1\",\n  \"note\": null,\n  \"nextTime\": \"Use more cumin.\",\n  \"cookedAt\": \"2026-06-01T00:00:00.000Z\",\n  \"photoUrl\": \"/photos/spoons/chef_1/recipe_1/cooked.jpg\"\n}",
         "examples": [
           {
             "name": "example",
             "label": "Example",
-            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+            "example": "{\n  \"clientMutationId\": \"spoon-update-device-uuid-1\",\n  \"note\": null,\n  \"nextTime\": \"Use more cumin.\",\n  \"cookedAt\": \"2026-06-01T00:00:00.000Z\",\n  \"photoUrl\": \"/photos/spoons/chef_1/recipe_1/cooked.jpg\"\n}"
           }
         ]
       },
+      "requestBodyVariants": [
+        {
+          "required": true,
+          "contentType": "application/json",
+          "fileFields": [],
+          "example": "{\n  \"clientMutationId\": \"spoon-update-device-uuid-1\",\n  \"note\": null,\n  \"nextTime\": \"Use more cumin.\",\n  \"cookedAt\": \"2026-06-01T00:00:00.000Z\",\n  \"photoUrl\": \"/photos/spoons/chef_1/recipe_1/cooked.jpg\"\n}",
+          "examples": [
+            {
+              "name": "example",
+              "label": "Example",
+              "example": "{\n  \"clientMutationId\": \"spoon-update-device-uuid-1\",\n  \"note\": null,\n  \"nextTime\": \"Use more cumin.\",\n  \"cookedAt\": \"2026-06-01T00:00:00.000Z\",\n  \"photoUrl\": \"/photos/spoons/chef_1/recipe_1/cooked.jpg\"\n}"
+            }
+          ]
+        }
+      ],
       "responseStatuses": [
         "200",
         "400",
@@ -5459,7 +5772,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"spoon\": {\n      \"id\": \"spoon_1\",\n      \"chefId\": \"chef_1\",\n      \"recipeId\": \"recipe_1\",\n      \"cookedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"photoUrl\": \"/photos/spoons/chef_1/recipe_1/cooked.jpg\",\n      \"note\": \"Weeknight win.\",\n      \"nextTime\": \"Use more cumin.\",\n      \"deletedAt\": null,\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"cover\": null,\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -5587,6 +5900,18 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         },
         {
+          "name": "clientMutationId",
+          "in": "query",
+          "label": "Client Mutation Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "clientMutationId",
+          "description": "Chef-wide idempotency key fallback for clients that cannot send a JSON body with DELETE. Prefer the JSON body or X-Client-Mutation-Id header.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
           "name": "X-Request-Id",
           "in": "header",
           "label": "X Request Id",
@@ -5599,7 +5924,34 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         }
       ],
-      "requestBody": null,
+      "requestBody": {
+        "required": false,
+        "contentType": "application/json",
+        "fileFields": [],
+        "example": "{\n  \"clientMutationId\": \"spoon-delete-device-uuid-1\"\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"spoon-delete-device-uuid-1\"\n}"
+          }
+        ]
+      },
+      "requestBodyVariants": [
+        {
+          "required": false,
+          "contentType": "application/json",
+          "fileFields": [],
+          "example": "{\n  \"clientMutationId\": \"spoon-delete-device-uuid-1\"\n}",
+          "examples": [
+            {
+              "name": "example",
+              "label": "Example",
+              "example": "{\n  \"clientMutationId\": \"spoon-delete-device-uuid-1\"\n}"
+            }
+          ]
+        }
+      ],
       "responseStatuses": [
         "200",
         "400",
@@ -5654,7 +6006,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"deleted\": true,\n    \"spoon\": {\n      \"id\": \"spoon_1\",\n      \"chefId\": \"chef_1\",\n      \"recipeId\": \"recipe_1\",\n      \"cookedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"photoUrl\": \"/photos/spoons/chef_1/recipe_1/cooked.jpg\",\n      \"note\": \"Weeknight win.\",\n      \"nextTime\": \"Add more lemon.\",\n      \"deletedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -5827,6 +6179,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         }
       ],
       "requestBody": null,
+      "requestBodyVariants": [],
       "responseStatuses": [
         "200",
         "400",
@@ -6003,6 +6356,21 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         ]
       },
+      "requestBodyVariants": [
+        {
+          "required": true,
+          "contentType": "application/json",
+          "fileFields": [],
+          "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+          "examples": [
+            {
+              "name": "example",
+              "label": "Example",
+              "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+            }
+          ]
+        }
+      ],
       "responseStatuses": [
         "201",
         "400",
@@ -6183,6 +6551,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         }
       ],
       "requestBody": null,
+      "requestBodyVariants": [],
       "responseStatuses": [
         "200",
         "400",
@@ -6362,6 +6731,21 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         ]
       },
+      "requestBodyVariants": [
+        {
+          "required": true,
+          "contentType": "application/json",
+          "fileFields": [],
+          "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+          "examples": [
+            {
+              "name": "example",
+              "label": "Example",
+              "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+            }
+          ]
+        }
+      ],
       "responseStatuses": [
         "200",
         "400",
@@ -6546,6 +6930,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         }
       ],
       "requestBody": null,
+      "requestBodyVariants": [],
       "responseStatuses": [
         "200",
         "400",
@@ -6740,6 +7125,21 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         ]
       },
+      "requestBodyVariants": [
+        {
+          "required": true,
+          "contentType": "application/json",
+          "fileFields": [],
+          "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+          "examples": [
+            {
+              "name": "example",
+              "label": "Example",
+              "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+            }
+          ]
+        }
+      ],
       "responseStatuses": [
         "200",
         "400",
@@ -6934,6 +7334,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         }
       ],
       "requestBody": null,
+      "requestBodyVariants": [],
       "responseStatuses": [
         "200",
         "400",
@@ -7102,6 +7503,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         }
       ],
       "requestBody": null,
+      "requestBodyVariants": [],
       "responseStatuses": [
         "200",
         "400",
@@ -7296,6 +7698,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         }
       ],
       "requestBody": null,
+      "requestBodyVariants": [],
       "responseStatuses": [
         "200",
         "400",
@@ -7479,6 +7882,21 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         ]
       },
+      "requestBodyVariants": [
+        {
+          "required": true,
+          "contentType": "application/json",
+          "fileFields": [],
+          "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"name\": \"Eggs\",\n  \"quantity\": 12,\n  \"unit\": \"Each\",\n  \"categoryKey\": null,\n  \"iconKey\": null\n}",
+          "examples": [
+            {
+              "name": "example",
+              "label": "Example",
+              "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"name\": \"Eggs\",\n  \"quantity\": 12,\n  \"unit\": \"Each\",\n  \"categoryKey\": null,\n  \"iconKey\": null\n}"
+            }
+          ]
+        }
+      ],
       "responseStatuses": [
         "200",
         "201",
@@ -7683,6 +8101,21 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         ]
       },
+      "requestBodyVariants": [
+        {
+          "required": true,
+          "contentType": "application/json",
+          "fileFields": [],
+          "example": "{\n  \"clientMutationId\": \"device-uuid-2\",\n  \"checked\": true\n}",
+          "examples": [
+            {
+              "name": "example",
+              "label": "Example",
+              "example": "{\n  \"clientMutationId\": \"device-uuid-2\",\n  \"checked\": true\n}"
+            }
+          ]
+        }
+      ],
       "responseStatuses": [
         "200",
         "400",
@@ -7881,6 +8314,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         }
       ],
       "requestBody": null,
+      "requestBodyVariants": [],
       "responseStatuses": [
         "200",
         "400",
@@ -8055,6 +8489,21 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         ]
       },
+      "requestBodyVariants": [
+        {
+          "required": true,
+          "contentType": "application/json",
+          "fileFields": [],
+          "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+          "examples": [
+            {
+              "name": "example",
+              "label": "Example",
+              "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+            }
+          ]
+        }
+      ],
       "responseStatuses": [
         "200",
         "400",
@@ -8229,6 +8678,21 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         ]
       },
+      "requestBodyVariants": [
+        {
+          "required": true,
+          "contentType": "application/json",
+          "fileFields": [],
+          "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+          "examples": [
+            {
+              "name": "example",
+              "label": "Example",
+              "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+            }
+          ]
+        }
+      ],
       "responseStatuses": [
         "200",
         "400",
@@ -8403,6 +8867,21 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         ]
       },
+      "requestBodyVariants": [
+        {
+          "required": true,
+          "contentType": "application/json",
+          "fileFields": [],
+          "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+          "examples": [
+            {
+              "name": "example",
+              "label": "Example",
+              "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+            }
+          ]
+        }
+      ],
       "responseStatuses": [
         "200",
         "400",
@@ -8561,6 +9040,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         }
       ],
       "requestBody": null,
+      "requestBodyVariants": [],
       "responseStatuses": [
         "200",
         "400",
@@ -8726,6 +9206,21 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         ]
       },
+      "requestBodyVariants": [
+        {
+          "required": true,
+          "contentType": "application/json",
+          "fileFields": [],
+          "example": "{\n  \"email\": \"ari@example.com\",\n  \"username\": \"ari\"\n}",
+          "examples": [
+            {
+              "name": "example",
+              "label": "Example",
+              "example": "{\n  \"email\": \"ari@example.com\",\n  \"username\": \"ari\"\n}"
+            }
+          ]
+        }
+      ],
       "responseStatuses": [
         "200",
         "400",
@@ -8898,6 +9393,23 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         ]
       },
+      "requestBodyVariants": [
+        {
+          "required": true,
+          "contentType": "multipart/form-data",
+          "fileFields": [
+            "photo"
+          ],
+          "example": "{\n  \"photo\": \"<binary image file>\"\n}",
+          "examples": [
+            {
+              "name": "example",
+              "label": "Example",
+              "example": "{\n  \"photo\": \"<binary image file>\"\n}"
+            }
+          ]
+        }
+      ],
       "responseStatuses": [
         "200",
         "400",
@@ -9056,6 +9568,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         }
       ],
       "requestBody": null,
+      "requestBodyVariants": [],
       "responseStatuses": [
         "200",
         "400",
@@ -9214,6 +9727,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         }
       ],
       "requestBody": null,
+      "requestBodyVariants": [],
       "responseStatuses": [
         "200",
         "400",
@@ -9367,6 +9881,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         }
       ],
       "requestBody": null,
+      "requestBodyVariants": [],
       "responseStatuses": [
         "200",
         "400",
@@ -9532,6 +10047,21 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         ]
       },
+      "requestBodyVariants": [
+        {
+          "required": true,
+          "contentType": "application/json",
+          "fileFields": [],
+          "example": "{\n  \"notifySpoonOnMyRecipe\": false,\n  \"notifyForkOfMyRecipe\": true,\n  \"notifyCookbookSaveOfMine\": false,\n  \"notifyFellowChefOriginCook\": true\n}",
+          "examples": [
+            {
+              "name": "example",
+              "label": "Example",
+              "example": "{\n  \"notifySpoonOnMyRecipe\": false,\n  \"notifyForkOfMyRecipe\": true,\n  \"notifyCookbookSaveOfMine\": false,\n  \"notifyFellowChefOriginCook\": true\n}"
+            }
+          ]
+        }
+      ],
       "responseStatuses": [
         "200",
         "400",
@@ -9702,6 +10232,21 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         ]
       },
+      "requestBodyVariants": [
+        {
+          "required": true,
+          "contentType": "application/json",
+          "fileFields": [],
+          "example": "{\n  \"deviceId\": \"ios-simulator-1\",\n  \"platform\": \"ios\",\n  \"environment\": \"development\",\n  \"token\": \"apns-token-...\",\n  \"deviceName\": \"iPhone\",\n  \"appVersion\": \"1.0.0\"\n}",
+          "examples": [
+            {
+              "name": "example",
+              "label": "Example",
+              "example": "{\n  \"deviceId\": \"ios-simulator-1\",\n  \"platform\": \"ios\",\n  \"environment\": \"development\",\n  \"token\": \"apns-token-...\",\n  \"deviceName\": \"iPhone\",\n  \"appVersion\": \"1.0.0\"\n}"
+            }
+          ]
+        }
+      ],
       "responseStatuses": [
         "200",
         "201",
@@ -9877,6 +10422,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         }
       ],
       "requestBody": null,
+      "requestBodyVariants": [],
       "responseStatuses": [
         "200",
         "400",
@@ -10035,6 +10581,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         }
       ],
       "requestBody": null,
+      "requestBodyVariants": [],
       "responseStatuses": [
         "200",
         "400",
@@ -10200,6 +10747,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         }
       ],
       "requestBody": null,
+      "requestBodyVariants": [],
       "responseStatuses": [
         "200",
         "400",
@@ -10358,6 +10906,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         }
       ],
       "requestBody": null,
+      "requestBodyVariants": [],
       "responseStatuses": [
         "200",
         "400",
@@ -10512,6 +11061,21 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         ]
       },
+      "requestBodyVariants": [
+        {
+          "required": true,
+          "contentType": "application/json",
+          "fileFields": [],
+          "example": "{\n  \"name\": \"Tiny client\",\n  \"scopes\": [\n    \"recipes:read\",\n    \"shopping_list:read\",\n    \"shopping_list:write\"\n  ]\n}",
+          "examples": [
+            {
+              "name": "example",
+              "label": "Example",
+              "example": "{\n  \"name\": \"Tiny client\",\n  \"scopes\": [\n    \"recipes:read\",\n    \"shopping_list:read\",\n    \"shopping_list:write\"\n  ]\n}"
+            }
+          ]
+        }
+      ],
       "responseStatuses": [
         "201",
         "400",
@@ -10672,6 +11236,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         }
       ],
       "requestBody": null,
+      "requestBodyVariants": [],
       "responseStatuses": [
         "200",
         "400",
@@ -10851,6 +11416,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         }
       ],
       "requestBody": null,
+      "requestBodyVariants": [],
       "responseStatuses": [
         "200",
         "400",
@@ -11022,6 +11588,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         }
       ],
       "requestBody": null,
+      "requestBodyVariants": [],
       "responseStatuses": [
         "200",
         "400",
@@ -11220,6 +11787,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         }
       ],
       "requestBody": null,
+      "requestBodyVariants": [],
       "responseStatuses": [
         "200",
         "400",
@@ -11418,6 +11986,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         }
       ],
       "requestBody": null,
+      "requestBodyVariants": [],
       "responseStatuses": [
         "200",
         "400",
@@ -11621,6 +12190,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         }
       ],
       "requestBody": null,
+      "requestBodyVariants": [],
       "responseStatuses": [
         "200",
         "400",
@@ -11787,6 +12357,21 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         ]
       },
+      "requestBodyVariants": [
+        {
+          "required": true,
+          "contentType": "application/json",
+          "fileFields": [],
+          "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+          "examples": [
+            {
+              "name": "example",
+              "label": "Example",
+              "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+            }
+          ]
+        }
+      ],
       "responseStatuses": [
         "201",
         "400",
@@ -11928,6 +12513,21 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         ]
       },
+      "requestBodyVariants": [
+        {
+          "required": true,
+          "contentType": "application/json",
+          "fileFields": [],
+          "example": "{\n  \"client_name\": \"Grocery helper\",\n  \"redirect_uris\": [\n    \"https://example.com/oauth/callback\"\n  ],\n  \"token_endpoint_auth_method\": \"none\",\n  \"grant_types\": [\n    \"authorization_code\",\n    \"refresh_token\"\n  ],\n  \"response_types\": [\n    \"code\"\n  ]\n}",
+          "examples": [
+            {
+              "name": "example",
+              "label": "Example",
+              "example": "{\n  \"client_name\": \"Grocery helper\",\n  \"redirect_uris\": [\n    \"https://example.com/oauth/callback\"\n  ],\n  \"token_endpoint_auth_method\": \"none\",\n  \"grant_types\": [\n    \"authorization_code\",\n    \"refresh_token\"\n  ],\n  \"response_types\": [\n    \"code\"\n  ]\n}"
+            }
+          ]
+        }
+      ],
       "responseStatuses": [
         "201",
         "400",
@@ -12105,6 +12705,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         }
       ],
       "requestBody": null,
+      "requestBodyVariants": [],
       "responseStatuses": [
         "200",
         "302"
@@ -12167,6 +12768,26 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         ]
       },
+      "requestBodyVariants": [
+        {
+          "required": true,
+          "contentType": "application/x-www-form-urlencoded",
+          "fileFields": [],
+          "example": "grant_type=authorization_code&client_id=cm_client_id_from_register&redirect_uri=https%3A%2F%2Fexample.com%2Foauth%2Fcallback&code=oac_...&code_verifier=pkce_verifier_0123456789_abcdefghijklmnopqrstuvwxyz_ABCDEF",
+          "examples": [
+            {
+              "name": "authorization_code",
+              "label": "Authorization Code",
+              "example": "grant_type=authorization_code&client_id=cm_client_id_from_register&redirect_uri=https%3A%2F%2Fexample.com%2Foauth%2Fcallback&code=oac_...&code_verifier=pkce_verifier_0123456789_abcdefghijklmnopqrstuvwxyz_ABCDEF"
+            },
+            {
+              "name": "refresh_token",
+              "label": "Refresh Token",
+              "example": "grant_type=refresh_token&client_id=cm_client_id_from_register&refresh_token=ort_..."
+            }
+          ]
+        }
+      ],
       "responseStatuses": [
         "200",
         "400",
@@ -12248,6 +12869,21 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         ]
       },
+      "requestBodyVariants": [
+        {
+          "required": true,
+          "contentType": "application/x-www-form-urlencoded",
+          "fileFields": [],
+          "example": "token=ort_...&client_id=cm_client_id_from_register&token_type_hint=refresh_token",
+          "examples": [
+            {
+              "name": "refresh_token",
+              "label": "Refresh Token",
+              "example": "token=ort_...&client_id=cm_client_id_from_register&token_type_hint=refresh_token"
+            }
+          ]
+        }
+      ],
       "responseStatuses": [
         "204",
         "400",
@@ -12328,6 +12964,21 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         ]
       },
+      "requestBodyVariants": [
+        {
+          "required": false,
+          "contentType": "application/json",
+          "fileFields": [],
+          "example": "{\n  \"agentName\": \"Kitchen display\",\n  \"scopes\": \"shopping_list:read shopping_list:write\"\n}",
+          "examples": [
+            {
+              "name": "example",
+              "label": "Example",
+              "example": "{\n  \"agentName\": \"Kitchen display\",\n  \"scopes\": \"shopping_list:read shopping_list:write\"\n}"
+            }
+          ]
+        }
+      ],
       "responseStatuses": [
         "200",
         "400",
@@ -12409,6 +13060,21 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         ]
       },
+      "requestBodyVariants": [
+        {
+          "required": true,
+          "contentType": "application/json",
+          "fileFields": [],
+          "example": "{\n  \"deviceCode\": \"sjdc_...\"\n}",
+          "examples": [
+            {
+              "name": "example",
+              "label": "Example",
+              "example": "{\n  \"deviceCode\": \"sjdc_...\"\n}"
+            }
+          ]
+        }
+      ],
       "responseStatuses": [
         "200",
         "400",
@@ -12517,6 +13183,21 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         ]
       },
+      "requestBodyVariants": [
+        {
+          "required": true,
+          "contentType": "application/json",
+          "fileFields": [],
+          "example": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/list\",\n  \"params\": {}\n}",
+          "examples": [
+            {
+              "name": "example",
+              "label": "Example",
+              "example": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/list\",\n  \"params\": {}\n}"
+            }
+          ]
+        }
+      ],
       "responseStatuses": [
         "200",
         "401",

@@ -128,6 +128,7 @@ function expectRecipeDetailShape(recipe: Record<string, any>) {
     "description",
     "href",
     "id",
+    "recentSpoons",
     "servings",
     "steps",
     "title",
@@ -145,6 +146,7 @@ function expectRecipeDetailShape(recipe: Record<string, any>) {
   expectAttributionShape(recipe.attribution);
   expect(Array.isArray(recipe.steps)).toBe(true);
   expect(Array.isArray(recipe.cookbooks)).toBe(true);
+  expect(Array.isArray(recipe.recentSpoons)).toBe(true);
   for (const step of recipe.steps) {
     expectExactKeys(step, ["description", "duration", "id", "ingredients", "stepNum", "stepTitle", "usingSteps"]);
     expect(typeof step.id).toBe("string");

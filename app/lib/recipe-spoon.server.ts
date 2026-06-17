@@ -27,6 +27,7 @@ export class SpoonNotFoundError extends Error {
 }
 
 export interface CreateSpoonInput {
+  id?: string;
   chefId: string;
   recipeId: string;
   photoFile?: File;
@@ -145,6 +146,7 @@ export async function createSpoon(
     );
   }
   const data: Prisma.RecipeSpoonUncheckedCreateInput = {
+    id: input.id,
     chefId: input.chefId,
     recipeId: input.recipeId,
     note,

@@ -369,6 +369,36 @@ const schemas = {
     ingredients: { ...arrayOf(ref("RecipeIngredient")), description: "Ingredients attached to this step, in API order. API v1 does not expose a separate ingredient display-text field." },
     usingSteps: { ...arrayOf(ref("RecipeStepOutputUse")), description: "Prior recipe steps whose outputs this step uses, ordered by outputStepNum." },
   }),
+  RecipeSpoonChef: objectSchema(["id", "photoUrl", "username"], {
+    id: idSchema,
+    photoUrl: nullableStringSchema,
+    username: { type: "string" },
+  }),
+  RecipeSpoon: objectSchema(["chefId", "cookedAt", "createdAt", "deletedAt", "id", "nextTime", "note", "photoUrl", "recipeId", "updatedAt"], {
+    id: idSchema,
+    chefId: idSchema,
+    recipeId: idSchema,
+    cookedAt: dateTimeSchema,
+    photoUrl: nullableStringSchema,
+    note: boundedNullableStringSchema,
+    nextTime: boundedNullableStringSchema,
+    deletedAt: nullableDateTimeSchema,
+    createdAt: dateTimeSchema,
+    updatedAt: dateTimeSchema,
+  }),
+  RecipeDetailRecentSpoon: objectSchema(["chef", "chefId", "cookedAt", "createdAt", "deletedAt", "id", "nextTime", "note", "photoUrl", "recipeId", "updatedAt"], {
+    id: idSchema,
+    chefId: idSchema,
+    recipeId: idSchema,
+    cookedAt: dateTimeSchema,
+    photoUrl: nullableStringSchema,
+    note: boundedNullableStringSchema,
+    nextTime: boundedNullableStringSchema,
+    deletedAt: nullableDateTimeSchema,
+    createdAt: dateTimeSchema,
+    updatedAt: dateTimeSchema,
+    chef: ref("RecipeSpoonChef"),
+  }),
   CookbookLink: objectSchema(["id", "title", "href", "canonicalUrl"], {
     id: idSchema,
     title: { type: "string" },
@@ -410,7 +440,7 @@ const schemas = {
     createdAt: dateTimeSchema,
     updatedAt: dateTimeSchema,
   }),
-  RecipeDetail: objectSchema(["id", "title", "description", "servings", "chef", "coverImageUrl", "coverProvenanceLabel", "coverSourceType", "coverVariant", "href", "canonicalUrl", "attribution", "createdAt", "updatedAt", "steps", "cookbooks"], {
+  RecipeDetail: objectSchema(["id", "title", "description", "servings", "chef", "coverImageUrl", "coverProvenanceLabel", "coverSourceType", "coverVariant", "href", "canonicalUrl", "attribution", "createdAt", "updatedAt", "steps", "cookbooks", "recentSpoons"], {
     id: idSchema,
     title: { type: "string" },
     description: nullableStringSchema,
@@ -427,6 +457,7 @@ const schemas = {
     updatedAt: dateTimeSchema,
     steps: { ...arrayOf(ref("RecipeStep")), description: "Recipe steps returned in ascending stepNum order." },
     cookbooks: arrayOf(ref("CookbookLink")),
+    recentSpoons: { ...arrayOf(ref("RecipeDetailRecentSpoon")), description: "Latest non-deleted cook-log preview rows for the recipe. Use /api/v1/recipes/{id}/spoons for cursor pagination." },
   }),
   CookbookSummary: objectSchema(["id", "title", "chef", "recipeCount", "coverImageUrls", "href", "canonicalUrl", "attribution", "createdAt", "updatedAt"], {
     id: idSchema,
@@ -757,6 +788,54 @@ const schemas = {
     clientMutationId: shortTextSchema,
     replayed: { type: "boolean" },
   }),
+  RecipeSpoonListItem: objectSchema(["chef", "chefId", "cookedAt", "coverGenerationStatus", "coverImageUrl", "coverProvenanceLabel", "coverSourceType", "coverStatus", "coverVariant", "createdAt", "deletedAt", "id", "nextTime", "note", "photoUrl", "recipeId", "updatedAt"], {
+    id: idSchema,
+    chefId: idSchema,
+    recipeId: idSchema,
+    cookedAt: dateTimeSchema,
+    photoUrl: nullableStringSchema,
+    note: boundedNullableStringSchema,
+    nextTime: boundedNullableStringSchema,
+    deletedAt: nullableDateTimeSchema,
+    createdAt: dateTimeSchema,
+    updatedAt: dateTimeSchema,
+    chef: ref("RecipeSpoonChef"),
+    coverImageUrl: nullableStringSchema,
+    coverProvenanceLabel: nullableStringSchema,
+    coverSourceType: coverSourceTypeSchema,
+    coverVariant: coverVariantSchema,
+    coverStatus: { type: ["string", "null"], enum: ["processing", "ready", "failed", "archived", null] },
+    coverGenerationStatus: { type: ["string", "null"], enum: ["none", "processing", "succeeded", "failed", null] },
+  }),
+  RecipeSpoonListData: objectSchema(["cursor", "hasMore", "limit", "nextCursor", "recipeId", "spoons"], {
+    recipeId: idSchema,
+    limit: { type: "integer", minimum: 1, maximum: 50 },
+    cursor: nullableStringSchema,
+    nextCursor: nullableStringSchema,
+    hasMore: { type: "boolean" },
+    spoons: arrayOf(ref("RecipeSpoonListItem")),
+  }),
+  RecipeSpoonNotifications: objectSchema(["fellowChefOriginCook", "spoonOnMyRecipe"], {
+    spoonOnMyRecipe: { type: "string", enum: ["queued", "skipped", "unavailable"] },
+    fellowChefOriginCook: { type: "string", enum: ["queued", "skipped", "unavailable"] },
+  }),
+  CreateRecipeSpoonData: objectSchema(["cover", "isOriginCook", "mutation", "notifications", "spoon"], {
+    spoon: ref("RecipeSpoon"),
+    isOriginCook: { type: "boolean" },
+    cover: { oneOf: [ref("RecipeCover"), { type: "null" }] },
+    notifications: ref("RecipeSpoonNotifications"),
+    mutation: ref("MutationMetadata"),
+  }),
+  UpdateRecipeSpoonData: objectSchema(["cover", "mutation", "spoon"], {
+    spoon: ref("RecipeSpoon"),
+    cover: { oneOf: [ref("RecipeCover"), { type: "null" }] },
+    mutation: ref("MutationMetadata"),
+  }),
+  DeleteRecipeSpoonData: objectSchema(["deleted", "mutation", "spoon"], {
+    deleted: { const: true },
+    spoon: ref("RecipeSpoon"),
+    mutation: ref("MutationMetadata"),
+  }),
   RecipeCover: objectSchema(["activeVariant", "archivedAt", "createdAt", "createdById", "displayUrl", "failureReason", "generationStatus", "id", "imageUrl", "provenanceLabel", "recipeId", "sourceImageUrl", "sourceSpoonId", "sourceType", "status", "stylizedImageUrl"], {
     id: idSchema,
     recipeId: idSchema,
@@ -862,6 +941,32 @@ const schemas = {
     clientMutationId: shortTextSchema,
     activate: { type: "boolean" },
     generateEditorial: { type: "boolean", description: "Defaults to true." },
+  }),
+  CreateRecipeSpoonRequest: objectSchema(["clientMutationId"], {
+    clientMutationId: shortTextSchema,
+    note: boundedNullableStringSchema,
+    nextTime: boundedNullableStringSchema,
+    cookedAt: dateTimeSchema,
+    photoUrl: { ...nullableStringSchema, description: "Optional owner-owned Spoonjoy spoon photo URL under /photos/spoons/{chefId}/..." },
+    useAsRecipeCover: { type: "boolean", description: "Owners can opt a spoon photo into recipe cover creation. Non-owner opt-ins are ignored." },
+  }),
+  CreateRecipeSpoonPhotoUploadRequest: objectSchema(["clientMutationId", "photo"], {
+    clientMutationId: shortTextSchema,
+    photo: { type: "string", format: "binary", description: "Spoon photo file. Accepted media types are JPG, PNG, and WebP." },
+    note: boundedNullableStringSchema,
+    nextTime: boundedNullableStringSchema,
+    cookedAt: dateTimeSchema,
+    useAsRecipeCover: { type: "boolean", description: "Owners can opt a spoon photo into recipe cover creation. Non-owner opt-ins are ignored." },
+  }),
+  UpdateRecipeSpoonRequest: objectSchema(["clientMutationId"], {
+    clientMutationId: shortTextSchema,
+    note: boundedNullableStringSchema,
+    nextTime: boundedNullableStringSchema,
+    cookedAt: dateTimeSchema,
+    photoUrl: { ...nullableStringSchema, description: "Optional owner-owned Spoonjoy spoon photo URL under /photos/spoons/{chefId}/..." },
+  }),
+  DeleteRecipeSpoonRequest: objectSchema(["clientMutationId"], {
+    clientMutationId: shortTextSchema,
   }),
   CreateTokenRequest: objectSchema(["name"], {
     name: shortTextSchema,
@@ -1067,6 +1172,10 @@ const schemas = {
   RecipeCoverListEnvelope: successEnvelope(ref("RecipeCoverListData")),
   RecipeCoverMutationEnvelope: successEnvelope(ref("RecipeCoverMutationData")),
   ActiveRecipeCoverMutationEnvelope: successEnvelope(ref("ActiveRecipeCoverMutationData")),
+  RecipeSpoonListEnvelope: successEnvelope(ref("RecipeSpoonListData")),
+  CreateRecipeSpoonEnvelope: successEnvelope(ref("CreateRecipeSpoonData")),
+  UpdateRecipeSpoonEnvelope: successEnvelope(ref("UpdateRecipeSpoonData")),
+  DeleteRecipeSpoonEnvelope: successEnvelope(ref("DeleteRecipeSpoonData")),
   CookbookListData: objectSchema(["query", "limit", "cursor", "nextCursor", "hasMore", "cookbooks"], {
     query: nullableStringSchema,
     limit: { type: "integer" },
@@ -1265,12 +1374,12 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
     POST: { operationId: "postApiV1RecipeCoverFromSpoon", tags: ["Recipe Covers"], summary: "Create a recipe cover from an existing spoon photo", auth: "bearer", scopes: ["kitchen:write"], success: { 201: "RecipeCoverMutationEnvelope", 202: "RecipeCoverMutationEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.spoonId], requestBody: "RecipeCoverFromSpoonRequest" },
   },
   "/api/v1/recipes/{id}/spoons": {
-    GET: { operationId: "getApiV1RecipeSpoons", tags: ["Spoons"], summary: "List recipe spoons and cook logs", auth: "optional", scopes: ["recipes:read"], success: nativeContractSuccess, errors: optionalReadErrors, parameters: [pathParameters.id, queryParameters.cursor, queryParameters.limit] },
-    POST: { operationId: "postApiV1RecipeSpoons", tags: ["Spoons"], summary: "Create a spoon or cook log", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractCreated, errors: bearerMutationErrors, parameters: [pathParameters.id], requestBody: "NativeMutationRequest" },
+    GET: { operationId: "getApiV1RecipeSpoons", tags: ["Spoons"], summary: "List recipe spoons and cook logs", auth: "optional", scopes: ["recipes:read"], success: { 200: "RecipeSpoonListEnvelope" }, errors: optionalReadErrors, parameters: [pathParameters.id, queryParameters.cursor, queryParameters.limit] },
+    POST: { operationId: "postApiV1RecipeSpoons", tags: ["Spoons"], summary: "Create a spoon or cook log", auth: "bearer", scopes: ["kitchen:write"], success: { 201: "CreateRecipeSpoonEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.id], requestBody: "CreateRecipeSpoonRequest" },
   },
   "/api/v1/recipes/{id}/spoons/{spoonId}": {
-    PATCH: { operationId: "patchApiV1RecipeSpoon", tags: ["Spoons"], summary: "Update a spoon or cook log", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.spoonId], requestBody: "NativeMutationRequest" },
-    DELETE: { operationId: "deleteApiV1RecipeSpoon", tags: ["Spoons"], summary: "Delete a spoon or cook log", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.spoonId, pathParameters.clientMutationIdHeader] },
+    PATCH: { operationId: "patchApiV1RecipeSpoon", tags: ["Spoons"], summary: "Update a spoon or cook log", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "UpdateRecipeSpoonEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.spoonId], requestBody: "UpdateRecipeSpoonRequest" },
+    DELETE: { operationId: "deleteApiV1RecipeSpoon", tags: ["Spoons"], summary: "Delete a spoon or cook log", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "DeleteRecipeSpoonEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.spoonId, pathParameters.clientMutationIdHeader, pathParameters.clientMutationIdQuery], requestBody: "DeleteRecipeSpoonRequest", requestBodyRequired: false },
   },
   "/api/v1/cookbooks": {
     GET: { operationId: "getApiV1Cookbooks", tags: ["Cookbooks"], summary: "Search public cookbooks", auth: "optional", scopes: ["cookbooks:read"], success: { 200: "CookbookListEnvelope" }, errors: optionalReadErrors, parameters: [queryParameters.query, queryParameters.q, queryParameters.cursor, queryParameters.limit] },
@@ -1401,6 +1510,19 @@ const exampleCookbookLink = {
   href: "/cookbooks/cookbook_1",
   canonicalUrl: "https://spoonjoy.app/cookbooks/cookbook_1",
 };
+const exampleRecipeDetailSpoon = {
+  id: "spoon_1",
+  chefId: "chef_2",
+  recipeId: "recipe_1",
+  cookedAt: exampleTimestamp,
+  photoUrl: "/photos/spoons/chef_2/recipe_1/cooked.jpg",
+  note: "Loved this with extra lemon.",
+  nextTime: null,
+  deletedAt: null,
+  createdAt: exampleTimestamp,
+  updatedAt: exampleTimestamp,
+  chef: { id: "chef_2", username: "jules", photoUrl: null },
+};
 const exampleRecipeSummary = {
   id: "recipe_1",
   title: "Pasta",
@@ -1427,6 +1549,7 @@ const exampleRecipeDetail = {
   ...exampleRecipeSummary,
   steps: [exampleRecipeStep, exampleDependentRecipeStep],
   cookbooks: [exampleCookbookLink],
+  recentSpoons: [exampleRecipeDetailSpoon],
 };
 const exampleRecipeDetailAfterStepDelete = {
   ...exampleRecipeDetail,
@@ -1696,6 +1819,32 @@ const exampleProviderSecretBlocker = {
   outputPath: "/tmp/spoonjoy/web/provider-secret-blocker-recipe-covers.json",
   ownerAction: "Provide OPENAI_API_KEY, GEMINI_API_KEY, or GOOGLE_API_KEY for local recipe cover editorial generation.",
   reason: "Recipe cover editorial image generation requires an image provider secret.",
+};
+const exampleRecipeSpoon = {
+  id: "spoon_1",
+  chefId: "chef_1",
+  recipeId: "recipe_1",
+  cookedAt: exampleTimestamp,
+  photoUrl: "/photos/spoons/chef_1/recipe_1/cooked.jpg",
+  note: "Weeknight win.",
+  nextTime: "Add more lemon.",
+  deletedAt: null,
+  createdAt: exampleTimestamp,
+  updatedAt: exampleTimestamp,
+};
+const exampleRecipeSpoonListItem = {
+  ...exampleRecipeSpoon,
+  chef: { id: "chef_1", username: "ari", photoUrl: "/photos/profiles/chef_1/avatar.gif" },
+  coverImageUrl: "/photos/recipes/chef_1/recipe_1/editorial.jpg",
+  coverProvenanceLabel: "Editorialized chef photo",
+  coverSourceType: "spoon",
+  coverVariant: "stylized",
+  coverStatus: "ready",
+  coverGenerationStatus: "succeeded",
+};
+const exampleRecipeSpoonNotifications = {
+  spoonOnMyRecipe: "skipped",
+  fellowChefOriginCook: "queued",
 };
 const exampleCheckedShoppingItem = { ...exampleShoppingItem, checked: true, checkedAt: exampleTimestamp };
 const exampleDeletedShoppingItem = { ...exampleShoppingItem, deletedAt: exampleTimestamp };
@@ -1970,6 +2119,47 @@ const responseExamples: Record<string, unknown> = {
       mutation: exampleMutation,
     },
   },
+  RecipeSpoonListEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      recipeId: "recipe_1",
+      limit: 20,
+      cursor: null,
+      nextCursor: null,
+      hasMore: false,
+      spoons: [exampleRecipeSpoonListItem],
+    },
+  },
+  CreateRecipeSpoonEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      spoon: exampleRecipeSpoon,
+      isOriginCook: true,
+      cover: { ...exampleRecipeCover, sourceType: "spoon", sourceSpoonId: exampleRecipeSpoon.id },
+      notifications: exampleRecipeSpoonNotifications,
+      mutation: exampleMutation,
+    },
+  },
+  UpdateRecipeSpoonEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      spoon: { ...exampleRecipeSpoon, nextTime: "Use more cumin.", updatedAt: exampleTimestamp },
+      cover: null,
+      mutation: exampleMutation,
+    },
+  },
+  DeleteRecipeSpoonEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      deleted: true,
+      spoon: { ...exampleRecipeSpoon, deletedAt: exampleTimestamp },
+      mutation: exampleMutation,
+    },
+  },
   CookbookListEnvelope: {
     ok: true,
     requestId: "req_example",
@@ -2156,6 +2346,30 @@ const requestExamples: Record<string, unknown> = {
     activate: true,
     generateEditorial: false,
   },
+  CreateRecipeSpoonRequest: {
+    clientMutationId: "spoon-create-device-uuid-1",
+    note: "Weeknight win.",
+    nextTime: "Add more lemon.",
+    cookedAt: exampleTimestamp,
+    photoUrl: null,
+    useAsRecipeCover: false,
+  },
+  CreateRecipeSpoonPhotoUploadRequest: {
+    clientMutationId: "spoon-photo-device-uuid-1",
+    photo: "<binary JPG, PNG, or WebP file>",
+    note: "First cook photo.",
+    nextTime: null,
+    cookedAt: exampleTimestamp,
+    useAsRecipeCover: true,
+  },
+  UpdateRecipeSpoonRequest: {
+    clientMutationId: "spoon-update-device-uuid-1",
+    note: null,
+    nextTime: "Use more cumin.",
+    cookedAt: exampleTimestamp,
+    photoUrl: "/photos/spoons/chef_1/recipe_1/cooked.jpg",
+  },
+  DeleteRecipeSpoonRequest: { clientMutationId: "spoon-delete-device-uuid-1" },
   NativeProfileRequest: { email: "ari@example.com", username: "ari" },
   ProfilePhotoUploadRequest: { photo: "<binary image file>" },
   NativeNotificationPreferencesRequest: {
@@ -2192,6 +2406,17 @@ function requestContentFor(schemaName: string) {
         schema: ref(schemaName),
         examples: {
           example: { value: requestExamples[schemaName] },
+        },
+      },
+    };
+  }
+  if (schemaName === "CreateRecipeSpoonRequest") {
+    return {
+      ...jsonContent(ref("CreateRecipeSpoonRequest"), requestExamples.CreateRecipeSpoonRequest),
+      "multipart/form-data": {
+        schema: ref("CreateRecipeSpoonPhotoUploadRequest"),
+        examples: {
+          example: { value: requestExamples.CreateRecipeSpoonPhotoUploadRequest },
         },
       },
     };

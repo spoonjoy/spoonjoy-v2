@@ -193,12 +193,14 @@ function expectRecipeGraphShape(recipe: Record<string, any>) {
     "description",
     "href",
     "id",
+    "recentSpoons",
     "servings",
     "steps",
     "title",
     "updatedAt",
   ]);
   expect(Array.isArray(recipe.steps)).toBe(true);
+  expect(Array.isArray(recipe.recentSpoons)).toBe(true);
   for (const step of recipe.steps) {
     expectStepShape(step);
   }

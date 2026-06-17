@@ -679,6 +679,129 @@ describe("API v1 mutation and validation telemetry", () => {
     }
   });
 
+  it("captures recipe spoon operation names and validation outcomes without leaking native payloads", async () => {
+    const fixture = await createRecipeFixture(db);
+    const credential = await createApiCredential(db, fixture.chef.id, "Telemetry Spoon Writer", {
+      scopes: ["kitchen:write", "recipes:read"],
+    });
+    const auth = { Authorization: `Bearer ${credential.token}` };
+    const spoon = await db.recipeSpoon.create({
+      data: {
+        chefId: fixture.chef.id,
+        recipeId: fixture.recipe.id,
+        note: "Telemetry spoon text must stay out of analytics",
+      },
+    });
+
+    const listContext = routeArgs(
+      apiRequest(`http://localhost/api/v1/recipes/${fixture.recipe.id}/spoons`, "req_spoon_operation_list", auth),
+      `recipes/${fixture.recipe.id}/spoons`,
+    );
+    expect((await loader(listContext.args)).status).toBe(200);
+    await Promise.all(listContext.scheduled);
+    expectApiV1OperationName({
+      routeTemplate: "/api/v1/recipes/{id}/spoons",
+      requestId: "req_spoon_operation_list",
+      operation: "recipes.spoons.list",
+      forbidden: [fixture.recipe.id, spoon.note!, credential.token, credential.credential.tokenPrefix],
+    });
+
+    for (const [method, path, routeTemplate, requestId, operation, body] of [
+      ["POST", `recipes/${fixture.recipe.id}/spoons`, "/api/v1/recipes/{id}/spoons", "req_spoon_create_auth_operation", "recipes.spoons.create", {
+        clientMutationId: "raw-spoon-create-mutation",
+        note: "raw spoon create",
+      }],
+      ["PATCH", `recipes/${fixture.recipe.id}/spoons/${spoon.id}`, "/api/v1/recipes/{id}/spoons/{spoonId}", "req_spoon_update_auth_operation", "recipes.spoons.update", {
+        clientMutationId: "raw-spoon-update-mutation",
+        note: "raw spoon update",
+      }],
+      ["DELETE", `recipes/${fixture.recipe.id}/spoons/${spoon.id}`, "/api/v1/recipes/{id}/spoons/{spoonId}", "req_spoon_delete_auth_operation", "recipes.spoons.delete", {
+        clientMutationId: "raw-spoon-delete-mutation",
+      }],
+    ] as const) {
+      const request = apiJsonRequest(method, path, requestId, {}, body);
+      const response = await action(routeArgs(request.request, path).args);
+
+      expect(response.status).toBe(401);
+      expectApiV1ErrorEvent({
+        routeTemplate,
+        requestId,
+        status: 401,
+        errorCode: "authentication_required",
+        authMode: "anonymous",
+        operation,
+        privacyClass: "private",
+        forbidden: [request.bodyText, fixture.recipe.id, spoon.id, spoon.note!],
+      });
+    }
+
+    const createNoContentType = routeArgs(new UndiciRequest(`http://localhost/api/v1/recipes/${fixture.recipe.id}/spoons`, {
+      method: "POST",
+      headers: {
+        ...auth,
+        "X-Request-Id": "req_spoon_create_no_content_type",
+        "User-Agent": "PostmanRuntime/7.39.0",
+      },
+    }) as unknown as Request, `recipes/${fixture.recipe.id}/spoons`);
+    expect((await action(createNoContentType.args)).status).toBe(400);
+    await Promise.all(createNoContentType.scheduled);
+    expectApiV1ErrorEvent({
+      routeTemplate: "/api/v1/recipes/{id}/spoons",
+      requestId: "req_spoon_create_no_content_type",
+      status: 400,
+      errorCode: "validation_error",
+      authMode: "bearer",
+      operation: "recipes.spoons.create",
+      privacyClass: "authenticated",
+      forbidden: [fixture.recipe.id, credential.token, credential.credential.tokenPrefix],
+    });
+
+    const deleteWithQuery = routeArgs(new UndiciRequest(
+      `http://localhost/api/v1/recipes/${fixture.recipe.id}/spoons/${spoon.id}?clientMutationId=delete-query-mutation`,
+      {
+        method: "DELETE",
+        headers: {
+          ...auth,
+          "X-Request-Id": "req_spoon_delete_query_mutation",
+          "User-Agent": "PostmanRuntime/7.39.0",
+        },
+      },
+    ) as unknown as Request, `recipes/${fixture.recipe.id}/spoons/${spoon.id}`);
+    expect((await action(deleteWithQuery.args)).status).toBe(200);
+    await Promise.all(deleteWithQuery.scheduled);
+    expectApiV1OperationEvent({
+      routeTemplate: "/api/v1/recipes/{id}/spoons/{spoonId}",
+      requestId: "req_spoon_delete_query_mutation",
+      operation: "recipes.spoons.delete",
+      status: 200,
+      authMode: "bearer",
+      requestBytes: 0,
+      idempotencyOutcome: "committed",
+      forbidden: [fixture.recipe.id, spoon.id, "delete-query-mutation", credential.token, credential.credential.tokenPrefix],
+    });
+
+    const deleteMissingMutation = routeArgs(new UndiciRequest(`http://localhost/api/v1/recipes/${fixture.recipe.id}/spoons/${spoon.id}`, {
+      method: "DELETE",
+      headers: {
+        ...auth,
+        "X-Request-Id": "req_spoon_delete_missing_mutation",
+        "User-Agent": "PostmanRuntime/7.39.0",
+      },
+    }) as unknown as Request, `recipes/${fixture.recipe.id}/spoons/${spoon.id}`);
+    expect((await action(deleteMissingMutation.args)).status).toBe(400);
+    await Promise.all(deleteMissingMutation.scheduled);
+    expectApiV1ErrorEvent({
+      routeTemplate: "/api/v1/recipes/{id}/spoons/{spoonId}",
+      requestId: "req_spoon_delete_missing_mutation",
+      status: 400,
+      errorCode: "validation_error",
+      authMode: "bearer",
+      operation: "recipes.spoons.delete",
+      privacyClass: "authenticated",
+      forbidden: [fixture.recipe.id, spoon.id, credential.token, credential.credential.tokenPrefix],
+    });
+  });
+
   it("captures recipe step operation names on authentication failures", async () => {
     const fixture = await createRecipeFixture(db);
     const stepId = "telemetry-step";

@@ -85,6 +85,17 @@ type OpenApiParameter = {
     maximum?: number;
   };
 };
+type ApiPlaygroundRequestBody = {
+  required: boolean;
+  contentType: "application/json" | "application/x-www-form-urlencoded" | "multipart/form-data";
+  fileFields: string[];
+  example: string;
+  examples: {
+    name: string;
+    label: string;
+    example: string;
+  }[];
+};
 
 const OUTPUT_FILE = "app/lib/generated/api-v1-playground.ts";
 export const OPENAPI_OPERATION_METHODS = ["get", "put", "post", "delete", "options", "head", "patch", "trace"] as const;
@@ -154,18 +165,13 @@ function parameterFromOpenApi(path: string, parameter: OpenApiParameter) {
   };
 }
 
-function requestBodyExample(operation: OpenApiOperation) {
-  const jsonExamples = operation.requestBody?.content?.["application/json"]?.examples;
-  const formExamples = operation.requestBody?.content?.["application/x-www-form-urlencoded"]?.examples;
-  const multipartExamples = operation.requestBody?.content?.["multipart/form-data"]?.examples;
-  const examples = jsonExamples ?? formExamples ?? multipartExamples;
+function requestBodyVariant(
+  operation: OpenApiOperation,
+  contentType: ApiPlaygroundRequestBody["contentType"],
+  examples: Record<string, { value?: unknown }> | undefined,
+): ApiPlaygroundRequestBody | null {
   const example = examples?.example?.value ?? Object.values(examples ?? {})[0]?.value;
   if (example === undefined) return null;
-  const contentType = jsonExamples
-    ? "application/json"
-    : formExamples
-      ? "application/x-www-form-urlencoded"
-      : "multipart/form-data";
   const fileFields = contentType === "multipart/form-data" && example && typeof example === "object"
     ? Object.entries(example as Record<string, unknown>)
       .filter(([, value]) => typeof value === "string" && value.toLowerCase().includes("binary"))
@@ -190,6 +196,20 @@ function requestBodyExample(operation: OpenApiOperation) {
       example: renderExample(item.value),
     })),
   };
+}
+
+function requestBodyVariants(operation: OpenApiOperation): ApiPlaygroundRequestBody[] {
+  const content = operation.requestBody?.content;
+  if (!content) return [];
+  return [
+    requestBodyVariant(operation, "application/json", content["application/json"]?.examples),
+    requestBodyVariant(operation, "application/x-www-form-urlencoded", content["application/x-www-form-urlencoded"]?.examples),
+    requestBodyVariant(operation, "multipart/form-data", content["multipart/form-data"]?.examples),
+  ].filter((variant): variant is ApiPlaygroundRequestBody => Boolean(variant));
+}
+
+function requestBodyExample(operation: OpenApiOperation) {
+  return requestBodyVariants(operation)[0] ?? null;
 }
 
 function operationKind(path: string, method: string) {
@@ -323,6 +343,7 @@ function operationFromOpenApi(
   const operationId = operation.operationId ?? `${method}_${path}`;
   const tag = operation.tags?.[0] ?? "API";
   const auth = operation["x-auth"] === "bearer" ? "authenticated" : "optional";
+  const bodyVariants = requestBodyVariants(operation);
   return {
     id: `${method.toUpperCase()} ${path}`,
     operationId,
@@ -346,7 +367,8 @@ function operationFromOpenApi(
     risk: operationRisk(path, method),
     guide: operationGuide(path, method, operation),
     params: (operation.parameters ?? []).map((parameter) => parameterFromOpenApi(path, parameter)),
-    requestBody: requestBodyExample(operation),
+    requestBody: bodyVariants[0] ?? null,
+    requestBodyVariants: bodyVariants,
     responseStatuses: responseSummaries(operation).map((response) => response.status),
     responseSummaries: responseSummaries(operation),
     responseExamples: responseExamples(operation),
@@ -400,6 +422,17 @@ export type ApiV1PlaygroundParam = {
     maximum?: number;
   };
 };
+export type ApiV1PlaygroundRequestBody = {
+  required: boolean;
+  contentType: "application/json" | "application/x-www-form-urlencoded" | "multipart/form-data";
+  fileFields: readonly string[];
+  example: string;
+  examples: readonly {
+    name: string;
+    label: string;
+    example: string;
+  }[];
+};
 export type ApiV1PlaygroundOperation = {
   id: string;
   operationId: string;
@@ -423,17 +456,8 @@ export type ApiV1PlaygroundOperation = {
   risk: ApiV1PlaygroundOperationRisk;
   guide: string;
   params: readonly ApiV1PlaygroundParam[];
-  requestBody: null | {
-    required: boolean;
-    contentType: "application/json" | "application/x-www-form-urlencoded" | "multipart/form-data";
-    fileFields: readonly string[];
-    example: string;
-    examples: readonly {
-      name: string;
-      label: string;
-      example: string;
-    }[];
-  };
+  requestBody: null | ApiV1PlaygroundRequestBody;
+  requestBodyVariants: readonly ApiV1PlaygroundRequestBody[];
   responseStatuses: readonly string[];
 	  responseSummaries: readonly {
 	    status: string;
