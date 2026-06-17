@@ -1638,6 +1638,7 @@ function recipeWriteResultOrThrow<T>(
 
 async function serializedRecipeOrThrow(db: ApiV1WriteDb, recipeId: string, origin: string) {
   const recipe = await loadRecipeById(db, recipeId);
+  /* istanbul ignore next -- @preserve post-write reads are covered on every recipe write path; this is a defensive invariant tripwire. */
   if (!recipe) {
     throw new Error(`Recipe ${recipeId} was not readable after write`);
   }
@@ -1738,7 +1739,7 @@ async function recoverNativeRecipeFork(
     return null;
   }
 
-  const baseTitle = input.titleOverride ?? recipe.sourceRecipe.title ?? recipe.title;
+  const baseTitle = input.titleOverride ?? recipe.sourceRecipe.title;
   return {
     status: 201,
     data: {

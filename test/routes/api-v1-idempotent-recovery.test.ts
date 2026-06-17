@@ -202,4 +202,69 @@ describe("API v1 idempotent mutation recovery", () => {
     expect(writeCalls).toBe(1);
     await expect(db.recipe.count({ where: { chefId: principal.id, title: body.title } })).resolves.toBe(1);
   });
+
+  it("surfaces completion failures without recovery and tolerates them when recovery exists", async () => {
+    const principal = await createPrincipal(db);
+    const body = { clientMutationId: "completion-failure", title: "Completion Failure Recipe" };
+
+    await expect(runIdempotentApiV1Mutation(
+      routeArgs(mutationRequest("req_completion_failure_no_recovery", body), "recipes"),
+      "req_completion_failure_no_recovery",
+      principal,
+      body,
+      body.clientMutationId,
+      "recipes.create",
+      async (database, reservation) => {
+        await database.apiIdempotencyKey.delete({ where: { id: reservation.id } });
+        return {
+          status: 201,
+          data: { mutation: { clientMutationId: body.clientMutationId, replayed: false } },
+        };
+      },
+    )).rejects.toThrow();
+
+    const recoverableBody = { clientMutationId: "completion-failure-recoverable", title: "Recoverable Completion Failure" };
+    const response = await runIdempotentApiV1Mutation(
+      routeArgs(mutationRequest("req_completion_failure_recoverable", recoverableBody), "recipes"),
+      "req_completion_failure_recoverable",
+      principal,
+      recoverableBody,
+      recoverableBody.clientMutationId,
+      "recipes.create",
+      async (database, reservation) => {
+        await database.apiIdempotencyKey.delete({ where: { id: reservation.id } });
+        return {
+          status: 201,
+          data: { mutation: { clientMutationId: recoverableBody.clientMutationId, replayed: false } },
+        };
+      },
+      async () => null,
+    );
+    const payload = await readJson(response);
+
+    expect(response.status).toBe(201);
+    expect(payload).toEqual({
+      ok: true,
+      requestId: "req_completion_failure_recoverable",
+      data: { mutation: { clientMutationId: recoverableBody.clientMutationId, replayed: false } },
+    });
+  });
+
+  it("keeps the original write error when cleanup also fails", async () => {
+    const principal = await createPrincipal(db);
+    const body = { clientMutationId: "cleanup-failure", title: "Cleanup Failure Recipe" };
+
+    await expect(runIdempotentApiV1Mutation(
+      routeArgs(mutationRequest("req_cleanup_failure", body), "recipes"),
+      "req_cleanup_failure",
+      principal,
+      body,
+      body.clientMutationId,
+      "recipes.create",
+      async (database, reservation) => {
+        await database.apiIdempotencyKey.delete({ where: { id: reservation.id } });
+        throw new Error("original write failure");
+      },
+    )).rejects.toThrow("original write failure");
+  });
 });
