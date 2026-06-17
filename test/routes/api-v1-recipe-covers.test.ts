@@ -687,6 +687,42 @@ describe("API v1 recipe image and cover lifecycle endpoints", () => {
       coverMode: "manual",
     });
 
+    const replay = await action(routeArgs(
+      multipartImageRequest(
+        `recipes/${recipe.id}/image`,
+        writer.token,
+        "req_cover_image_upload_replay",
+        clientMutationId,
+        new File([VALID_PNG_BYTES], "cover.png", { type: "image/png" }),
+        { activate: "true", generateEditorial: "false" },
+      ),
+      `recipes/${recipe.id}/image`,
+      { PHOTOS: photos.bucket },
+    ));
+    const replayPayload = await readJson(replay);
+    expect(replay.status).toBe(201);
+    expectSuccessEnvelope(replayPayload, "req_cover_image_upload_replay");
+    expectCoverMutationData(replayPayload.data, clientMutationId, true);
+    expect(replayPayload.data.createdCover.id).toBe(stored.id);
+    expect(photos.puts).toHaveLength(1);
+    await expect(db.recipeCover.count({ where: { recipeId: recipe.id } })).resolves.toBe(1);
+
+    const conflict = await action(routeArgs(
+      multipartImageRequest(
+        `recipes/${recipe.id}/image`,
+        writer.token,
+        "req_cover_image_upload_conflict",
+        clientMutationId,
+        new File([VALID_PNG_BYTES], "cover.png", { type: "image/png" }),
+        { activate: "false", generateEditorial: "false" },
+      ),
+      `recipes/${recipe.id}/image`,
+      { PHOTOS: photos.bucket },
+    ));
+    expect(conflict.status).toBe(409);
+    expectErrorEnvelope(await readJson(conflict), "req_cover_image_upload_conflict", "idempotency_conflict", 409);
+    expect(photos.puts).toHaveLength(1);
+
     const invalidContent = await action(routeArgs(
       jsonMutationRequest(
         "POST",
@@ -778,6 +814,18 @@ describe("API v1 recipe image and cover lifecycle endpoints", () => {
     expectSuccessEnvelope(replayPayload, "req_cover_create_url_replay");
     expectCoverMutationData(replayPayload.data, clientMutationId, true);
     expect(replayPayload.data.createdCover.id).toBe(firstPayload.data.createdCover.id);
+    await expect(db.recipeCover.count({ where: { recipeId: recipe.id } })).resolves.toBe(1);
+
+    const conflict = await action(routeArgs(
+      jsonMutationRequest("POST", `recipes/${recipe.id}/covers`, writer.token, "req_cover_create_url_conflict", {
+        ...requestBody,
+        activate: false,
+      }),
+      `recipes/${recipe.id}/covers`,
+      { PHOTOS: photos.bucket },
+    ));
+    expect(conflict.status).toBe(409);
+    expectErrorEnvelope(await readJson(conflict), "req_cover_create_url_conflict", "idempotency_conflict", 409);
     await expect(db.recipeCover.count({ where: { recipeId: recipe.id } })).resolves.toBe(1);
 
     for (const [requestId, badImageUrl, message] of [
@@ -896,6 +944,102 @@ describe("API v1 recipe image and cover lifecycle endpoints", () => {
     });
     expect(inactiveArchivePayload.data.archivedCover.archivedAt).toEqual(expect.any(String));
 
+    const inactiveArchiveReplay = await action(routeArgs(
+      jsonMutationRequest("DELETE", `recipes/${recipe.id}/covers/${previous.id}`, writer.token, "req_cover_archive_inactive_replay", {
+        clientMutationId: "native-archive-inactive-cover-1",
+      }),
+      `recipes/${recipe.id}/covers/${previous.id}`,
+    ));
+    const inactiveArchiveReplayPayload = await readJson(inactiveArchiveReplay);
+    expect(inactiveArchiveReplay.status).toBe(200);
+    expectActiveCoverMutationData(inactiveArchiveReplayPayload.data, "native-archive-inactive-cover-1", true);
+    expect(inactiveArchiveReplayPayload.data.archivedCover.id).toBe(previous.id);
+
+    const inactiveArchiveConflict = await action(routeArgs(
+      jsonMutationRequest("DELETE", `recipes/${recipe.id}/covers/${previous.id}`, writer.token, "req_cover_archive_inactive_conflict", {
+        clientMutationId: "native-archive-inactive-cover-1",
+        deleteSafeObjects: true,
+      }),
+      `recipes/${recipe.id}/covers/${previous.id}`,
+    ));
+    expect(inactiveArchiveConflict.status).toBe(409);
+    expectErrorEnvelope(await readJson(inactiveArchiveConflict), "req_cover_archive_inactive_conflict", "idempotency_conflict", 409);
+
+    const activeReplacementTarget = await db.recipeCover.create({
+      data: {
+        recipeId: recipe.id,
+        imageUrl: "/photos/recipes/owner/archive-target.jpg",
+        sourceType: "chef-upload",
+        status: "ready",
+        generationStatus: "none",
+        createdById: chef.id,
+      },
+    });
+    const nextReplacement = await db.recipeCover.create({
+      data: {
+        recipeId: recipe.id,
+        imageUrl: "/photos/recipes/owner/next-replacement.jpg",
+        stylizedImageUrl: "/photos/recipes/owner/next-replacement-editorial.jpg",
+        sourceType: "chef-upload",
+        status: "ready",
+        generationStatus: "succeeded",
+        createdById: chef.id,
+      },
+    });
+    await db.recipe.update({
+      where: { id: recipe.id },
+      data: { activeCoverId: activeReplacementTarget.id, activeCoverVariant: "image", coverMode: "manual" },
+    });
+    const replacementArchiveBody = {
+      clientMutationId: "native-archive-active-with-replacement-1",
+      replacementCoverId: nextReplacement.id,
+      replacementVariant: "stylized",
+    };
+    const replacementArchive = await action(routeArgs(
+      jsonMutationRequest("DELETE", `recipes/${recipe.id}/covers/${activeReplacementTarget.id}`, writer.token, "req_cover_archive_with_replacement", replacementArchiveBody),
+      `recipes/${recipe.id}/covers/${activeReplacementTarget.id}`,
+    ));
+    const replacementArchivePayload = await readJson(replacementArchive);
+    expect(replacementArchive.status).toBe(200);
+    expectActiveCoverMutationData(replacementArchivePayload.data, replacementArchiveBody.clientMutationId, false);
+    expect(replacementArchivePayload.data).toMatchObject({
+      activeCover: { id: nextReplacement.id, activeVariant: "stylized" },
+      previousActiveCover: { id: activeReplacementTarget.id, activeVariant: "image" },
+      archivedCover: { id: activeReplacementTarget.id, status: "archived", activeVariant: null },
+    });
+    await expect(db.recipe.findUniqueOrThrow({
+      where: { id: recipe.id },
+      select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
+    })).resolves.toEqual({
+      activeCoverId: nextReplacement.id,
+      activeCoverVariant: "stylized",
+      coverMode: "manual",
+    });
+
+    const replacementArchiveReplay = await action(routeArgs(
+      jsonMutationRequest("DELETE", `recipes/${recipe.id}/covers/${activeReplacementTarget.id}`, writer.token, "req_cover_archive_with_replacement_replay", replacementArchiveBody),
+      `recipes/${recipe.id}/covers/${activeReplacementTarget.id}`,
+    ));
+    const replacementArchiveReplayPayload = await readJson(replacementArchiveReplay);
+    expect(replacementArchiveReplay.status).toBe(200);
+    expectActiveCoverMutationData(replacementArchiveReplayPayload.data, replacementArchiveBody.clientMutationId, true);
+    expect(replacementArchiveReplayPayload.data.archivedCover.id).toBe(activeReplacementTarget.id);
+
+    const replacementArchiveConflict = await action(routeArgs(
+      jsonMutationRequest("DELETE", `recipes/${recipe.id}/covers/${activeReplacementTarget.id}`, writer.token, "req_cover_archive_with_replacement_conflict", {
+        ...replacementArchiveBody,
+        replacementVariant: "image",
+      }),
+      `recipes/${recipe.id}/covers/${activeReplacementTarget.id}`,
+    ));
+    expect(replacementArchiveConflict.status).toBe(409);
+    expectErrorEnvelope(await readJson(replacementArchiveConflict), "req_cover_archive_with_replacement_conflict", "idempotency_conflict", 409);
+
+    await db.recipe.update({
+      where: { id: recipe.id },
+      data: { activeCoverId: replacement.id, activeCoverVariant: "stylized", coverMode: "manual" },
+    });
+
     const activeWithoutChoice = await action(routeArgs(
       jsonMutationRequest("DELETE", `recipes/${recipe.id}/covers/${replacement.id}`, writer.token, "req_cover_archive_active_denied", {
         clientMutationId: "native-archive-active-denied",
@@ -984,6 +1128,45 @@ describe("API v1 recipe image and cover lifecycle endpoints", () => {
       .filter((fileName) => fileName.startsWith("provider-secret-blocker-"));
     expect(blockerFiles).toEqual(["provider-secret-blocker-recipe-covers.json"]);
 
+    const replay = await action(routeArgs(
+      jsonMutationRequest("POST", `recipes/${recipe.id}/covers/regenerate`, writer.token, "req_cover_regenerate_no_provider_replay", {
+        clientMutationId,
+        coverId: cover.id,
+        activateWhenReady: true,
+      }),
+      `recipes/${recipe.id}/covers/regenerate`,
+      {
+        ARTIFACT_ROOT: artifactRoot(),
+        OPENAI_API_KEY: "",
+        GEMINI_API_KEY: "",
+        GOOGLE_API_KEY: "",
+      },
+    ));
+    const replayPayload = await readJson(replay);
+    expect(replay.status).toBe(202);
+    expectSuccessEnvelope(replayPayload, "req_cover_regenerate_no_provider_replay");
+    expectCoverMutationData(replayPayload.data, clientMutationId, true, { created: true, blockers: true });
+    expect(replayPayload.data.createdCover.id).toBe(cover.id);
+    expectProviderBlockerShape(replayPayload.data.blockers[0], blockerPath);
+
+    const conflict = await action(routeArgs(
+      jsonMutationRequest("POST", `recipes/${recipe.id}/covers/regenerate`, writer.token, "req_cover_regenerate_no_provider_conflict", {
+        clientMutationId,
+        coverId: cover.id,
+        activateWhenReady: false,
+      }),
+      `recipes/${recipe.id}/covers/regenerate`,
+      {
+        ARTIFACT_ROOT: artifactRoot(),
+        OPENAI_API_KEY: "",
+        GEMINI_API_KEY: "",
+        GOOGLE_API_KEY: "",
+      },
+    ));
+    expect(conflict.status).toBe(409);
+    expectErrorEnvelope(await readJson(conflict), "req_cover_regenerate_no_provider_conflict", "idempotency_conflict", 409);
+    await expect(db.recipeCover.count({ where: { recipeId: recipe.id } })).resolves.toBe(1);
+
     const archived = await db.recipeCover.create({
       data: {
         recipeId: recipe.id,
@@ -1003,6 +1186,128 @@ describe("API v1 recipe image and cover lifecycle endpoints", () => {
     ));
     expect(invalid.status).toBe(400);
     expectErrorEnvelope(await readJson(invalid), "req_cover_regenerate_archived", "validation_error", 400);
+  });
+
+  it("returns canonical provider-secret blockers for editorial upload, URL, and spoon cover creation", async () => {
+    const { chef, otherChef, writer, recipe } = await createCoverFixture(db);
+    const imageKey = `recipes/${chef.id}/uploads/editorial-source.png`;
+    const photos = createMemoryPhotosBucket([imageKey]);
+    const blockerPath = providerBlockerPath();
+    const providerEnv = {
+      PHOTOS: photos.bucket,
+      ARTIFACT_ROOT: artifactRoot(),
+      OPENAI_API_KEY: "",
+      GEMINI_API_KEY: "",
+      GOOGLE_API_KEY: "",
+    };
+
+    const uploadClientMutationId = "native-upload-cover-provider-blocked-1";
+    const upload = await action(routeArgs(
+      multipartImageRequest(
+        `recipes/${recipe.id}/image`,
+        writer.token,
+        "req_cover_image_upload_provider_blocked",
+        uploadClientMutationId,
+        new File([VALID_PNG_BYTES], "cover.png", { type: "image/png" }),
+        { activate: "true", generateEditorial: "true" },
+      ),
+      `recipes/${recipe.id}/image`,
+      providerEnv,
+    ));
+    const uploadPayload = await readJson(upload);
+    expect(upload.status).toBe(202);
+    expectSuccessEnvelope(uploadPayload, "req_cover_image_upload_provider_blocked");
+    expectCoverMutationData(uploadPayload.data, uploadClientMutationId, false, { created: true, blockers: true });
+    expect(uploadPayload.data.createdCover).toMatchObject({
+      recipeId: recipe.id,
+      sourceType: "chef-upload",
+      status: "ready",
+      generationStatus: "failed",
+      failureReason: "missing_image_provider_config",
+      createdById: chef.id,
+      activeVariant: "image",
+    });
+    expect(uploadPayload.data.activeCover).toMatchObject({
+      id: uploadPayload.data.createdCover.id,
+      activeVariant: "image",
+    });
+    expectProviderBlockerShape(uploadPayload.data.blockers[0], blockerPath);
+
+    const createClientMutationId = "native-create-cover-provider-blocked-1";
+    const create = await action(routeArgs(
+      jsonMutationRequest("POST", `recipes/${recipe.id}/covers`, writer.token, "req_cover_create_url_provider_blocked", {
+        clientMutationId: createClientMutationId,
+        imageUrl: `/photos/${imageKey}`,
+        activate: true,
+        generateEditorial: true,
+      }),
+      `recipes/${recipe.id}/covers`,
+      providerEnv,
+    ));
+    const createPayload = await readJson(create);
+    expect(create.status).toBe(202);
+    expectSuccessEnvelope(createPayload, "req_cover_create_url_provider_blocked");
+    expectCoverMutationData(createPayload.data, createClientMutationId, false, { created: true, blockers: true });
+    expect(createPayload.data.createdCover).toMatchObject({
+      recipeId: recipe.id,
+      imageUrl: `/photos/${imageKey}`,
+      sourceType: "chef-upload",
+      status: "ready",
+      generationStatus: "failed",
+      failureReason: "missing_image_provider_config",
+      activeVariant: "image",
+    });
+    expect(createPayload.data.previousActiveCover).toMatchObject({
+      id: uploadPayload.data.createdCover.id,
+      activeVariant: "image",
+    });
+    expectProviderBlockerShape(createPayload.data.blockers[0], blockerPath);
+
+    const spoon = await db.recipeSpoon.create({
+      data: {
+        recipeId: recipe.id,
+        chefId: otherChef.id,
+        photoUrl: "/photos/spoons/other/editorial-source.jpg",
+      },
+    });
+    const spoonClientMutationId = "native-cover-from-spoon-provider-blocked-1";
+    const fromSpoon = await action(routeArgs(
+      jsonMutationRequest("POST", `recipes/${recipe.id}/covers/from-spoon/${spoon.id}`, writer.token, "req_cover_from_spoon_provider_blocked", {
+        clientMutationId: spoonClientMutationId,
+        activate: true,
+        generateEditorial: true,
+      }),
+      `recipes/${recipe.id}/covers/from-spoon/${spoon.id}`,
+      providerEnv,
+    ));
+    const fromSpoonPayload = await readJson(fromSpoon);
+    expect(fromSpoon.status).toBe(202);
+    expectSuccessEnvelope(fromSpoonPayload, "req_cover_from_spoon_provider_blocked");
+    expectCoverMutationData(fromSpoonPayload.data, spoonClientMutationId, false, { created: true, blockers: true });
+    expect(fromSpoonPayload.data.createdCover).toMatchObject({
+      recipeId: recipe.id,
+      imageUrl: "/photos/spoons/other/editorial-source.jpg",
+      sourceType: "spoon",
+      sourceSpoonId: spoon.id,
+      sourceImageUrl: "/photos/spoons/other/editorial-source.jpg",
+      status: "ready",
+      generationStatus: "failed",
+      failureReason: "missing_image_provider_config",
+      createdById: chef.id,
+      activeVariant: "image",
+    });
+    expect(fromSpoonPayload.data.previousActiveCover).toMatchObject({
+      id: createPayload.data.createdCover.id,
+      activeVariant: "image",
+    });
+    expectProviderBlockerShape(fromSpoonPayload.data.blockers[0], blockerPath);
+
+    const blocker = JSON.parse(await readFile(blockerPath, "utf8")) as Record<string, unknown>;
+    expectProviderBlockerShape(blocker, blockerPath);
+    const blockerFiles = (await readdir(path.dirname(blockerPath)))
+      .filter((fileName) => fileName.startsWith("provider-secret-blocker-"));
+    expect(blockerFiles).toEqual(["provider-secret-blocker-recipe-covers.json"]);
+    await expect(db.recipeCover.count({ where: { recipeId: recipe.id } })).resolves.toBe(3);
   });
 
   it("creates cover candidates from existing spoon photos without inventing comments or social surfaces", async () => {
@@ -1071,6 +1376,33 @@ describe("API v1 recipe image and cover lifecycle endpoints", () => {
     expect(payload.data.createdCover).not.toHaveProperty("comment");
     expect(payload.data.createdCover).not.toHaveProperty("post");
     expect(payload.data.createdCover).not.toHaveProperty("feed");
+
+    const replay = await action(routeArgs(
+      jsonMutationRequest("POST", `recipes/${recipe.id}/covers/from-spoon/${spoon.id}`, writer.token, "req_cover_from_spoon_replay", {
+        clientMutationId,
+        activate: true,
+        generateEditorial: false,
+      }),
+      `recipes/${recipe.id}/covers/from-spoon/${spoon.id}`,
+    ));
+    const replayPayload = await readJson(replay);
+    expect(replay.status).toBe(201);
+    expectSuccessEnvelope(replayPayload, "req_cover_from_spoon_replay");
+    expectCoverMutationData(replayPayload.data, clientMutationId, true);
+    expect(replayPayload.data.createdCover.id).toBe(payload.data.createdCover.id);
+    await expect(db.recipeCover.count({ where: { recipeId: recipe.id } })).resolves.toBe(1);
+
+    const conflict = await action(routeArgs(
+      jsonMutationRequest("POST", `recipes/${recipe.id}/covers/from-spoon/${spoon.id}`, writer.token, "req_cover_from_spoon_conflict", {
+        clientMutationId,
+        activate: false,
+        generateEditorial: false,
+      }),
+      `recipes/${recipe.id}/covers/from-spoon/${spoon.id}`,
+    ));
+    expect(conflict.status).toBe(409);
+    expectErrorEnvelope(await readJson(conflict), "req_cover_from_spoon_conflict", "idempotency_conflict", 409);
+    await expect(db.recipeCover.count({ where: { recipeId: recipe.id } })).resolves.toBe(1);
 
     for (const [requestId, spoonId] of [
       ["req_cover_from_missing_spoon", "missing-spoon"],
