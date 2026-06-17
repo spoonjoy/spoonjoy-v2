@@ -173,7 +173,8 @@ function expectUpdateCookbookData(data: Record<string, any>, clientMutationId: s
 function expectDeleteCookbookData(data: Record<string, any>, clientMutationId: string) {
   expectExactKeys(data, ["cookbook", "deleted", "mutation"]);
   expect(data.deleted).toBe(true);
-  expectExactKeys(data.cookbook, ["id", "title"]);
+  expectExactKeys(data.cookbook, ["deletedAt", "id", "title"]);
+  expect(typeof data.cookbook.deletedAt).toBe("string");
   expectMutationShape(data.mutation, clientMutationId, false);
 }
 
@@ -184,16 +185,12 @@ function expectCookbookRecipeMutationData(
   value: boolean,
 ) {
   const expectedKeys = key === "added"
-    ? ["added", "cookbook", "mutation", "notifications"]
+    ? ["added", "cookbook", "mutation"]
     : ["cookbook", "mutation", "removed"];
   expectExactKeys(data, expectedKeys);
   expect(data[key]).toBe(value);
   expectCookbookDetailShape(data.cookbook);
   expectMutationShape(data.mutation, clientMutationId, false);
-  if (key === "added") {
-    expectExactKeys(data.notifications, ["cookbookSaveOfMine"]);
-    expect(["queued", "skipped", "unavailable"]).toContain(data.notifications.cookbookSaveOfMine);
-  }
 }
 
 async function expectInProgress(response: Response, requestId: string) {
@@ -362,7 +359,7 @@ describe("API v1 cookbook write mutations", () => {
     expect(first.status).toBe(200);
     expectPrivateEnvelopeHeaders(first, "req_cookbook_delete");
     expectDeleteCookbookData(payload.data, body.clientMutationId);
-    expect(payload.data.cookbook).toEqual({ id: fixture.cookbook.id, title: fixture.cookbook.title });
+    expect(payload.data.cookbook).toMatchObject({ id: fixture.cookbook.id, title: fixture.cookbook.title });
     await expect(db.cookbook.findUnique({ where: { id: fixture.cookbook.id } })).resolves.toBeNull();
     await expect(db.recipeInCookbook.count({ where: { cookbookId: fixture.cookbook.id } })).resolves.toBe(0);
     await expect(db.recipe.findUnique({ where: { id: fixture.ownRecipe.id } })).resolves.not.toBeNull();
@@ -570,6 +567,20 @@ describe("API v1 cookbook write mutations", () => {
     expect(addDeletedRecipe.status).toBe(404);
     expectPrivateEnvelopeHeaders(addDeletedRecipe, "req_cookbook_add_deleted_recipe");
     expectErrorEnvelope(await readJson(addDeletedRecipe), "req_cookbook_add_deleted_recipe", "not_found", 404);
+
+    const addMissingRecipe = await action(routeArgs(
+      mutationRequest(
+        "POST",
+        `cookbooks/${fixture.cookbook.id}/recipes/missing-recipe`,
+        fixture.writer.token,
+        "req_cookbook_add_missing_recipe",
+        { clientMutationId: "cookbook-add-missing-recipe" },
+      ),
+      `cookbooks/${fixture.cookbook.id}/recipes/missing-recipe`,
+    ).args);
+    expect(addMissingRecipe.status).toBe(404);
+    expectPrivateEnvelopeHeaders(addMissingRecipe, "req_cookbook_add_missing_recipe");
+    expectErrorEnvelope(await readJson(addMissingRecipe), "req_cookbook_add_missing_recipe", "not_found", 404);
 
     const crossOwnerAdd = await action(routeArgs(
       mutationRequest(
