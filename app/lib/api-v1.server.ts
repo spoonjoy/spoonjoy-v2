@@ -108,7 +108,7 @@ export function apiV1Headers(requestId: string, json = true): Headers {
     "X-Request-Id": requestId,
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Request-Id, X-Client-Mutation-Id",
-    "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, PATCH, PUT, DELETE, OPTIONS",
     "Access-Control-Expose-Headers": "X-Request-Id, Retry-After",
   });
   if (json) {
@@ -414,8 +414,14 @@ function isKnownApiV1Path(path: string): boolean {
 }
 
 function allowedApiV1Methods(path: string): string | null {
-  const resource = API_V1_RESOURCES.find((candidate) => pathTemplateMatches(candidate.path, path));
-  return resource ? resource.methods.join(", ") : null;
+  const methods = new Set<string>();
+  for (const resource of API_V1_RESOURCES) {
+    if (!pathTemplateMatches(resource.path, path)) continue;
+    for (const method of resource.methods) {
+      methods.add(method);
+    }
+  }
+  return methods.size > 0 ? Array.from(methods).join(", ") : null;
 }
 
 export async function parseApiV1JsonBody(request: Request): Promise<Record<string, unknown>> {
@@ -1727,13 +1733,13 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
       return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
     }
 
-    if (args.request.method !== "GET" && args.request.method !== "POST" && args.request.method !== "PATCH" && args.request.method !== "DELETE") {
-      throw new ApiV1Error("method_not_allowed", "Method not allowed", { allow: allowedApiV1Methods(path) ?? "GET, POST, PATCH, DELETE" });
+    if (args.request.method !== "GET" && args.request.method !== "POST" && args.request.method !== "PATCH" && args.request.method !== "PUT" && args.request.method !== "DELETE") {
+      throw new ApiV1Error("method_not_allowed", "Method not allowed", { allow: allowedApiV1Methods(path) ?? "GET, POST, PATCH, PUT, DELETE" });
     }
 
     if (isKnownApiV1Path(path)) {
       /* istanbul ignore next -- @preserve known paths always have an allowed-method header from API_V1_RESOURCES. */
-      throw new ApiV1Error("method_not_allowed", "Method not allowed", { allow: allowedApiV1Methods(path) ?? "GET, POST, PATCH, DELETE" });
+      throw new ApiV1Error("method_not_allowed", "Method not allowed", { allow: allowedApiV1Methods(path) ?? "GET, POST, PATCH, PUT, DELETE" });
     }
 
     if (args.request.method === "GET") {

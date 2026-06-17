@@ -95,9 +95,9 @@ describe("API v1 OpenAPI document", () => {
     });
     expect(document["x-oauth-scope-map"]).toEqual({
       "cookbooks:read": ["cookbooks:read"],
-      "kitchen:read": ["cookbooks:read", "public:read", "recipes:read", "shopping_list:read"],
-      "kitchen:write": ["shopping_list:write"],
-      "public:read": ["recipes:read", "cookbooks:read"],
+      "kitchen:read": ["cookbooks:read", "kitchen:read", "public:read", "recipes:read", "shopping_list:read"],
+      "kitchen:write": ["kitchen:write", "shopping_list:write"],
+      "public:read": ["cookbooks:read", "public:read", "recipes:read"],
       "recipes:read": ["recipes:read"],
       "shopping_list:read": ["shopping_list:read"],
       "shopping_list:write": ["shopping_list:write"],

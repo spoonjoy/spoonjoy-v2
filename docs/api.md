@@ -19,16 +19,16 @@ Spoonjoy's public developer surface starts at `/api`, with compatibility aliases
 Available now:
 
 - Public recipe and cookbook reads
-- Owner-scoped shopping-list read, sync, add, check, and remove
+- Native app contract covering current Spoonjoy parity REST rows for recipes, cookbooks, spoons, shopping list, account/profile, public chef graph, search, and tokens
+- Owner-scoped shopping-list read, sync, add, check, remove, add-from-recipe, clear-completed, and clear-all
+- Account, kitchen, profile photo, notification preference, APNs device, connection, and private mobile sync contract rows
 - Session-created and bearer-created API tokens
 - OAuth/PKCE delegated access
 - Delegated agent/device approval links
 - Remote MCP endpoint
 
-Not in API v1 yet:
+Future API surface:
 
-- Recipe write, import, or export endpoints
-- Private recipe-library endpoints
 - Inventory or pantry stock APIs
 - Meal plan or "today's recipes" APIs
 - Full account export APIs
@@ -37,7 +37,7 @@ Not in API v1 yet:
 - Bulk shopping-list import or batch mutation endpoints
 - Corporate tenant, admin, employee, or org-export APIs
 
-If something is not in API v1 yet, treat it as future API surface rather than a hidden endpoint. New external clients should use `/api/v1`, `/api`, `/api/playground`, and the OpenAPI document; legacy app-only `/api/*` routes are not the external contract and reject OAuth access tokens that are audience-bound to `/mcp`.
+If something is outside API v1, treat it as future API surface rather than a hidden endpoint. New external clients should use `/api/v1`, `/api`, `/api/playground`, and the OpenAPI document; legacy app-only `/api/*` routes are not the external contract and reject OAuth access tokens that are audience-bound to `/mcp`.
 
 No-code connector builders that need an OpenAPI 3.0 REST-only import should use `/api/v1/openapi.connector.json`; it omits OAuth redirect screens, delegated approval helpers, and MCP JSON-RPC operations that connector importers often misclassify as normal actions.
 
@@ -45,7 +45,7 @@ Generated SDKs should use `/api/v1/openapi.sdk.json`; it keeps REST v1 resources
 
 | Surface | Build with it | Current boundary |
 | --- | --- | --- |
-| REST API v1 | Public catalog clients, shopping-list sync, bearer-token scripts, generated SDKs | No recipe write/import/export or private library endpoints yet. |
+| REST API v1 | Public catalog clients, native app parity, shopping-list sync, bearer-token scripts, generated SDKs | Native parity REST contract rows are declared; endpoint-family implementation units replace placeholder OpenAPI examples before those new write resources return success. |
 | No-code connector profile | Zapier/Make/n8n-style searches, actions, and polling triggers | No webhooks, REST Hooks, SSE, event subscriptions, or DELETE request bodies. |
 | OAuth/PKCE | Third-party mobile, SaaS, extension, and connector account linking | Public clients only; no client secret, password grant, token-management scopes, or custom schemes. |
 | Delegated approval | CLIs, appliances, voice clients, and agents without a callback URL | Custom Spoonjoy approval flow, not OAuth Device Authorization Grant. |
@@ -383,13 +383,13 @@ OAuth/MCP consent can use broad `kitchen:read` and `kitchen:write` scopes or lea
 
 | OAuth scope | REST scopes unlocked |
 | --- | --- |
-| `kitchen:read` | `cookbooks:read`, `public:read`, `recipes:read`, `shopping_list:read` |
-| `kitchen:write` | `shopping_list:write` |
+| `kitchen:read` | `cookbooks:read`, `kitchen:read`, `public:read`, `recipes:read`, `shopping_list:read` |
+| `kitchen:write` | `kitchen:write`, `shopping_list:write` |
 | `shopping_list:read` | `shopping_list:read` |
 | `shopping_list:write` | `shopping_list:write` |
 | `recipes:read` | `recipes:read` |
 | `cookbooks:read` | `cookbooks:read` |
-| `public:read` | public recipe and cookbook reads |
+| `public:read` | `cookbooks:read`, `public:read`, `recipes:read` |
 
 ## Scopes
 
@@ -398,6 +398,8 @@ Fine-grained REST scopes are attached to bearer tokens and OAuth-issued API cred
 | Scope | Purpose |
 | --- | --- |
 | `public:read` | Read public recipe and cookbook data with a bearer or OAuth credential. Anonymous reads do not need it. |
+| `kitchen:read` | Read the authenticated chef's Spoonjoy kitchen, account, private sync, and owner-scoped read surfaces. |
+| `kitchen:write` | Mutate the authenticated chef's Spoonjoy kitchen, including recipe, cookbook, spoon, account, APNs, and broad shopping-list write surfaces. |
 | `recipes:read` | Read public recipes and recipe detail. |
 | `cookbooks:read` | Read public cookbook lists and cookbook detail. |
 | `shopping_list:read` | Read the authenticated owner's active shopping list and sync feed. |
@@ -421,16 +423,82 @@ API v1 is rate limited by IP and credential before authentication work. Anonymou
 | `GET` | `/api/v1/openapi.connector.json` | Optional | none |
 | `GET` | `/api/v1/recipes` | Optional | `recipes:read` when authenticated |
 | `GET` | `/api/v1/recipes/{id}` | Optional | `recipes:read` when authenticated |
+| `POST` | `/api/v1/recipes` | Authenticated chef | `kitchen:write` |
+| `PATCH` | `/api/v1/recipes/{id}` | Authenticated chef | `kitchen:write` |
+| `DELETE` | `/api/v1/recipes/{id}` | Authenticated chef | `kitchen:write` |
+| `POST` | `/api/v1/recipes/{id}/fork` | Authenticated chef | `kitchen:write` |
+| `POST` | `/api/v1/recipes/{id}/steps` | Authenticated chef | `kitchen:write` |
+| `PATCH` | `/api/v1/recipes/{id}/steps/{stepId}` | Authenticated chef | `kitchen:write` |
+| `DELETE` | `/api/v1/recipes/{id}/steps/{stepId}` | Authenticated chef | `kitchen:write` |
+| `POST` | `/api/v1/recipes/{id}/steps/reorder` | Authenticated chef | `kitchen:write` |
+| `POST` | `/api/v1/recipes/{id}/steps/{stepId}/ingredients` | Authenticated chef | `kitchen:write` |
+| `DELETE` | `/api/v1/recipes/{id}/steps/{stepId}/ingredients/{ingredientId}` | Authenticated chef | `kitchen:write` |
+| `PUT` | `/api/v1/recipes/{id}/step-output-uses` | Authenticated chef | `kitchen:write` |
+| `POST` | `/api/v1/recipes/{id}/image` | Authenticated chef | `kitchen:write` |
+| `GET` | `/api/v1/recipes/{id}/covers` | Authenticated chef | `kitchen:write` |
+| `POST` | `/api/v1/recipes/{id}/covers` | Authenticated chef | `kitchen:write` |
+| `PATCH` | `/api/v1/recipes/{id}/covers/{coverId}` | Authenticated chef | `kitchen:write` |
+| `DELETE` | `/api/v1/recipes/{id}/covers/{coverId}` | Authenticated chef | `kitchen:write` |
+| `POST` | `/api/v1/recipes/{id}/covers/regenerate` | Authenticated chef | `kitchen:write` |
+| `POST` | `/api/v1/recipes/{id}/covers/from-spoon/{spoonId}` | Authenticated chef | `kitchen:write` |
+| `GET` | `/api/v1/recipes/{id}/spoons` | Optional | `recipes:read` when authenticated |
+| `POST` | `/api/v1/recipes/{id}/spoons` | Authenticated chef | `kitchen:write` |
+| `PATCH` | `/api/v1/recipes/{id}/spoons/{spoonId}` | Authenticated chef | `kitchen:write` |
+| `DELETE` | `/api/v1/recipes/{id}/spoons/{spoonId}` | Authenticated chef | `kitchen:write` |
 | `GET` | `/api/v1/cookbooks` | Optional | `cookbooks:read` when authenticated |
 | `GET` | `/api/v1/cookbooks/{id}` | Optional | `cookbooks:read` when authenticated |
+| `POST` | `/api/v1/cookbooks` | Authenticated chef | `kitchen:write` |
+| `PATCH` | `/api/v1/cookbooks/{id}` | Authenticated chef | `kitchen:write` |
+| `DELETE` | `/api/v1/cookbooks/{id}` | Authenticated chef | `kitchen:write` |
+| `POST` | `/api/v1/cookbooks/{id}/recipes/{recipeId}` | Authenticated chef | `kitchen:write` |
+| `DELETE` | `/api/v1/cookbooks/{id}/recipes/{recipeId}` | Authenticated chef | `kitchen:write` |
 | `GET` | `/api/v1/shopping-list` | Authenticated chef | `shopping_list:read` |
 | `GET` | `/api/v1/shopping-list/sync` | Authenticated chef | `shopping_list:read` |
 | `POST` | `/api/v1/shopping-list/items` | Authenticated chef | `shopping_list:write` |
 | `PATCH` | `/api/v1/shopping-list/items/{itemId}` | Authenticated chef | `shopping_list:write` |
 | `DELETE` | `/api/v1/shopping-list/items/{itemId}` | Authenticated chef | `shopping_list:write` |
+| `POST` | `/api/v1/shopping-list/add-from-recipe` | Authenticated chef | `shopping_list:write` |
+| `POST` | `/api/v1/shopping-list/clear-completed` | Authenticated chef | `shopping_list:write` |
+| `POST` | `/api/v1/shopping-list/clear-all` | Authenticated chef | `shopping_list:write` |
+| `GET` | `/api/v1/me` | Authenticated chef | `kitchen:read` |
+| `PATCH` | `/api/v1/me` | Authenticated chef | `kitchen:write` |
+| `POST` | `/api/v1/me/photo` | Authenticated chef | `kitchen:write` |
+| `DELETE` | `/api/v1/me/photo` | Authenticated chef | `kitchen:write` |
+| `GET` | `/api/v1/me/kitchen` | Authenticated chef | `kitchen:read` |
+| `GET` | `/api/v1/me/notification-preferences` | Authenticated chef | `kitchen:read` |
+| `PATCH` | `/api/v1/me/notification-preferences` | Authenticated chef | `kitchen:write` |
+| `POST` | `/api/v1/me/apns-devices` | Authenticated chef | `kitchen:write` |
+| `DELETE` | `/api/v1/me/apns-devices/{deviceId}` | Authenticated chef | `kitchen:write` |
+| `GET` | `/api/v1/me/connections` | Authenticated chef | `kitchen:read` |
+| `DELETE` | `/api/v1/me/connections/{connectionId}` | Authenticated chef | `kitchen:write` |
 | `GET` | `/api/v1/tokens` | Authenticated chef | `tokens:read` |
 | `POST` | `/api/v1/tokens` | Authenticated chef | `tokens:write` |
 | `DELETE` | `/api/v1/tokens/{credentialId}` | Authenticated chef | `tokens:write` |
+| `GET` | `/api/v1/me/sync` | Authenticated chef | `kitchen:read` |
+| `GET` | `/api/v1/users/{identifier}` | Optional | `public:read` when authenticated |
+| `GET` | `/api/v1/users/{identifier}/fellow-chefs` | Optional | `public:read` when authenticated |
+| `GET` | `/api/v1/users/{identifier}/kitchen-visitors` | Optional | `public:read` when authenticated |
+| `GET` | `/api/v1/search` | Optional | `public:read` when authenticated |
+| `POST` | `/api/v1/recipes/import` | Authenticated chef | `kitchen:write` |
+
+### Native app contract
+
+The Native parity REST contract is the source of truth for the iOS, iPadOS, and macOS app. It covers the current Spoonjoy product model without inventing new surfaces: recipe CRUD and import, step and ingredient editing, step output uses, recipe image and cover management, spoons, cookbook CRUD and membership, shopping-list sync and destructive clears, account/profile fields, profile photo upload/removal, notification preferences, APNs device registration, OAuth connection management, personal tokens, current-chef private sync, public chef graph, and search.
+
+Private mobile cache clients should treat authenticated responses as private no-store data. Public recipe and cookbook responses may be cached briefly by anonymous clients, but once a request carries a session or bearer credential the native app should place the data in its account/environment-scoped offline cache, mark it with freshness and source metadata, and purge it on logout, account switch, token revocation, or a server tombstone. Offline cache entries for private kitchen data must not leak into Spotlight, App Intents, share payloads, logs, screenshots, or public caches unless a field is deliberately user-visible.
+
+Endpoint-family implementation units replace the placeholder `NativeContractEnvelope` schemas with exact request and response bodies before those new write resources return HTTP success. Until a row has a real handler, clients should discover it through OpenAPI for code generation and planning, but treat live non-success responses as not-yet-implemented behavior rather than retryable domain failures.
+
+Native app bootstrap sequence:
+
+```text
+GET /api/v1/me
+POST /api/v1/me/photo
+POST /api/v1/me/apns-devices
+PATCH /api/v1/me/notification-preferences
+POST /api/v1/recipes/import
+GET /api/v1/me/sync
+```
 
 ## Sync And Mutations
 
@@ -444,7 +512,7 @@ Mutation responses return the changed item and mutation metadata, not the entire
 
 Retry network timeouts, `429`, and `5xx` responses with the same mutation id. Refresh or reconnect on `401`. Do not retry validation, scope, or idempotency-conflict errors unchanged.
 
-Recipe and cookbook list endpoints are public catalog search endpoints today. They accept `limit`, `cursor`, and `query`/`q`; when both query aliases are supplied, `query` wins. Responses include `cursor`, `nextCursor`, and `hasMore`, plus `coverImageUrl` on recipe summaries and `coverImageUrls` on cookbook summaries. They do not yet provide full owner export or deleted recipe/cookbook tombstones. Use shopping-list sync for incremental owner data until export APIs exist.
+Recipe and cookbook list endpoints are public catalog search endpoints today. They accept `limit`, `cursor`, and `query`/`q`; when both query aliases are supplied, `query` wins. Responses include `cursor`, `nextCursor`, and `hasMore`, plus `coverImageUrl` on recipe summaries and `coverImageUrls` on cookbook summaries. Full account export and deleted recipe/cookbook tombstone feeds remain future API surface. Use shopping-list sync and current-chef sync for owner data until export APIs exist.
 
 Public catalog cursors page by `createdAt` plus `id` for deterministic catalog walks. They are not repeatable snapshot guarantees, not `updatedAt` incremental feeds, and do not include deletion tombstones. New public records can appear during a long crawl. Restart a full crawl when you need to catch public recipe/cookbook edits or removals. Anonymous public recipe/cookbook responses expose `Cache-Control: public, max-age=60, stale-while-revalidate=300`; authenticated public reads are validated and returned with private/no-store cache headers. API v1 does not provide `ETag`, `Last-Modified`, or conditional request support yet.
 
@@ -462,7 +530,7 @@ curl -fsS -X POST 'https://spoonjoy.app/api/v1/shopping-list/items' \
 These starting points fit different client shapes without changing the underlying API:
 
 - Tiny-device clients: use cursor sync, compact responses, and idempotent writes so a device can recover from interrupted network calls.
-- Mobile apps: read the public Chef graph before sign-in, then request least-privilege shopping-list scopes after the chef connects their account.
+- Mobile apps: read the public Chef graph before sign-in, then request least-privilege shopping-list scopes or broad kitchen scopes after the chef connects their account. Native clients should use the Private mobile cache rules for offline cache storage.
 - CLI/script clients: use bearer credentials, curl, and the OpenAPI contract only when the script cannot share a Spoonjoy session.
 - Browser clients: use same-origin Session only inside spoonjoy.app; extensions and third-party browser apps use OAuth/PKCE.
 - Agent clients: use MCP with a bearer token, or delegated connection endpoints when a chef needs to approve an external runtime.
@@ -598,7 +666,7 @@ func syncShoppingList(accessToken: String, cursor: String?) async throws -> Stri
 
 ### Browser extension OAuth
 
-Browser extensions should use OAuth/PKCE from the background script or service worker, store `client_id`, `state`, and `code_verifier` in extension storage until callback, verify `state` before exchanging the code, and request only the scopes needed for the feature. API v1 does not create or import recipes yet; the supported extension story today is shopping-list ingredient sync. A "save ingredients" extension normally needs `shopping_list:read shopping_list:write`; a public recipe overlay can stay anonymous. Chrome-style `chrome.identity.getRedirectURL()` / `launchWebAuthFlow` callbacks are HTTPS URLs and can be registered exactly; custom extension schemes are not accepted.
+Browser extensions should use OAuth/PKCE from the background script or service worker, store `client_id`, `state`, and `code_verifier` in extension storage until callback, verify `state` before exchanging the code, and request only the scopes needed for the feature. A "save ingredients" extension normally needs `shopping_list:read shopping_list:write`; recipe clipping or `POST /api/v1/recipes/import` needs `kitchen:write`; a public recipe overlay can stay anonymous. Chrome-style `chrome.identity.getRedirectURL()` / `launchWebAuthFlow` callbacks are HTTPS URLs and can be registered exactly; custom extension schemes are not accepted.
 
 Use single-flight refresh in the background worker, atomically replace the stored refresh token after every refresh, then retry queued mutations with the same `clientMutationId`. On disconnect, call `/oauth/revoke` with the stored refresh token and clear extension storage.
 
@@ -826,7 +894,7 @@ snapshot_resource recipes recipes recipes.ndjson
 snapshot_resource cookbooks cookbooks cookbooks.ndjson
 ```
 
-Use shopping-list sync when you need owner-scoped incremental data. Full account export, recipe/cookbook update feeds, and recipe/cookbook deletion tombstones are not in API v1 yet.
+Use shopping-list sync and current-chef sync when you need owner-scoped incremental data. Full account export, recipe/cookbook update feeds, and recipe/cookbook deletion tombstone feeds remain future API surface.
 
 Public data is still chef-controlled content. API availability is not a copyright, trademark, photo, or commercial-republishing license. Preserve `attribution.creditText` and `attribution.canonicalUrl`, link back to Spoonjoy, comply with Spoonjoy terms and the source owner's rights, and do not assume full recipe/photo republication is allowed just because JSON is readable. Keep authenticated shopping-list/OAuth data out of any public catalog cache, and remove or hide mirrored public content when a later fetch returns `404 not_found`.
 

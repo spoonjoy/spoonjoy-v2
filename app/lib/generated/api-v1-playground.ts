@@ -201,7 +201,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "eyebrow": "Extension background",
       "audience": "Use for extensions that turn scraped ingredient rows into shopping-list mutations without exposing tokens to content scripts.",
       "notes": [
-        "API v1 does not create or import recipes yet; keep recipe clipping UI separate from Spoonjoy's current shopping-list sync API.",
+        "Recipe clipping can use POST /api/v1/recipes/import with kitchen:write; shopping-list ingredient sync can stay on shopping_list:read shopping_list:write.",
         "Run OAuth/PKCE in the extension background or service worker, store state and code_verifier until callback, and keep bearer tokens out of content scripts.",
         "Register the HTTPS callback produced by chrome.identity.getRedirectURL/launchWebAuthFlow exactly; custom extension schemes are rejected.",
         "Use shopping_list:read shopping_list:write for ingredient sync, then post one row at a time with deterministic clientMutationId values.",
@@ -241,11 +241,13 @@ export const API_V1_PLAYGROUND_MANIFEST = {
   "oauthScopeMap": {
     "kitchen:read": [
       "cookbooks:read",
+      "kitchen:read",
       "public:read",
       "recipes:read",
       "shopping_list:read"
     ],
     "kitchen:write": [
+      "kitchen:write",
       "shopping_list:write"
     ],
     "shopping_list:read": [
@@ -261,14 +263,19 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "cookbooks:read"
     ],
     "public:read": [
-      "recipes:read",
-      "cookbooks:read"
+      "cookbooks:read",
+      "public:read",
+      "recipes:read"
     ]
   },
   "currentCapabilities": {
     "available": [
       "public recipe and cookbook reads",
-      "owner-scoped shopping-list read/sync/write",
+      "Native app contract for current Spoonjoy parity REST rows",
+      "owner-scoped shopping-list read/sync/write/add-from-recipe/clear",
+      "recipe, cookbook, spoon, cover, step, ingredient, and import contract declarations",
+      "account, kitchen, profile photo, notification preference, APNs device, connection, and private sync contract declarations",
+      "private no-store authenticated responses for native offline cache clients",
       "session-created and bearer-created API tokens",
       "OAuth/PKCE delegated access",
       "delegated agent/device approval links",
@@ -276,8 +283,6 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "cursor-paginated public recipe and cookbook lists"
     ],
     "notYetAvailable": [
-      "Recipe write, import, or export endpoints",
-      "Private recipe-library endpoints",
       "Inventory or pantry stock APIs",
       "Meal plan or \"today's recipes\" APIs",
       "Full account export APIs",
@@ -383,7 +388,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"app\": \"spoonjoy\",\n    \"version\": \"v1\",\n    \"status\": \"ok\",\n    \"docsUrl\": \"https://spoonjoy.app/api\",\n    \"openapiUrl\": \"/api/v1/openapi.json\",\n    \"sdkOpenapiUrl\": \"/api/v1/openapi.sdk.json\",\n    \"connectorOpenapiUrl\": \"/api/v1/openapi.connector.json\",\n    \"resources\": [\n      {\n        \"name\": \"root\",\n        \"path\": \"/api/v1\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"health\",\n        \"path\": \"/api/v1/health\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"openapi\",\n        \"path\": \"/api/v1/openapi.json\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"openapi-sdk\",\n        \"path\": \"/api/v1/openapi.sdk.json\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"openapi-connector\",\n        \"path\": \"/api/v1/openapi.connector.json\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"recipes\",\n        \"path\": \"/api/v1/recipes\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": [\n          \"recipes:read\"\n        ]\n      },\n      {\n        \"name\": \"recipe\",\n        \"path\": \"/api/v1/recipes/{id}\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": [\n          \"recipes:read\"\n        ]\n      },\n      {\n        \"name\": \"cookbooks\",\n        \"path\": \"/api/v1/cookbooks\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": [\n          \"cookbooks:read\"\n        ]\n      },\n      {\n        \"name\": \"cookbook\",\n        \"path\": \"/api/v1/cookbooks/{id}\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": [\n          \"cookbooks:read\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list\",\n        \"path\": \"/api/v1/shopping-list\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:read\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-sync\",\n        \"path\": \"/api/v1/shopping-list/sync\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:read\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-items\",\n        \"path\": \"/api/v1/shopping-list/items\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:write\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-item\",\n        \"path\": \"/api/v1/shopping-list/items/{itemId}\",\n        \"methods\": [\n          \"PATCH\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:write\"\n        ]\n      },\n      {\n        \"name\": \"tokens\",\n        \"path\": \"/api/v1/tokens\",\n        \"methods\": [\n          \"GET\",\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"tokens:read\",\n          \"tokens:write\"\n        ]\n      },\n      {\n        \"name\": \"token\",\n        \"path\": \"/api/v1/tokens/{credentialId}\",\n        \"methods\": [\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"tokens:write\"\n        ]\n      }\n    ],\n    \"auth\": {\n      \"modes\": [\n        \"anonymous\",\n        \"session\",\n        \"bearer\",\n        \"oauth_pkce\",\n        \"delegated_agent\",\n        \"mcp\"\n      ],\n      \"tokenUrl\": \"/api/v1/tokens\",\n      \"revokeUrl\": \"/api/v1/tokens/{credentialId}\",\n      \"public\": {\n        \"anonymous\": true,\n        \"note\": \"Public recipe and cookbook reads can be called without credentials.\"\n      },\n      \"session\": {\n        \"tokenUrl\": \"/api/v1/tokens\",\n        \"note\": \"Same-origin Spoonjoy browser sessions can create personal bearer credentials.\"\n      },\n      \"bearer\": {\n        \"header\": \"Authorization: Bearer sj_...\",\n        \"tokenUrl\": \"/api/v1/tokens\",\n        \"revokeUrl\": \"/api/v1/tokens/{credentialId}\"\n      },\n      \"oauth\": {\n        \"register\": \"/oauth/register\",\n        \"authorize\": \"/oauth/authorize\",\n        \"token\": \"/oauth/token\",\n        \"revoke\": \"/oauth/revoke\"\n      },\n      \"mcp\": {\n        \"endpoint\": \"/mcp\",\n        \"startAgentConnection\": \"/api/tools/start_agent_connection\",\n        \"pollAgentConnection\": \"/api/tools/poll_agent_connection\"\n      }\n    }\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"app\": \"spoonjoy\",\n    \"version\": \"v1\",\n    \"status\": \"ok\",\n    \"docsUrl\": \"https://spoonjoy.app/api\",\n    \"openapiUrl\": \"/api/v1/openapi.json\",\n    \"sdkOpenapiUrl\": \"/api/v1/openapi.sdk.json\",\n    \"connectorOpenapiUrl\": \"/api/v1/openapi.connector.json\",\n    \"resources\": [\n      {\n        \"name\": \"root\",\n        \"path\": \"/api/v1\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"health\",\n        \"path\": \"/api/v1/health\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"openapi\",\n        \"path\": \"/api/v1/openapi.json\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"openapi-sdk\",\n        \"path\": \"/api/v1/openapi.sdk.json\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"openapi-connector\",\n        \"path\": \"/api/v1/openapi.connector.json\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"recipes\",\n        \"path\": \"/api/v1/recipes\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": [\n          \"recipes:read\"\n        ]\n      },\n      {\n        \"name\": \"recipe-create\",\n        \"path\": \"/api/v1/recipes\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe\",\n        \"path\": \"/api/v1/recipes/{id}\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": [\n          \"recipes:read\"\n        ]\n      },\n      {\n        \"name\": \"recipe-write\",\n        \"path\": \"/api/v1/recipes/{id}\",\n        \"methods\": [\n          \"PATCH\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-fork\",\n        \"path\": \"/api/v1/recipes/{id}/fork\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-steps\",\n        \"path\": \"/api/v1/recipes/{id}/steps\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-step\",\n        \"path\": \"/api/v1/recipes/{id}/steps/{stepId}\",\n        \"methods\": [\n          \"PATCH\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-step-reorder\",\n        \"path\": \"/api/v1/recipes/{id}/steps/reorder\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-step-ingredients\",\n        \"path\": \"/api/v1/recipes/{id}/steps/{stepId}/ingredients\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-step-ingredient\",\n        \"path\": \"/api/v1/recipes/{id}/steps/{stepId}/ingredients/{ingredientId}\",\n        \"methods\": [\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-step-output-uses\",\n        \"path\": \"/api/v1/recipes/{id}/step-output-uses\",\n        \"methods\": [\n          \"PUT\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-image\",\n        \"path\": \"/api/v1/recipes/{id}/image\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-covers\",\n        \"path\": \"/api/v1/recipes/{id}/covers\",\n        \"methods\": [\n          \"GET\",\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-cover\",\n        \"path\": \"/api/v1/recipes/{id}/covers/{coverId}\",\n        \"methods\": [\n          \"PATCH\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-cover-regenerate\",\n        \"path\": \"/api/v1/recipes/{id}/covers/regenerate\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-cover-from-spoon\",\n        \"path\": \"/api/v1/recipes/{id}/covers/from-spoon/{spoonId}\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-spoons\",\n        \"path\": \"/api/v1/recipes/{id}/spoons\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": [\n          \"recipes:read\"\n        ]\n      },\n      {\n        \"name\": \"recipe-spoon-create\",\n        \"path\": \"/api/v1/recipes/{id}/spoons\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-spoon\",\n        \"path\": \"/api/v1/recipes/{id}/spoons/{spoonId}\",\n        \"methods\": [\n          \"PATCH\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"cookbooks\",\n        \"path\": \"/api/v1/cookbooks\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": [\n          \"cookbooks:read\"\n        ]\n      },\n      {\n        \"name\": \"cookbook-create\",\n        \"path\": \"/api/v1/cookbooks\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"cookbook\",\n        \"path\": \"/api/v1/cookbooks/{id}\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": [\n          \"cookbooks:read\"\n        ]\n      },\n      {\n        \"name\": \"cookbook-write\",\n        \"path\": \"/api/v1/cookbooks/{id}\",\n        \"methods\": [\n          \"PATCH\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"cookbook-recipe\",\n        \"path\": \"/api/v1/cookbooks/{id}/recipes/{recipeId}\",\n        \"methods\": [\n          \"POST\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list\",\n        \"path\": \"/api/v1/shopping-list\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:read\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-sync\",\n        \"path\": \"/api/v1/shopping-list/sync\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:read\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-items\",\n        \"path\": \"/api/v1/shopping-list/items\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:write\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-item\",\n        \"path\": \"/api/v1/shopping-list/items/{itemId}\",\n        \"methods\": [\n          \"PATCH\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:write\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-add-from-recipe\",\n        \"path\": \"/api/v1/shopping-list/add-from-recipe\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:write\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-clear-completed\",\n        \"path\": \"/api/v1/shopping-list/clear-completed\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:write\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-clear-all\",\n        \"path\": \"/api/v1/shopping-list/clear-all\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:write\"\n        ]\n      },\n      {\n        \"name\": \"me\",\n        \"path\": \"/api/v1/me\",\n        \"methods\": [\n          \"GET\",\n          \"PATCH\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:read\",\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"me-photo\",\n        \"path\": \"/api/v1/me/photo\",\n        \"methods\": [\n          \"POST\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"me-kitchen\",\n        \"path\": \"/api/v1/me/kitchen\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:read\"\n        ]\n      },\n      {\n        \"name\": \"me-notification-preferences\",\n        \"path\": \"/api/v1/me/notification-preferences\",\n        \"methods\": [\n          \"GET\",\n          \"PATCH\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:read\",\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"me-apns-devices\",\n        \"path\": \"/api/v1/me/apns-devices\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"me-apns-device\",\n        \"path\": \"/api/v1/me/apns-devices/{deviceId}\",\n        \"methods\": [\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"me-connections\",\n        \"path\": \"/api/v1/me/connections\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:read\"\n        ]\n      },\n      {\n        \"name\": \"me-connection\",\n        \"path\": \"/api/v1/me/connections/{connectionId}\",\n        \"methods\": [\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"tokens\",\n        \"path\": \"/api/v1/tokens\",\n        \"methods\": [\n          \"GET\",\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"tokens:read\",\n          \"tokens:write\"\n        ]\n      },\n      {\n        \"name\": \"token\",\n        \"path\": \"/api/v1/tokens/{credentialId}\",\n        \"methods\": [\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"tokens:write\"\n        ]\n      },\n      {\n        \"name\": \"me-sync\",\n        \"path\": \"/api/v1/me/sync\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:read\"\n        ]\n      },\n      {\n        \"name\": \"user-profile\",\n        \"path\": \"/api/v1/users/{identifier}\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": [\n          \"public:read\"\n        ]\n      },\n      {\n        \"name\": \"user-fellow-chefs\",\n        \"path\": \"/api/v1/users/{identifier}/fellow-chefs\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": [\n          \"public:read\"\n        ]\n      },\n      {\n        \"name\": \"user-kitchen-visitors\",\n        \"path\": \"/api/v1/users/{identifier}/kitchen-visitors\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": [\n          \"public:read\"\n        ]\n      },\n      {\n        \"name\": \"search\",\n        \"path\": \"/api/v1/search\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": [\n          \"public:read\"\n        ]\n      },\n      {\n        \"name\": \"recipe-import\",\n        \"path\": \"/api/v1/recipes/import\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      }\n    ],\n    \"auth\": {\n      \"modes\": [\n        \"anonymous\",\n        \"session\",\n        \"bearer\",\n        \"oauth_pkce\",\n        \"delegated_agent\",\n        \"mcp\"\n      ],\n      \"tokenUrl\": \"/api/v1/tokens\",\n      \"revokeUrl\": \"/api/v1/tokens/{credentialId}\",\n      \"public\": {\n        \"anonymous\": true,\n        \"note\": \"Public recipe and cookbook reads can be called without credentials.\"\n      },\n      \"session\": {\n        \"tokenUrl\": \"/api/v1/tokens\",\n        \"note\": \"Same-origin Spoonjoy browser sessions can create personal bearer credentials.\"\n      },\n      \"bearer\": {\n        \"header\": \"Authorization: Bearer sj_...\",\n        \"tokenUrl\": \"/api/v1/tokens\",\n        \"revokeUrl\": \"/api/v1/tokens/{credentialId}\"\n      },\n      \"oauth\": {\n        \"register\": \"/oauth/register\",\n        \"authorize\": \"/oauth/authorize\",\n        \"token\": \"/oauth/token\",\n        \"revoke\": \"/oauth/revoke\"\n      },\n      \"mcp\": {\n        \"endpoint\": \"/mcp\",\n        \"startAgentConnection\": \"/api/tools/start_agent_connection\",\n        \"pollAgentConnection\": \"/api/tools/poll_agent_connection\"\n      }\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -1066,6 +1071,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "400",
         "401",
         "403",
+        "404",
         "405",
         "429",
         "500"
@@ -1086,6 +1092,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "403",
           "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
         },
         {
           "status": "405",
@@ -1132,6 +1142,12 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: recipes:read\",\n    \"status\": 403\n  }\n}"
         },
         {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
           "status": "405",
           "name": "method_not_allowed",
           "label": "Method Not Allowed",
@@ -1142,12 +1158,186 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "name": "rate_limited",
           "label": "Rate Limited",
           "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"rate_limited\",\n    \"message\": \"Too many requests\",\n    \"status\": 429\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "POST /api/v1/recipes",
+      "operationId": "postApiV1Recipes",
+      "label": "Create a recipe",
+      "method": "POST",
+      "path": "/api/v1/recipes",
+      "profiles": [
+        "full",
+        "connector",
+        "sdk"
+      ],
+      "tag": "Recipes",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": {
+        "cursor": "opaque",
+        "limit": {
+          "min": 1,
+          "max": 50,
+          "default": 20
+        },
+        "order": "createdAt/id cursor walk",
+        "caveat": "Not an updatedAt incremental feed and not a repeatable snapshot guarantee."
+      },
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "write",
+      "risk": "mutating",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "contentType": "application/json",
+        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+          }
+        ]
+      },
+      "responseStatuses": [
+        "201",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "201",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
         },
         {
           "status": "500",
-          "name": "internal_error",
-          "label": "Internal Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error\",\n    \"status\": 500\n  }\n}"
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "201",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
         }
       ]
     },
@@ -1248,7 +1438,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         },
         {
           "status": "400",
-          "description": "Errors: validation_error"
+          "description": "Errors: validation_error, invalid_cursor"
         },
         {
           "status": "401",
@@ -1289,6 +1479,12 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
         },
         {
+          "status": "400",
+          "name": "invalid_cursor",
+          "label": "Invalid Cursor",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_cursor\",\n    \"message\": \"cursor must be a valid Spoonjoy cursor\",\n    \"status\": 400\n  }\n}"
+        },
+        {
           "status": "401",
           "name": "invalid_token",
           "label": "Invalid Token",
@@ -1317,12 +1513,3938 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "name": "rate_limited",
           "label": "Rate Limited",
           "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"rate_limited\",\n    \"message\": \"Too many requests\",\n    \"status\": 429\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "PATCH /api/v1/recipes/{id}",
+      "operationId": "patchApiV1Recipe",
+      "label": "Update a recipe",
+      "method": "PATCH",
+      "path": "/api/v1/recipes/{id}",
+      "profiles": [
+        "full",
+        "connector",
+        "sdk"
+      ],
+      "tag": "Recipes",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "write",
+      "risk": "mutating",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "label": "Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "recipe_1",
+          "description": "Spoonjoy resource id from a previous list response.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "contentType": "application/json",
+        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+          }
+        ]
+      },
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
         },
         {
           "status": "500",
-          "name": "internal_error",
-          "label": "Internal Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error\",\n    \"status\": 500\n  }\n}"
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "DELETE /api/v1/recipes/{id}",
+      "operationId": "deleteApiV1Recipe",
+      "label": "Delete a recipe",
+      "method": "DELETE",
+      "path": "/api/v1/recipes/{id}",
+      "profiles": [
+        "full",
+        "connector",
+        "sdk"
+      ],
+      "tag": "Recipes",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "destructive",
+      "risk": "destructive",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "label": "Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "recipe_1",
+          "description": "Spoonjoy resource id from a previous list response.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Client-Mutation-Id",
+          "in": "header",
+          "label": "X Client Mutation Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "delete:item_1:uuid-or-hash",
+          "description": "Chef-wide idempotency key for this delete. Use the same value when retrying the exact same request after a timeout.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": null,
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "POST /api/v1/recipes/{id}/fork",
+      "operationId": "postApiV1RecipeFork",
+      "label": "Fork a recipe",
+      "method": "POST",
+      "path": "/api/v1/recipes/{id}/fork",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Recipes",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "write",
+      "risk": "mutating",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "label": "Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "recipe_1",
+          "description": "Spoonjoy resource id from a previous list response.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "contentType": "application/json",
+        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+          }
+        ]
+      },
+      "responseStatuses": [
+        "201",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "201",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "201",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "POST /api/v1/recipes/{id}/steps",
+      "operationId": "postApiV1RecipeSteps",
+      "label": "Create a recipe step",
+      "method": "POST",
+      "path": "/api/v1/recipes/{id}/steps",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Recipe Steps",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "write",
+      "risk": "mutating",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "label": "Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "recipe_1",
+          "description": "Spoonjoy resource id from a previous list response.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "contentType": "application/json",
+        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+          }
+        ]
+      },
+      "responseStatuses": [
+        "201",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "201",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "201",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "PATCH /api/v1/recipes/{id}/steps/{stepId}",
+      "operationId": "patchApiV1RecipeStep",
+      "label": "Update a recipe step",
+      "method": "PATCH",
+      "path": "/api/v1/recipes/{id}/steps/{stepId}",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Recipe Steps",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "write",
+      "risk": "mutating",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "label": "Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "recipe_1",
+          "description": "Spoonjoy resource id from a previous list response.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "stepId",
+          "in": "path",
+          "label": "Step Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "step_1",
+          "description": "Recipe step id from recipe detail.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "contentType": "application/json",
+        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+          }
+        ]
+      },
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "DELETE /api/v1/recipes/{id}/steps/{stepId}",
+      "operationId": "deleteApiV1RecipeStep",
+      "label": "Delete a recipe step",
+      "method": "DELETE",
+      "path": "/api/v1/recipes/{id}/steps/{stepId}",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Recipe Steps",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "destructive",
+      "risk": "destructive",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "label": "Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "recipe_1",
+          "description": "Spoonjoy resource id from a previous list response.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "stepId",
+          "in": "path",
+          "label": "Step Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "step_1",
+          "description": "Recipe step id from recipe detail.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Client-Mutation-Id",
+          "in": "header",
+          "label": "X Client Mutation Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "delete:item_1:uuid-or-hash",
+          "description": "Chef-wide idempotency key for this delete. Use the same value when retrying the exact same request after a timeout.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": null,
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "POST /api/v1/recipes/{id}/steps/reorder",
+      "operationId": "postApiV1RecipeStepsReorder",
+      "label": "Reorder recipe steps",
+      "method": "POST",
+      "path": "/api/v1/recipes/{id}/steps/reorder",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Recipe Steps",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "write",
+      "risk": "mutating",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "label": "Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "recipe_1",
+          "description": "Spoonjoy resource id from a previous list response.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "contentType": "application/json",
+        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+          }
+        ]
+      },
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "POST /api/v1/recipes/{id}/steps/{stepId}/ingredients",
+      "operationId": "postApiV1RecipeStepIngredients",
+      "label": "Add a step ingredient",
+      "method": "POST",
+      "path": "/api/v1/recipes/{id}/steps/{stepId}/ingredients",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Recipe Steps",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "write",
+      "risk": "mutating",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "label": "Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "recipe_1",
+          "description": "Spoonjoy resource id from a previous list response.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "stepId",
+          "in": "path",
+          "label": "Step Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "step_1",
+          "description": "Recipe step id from recipe detail.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "contentType": "application/json",
+        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+          }
+        ]
+      },
+      "responseStatuses": [
+        "201",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "201",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "201",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "DELETE /api/v1/recipes/{id}/steps/{stepId}/ingredients/{ingredientId}",
+      "operationId": "deleteApiV1RecipeStepIngredient",
+      "label": "Delete a step ingredient",
+      "method": "DELETE",
+      "path": "/api/v1/recipes/{id}/steps/{stepId}/ingredients/{ingredientId}",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Recipe Steps",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "destructive",
+      "risk": "destructive",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "label": "Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "recipe_1",
+          "description": "Spoonjoy resource id from a previous list response.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "stepId",
+          "in": "path",
+          "label": "Step Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "step_1",
+          "description": "Recipe step id from recipe detail.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "ingredientId",
+          "in": "path",
+          "label": "Ingredient Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "ingredient_1",
+          "description": "Recipe step ingredient id from recipe detail.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Client-Mutation-Id",
+          "in": "header",
+          "label": "X Client Mutation Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "delete:item_1:uuid-or-hash",
+          "description": "Chef-wide idempotency key for this delete. Use the same value when retrying the exact same request after a timeout.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": null,
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "PUT /api/v1/recipes/{id}/step-output-uses",
+      "operationId": "putApiV1RecipeStepOutputUses",
+      "label": "Replace step-output dependency uses",
+      "method": "PUT",
+      "path": "/api/v1/recipes/{id}/step-output-uses",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Recipe Steps",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "write",
+      "risk": "mutating",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "label": "Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "recipe_1",
+          "description": "Spoonjoy resource id from a previous list response.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "contentType": "application/json",
+        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+          }
+        ]
+      },
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "POST /api/v1/recipes/{id}/image",
+      "operationId": "postApiV1RecipeImage",
+      "label": "Upload or assign a recipe image",
+      "method": "POST",
+      "path": "/api/v1/recipes/{id}/image",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Recipe Covers",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "write",
+      "risk": "mutating",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "label": "Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "recipe_1",
+          "description": "Spoonjoy resource id from a previous list response.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "contentType": "application/json",
+        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+          }
+        ]
+      },
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "GET /api/v1/recipes/{id}/covers",
+      "operationId": "getApiV1RecipeCovers",
+      "label": "List recipe cover history",
+      "method": "GET",
+      "path": "/api/v1/recipes/{id}/covers",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Recipe Covers",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "read",
+      "risk": "safe",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "label": "Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "recipe_1",
+          "description": "Spoonjoy resource id from a previous list response.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": null,
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: validation_error, invalid_cursor"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_cursor",
+          "label": "Invalid Cursor",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_cursor\",\n    \"message\": \"cursor must be a valid Spoonjoy cursor\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "POST /api/v1/recipes/{id}/covers",
+      "operationId": "postApiV1RecipeCovers",
+      "label": "Create a recipe cover",
+      "method": "POST",
+      "path": "/api/v1/recipes/{id}/covers",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Recipe Covers",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "write",
+      "risk": "mutating",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "label": "Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "recipe_1",
+          "description": "Spoonjoy resource id from a previous list response.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "contentType": "application/json",
+        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+          }
+        ]
+      },
+      "responseStatuses": [
+        "201",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "201",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "201",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "PATCH /api/v1/recipes/{id}/covers/{coverId}",
+      "operationId": "patchApiV1RecipeCover",
+      "label": "Update a recipe cover",
+      "method": "PATCH",
+      "path": "/api/v1/recipes/{id}/covers/{coverId}",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Recipe Covers",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "write",
+      "risk": "mutating",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "label": "Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "recipe_1",
+          "description": "Spoonjoy resource id from a previous list response.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "coverId",
+          "in": "path",
+          "label": "Cover Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "cover_1",
+          "description": "Recipe cover id from cover history.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "contentType": "application/json",
+        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+          }
+        ]
+      },
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "DELETE /api/v1/recipes/{id}/covers/{coverId}",
+      "operationId": "deleteApiV1RecipeCover",
+      "label": "Delete or archive a recipe cover",
+      "method": "DELETE",
+      "path": "/api/v1/recipes/{id}/covers/{coverId}",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Recipe Covers",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "destructive",
+      "risk": "destructive",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "label": "Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "recipe_1",
+          "description": "Spoonjoy resource id from a previous list response.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "coverId",
+          "in": "path",
+          "label": "Cover Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "cover_1",
+          "description": "Recipe cover id from cover history.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Client-Mutation-Id",
+          "in": "header",
+          "label": "X Client Mutation Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "delete:item_1:uuid-or-hash",
+          "description": "Chef-wide idempotency key for this delete. Use the same value when retrying the exact same request after a timeout.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": null,
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "POST /api/v1/recipes/{id}/covers/regenerate",
+      "operationId": "postApiV1RecipeCoversRegenerate",
+      "label": "Regenerate a recipe cover",
+      "method": "POST",
+      "path": "/api/v1/recipes/{id}/covers/regenerate",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Recipe Covers",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "write",
+      "risk": "mutating",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "label": "Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "recipe_1",
+          "description": "Spoonjoy resource id from a previous list response.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "contentType": "application/json",
+        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+          }
+        ]
+      },
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "POST /api/v1/recipes/{id}/covers/from-spoon/{spoonId}",
+      "operationId": "postApiV1RecipeCoverFromSpoon",
+      "label": "Create a recipe cover from a spoon",
+      "method": "POST",
+      "path": "/api/v1/recipes/{id}/covers/from-spoon/{spoonId}",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Recipe Covers",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "write",
+      "risk": "mutating",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "label": "Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "recipe_1",
+          "description": "Spoonjoy resource id from a previous list response.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "spoonId",
+          "in": "path",
+          "label": "Spoon Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "spoon_1",
+          "description": "Spoon/cook-log id from recipe or profile responses.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "contentType": "application/json",
+        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+          }
+        ]
+      },
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "GET /api/v1/recipes/{id}/spoons",
+      "operationId": "getApiV1RecipeSpoons",
+      "label": "List recipe spoons and cook logs",
+      "method": "GET",
+      "path": "/api/v1/recipes/{id}/spoons",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Spoons",
+      "auth": "optional",
+      "scopes": [
+        "recipes:read"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [
+        [
+          "kitchen:read"
+        ],
+        [
+          "public:read"
+        ]
+      ],
+      "credentialModes": [
+        "anonymous",
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "read",
+      "risk": "safe",
+      "guide": "Anonymous is enough for public reads. If you send Session or Bearer credentials, Spoonjoy validates them and checks the listed scopes.",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "label": "Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "recipe_1",
+          "description": "Spoonjoy resource id from a previous list response.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "cursor",
+          "in": "query",
+          "label": "Cursor",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "v1.cursor_from_nextCursor",
+          "description": "Opaque pagination cursor returned as nextCursor. Catalog cursors are v1.* values; shopping-list sync also accepts an ISO timestamp only as bootstrap compatibility.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "limit",
+          "in": "query",
+          "label": "Limit",
+          "required": false,
+          "defaultValue": "20",
+          "placeholder": "20",
+          "description": "Page size from 1 to 50. Defaults to 20.",
+          "schema": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": null,
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: validation_error, invalid_cursor"
+        },
+        {
+          "status": "401",
+          "description": "Errors: invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_cursor",
+          "label": "Invalid Cursor",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_cursor\",\n    \"message\": \"cursor must be a valid Spoonjoy cursor\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: recipes:read\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        },
+        {
+          "status": "429",
+          "name": "rate_limited",
+          "label": "Rate Limited",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"rate_limited\",\n    \"message\": \"Too many requests\",\n    \"status\": 429\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "POST /api/v1/recipes/{id}/spoons",
+      "operationId": "postApiV1RecipeSpoons",
+      "label": "Create a spoon or cook log",
+      "method": "POST",
+      "path": "/api/v1/recipes/{id}/spoons",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Spoons",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "write",
+      "risk": "mutating",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "label": "Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "recipe_1",
+          "description": "Spoonjoy resource id from a previous list response.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "contentType": "application/json",
+        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+          }
+        ]
+      },
+      "responseStatuses": [
+        "201",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "201",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "201",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "PATCH /api/v1/recipes/{id}/spoons/{spoonId}",
+      "operationId": "patchApiV1RecipeSpoon",
+      "label": "Update a spoon or cook log",
+      "method": "PATCH",
+      "path": "/api/v1/recipes/{id}/spoons/{spoonId}",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Spoons",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "write",
+      "risk": "mutating",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "label": "Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "recipe_1",
+          "description": "Spoonjoy resource id from a previous list response.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "spoonId",
+          "in": "path",
+          "label": "Spoon Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "spoon_1",
+          "description": "Spoon/cook-log id from recipe or profile responses.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "contentType": "application/json",
+        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+          }
+        ]
+      },
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "DELETE /api/v1/recipes/{id}/spoons/{spoonId}",
+      "operationId": "deleteApiV1RecipeSpoon",
+      "label": "Delete a spoon or cook log",
+      "method": "DELETE",
+      "path": "/api/v1/recipes/{id}/spoons/{spoonId}",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Spoons",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "destructive",
+      "risk": "destructive",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "label": "Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "recipe_1",
+          "description": "Spoonjoy resource id from a previous list response.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "spoonId",
+          "in": "path",
+          "label": "Spoon Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "spoon_1",
+          "description": "Spoon/cook-log id from recipe or profile responses.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Client-Mutation-Id",
+          "in": "header",
+          "label": "X Client Mutation Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "delete:item_1:uuid-or-hash",
+          "description": "Chef-wide idempotency key for this delete. Use the same value when retrying the exact same request after a timeout.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": null,
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
         }
       ]
     },
@@ -1458,6 +5580,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "400",
         "401",
         "403",
+        "404",
         "405",
         "429",
         "500"
@@ -1478,6 +5601,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "403",
           "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
         },
         {
           "status": "405",
@@ -1524,6 +5651,12 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: cookbooks:read\",\n    \"status\": 403\n  }\n}"
         },
         {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
           "status": "405",
           "name": "method_not_allowed",
           "label": "Method Not Allowed",
@@ -1534,12 +5667,186 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "name": "rate_limited",
           "label": "Rate Limited",
           "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"rate_limited\",\n    \"message\": \"Too many requests\",\n    \"status\": 429\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "POST /api/v1/cookbooks",
+      "operationId": "postApiV1Cookbooks",
+      "label": "Create a cookbook",
+      "method": "POST",
+      "path": "/api/v1/cookbooks",
+      "profiles": [
+        "full",
+        "connector",
+        "sdk"
+      ],
+      "tag": "Cookbooks",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": {
+        "cursor": "opaque",
+        "limit": {
+          "min": 1,
+          "max": 50,
+          "default": 20
+        },
+        "order": "createdAt/id cursor walk",
+        "caveat": "Not an updatedAt incremental feed and not a repeatable snapshot guarantee."
+      },
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "write",
+      "risk": "mutating",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "contentType": "application/json",
+        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+          }
+        ]
+      },
+      "responseStatuses": [
+        "201",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "201",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
         },
         {
           "status": "500",
-          "name": "internal_error",
-          "label": "Internal Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error\",\n    \"status\": 500\n  }\n}"
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "201",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
         }
       ]
     },
@@ -1640,7 +5947,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         },
         {
           "status": "400",
-          "description": "Errors: validation_error"
+          "description": "Errors: validation_error, invalid_cursor"
         },
         {
           "status": "401",
@@ -1681,6 +5988,12 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
         },
         {
+          "status": "400",
+          "name": "invalid_cursor",
+          "label": "Invalid Cursor",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_cursor\",\n    \"message\": \"cursor must be a valid Spoonjoy cursor\",\n    \"status\": 400\n  }\n}"
+        },
+        {
           "status": "401",
           "name": "invalid_token",
           "label": "Invalid Token",
@@ -1709,12 +6022,760 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "name": "rate_limited",
           "label": "Rate Limited",
           "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"rate_limited\",\n    \"message\": \"Too many requests\",\n    \"status\": 429\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "PATCH /api/v1/cookbooks/{id}",
+      "operationId": "patchApiV1Cookbook",
+      "label": "Update a cookbook",
+      "method": "PATCH",
+      "path": "/api/v1/cookbooks/{id}",
+      "profiles": [
+        "full",
+        "connector",
+        "sdk"
+      ],
+      "tag": "Cookbooks",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "write",
+      "risk": "mutating",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "label": "Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "cookbook_1",
+          "description": "Spoonjoy resource id from a previous list response.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "contentType": "application/json",
+        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+          }
+        ]
+      },
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
         },
         {
           "status": "500",
-          "name": "internal_error",
-          "label": "Internal Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error\",\n    \"status\": 500\n  }\n}"
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "DELETE /api/v1/cookbooks/{id}",
+      "operationId": "deleteApiV1Cookbook",
+      "label": "Delete a cookbook",
+      "method": "DELETE",
+      "path": "/api/v1/cookbooks/{id}",
+      "profiles": [
+        "full",
+        "connector",
+        "sdk"
+      ],
+      "tag": "Cookbooks",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "destructive",
+      "risk": "destructive",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "label": "Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "cookbook_1",
+          "description": "Spoonjoy resource id from a previous list response.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Client-Mutation-Id",
+          "in": "header",
+          "label": "X Client Mutation Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "delete:item_1:uuid-or-hash",
+          "description": "Chef-wide idempotency key for this delete. Use the same value when retrying the exact same request after a timeout.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": null,
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "POST /api/v1/cookbooks/{id}/recipes/{recipeId}",
+      "operationId": "postApiV1CookbookRecipe",
+      "label": "Add a recipe to a cookbook",
+      "method": "POST",
+      "path": "/api/v1/cookbooks/{id}/recipes/{recipeId}",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Cookbooks",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "write",
+      "risk": "mutating",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "label": "Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "recipe_1",
+          "description": "Spoonjoy resource id from a previous list response.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "recipeId",
+          "in": "path",
+          "label": "Recipe Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "recipe_1",
+          "description": "Recipe id being added to or removed from a cookbook.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "contentType": "application/json",
+        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+          }
+        ]
+      },
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "DELETE /api/v1/cookbooks/{id}/recipes/{recipeId}",
+      "operationId": "deleteApiV1CookbookRecipe",
+      "label": "Remove a recipe from a cookbook",
+      "method": "DELETE",
+      "path": "/api/v1/cookbooks/{id}/recipes/{recipeId}",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Cookbooks",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "destructive",
+      "risk": "destructive",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "label": "Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "recipe_1",
+          "description": "Spoonjoy resource id from a previous list response.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "recipeId",
+          "in": "path",
+          "label": "Recipe Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "recipe_1",
+          "description": "Recipe id being added to or removed from a cookbook.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Client-Mutation-Id",
+          "in": "header",
+          "label": "X Client Mutation Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "delete:item_1:uuid-or-hash",
+          "description": "Chef-wide idempotency key for this delete. Use the same value when retrying the exact same request after a timeout.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": null,
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
         }
       ]
     },
@@ -1791,6 +6852,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "400",
         "401",
         "403",
+        "404",
         "405",
         "429",
         "500"
@@ -1802,7 +6864,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         },
         {
           "status": "400",
-          "description": "Errors: validation_error"
+          "description": "Errors: validation_error, invalid_cursor"
         },
         {
           "status": "401",
@@ -1811,6 +6873,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "403",
           "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
         },
         {
           "status": "405",
@@ -1839,6 +6905,12 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
         },
         {
+          "status": "400",
+          "name": "invalid_cursor",
+          "label": "Invalid Cursor",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_cursor\",\n    \"message\": \"cursor must be a valid Spoonjoy cursor\",\n    \"status\": 400\n  }\n}"
+        },
+        {
           "status": "401",
           "name": "authentication_required",
           "label": "Authentication Required",
@@ -1857,22 +6929,16 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: shopping_list:read\",\n    \"status\": 403\n  }\n}"
         },
         {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
           "status": "405",
           "name": "method_not_allowed",
           "label": "Method Not Allowed",
           "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
-        },
-        {
-          "status": "429",
-          "name": "rate_limited",
-          "label": "Rate Limited",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"rate_limited\",\n    \"message\": \"Too many requests\",\n    \"status\": 429\n  }\n}"
-        },
-        {
-          "status": "500",
-          "name": "internal_error",
-          "label": "Internal Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error\",\n    \"status\": 500\n  }\n}"
         }
       ]
     },
@@ -1980,6 +7046,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "400",
         "401",
         "403",
+        "404",
         "405",
         "429",
         "500"
@@ -1991,7 +7058,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         },
         {
           "status": "400",
-          "description": "Errors: invalid_cursor, validation_error"
+          "description": "Errors: validation_error, invalid_cursor"
         },
         {
           "status": "401",
@@ -2000,6 +7067,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "403",
           "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
         },
         {
           "status": "405",
@@ -2023,15 +7094,15 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         },
         {
           "status": "400",
-          "name": "invalid_cursor",
-          "label": "Invalid Cursor",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_cursor\",\n    \"message\": \"cursor must be a valid Spoonjoy cursor\",\n    \"status\": 400\n  }\n}"
-        },
-        {
-          "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
           "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_cursor",
+          "label": "Invalid Cursor",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_cursor\",\n    \"message\": \"cursor must be a valid Spoonjoy cursor\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "401",
@@ -2052,16 +7123,16 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: shopping_list:read\",\n    \"status\": 403\n  }\n}"
         },
         {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
           "status": "405",
           "name": "method_not_allowed",
           "label": "Method Not Allowed",
           "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
-        },
-        {
-          "status": "429",
-          "name": "rate_limited",
-          "label": "Rate Limited",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"rate_limited\",\n    \"message\": \"Too many requests\",\n    \"status\": 429\n  }\n}"
         }
       ]
     },
@@ -2158,6 +7229,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "400",
         "401",
         "403",
+        "404",
         "405",
         "409",
         "429",
@@ -2183,6 +7255,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "403",
           "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
         },
         {
           "status": "405",
@@ -2245,10 +7321,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: shopping_list:write\",\n    \"status\": 403\n  }\n}"
         },
         {
-          "status": "405",
-          "name": "method_not_allowed",
-          "label": "Method Not Allowed",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
         }
       ]
     },
@@ -2566,7 +7642,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         },
         {
           "status": "400",
-          "description": "Errors: validation_error"
+          "description": "Errors: invalid_json, validation_error"
         },
         {
           "status": "401",
@@ -2606,6 +7682,12 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         },
         {
           "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
           "name": "validation_error",
           "label": "Validation Error",
           "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
@@ -2639,12 +7721,2347 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "name": "method_not_allowed",
           "label": "Method Not Allowed",
           "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "POST /api/v1/shopping-list/add-from-recipe",
+      "operationId": "postApiV1ShoppingListAddFromRecipe",
+      "label": "Add recipe ingredients to the shopping list",
+      "method": "POST",
+      "path": "/api/v1/shopping-list/add-from-recipe",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Shopping List",
+      "auth": "authenticated",
+      "scopes": [
+        "shopping_list:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [
+        [
+          "kitchen:write"
+        ]
+      ],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "write",
+      "risk": "mutating",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "contentType": "application/json",
+        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+          }
+        ]
+      },
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
         },
         {
           "status": "409",
-          "name": "idempotency_in_progress",
-          "label": "Idempotency In Progress",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"idempotency_in_progress\",\n    \"message\": \"Idempotency key is already in progress; retry shortly\",\n    \"status\": 409,\n    \"details\": {\n      \"retryAfterSeconds\": 2\n    }\n  }\n}"
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: shopping_list:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "POST /api/v1/shopping-list/clear-completed",
+      "operationId": "postApiV1ShoppingListClearCompleted",
+      "label": "Clear completed shopping-list items",
+      "method": "POST",
+      "path": "/api/v1/shopping-list/clear-completed",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Shopping List",
+      "auth": "authenticated",
+      "scopes": [
+        "shopping_list:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [
+        [
+          "kitchen:write"
+        ]
+      ],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "write",
+      "risk": "mutating",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "contentType": "application/json",
+        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+          }
+        ]
+      },
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: shopping_list:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "POST /api/v1/shopping-list/clear-all",
+      "operationId": "postApiV1ShoppingListClearAll",
+      "label": "Clear all shopping-list items",
+      "method": "POST",
+      "path": "/api/v1/shopping-list/clear-all",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Shopping List",
+      "auth": "authenticated",
+      "scopes": [
+        "shopping_list:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [
+        [
+          "kitchen:write"
+        ]
+      ],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "write",
+      "risk": "mutating",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "contentType": "application/json",
+        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+          }
+        ]
+      },
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: shopping_list:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "GET /api/v1/me",
+      "operationId": "getApiV1Me",
+      "label": "Read the current chef account",
+      "method": "GET",
+      "path": "/api/v1/me",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Account",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:read"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "read",
+      "risk": "safe",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": null,
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: validation_error, invalid_cursor"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_cursor",
+          "label": "Invalid Cursor",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_cursor\",\n    \"message\": \"cursor must be a valid Spoonjoy cursor\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:read\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "PATCH /api/v1/me",
+      "operationId": "patchApiV1Me",
+      "label": "Update current chef profile fields",
+      "method": "PATCH",
+      "path": "/api/v1/me",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Account",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "write",
+      "risk": "mutating",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "contentType": "application/json",
+        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+          }
+        ]
+      },
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "POST /api/v1/me/photo",
+      "operationId": "postApiV1MePhoto",
+      "label": "Upload current chef profile photo",
+      "method": "POST",
+      "path": "/api/v1/me/photo",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Account",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "write",
+      "risk": "mutating",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "contentType": "application/json",
+        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+          }
+        ]
+      },
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "DELETE /api/v1/me/photo",
+      "operationId": "deleteApiV1MePhoto",
+      "label": "Remove current chef profile photo",
+      "method": "DELETE",
+      "path": "/api/v1/me/photo",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Account",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "destructive",
+      "risk": "destructive",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "X-Client-Mutation-Id",
+          "in": "header",
+          "label": "X Client Mutation Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "delete:item_1:uuid-or-hash",
+          "description": "Chef-wide idempotency key for this delete. Use the same value when retrying the exact same request after a timeout.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": null,
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "GET /api/v1/me/kitchen",
+      "operationId": "getApiV1MeKitchen",
+      "label": "Bootstrap current chef kitchen data",
+      "method": "GET",
+      "path": "/api/v1/me/kitchen",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Account",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:read"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "read",
+      "risk": "safe",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": null,
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: validation_error, invalid_cursor"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_cursor",
+          "label": "Invalid Cursor",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_cursor\",\n    \"message\": \"cursor must be a valid Spoonjoy cursor\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:read\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "GET /api/v1/me/notification-preferences",
+      "operationId": "getApiV1MeNotificationPreferences",
+      "label": "Read notification preferences",
+      "method": "GET",
+      "path": "/api/v1/me/notification-preferences",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Account",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:read"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "read",
+      "risk": "safe",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": null,
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: validation_error, invalid_cursor"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_cursor",
+          "label": "Invalid Cursor",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_cursor\",\n    \"message\": \"cursor must be a valid Spoonjoy cursor\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:read\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "PATCH /api/v1/me/notification-preferences",
+      "operationId": "patchApiV1MeNotificationPreferences",
+      "label": "Update notification preferences",
+      "method": "PATCH",
+      "path": "/api/v1/me/notification-preferences",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Account",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "write",
+      "risk": "mutating",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "contentType": "application/json",
+        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+          }
+        ]
+      },
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "POST /api/v1/me/apns-devices",
+      "operationId": "postApiV1MeApnsDevices",
+      "label": "Register a native APNs device",
+      "method": "POST",
+      "path": "/api/v1/me/apns-devices",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Account",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "write",
+      "risk": "mutating",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "contentType": "application/json",
+        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+          }
+        ]
+      },
+      "responseStatuses": [
+        "201",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "201",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "201",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "DELETE /api/v1/me/apns-devices/{deviceId}",
+      "operationId": "deleteApiV1MeApnsDevice",
+      "label": "Revoke a native APNs device",
+      "method": "DELETE",
+      "path": "/api/v1/me/apns-devices/{deviceId}",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Account",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "destructive",
+      "risk": "destructive",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "deviceId",
+          "in": "path",
+          "label": "Device Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "apns_device_1",
+          "description": "Native APNs device registration id.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Client-Mutation-Id",
+          "in": "header",
+          "label": "X Client Mutation Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "delete:item_1:uuid-or-hash",
+          "description": "Chef-wide idempotency key for this delete. Use the same value when retrying the exact same request after a timeout.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": null,
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "GET /api/v1/me/connections",
+      "operationId": "getApiV1MeConnections",
+      "label": "List connected OAuth apps",
+      "method": "GET",
+      "path": "/api/v1/me/connections",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Account",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:read"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "read",
+      "risk": "safe",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": null,
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: validation_error, invalid_cursor"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_cursor",
+          "label": "Invalid Cursor",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_cursor\",\n    \"message\": \"cursor must be a valid Spoonjoy cursor\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:read\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "DELETE /api/v1/me/connections/{connectionId}",
+      "operationId": "deleteApiV1MeConnection",
+      "label": "Disconnect an OAuth app connection",
+      "method": "DELETE",
+      "path": "/api/v1/me/connections/{connectionId}",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Account",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "destructive",
+      "risk": "destructive",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "connectionId",
+          "in": "path",
+          "label": "Connection Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "connection_1",
+          "description": "OAuth app connection id from GET /api/v1/me/connections.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Client-Mutation-Id",
+          "in": "header",
+          "label": "X Client Mutation Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "delete:item_1:uuid-or-hash",
+          "description": "Chef-wide idempotency key for this delete. Use the same value when retrying the exact same request after a timeout.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": null,
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
         }
       ]
     },
@@ -3111,6 +10528,1124 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "name": "rate_limited",
           "label": "Rate Limited",
           "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"rate_limited\",\n    \"message\": \"Too many requests\",\n    \"status\": 429\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "GET /api/v1/me/sync",
+      "operationId": "getApiV1MeSync",
+      "label": "Sync private native cache data",
+      "method": "GET",
+      "path": "/api/v1/me/sync",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Sync",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:read"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "read",
+      "risk": "safe",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "cursor",
+          "in": "query",
+          "label": "Cursor",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "v1.cursor_from_nextCursor",
+          "description": "Opaque pagination cursor returned as nextCursor. Catalog cursors are v1.* values; shopping-list sync also accepts an ISO timestamp only as bootstrap compatibility.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "limit",
+          "in": "query",
+          "label": "Limit",
+          "required": false,
+          "defaultValue": "20",
+          "placeholder": "20",
+          "description": "Page size from 1 to 50. Defaults to 20.",
+          "schema": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": null,
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: validation_error, invalid_cursor"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_cursor",
+          "label": "Invalid Cursor",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_cursor\",\n    \"message\": \"cursor must be a valid Spoonjoy cursor\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:read\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "GET /api/v1/users/{identifier}",
+      "operationId": "getApiV1User",
+      "label": "Read a chef profile",
+      "method": "GET",
+      "path": "/api/v1/users/{identifier}",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Profiles",
+      "auth": "optional",
+      "scopes": [
+        "public:read"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [
+        [
+          "kitchen:read"
+        ]
+      ],
+      "credentialModes": [
+        "anonymous",
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "read",
+      "risk": "safe",
+      "guide": "Anonymous is enough for public reads. If you send Session or Bearer credentials, Spoonjoy validates them and checks the listed scopes.",
+      "params": [
+        {
+          "name": "identifier",
+          "in": "path",
+          "label": "Identifier",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "ari",
+          "description": "Chef username or id.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": null,
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: validation_error, invalid_cursor"
+        },
+        {
+          "status": "401",
+          "description": "Errors: invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_cursor",
+          "label": "Invalid Cursor",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_cursor\",\n    \"message\": \"cursor must be a valid Spoonjoy cursor\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: public:read\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        },
+        {
+          "status": "429",
+          "name": "rate_limited",
+          "label": "Rate Limited",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"rate_limited\",\n    \"message\": \"Too many requests\",\n    \"status\": 429\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "GET /api/v1/users/{identifier}/fellow-chefs",
+      "operationId": "getApiV1UserFellowChefs",
+      "label": "List fellow chefs for a profile",
+      "method": "GET",
+      "path": "/api/v1/users/{identifier}/fellow-chefs",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Profiles",
+      "auth": "optional",
+      "scopes": [
+        "public:read"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [
+        [
+          "kitchen:read"
+        ]
+      ],
+      "credentialModes": [
+        "anonymous",
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "read",
+      "risk": "safe",
+      "guide": "Anonymous is enough for public reads. If you send Session or Bearer credentials, Spoonjoy validates them and checks the listed scopes.",
+      "params": [
+        {
+          "name": "identifier",
+          "in": "path",
+          "label": "Identifier",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "ari",
+          "description": "Chef username or id.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "cursor",
+          "in": "query",
+          "label": "Cursor",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "v1.cursor_from_nextCursor",
+          "description": "Opaque pagination cursor returned as nextCursor. Catalog cursors are v1.* values; shopping-list sync also accepts an ISO timestamp only as bootstrap compatibility.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "limit",
+          "in": "query",
+          "label": "Limit",
+          "required": false,
+          "defaultValue": "20",
+          "placeholder": "20",
+          "description": "Page size from 1 to 50. Defaults to 20.",
+          "schema": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": null,
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: validation_error, invalid_cursor"
+        },
+        {
+          "status": "401",
+          "description": "Errors: invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_cursor",
+          "label": "Invalid Cursor",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_cursor\",\n    \"message\": \"cursor must be a valid Spoonjoy cursor\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: public:read\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        },
+        {
+          "status": "429",
+          "name": "rate_limited",
+          "label": "Rate Limited",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"rate_limited\",\n    \"message\": \"Too many requests\",\n    \"status\": 429\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "GET /api/v1/users/{identifier}/kitchen-visitors",
+      "operationId": "getApiV1UserKitchenVisitors",
+      "label": "List kitchen visitors for a profile",
+      "method": "GET",
+      "path": "/api/v1/users/{identifier}/kitchen-visitors",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Profiles",
+      "auth": "optional",
+      "scopes": [
+        "public:read"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [
+        [
+          "kitchen:read"
+        ]
+      ],
+      "credentialModes": [
+        "anonymous",
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "read",
+      "risk": "safe",
+      "guide": "Anonymous is enough for public reads. If you send Session or Bearer credentials, Spoonjoy validates them and checks the listed scopes.",
+      "params": [
+        {
+          "name": "identifier",
+          "in": "path",
+          "label": "Identifier",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "ari",
+          "description": "Chef username or id.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "cursor",
+          "in": "query",
+          "label": "Cursor",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "v1.cursor_from_nextCursor",
+          "description": "Opaque pagination cursor returned as nextCursor. Catalog cursors are v1.* values; shopping-list sync also accepts an ISO timestamp only as bootstrap compatibility.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "limit",
+          "in": "query",
+          "label": "Limit",
+          "required": false,
+          "defaultValue": "20",
+          "placeholder": "20",
+          "description": "Page size from 1 to 50. Defaults to 20.",
+          "schema": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": null,
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: validation_error, invalid_cursor"
+        },
+        {
+          "status": "401",
+          "description": "Errors: invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_cursor",
+          "label": "Invalid Cursor",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_cursor\",\n    \"message\": \"cursor must be a valid Spoonjoy cursor\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: public:read\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        },
+        {
+          "status": "429",
+          "name": "rate_limited",
+          "label": "Rate Limited",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"rate_limited\",\n    \"message\": \"Too many requests\",\n    \"status\": 429\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "GET /api/v1/search",
+      "operationId": "getApiV1Search",
+      "label": "Search recipes, cookbooks, chefs, and private shopping-list items",
+      "method": "GET",
+      "path": "/api/v1/search",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Search",
+      "auth": "optional",
+      "scopes": [
+        "public:read"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [
+        [
+          "kitchen:read"
+        ]
+      ],
+      "credentialModes": [
+        "anonymous",
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "read",
+      "risk": "safe",
+      "guide": "Anonymous is enough for public reads. If you send Session or Bearer credentials, Spoonjoy validates them and checks the listed scopes.",
+      "params": [
+        {
+          "name": "query",
+          "in": "query",
+          "label": "Query",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "pasta",
+          "description": "Search text. When both query and q are sent, query wins.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "q",
+          "in": "query",
+          "label": "Q",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "weeknight",
+          "description": "Search-text alias for clients that conventionally use q. Ignored when query is also present.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "cursor",
+          "in": "query",
+          "label": "Cursor",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "v1.cursor_from_nextCursor",
+          "description": "Opaque pagination cursor returned as nextCursor. Catalog cursors are v1.* values; shopping-list sync also accepts an ISO timestamp only as bootstrap compatibility.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "limit",
+          "in": "query",
+          "label": "Limit",
+          "required": false,
+          "defaultValue": "20",
+          "placeholder": "20",
+          "description": "Page size from 1 to 50. Defaults to 20.",
+          "schema": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": null,
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: validation_error, invalid_cursor"
+        },
+        {
+          "status": "401",
+          "description": "Errors: invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_cursor",
+          "label": "Invalid Cursor",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_cursor\",\n    \"message\": \"cursor must be a valid Spoonjoy cursor\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: public:read\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        },
+        {
+          "status": "429",
+          "name": "rate_limited",
+          "label": "Rate Limited",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"rate_limited\",\n    \"message\": \"Too many requests\",\n    \"status\": 429\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "POST /api/v1/recipes/import",
+      "operationId": "postApiV1RecipesImport",
+      "label": "Import a recipe from a URL, text, or captured draft",
+      "method": "POST",
+      "path": "/api/v1/recipes/import",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Recipes",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "write",
+      "risk": "mutating",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "contentType": "application/json",
+        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+          }
+        ]
+      },
+      "responseStatuses": [
+        "201",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "201",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "201",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
         }
       ]
     },

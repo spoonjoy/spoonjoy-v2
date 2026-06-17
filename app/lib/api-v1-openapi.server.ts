@@ -130,6 +130,20 @@ const schemas = {
     requestId: idSchema,
     data: { type: "object" },
   }),
+  NativeContractData: objectSchema(["status", "resource", "message"], {
+    status: { type: "string", enum: ["declared"] },
+    resource: { type: "string" },
+    message: { type: "string" },
+  }),
+  NativeContractEnvelope: successEnvelope(ref("NativeContractData")),
+  NativeMutationRequest: objectSchema(["clientMutationId"], {
+    clientMutationId: shortTextSchema,
+    payload: {
+      type: "object",
+      additionalProperties: true,
+      description: "Endpoint-specific payload. Unit-specific API tests replace this with exact schemas before handler success ships.",
+    },
+  }),
   OpenApiInfo: objectSchema(["title", "version", "description"], {
     title: { type: "string" },
     version: { type: "string" },
@@ -565,6 +579,14 @@ const pathParameters = {
   id: { name: "id", in: "path", required: true, description: "Spoonjoy resource id from a previous list response.", schema: idSchema },
   itemId: { name: "itemId", in: "path", required: true, description: "Shopping-list item id from GET /api/v1/shopping-list or /sync.", schema: idSchema },
   credentialId: { name: "credentialId", in: "path", required: true, description: "Bearer credential id from GET /api/v1/tokens.", schema: idSchema },
+  stepId: { name: "stepId", in: "path", required: true, description: "Recipe step id from recipe detail.", schema: idSchema },
+  ingredientId: { name: "ingredientId", in: "path", required: true, description: "Recipe step ingredient id from recipe detail.", schema: idSchema },
+  coverId: { name: "coverId", in: "path", required: true, description: "Recipe cover id from cover history.", schema: idSchema },
+  spoonId: { name: "spoonId", in: "path", required: true, description: "Spoon/cook-log id from recipe or profile responses.", schema: idSchema },
+  recipeId: { name: "recipeId", in: "path", required: true, description: "Recipe id being added to or removed from a cookbook.", schema: idSchema },
+  deviceId: { name: "deviceId", in: "path", required: true, description: "Native APNs device registration id.", schema: idSchema },
+  connectionId: { name: "connectionId", in: "path", required: true, description: "OAuth app connection id from GET /api/v1/me/connections.", schema: idSchema },
+  identifier: { name: "identifier", in: "path", required: true, description: "Chef username or id.", schema: idSchema },
   requestIdHeader: {
     name: "X-Request-Id",
     in: "header",
@@ -588,46 +610,146 @@ const queryParameters = {
   limit: { name: "limit", in: "query", required: false, description: "Page size from 1 to 50. Defaults to 20.", schema: { type: "integer", minimum: 1, maximum: 50, default: 20 } },
 };
 
+const discoveryErrors: ApiV1ErrorCode[] = ["validation_error", "invalid_token", "method_not_allowed", "rate_limited", "internal_error"];
+const optionalReadErrors: ApiV1ErrorCode[] = ["validation_error", "invalid_cursor", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"];
+const bearerReadErrors: ApiV1ErrorCode[] = ["validation_error", "invalid_cursor", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"];
+const bearerMutationErrors: ApiV1ErrorCode[] = ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"];
+const nativeContractSuccess: Record<number, string> = { 200: "NativeContractEnvelope" };
+const nativeContractCreated: Record<number, string> = { 201: "NativeContractEnvelope" };
+
 const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationConfig>>> = {
   "/api/v1": {
-    GET: { operationId: "getApiV1Root", tags: ["Discovery"], summary: "Discover the Spoonjoy API", auth: "optional", scopes: [], success: { 200: "DiscoveryEnvelope" }, errors: ["validation_error", "invalid_token", "method_not_allowed", "rate_limited", "internal_error"] },
+    GET: { operationId: "getApiV1Root", tags: ["Discovery"], summary: "Discover the Spoonjoy API", auth: "optional", scopes: [], success: { 200: "DiscoveryEnvelope" }, errors: discoveryErrors },
   },
   "/api/v1/health": {
-    GET: { operationId: "getApiV1Health", tags: ["Discovery"], summary: "Check API health", auth: "optional", scopes: [], success: { 200: "HealthEnvelope" }, errors: ["validation_error", "invalid_token", "method_not_allowed", "rate_limited", "internal_error"] },
+    GET: { operationId: "getApiV1Health", tags: ["Discovery"], summary: "Check API health", auth: "optional", scopes: [], success: { 200: "HealthEnvelope" }, errors: discoveryErrors },
   },
   "/api/v1/openapi.json": {
-    GET: { operationId: "getApiV1OpenApi", tags: ["Discovery"], summary: "Fetch the OpenAPI document", auth: "optional", scopes: [], success: { 200: "OpenApiDocument" }, errors: ["validation_error", "invalid_token", "method_not_allowed", "rate_limited", "internal_error"] },
+    GET: { operationId: "getApiV1OpenApi", tags: ["Discovery"], summary: "Fetch the OpenAPI document", auth: "optional", scopes: [], success: { 200: "OpenApiDocument" }, errors: discoveryErrors },
   },
   "/api/v1/openapi.sdk.json": {
-    GET: { operationId: "getApiV1SdkOpenApi", tags: ["Discovery"], summary: "Fetch the SDK OpenAPI profile", auth: "optional", scopes: [], success: { 200: "SdkOpenApiDocument" }, errors: ["validation_error", "invalid_token", "method_not_allowed", "rate_limited", "internal_error"] },
+    GET: { operationId: "getApiV1SdkOpenApi", tags: ["Discovery"], summary: "Fetch the SDK OpenAPI profile", auth: "optional", scopes: [], success: { 200: "SdkOpenApiDocument" }, errors: discoveryErrors },
   },
   "/api/v1/openapi.connector.json": {
-    GET: { operationId: "getApiV1ConnectorOpenApi", tags: ["Discovery"], summary: "Fetch the no-code connector OpenAPI profile", auth: "optional", scopes: [], success: { 200: "ConnectorOpenApiDocument" }, errors: ["validation_error", "invalid_token", "method_not_allowed", "rate_limited", "internal_error"] },
+    GET: { operationId: "getApiV1ConnectorOpenApi", tags: ["Discovery"], summary: "Fetch the no-code connector OpenAPI profile", auth: "optional", scopes: [], success: { 200: "ConnectorOpenApiDocument" }, errors: discoveryErrors },
   },
   "/api/v1/recipes": {
-    GET: { operationId: "getApiV1Recipes", tags: ["Recipes"], summary: "Search public recipes", auth: "optional", scopes: ["recipes:read"], success: { 200: "RecipeListEnvelope" }, errors: ["validation_error", "invalid_cursor", "invalid_token", "insufficient_scope", "method_not_allowed", "rate_limited", "internal_error"], parameters: [queryParameters.query, queryParameters.q, queryParameters.cursor, queryParameters.limit] },
+    GET: { operationId: "getApiV1Recipes", tags: ["Recipes"], summary: "Search public recipes", auth: "optional", scopes: ["recipes:read"], success: { 200: "RecipeListEnvelope" }, errors: optionalReadErrors, parameters: [queryParameters.query, queryParameters.q, queryParameters.cursor, queryParameters.limit] },
+    POST: { operationId: "postApiV1Recipes", tags: ["Recipes"], summary: "Create a recipe", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractCreated, errors: bearerMutationErrors, requestBody: "NativeMutationRequest" },
   },
   "/api/v1/recipes/{id}": {
-    GET: { operationId: "getApiV1Recipe", tags: ["Recipes"], summary: "Read one public recipe", auth: "optional", scopes: ["recipes:read"], success: { 200: "RecipeDetailEnvelope" }, errors: ["validation_error", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id] },
+    GET: { operationId: "getApiV1Recipe", tags: ["Recipes"], summary: "Read one public recipe", auth: "optional", scopes: ["recipes:read"], success: { 200: "RecipeDetailEnvelope" }, errors: optionalReadErrors, parameters: [pathParameters.id] },
+    PATCH: { operationId: "patchApiV1Recipe", tags: ["Recipes"], summary: "Update a recipe", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, parameters: [pathParameters.id], requestBody: "NativeMutationRequest" },
+    DELETE: { operationId: "deleteApiV1Recipe", tags: ["Recipes"], summary: "Delete a recipe", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.clientMutationIdHeader] },
+  },
+  "/api/v1/recipes/{id}/fork": {
+    POST: { operationId: "postApiV1RecipeFork", tags: ["Recipes"], summary: "Fork a recipe", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractCreated, errors: bearerMutationErrors, parameters: [pathParameters.id], requestBody: "NativeMutationRequest" },
+  },
+  "/api/v1/recipes/{id}/steps": {
+    POST: { operationId: "postApiV1RecipeSteps", tags: ["Recipe Steps"], summary: "Create a recipe step", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractCreated, errors: bearerMutationErrors, parameters: [pathParameters.id], requestBody: "NativeMutationRequest" },
+  },
+  "/api/v1/recipes/{id}/steps/{stepId}": {
+    PATCH: { operationId: "patchApiV1RecipeStep", tags: ["Recipe Steps"], summary: "Update a recipe step", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.stepId], requestBody: "NativeMutationRequest" },
+    DELETE: { operationId: "deleteApiV1RecipeStep", tags: ["Recipe Steps"], summary: "Delete a recipe step", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.stepId, pathParameters.clientMutationIdHeader] },
+  },
+  "/api/v1/recipes/{id}/steps/reorder": {
+    POST: { operationId: "postApiV1RecipeStepsReorder", tags: ["Recipe Steps"], summary: "Reorder recipe steps", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, parameters: [pathParameters.id], requestBody: "NativeMutationRequest" },
+  },
+  "/api/v1/recipes/{id}/steps/{stepId}/ingredients": {
+    POST: { operationId: "postApiV1RecipeStepIngredients", tags: ["Recipe Steps"], summary: "Add a step ingredient", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractCreated, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.stepId], requestBody: "NativeMutationRequest" },
+  },
+  "/api/v1/recipes/{id}/steps/{stepId}/ingredients/{ingredientId}": {
+    DELETE: { operationId: "deleteApiV1RecipeStepIngredient", tags: ["Recipe Steps"], summary: "Delete a step ingredient", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.stepId, pathParameters.ingredientId, pathParameters.clientMutationIdHeader] },
+  },
+  "/api/v1/recipes/{id}/step-output-uses": {
+    PUT: { operationId: "putApiV1RecipeStepOutputUses", tags: ["Recipe Steps"], summary: "Replace step-output dependency uses", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, parameters: [pathParameters.id], requestBody: "NativeMutationRequest" },
+  },
+  "/api/v1/recipes/{id}/image": {
+    POST: { operationId: "postApiV1RecipeImage", tags: ["Recipe Covers"], summary: "Upload or assign a recipe image", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, parameters: [pathParameters.id], requestBody: "NativeMutationRequest" },
+  },
+  "/api/v1/recipes/{id}/covers": {
+    GET: { operationId: "getApiV1RecipeCovers", tags: ["Recipe Covers"], summary: "List recipe cover history", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerReadErrors, parameters: [pathParameters.id] },
+    POST: { operationId: "postApiV1RecipeCovers", tags: ["Recipe Covers"], summary: "Create a recipe cover", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractCreated, errors: bearerMutationErrors, parameters: [pathParameters.id], requestBody: "NativeMutationRequest" },
+  },
+  "/api/v1/recipes/{id}/covers/{coverId}": {
+    PATCH: { operationId: "patchApiV1RecipeCover", tags: ["Recipe Covers"], summary: "Update a recipe cover", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.coverId], requestBody: "NativeMutationRequest" },
+    DELETE: { operationId: "deleteApiV1RecipeCover", tags: ["Recipe Covers"], summary: "Delete or archive a recipe cover", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.coverId, pathParameters.clientMutationIdHeader] },
+  },
+  "/api/v1/recipes/{id}/covers/regenerate": {
+    POST: { operationId: "postApiV1RecipeCoversRegenerate", tags: ["Recipe Covers"], summary: "Regenerate a recipe cover", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, parameters: [pathParameters.id], requestBody: "NativeMutationRequest" },
+  },
+  "/api/v1/recipes/{id}/covers/from-spoon/{spoonId}": {
+    POST: { operationId: "postApiV1RecipeCoverFromSpoon", tags: ["Recipe Covers"], summary: "Create a recipe cover from a spoon", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.spoonId], requestBody: "NativeMutationRequest" },
+  },
+  "/api/v1/recipes/{id}/spoons": {
+    GET: { operationId: "getApiV1RecipeSpoons", tags: ["Spoons"], summary: "List recipe spoons and cook logs", auth: "optional", scopes: ["recipes:read"], success: nativeContractSuccess, errors: optionalReadErrors, parameters: [pathParameters.id, queryParameters.cursor, queryParameters.limit] },
+    POST: { operationId: "postApiV1RecipeSpoons", tags: ["Spoons"], summary: "Create a spoon or cook log", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractCreated, errors: bearerMutationErrors, parameters: [pathParameters.id], requestBody: "NativeMutationRequest" },
+  },
+  "/api/v1/recipes/{id}/spoons/{spoonId}": {
+    PATCH: { operationId: "patchApiV1RecipeSpoon", tags: ["Spoons"], summary: "Update a spoon or cook log", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.spoonId], requestBody: "NativeMutationRequest" },
+    DELETE: { operationId: "deleteApiV1RecipeSpoon", tags: ["Spoons"], summary: "Delete a spoon or cook log", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.spoonId, pathParameters.clientMutationIdHeader] },
   },
   "/api/v1/cookbooks": {
-    GET: { operationId: "getApiV1Cookbooks", tags: ["Cookbooks"], summary: "Search public cookbooks", auth: "optional", scopes: ["cookbooks:read"], success: { 200: "CookbookListEnvelope" }, errors: ["validation_error", "invalid_cursor", "invalid_token", "insufficient_scope", "method_not_allowed", "rate_limited", "internal_error"], parameters: [queryParameters.query, queryParameters.q, queryParameters.cursor, queryParameters.limit] },
+    GET: { operationId: "getApiV1Cookbooks", tags: ["Cookbooks"], summary: "Search public cookbooks", auth: "optional", scopes: ["cookbooks:read"], success: { 200: "CookbookListEnvelope" }, errors: optionalReadErrors, parameters: [queryParameters.query, queryParameters.q, queryParameters.cursor, queryParameters.limit] },
+    POST: { operationId: "postApiV1Cookbooks", tags: ["Cookbooks"], summary: "Create a cookbook", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractCreated, errors: bearerMutationErrors, requestBody: "NativeMutationRequest" },
   },
   "/api/v1/cookbooks/{id}": {
-    GET: { operationId: "getApiV1Cookbook", tags: ["Cookbooks"], summary: "Read one public cookbook", auth: "optional", scopes: ["cookbooks:read"], success: { 200: "CookbookDetailEnvelope" }, errors: ["validation_error", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id] },
+    GET: { operationId: "getApiV1Cookbook", tags: ["Cookbooks"], summary: "Read one public cookbook", auth: "optional", scopes: ["cookbooks:read"], success: { 200: "CookbookDetailEnvelope" }, errors: optionalReadErrors, parameters: [pathParameters.id] },
+    PATCH: { operationId: "patchApiV1Cookbook", tags: ["Cookbooks"], summary: "Update a cookbook", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, parameters: [pathParameters.id], requestBody: "NativeMutationRequest" },
+    DELETE: { operationId: "deleteApiV1Cookbook", tags: ["Cookbooks"], summary: "Delete a cookbook", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.clientMutationIdHeader] },
+  },
+  "/api/v1/cookbooks/{id}/recipes/{recipeId}": {
+    POST: { operationId: "postApiV1CookbookRecipe", tags: ["Cookbooks"], summary: "Add a recipe to a cookbook", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.recipeId], requestBody: "NativeMutationRequest" },
+    DELETE: { operationId: "deleteApiV1CookbookRecipe", tags: ["Cookbooks"], summary: "Remove a recipe from a cookbook", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.recipeId, pathParameters.clientMutationIdHeader] },
   },
   "/api/v1/shopping-list": {
-    GET: { operationId: "getApiV1ShoppingList", tags: ["Shopping List"], summary: "Read the authenticated shopping list", auth: "bearer", scopes: ["shopping_list:read"], success: { 200: "ShoppingListEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "method_not_allowed", "rate_limited", "internal_error"] },
+    GET: { operationId: "getApiV1ShoppingList", tags: ["Shopping List"], summary: "Read the authenticated shopping list", auth: "bearer", scopes: ["shopping_list:read"], success: { 200: "ShoppingListEnvelope" }, errors: bearerReadErrors },
   },
   "/api/v1/shopping-list/sync": {
-    GET: { operationId: "getApiV1ShoppingListSync", tags: ["Shopping List"], summary: "Sync shopping-list changes", auth: "bearer", scopes: ["shopping_list:read"], success: { 200: "ShoppingListSyncEnvelope" }, errors: ["invalid_cursor", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "method_not_allowed", "rate_limited", "internal_error"], parameters: [queryParameters.cursor, queryParameters.limit] },
+    GET: { operationId: "getApiV1ShoppingListSync", tags: ["Shopping List"], summary: "Sync shopping-list changes", auth: "bearer", scopes: ["shopping_list:read"], success: { 200: "ShoppingListSyncEnvelope" }, errors: bearerReadErrors, parameters: [queryParameters.cursor, queryParameters.limit] },
   },
   "/api/v1/shopping-list/items": {
-    POST: { operationId: "postApiV1ShoppingListItems", tags: ["Shopping List"], summary: "Add or restore a shopping-list item", auth: "bearer", scopes: ["shopping_list:write"], success: { 200: "CreateShoppingItemEnvelope", 201: "CreateShoppingItemEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "CreateShoppingItemRequest" },
+    POST: { operationId: "postApiV1ShoppingListItems", tags: ["Shopping List"], summary: "Add or restore a shopping-list item", auth: "bearer", scopes: ["shopping_list:write"], success: { 200: "CreateShoppingItemEnvelope", 201: "CreateShoppingItemEnvelope" }, errors: bearerMutationErrors, requestBody: "CreateShoppingItemRequest" },
   },
   "/api/v1/shopping-list/items/{itemId}": {
-    PATCH: { operationId: "patchApiV1ShoppingListItem", tags: ["Shopping List"], summary: "Set a shopping-list item checked state", auth: "bearer", scopes: ["shopping_list:write"], success: { 200: "UpdateShoppingItemEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.itemId], requestBody: "CheckShoppingItemRequest" },
-    DELETE: { operationId: "deleteApiV1ShoppingListItem", tags: ["Shopping List"], summary: "Remove a shopping-list item", auth: "bearer", scopes: ["shopping_list:write"], success: { 200: "DeleteShoppingItemEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.itemId, pathParameters.clientMutationIdHeader] },
+    PATCH: { operationId: "patchApiV1ShoppingListItem", tags: ["Shopping List"], summary: "Set a shopping-list item checked state", auth: "bearer", scopes: ["shopping_list:write"], success: { 200: "UpdateShoppingItemEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.itemId], requestBody: "CheckShoppingItemRequest" },
+    DELETE: { operationId: "deleteApiV1ShoppingListItem", tags: ["Shopping List"], summary: "Remove a shopping-list item", auth: "bearer", scopes: ["shopping_list:write"], success: { 200: "DeleteShoppingItemEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.itemId, pathParameters.clientMutationIdHeader] },
+  },
+  "/api/v1/shopping-list/add-from-recipe": {
+    POST: { operationId: "postApiV1ShoppingListAddFromRecipe", tags: ["Shopping List"], summary: "Add recipe ingredients to the shopping list", auth: "bearer", scopes: ["shopping_list:write"], success: nativeContractSuccess, errors: bearerMutationErrors, requestBody: "NativeMutationRequest" },
+  },
+  "/api/v1/shopping-list/clear-completed": {
+    POST: { operationId: "postApiV1ShoppingListClearCompleted", tags: ["Shopping List"], summary: "Clear completed shopping-list items", auth: "bearer", scopes: ["shopping_list:write"], success: nativeContractSuccess, errors: bearerMutationErrors, requestBody: "NativeMutationRequest" },
+  },
+  "/api/v1/shopping-list/clear-all": {
+    POST: { operationId: "postApiV1ShoppingListClearAll", tags: ["Shopping List"], summary: "Clear all shopping-list items", auth: "bearer", scopes: ["shopping_list:write"], success: nativeContractSuccess, errors: bearerMutationErrors, requestBody: "NativeMutationRequest" },
+  },
+  "/api/v1/me": {
+    GET: { operationId: "getApiV1Me", tags: ["Account"], summary: "Read the current chef account", auth: "bearer", scopes: ["kitchen:read"], success: nativeContractSuccess, errors: bearerReadErrors },
+    PATCH: { operationId: "patchApiV1Me", tags: ["Account"], summary: "Update current chef profile fields", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, requestBody: "NativeMutationRequest" },
+  },
+  "/api/v1/me/photo": {
+    POST: { operationId: "postApiV1MePhoto", tags: ["Account"], summary: "Upload current chef profile photo", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, requestBody: "NativeMutationRequest" },
+    DELETE: { operationId: "deleteApiV1MePhoto", tags: ["Account"], summary: "Remove current chef profile photo", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, parameters: [pathParameters.clientMutationIdHeader] },
+  },
+  "/api/v1/me/kitchen": {
+    GET: { operationId: "getApiV1MeKitchen", tags: ["Account"], summary: "Bootstrap current chef kitchen data", auth: "bearer", scopes: ["kitchen:read"], success: nativeContractSuccess, errors: bearerReadErrors },
+  },
+  "/api/v1/me/notification-preferences": {
+    GET: { operationId: "getApiV1MeNotificationPreferences", tags: ["Account"], summary: "Read notification preferences", auth: "bearer", scopes: ["kitchen:read"], success: nativeContractSuccess, errors: bearerReadErrors },
+    PATCH: { operationId: "patchApiV1MeNotificationPreferences", tags: ["Account"], summary: "Update notification preferences", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, requestBody: "NativeMutationRequest" },
+  },
+  "/api/v1/me/apns-devices": {
+    POST: { operationId: "postApiV1MeApnsDevices", tags: ["Account"], summary: "Register a native APNs device", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractCreated, errors: bearerMutationErrors, requestBody: "NativeMutationRequest" },
+  },
+  "/api/v1/me/apns-devices/{deviceId}": {
+    DELETE: { operationId: "deleteApiV1MeApnsDevice", tags: ["Account"], summary: "Revoke a native APNs device", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, parameters: [pathParameters.deviceId, pathParameters.clientMutationIdHeader] },
+  },
+  "/api/v1/me/connections": {
+    GET: { operationId: "getApiV1MeConnections", tags: ["Account"], summary: "List connected OAuth apps", auth: "bearer", scopes: ["kitchen:read"], success: nativeContractSuccess, errors: bearerReadErrors },
+  },
+  "/api/v1/me/connections/{connectionId}": {
+    DELETE: { operationId: "deleteApiV1MeConnection", tags: ["Account"], summary: "Disconnect an OAuth app connection", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, parameters: [pathParameters.connectionId, pathParameters.clientMutationIdHeader] },
   },
   "/api/v1/tokens": {
     GET: { operationId: "getApiV1Tokens", tags: ["Tokens"], summary: "List bearer credentials", auth: "bearer", scopes: ["tokens:read"], success: { 200: "TokenListEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "method_not_allowed", "rate_limited", "internal_error"] },
@@ -635,6 +757,24 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
   },
   "/api/v1/tokens/{credentialId}": {
     DELETE: { operationId: "deleteApiV1Token", tags: ["Tokens"], summary: "Revoke a bearer credential", auth: "bearer", scopes: ["tokens:write"], success: { 200: "RevokeTokenEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.credentialId] },
+  },
+  "/api/v1/me/sync": {
+    GET: { operationId: "getApiV1MeSync", tags: ["Sync"], summary: "Sync private native cache data", auth: "bearer", scopes: ["kitchen:read"], success: nativeContractSuccess, errors: bearerReadErrors, parameters: [queryParameters.cursor, queryParameters.limit] },
+  },
+  "/api/v1/users/{identifier}": {
+    GET: { operationId: "getApiV1User", tags: ["Profiles"], summary: "Read a chef profile", auth: "optional", scopes: ["public:read"], success: nativeContractSuccess, errors: optionalReadErrors, parameters: [pathParameters.identifier] },
+  },
+  "/api/v1/users/{identifier}/fellow-chefs": {
+    GET: { operationId: "getApiV1UserFellowChefs", tags: ["Profiles"], summary: "List fellow chefs for a profile", auth: "optional", scopes: ["public:read"], success: nativeContractSuccess, errors: optionalReadErrors, parameters: [pathParameters.identifier, queryParameters.cursor, queryParameters.limit] },
+  },
+  "/api/v1/users/{identifier}/kitchen-visitors": {
+    GET: { operationId: "getApiV1UserKitchenVisitors", tags: ["Profiles"], summary: "List kitchen visitors for a profile", auth: "optional", scopes: ["public:read"], success: nativeContractSuccess, errors: optionalReadErrors, parameters: [pathParameters.identifier, queryParameters.cursor, queryParameters.limit] },
+  },
+  "/api/v1/search": {
+    GET: { operationId: "getApiV1Search", tags: ["Search"], summary: "Search recipes, cookbooks, chefs, and private shopping-list items", auth: "optional", scopes: ["public:read"], success: nativeContractSuccess, errors: optionalReadErrors, parameters: [queryParameters.query, queryParameters.q, queryParameters.cursor, queryParameters.limit] },
+  },
+  "/api/v1/recipes/import": {
+    POST: { operationId: "postApiV1RecipesImport", tags: ["Recipes"], summary: "Import a recipe from a URL, text, or captured draft", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractCreated, errors: bearerMutationErrors, requestBody: "NativeMutationRequest" },
   },
 };
 
@@ -785,6 +925,15 @@ const responseExamples: Record<string, unknown> = {
       scopes: ["recipes:read"],
     },
   },
+  NativeContractEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      status: "declared",
+      resource: "native-api-contract",
+      message: "This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.",
+    },
+  },
   RecipeListEnvelope: {
     ok: true,
     requestId: "req_example",
@@ -849,6 +998,12 @@ const responseExamples: Record<string, unknown> = {
 };
 
 const requestExamples: Record<string, unknown> = {
+  NativeMutationRequest: {
+    clientMutationId: "device-uuid-1",
+    payload: {
+      note: "Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.",
+    },
+  },
   CreateTokenRequest: { name: "Tiny client", scopes: ["recipes:read", "shopping_list:read", "shopping_list:write"] },
   CreateShoppingItemRequest: {
     clientMutationId: "device-uuid-1",
@@ -1010,7 +1165,7 @@ function securityFor(auth: OperationAuth, scopes: readonly string[]) {
 
 function acceptedOauthScopeSets(scopes: readonly string[]) {
   const alternatives: string[][] = [];
-  if (scopes.some((scope) => scope === "recipes:read" || scope === "cookbooks:read" || scope === "shopping_list:read")) {
+  if (scopes.some((scope) => scope === "recipes:read" || scope === "cookbooks:read" || scope === "public:read" || scope === "shopping_list:read")) {
     alternatives.push(["kitchen:read"]);
   }
   if (scopes.some((scope) => scope === "recipes:read" || scope === "cookbooks:read")) {
@@ -1031,7 +1186,7 @@ function retryPolicyFor(path: ResourcePath, method: HttpMethod) {
       reason: "Creates a one-time-display bearer secret. Do not auto-retry network timeouts or 5xx responses because a successful first attempt may have returned a token the client did not receive.",
     };
   }
-  const isMutation = method === "POST" || method === "PATCH" || method === "DELETE";
+  const isMutation = method === "POST" || method === "PATCH" || method === "PUT" || method === "DELETE";
   if (path.startsWith("/api/v1/shopping-list/items")) {
     return {
       retryOn: ["network_timeout", "429", "5xx", "idempotency_in_progress"],
@@ -1523,13 +1678,13 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
       schemas,
     },
     "x-oauth-scope-map": {
-      "kitchen:read": ["cookbooks:read", "public:read", "recipes:read", "shopping_list:read"],
-      "kitchen:write": ["shopping_list:write"],
+      "kitchen:read": ["cookbooks:read", "kitchen:read", "public:read", "recipes:read", "shopping_list:read"],
+      "kitchen:write": ["kitchen:write", "shopping_list:write"],
       "shopping_list:read": ["shopping_list:read"],
       "shopping_list:write": ["shopping_list:write"],
       "recipes:read": ["recipes:read"],
       "cookbooks:read": ["cookbooks:read"],
-      "public:read": ["recipes:read", "cookbooks:read"],
+      "public:read": ["cookbooks:read", "public:read", "recipes:read"],
     },
     "x-oauth-discovery": {
       authorizationServerMetadataUrl: absoluteApiUrl(serverUrl, "/.well-known/oauth-authorization-server"),
@@ -1768,7 +1923,7 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
         eyebrow: "Extension background",
         audience: "Use for extensions that turn scraped ingredient rows into shopping-list mutations without exposing tokens to content scripts.",
         notes: [
-          "API v1 does not create or import recipes yet; keep recipe clipping UI separate from Spoonjoy's current shopping-list sync API.",
+          "Recipe clipping can use POST /api/v1/recipes/import with kitchen:write; shopping-list ingredient sync can stay on shopping_list:read shopping_list:write.",
           "Run OAuth/PKCE in the extension background or service worker, store state and code_verifier until callback, and keep bearer tokens out of content scripts.",
           "Register the HTTPS callback produced by chrome.identity.getRedirectURL/launchWebAuthFlow exactly; custom extension schemes are rejected.",
           "Use shopping_list:read shopping_list:write for ingredient sync, then post one row at a time with deterministic clientMutationId values.",
@@ -1846,7 +2001,11 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
     "x-current-capabilities": {
       available: [
         "public recipe and cookbook reads",
-        "owner-scoped shopping-list read/sync/write",
+        "Native app contract for current Spoonjoy parity REST rows",
+        "owner-scoped shopping-list read/sync/write/add-from-recipe/clear",
+        "recipe, cookbook, spoon, cover, step, ingredient, and import contract declarations",
+        "account, kitchen, profile photo, notification preference, APNs device, connection, and private sync contract declarations",
+        "private no-store authenticated responses for native offline cache clients",
         "session-created and bearer-created API tokens",
         "OAuth/PKCE delegated access",
         "delegated agent/device approval links",
@@ -1854,8 +2013,6 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
         "cursor-paginated public recipe and cookbook lists",
       ],
       notYetAvailable: [
-        "Recipe write, import, or export endpoints",
-        "Private recipe-library endpoints",
         "Inventory or pantry stock APIs",
         "Meal plan or \"today's recipes\" APIs",
         "Full account export APIs",
@@ -2138,7 +2295,7 @@ export function buildApiV1ConnectorOpenApiDocument(options: BuildOpenApiOptions 
       unavailable: [
         "webhooks, REST Hooks, SSE, and event subscriptions",
         "recipe/cookbook updatedAt export feeds and deletion tombstones",
-        "recipe write/import/export endpoints",
+        "no-code recipe write/import/export actions",
       ],
     },
   };

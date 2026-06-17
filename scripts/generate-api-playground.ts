@@ -99,6 +99,14 @@ function titleCase(value: string) {
 function defaultPathValue(path: string, name: string) {
   if (name === "itemId") return "item_1";
   if (name === "credentialId") return "cred_1";
+  if (name === "stepId") return "step_1";
+  if (name === "ingredientId") return "ingredient_1";
+  if (name === "coverId") return "cover_1";
+  if (name === "spoonId") return "spoon_1";
+  if (name === "recipeId") return "recipe_1";
+  if (name === "deviceId") return "apns_device_1";
+  if (name === "connectionId") return "connection_1";
+  if (name === "identifier") return "ari";
   if (name === "id" && path.includes("/recipes/")) return "recipe_1";
   if (name === "id" && path.includes("/cookbooks/")) return "cookbook_1";
   return "";
@@ -180,7 +188,7 @@ function operationRisk(path: string, method: string) {
   if ((path === "/api/v1/tokens" || path === "/oauth/token" || path === "/api/tools/start_agent_connection" || path === "/api/tools/poll_agent_connection") && method === "post") return "secret";
   if (path === "/oauth/authorize") return "mutating";
   if (method === "delete") return "destructive";
-  if (method === "post" || method === "patch") return "mutating";
+  if (method === "post" || method === "patch" || method === "put") return "mutating";
   return "safe";
 }
 

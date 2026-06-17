@@ -38,6 +38,46 @@ const DEVELOPER_OG_CARD = PAGE_OG_CARDS.api;
 const DEVELOPER_CANONICAL_PATH = "/api";
 const DEVELOPER_OG_PATH = pageOgPath("api");
 
+type DeveloperResource = {
+  name: string;
+  path: string;
+  methods: readonly string[];
+  auth: "optional" | "bearer";
+  scopes: readonly string[];
+};
+
+type DeveloperScopeRequirement = {
+  path: string;
+  method: string;
+  auth: "optional" | "bearer";
+  scopes: readonly string[];
+};
+
+type DeveloperLoaderData = {
+  resources: readonly DeveloperResource[];
+  scopeRequirements: readonly DeveloperScopeRequirement[];
+  errorStatus: Record<string, number>;
+  openapiUrl: string;
+  sdkOpenapiUrl: string;
+  connectorOpenapiUrl: string;
+  scopes: readonly string[];
+  authFlows: readonly {
+    id: string;
+    title: string;
+    eyebrow: string;
+    audience: string;
+    endpoints: readonly string[];
+    scopes: readonly string[];
+    notes: readonly string[];
+    sample: string;
+  }[];
+  oauthScopeMap: Record<string, readonly string[]>;
+  currentCapabilities: {
+    available: readonly string[];
+    notYetAvailable: readonly string[];
+  };
+};
+
 const scopeLabels: Record<string, string> = {
   "public:read": "Public read",
   "kitchen:read": "Delegated kitchen read",
@@ -226,6 +266,8 @@ const guideSteps = [
   "Use Session for logged-in playground calls; use bearer or OAuth only when a client runs outside that session.",
   "Use a stable mutation id for shopping-list writes, then retry with the same value when a network call is interrupted.",
   "Use the sync cursor to fetch shopping-list changes, including removed items.",
+  "Use the Native parity REST contract for the iOS, iPadOS, and macOS app surfaces.",
+  "Store authenticated mobile data in a Private mobile cache with account, environment, freshness, and purge metadata.",
 ] as const;
 
 const guideSections = [
@@ -250,6 +292,8 @@ function sectionId(title: string) {
 }
 
 const syncSafetyRows = [
+  ["Native parity REST contract", "API v1 declares current native rows for GET /api/v1/me, POST /api/v1/me/photo, POST /api/v1/me/apns-devices, PATCH /api/v1/me/notification-preferences, POST /api/v1/recipes/import, and the rest of the current Spoonjoy product surface."],
+  ["Private mobile cache", "Authenticated native responses are private no-store data. Store them only in an account/environment-scoped offline cache, purge on logout or account switch, and keep private fields out of Spotlight, App Intents, share payloads, logs, and public caches."],
   ["Cursor", "Use the returned nextCursor as the next request cursor after applying every item in the page durably. Treat it as opaque; ISO timestamps are accepted only as a bootstrap convenience."],
   ["Tombstones", "Sync includes deleted rows with deletedAt so offline clients can remove local items."],
   ["Pagination", "Use limit from 1 to 50 for small payloads. hasMore: true means continue with the returned nextCursor; webhooks, REST Hooks, SSE, and event subscriptions are not available yet."],
@@ -263,13 +307,13 @@ const scenarioQuickstarts = [
   {
     title: "Native mobile OAuth",
     mode: "iOS + Android",
-    body: "Register once per app install or environment, persist client_id, and do not register on every launch. Use HTTPS universal links or Android App Links for production callbacks, with localhost or 127.0.0.1 loopback only for development. Store tokens in Keychain or Android Keystore-backed storage. Refresh tokens rotate, so replace the stored refresh token atomically and use single-flight refresh when concurrent requests hit 401.",
-    sample: "POST /oauth/register\n{ \"client_name\": \"Grocery helper\", \"redirect_uris\": [\"https://example.com/spoonjoy/oauth/callback\"], \"token_endpoint_auth_method\": \"none\" }\n\nGET /oauth/authorize?...&state=client_state&code_challenge=pkce_s256&scope=shopping_list:read+shopping_list:write\n\nPOST /oauth/token\ngrant_type=authorization_code&client_id=cm_client_id_from_register&redirect_uri=https%3A%2F%2Fexample.com%2Fspoonjoy%2Foauth%2Fcallback&code=oac_...&code_verifier=pkce_verifier_...\n\nPOST /oauth/token\ngrant_type=refresh_token&client_id=cm_client_id_from_register&refresh_token=ort_...\n\nGET /api/v1/shopping-list/sync?limit=50",
+    body: "Register once per app install or environment, persist client_id, and do not register on every launch. Use HTTPS universal links or Android App Links for production callbacks, with localhost or 127.0.0.1 loopback only for development. Store tokens in Keychain or Android Keystore-backed storage. Refresh tokens rotate, so replace the stored refresh token atomically and use single-flight refresh when concurrent requests hit 401. After sign-in, use the Native parity REST contract and a Private mobile cache for offline cache reads.",
+    sample: "POST /oauth/register\n{ \"client_name\": \"Grocery helper\", \"redirect_uris\": [\"https://example.com/spoonjoy/oauth/callback\"], \"token_endpoint_auth_method\": \"none\" }\n\nGET /oauth/authorize?...&state=client_state&code_challenge=pkce_s256&scope=kitchen:read+kitchen:write\n\nPOST /oauth/token\ngrant_type=authorization_code&client_id=cm_client_id_from_register&redirect_uri=https%3A%2F%2Fexample.com%2Fspoonjoy%2Foauth%2Fcallback&code=oac_...&code_verifier=pkce_verifier_...\n\nPOST /oauth/token\ngrant_type=refresh_token&client_id=cm_client_id_from_register&refresh_token=ort_...\n\nGET /api/v1/me\nPOST /api/v1/me/photo\nPOST /api/v1/me/apns-devices\nPATCH /api/v1/me/notification-preferences\nPOST /api/v1/recipes/import\nGET /api/v1/shopping-list/sync?limit=50",
   },
   {
     title: "Browser extension OAuth",
     mode: "Extension",
-    body: "API v1 does not create or import recipes yet; the supported extension story today is shopping-list ingredient sync. Run OAuth/PKCE in the extension background, persist client_id plus state and code_verifier until callback, verify state, and make bearer API calls from the background instead of a content script. Register the HTTPS callback from chrome.identity.getRedirectURL/launchWebAuthFlow exactly; custom extension schemes are rejected.",
+    body: "Recipe clipping and shopping-list ingredient sync both use API v1. Run OAuth/PKCE in the extension background, persist client_id plus state and code_verifier until callback, verify state, and make bearer API calls from the background instead of a content script. Register the HTTPS callback from chrome.identity.getRedirectURL/launchWebAuthFlow exactly; custom extension schemes are rejected.",
     sample: "const item = { sourceRowId: \"row-42\", name: \"Eggs\", quantity: 12, unit: \"Each\" }\nclientMutationId = `extension:${sha256(recipeUrl)}:${item.sourceRowId}:${bodyHash}`\nPOST /api/v1/shopping-list/items\nAuthorization: Bearer sj_...\n{ \"clientMutationId\": \"extension:...\", \"name\": \"Eggs\", \"quantity\": 12, \"unit\": \"Each\" }",
   },
   {
@@ -376,7 +420,7 @@ function scopeTone(scope: string) {
 }
 
 export default function Developers() {
-  const { resources, scopeRequirements, errorStatus, openapiUrl, sdkOpenapiUrl, connectorOpenapiUrl, scopes, authFlows, oauthScopeMap, currentCapabilities } = useLoaderData<typeof loader>();
+  const { resources, scopeRequirements, errorStatus, openapiUrl, sdkOpenapiUrl, connectorOpenapiUrl, scopes, authFlows, oauthScopeMap, currentCapabilities } = useLoaderData<DeveloperLoaderData>();
   const posthog = usePostHog();
   const docsViewTelemetrySent = useRef(false);
 
@@ -471,12 +515,12 @@ export default function Developers() {
             </ul>
           </div>
           <div>
-            <p className="font-sj-ui text-xs font-bold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">Not in v1 yet</p>
+            <p className="font-sj-ui text-xs font-bold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">Future surface</p>
             <ul className="mt-3 grid gap-2 text-sm/6 text-[var(--sj-ink-soft)]">
               {currentCapabilities.notYetAvailable.map((item) => <li key={item}>- {item}</li>)}
             </ul>
             <Text className="mt-3">
-              Corporate tenant/admin APIs, inventory, meal plans, full exports, canonical unit conversion, webhooks, REST Hooks, batch mutations, and recipe write/import/export endpoints are future API surface, not hidden current endpoints.
+              Corporate tenant/admin APIs, inventory, meal plans, full exports, canonical unit conversion, webhooks, REST Hooks, and batch mutations are future API surface, not hidden current endpoints.
             </Text>
             <Text className="mt-3">
               Delegated approval helper endpoints under /api/tools/* are part of the current public connection flow. Other legacy app-only /api/* routes are not the external contract.
@@ -703,6 +747,7 @@ export default function Developers() {
                   {methodRows.map(({ method, requirement }) => (
                     <span key={method} className="inline-flex items-center gap-2">
                       <MethodBadge method={method} />
+                      <span className="font-mono text-xs text-[var(--sj-ink-soft)]">{method} {resource.path}</span>
                       {requirement?.scopes.length ? (
                         requirement.scopes.map((scope) => (
                           <Badge key={scope} color={scopeTone(scope) as "amber" | "green" | "red" | "zinc"}>
@@ -752,7 +797,7 @@ export default function Developers() {
       <SectionShell title="Sync And Safety">
         <Text className="mb-5">
           Recipe and cookbook lists are public catalog search endpoints today. The query parameter wins when both query and q are supplied;
-          lists include cursor, nextCursor, hasMore, cover images, canonicalUrl, and attribution fields. Owner export and deleted recipe tombstones are not in API v1 yet.
+          lists include cursor, nextCursor, hasMore, cover images, canonicalUrl, and attribution fields. Full export and deleted recipe tombstone feeds remain future API surface.
         </Text>
         <Text className="mb-5">
           Shopping-list cursor sync is the current incremental owner-data path. Store nextCursor after applying each batch and retry mutations with stable clientMutationId values.
