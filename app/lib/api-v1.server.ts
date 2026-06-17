@@ -41,6 +41,12 @@ import {
   uploadNativeAccountPhoto,
   type ApiV1AccountResult,
 } from "~/lib/api-v1-account.server";
+import {
+  listNativeProfileGraph,
+  loadNativeUserProfile,
+  searchNativeSpoonjoy,
+  type ApiV1UsersSearchResult,
+} from "~/lib/api-v1-users-search.server";
 import { enforceRateLimit } from "~/lib/rate-limit.server";
 import { getRequestDb } from "~/lib/route-platform.server";
 import {
@@ -166,6 +172,25 @@ function apiV1AccountResponse<T>(requestId: string, result: ApiV1AccountResult<T
     throw new ApiV1Error(result.code, result.message, result.details);
   }
   return apiV1PrivateSuccess(requestId, result.data, result.status);
+}
+
+function apiV1UsersSearchResponse<T>(
+  requestId: string,
+  result: ApiV1UsersSearchResult<T>,
+  principal: ApiPrincipal | null,
+): Response {
+  if (!result.ok) {
+    throw new ApiV1Error(result.code, result.message, result.details);
+  }
+  if (result.private) {
+    return apiV1PrivateSuccess(requestId, result.data, result.status);
+  }
+  return apiV1Success(
+    requestId,
+    result.data,
+    result.status,
+    principal ? authenticatedPublicCacheHeaders() : publicCacheHeaders(),
+  );
 }
 
 export function apiV1ErrorResponse(requestId: string, error: ApiV1Error): Response {
@@ -345,6 +370,14 @@ function apiV1OperationFor(method: string, path: string): string | undefined {
       return "tokens.create";
     case "DELETE token":
       return "tokens.revoke";
+    case "GET user-profile":
+      return "profiles.read";
+    case "GET user-fellow-chefs":
+      return "profiles.fellow-chefs.list";
+    case "GET user-kitchen-visitors":
+      return "profiles.kitchen-visitors.list";
+    case "GET search":
+      return "search.read";
     /* istanbul ignore next -- @preserve API_V1_RESOURCES only defines the method/resource combinations above. */
     default:
       return undefined;
@@ -1860,6 +1893,50 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
     if (args.request.method === "DELETE" && segments[0] === "tokens" && segments.length === 2) {
       const principal = await authorize(path) as ApiPrincipal;
       const response = await handleTokenRevoke(args, requestId, principal, segments[1]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "GET" && segments[0] === "users" && segments.length === 2) {
+      const principal = await authorize(path);
+      const db = await getRequestDb(args.context);
+      const response = apiV1UsersSearchResponse(
+        requestId,
+        await loadNativeUserProfile(db, segments[1], publicContentOrigin(args), principal?.id ?? null),
+        principal,
+      );
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "GET" && segments[0] === "users" && segments[2] === "fellow-chefs" && segments.length === 3) {
+      const principal = await authorize(path);
+      const db = await getRequestDb(args.context);
+      const response = apiV1UsersSearchResponse(
+        requestId,
+        await listNativeProfileGraph(db, segments[1], publicContentOrigin(args), new URL(args.request.url), "fellow-chefs"),
+        principal,
+      );
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "GET" && segments[0] === "users" && segments[2] === "kitchen-visitors" && segments.length === 3) {
+      const principal = await authorize(path);
+      const db = await getRequestDb(args.context);
+      const response = apiV1UsersSearchResponse(
+        requestId,
+        await listNativeProfileGraph(db, segments[1], publicContentOrigin(args), new URL(args.request.url), "kitchen-visitors"),
+        principal,
+      );
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "GET" && path === "search") {
+      const principal = await authorize(path);
+      const db = await getRequestDb(args.context);
+      const response = apiV1UsersSearchResponse(
+        requestId,
+        await searchNativeSpoonjoy(db, new URL(args.request.url), publicContentOrigin(args), principal?.id ?? null),
+        principal,
+      );
       return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
     }
 

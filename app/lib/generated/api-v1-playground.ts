@@ -280,7 +280,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "OAuth/PKCE delegated access",
       "delegated agent/device approval links",
       "remote MCP endpoint",
-      "cursor-paginated public recipe and cookbook lists"
+      "cursor-paginated public recipe and cookbook lists",
+      "public chef profile, chef graph, and scoped search reads"
     ],
     "notYetAvailable": [
       "Inventory or pantry stock APIs",
@@ -10675,7 +10676,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "method": "GET",
       "path": "/api/v1/users/{identifier}",
       "profiles": [
-        "full"
+        "full",
+        "sdk"
       ],
       "tag": "Profiles",
       "auth": "optional",
@@ -10792,7 +10794,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"profile\": {\n      \"id\": \"chef_1\",\n      \"username\": \"ari\",\n      \"photoUrl\": \"/photos/profiles/chef_1/avatar.gif\",\n      \"joinedLabel\": \"Joined Jun 2026\",\n      \"href\": \"/users/ari\",\n      \"canonicalUrl\": \"https://spoonjoy.app/users/ari\"\n    },\n    \"isOwner\": false,\n    \"recipes\": [\n      {\n        \"id\": \"recipe_1\",\n        \"title\": \"Pasta\",\n        \"description\": \"Weeknight pasta\",\n        \"servings\": \"4\",\n        \"coverImageUrl\": \"/photos/recipes/recipe_1/cover.jpg\",\n        \"coverProvenanceLabel\": \"Chef photo\",\n        \"href\": \"/recipes/recipe_1\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\"\n      }\n    ],\n    \"cookbooks\": [\n      {\n        \"id\": \"cookbook_1\",\n        \"title\": \"Weeknights\",\n        \"recipeCount\": 1,\n        \"recipes\": [\n          {\n            \"id\": \"recipe_1\",\n            \"title\": \"Pasta\",\n            \"coverImageUrl\": \"/photos/recipes/recipe_1/cover.jpg\",\n            \"coverProvenanceLabel\": \"Chef photo\",\n            \"href\": \"/recipes/recipe_1\",\n            \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\"\n          }\n        ],\n        \"href\": \"/cookbooks/cookbook_1\",\n        \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n      }\n    ],\n    \"recentSpoons\": [\n      {\n        \"id\": \"spoon_1\",\n        \"cookedAt\": \"2026-06-01T00:00:00.000Z\",\n        \"photoUrl\": null,\n        \"note\": \"Loved this with extra lemon.\",\n        \"nextTime\": null,\n        \"chef\": {\n          \"id\": \"chef_1\",\n          \"username\": \"ari\",\n          \"photoUrl\": \"/photos/profiles/chef_1/avatar.gif\"\n        },\n        \"recipe\": {\n          \"id\": \"recipe_2\",\n          \"title\": \"Lemony Beans\",\n          \"chefId\": \"chef_2\"\n        },\n        \"coverImageUrl\": null,\n        \"coverProvenanceLabel\": null\n      }\n    ],\n    \"fellowChefsCount\": 1,\n    \"kitchenVisitorsCount\": 1\n  }\n}"
         },
         {
           "status": "400",
@@ -10845,7 +10847,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "method": "GET",
       "path": "/api/v1/users/{identifier}/fellow-chefs",
       "profiles": [
-        "full"
+        "full",
+        "sdk"
       ],
       "tag": "Profiles",
       "auth": "optional",
@@ -10900,15 +10903,16 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         },
         {
-          "name": "cursor",
+          "name": "page",
           "in": "query",
-          "label": "Cursor",
+          "label": "Page",
           "required": false,
-          "defaultValue": "",
-          "placeholder": "v1.cursor_from_nextCursor",
-          "description": "Opaque pagination cursor returned as nextCursor. Catalog cursors are v1.* values; shopping-list sync also accepts an ISO timestamp only as bootstrap compatibility.",
+          "defaultValue": "1",
+          "placeholder": "page",
+          "description": "One-based page number for chef graph lists.",
           "schema": {
-            "type": "string"
+            "type": "integer",
+            "minimum": 1
           }
         },
         {
@@ -10916,9 +10920,9 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "in": "query",
           "label": "Limit",
           "required": false,
-          "defaultValue": "20",
+          "defaultValue": "50",
           "placeholder": "20",
-          "description": "Page size from 1 to 50. Defaults to 20.",
+          "description": "Graph page size from 1 to 50. Defaults to 50.",
           "schema": {
             "type": "integer",
             "minimum": 1,
@@ -10988,7 +10992,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"profile\": {\n      \"id\": \"chef_1\",\n      \"username\": \"ari\",\n      \"href\": \"/users/ari\",\n      \"canonicalUrl\": \"https://spoonjoy.app/users/ari\"\n    },\n    \"page\": 1,\n    \"pageSize\": 50,\n    \"total\": 1,\n    \"nextCursor\": null,\n    \"rows\": [\n      {\n        \"chefId\": \"chef_2\",\n        \"username\": \"jules\",\n        \"photoUrl\": null,\n        \"href\": \"/users/jules\",\n        \"canonicalUrl\": \"https://spoonjoy.app/users/jules\",\n        \"interactionCounts\": {\n          \"spoons\": 1,\n          \"forks\": 0,\n          \"cookbookSaves\": 0\n        },\n        \"latestInteractionAt\": \"2026-06-01T00:00:00.000Z\"\n      }\n    ]\n  }\n}"
         },
         {
           "status": "400",
@@ -11041,7 +11045,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "method": "GET",
       "path": "/api/v1/users/{identifier}/kitchen-visitors",
       "profiles": [
-        "full"
+        "full",
+        "sdk"
       ],
       "tag": "Profiles",
       "auth": "optional",
@@ -11096,15 +11101,16 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         },
         {
-          "name": "cursor",
+          "name": "page",
           "in": "query",
-          "label": "Cursor",
+          "label": "Page",
           "required": false,
-          "defaultValue": "",
-          "placeholder": "v1.cursor_from_nextCursor",
-          "description": "Opaque pagination cursor returned as nextCursor. Catalog cursors are v1.* values; shopping-list sync also accepts an ISO timestamp only as bootstrap compatibility.",
+          "defaultValue": "1",
+          "placeholder": "page",
+          "description": "One-based page number for chef graph lists.",
           "schema": {
-            "type": "string"
+            "type": "integer",
+            "minimum": 1
           }
         },
         {
@@ -11112,9 +11118,9 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "in": "query",
           "label": "Limit",
           "required": false,
-          "defaultValue": "20",
+          "defaultValue": "50",
           "placeholder": "20",
-          "description": "Page size from 1 to 50. Defaults to 20.",
+          "description": "Graph page size from 1 to 50. Defaults to 50.",
           "schema": {
             "type": "integer",
             "minimum": 1,
@@ -11184,7 +11190,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"profile\": {\n      \"id\": \"chef_1\",\n      \"username\": \"ari\",\n      \"href\": \"/users/ari\",\n      \"canonicalUrl\": \"https://spoonjoy.app/users/ari\"\n    },\n    \"page\": 1,\n    \"pageSize\": 50,\n    \"total\": 1,\n    \"nextCursor\": null,\n    \"rows\": [\n      {\n        \"chefId\": \"chef_2\",\n        \"username\": \"jules\",\n        \"photoUrl\": null,\n        \"href\": \"/users/jules\",\n        \"canonicalUrl\": \"https://spoonjoy.app/users/jules\",\n        \"interactionCounts\": {\n          \"spoons\": 1,\n          \"forks\": 0,\n          \"cookbookSaves\": 0\n        },\n        \"latestInteractionAt\": \"2026-06-01T00:00:00.000Z\"\n      }\n    ]\n  }\n}"
         },
         {
           "status": "400",
@@ -11237,7 +11243,9 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "method": "GET",
       "path": "/api/v1/search",
       "profiles": [
-        "full"
+        "full",
+        "connector",
+        "sdk"
       ],
       "tag": "Search",
       "auth": "optional",
@@ -11304,13 +11312,13 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         },
         {
-          "name": "cursor",
+          "name": "scope",
           "in": "query",
-          "label": "Cursor",
+          "label": "Scope",
           "required": false,
-          "defaultValue": "",
-          "placeholder": "v1.cursor_from_nextCursor",
-          "description": "Opaque pagination cursor returned as nextCursor. Catalog cursors are v1.* values; shopping-list sync also accepts an ISO timestamp only as bootstrap compatibility.",
+          "defaultValue": "all",
+          "placeholder": "scope",
+          "description": "Search scope. The legacy shopping alias normalizes to shopping-list.",
           "schema": {
             "type": "string"
           }
@@ -11392,7 +11400,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"query\": \"tomato\",\n    \"scope\": \"all\",\n    \"limit\": 20,\n    \"isAuthenticated\": false,\n    \"results\": [\n      {\n        \"type\": \"recipe\",\n        \"id\": \"recipe_1\",\n        \"ownerId\": \"chef_1\",\n        \"ownerUsername\": \"ari\",\n        \"owner\": {\n          \"id\": \"chef_1\",\n          \"username\": \"ari\"\n        },\n        \"title\": \"Pasta\",\n        \"subtitle\": \"Recipe by ari\",\n        \"snippet\": \"Weeknight pasta\",\n        \"href\": \"/recipes/recipe_1\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"imageUrl\": \"/photos/recipes/recipe_1/cover.jpg\",\n        \"score\": -1.2,\n        \"metadata\": {\n          \"servings\": \"4\",\n          \"chefUsername\": \"ari\",\n          \"ingredientNames\": [\n            \"tomato\"\n          ],\n          \"stepCount\": 2,\n          \"cookbookTitles\": [\n            \"Weeknights\"\n          ],\n          \"coverProvenanceLabel\": \"Chef photo\",\n          \"coverSourceType\": \"chef-upload\",\n          \"coverVariant\": \"image\"\n        }\n      }\n    ]\n  }\n}"
         },
         {
           "status": "400",

@@ -609,6 +609,7 @@ describe("API v1 OpenAPI document", () => {
       "/api/v1/cookbooks/{id}",
       "/api/v1/recipes",
       "/api/v1/recipes/{id}",
+      "/api/v1/search",
       "/api/v1/shopping-list",
       "/api/v1/shopping-list/items",
       "/api/v1/shopping-list/items/{itemId}",
@@ -631,6 +632,11 @@ describe("API v1 OpenAPI document", () => {
       "x-display-name": "New, updated, or removed shopping-list item",
       "x-tombstone-field": "deletedAt",
       "x-removal-when": "deletedAt is not null",
+    });
+    expect(connector.paths["/api/v1/search"].get).toMatchObject({
+      "x-connector-role": "search",
+      "x-display-name": "Search Spoonjoy",
+      "x-item-path": "$.data.results",
     });
     expect(JSON.stringify(connector)).not.toContain('"const"');
     expect(JSON.stringify(connector)).not.toContain('["string","null"]');

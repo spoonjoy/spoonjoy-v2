@@ -429,6 +429,124 @@ const schemas = {
     updatedAt: dateTimeSchema,
     recipes: { ...arrayOf(ref("RecipeSummary")), description: "Currently public, non-deleted recipe summaries in cookbook order." },
   }),
+  ProfileSummary: objectSchema(["id", "username", "photoUrl", "joinedLabel", "href", "canonicalUrl"], {
+    id: idSchema,
+    username: { type: "string", minLength: 1 },
+    photoUrl: nullableStringSchema,
+    joinedLabel: { type: "string", examples: ["Joined Jun 2026"] },
+    href: { type: "string" },
+    canonicalUrl: uriSchema,
+  }),
+  ProfileLink: objectSchema(["id", "username", "href", "canonicalUrl"], {
+    id: idSchema,
+    username: { type: "string", minLength: 1 },
+    href: { type: "string" },
+    canonicalUrl: uriSchema,
+  }),
+  ProfileRecipe: objectSchema(["id", "title", "description", "servings", "coverImageUrl", "coverProvenanceLabel", "href", "canonicalUrl"], {
+    id: idSchema,
+    title: { type: "string" },
+    description: nullableStringSchema,
+    servings: nullableStringSchema,
+    coverImageUrl: nullableStringSchema,
+    coverProvenanceLabel: nullableStringSchema,
+    href: { type: "string" },
+    canonicalUrl: uriSchema,
+  }),
+  ProfileCookbookRecipe: objectSchema(["id", "title", "coverImageUrl", "coverProvenanceLabel", "href", "canonicalUrl"], {
+    id: idSchema,
+    title: { type: "string" },
+    coverImageUrl: nullableStringSchema,
+    coverProvenanceLabel: nullableStringSchema,
+    href: { type: "string" },
+    canonicalUrl: uriSchema,
+  }),
+  ProfileCookbook: objectSchema(["id", "title", "recipeCount", "recipes", "href", "canonicalUrl"], {
+    id: idSchema,
+    title: { type: "string" },
+    recipeCount: { type: "integer", minimum: 0, description: "Count of active, non-deleted linked recipes." },
+    recipes: arrayOf(ref("ProfileCookbookRecipe")),
+    href: { type: "string" },
+    canonicalUrl: uriSchema,
+  }),
+  ProfileSpoonChef: objectSchema(["id", "username", "photoUrl"], {
+    id: idSchema,
+    username: { type: "string", minLength: 1 },
+    photoUrl: nullableStringSchema,
+  }),
+  ProfileSpoonRecipe: objectSchema(["id", "title", "chefId"], {
+    id: idSchema,
+    title: { type: "string" },
+    chefId: idSchema,
+  }),
+  ProfileRecentSpoon: objectSchema(["id", "cookedAt", "photoUrl", "note", "nextTime", "chef", "recipe", "coverImageUrl", "coverProvenanceLabel"], {
+    id: idSchema,
+    cookedAt: dateTimeSchema,
+    photoUrl: nullableStringSchema,
+    note: nullableStringSchema,
+    nextTime: nullableStringSchema,
+    chef: ref("ProfileSpoonChef"),
+    recipe: ref("ProfileSpoonRecipe"),
+    coverImageUrl: nullableStringSchema,
+    coverProvenanceLabel: nullableStringSchema,
+  }),
+  UserProfileData: objectSchema(["profile", "isOwner", "recipes", "cookbooks", "recentSpoons", "fellowChefsCount", "kitchenVisitorsCount"], {
+    profile: ref("ProfileSummary"),
+    isOwner: { type: "boolean" },
+    recipes: arrayOf(ref("ProfileRecipe")),
+    cookbooks: arrayOf(ref("ProfileCookbook")),
+    recentSpoons: arrayOf(ref("ProfileRecentSpoon")),
+    fellowChefsCount: { type: "integer", minimum: 0 },
+    kitchenVisitorsCount: { type: "integer", minimum: 0 },
+  }),
+  ProfileInteractionCounts: objectSchema(["spoons", "forks", "cookbookSaves"], {
+    spoons: { type: "integer", minimum: 0 },
+    forks: { type: "integer", minimum: 0 },
+    cookbookSaves: { type: "integer", minimum: 0 },
+  }),
+  ProfileGraphRow: objectSchema(["chefId", "username", "photoUrl", "href", "canonicalUrl", "interactionCounts", "latestInteractionAt"], {
+    chefId: idSchema,
+    username: { type: "string", minLength: 1 },
+    photoUrl: nullableStringSchema,
+    href: { type: "string" },
+    canonicalUrl: uriSchema,
+    interactionCounts: ref("ProfileInteractionCounts"),
+    latestInteractionAt: dateTimeSchema,
+  }),
+  ProfileGraphData: objectSchema(["profile", "page", "pageSize", "total", "nextCursor", "rows"], {
+    profile: ref("ProfileLink"),
+    page: { type: "integer", minimum: 1 },
+    pageSize: { type: "integer", minimum: 1, maximum: 50 },
+    total: { type: "integer", minimum: 0 },
+    nextCursor: nullableStringSchema,
+    rows: arrayOf(ref("ProfileGraphRow")),
+  }),
+  SearchOwner: objectSchema(["id", "username"], {
+    id: idSchema,
+    username: { type: "string", minLength: 1 },
+  }),
+  SearchResult: objectSchema(["type", "id", "ownerId", "ownerUsername", "owner", "title", "subtitle", "snippet", "href", "canonicalUrl", "imageUrl", "score", "metadata"], {
+    type: { type: "string", enum: ["recipe", "cookbook", "chef", "shopping-list-item"] },
+    id: idSchema,
+    ownerId: idSchema,
+    ownerUsername: { type: "string", minLength: 1 },
+    owner: ref("SearchOwner"),
+    title: { type: "string" },
+    subtitle: { type: "string" },
+    snippet: { type: "string" },
+    href: { type: "string" },
+    canonicalUrl: uriSchema,
+    imageUrl: nullableStringSchema,
+    score: { type: "number" },
+    metadata: { type: "object", additionalProperties: true },
+  }),
+  SearchData: objectSchema(["query", "scope", "limit", "isAuthenticated", "results"], {
+    query: { type: "string" },
+    scope: { type: "string", enum: ["all", "recipes", "cookbooks", "chefs", "shopping-list"] },
+    limit: { type: "integer", minimum: 1, maximum: 50 },
+    isAuthenticated: { type: "boolean" },
+    results: arrayOf(ref("SearchResult")),
+  }),
   CredentialMetadata: objectSchema(["id", "name", "tokenPrefix", "scopes", "createdAt", "updatedAt", "lastUsedAt", "revokedAt", "expiresAt"], {
     id: idSchema,
     name: shortTextSchema,
@@ -717,6 +835,9 @@ const schemas = {
   RecipeDetailEnvelope: successEnvelope(ref("RecipeDetailData")),
   CookbookListEnvelope: successEnvelope(ref("CookbookListData")),
   CookbookDetailEnvelope: successEnvelope(ref("CookbookDetailData")),
+  UserProfileEnvelope: successEnvelope(ref("UserProfileData")),
+  ProfileGraphEnvelope: successEnvelope(ref("ProfileGraphData")),
+  SearchEnvelope: successEnvelope(ref("SearchData")),
   TokenListEnvelope: successEnvelope(ref("TokenListData")),
   CreateTokenEnvelope: successEnvelope(ref("CreateTokenData")),
   RevokeTokenEnvelope: successEnvelope(ref("RevokeTokenData")),
@@ -758,8 +879,11 @@ const pathParameters = {
 const queryParameters = {
   query: { name: "query", in: "query", required: false, description: "Search text. When both query and q are sent, query wins.", schema: { type: "string" } },
   q: { name: "q", in: "query", required: false, description: "Search-text alias for clients that conventionally use q. Ignored when query is also present.", schema: { type: "string" } },
+  scope: { name: "scope", in: "query", required: false, description: "Search scope. The legacy shopping alias normalizes to shopping-list.", schema: { type: "string", enum: ["all", "recipes", "cookbooks", "chefs", "shopping-list", "shopping"], default: "all" } },
+  page: { name: "page", in: "query", required: false, description: "One-based page number for chef graph lists.", schema: { type: "integer", minimum: 1, default: 1 } },
   cursor: { name: "cursor", in: "query", required: false, description: "Opaque pagination cursor returned as nextCursor. Catalog cursors are v1.* values; shopping-list sync also accepts an ISO timestamp only as bootstrap compatibility.", schema: { type: "string" }, examples: { catalog: { value: "v1.cursor_from_nextCursor" }, sync: { value: "v1.cursor_or_iso_bootstrap" } } },
   limit: { name: "limit", in: "query", required: false, description: "Page size from 1 to 50. Defaults to 20.", schema: { type: "integer", minimum: 1, maximum: 50, default: 20 } },
+  graphLimit: { name: "limit", in: "query", required: false, description: "Graph page size from 1 to 50. Defaults to 50.", schema: { type: "integer", minimum: 1, maximum: 50, default: 50 } },
 };
 
 const discoveryErrors: ApiV1ErrorCode[] = ["validation_error", "invalid_token", "method_not_allowed", "rate_limited", "internal_error"];
@@ -914,16 +1038,16 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
     GET: { operationId: "getApiV1MeSync", tags: ["Sync"], summary: "Sync private native cache data", auth: "bearer", scopes: ["kitchen:read"], success: nativeContractSuccess, errors: bearerReadErrors, parameters: [queryParameters.cursor, queryParameters.limit] },
   },
   "/api/v1/users/{identifier}": {
-    GET: { operationId: "getApiV1User", tags: ["Profiles"], summary: "Read a chef profile", auth: "optional", scopes: ["public:read"], success: nativeContractSuccess, errors: optionalReadErrors, parameters: [pathParameters.identifier] },
+    GET: { operationId: "getApiV1User", tags: ["Profiles"], summary: "Read a chef profile", auth: "optional", scopes: ["public:read"], success: { 200: "UserProfileEnvelope" }, errors: optionalReadErrors, parameters: [pathParameters.identifier] },
   },
   "/api/v1/users/{identifier}/fellow-chefs": {
-    GET: { operationId: "getApiV1UserFellowChefs", tags: ["Profiles"], summary: "List fellow chefs for a profile", auth: "optional", scopes: ["public:read"], success: nativeContractSuccess, errors: optionalReadErrors, parameters: [pathParameters.identifier, queryParameters.cursor, queryParameters.limit] },
+    GET: { operationId: "getApiV1UserFellowChefs", tags: ["Profiles"], summary: "List fellow chefs for a profile", auth: "optional", scopes: ["public:read"], success: { 200: "ProfileGraphEnvelope" }, errors: optionalReadErrors, parameters: [pathParameters.identifier, queryParameters.page, queryParameters.graphLimit] },
   },
   "/api/v1/users/{identifier}/kitchen-visitors": {
-    GET: { operationId: "getApiV1UserKitchenVisitors", tags: ["Profiles"], summary: "List kitchen visitors for a profile", auth: "optional", scopes: ["public:read"], success: nativeContractSuccess, errors: optionalReadErrors, parameters: [pathParameters.identifier, queryParameters.cursor, queryParameters.limit] },
+    GET: { operationId: "getApiV1UserKitchenVisitors", tags: ["Profiles"], summary: "List kitchen visitors for a profile", auth: "optional", scopes: ["public:read"], success: { 200: "ProfileGraphEnvelope" }, errors: optionalReadErrors, parameters: [pathParameters.identifier, queryParameters.page, queryParameters.graphLimit] },
   },
   "/api/v1/search": {
-    GET: { operationId: "getApiV1Search", tags: ["Search"], summary: "Search recipes, cookbooks, chefs, and private shopping-list items", auth: "optional", scopes: ["public:read"], success: nativeContractSuccess, errors: optionalReadErrors, parameters: [queryParameters.query, queryParameters.q, queryParameters.cursor, queryParameters.limit] },
+    GET: { operationId: "getApiV1Search", tags: ["Search"], summary: "Search recipes, cookbooks, chefs, and private shopping-list items", auth: "optional", scopes: ["public:read"], success: { 200: "SearchEnvelope" }, errors: optionalReadErrors, parameters: [queryParameters.query, queryParameters.q, queryParameters.scope, queryParameters.limit] },
   },
   "/api/v1/recipes/import": {
     POST: { operationId: "postApiV1RecipesImport", tags: ["Recipes"], summary: "Import a recipe from a URL, text, or captured draft", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractCreated, errors: bearerMutationErrors, requestBody: "NativeMutationRequest" },
@@ -991,6 +1115,83 @@ const exampleCookbookSummary = {
   updatedAt: exampleTimestamp,
 };
 const exampleCookbookDetail = { ...exampleCookbookSummary, recipes: [exampleRecipeSummary] };
+const exampleProfileSummary = {
+  id: "chef_1",
+  username: "ari",
+  photoUrl: "/photos/profiles/chef_1/avatar.gif",
+  joinedLabel: "Joined Jun 2026",
+  href: "/users/ari",
+  canonicalUrl: "https://spoonjoy.app/users/ari",
+};
+const exampleProfileRecipe = {
+  id: "recipe_1",
+  title: "Pasta",
+  description: "Weeknight pasta",
+  servings: "4",
+  coverImageUrl: "/photos/recipes/recipe_1/cover.jpg",
+  coverProvenanceLabel: "Chef photo",
+  href: "/recipes/recipe_1",
+  canonicalUrl: "https://spoonjoy.app/recipes/recipe_1",
+};
+const exampleProfileCookbook = {
+  id: "cookbook_1",
+  title: "Weeknights",
+  recipeCount: 1,
+  recipes: [{
+    id: "recipe_1",
+    title: "Pasta",
+    coverImageUrl: "/photos/recipes/recipe_1/cover.jpg",
+    coverProvenanceLabel: "Chef photo",
+    href: "/recipes/recipe_1",
+    canonicalUrl: "https://spoonjoy.app/recipes/recipe_1",
+  }],
+  href: "/cookbooks/cookbook_1",
+  canonicalUrl: "https://spoonjoy.app/cookbooks/cookbook_1",
+};
+const exampleRecentSpoon = {
+  id: "spoon_1",
+  cookedAt: exampleTimestamp,
+  photoUrl: null,
+  note: "Loved this with extra lemon.",
+  nextTime: null,
+  chef: { id: "chef_1", username: "ari", photoUrl: "/photos/profiles/chef_1/avatar.gif" },
+  recipe: { id: "recipe_2", title: "Lemony Beans", chefId: "chef_2" },
+  coverImageUrl: null,
+  coverProvenanceLabel: null,
+};
+const exampleProfileGraphRow = {
+  chefId: "chef_2",
+  username: "jules",
+  photoUrl: null,
+  href: "/users/jules",
+  canonicalUrl: "https://spoonjoy.app/users/jules",
+  interactionCounts: { spoons: 1, forks: 0, cookbookSaves: 0 },
+  latestInteractionAt: exampleTimestamp,
+};
+const exampleSearchResult = {
+  type: "recipe",
+  id: "recipe_1",
+  ownerId: "chef_1",
+  ownerUsername: "ari",
+  owner: { id: "chef_1", username: "ari" },
+  title: "Pasta",
+  subtitle: "Recipe by ari",
+  snippet: "Weeknight pasta",
+  href: "/recipes/recipe_1",
+  canonicalUrl: "https://spoonjoy.app/recipes/recipe_1",
+  imageUrl: "/photos/recipes/recipe_1/cover.jpg",
+  score: -1.2,
+  metadata: {
+    servings: "4",
+    chefUsername: "ari",
+    ingredientNames: ["tomato"],
+    stepCount: 2,
+    cookbookTitles: ["Weeknights"],
+    coverProvenanceLabel: "Chef photo",
+    coverSourceType: "chef-upload",
+    coverVariant: "image",
+  },
+};
 const exampleCredential = {
   id: "cred_1",
   name: "Tiny client",
@@ -1228,6 +1429,47 @@ const responseExamples: Record<string, unknown> = {
     },
   },
   CookbookDetailEnvelope: { ok: true, requestId: "req_example", data: { cookbook: exampleCookbookDetail } },
+  UserProfileEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      profile: exampleProfileSummary,
+      isOwner: false,
+      recipes: [exampleProfileRecipe],
+      cookbooks: [exampleProfileCookbook],
+      recentSpoons: [exampleRecentSpoon],
+      fellowChefsCount: 1,
+      kitchenVisitorsCount: 1,
+    },
+  },
+  ProfileGraphEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      profile: {
+        id: exampleProfileSummary.id,
+        username: exampleProfileSummary.username,
+        href: exampleProfileSummary.href,
+        canonicalUrl: exampleProfileSummary.canonicalUrl,
+      },
+      page: 1,
+      pageSize: 50,
+      total: 1,
+      nextCursor: null,
+      rows: [exampleProfileGraphRow],
+    },
+  },
+  SearchEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      query: "tomato",
+      scope: "all",
+      limit: 20,
+      isAuthenticated: false,
+      results: [exampleSearchResult],
+    },
+  },
   TokenListEnvelope: { ok: true, requestId: "req_example", data: { tokens: [exampleCredential] } },
   CreateTokenEnvelope: { ok: true, requestId: "req_example", data: { token: "sj_secret", credential: exampleCredential } },
   RevokeTokenEnvelope: { ok: true, requestId: "req_example", data: { revoked: true, credential: { ...exampleCredential, revokedAt: exampleTimestamp } } },
@@ -1340,7 +1582,7 @@ function successResponse(schemaName: string, options: { publicCache?: boolean; n
   };
   if (options.publicCache) {
     headers["Cache-Control"] = {
-      description: "Present on anonymous public recipe/cookbook responses: public, max-age=60, stale-while-revalidate=300. Authenticated public reads validate scopes and are not public-cacheable.",
+      description: "Present on anonymous public read responses: public, max-age=60, stale-while-revalidate=300. Authenticated public reads validate scopes and are not public-cacheable; shopping-list search results are always private.",
       schema: { type: "string" },
     };
     headers.Vary = {
@@ -1892,7 +2134,11 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
             path === "/api/v1/recipes" ||
             path === "/api/v1/recipes/{id}" ||
             path === "/api/v1/cookbooks" ||
-            path === "/api/v1/cookbooks/{id}"
+            path === "/api/v1/cookbooks/{id}" ||
+            path === "/api/v1/users/{identifier}" ||
+            path === "/api/v1/users/{identifier}/fellow-chefs" ||
+            path === "/api/v1/users/{identifier}/kitchen-visitors" ||
+            path === "/api/v1/search"
           ),
           noStore: requirement.auth === "bearer",
         });
@@ -2309,6 +2555,7 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
         "delegated agent/device approval links",
         "remote MCP endpoint",
         "cursor-paginated public recipe and cookbook lists",
+        "public chef profile, chef graph, and scoped search reads",
       ],
       notYetAvailable: [
         "Inventory or pantry stock APIs",
@@ -2329,6 +2576,7 @@ const CONNECTOR_PATHS = new Set([
   "/api/v1/recipes/{id}",
   "/api/v1/cookbooks",
   "/api/v1/cookbooks/{id}",
+  "/api/v1/search",
   "/api/v1/shopping-list",
   "/api/v1/shopping-list/sync",
   "/api/v1/shopping-list/items",
@@ -2348,6 +2596,10 @@ const SDK_PATHS = new Set([
   "/api/v1/recipes/{id}",
   "/api/v1/cookbooks",
   "/api/v1/cookbooks/{id}",
+  "/api/v1/users/{identifier}",
+  "/api/v1/users/{identifier}/fellow-chefs",
+  "/api/v1/users/{identifier}/kitchen-visitors",
+  "/api/v1/search",
   "/api/v1/shopping-list",
   "/api/v1/shopping-list/sync",
   "/api/v1/shopping-list/items",
@@ -2464,6 +2716,13 @@ function annotateConnectorOperations(paths: MutableOpenApiDocument) {
         "x-display-name": "Search public cookbooks",
         "x-item-path": "$.data.cookbooks",
         "x-cursor-path": "$.data.nextCursor",
+      },
+    },
+    "/api/v1/search": {
+      get: {
+        "x-connector-role": "search",
+        "x-display-name": "Search Spoonjoy",
+        "x-item-path": "$.data.results",
       },
     },
     "/api/v1/shopping-list/sync": {

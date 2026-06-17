@@ -485,7 +485,7 @@ API v1 is rate limited by IP and credential before authentication work. Anonymou
 
 The Native parity REST contract is the source of truth for the iOS, iPadOS, and macOS app. It covers the current Spoonjoy product model without inventing new surfaces: recipe CRUD and import, step and ingredient editing, step output uses, recipe image and cover management, spoons, cookbook CRUD and membership, shopping-list sync and destructive clears, account/profile fields, profile photo upload/removal, notification preferences, APNs device registration, OAuth connection management, personal tokens, current-chef private sync, public chef graph, and search.
 
-Private mobile cache clients should treat authenticated responses as private no-store data. Public recipe and cookbook responses may be cached briefly by anonymous clients, but once a request carries a session or bearer credential the native app should place the data in its account/environment-scoped offline cache, mark it with freshness and source metadata, and purge it on logout, account switch, token revocation, or a server tombstone. Offline cache entries for private kitchen data must not leak into Spotlight, App Intents, share payloads, logs, screenshots, or public caches unless a field is deliberately user-visible.
+Private mobile cache clients should treat authenticated responses as private no-store data. Anonymous public recipe, cookbook, profile, chef graph, and public search responses may be cached briefly, but once a request carries a session or bearer credential the native app should place the data in its account/environment-scoped offline cache, mark it with freshness and source metadata, and purge it on logout, account switch, token revocation, or a server tombstone. Offline cache entries for private kitchen data must not leak into Spotlight, App Intents, share payloads, logs, screenshots, or public caches unless a field is deliberately user-visible.
 
 Endpoint-family implementation units replace the placeholder `NativeContractEnvelope` schemas with exact request and response bodies before those new write resources return HTTP success. Until a row has a real handler, clients should discover it through OpenAPI for code generation and planning, but treat live non-success responses as not-yet-implemented behavior rather than retryable domain failures.
 
@@ -515,6 +515,10 @@ Retry network timeouts, `429`, and `5xx` responses with the same mutation id. Re
 Recipe and cookbook list endpoints are public catalog search endpoints today. They accept `limit`, `cursor`, and `query`/`q`; when both query aliases are supplied, `query` wins. Responses include `cursor`, `nextCursor`, and `hasMore`, plus `coverImageUrl` on recipe summaries and `coverImageUrls` on cookbook summaries. Full account export and deleted recipe/cookbook tombstone feeds remain future API surface. Use shopping-list sync and current-chef sync for owner data until export APIs exist.
 
 Public catalog cursors page by `createdAt` plus `id` for deterministic catalog walks. They are not repeatable snapshot guarantees, not `updatedAt` incremental feeds, and do not include deletion tombstones. New public records can appear during a long crawl. Restart a full crawl when you need to catch public recipe/cookbook edits or removals. Anonymous public recipe/cookbook responses expose `Cache-Control: public, max-age=60, stale-while-revalidate=300`; authenticated public reads are validated and returned with private/no-store cache headers. API v1 does not provide `ETag`, `Last-Modified`, or conditional request support yet.
+
+Profile reads mirror the current Spoonjoy chef profile model without adding future social surfaces. `GET /api/v1/users/{identifier}` accepts a username or user id and returns the canonical username profile, active recipes, active cookbook recipe counts, recent spoons by that chef, and fellow-chef/kitchen-visitor counts. `GET /api/v1/users/{identifier}/fellow-chefs?page=1&limit=50` and `/kitchen-visitors` return derived chef graph pages from spoons, forks, and cookbook saves. Anonymous graph/profile responses are public-cacheable; authenticated responses are no-store so native clients can cache them under the signed-in account/environment.
+
+`GET /api/v1/search` delegates to the shared Spoonjoy search index. `query` wins over `q`, `scope=shopping` normalizes to `shopping-list`, and `limit` is 1 to 50. Anonymous search omits shopping-list items even for `scope=all`; authenticated search can include owner-scoped shopping-list matches and returns private no-store headers whenever shopping-list results may be present.
 
 Recipe ingredient quantities, units, servings, temperatures, and timers are original author data in API v1. Units are free-form display strings, not a canonical conversion model. API v1 does not expose a `/api/v1/units` registry, density tables, structured yields, locale-aware unit names, or volume-to-mass conversion rules; clients that convert measurements must treat unsupported ingredients or units as non-convertible and preserve the original text.
 
@@ -854,7 +858,7 @@ Trigger: New, updated, or removed shopping-list item
 4. Persist data.nextCursor only after the trigger run succeeds.
 ```
 
-Public recipe/cookbook lists are usable as catalog searches and cursor walks, not instant triggers or owner export feeds. They do not emit private data, updatedAt deltas, repeatable snapshot guarantees, or deletion tombstones in v1.
+Public recipe/cookbook lists and `/api/v1/search` are usable as connector searches. They are not instant triggers or owner export feeds, and they do not emit private data, updatedAt deltas, repeatable snapshot guarantees, or deletion tombstones in v1.
 
 ### Public BI snapshot export
 
