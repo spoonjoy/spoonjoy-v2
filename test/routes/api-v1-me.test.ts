@@ -66,6 +66,27 @@ function expectErrorEnvelope(payload: any, requestId: string, code: string, stat
   expect(payload.error).toMatchObject({ code, status, message: expect.any(String) });
 }
 
+function expectCredentialSecretsAbsent(credential: Record<string, unknown>) {
+  for (const key of ["token", "tokenHash", "rawToken", "secret", "accessToken", "refreshToken"]) {
+    expect(credential[key]).toBeUndefined();
+  }
+}
+
+function expectTokenCredentialMetadata(credential: Record<string, unknown>) {
+  expect(Object.keys(credential).sort()).toEqual([
+    "createdAt",
+    "expiresAt",
+    "id",
+    "lastUsedAt",
+    "name",
+    "revokedAt",
+    "scopes",
+    "tokenPrefix",
+    "updatedAt",
+  ]);
+  expectCredentialSecretsAbsent(credential);
+}
+
 function nativeConnectionIdFor(clientId: string, resource: string | null) {
   return `oauth_${Buffer.from(JSON.stringify({ clientId, resource })).toString("base64url")}`;
 }
@@ -250,7 +271,7 @@ describe("API v1 native account and bootstrap endpoints", () => {
           method: "GET",
           url: "/account/settings",
           onlineOnly: true,
-          actions: ["changePassword", "setPassword", "removePassword"],
+          actions: ["changePassword", "removePassword"],
         },
         passkeys: {
           method: "GET",
@@ -293,7 +314,9 @@ describe("API v1 native account and bootstrap endpoints", () => {
     });
     expect(payload.data.me.apiCredentials.map((credential: { id: string }) => credential.id)).not.toContain(oauthAccess.credential.id);
     expect(payload.data.me.apiCredentials.map((credential: { id: string }) => credential.id)).not.toContain(revoked.credential.id);
-    expect(payload.data.me.apiCredentials[0].token).toBeUndefined();
+    for (const credential of payload.data.me.apiCredentials) {
+      expectCredentialSecretsAbsent(credential);
+    }
     expect(payload.data.notifications).toEqual({
       pushSubscribed: true,
       preferences: {
@@ -313,6 +336,87 @@ describe("API v1 native account and bootstrap endpoints", () => {
     expect(kitchenPayload.data).toMatchObject({
       me: { id: user.id, username: user.username },
       notifications: { pushSubscribed: true },
+    });
+  });
+
+  it("returns account-security handoffs for OAuth/passkey-only native accounts", async () => {
+    const user = await db.user.create({
+      data: {
+        ...createTestUser(),
+        hashedPassword: null,
+        salt: null,
+      },
+    });
+    await db.oAuth.create({
+      data: {
+        provider: "github",
+        providerUserId: `github-${faker.string.alphanumeric(10)}`,
+        providerUsername: "octochef",
+        userId: user.id,
+      },
+    });
+    await db.userCredential.create({
+      data: {
+        id: "pk_oauth_only",
+        userId: user.id,
+        publicKey: new Uint8Array([4, 5, 6]),
+        counter: 0n,
+        transports: "hybrid",
+        name: "Kitchen iPhone",
+        createdAt: new Date("2026-06-04T10:00:00.000Z"),
+      },
+    });
+    const reader = await createApiCredential(db, user.id, "Native OAuth-only reader", {
+      scopes: ["kitchen:read"],
+    });
+
+    const response = await loader(routeArgs(getRequest("me", reader.token, "req_me_oauth_only_bootstrap"), "me"));
+    const payload = await readJson(response);
+
+    expect(response.status).toBe(200);
+    expectPrivateEnvelopeHeaders(response, "req_me_oauth_only_bootstrap");
+    expectSuccessEnvelope(payload, "req_me_oauth_only_bootstrap");
+    expect(payload.data.me).toMatchObject({
+      id: user.id,
+      email: user.email,
+      username: user.username,
+      hasPassword: false,
+      oauthAccounts: [
+        {
+          provider: "github",
+          providerUsername: "octochef",
+        },
+      ],
+      passkeys: [
+        {
+          id: "pk_oauth_only",
+          name: "Kitchen iPhone",
+          transports: "hybrid",
+          createdAt: "2026-06-04T10:00:00.000Z",
+        },
+      ],
+      handoffs: {
+        accountSettings: { method: "GET", url: "/account/settings", onlineOnly: true },
+        password: {
+          method: "GET",
+          url: "/account/settings",
+          onlineOnly: true,
+          actions: ["setPassword"],
+        },
+        passkeys: {
+          method: "GET",
+          url: "/account/settings",
+          onlineOnly: true,
+          registrationOptionsUrl: "/auth/webauthn/register/options",
+          registrationVerifyUrl: "/auth/webauthn/register/verify",
+          actions: ["addPasskey", "renamePasskey", "removePasskey"],
+        },
+        providerLinks: {
+          google: { method: "GET", url: "/auth/google?linking=true", onlineOnly: true },
+          github: { method: "GET", url: "/auth/github?linking=true", onlineOnly: true },
+          apple: { method: "GET", url: "/auth/apple?linking=true", onlineOnly: true },
+        },
+      },
     });
   });
 
@@ -351,7 +455,9 @@ describe("API v1 native account and bootstrap endpoints", () => {
     expect(listedIds).toEqual(expect.arrayContaining([personal.credential.id, reader.credential.id, writer.credential.id]));
     expect(listedIds).not.toContain(oauthAccess.credential.id);
     expect(listedIds).not.toContain(otherOwnerToken.credential.id);
-    expect(listPayload.data.tokens.every((credential: { token?: unknown }) => credential.token === undefined)).toBe(true);
+    for (const credential of listPayload.data.tokens) {
+      expectTokenCredentialMetadata(credential);
+    }
 
     const created = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/tokens", {
       method: "POST",
@@ -375,6 +481,7 @@ describe("API v1 native account and bootstrap endpoints", () => {
       scopes: expect.arrayContaining(["kitchen:read", "tokens:read"]),
       revokedAt: null,
     });
+    expectTokenCredentialMetadata(createdPayload.data.credential);
     await expect(db.apiCredential.findUniqueOrThrow({ where: { id: createdPayload.data.credential.id } }))
       .resolves.toMatchObject({ tokenHash: expect.not.stringContaining(createdPayload.data.token) });
 
@@ -391,6 +498,7 @@ describe("API v1 native account and bootstrap endpoints", () => {
       revoked: true,
       credential: { id: createdPayload.data.credential.id, revokedAt: expect.any(String) },
     });
+    expectTokenCredentialMetadata(revokePayload.data.credential);
 
     const revokeAgain = await action(routeArgs(new UndiciRequest(`http://localhost/api/v1/tokens/${createdPayload.data.credential.id}`, {
       method: "DELETE",
@@ -405,6 +513,7 @@ describe("API v1 native account and bootstrap endpoints", () => {
       revoked: false,
       credential: { id: createdPayload.data.credential.id, revokedAt: expect.any(String) },
     });
+    expectTokenCredentialMetadata(revokeAgainPayload.data.credential);
 
     const afterRevokeList = await loader(routeArgs(new UndiciRequest("http://localhost/api/v1/tokens", {
       headers: { Cookie: cookie, "X-Request-Id": "req_native_tokens_after_revoke" },
@@ -414,6 +523,9 @@ describe("API v1 native account and bootstrap endpoints", () => {
     expectPrivateEnvelopeHeaders(afterRevokeList, "req_native_tokens_after_revoke");
     expect(afterRevokePayload.data.tokens.map((credential: { id: string }) => credential.id))
       .not.toContain(createdPayload.data.credential.id);
+    for (const credential of afterRevokePayload.data.tokens) {
+      expectTokenCredentialMetadata(credential);
+    }
 
     const readWithoutScope = await loader(routeArgs(new UndiciRequest("http://localhost/api/v1/tokens", {
       headers: { Authorization: `Bearer ${writer.token}`, "X-Request-Id": "req_native_tokens_read_scope" },
@@ -897,10 +1009,14 @@ describe("API v1 native account and bootstrap endpoints", () => {
       disconnected: true,
       connection: { id: connectionId, clientId: client.id, resource },
     });
-    await expect(db.oAuthRefreshToken.findMany({ where: { userId: user.id, clientId: client.id, resource } }))
-      .resolves.toEqual(expect.arrayContaining([
-        expect.objectContaining({ revokedAt: expect.any(Date) }),
-      ]));
+    const refreshTokens = await db.oAuthRefreshToken.findMany({ where: { userId: user.id, clientId: client.id, resource } });
+    expect(refreshTokens).toHaveLength(2);
+    expect(refreshTokens.every((token) => token.revokedAt instanceof Date)).toBe(true);
+    await expect(db.oAuthRefreshToken.count({ where: { userId: user.id, clientId: client.id, resource, revokedAt: null } }))
+      .resolves.toBe(0);
+    await expect(db.apiCredential.count({
+      where: { userId: user.id, oauthClientId: client.id, oauthResource: resource, revokedAt: null },
+    })).resolves.toBe(0);
     await expect(db.apiCredential.findUniqueOrThrow({ where: { id: access.credential.id } }))
       .resolves.toMatchObject({ revokedAt: expect.any(Date) });
 
