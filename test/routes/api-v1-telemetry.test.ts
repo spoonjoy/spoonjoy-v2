@@ -64,7 +64,7 @@ function apiRequest(url: string, requestId: string, headers: Record<string, stri
 }
 
 function apiJsonRequest(
-  method: "POST" | "PATCH" | "DELETE",
+  method: "POST" | "PATCH" | "PUT" | "DELETE",
   path: string,
   requestId: string,
   headers: Record<string, string>,
@@ -585,6 +585,60 @@ describe("API v1 mutation and validation telemetry", () => {
         operation,
         privacyClass: "private",
         forbidden: [request.bodyText, fixture.recipe.title],
+      });
+    }
+  });
+
+  it("captures recipe step operation names on authentication failures", async () => {
+    const fixture = await createRecipeFixture(db);
+    const stepId = "telemetry-step";
+    const ingredientId = "telemetry-ingredient";
+
+    for (const [method, path, routeTemplate, requestId, operation, body] of [
+      ["POST", `recipes/${fixture.recipe.id}/steps`, "/api/v1/recipes/{id}/steps", "req_step_create_auth_operation", "recipes.steps.create", {
+        clientMutationId: "telemetry-step-create",
+        description: "Telemetry step create",
+      }],
+      ["PATCH", `recipes/${fixture.recipe.id}/steps/${stepId}`, "/api/v1/recipes/{id}/steps/{stepId}", "req_step_update_auth_operation", "recipes.steps.update", {
+        clientMutationId: "telemetry-step-update",
+        description: "Telemetry step update",
+      }],
+      ["DELETE", `recipes/${fixture.recipe.id}/steps/${stepId}`, "/api/v1/recipes/{id}/steps/{stepId}", "req_step_delete_auth_operation", "recipes.steps.delete", {
+        clientMutationId: "telemetry-step-delete",
+      }],
+      ["POST", `recipes/${fixture.recipe.id}/steps/reorder`, "/api/v1/recipes/{id}/steps/reorder", "req_step_reorder_auth_operation", "recipes.steps.reorder", {
+        clientMutationId: "telemetry-step-reorder",
+        stepId,
+        toStepNum: 2,
+      }],
+      ["POST", `recipes/${fixture.recipe.id}/steps/${stepId}/ingredients`, "/api/v1/recipes/{id}/steps/{stepId}/ingredients", "req_step_ingredient_create_auth_operation", "recipes.steps.ingredients.create", {
+        clientMutationId: "telemetry-step-ingredient-create",
+        quantity: 1,
+        unit: "cup",
+        name: "salt",
+      }],
+      ["DELETE", `recipes/${fixture.recipe.id}/steps/${stepId}/ingredients/${ingredientId}`, "/api/v1/recipes/{id}/steps/{stepId}/ingredients/{ingredientId}", "req_step_ingredient_delete_auth_operation", "recipes.steps.ingredients.delete", {
+        clientMutationId: "telemetry-step-ingredient-delete",
+      }],
+      ["PUT", `recipes/${fixture.recipe.id}/step-output-uses`, "/api/v1/recipes/{id}/step-output-uses", "req_step_output_uses_auth_operation", "recipes.steps.output-uses.replace", {
+        clientMutationId: "telemetry-step-output-uses",
+        inputStepId: stepId,
+        outputStepNums: [1],
+      }],
+    ] as const) {
+      const request = apiJsonRequest(method, path, requestId, {}, body);
+      const response = await action(routeArgs(request.request, path).args);
+
+      expect(response.status).toBe(401);
+      expectApiV1ErrorEvent({
+        routeTemplate,
+        requestId,
+        status: 401,
+        errorCode: "authentication_required",
+        authMode: "anonymous",
+        operation,
+        privacyClass: "private",
+        forbidden: [request.bodyText, fixture.recipe.title, stepId, ingredientId],
       });
     }
   });

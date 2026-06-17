@@ -87,6 +87,11 @@ function expectMutationShape(mutation: Record<string, unknown>, clientMutationId
   expect(mutation).toEqual({ clientMutationId, replayed });
 }
 
+async function expectInProgress(response: Response, requestId: string) {
+  expect(response.status).toBe(409);
+  expectErrorEnvelope(await readJson(response), requestId, "idempotency_in_progress", 409);
+}
+
 function expectChefShape(chef: Record<string, unknown>) {
   expectExactKeys(chef, ["id", "username"]);
   expect(typeof chef.id).toBe("string");
@@ -906,6 +911,113 @@ describe("API v1 recipe write mutations", () => {
       context: {},
     } as never);
     expect(noCloudflareFork.status).toBe(201);
+  });
+
+  it("rejects incomplete recipe recovery when committed state is missing or mismatched", async () => {
+    const fixture = await createRecipeWriteFixture(db);
+
+    const createWrongOwnerBody = { clientMutationId: "recover-create-wrong-owner", title: "Wrong Owner Create" };
+    const createWrongOwnerReservation = await reserveMutation(db, {
+      body: createWrongOwnerBody,
+      credentialId: fixture.writer.credential.id,
+      method: "POST",
+      operation: "recipes.create",
+      path: "recipes",
+      userId: fixture.chef.id,
+    });
+    await db.recipe.create({
+      data: { id: createWrongOwnerReservation.id, chefId: fixture.otherChef.id, title: createWrongOwnerBody.title },
+    });
+    await expectInProgress(await action(routeArgs(
+      mutationRequest("POST", "recipes", fixture.writer.token, "req_recover_create_wrong_owner", createWrongOwnerBody),
+      "recipes",
+    )), "req_recover_create_wrong_owner");
+
+    const updateWrongOwnerRecipe = await createRecipeGraph(db, fixture.otherChef.id, { title: "Wrong Owner Update Source" });
+    const updateWrongOwnerBody = { clientMutationId: "recover-update-wrong-owner", title: "Wrong Owner Update" };
+    await reserveMutation(db, {
+      body: updateWrongOwnerBody,
+      credentialId: fixture.writer.credential.id,
+      method: "PATCH",
+      operation: "recipes.update",
+      path: `recipes/${updateWrongOwnerRecipe.id}`,
+      userId: fixture.chef.id,
+    });
+    await db.recipe.update({
+      where: { id: updateWrongOwnerRecipe.id },
+      data: { title: updateWrongOwnerBody.title },
+    });
+    await expectInProgress(await action(routeArgs(
+      mutationRequest("PATCH", `recipes/${updateWrongOwnerRecipe.id}`, fixture.writer.token, "req_recover_update_wrong_owner", updateWrongOwnerBody),
+      `recipes/${updateWrongOwnerRecipe.id}`,
+    )), "req_recover_update_wrong_owner");
+
+    const titleMismatchRecipe = await createRecipeGraph(db, fixture.chef.id, { title: "Title Mismatch Source" });
+    const titleMismatchBody = { clientMutationId: "recover-update-title-mismatch", title: "Expected Recovered Title" };
+    await reserveMutation(db, {
+      body: titleMismatchBody,
+      credentialId: fixture.writer.credential.id,
+      method: "PATCH",
+      operation: "recipes.update",
+      path: `recipes/${titleMismatchRecipe.id}`,
+      userId: fixture.chef.id,
+    });
+    await db.recipe.update({
+      where: { id: titleMismatchRecipe.id },
+      data: { title: "Different recovered title" },
+    });
+    await expectInProgress(await action(routeArgs(
+      mutationRequest("PATCH", `recipes/${titleMismatchRecipe.id}`, fixture.writer.token, "req_recover_update_title_mismatch", titleMismatchBody),
+      `recipes/${titleMismatchRecipe.id}`,
+    )), "req_recover_update_title_mismatch");
+
+    const notDeletedRecipe = await createRecipeGraph(db, fixture.chef.id, { title: "Not Deleted Recovery Source" });
+    const notDeletedBody = { clientMutationId: "recover-delete-not-deleted" };
+    await reserveMutation(db, {
+      body: notDeletedBody,
+      credentialId: fixture.writer.credential.id,
+      method: "DELETE",
+      operation: "recipes.delete",
+      path: `recipes/${notDeletedRecipe.id}`,
+      userId: fixture.chef.id,
+    });
+    await expectInProgress(await action(routeArgs(
+      mutationRequest("DELETE", `recipes/${notDeletedRecipe.id}`, fixture.writer.token, "req_recover_delete_not_deleted", notDeletedBody),
+      `recipes/${notDeletedRecipe.id}`,
+    )), "req_recover_delete_not_deleted");
+
+    const staleDeletedRecipe = await createRecipeGraph(db, fixture.chef.id, {
+      title: "Stale Deleted Recovery Source",
+      deletedAt: new Date(Date.now() - 60_000),
+    });
+    const staleDeletedBody = { clientMutationId: "recover-delete-stale" };
+    await reserveMutation(db, {
+      body: staleDeletedBody,
+      credentialId: fixture.writer.credential.id,
+      method: "DELETE",
+      operation: "recipes.delete",
+      path: `recipes/${staleDeletedRecipe.id}`,
+      userId: fixture.chef.id,
+    });
+    await expectInProgress(await action(routeArgs(
+      mutationRequest("DELETE", `recipes/${staleDeletedRecipe.id}`, fixture.writer.token, "req_recover_delete_stale", staleDeletedBody),
+      `recipes/${staleDeletedRecipe.id}`,
+    )), "req_recover_delete_stale");
+
+    const source = await createRecipeGraph(db, fixture.otherChef.id, { title: "Missing Fork Recovery Source" });
+    const forkMissingBody = { clientMutationId: "recover-fork-missing", title: "Missing Fork" };
+    await reserveMutation(db, {
+      body: forkMissingBody,
+      credentialId: fixture.writer.credential.id,
+      method: "POST",
+      operation: "recipes.fork",
+      path: `recipes/${source.id}/fork`,
+      userId: fixture.chef.id,
+    });
+    await expectInProgress(await action(routeArgs(
+      mutationRequest("POST", `recipes/${source.id}/fork`, fixture.writer.token, "req_recover_fork_missing", forkMissingBody),
+      `recipes/${source.id}/fork`,
+    )), "req_recover_fork_missing");
   });
 
   it("validates mutation bodies, duplicate titles, deleted fork sources, auth, and scope before writes", async () => {
