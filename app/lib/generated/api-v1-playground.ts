@@ -6302,14 +6302,15 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "retryOn": [
           "network_timeout",
           "429",
-          "5xx"
+          "5xx",
+          "idempotency_in_progress"
         ],
         "retryAfterHeader": "Retry-After",
-        "preserveClientMutationId": false,
+        "preserveClientMutationId": true,
         "doNotRetryUnchanged": [
           "validation_error",
-          "invalid_cursor",
-          "insufficient_scope"
+          "insufficient_scope",
+          "idempotency_conflict"
         ]
       },
       "cursorPolicy": {
@@ -6322,7 +6323,17 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "order": "createdAt/id cursor walk",
         "caveat": "Not an updatedAt incremental feed and not a repeatable snapshot guarantee."
       },
-      "idempotency": null,
+      "idempotency": {
+        "key": "clientMutationId",
+        "location": "jsonBody",
+        "retentionHours": 24,
+        "replayStatus": [
+          201
+        ],
+        "conflictStatus": 409,
+        "inProgressRetryAfterSeconds": 2,
+        "retryBodyRule": "Persist and retry the same parsed JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts."
+      },
       "personalTokenOnly": false,
       "oauthNote": "",
       "selfRevokeException": "",
@@ -6347,12 +6358,12 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "required": true,
         "contentType": "application/json",
         "fileFields": [],
-        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "example": "{\n  \"clientMutationId\": \"cookbook-create-device-uuid-1\",\n  \"title\": \"Packed Lunches\"\n}",
         "examples": [
           {
             "name": "example",
             "label": "Example",
-            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+            "example": "{\n  \"clientMutationId\": \"cookbook-create-device-uuid-1\",\n  \"title\": \"Packed Lunches\"\n}"
           }
         ]
       },
@@ -6361,12 +6372,12 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "required": true,
           "contentType": "application/json",
           "fileFields": [],
-          "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+          "example": "{\n  \"clientMutationId\": \"cookbook-create-device-uuid-1\",\n  \"title\": \"Packed Lunches\"\n}",
           "examples": [
             {
               "name": "example",
               "label": "Example",
-              "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+              "example": "{\n  \"clientMutationId\": \"cookbook-create-device-uuid-1\",\n  \"title\": \"Packed Lunches\"\n}"
             }
           ]
         }
@@ -6425,7 +6436,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "201",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"created\": true,\n    \"cookbook\": {\n      \"id\": \"cookbook_created_1\",\n      \"title\": \"Packed Lunches\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"recipeCount\": 0,\n      \"coverImageUrls\": [],\n      \"href\": \"/cookbooks/cookbook_created_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_created_1\",\n      \"attribution\": {\n        \"creditText\": \"Packed Lunches by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_created_1\"\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"recipes\": []\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -6674,18 +6685,29 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "retryOn": [
           "network_timeout",
           "429",
-          "5xx"
+          "5xx",
+          "idempotency_in_progress"
         ],
         "retryAfterHeader": "Retry-After",
-        "preserveClientMutationId": false,
+        "preserveClientMutationId": true,
         "doNotRetryUnchanged": [
           "validation_error",
-          "invalid_cursor",
-          "insufficient_scope"
+          "insufficient_scope",
+          "idempotency_conflict"
         ]
       },
       "cursorPolicy": null,
-      "idempotency": null,
+      "idempotency": {
+        "key": "clientMutationId",
+        "location": "jsonBody",
+        "retentionHours": 24,
+        "replayStatus": [
+          200
+        ],
+        "conflictStatus": 409,
+        "inProgressRetryAfterSeconds": 2,
+        "retryBodyRule": "Persist and retry the same parsed JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts."
+      },
       "personalTokenOnly": false,
       "oauthNote": "",
       "selfRevokeException": "",
@@ -6722,12 +6744,12 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "required": true,
         "contentType": "application/json",
         "fileFields": [],
-        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "example": "{\n  \"clientMutationId\": \"cookbook-update-device-uuid-1\",\n  \"title\": \"Dinner Parties\"\n}",
         "examples": [
           {
             "name": "example",
             "label": "Example",
-            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+            "example": "{\n  \"clientMutationId\": \"cookbook-update-device-uuid-1\",\n  \"title\": \"Dinner Parties\"\n}"
           }
         ]
       },
@@ -6736,12 +6758,12 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "required": true,
           "contentType": "application/json",
           "fileFields": [],
-          "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+          "example": "{\n  \"clientMutationId\": \"cookbook-update-device-uuid-1\",\n  \"title\": \"Dinner Parties\"\n}",
           "examples": [
             {
               "name": "example",
               "label": "Example",
-              "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+              "example": "{\n  \"clientMutationId\": \"cookbook-update-device-uuid-1\",\n  \"title\": \"Dinner Parties\"\n}"
             }
           ]
         }
@@ -6800,7 +6822,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"updated\": true,\n    \"cookbook\": {\n      \"id\": \"cookbook_1\",\n      \"title\": \"Dinner Parties\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"recipeCount\": 1,\n      \"coverImageUrls\": [\n        \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\"\n      ],\n      \"href\": \"/cookbooks/cookbook_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\",\n      \"attribution\": {\n        \"creditText\": \"Dinner Parties by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"recipes\": [\n        {\n          \"id\": \"recipe_1\",\n          \"title\": \"Pasta\",\n          \"description\": \"Weeknight pasta\",\n          \"servings\": \"4\",\n          \"chef\": {\n            \"id\": \"chef_1\",\n            \"username\": \"ari\"\n          },\n          \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n          \"coverProvenanceLabel\": \"Chef photo\",\n          \"coverSourceType\": \"chef-upload\",\n          \"coverVariant\": \"image\",\n          \"href\": \"/recipes/recipe_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n          \"attribution\": {\n            \"creditText\": \"Pasta by ari on Spoonjoy\",\n            \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n            \"sourceUrl\": \"https://example.com/original-pasta\",\n            \"sourceHost\": \"example.com\",\n            \"sourceRecipe\": null\n          },\n          \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n          \"updatedAt\": \"2026-06-01T00:00:00.000Z\"\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -6873,18 +6895,29 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "retryOn": [
           "network_timeout",
           "429",
-          "5xx"
+          "5xx",
+          "idempotency_in_progress"
         ],
         "retryAfterHeader": "Retry-After",
-        "preserveClientMutationId": false,
+        "preserveClientMutationId": true,
         "doNotRetryUnchanged": [
           "validation_error",
-          "invalid_cursor",
-          "insufficient_scope"
+          "insufficient_scope",
+          "idempotency_conflict"
         ]
       },
       "cursorPolicy": null,
-      "idempotency": null,
+      "idempotency": {
+        "key": "clientMutationId",
+        "location": "jsonBodyOrXClientMutationIdHeaderOrQuery",
+        "retentionHours": 24,
+        "replayStatus": [
+          200
+        ],
+        "conflictStatus": 409,
+        "inProgressRetryAfterSeconds": 2,
+        "retryBodyRule": "Persist and retry the same parsed JSON body for this clientMutationId, or the same X-Client-Mutation-Id header/query value when the DELETE body is omitted. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts."
+      },
       "personalTokenOnly": false,
       "oauthNote": "",
       "selfRevokeException": "",
@@ -6908,10 +6941,22 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "name": "X-Client-Mutation-Id",
           "in": "header",
           "label": "X Client Mutation Id",
-          "required": true,
+          "required": false,
           "defaultValue": "",
           "placeholder": "delete:item_1:uuid-or-hash",
-          "description": "Chef-wide idempotency key for this delete. Use the same value when retrying the exact same request after a timeout.",
+          "description": "Chef-wide idempotency key fallback for clients that cannot send a JSON body with DELETE. Prefer the JSON body when available; otherwise use this header or clientMutationId query.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "clientMutationId",
+          "in": "query",
+          "label": "Client Mutation Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "clientMutationId",
+          "description": "Chef-wide idempotency key fallback for clients that cannot send a JSON body with DELETE. Prefer the JSON body or X-Client-Mutation-Id header.",
           "schema": {
             "type": "string"
           }
@@ -6929,8 +6974,34 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         }
       ],
-      "requestBody": null,
-      "requestBodyVariants": [],
+      "requestBody": {
+        "required": false,
+        "contentType": "application/json",
+        "fileFields": [],
+        "example": "{\n  \"clientMutationId\": \"cookbook-delete-device-uuid-1\"\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"cookbook-delete-device-uuid-1\"\n}"
+          }
+        ]
+      },
+      "requestBodyVariants": [
+        {
+          "required": false,
+          "contentType": "application/json",
+          "fileFields": [],
+          "example": "{\n  \"clientMutationId\": \"cookbook-delete-device-uuid-1\"\n}",
+          "examples": [
+            {
+              "name": "example",
+              "label": "Example",
+              "example": "{\n  \"clientMutationId\": \"cookbook-delete-device-uuid-1\"\n}"
+            }
+          ]
+        }
+      ],
       "responseStatuses": [
         "200",
         "400",
@@ -6985,7 +7056,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"deleted\": true,\n    \"cookbook\": {\n      \"id\": \"cookbook_1\",\n      \"title\": \"Weeknights\",\n      \"deletedAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -7056,18 +7127,30 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "retryOn": [
           "network_timeout",
           "429",
-          "5xx"
+          "5xx",
+          "idempotency_in_progress"
         ],
         "retryAfterHeader": "Retry-After",
-        "preserveClientMutationId": false,
+        "preserveClientMutationId": true,
         "doNotRetryUnchanged": [
           "validation_error",
-          "invalid_cursor",
-          "insufficient_scope"
+          "insufficient_scope",
+          "idempotency_conflict"
         ]
       },
       "cursorPolicy": null,
-      "idempotency": null,
+      "idempotency": {
+        "key": "clientMutationId",
+        "location": "jsonBody",
+        "retentionHours": 24,
+        "replayStatus": [
+          200,
+          201
+        ],
+        "conflictStatus": 409,
+        "inProgressRetryAfterSeconds": 2,
+        "retryBodyRule": "Persist and retry the same parsed JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts."
+      },
       "personalTokenOnly": false,
       "oauthNote": "",
       "selfRevokeException": "",
@@ -7116,12 +7199,12 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "required": true,
         "contentType": "application/json",
         "fileFields": [],
-        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "example": "{\n  \"clientMutationId\": \"cookbook-recipe-device-uuid-1\"\n}",
         "examples": [
           {
             "name": "example",
             "label": "Example",
-            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+            "example": "{\n  \"clientMutationId\": \"cookbook-recipe-device-uuid-1\"\n}"
           }
         ]
       },
@@ -7130,12 +7213,261 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "required": true,
           "contentType": "application/json",
           "fileFields": [],
-          "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+          "example": "{\n  \"clientMutationId\": \"cookbook-recipe-device-uuid-1\"\n}",
           "examples": [
             {
               "name": "example",
               "label": "Example",
-              "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+              "example": "{\n  \"clientMutationId\": \"cookbook-recipe-device-uuid-1\"\n}"
+            }
+          ]
+        }
+      ],
+      "responseStatuses": [
+        "200",
+        "201",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "201",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"added\": false,\n    \"cookbook\": {\n      \"id\": \"cookbook_1\",\n      \"title\": \"Weeknights\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"recipeCount\": 1,\n      \"coverImageUrls\": [\n        \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\"\n      ],\n      \"href\": \"/cookbooks/cookbook_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\",\n      \"attribution\": {\n        \"creditText\": \"Weeknights by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"recipes\": [\n        {\n          \"id\": \"recipe_1\",\n          \"title\": \"Pasta\",\n          \"description\": \"Weeknight pasta\",\n          \"servings\": \"4\",\n          \"chef\": {\n            \"id\": \"chef_1\",\n            \"username\": \"ari\"\n          },\n          \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n          \"coverProvenanceLabel\": \"Chef photo\",\n          \"coverSourceType\": \"chef-upload\",\n          \"coverVariant\": \"image\",\n          \"href\": \"/recipes/recipe_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n          \"attribution\": {\n            \"creditText\": \"Pasta by ari on Spoonjoy\",\n            \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n            \"sourceUrl\": \"https://example.com/original-pasta\",\n            \"sourceHost\": \"example.com\",\n            \"sourceRecipe\": null\n          },\n          \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n          \"updatedAt\": \"2026-06-01T00:00:00.000Z\"\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
+        },
+        {
+          "status": "201",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"added\": true,\n    \"cookbook\": {\n      \"id\": \"cookbook_1\",\n      \"title\": \"Weeknights\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"recipeCount\": 1,\n      \"coverImageUrls\": [\n        \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\"\n      ],\n      \"href\": \"/cookbooks/cookbook_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\",\n      \"attribution\": {\n        \"creditText\": \"Weeknights by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"recipes\": [\n        {\n          \"id\": \"recipe_1\",\n          \"title\": \"Pasta\",\n          \"description\": \"Weeknight pasta\",\n          \"servings\": \"4\",\n          \"chef\": {\n            \"id\": \"chef_1\",\n            \"username\": \"ari\"\n          },\n          \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n          \"coverProvenanceLabel\": \"Chef photo\",\n          \"coverSourceType\": \"chef-upload\",\n          \"coverVariant\": \"image\",\n          \"href\": \"/recipes/recipe_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n          \"attribution\": {\n            \"creditText\": \"Pasta by ari on Spoonjoy\",\n            \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n            \"sourceUrl\": \"https://example.com/original-pasta\",\n            \"sourceHost\": \"example.com\",\n            \"sourceRecipe\": null\n          },\n          \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n          \"updatedAt\": \"2026-06-01T00:00:00.000Z\"\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "DELETE /api/v1/cookbooks/{id}/recipes/{recipeId}",
+      "operationId": "deleteApiV1CookbookRecipe",
+      "label": "Remove a recipe from a cookbook",
+      "method": "DELETE",
+      "path": "/api/v1/cookbooks/{id}/recipes/{recipeId}",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Cookbooks",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx",
+          "idempotency_in_progress"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": true,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "insufficient_scope",
+          "idempotency_conflict"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": {
+        "key": "clientMutationId",
+        "location": "jsonBodyOrXClientMutationIdHeaderOrQuery",
+        "retentionHours": 24,
+        "replayStatus": [
+          200
+        ],
+        "conflictStatus": 409,
+        "inProgressRetryAfterSeconds": 2,
+        "retryBodyRule": "Persist and retry the same parsed JSON body for this clientMutationId, or the same X-Client-Mutation-Id header/query value when the DELETE body is omitted. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts."
+      },
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "destructive",
+      "risk": "destructive",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "label": "Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "recipe_1",
+          "description": "Spoonjoy resource id from a previous list response.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "recipeId",
+          "in": "path",
+          "label": "Recipe Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "recipe_1",
+          "description": "Recipe id being added to or removed from a cookbook.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Client-Mutation-Id",
+          "in": "header",
+          "label": "X Client Mutation Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "delete:item_1:uuid-or-hash",
+          "description": "Chef-wide idempotency key fallback for clients that cannot send a JSON body with DELETE. Prefer the JSON body when available; otherwise use this header or clientMutationId query.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "clientMutationId",
+          "in": "query",
+          "label": "Client Mutation Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "clientMutationId",
+          "description": "Chef-wide idempotency key fallback for clients that cannot send a JSON body with DELETE. Prefer the JSON body or X-Client-Mutation-Id header.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": false,
+        "contentType": "application/json",
+        "fileFields": [],
+        "example": "{\n  \"clientMutationId\": \"cookbook-recipe-device-uuid-1\"\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"cookbook-recipe-device-uuid-1\"\n}"
+          }
+        ]
+      },
+      "requestBodyVariants": [
+        {
+          "required": false,
+          "contentType": "application/json",
+          "fileFields": [],
+          "example": "{\n  \"clientMutationId\": \"cookbook-recipe-device-uuid-1\"\n}",
+          "examples": [
+            {
+              "name": "example",
+              "label": "Example",
+              "example": "{\n  \"clientMutationId\": \"cookbook-recipe-device-uuid-1\"\n}"
             }
           ]
         }
@@ -7194,202 +7526,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
-        },
-        {
-          "status": "400",
-          "name": "invalid_json",
-          "label": "Invalid Json",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
-        },
-        {
-          "status": "400",
-          "name": "validation_error",
-          "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
-        },
-        {
-          "status": "401",
-          "name": "authentication_required",
-          "label": "Authentication Required",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
-        },
-        {
-          "status": "401",
-          "name": "invalid_token",
-          "label": "Invalid Token",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
-        },
-        {
-          "status": "403",
-          "name": "insufficient_scope",
-          "label": "Insufficient Scope",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
-        },
-        {
-          "status": "404",
-          "name": "not_found",
-          "label": "Not Found",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
-        },
-        {
-          "status": "405",
-          "name": "method_not_allowed",
-          "label": "Method Not Allowed",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
-        }
-      ]
-    },
-    {
-      "id": "DELETE /api/v1/cookbooks/{id}/recipes/{recipeId}",
-      "operationId": "deleteApiV1CookbookRecipe",
-      "label": "Remove a recipe from a cookbook",
-      "method": "DELETE",
-      "path": "/api/v1/cookbooks/{id}/recipes/{recipeId}",
-      "profiles": [
-        "full"
-      ],
-      "tag": "Cookbooks",
-      "auth": "authenticated",
-      "scopes": [
-        "kitchen:write"
-      ],
-      "grantableScopes": [],
-      "acceptedOauthScopes": [],
-      "credentialModes": [
-        "session",
-        "bearer",
-        "oauth_pkce"
-      ],
-      "retryPolicy": {
-        "retryOn": [
-          "network_timeout",
-          "429",
-          "5xx"
-        ],
-        "retryAfterHeader": "Retry-After",
-        "preserveClientMutationId": false,
-        "doNotRetryUnchanged": [
-          "validation_error",
-          "invalid_cursor",
-          "insufficient_scope"
-        ]
-      },
-      "cursorPolicy": null,
-      "idempotency": null,
-      "personalTokenOnly": false,
-      "oauthNote": "",
-      "selfRevokeException": "",
-      "kind": "destructive",
-      "risk": "destructive",
-      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
-      "params": [
-        {
-          "name": "id",
-          "in": "path",
-          "label": "Id",
-          "required": true,
-          "defaultValue": "",
-          "placeholder": "recipe_1",
-          "description": "Spoonjoy resource id from a previous list response.",
-          "schema": {
-            "type": "string"
-          }
-        },
-        {
-          "name": "recipeId",
-          "in": "path",
-          "label": "Recipe Id",
-          "required": true,
-          "defaultValue": "",
-          "placeholder": "recipe_1",
-          "description": "Recipe id being added to or removed from a cookbook.",
-          "schema": {
-            "type": "string"
-          }
-        },
-        {
-          "name": "X-Client-Mutation-Id",
-          "in": "header",
-          "label": "X Client Mutation Id",
-          "required": true,
-          "defaultValue": "",
-          "placeholder": "delete:item_1:uuid-or-hash",
-          "description": "Chef-wide idempotency key for this delete. Use the same value when retrying the exact same request after a timeout.",
-          "schema": {
-            "type": "string"
-          }
-        },
-        {
-          "name": "X-Request-Id",
-          "in": "header",
-          "label": "X Request Id",
-          "required": false,
-          "defaultValue": "",
-          "placeholder": "X-Request-Id",
-          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
-          "schema": {
-            "type": "string"
-          }
-        }
-      ],
-      "requestBody": null,
-      "requestBodyVariants": [],
-      "responseStatuses": [
-        "200",
-        "400",
-        "401",
-        "403",
-        "404",
-        "405",
-        "409",
-        "429",
-        "500"
-      ],
-      "responseSummaries": [
-        {
-          "status": "200",
-          "description": "Success"
-        },
-        {
-          "status": "400",
-          "description": "Errors: invalid_json, validation_error"
-        },
-        {
-          "status": "401",
-          "description": "Errors: authentication_required, invalid_token"
-        },
-        {
-          "status": "403",
-          "description": "Errors: insufficient_scope"
-        },
-        {
-          "status": "404",
-          "description": "Errors: not_found"
-        },
-        {
-          "status": "405",
-          "description": "Errors: method_not_allowed"
-        },
-        {
-          "status": "409",
-          "description": "Errors: idempotency_conflict, idempotency_in_progress"
-        },
-        {
-          "status": "429",
-          "description": "Errors: rate_limited"
-        },
-        {
-          "status": "500",
-          "description": "Errors: internal_error"
-        }
-      ],
-      "responseExamples": [
-        {
-          "status": "200",
-          "name": "example",
-          "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"removed\": true,\n    \"cookbook\": {\n      \"id\": \"cookbook_1\",\n      \"title\": \"Weeknights\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"recipeCount\": 0,\n      \"coverImageUrls\": [],\n      \"href\": \"/cookbooks/cookbook_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\",\n      \"attribution\": {\n        \"creditText\": \"Weeknights by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"recipes\": []\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",

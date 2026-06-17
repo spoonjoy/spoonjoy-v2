@@ -442,6 +442,78 @@ describe("API v1 OpenAPI document", () => {
       .toBe("#/components/schemas/ErrorEnvelope");
   });
 
+  it("declares exact request and response schemas for cookbook mutations", () => {
+    const document = buildApiV1OpenApiDocument();
+
+    expect(operation(document, "/api/v1/cookbooks", "POST").requestBody.content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/CreateCookbookRequest");
+    expect(operation(document, "/api/v1/cookbooks", "POST").responses["201"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/CreateCookbookEnvelope");
+    expect(operation(document, "/api/v1/cookbooks/{id}", "PATCH").requestBody.content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/UpdateCookbookRequest");
+    expect(operation(document, "/api/v1/cookbooks/{id}", "PATCH").responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/UpdateCookbookEnvelope");
+    expect(operation(document, "/api/v1/cookbooks/{id}", "DELETE").requestBody.content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/DeleteCookbookRequest");
+    expect(operation(document, "/api/v1/cookbooks/{id}", "DELETE").requestBody.required)
+      .toBe(false);
+    expect(operation(document, "/api/v1/cookbooks/{id}", "DELETE").parameters)
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ name: "X-Client-Mutation-Id", in: "header", required: false }),
+        expect.objectContaining({ name: "clientMutationId", in: "query", required: false }),
+      ]));
+    expect(operation(document, "/api/v1/cookbooks/{id}", "DELETE").responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/DeleteCookbookEnvelope");
+
+    expect(operation(document, "/api/v1/cookbooks/{id}/recipes/{recipeId}", "POST").requestBody.content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/CookbookRecipeMutationRequest");
+    expect(operation(document, "/api/v1/cookbooks/{id}/recipes/{recipeId}", "POST").responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/AddRecipeToCookbookExistingEnvelope");
+    expect(operation(document, "/api/v1/cookbooks/{id}/recipes/{recipeId}", "POST").responses["201"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/AddRecipeToCookbookEnvelope");
+    expect(operation(document, "/api/v1/cookbooks/{id}/recipes/{recipeId}", "DELETE").requestBody.content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/CookbookRecipeMutationRequest");
+    expect(operation(document, "/api/v1/cookbooks/{id}/recipes/{recipeId}", "DELETE").requestBody.required)
+      .toBe(false);
+    expect(operation(document, "/api/v1/cookbooks/{id}/recipes/{recipeId}", "DELETE").parameters)
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ name: "recipeId", in: "path", required: true }),
+        expect.objectContaining({ name: "X-Client-Mutation-Id", in: "header", required: false }),
+        expect.objectContaining({ name: "clientMutationId", in: "query", required: false }),
+      ]));
+    expect(operation(document, "/api/v1/cookbooks/{id}/recipes/{recipeId}", "DELETE").responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/RemoveRecipeFromCookbookEnvelope");
+
+    expect(operation(document, "/api/v1/cookbooks/{id}/recipes/{recipeId}", "POST")["x-idempotency"]).toMatchObject({
+      key: "clientMutationId",
+      location: "jsonBody",
+      replayStatus: [200, 201],
+    });
+    expect(operation(document, "/api/v1/cookbooks/{id}", "DELETE")["x-idempotency"]).toMatchObject({
+      key: "clientMutationId",
+      location: "jsonBodyOrXClientMutationIdHeaderOrQuery",
+      replayStatus: [200],
+    });
+    expect(responseExample(document, "/api/v1/cookbooks", "POST", "201").data).toMatchObject({
+      created: true,
+      cookbook: { title: "Packed Lunches" },
+      mutation: { clientMutationId: "device-uuid-1", replayed: false },
+    });
+    expect(responseExample(document, "/api/v1/cookbooks/{id}", "DELETE", "200").data.cookbook)
+      .toEqual({ id: "cookbook_1", title: "Weeknights", deletedAt: "2026-06-01T00:00:00.000Z" });
+
+    const cookbookWriteSpec = JSON.stringify({
+      create: operation(document, "/api/v1/cookbooks", "POST"),
+      update: operation(document, "/api/v1/cookbooks/{id}", "PATCH"),
+      delete: operation(document, "/api/v1/cookbooks/{id}", "DELETE"),
+      add: operation(document, "/api/v1/cookbooks/{id}/recipes/{recipeId}", "POST"),
+      remove: operation(document, "/api/v1/cookbooks/{id}/recipes/{recipeId}", "DELETE"),
+    });
+    expect(cookbookWriteSpec).not.toContain("NativeMutationRequest");
+    expect(cookbookWriteSpec).not.toContain("NativeContractEnvelope");
+    expect(cookbookWriteSpec).not.toContain("Endpoint-family units replace this contract placeholder");
+  });
+
   it("declares exact request and response schemas for recipe step mutations", () => {
     const document = buildApiV1OpenApiDocument();
 

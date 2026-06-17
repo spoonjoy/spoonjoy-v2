@@ -3,7 +3,7 @@ import { faker } from "@faker-js/faker";
 import { Request as UndiciRequest } from "undici";
 import { action } from "~/routes/api.v1.$";
 import { createApiCredential } from "~/lib/api-auth.server";
-import { hashIdempotencyRequest, idempotencyClientKey } from "~/lib/api-idempotency.server";
+import { hashIdempotencyRequest, idempotencyClientKey, reserveIdempotencyKey } from "~/lib/api-idempotency.server";
 import { resolveApiV1ScopeRequirement } from "~/lib/api-v1.server";
 import { getLocalDb } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
@@ -73,6 +73,15 @@ function deleteRequest(pathSuffix: string, token: string, requestId: string, cli
   return new UndiciRequest(`http://localhost/api/v1/${pathSuffix}`, {
     method: "DELETE",
     headers: bearerHeaders(token, requestId, { "X-Client-Mutation-Id": clientMutationId }),
+  }) as unknown as Request;
+}
+
+function deleteQueryRequest(pathSuffix: string, token: string, requestId: string, clientMutationId: string) {
+  const url = new URL(`http://localhost/api/v1/${pathSuffix}`);
+  url.searchParams.set("clientMutationId", clientMutationId);
+  return new UndiciRequest(url, {
+    method: "DELETE",
+    headers: bearerHeaders(token, requestId),
   }) as unknown as Request;
 }
 
@@ -156,26 +165,26 @@ function expectCookbookDetailShape(cookbook: Record<string, any>) {
   expect(Array.isArray(cookbook.recipes)).toBe(true);
 }
 
-function expectCreateCookbookData(data: Record<string, any>, clientMutationId: string, created: boolean) {
+function expectCreateCookbookData(data: Record<string, any>, clientMutationId: string, created: boolean, replayed = false) {
   expectExactKeys(data, ["cookbook", "created", "mutation"]);
   expect(data.created).toBe(created);
   expectCookbookDetailShape(data.cookbook);
-  expectMutationShape(data.mutation, clientMutationId, false);
+  expectMutationShape(data.mutation, clientMutationId, replayed);
 }
 
-function expectUpdateCookbookData(data: Record<string, any>, clientMutationId: string) {
+function expectUpdateCookbookData(data: Record<string, any>, clientMutationId: string, replayed = false) {
   expectExactKeys(data, ["cookbook", "mutation", "updated"]);
   expect(data.updated).toBe(true);
   expectCookbookDetailShape(data.cookbook);
-  expectMutationShape(data.mutation, clientMutationId, false);
+  expectMutationShape(data.mutation, clientMutationId, replayed);
 }
 
-function expectDeleteCookbookData(data: Record<string, any>, clientMutationId: string) {
+function expectDeleteCookbookData(data: Record<string, any>, clientMutationId: string, replayed = false) {
   expectExactKeys(data, ["cookbook", "deleted", "mutation"]);
   expect(data.deleted).toBe(true);
   expectExactKeys(data.cookbook, ["deletedAt", "id", "title"]);
   expect(typeof data.cookbook.deletedAt).toBe("string");
-  expectMutationShape(data.mutation, clientMutationId, false);
+  expectMutationShape(data.mutation, clientMutationId, replayed);
 }
 
 function expectCookbookRecipeMutationData(
@@ -183,6 +192,7 @@ function expectCookbookRecipeMutationData(
   clientMutationId: string,
   key: "added" | "removed",
   value: boolean,
+  replayed = false,
 ) {
   const expectedKeys = key === "added"
     ? ["added", "cookbook", "mutation"]
@@ -190,7 +200,7 @@ function expectCookbookRecipeMutationData(
   expectExactKeys(data, expectedKeys);
   expect(data[key]).toBe(value);
   expectCookbookDetailShape(data.cookbook);
-  expectMutationShape(data.mutation, clientMutationId, false);
+  expectMutationShape(data.mutation, clientMutationId, replayed);
 }
 
 async function expectInProgress(response: Response, requestId: string) {
@@ -231,6 +241,33 @@ async function createFixture(db: LocalDb) {
   });
 
   return { owner, other, recipeOwner, writer, reader, otherWriter, ownRecipe, otherRecipe, deletedRecipe, cookbook };
+}
+
+async function reserveCookbookMutation(
+  db: LocalDb,
+  input: {
+    body: Record<string, unknown> & { clientMutationId: string };
+    credentialId: string;
+    method: MutationMethod;
+    operation: string;
+    path: string;
+    userId: string;
+  },
+) {
+  const reservation = await reserveIdempotencyKey(db, {
+    userId: input.userId,
+    credentialId: input.credentialId,
+    clientKey: idempotencyClientKey({ id: input.userId, source: "bearer", credentialId: input.credentialId }),
+    key: input.body.clientMutationId,
+    operation: input.operation,
+    requestHash: await hashIdempotencyRequest({
+      method: input.method,
+      path: `/api/v1/${input.path}`,
+      body: input.body,
+    }),
+  });
+  if (reservation.status !== "reserved") throw new Error(`expected reserved idempotency key, got ${reservation.status}`);
+  return reservation.record;
 }
 
 describe("API v1 cookbook write mutations", () => {
@@ -385,6 +422,24 @@ describe("API v1 cookbook write mutations", () => {
     expect(missing.status).toBe(404);
     expectPrivateEnvelopeHeaders(missing, "req_cookbook_delete_missing");
     expectErrorEnvelope(await readJson(missing), "req_cookbook_delete_missing", "not_found", 404);
+
+    const queryFallbackCookbook = await db.cookbook.create({
+      data: { title: createCookbookTitle(), authorId: fixture.owner.id },
+    });
+    const queryFallback = await action(routeArgs(
+      deleteQueryRequest(
+        `cookbooks/${queryFallbackCookbook.id}`,
+        fixture.writer.token,
+        "req_cookbook_delete_query_fallback",
+        "cookbook-delete-query-fallback",
+      ),
+      `cookbooks/${queryFallbackCookbook.id}`,
+    ).args);
+    const queryFallbackPayload = await readJson(queryFallback);
+    expect(queryFallback.status).toBe(200);
+    expectPrivateEnvelopeHeaders(queryFallback, "req_cookbook_delete_query_fallback");
+    expectDeleteCookbookData(queryFallbackPayload.data, "cookbook-delete-query-fallback");
+    expect(queryFallbackPayload.data.cookbook).toMatchObject({ id: queryFallbackCookbook.id });
   });
 
   it("adds and removes active recipes with idempotency, detail refresh, and cookbook-save notifications", async () => {
@@ -498,6 +553,24 @@ describe("API v1 cookbook write mutations", () => {
     const idempotentRemovePayload = await readJson(idempotentRemove);
     expect(idempotentRemove.status).toBe(200);
     expectCookbookRecipeMutationData(idempotentRemovePayload.data, "cookbook-remove-existing", "removed", false);
+
+    await db.recipeInCookbook.create({
+      data: { cookbookId: fixture.cookbook.id, recipeId: fixture.ownRecipe.id, addedById: fixture.owner.id },
+    });
+    const queryFallbackRemove = await action(routeArgs(
+      deleteQueryRequest(
+        `cookbooks/${fixture.cookbook.id}/recipes/${fixture.ownRecipe.id}`,
+        fixture.writer.token,
+        "req_cookbook_remove_recipe_query_fallback",
+        "cookbook-remove-query-fallback",
+      ),
+      `cookbooks/${fixture.cookbook.id}/recipes/${fixture.ownRecipe.id}`,
+    ).args);
+    const queryFallbackRemovePayload = await readJson(queryFallbackRemove);
+    expect(queryFallbackRemove.status).toBe(200);
+    expectPrivateEnvelopeHeaders(queryFallbackRemove, "req_cookbook_remove_recipe_query_fallback");
+    expectCookbookRecipeMutationData(queryFallbackRemovePayload.data, "cookbook-remove-query-fallback", "removed", true);
+    expect(queryFallbackRemovePayload.data.cookbook.recipes).toEqual([]);
   });
 
   it("validates auth, scope, title, recipe state, and owner checks before writes", async () => {
@@ -528,6 +601,7 @@ describe("API v1 cookbook write mutations", () => {
     for (const [requestId, method, path, body] of [
       ["req_cookbook_create_blank", "POST", "cookbooks", { clientMutationId: "cookbook-create-blank", title: "  " }],
       ["req_cookbook_create_title_type", "POST", "cookbooks", { clientMutationId: "cookbook-create-title-type", title: 12 }],
+      ["req_cookbook_create_mutation_id_long", "POST", "cookbooks", { clientMutationId: "x".repeat(161), title: "Too Long Mutation" }],
       ["req_cookbook_update_blank", "PATCH", `cookbooks/${fixture.cookbook.id}`, { clientMutationId: "cookbook-update-blank", title: "" }],
       ["req_cookbook_update_unknown", "PATCH", `cookbooks/${fixture.cookbook.id}`, { clientMutationId: "cookbook-update-unknown", unknown: true }],
       ["req_cookbook_delete_missing_mutation", "DELETE", `cookbooks/${fixture.cookbook.id}`, {}],
@@ -595,6 +669,169 @@ describe("API v1 cookbook write mutations", () => {
     expect(crossOwnerAdd.status).toBe(403);
     expectPrivateEnvelopeHeaders(crossOwnerAdd, "req_cookbook_add_cross_owner");
     expectErrorEnvelope(await readJson(crossOwnerAdd), "req_cookbook_add_cross_owner", "insufficient_scope", 403);
+  });
+
+  it("recovers committed in-flight cookbook mutations through the real route callbacks", async () => {
+    const fixture = await createFixture(db);
+
+    const createBody = { clientMutationId: "cookbook-recover-create", title: "Recovered Cookbook" };
+    const createReservation = await reserveCookbookMutation(db, {
+      body: createBody,
+      credentialId: fixture.writer.credential.id,
+      method: "POST",
+      operation: "cookbooks.create",
+      path: "cookbooks",
+      userId: fixture.owner.id,
+    });
+    await db.cookbook.create({
+      data: { id: createReservation.id, title: createBody.title, authorId: fixture.owner.id },
+    });
+    const recoveredCreate = await action(routeArgs(
+      mutationRequest("POST", "cookbooks", fixture.writer.token, "req_cookbook_recover_create", createBody),
+      "cookbooks",
+    ).args);
+    const createPayload = await readJson(recoveredCreate);
+    expect(recoveredCreate.status).toBe(201);
+    expectCreateCookbookData(createPayload.data, createBody.clientMutationId, true, true);
+    expect(createPayload.data).toMatchObject({
+      cookbook: { id: createReservation.id, title: createBody.title },
+      mutation: { replayed: true },
+    });
+
+    const updateBody = { clientMutationId: "cookbook-recover-update", title: "Recovered Rename" };
+    await reserveCookbookMutation(db, {
+      body: updateBody,
+      credentialId: fixture.writer.credential.id,
+      method: "PATCH",
+      operation: "cookbooks.update",
+      path: `cookbooks/${fixture.cookbook.id}`,
+      userId: fixture.owner.id,
+    });
+    await db.cookbook.update({
+      where: { id: fixture.cookbook.id },
+      data: { title: updateBody.title },
+    });
+    const recoveredUpdate = await action(routeArgs(
+      mutationRequest("PATCH", `cookbooks/${fixture.cookbook.id}`, fixture.writer.token, "req_cookbook_recover_update", updateBody),
+      `cookbooks/${fixture.cookbook.id}`,
+    ).args);
+    const updatePayload = await readJson(recoveredUpdate);
+    expect(recoveredUpdate.status).toBe(200);
+    expectUpdateCookbookData(updatePayload.data, updateBody.clientMutationId, true);
+    expect(updatePayload.data).toMatchObject({
+      cookbook: { id: fixture.cookbook.id, title: updateBody.title },
+      mutation: { replayed: true },
+    });
+
+    const deleteCookbook = await db.cookbook.create({
+      data: { title: createCookbookTitle(), authorId: fixture.owner.id },
+    });
+    const deleteBody = { clientMutationId: "cookbook-recover-delete" };
+    const deleteReservation = await reserveCookbookMutation(db, {
+      body: deleteBody,
+      credentialId: fixture.writer.credential.id,
+      method: "DELETE",
+      operation: "cookbooks.delete",
+      path: `cookbooks/${deleteCookbook.id}`,
+      userId: fixture.owner.id,
+    });
+    const deletedAt = new Date(deleteReservation.createdAt.getTime() + 1000);
+    await db.$transaction([
+      db.apiMutationTombstone.create({
+        data: {
+          idempotencyKeyId: deleteReservation.id,
+          operation: "cookbooks.delete",
+          resourceType: "cookbook",
+          resourceId: deleteCookbook.id,
+          payload: JSON.stringify({ title: deleteCookbook.title, deletedAt: deletedAt.toISOString() }),
+        },
+      }),
+      db.cookbook.delete({ where: { id: deleteCookbook.id } }),
+    ]);
+    const recoveredDelete = await action(routeArgs(
+      deleteRequest(`cookbooks/${deleteCookbook.id}`, fixture.writer.token, "req_cookbook_recover_delete", deleteBody.clientMutationId),
+      `cookbooks/${deleteCookbook.id}`,
+    ).args);
+    const deletePayload = await readJson(recoveredDelete);
+    expect(recoveredDelete.status).toBe(200);
+    expectDeleteCookbookData(deletePayload.data, deleteBody.clientMutationId, true);
+    expect(deletePayload.data).toMatchObject({
+      cookbook: { id: deleteCookbook.id, title: deleteCookbook.title, deletedAt: deletedAt.toISOString() },
+      mutation: { replayed: true },
+    });
+
+    const addBody = { clientMutationId: "cookbook-recover-add" };
+    const addReservation = await reserveCookbookMutation(db, {
+      body: addBody,
+      credentialId: fixture.writer.credential.id,
+      method: "POST",
+      operation: "cookbooks.recipes.add",
+      path: `cookbooks/${fixture.cookbook.id}/recipes/${fixture.otherRecipe.id}`,
+      userId: fixture.owner.id,
+    });
+    await db.recipeInCookbook.create({
+      data: {
+        id: addReservation.id,
+        cookbookId: fixture.cookbook.id,
+        recipeId: fixture.otherRecipe.id,
+        addedById: fixture.owner.id,
+      },
+    });
+    const recoveredAdd = await action(routeArgs(
+      mutationRequest(
+        "POST",
+        `cookbooks/${fixture.cookbook.id}/recipes/${fixture.otherRecipe.id}`,
+        fixture.writer.token,
+        "req_cookbook_recover_add",
+        addBody,
+      ),
+      `cookbooks/${fixture.cookbook.id}/recipes/${fixture.otherRecipe.id}`,
+    ).args);
+    const addPayload = await readJson(recoveredAdd);
+    expect(recoveredAdd.status).toBe(201);
+    expectCookbookRecipeMutationData(addPayload.data, addBody.clientMutationId, "added", true, true);
+    expect(addPayload.data).toMatchObject({
+      cookbook: { id: fixture.cookbook.id, recipes: [expect.objectContaining({ id: fixture.otherRecipe.id })] },
+      mutation: { replayed: true },
+    });
+
+    const removeBody = { clientMutationId: "cookbook-recover-remove" };
+    const removeReservation = await reserveCookbookMutation(db, {
+      body: removeBody,
+      credentialId: fixture.writer.credential.id,
+      method: "DELETE",
+      operation: "cookbooks.recipes.remove",
+      path: `cookbooks/${fixture.cookbook.id}/recipes/${fixture.otherRecipe.id}`,
+      userId: fixture.owner.id,
+    });
+    await db.$transaction([
+      db.apiMutationTombstone.create({
+        data: {
+          idempotencyKeyId: removeReservation.id,
+          operation: "cookbooks.recipes.remove",
+          resourceType: "recipe_in_cookbook",
+          resourceId: fixture.otherRecipe.id,
+          parentResourceId: fixture.cookbook.id,
+        },
+      }),
+      db.recipeInCookbook.delete({ where: { id: addReservation.id } }),
+    ]);
+    const recoveredRemove = await action(routeArgs(
+      deleteRequest(
+        `cookbooks/${fixture.cookbook.id}/recipes/${fixture.otherRecipe.id}`,
+        fixture.writer.token,
+        "req_cookbook_recover_remove",
+        removeBody.clientMutationId,
+      ),
+      `cookbooks/${fixture.cookbook.id}/recipes/${fixture.otherRecipe.id}`,
+    ).args);
+    const removePayload = await readJson(recoveredRemove);
+    expect(recoveredRemove.status).toBe(200);
+    expectCookbookRecipeMutationData(removePayload.data, removeBody.clientMutationId, "removed", true, true);
+    expect(removePayload.data).toMatchObject({
+      cookbook: { id: fixture.cookbook.id, recipes: [] },
+      mutation: { replayed: true },
+    });
   });
 
   it("rejects cookbook idempotency conflicts across bodies, paths, operations, and in-progress reservations", async () => {

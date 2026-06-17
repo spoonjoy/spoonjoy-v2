@@ -115,8 +115,20 @@ import {
   updateNativeRecipeSpoon,
   type ApiV1SpoonResult,
 } from "~/lib/api-v1-spoons.server";
+import {
+  addNativeRecipeToCookbook,
+  createNativeCookbook,
+  deleteNativeCookbook,
+  parseNativeCookbookCreateBody,
+  parseNativeCookbookDeleteBody,
+  parseNativeCookbookPatchBody,
+  parseNativeCookbookRecipeBody,
+  removeNativeRecipeFromCookbook,
+  updateNativeCookbook,
+  type ApiV1CookbookWriteResult,
+} from "~/lib/api-v1-cookbook-writes.server";
 import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
-import { notifyForkOfMyRecipe } from "~/lib/notification-triggers.server";
+import { notifyCookbookSaveOfMine, notifyForkOfMyRecipe } from "~/lib/notification-triggers.server";
 import { enforceRateLimit } from "~/lib/rate-limit.server";
 import { getRequestDb } from "~/lib/route-platform.server";
 import {
@@ -446,6 +458,16 @@ function apiV1OperationFor(method: string, path: string): string | undefined {
       return "cookbooks.list";
     case "GET cookbook":
       return "cookbooks.get";
+    case "POST cookbook-create":
+      return "cookbooks.create";
+    case "PATCH cookbook-write":
+      return "cookbooks.update";
+    case "DELETE cookbook-write":
+      return "cookbooks.delete";
+    case "POST cookbook-recipe":
+      return "cookbooks.recipes.add";
+    case "DELETE cookbook-recipe":
+      return "cookbooks.recipes.remove";
     case "GET shopping-list":
       return "shopping-list.read";
     case "GET shopping-list-sync":
@@ -501,7 +523,7 @@ function apiV1OperationFor(method: string, path: string): string | undefined {
 function defaultIdempotencyOutcome(operation: string | undefined, errorCode: ApiV1ErrorCode | undefined) {
   if (!operation) return undefined;
   if (operation.startsWith("tokens.")) return "none";
-  if (!operation.startsWith("shopping-list.items.") && !operation.startsWith("recipes.")) return undefined;
+  if (!operation.startsWith("shopping-list.items.") && !operation.startsWith("recipes.") && !operation.startsWith("cookbooks.")) return undefined;
   if (errorCode === "idempotency_conflict") return "conflict";
   if (errorCode === "idempotency_in_progress") return "in_progress";
   if (errorCode === "invalid_json" || errorCode === "validation_error") return "not_attempted";
@@ -1308,6 +1330,216 @@ async function handleCookbookDetail(args: ApiV1RouteArgs, requestId: string, pri
   return apiV1Success(requestId, { cookbook: cookbookDetail(cookbook, origin) }, 200, principal ? authenticatedPublicCacheHeaders() : publicCacheHeaders());
 }
 
+async function handleCookbookCreate(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
+  const body = await parseApiV1JsonBody(args.request);
+  const input = cookbookWriteResultOrThrow(parseNativeCookbookCreateBody(body)).data;
+  const origin = publicContentOrigin(args);
+
+  return await runIdempotentApiV1Mutation(
+    args,
+    requestId,
+    principal,
+    body,
+    input.clientMutationId,
+    "cookbooks.create",
+    async (db, reservation) => {
+      const created = cookbookWriteResultOrThrow(await createNativeCookbook(db, principal.id, input, {
+        cookbookId: reservation.id,
+      }));
+      return {
+        status: created.status,
+        data: {
+          created: created.data.created,
+          cookbook: await serializedCookbookOrThrow(db, created.data.cookbookId, origin),
+          mutation: { clientMutationId: input.clientMutationId, replayed: false },
+        },
+      };
+    },
+    (db, reservation) => recoverNativeCookbookCreate(db, reservation, {
+      clientMutationId: input.clientMutationId,
+      origin,
+      principalId: principal.id,
+      title: input.title,
+    }),
+  );
+}
+
+async function handleCookbookUpdate(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, cookbookId: string) {
+  const body = await parseApiV1JsonBody(args.request);
+  const input = cookbookWriteResultOrThrow(parseNativeCookbookPatchBody(body)).data;
+  const origin = publicContentOrigin(args);
+
+  return await runIdempotentApiV1Mutation(
+    args,
+    requestId,
+    principal,
+    body,
+    input.clientMutationId,
+    "cookbooks.update",
+    async (db) => {
+      const updated = cookbookWriteResultOrThrow(await updateNativeCookbook(db, principal.id, cookbookId, input));
+      return {
+        status: updated.status,
+        data: {
+          updated: updated.data.updated,
+          cookbook: await serializedCookbookOrThrow(db, updated.data.cookbookId, origin),
+          mutation: { clientMutationId: input.clientMutationId, replayed: false },
+        },
+      };
+    },
+    (db, reservation) => recoverNativeCookbookUpdate(db, reservation, {
+      clientMutationId: input.clientMutationId,
+      origin,
+      principalId: principal.id,
+      cookbookId,
+      title: input.title,
+    }),
+  );
+}
+
+async function handleCookbookDelete(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, cookbookId: string) {
+  const body = await parseApiV1JsonBody(args.request);
+  const url = new URL(args.request.url);
+  const input = cookbookWriteResultOrThrow(parseNativeCookbookDeleteBody(
+    body,
+    args.request.headers.get("X-Client-Mutation-Id") ?? url.searchParams.get("clientMutationId"),
+  )).data;
+  const idempotencyBody = { clientMutationId: input.clientMutationId };
+
+  return await runIdempotentApiV1Mutation(
+    args,
+    requestId,
+    principal,
+    idempotencyBody,
+    input.clientMutationId,
+    "cookbooks.delete",
+    async (db, reservation) => {
+      const deleted = cookbookWriteResultOrThrow(await deleteNativeCookbook(db, principal.id, cookbookId, {
+        idempotencyKeyId: reservation.id,
+        operation: "cookbooks.delete",
+      }));
+      return {
+        status: deleted.status,
+        data: {
+          deleted: deleted.data.deleted,
+          cookbook: {
+            id: deleted.data.cookbook.id,
+            title: deleted.data.cookbook.title,
+            deletedAt: deleted.data.cookbook.deletedAt.toISOString(),
+          },
+          mutation: { clientMutationId: input.clientMutationId, replayed: false },
+        },
+      };
+    },
+    (db, reservation) => recoverNativeCookbookDelete(db, reservation, {
+      clientMutationId: input.clientMutationId,
+      cookbookId,
+    }),
+  );
+}
+
+async function scheduleCookbookSaveNotification(
+  db: ApiV1WriteDb,
+  args: ApiV1RouteArgs,
+  input: { recipeId: string; actorId: string },
+) {
+  try {
+    const vapid = getVapidConfig((args.context.cloudflare?.env ?? {}) as VapidEnv);
+    const notifyTask = notifyCookbookSaveOfMine(
+      db,
+      { recipeId: input.recipeId, actorId: input.actorId },
+      { vapid, waitUntil: apiV1WaitUntilFor(args) },
+    );
+    const waitUntil = apiV1WaitUntilFor(args);
+    if (waitUntil) {
+      waitUntil(notifyTask);
+    } else {
+      await notifyTask;
+    }
+  } catch {
+    // Notification side effects must never break the cookbook mutation.
+  }
+}
+
+async function handleCookbookRecipeAdd(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, cookbookId: string, recipeId: string) {
+  const body = await parseApiV1JsonBody(args.request);
+  const input = cookbookWriteResultOrThrow(parseNativeCookbookRecipeBody(body)).data;
+  const origin = publicContentOrigin(args);
+
+  return await runIdempotentApiV1Mutation(
+    args,
+    requestId,
+    principal,
+    body,
+    input.clientMutationId,
+    "cookbooks.recipes.add",
+    async (db, reservation) => {
+      const added = cookbookWriteResultOrThrow(await addNativeRecipeToCookbook(db, principal.id, cookbookId, recipeId, {
+        relationId: reservation.id,
+      }));
+      if (added.data.added) {
+        await scheduleCookbookSaveNotification(db, args, { recipeId, actorId: principal.id });
+      }
+      return {
+        status: added.status,
+        data: {
+          added: added.data.added,
+          cookbook: await serializedCookbookOrThrow(db, added.data.cookbookId, origin),
+          mutation: { clientMutationId: input.clientMutationId, replayed: false },
+        },
+      };
+    },
+    (db, reservation) => recoverNativeCookbookRecipeAdd(db, reservation, {
+      clientMutationId: input.clientMutationId,
+      origin,
+      principalId: principal.id,
+      cookbookId,
+      recipeId,
+    }),
+  );
+}
+
+async function handleCookbookRecipeRemove(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, cookbookId: string, recipeId: string) {
+  const body = await parseApiV1JsonBody(args.request);
+  const url = new URL(args.request.url);
+  const input = cookbookWriteResultOrThrow(parseNativeCookbookRecipeBody(
+    body,
+    args.request.headers.get("X-Client-Mutation-Id") ?? url.searchParams.get("clientMutationId"),
+  )).data;
+  const idempotencyBody = { clientMutationId: input.clientMutationId };
+  const origin = publicContentOrigin(args);
+
+  return await runIdempotentApiV1Mutation(
+    args,
+    requestId,
+    principal,
+    idempotencyBody,
+    input.clientMutationId,
+    "cookbooks.recipes.remove",
+    async (db, reservation) => {
+      const removed = cookbookWriteResultOrThrow(await removeNativeRecipeFromCookbook(db, principal.id, cookbookId, recipeId, {
+        idempotencyKeyId: reservation.id,
+        operation: "cookbooks.recipes.remove",
+      }));
+      return {
+        status: removed.status,
+        data: {
+          removed: removed.data.removed,
+          cookbook: await serializedCookbookOrThrow(db, removed.data.cookbookId, origin),
+          mutation: { clientMutationId: input.clientMutationId, replayed: false },
+        },
+      };
+    },
+    (db, reservation) => recoverNativeCookbookRecipeRemove(db, reservation, {
+      clientMutationId: input.clientMutationId,
+      origin,
+      principalId: principal.id,
+      cookbookId,
+      recipeId,
+    }),
+  );
+}
+
 async function loadShoppingListForUser(db: ApiV1WriteDb, userId: string) {
   const include = {
     author: { select: { id: true, username: true } },
@@ -1813,6 +2045,15 @@ function spoonResultOrThrow<T>(
   return result;
 }
 
+function cookbookWriteResultOrThrow<T>(
+  result: ApiV1CookbookWriteResult<T>,
+): { status: number; data: T } {
+  if (!result.ok) {
+    throw new ApiV1Error(result.code, result.message, result.details);
+  }
+  return result;
+}
+
 async function serializedRecipeOrThrow(db: ApiV1WriteDb, recipeId: string, origin: string) {
   const recipe = await loadRecipeById(db, recipeId);
   /* istanbul ignore next -- @preserve post-write reads are covered on every recipe write path; this is a defensive invariant tripwire. */
@@ -1820,6 +2061,15 @@ async function serializedRecipeOrThrow(db: ApiV1WriteDb, recipeId: string, origi
     throw new Error(`Recipe ${recipeId} was not readable after write`);
   }
   return recipeDetail(recipe, origin);
+}
+
+async function serializedCookbookOrThrow(db: ApiV1WriteDb, cookbookId: string, origin: string) {
+  const cookbook = await loadCookbookById(db, cookbookId);
+  /* istanbul ignore next -- @preserve post-write reads are covered on every cookbook write path; this is a defensive invariant tripwire. */
+  if (!cookbook) {
+    throw new Error(`Cookbook ${cookbookId} was not readable after write`);
+  }
+  return cookbookDetail(cookbook, origin);
 }
 
 type SerializedRecipe = Awaited<ReturnType<typeof serializedRecipeOrThrow>>;
@@ -1938,6 +2188,141 @@ async function findMutationTombstone(
   if (!tombstone || tombstone.operation !== input.operation) return null;
   if (input.parentResourceId !== undefined && tombstone.parentResourceId !== input.parentResourceId) return null;
   return tombstone;
+}
+
+function cookbookDeleteTombstonePayload(tombstone: { payload: string | null }) {
+  if (!tombstone.payload) return null;
+  try {
+    const parsed = JSON.parse(tombstone.payload) as unknown;
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      !Array.isArray(parsed) &&
+      typeof (parsed as { title?: unknown }).title === "string" &&
+      typeof (parsed as { deletedAt?: unknown }).deletedAt === "string"
+    ) {
+      const deletedAt = new Date((parsed as { deletedAt: string }).deletedAt);
+      if (!Number.isNaN(deletedAt.getTime())) {
+        return {
+          title: (parsed as { title: string }).title,
+          deletedAt: deletedAt.toISOString(),
+        };
+      }
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+async function recoverNativeCookbookCreate(
+  db: ApiV1WriteDb,
+  reservation: ApiIdempotencyKey,
+  input: { clientMutationId: string; origin: string; principalId: string; title: string },
+): Promise<ApiV1IdempotentMutationResult | null> {
+  const cookbook = await loadCookbookById(db, reservation.id);
+  if (!cookbook || cookbook.author.id !== input.principalId || cookbook.title !== input.title) return null;
+  return {
+    status: 201,
+    data: {
+      created: true,
+      cookbook: cookbookDetail(cookbook, input.origin),
+      mutation: { clientMutationId: input.clientMutationId, replayed: false },
+    },
+  };
+}
+
+async function recoverNativeCookbookUpdate(
+  db: ApiV1WriteDb,
+  _reservation: ApiIdempotencyKey,
+  input: { clientMutationId: string; origin: string; principalId: string; cookbookId: string; title: string },
+): Promise<ApiV1IdempotentMutationResult | null> {
+  const cookbook = await loadCookbookById(db, input.cookbookId);
+  if (!cookbook || cookbook.author.id !== input.principalId || cookbook.title !== input.title) return null;
+  return {
+    status: 200,
+    data: {
+      updated: true,
+      cookbook: cookbookDetail(cookbook, input.origin),
+      mutation: { clientMutationId: input.clientMutationId, replayed: false },
+    },
+  };
+}
+
+async function recoverNativeCookbookDelete(
+  db: ApiV1WriteDb,
+  reservation: ApiIdempotencyKey,
+  input: { clientMutationId: string; cookbookId: string },
+): Promise<ApiV1IdempotentMutationResult | null> {
+  const tombstone = await findMutationTombstone(db, reservation, {
+    operation: "cookbooks.delete",
+    resourceType: "cookbook",
+    resourceId: input.cookbookId,
+  });
+  if (!tombstone) return null;
+  const existing = await db.cookbook.findUnique({ where: { id: input.cookbookId }, select: { id: true } });
+  if (existing) return null;
+  const payload = cookbookDeleteTombstonePayload(tombstone);
+  if (!payload) return null;
+  return {
+    status: 200,
+    data: {
+      deleted: true,
+      cookbook: { id: input.cookbookId, title: payload.title, deletedAt: payload.deletedAt },
+      mutation: { clientMutationId: input.clientMutationId, replayed: false },
+    },
+  };
+}
+
+async function recoverNativeCookbookRecipeAdd(
+  db: ApiV1WriteDb,
+  reservation: ApiIdempotencyKey,
+  input: { clientMutationId: string; origin: string; principalId: string; cookbookId: string; recipeId: string },
+): Promise<ApiV1IdempotentMutationResult | null> {
+  const cookbook = await loadCookbookById(db, input.cookbookId);
+  if (!cookbook || cookbook.author.id !== input.principalId) return null;
+  const relation = await db.recipeInCookbook.findUnique({
+    where: { cookbookId_recipeId: { cookbookId: input.cookbookId, recipeId: input.recipeId } },
+    select: { id: true, recipe: { select: { deletedAt: true } } },
+  });
+  if (!relation || relation.recipe.deletedAt) return null;
+  const added = relation.id === reservation.id;
+  return {
+    status: added ? 201 : 200,
+    data: {
+      added,
+      cookbook: cookbookDetail(cookbook, input.origin),
+      mutation: { clientMutationId: input.clientMutationId, replayed: false },
+    },
+  };
+}
+
+async function recoverNativeCookbookRecipeRemove(
+  db: ApiV1WriteDb,
+  reservation: ApiIdempotencyKey,
+  input: { clientMutationId: string; origin: string; principalId: string; cookbookId: string; recipeId: string },
+): Promise<ApiV1IdempotentMutationResult | null> {
+  const cookbook = await loadCookbookById(db, input.cookbookId);
+  if (!cookbook || cookbook.author.id !== input.principalId) return null;
+  const relation = await db.recipeInCookbook.findUnique({
+    where: { cookbookId_recipeId: { cookbookId: input.cookbookId, recipeId: input.recipeId } },
+    select: { id: true },
+  });
+  if (relation) return null;
+  const tombstone = await findMutationTombstone(db, reservation, {
+    operation: "cookbooks.recipes.remove",
+    resourceType: "recipe_in_cookbook",
+    resourceId: input.recipeId,
+    parentResourceId: input.cookbookId,
+  });
+  return {
+    status: 200,
+    data: {
+      removed: Boolean(tombstone),
+      cookbook: cookbookDetail(cookbook, input.origin),
+      mutation: { clientMutationId: input.clientMutationId, replayed: false },
+    },
+  };
 }
 
 async function recoverNativeRecipeCreate(
@@ -3377,9 +3762,39 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
       return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
     }
 
+    if (args.request.method === "POST" && path === "cookbooks") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleCookbookCreate(args, requestId, principal);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
     if (args.request.method === "GET" && segments[0] === "cookbooks" && segments.length === 2) {
       const principal = await authorize(path);
       const response = await handleCookbookDetail(args, requestId, principal, segments[1]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "PATCH" && segments[0] === "cookbooks" && segments.length === 2) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleCookbookUpdate(args, requestId, principal, segments[1]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "DELETE" && segments[0] === "cookbooks" && segments.length === 2) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleCookbookDelete(args, requestId, principal, segments[1]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "POST" && segments[0] === "cookbooks" && segments[2] === "recipes" && segments.length === 4) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleCookbookRecipeAdd(args, requestId, principal, segments[1], segments[3]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "DELETE" && segments[0] === "cookbooks" && segments[2] === "recipes" && segments.length === 4) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleCookbookRecipeRemove(args, requestId, principal, segments[1], segments[3]);
       return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
     }
 

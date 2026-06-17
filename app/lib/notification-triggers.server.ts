@@ -118,7 +118,7 @@ export async function notifyCookbookSaveOfMine(
   db: PrismaClient,
   input: NotifyCookbookSaveOfMineInput,
   deps: NotifyCookbookSaveOfMineDeps,
-): Promise<void> {
+): Promise<EnqueueNotificationResult> {
   try {
     const [recipe, actor] = await Promise.all([
       db.recipe.findUnique({
@@ -130,9 +130,9 @@ export async function notifyCookbookSaveOfMine(
         select: { id: true, username: true },
       }),
     ]);
-    if (!recipe || !actor) return;
-    if (recipe.chefId === actor.id) return;
-    await enqueueNotification(
+    if (!recipe || !actor) return NO_ENQUEUED_NOTIFICATION;
+    if (recipe.chefId === actor.id) return NO_ENQUEUED_NOTIFICATION;
+    return await enqueueNotification(
       db,
       {
         actorId: actor.id,
@@ -148,5 +148,6 @@ export async function notifyCookbookSaveOfMine(
     );
   } catch {
     // Notifications must never break the originating action.
+    return NO_ENQUEUED_NOTIFICATION;
   }
 }

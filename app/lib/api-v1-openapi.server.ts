@@ -968,6 +968,20 @@ const schemas = {
   DeleteRecipeSpoonRequest: objectSchema(["clientMutationId"], {
     clientMutationId: shortTextSchema,
   }),
+  CreateCookbookRequest: objectSchema(["clientMutationId", "title"], {
+    clientMutationId: shortTextSchema,
+    title: { type: "string", minLength: 1, maxLength: 200 },
+  }),
+  UpdateCookbookRequest: objectSchema(["clientMutationId", "title"], {
+    clientMutationId: shortTextSchema,
+    title: { type: "string", minLength: 1, maxLength: 200 },
+  }),
+  DeleteCookbookRequest: objectSchema(["clientMutationId"], {
+    clientMutationId: shortTextSchema,
+  }),
+  CookbookRecipeMutationRequest: objectSchema(["clientMutationId"], {
+    clientMutationId: shortTextSchema,
+  }),
   CreateTokenRequest: objectSchema(["name"], {
     name: shortTextSchema,
     scopes: {
@@ -1185,6 +1199,36 @@ const schemas = {
     cookbooks: arrayOf(ref("CookbookSummary")),
   }),
   CookbookDetailData: objectSchema(["cookbook"], { cookbook: ref("CookbookDetail") }),
+  DeletedCookbookTombstone: objectSchema(["id", "title", "deletedAt"], {
+    id: idSchema,
+    title: { type: "string" },
+    deletedAt: dateTimeSchema,
+  }),
+  CreateCookbookData: objectSchema(["created", "cookbook", "mutation"], {
+    created: { type: "boolean" },
+    cookbook: ref("CookbookDetail"),
+    mutation: ref("MutationMetadata"),
+  }),
+  UpdateCookbookData: objectSchema(["updated", "cookbook", "mutation"], {
+    updated: { type: "boolean" },
+    cookbook: ref("CookbookDetail"),
+    mutation: ref("MutationMetadata"),
+  }),
+  DeleteCookbookData: objectSchema(["deleted", "cookbook", "mutation"], {
+    deleted: { const: true },
+    cookbook: ref("DeletedCookbookTombstone"),
+    mutation: ref("MutationMetadata"),
+  }),
+  AddRecipeToCookbookData: objectSchema(["added", "cookbook", "mutation"], {
+    added: { type: "boolean" },
+    cookbook: ref("CookbookDetail"),
+    mutation: ref("MutationMetadata"),
+  }),
+  RemoveRecipeFromCookbookData: objectSchema(["removed", "cookbook", "mutation"], {
+    removed: { type: "boolean" },
+    cookbook: ref("CookbookDetail"),
+    mutation: ref("MutationMetadata"),
+  }),
   TokenListData: objectSchema(["tokens"], { tokens: arrayOf(ref("CredentialMetadata")) }),
   CreateTokenData: objectSchema(["token", "credential"], {
     token: { type: "string" },
@@ -1238,6 +1282,12 @@ const schemas = {
   ReplaceRecipeStepOutputUsesEnvelope: successEnvelope(ref("ReplaceRecipeStepOutputUsesData")),
   CookbookListEnvelope: successEnvelope(ref("CookbookListData")),
   CookbookDetailEnvelope: successEnvelope(ref("CookbookDetailData")),
+  CreateCookbookEnvelope: successEnvelope(ref("CreateCookbookData")),
+  UpdateCookbookEnvelope: successEnvelope(ref("UpdateCookbookData")),
+  DeleteCookbookEnvelope: successEnvelope(ref("DeleteCookbookData")),
+  AddRecipeToCookbookEnvelope: successEnvelope(ref("AddRecipeToCookbookData")),
+  AddRecipeToCookbookExistingEnvelope: successEnvelope(ref("AddRecipeToCookbookData")),
+  RemoveRecipeFromCookbookEnvelope: successEnvelope(ref("RemoveRecipeFromCookbookData")),
   UserProfileEnvelope: successEnvelope(ref("UserProfileData")),
   ProfileGraphEnvelope: successEnvelope(ref("ProfileGraphData")),
   SearchEnvelope: successEnvelope(ref("SearchData")),
@@ -1286,11 +1336,12 @@ const pathParameters = {
   },
 };
 
-const stepDeleteClientMutationIdHeader = {
+const optionalClientMutationIdHeader = {
   ...pathParameters.clientMutationIdHeader,
   required: false,
   description: "Chef-wide idempotency key fallback for clients that cannot send a JSON body with DELETE. Prefer the JSON body when available; otherwise use this header or clientMutationId query.",
 };
+const stepDeleteClientMutationIdHeader = optionalClientMutationIdHeader;
 
 const queryParameters = {
   query: { name: "query", in: "query", required: false, description: "Search text. When both query and q are sent, query wins.", schema: { type: "string" } },
@@ -1383,16 +1434,16 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
   },
   "/api/v1/cookbooks": {
     GET: { operationId: "getApiV1Cookbooks", tags: ["Cookbooks"], summary: "Search public cookbooks", auth: "optional", scopes: ["cookbooks:read"], success: { 200: "CookbookListEnvelope" }, errors: optionalReadErrors, parameters: [queryParameters.query, queryParameters.q, queryParameters.cursor, queryParameters.limit] },
-    POST: { operationId: "postApiV1Cookbooks", tags: ["Cookbooks"], summary: "Create a cookbook", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractCreated, errors: bearerMutationErrors, requestBody: "NativeMutationRequest" },
+    POST: { operationId: "postApiV1Cookbooks", tags: ["Cookbooks"], summary: "Create a cookbook", auth: "bearer", scopes: ["kitchen:write"], success: { 201: "CreateCookbookEnvelope" }, errors: bearerMutationErrors, requestBody: "CreateCookbookRequest" },
   },
   "/api/v1/cookbooks/{id}": {
     GET: { operationId: "getApiV1Cookbook", tags: ["Cookbooks"], summary: "Read one public cookbook", auth: "optional", scopes: ["cookbooks:read"], success: { 200: "CookbookDetailEnvelope" }, errors: optionalReadErrors, parameters: [pathParameters.id] },
-    PATCH: { operationId: "patchApiV1Cookbook", tags: ["Cookbooks"], summary: "Update a cookbook", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, parameters: [pathParameters.id], requestBody: "NativeMutationRequest" },
-    DELETE: { operationId: "deleteApiV1Cookbook", tags: ["Cookbooks"], summary: "Delete a cookbook", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.clientMutationIdHeader] },
+    PATCH: { operationId: "patchApiV1Cookbook", tags: ["Cookbooks"], summary: "Update a cookbook", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "UpdateCookbookEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.id], requestBody: "UpdateCookbookRequest" },
+    DELETE: { operationId: "deleteApiV1Cookbook", tags: ["Cookbooks"], summary: "Delete a cookbook", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "DeleteCookbookEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.id, optionalClientMutationIdHeader, pathParameters.clientMutationIdQuery], requestBody: "DeleteCookbookRequest", requestBodyRequired: false },
   },
   "/api/v1/cookbooks/{id}/recipes/{recipeId}": {
-    POST: { operationId: "postApiV1CookbookRecipe", tags: ["Cookbooks"], summary: "Add a recipe to a cookbook", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.recipeId], requestBody: "NativeMutationRequest" },
-    DELETE: { operationId: "deleteApiV1CookbookRecipe", tags: ["Cookbooks"], summary: "Remove a recipe from a cookbook", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.recipeId, pathParameters.clientMutationIdHeader] },
+    POST: { operationId: "postApiV1CookbookRecipe", tags: ["Cookbooks"], summary: "Add a recipe to a cookbook", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "AddRecipeToCookbookExistingEnvelope", 201: "AddRecipeToCookbookEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.recipeId], requestBody: "CookbookRecipeMutationRequest" },
+    DELETE: { operationId: "deleteApiV1CookbookRecipe", tags: ["Cookbooks"], summary: "Remove a recipe from a cookbook", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "RemoveRecipeFromCookbookEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.recipeId, optionalClientMutationIdHeader, pathParameters.clientMutationIdQuery], requestBody: "CookbookRecipeMutationRequest", requestBodyRequired: false },
   },
   "/api/v1/shopping-list": {
     GET: { operationId: "getApiV1ShoppingList", tags: ["Shopping List"], summary: "Read the authenticated shopping list", auth: "bearer", scopes: ["shopping_list:read"], success: { 200: "ShoppingListEnvelope" }, errors: bearerReadErrors },
@@ -1616,6 +1667,25 @@ const exampleCookbookSummary = {
   updatedAt: exampleTimestamp,
 };
 const exampleCookbookDetail = { ...exampleCookbookSummary, recipes: [exampleRecipeSummary] };
+const exampleCreatedCookbookDetail = {
+  ...exampleCookbookDetail,
+  id: "cookbook_created_1",
+  title: "Packed Lunches",
+  href: "/cookbooks/cookbook_created_1",
+  canonicalUrl: "https://spoonjoy.app/cookbooks/cookbook_created_1",
+  attribution: {
+    creditText: "Packed Lunches by ari on Spoonjoy",
+    canonicalUrl: "https://spoonjoy.app/cookbooks/cookbook_created_1",
+  },
+  recipes: [],
+  recipeCount: 0,
+  coverImageUrls: [],
+};
+const exampleDeletedCookbook = {
+  id: "cookbook_1",
+  title: "Weeknights",
+  deletedAt: exampleTimestamp,
+};
 const exampleProfileSummary = {
   id: "chef_1",
   username: "ari",
@@ -2173,6 +2243,51 @@ const responseExamples: Record<string, unknown> = {
     },
   },
   CookbookDetailEnvelope: { ok: true, requestId: "req_example", data: { cookbook: exampleCookbookDetail } },
+  CreateCookbookEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: { created: true, cookbook: exampleCreatedCookbookDetail, mutation: exampleMutation },
+  },
+  UpdateCookbookEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      updated: true,
+      cookbook: {
+        ...exampleCookbookDetail,
+        title: "Dinner Parties",
+        attribution: {
+          creditText: "Dinner Parties by ari on Spoonjoy",
+          canonicalUrl: "https://spoonjoy.app/cookbooks/cookbook_1",
+        },
+      },
+      mutation: exampleMutation,
+    },
+  },
+  DeleteCookbookEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: { deleted: true, cookbook: exampleDeletedCookbook, mutation: exampleMutation },
+  },
+  AddRecipeToCookbookEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: { added: true, cookbook: exampleCookbookDetail, mutation: exampleMutation },
+  },
+  AddRecipeToCookbookExistingEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: { added: false, cookbook: exampleCookbookDetail, mutation: exampleMutation },
+  },
+  RemoveRecipeFromCookbookEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      removed: true,
+      cookbook: { ...exampleCookbookDetail, recipes: [], recipeCount: 0, coverImageUrls: [] },
+      mutation: exampleMutation,
+    },
+  },
   UserProfileEnvelope: {
     ok: true,
     requestId: "req_example",
@@ -2370,6 +2485,16 @@ const requestExamples: Record<string, unknown> = {
     photoUrl: "/photos/spoons/chef_1/recipe_1/cooked.jpg",
   },
   DeleteRecipeSpoonRequest: { clientMutationId: "spoon-delete-device-uuid-1" },
+  CreateCookbookRequest: {
+    clientMutationId: "cookbook-create-device-uuid-1",
+    title: "Packed Lunches",
+  },
+  UpdateCookbookRequest: {
+    clientMutationId: "cookbook-update-device-uuid-1",
+    title: "Dinner Parties",
+  },
+  DeleteCookbookRequest: { clientMutationId: "cookbook-delete-device-uuid-1" },
+  CookbookRecipeMutationRequest: { clientMutationId: "cookbook-recipe-device-uuid-1" },
   NativeProfileRequest: { email: "ari@example.com", username: "ari" },
   ProfilePhotoUploadRequest: { photo: "<binary image file>" },
   NativeNotificationPreferencesRequest: {
@@ -2603,7 +2728,7 @@ function retryPolicyFor(path: ResourcePath, method: HttpMethod) {
       doNotRetryUnchanged: ["validation_error", "insufficient_scope", "idempotency_conflict"],
     };
   }
-  if (isMutation && path.startsWith("/api/v1/recipes")) {
+  if (isMutation && (path.startsWith("/api/v1/recipes") || path.startsWith("/api/v1/cookbooks"))) {
     return {
       retryOn: ["network_timeout", "429", "5xx", "idempotency_in_progress"],
       retryAfterHeader: "Retry-After",
@@ -2685,6 +2810,53 @@ function idempotencyPolicyFor(path: ResourcePath, method: HttpMethod) {
       location: "jsonBody",
       retentionHours: 24,
       replayStatus: [201],
+      conflictStatus: 409,
+      inProgressRetryAfterSeconds: 2,
+      retryBodyRule: "Persist and retry the same parsed JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts.",
+    };
+  }
+  if (path === "/api/v1/cookbooks" && method === "POST") {
+    return {
+      key: "clientMutationId",
+      location: "jsonBody",
+      retentionHours: 24,
+      replayStatus: [201],
+      conflictStatus: 409,
+      inProgressRetryAfterSeconds: 2,
+      retryBodyRule: "Persist and retry the same parsed JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts.",
+    };
+  }
+  if (path === "/api/v1/cookbooks/{id}" && method === "PATCH") {
+    return {
+      key: "clientMutationId",
+      location: "jsonBody",
+      retentionHours: 24,
+      replayStatus: [200],
+      conflictStatus: 409,
+      inProgressRetryAfterSeconds: 2,
+      retryBodyRule: "Persist and retry the same parsed JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts.",
+    };
+  }
+  if (
+    (path === "/api/v1/cookbooks/{id}" && method === "DELETE") ||
+    (path === "/api/v1/cookbooks/{id}/recipes/{recipeId}" && method === "DELETE")
+  ) {
+    return {
+      key: "clientMutationId",
+      location: "jsonBodyOrXClientMutationIdHeaderOrQuery",
+      retentionHours: 24,
+      replayStatus: [200],
+      conflictStatus: 409,
+      inProgressRetryAfterSeconds: 2,
+      retryBodyRule: "Persist and retry the same parsed JSON body for this clientMutationId, or the same X-Client-Mutation-Id header/query value when the DELETE body is omitted. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts.",
+    };
+  }
+  if (path === "/api/v1/cookbooks/{id}/recipes/{recipeId}" && method === "POST") {
+    return {
+      key: "clientMutationId",
+      location: "jsonBody",
+      retentionHours: 24,
+      replayStatus: [200, 201],
       conflictStatus: 409,
       inProgressRetryAfterSeconds: 2,
       retryBodyRule: "Persist and retry the same parsed JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts.",
