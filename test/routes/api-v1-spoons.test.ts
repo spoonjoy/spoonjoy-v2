@@ -535,6 +535,20 @@ describe("API v1 recipe spoon endpoints", () => {
   it("accepts uploaded spoon photos, auto-seeds owner origin covers, and ignores forged cover opt-ins from non-owners", async () => {
     const { bucket } = mockPhotosBucket();
     const { chef, chefWriter, cook, cookWriter, recipe } = await createSpoonFixture(db);
+    const fellowRecipe = await db.recipe.create({
+      data: {
+        ...createTestRecipe(cook.id),
+        title: `API v1 Spoon Fellow Recipe ${faker.string.alphanumeric(8)}`,
+        chefId: cook.id,
+      },
+    });
+    await db.recipeSpoon.create({
+      data: {
+        chefId: chef.id,
+        recipeId: fellowRecipe.id,
+        note: "prior cook that makes the recipe owner and cook fellow chefs",
+      },
+    });
     const ownerClientMutationId = "native-spoon-owner-photo";
     const ownerResponse = await action(routeArgs(
       multipartSpoonRequest(
@@ -558,6 +572,7 @@ describe("API v1 recipe spoon endpoints", () => {
       isOriginCook: true,
       notifications: {
         spoonOnMyRecipe: "skipped",
+        fellowChefOriginCook: "queued",
       },
       spoon: {
         chefId: chef.id,
@@ -589,6 +604,13 @@ describe("API v1 recipe spoon endpoints", () => {
       activeCoverVariant: null,
       coverMode: "auto",
     });
+    await expect(db.notificationEvent.findMany({
+      where: { recipientId: cook.id, kind: "fellow_chef_origin_cook" },
+    })).resolves.toEqual([
+      expect.objectContaining({
+        payload: expect.stringContaining(recipe.title),
+      }),
+    ]);
 
     const forgedResponse = await action(routeArgs(
       multipartSpoonRequest(
@@ -665,6 +687,46 @@ describe("API v1 recipe spoon endpoints", () => {
     expectErrorEnvelope(await readJson(wrongOwnerPhoto), "req_spoon_wrong_owner_photo", "validation_error", 400);
   });
 
+  it("validates note and nextTime payload types and length on create and update", async () => {
+    const { cook, cookWriter, recipe } = await createSpoonFixture(db);
+    const overlong = "x".repeat(161);
+    const existing = await db.recipeSpoon.create({
+      data: {
+        chefId: cook.id,
+        recipeId: recipe.id,
+        note: "editable",
+      },
+    });
+
+    for (const [requestId, body] of [
+      ["req_spoon_create_note_type", { clientMutationId: "native-spoon-create-note-type", note: 12 }],
+      ["req_spoon_create_next_type", { clientMutationId: "native-spoon-create-next-type", nextTime: { text: "later" } }],
+      ["req_spoon_create_note_long", { clientMutationId: "native-spoon-create-note-long", note: overlong }],
+      ["req_spoon_create_next_long", { clientMutationId: "native-spoon-create-next-long", nextTime: overlong }],
+    ] as const) {
+      const response = await action(routeArgs(
+        jsonMutationRequest("POST", `recipes/${recipe.id}/spoons`, cookWriter.token, requestId, body),
+        `recipes/${recipe.id}/spoons`,
+      ));
+      expect(response.status).toBe(400);
+      expectErrorEnvelope(await readJson(response), requestId, "validation_error", 400);
+    }
+
+    for (const [requestId, body] of [
+      ["req_spoon_update_note_type", { clientMutationId: "native-spoon-update-note-type", note: false }],
+      ["req_spoon_update_next_type", { clientMutationId: "native-spoon-update-next-type", nextTime: ["later"] }],
+      ["req_spoon_update_note_long", { clientMutationId: "native-spoon-update-note-long", note: overlong }],
+      ["req_spoon_update_next_long", { clientMutationId: "native-spoon-update-next-long", nextTime: overlong }],
+    ] as const) {
+      const response = await action(routeArgs(
+        jsonMutationRequest("PATCH", `recipes/${recipe.id}/spoons/${existing.id}`, cookWriter.token, requestId, body),
+        `recipes/${recipe.id}/spoons/${existing.id}`,
+      ));
+      expect(response.status).toBe(400);
+      expectErrorEnvelope(await readJson(response), requestId, "validation_error", 400);
+    }
+  });
+
   it("updates and deletes only owned active spoons on the recipe path while excluding deleted spoons from reads", async () => {
     const { cook, cookWriter, recipe, otherRecipe, strangerWriter } = await createSpoonFixture(db);
     const photoKey = `spoons/${cook.id}/updates/final.png`;
@@ -725,7 +787,21 @@ describe("API v1 recipe spoon endpoints", () => {
       `recipes/${recipe.id}/spoons/${spoon.id}`,
     ));
     expect(strangerUpdate.status).toBe(403);
-    expectErrorEnvelope(await readJson(strangerUpdate), "req_spoon_stranger_update", "forbidden", 403);
+    expectErrorEnvelope(await readJson(strangerUpdate), "req_spoon_stranger_update", "insufficient_scope", 403);
+
+    const deletePathMismatch = await action(routeArgs(
+      deleteRequest(`recipes/${otherRecipe.id}/spoons/${spoon.id}`, cookWriter.token, "req_spoon_delete_path_mismatch", "native-spoon-delete-path-mismatch"),
+      `recipes/${otherRecipe.id}/spoons/${spoon.id}`,
+    ));
+    expect(deletePathMismatch.status).toBe(404);
+    expectErrorEnvelope(await readJson(deletePathMismatch), "req_spoon_delete_path_mismatch", "not_found", 404);
+
+    const strangerDelete = await action(routeArgs(
+      deleteRequest(`recipes/${recipe.id}/spoons/${spoon.id}`, strangerWriter.token, "req_spoon_stranger_delete", "native-spoon-stranger-delete"),
+      `recipes/${recipe.id}/spoons/${spoon.id}`,
+    ));
+    expect(strangerDelete.status).toBe(403);
+    expectErrorEnvelope(await readJson(strangerDelete), "req_spoon_stranger_delete", "insufficient_scope", 403);
 
     const deleteClientMutationId = "native-spoon-delete";
     const deleted = await action(routeArgs(
