@@ -2554,14 +2554,14 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "cursorPolicy": null,
       "idempotency": {
         "key": "clientMutationId",
-        "location": "jsonBody",
+        "location": "jsonBodyOrXClientMutationIdHeaderOrQuery",
         "retentionHours": 24,
         "replayStatus": [
           200
         ],
         "conflictStatus": 409,
         "inProgressRetryAfterSeconds": 2,
-        "retryBodyRule": "Persist and retry the same parsed JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts."
+        "retryBodyRule": "Persist and retry the same parsed JSON body for this clientMutationId, or the same X-Client-Mutation-Id header/query value when the DELETE body is omitted. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts."
       },
       "personalTokenOnly": false,
       "oauthNote": "",
@@ -2590,6 +2590,30 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "defaultValue": "",
           "placeholder": "step_1",
           "description": "Recipe step id from recipe detail.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Client-Mutation-Id",
+          "in": "header",
+          "label": "X Client Mutation Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "delete:item_1:uuid-or-hash",
+          "description": "Chef-wide idempotency key for this delete. Use the same value when retrying the exact same request after a timeout.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "clientMutationId",
+          "in": "query",
+          "label": "Client Mutation Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "clientMutationId",
+          "description": "Chef-wide idempotency key fallback for clients that cannot send a JSON body with DELETE. Prefer the JSON body or X-Client-Mutation-Id header.",
           "schema": {
             "type": "string"
           }
@@ -3154,14 +3178,14 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "cursorPolicy": null,
       "idempotency": {
         "key": "clientMutationId",
-        "location": "jsonBody",
+        "location": "jsonBodyOrXClientMutationIdHeaderOrQuery",
         "retentionHours": 24,
         "replayStatus": [
           200
         ],
         "conflictStatus": 409,
         "inProgressRetryAfterSeconds": 2,
-        "retryBodyRule": "Persist and retry the same parsed JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts."
+        "retryBodyRule": "Persist and retry the same parsed JSON body for this clientMutationId, or the same X-Client-Mutation-Id header/query value when the DELETE body is omitted. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts."
       },
       "personalTokenOnly": false,
       "oauthNote": "",
@@ -3202,6 +3226,30 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "defaultValue": "",
           "placeholder": "ingredient_1",
           "description": "Recipe step ingredient id from recipe detail.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Client-Mutation-Id",
+          "in": "header",
+          "label": "X Client Mutation Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "delete:item_1:uuid-or-hash",
+          "description": "Chef-wide idempotency key for this delete. Use the same value when retrying the exact same request after a timeout.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "clientMutationId",
+          "in": "query",
+          "label": "Client Mutation Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "clientMutationId",
+          "description": "Chef-wide idempotency key fallback for clients that cannot send a JSON body with DELETE. Prefer the JSON body or X-Client-Mutation-Id header.",
           "schema": {
             "type": "string"
           }

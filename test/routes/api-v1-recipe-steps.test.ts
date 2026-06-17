@@ -911,6 +911,38 @@ describe("API v1 recipe step and dependency mutations", () => {
     expectMutationShape(payload.data.mutation, ingredientBody.clientMutationId, true);
   });
 
+  it("does not recover reorder idempotency when the recipe step order is corrupted", async () => {
+    const fixture = await createRecipeStepFixture(db);
+    const path = `recipes/${fixture.recipe.id}/steps/reorder`;
+    const body = {
+      clientMutationId: "step-reorder-corrupt-recovery",
+      stepId: fixture.steps[2].id,
+      toStepNum: 2,
+    };
+    await reserveRouteMutation(db, fixture, {
+      method: "POST",
+      path,
+      body,
+      operation: "recipes.steps.reorder",
+    });
+    await db.stepOutputUse.deleteMany({ where: { recipeId: fixture.recipe.id } });
+    await db.recipeStep.update({
+      where: { id: fixture.steps[1].id },
+      data: { stepNum: 4 },
+    });
+    await db.recipeStep.update({
+      where: { id: fixture.steps[2].id },
+      data: { stepNum: 2 },
+    });
+
+    const response = await action(routeArgs(
+      mutationRequest("POST", path, fixture.writer.token, "req_step_reorder_corrupt_recovery", body),
+      path,
+    ));
+    expect(response.status).toBe(409);
+    expectErrorEnvelope(await readJson(response), "req_step_reorder_corrupt_recovery", "idempotency_in_progress", 409);
+  });
+
   it("protects step deletion and reorder operations that would break step-output dependencies", async () => {
     const fixture = await createRecipeStepFixture(db);
 

@@ -1771,6 +1771,11 @@ function requestedOutputStepNums(outputStepNums: number[]) {
   return [...new Set(outputStepNums)].sort((a, b) => a - b);
 }
 
+function recipeStepOrderIsContiguous(recipe: SerializedRecipe) {
+  const stepNums = recipe.steps.map((step) => step.stepNum).sort((a, b) => a - b);
+  return stepNums.every((stepNum, index) => stepNum === index + 1);
+}
+
 function ingredientInputsMatch(
   actual: SerializedRecipeStep["ingredients"],
   expected: NativeRecipeStepIngredientInput[],
@@ -2251,7 +2256,7 @@ async function recoverNativeRecipeStepReorder(
   if (!recipeRow || recipeRow.chef.id !== input.principalId) return null;
   const recipe = recipeDetail(recipeRow, input.origin);
   const step = findSerializedStep(recipe, input.stepId);
-  if (!step || step.stepNum !== input.toStepNum) return null;
+  if (!step || step.stepNum !== input.toStepNum || !recipeStepOrderIsContiguous(recipe)) return null;
   return {
     status: 200,
     data: {

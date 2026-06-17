@@ -455,6 +455,11 @@ describe("API v1 OpenAPI document", () => {
       .toBe("#/components/schemas/UpdateRecipeStepEnvelope");
     expect(operation(document, "/api/v1/recipes/{id}/steps/{stepId}", "DELETE").requestBody.content["application/json"].schema.$ref)
       .toBe("#/components/schemas/DeleteRecipeStepRequest");
+    expect(operation(document, "/api/v1/recipes/{id}/steps/{stepId}", "DELETE").parameters)
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ name: "X-Client-Mutation-Id", in: "header", required: true }),
+        expect.objectContaining({ name: "clientMutationId", in: "query", required: false }),
+      ]));
     expect(operation(document, "/api/v1/recipes/{id}/steps/{stepId}", "DELETE").responses["200"].content["application/json"].schema.$ref)
       .toBe("#/components/schemas/DeleteRecipeStepEnvelope");
     expect(operation(document, "/api/v1/recipes/{id}/steps/reorder", "POST").requestBody.content["application/json"].schema.$ref)
@@ -463,6 +468,11 @@ describe("API v1 OpenAPI document", () => {
       .toBe("#/components/schemas/CreateRecipeStepIngredientRequest");
     expect(operation(document, "/api/v1/recipes/{id}/steps/{stepId}/ingredients/{ingredientId}", "DELETE").requestBody.content["application/json"].schema.$ref)
       .toBe("#/components/schemas/DeleteRecipeStepIngredientRequest");
+    expect(operation(document, "/api/v1/recipes/{id}/steps/{stepId}/ingredients/{ingredientId}", "DELETE").parameters)
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ name: "X-Client-Mutation-Id", in: "header", required: true }),
+        expect.objectContaining({ name: "clientMutationId", in: "query", required: false }),
+      ]));
     expect(operation(document, "/api/v1/recipes/{id}/step-output-uses", "PUT").requestBody.content["application/json"].schema.$ref)
       .toBe("#/components/schemas/ReplaceRecipeStepOutputUsesRequest");
     expect(operation(document, "/api/v1/recipes/{id}/step-output-uses", "PUT").responses["200"].content["application/json"].schema.$ref)
@@ -486,7 +496,12 @@ describe("API v1 OpenAPI document", () => {
     });
     expect(operation(document, "/api/v1/recipes/{id}/steps/{stepId}", "DELETE")["x-idempotency"]).toMatchObject({
       key: "clientMutationId",
-      location: "jsonBody",
+      location: "jsonBodyOrXClientMutationIdHeaderOrQuery",
+      replayStatus: [200],
+    });
+    expect(operation(document, "/api/v1/recipes/{id}/steps/{stepId}/ingredients/{ingredientId}", "DELETE")["x-idempotency"]).toMatchObject({
+      key: "clientMutationId",
+      location: "jsonBodyOrXClientMutationIdHeaderOrQuery",
       replayStatus: [200],
     });
     expect(responseExample(document, "/api/v1/recipes/{id}/steps", "POST", "201").data.step).toMatchObject({

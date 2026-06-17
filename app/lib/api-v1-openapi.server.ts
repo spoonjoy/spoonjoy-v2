@@ -1046,6 +1046,13 @@ const pathParameters = {
     description: "Chef-wide idempotency key for this delete. Use the same value when retrying the exact same request after a timeout.",
     schema: { type: "string", minLength: 1, maxLength: 160 },
   },
+  clientMutationIdQuery: {
+    name: "clientMutationId",
+    in: "query",
+    required: false,
+    description: "Chef-wide idempotency key fallback for clients that cannot send a JSON body with DELETE. Prefer the JSON body or X-Client-Mutation-Id header.",
+    schema: { type: "string", minLength: 1, maxLength: 160 },
+  },
 };
 
 const queryParameters = {
@@ -1098,7 +1105,7 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
   },
   "/api/v1/recipes/{id}/steps/{stepId}": {
     PATCH: { operationId: "patchApiV1RecipeStep", tags: ["Recipe Steps"], summary: "Update a recipe step", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "UpdateRecipeStepEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.stepId], requestBody: "UpdateRecipeStepRequest" },
-    DELETE: { operationId: "deleteApiV1RecipeStep", tags: ["Recipe Steps"], summary: "Delete a recipe step", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "DeleteRecipeStepEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.stepId], requestBody: "DeleteRecipeStepRequest" },
+    DELETE: { operationId: "deleteApiV1RecipeStep", tags: ["Recipe Steps"], summary: "Delete a recipe step", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "DeleteRecipeStepEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.stepId, pathParameters.clientMutationIdHeader, pathParameters.clientMutationIdQuery], requestBody: "DeleteRecipeStepRequest" },
   },
   "/api/v1/recipes/{id}/steps/reorder": {
     POST: { operationId: "postApiV1RecipeStepsReorder", tags: ["Recipe Steps"], summary: "Reorder recipe steps", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "ReorderRecipeStepEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.id], requestBody: "ReorderRecipeStepRequest" },
@@ -1107,7 +1114,7 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
     POST: { operationId: "postApiV1RecipeStepIngredients", tags: ["Recipe Steps"], summary: "Add a step ingredient", auth: "bearer", scopes: ["kitchen:write"], success: { 201: "CreateRecipeStepIngredientEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.stepId], requestBody: "CreateRecipeStepIngredientRequest" },
   },
   "/api/v1/recipes/{id}/steps/{stepId}/ingredients/{ingredientId}": {
-    DELETE: { operationId: "deleteApiV1RecipeStepIngredient", tags: ["Recipe Steps"], summary: "Delete a step ingredient", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "DeleteRecipeStepIngredientEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.stepId, pathParameters.ingredientId], requestBody: "DeleteRecipeStepIngredientRequest" },
+    DELETE: { operationId: "deleteApiV1RecipeStepIngredient", tags: ["Recipe Steps"], summary: "Delete a step ingredient", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "DeleteRecipeStepIngredientEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.stepId, pathParameters.ingredientId, pathParameters.clientMutationIdHeader, pathParameters.clientMutationIdQuery], requestBody: "DeleteRecipeStepIngredientRequest" },
   },
   "/api/v1/recipes/{id}/step-output-uses": {
     PUT: { operationId: "putApiV1RecipeStepOutputUses", tags: ["Recipe Steps"], summary: "Replace step-output dependency uses", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "ReplaceRecipeStepOutputUsesEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.id], requestBody: "ReplaceRecipeStepOutputUsesRequest" },
@@ -2224,14 +2231,20 @@ function idempotencyPolicyFor(path: ResourcePath, method: HttpMethod) {
     ) &&
     (method === "POST" || method === "PATCH" || method === "PUT" || method === "DELETE")
   ) {
+    const acceptsDeleteFallback = method === "DELETE" && (
+      path === "/api/v1/recipes/{id}/steps/{stepId}" ||
+      path === "/api/v1/recipes/{id}/steps/{stepId}/ingredients/{ingredientId}"
+    );
     return {
       key: "clientMutationId",
-      location: "jsonBody",
+      location: acceptsDeleteFallback ? "jsonBodyOrXClientMutationIdHeaderOrQuery" : "jsonBody",
       retentionHours: 24,
       replayStatus: [method === "POST" && (path === "/api/v1/recipes/{id}/steps" || path === "/api/v1/recipes/{id}/steps/{stepId}/ingredients") ? 201 : 200],
       conflictStatus: 409,
       inProgressRetryAfterSeconds: 2,
-      retryBodyRule: "Persist and retry the same parsed JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts.",
+      retryBodyRule: acceptsDeleteFallback
+        ? "Persist and retry the same parsed JSON body for this clientMutationId, or the same X-Client-Mutation-Id header/query value when the DELETE body is omitted. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts."
+        : "Persist and retry the same parsed JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts.",
     };
   }
   if (path === "/api/v1/shopping-list/items" && method === "POST") {

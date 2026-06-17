@@ -1,11 +1,7 @@
-import type { PrismaClient as PrismaClientType } from "@prisma/client";
+import type { Prisma, PrismaClient as PrismaClientType } from "@prisma/client";
 import type { ApiV1ErrorCode } from "~/lib/api-v1-contract.server";
 import { validateStepDeletion } from "~/lib/step-deletion-validation.server";
 import { checkStepUsage } from "~/lib/step-output-use-queries.server";
-import {
-  createStepOutputUses,
-  deleteExistingStepOutputUses,
-} from "~/lib/step-output-use-mutations.server";
 import { validateStepReorderComplete } from "~/lib/step-reorder-validation.server";
 import {
   validateIngredientName,
@@ -493,16 +489,40 @@ async function outputStepNumsFor(db: Database, recipeId: string, inputStepNum: n
   return rows.map((row) => row.outputStepNum);
 }
 
-async function replaceStepOutputUses(db: Database, recipeId: string, inputStepNum: number, outputStepNums: number[]) {
-  await deleteExistingStepOutputUses(db, recipeId, inputStepNum);
-  await createStepOutputUses(db, recipeId, inputStepNum, outputStepNums);
+function createStepOutputUseOps(
+  db: Database,
+  recipeId: string,
+  inputStepNum: number,
+  outputStepNums: number[],
+): Prisma.PrismaPromise<unknown>[] {
+  const uniqueOutputStepNums = [...new Set(outputStepNums)];
+  if (uniqueOutputStepNums.length === 0) return [];
+  return [
+    db.stepOutputUse.createMany({
+      data: uniqueOutputStepNums.map((outputStepNum) => ({
+        recipeId,
+        inputStepNum,
+        outputStepNum,
+      })),
+    }),
+  ];
 }
 
-async function restoreStepOutputUses(db: Database, recipeId: string, inputStepNum: number, outputStepNums: number[]) {
-  await replaceStepOutputUses(db, recipeId, inputStepNum, outputStepNums);
+function replaceStepOutputUseOps(
+  db: Database,
+  recipeId: string,
+  inputStepNum: number,
+  outputStepNums: number[],
+): Prisma.PrismaPromise<unknown>[] {
+  return [
+    db.stepOutputUse.deleteMany({
+      where: { recipeId, inputStepNum },
+    }),
+    ...createStepOutputUseOps(db, recipeId, inputStepNum, outputStepNums),
+  ];
 }
 
-async function createDeleteTombstone(
+function createDeleteTombstoneOp(
   db: Database,
   input: {
     idempotencyKeyId: string;
@@ -512,9 +532,9 @@ async function createDeleteTombstone(
     parentResourceId: string;
     payload: unknown;
   },
-) {
+): Prisma.PrismaPromise<unknown> {
   const payload = JSON.stringify(input.payload);
-  await db.apiMutationTombstone.upsert({
+  return db.apiMutationTombstone.upsert({
     where: {
       idempotencyKeyId_resourceType_resourceId: {
         idempotencyKeyId: input.idempotencyKeyId,
@@ -621,36 +641,6 @@ async function validateStepWillHaveContent<T>(
   return null;
 }
 
-async function restoreStepFields(
-  db: Database,
-  stepId: string,
-  fields: { stepTitle: string | null; description: string; duration: number | null },
-) {
-  await db.recipeStep.update({
-    where: { id: stepId },
-    data: fields,
-  });
-}
-
-async function restoreRecipeStepOrder(
-  db: Database,
-  originalSteps: Array<{ id: string; stepNum: number }>,
-) {
-  const ordered = [...originalSteps].sort((a, b) => a.stepNum - b.stepNum);
-  for (const [index, candidate] of ordered.entries()) {
-    await db.recipeStep.update({
-      where: { id: candidate.id },
-      data: { stepNum: -(index + 1) },
-    });
-  }
-  for (const candidate of ordered) {
-    await db.recipeStep.update({
-      where: { id: candidate.id },
-      data: { stepNum: candidate.stepNum },
-    });
-  }
-}
-
 export async function createNativeRecipeStep(
   db: Database,
   chefId: string,
@@ -698,45 +688,44 @@ export async function createNativeRecipeStep(
   );
   if (invalidRefs) return invalidRefs;
 
-  let createdStepId: string | null = null;
-  try {
-    const step = await db.recipeStep.create({
+  const stepId = options.stepId ?? crypto.randomUUID();
+  const resolvedIngredients: Array<{ quantity: number; unitId: string; ingredientRefId: string }> = [];
+  for (const ingredient of input.ingredients) {
+    const unit = await getOrCreateUnit(db, ingredient.unit);
+    const ingredientRef = await getOrCreateIngredientRef(db, ingredient.ingredientName);
+    resolvedIngredients.push({
+      quantity: ingredient.quantity,
+      unitId: unit.id,
+      ingredientRefId: ingredientRef.id,
+    });
+  }
+
+  const ops: Prisma.PrismaPromise<unknown>[] = [
+    db.recipeStep.create({
       data: {
-        id: options.stepId ?? crypto.randomUUID(),
+        id: stepId,
         recipeId,
         stepNum,
         stepTitle: input.stepTitle,
         description: input.description,
         duration: input.duration,
       },
-    });
-    createdStepId = step.id;
+    }),
+    ...createStepOutputUseOps(db, recipeId, stepNum, input.outputStepNums),
+    ...resolvedIngredients.map((ingredient) => db.ingredient.create({
+      data: {
+        recipeId,
+        stepNum,
+        quantity: ingredient.quantity,
+        unitId: ingredient.unitId,
+        ingredientRefId: ingredient.ingredientRefId,
+      },
+    })),
+  ];
 
-    if (input.outputStepNums.length > 0) {
-      await createStepOutputUses(db, recipeId, stepNum, input.outputStepNums);
-    }
+  await db.$transaction(ops);
 
-    for (const ingredient of input.ingredients) {
-      const unit = await getOrCreateUnit(db, ingredient.unit);
-      const ingredientRef = await getOrCreateIngredientRef(db, ingredient.ingredientName);
-      await db.ingredient.create({
-        data: {
-          recipeId,
-          stepNum,
-          quantity: ingredient.quantity,
-          unitId: unit.id,
-          ingredientRefId: ingredientRef.id,
-        },
-      });
-    }
-
-    return success({ recipeId, stepId: step.id, stepNum }, 201);
-  } catch (error) {
-    if (createdStepId) {
-      await db.recipeStep.delete({ where: { id: createdStepId } }).catch(() => undefined);
-    }
-    throw error;
-  }
+  return success({ recipeId, stepId, stepNum }, 201);
 }
 
 export async function updateNativeRecipeStep(
@@ -783,30 +772,25 @@ export async function updateNativeRecipeStep(
   };
   const updated = Object.keys(stepFields).length > 0 || input.fields.outputStepNums !== undefined;
 
-  try {
-    if (Object.keys(stepFields).length > 0) {
-      await db.recipeStep.update({
+  const ops: Prisma.PrismaPromise<unknown>[] = [];
+  if (Object.keys(stepFields).length > 0) {
+    ops.push(
+      db.recipeStep.update({
         where: { id: stepId },
         data: stepFields,
-      });
-    }
-
-    if (input.fields.outputStepNums !== undefined) {
-      await replaceStepOutputUses(db, recipeId, step.data.stepNum, input.fields.outputStepNums);
-    }
-
-    return success({ recipeId, stepId, updated });
-  } catch (error) {
-    await Promise.allSettled([
-      restoreStepFields(db, stepId, {
-        stepTitle: step.data.stepTitle,
-        description: step.data.description,
-        duration: step.data.duration,
       }),
-      restoreStepOutputUses(db, recipeId, step.data.stepNum, existingOutputStepNums),
-    ]);
-    throw error;
+    );
   }
+
+  if (input.fields.outputStepNums !== undefined) {
+    ops.push(...replaceStepOutputUseOps(db, recipeId, step.data.stepNum, input.fields.outputStepNums));
+  }
+
+  if (ops.length > 0) {
+    await db.$transaction(ops);
+  }
+
+  return success({ recipeId, stepId, updated });
 }
 
 export async function deleteNativeRecipeStep(
@@ -832,17 +816,18 @@ export async function deleteNativeRecipeStep(
     });
   }
 
+  const ops: Prisma.PrismaPromise<unknown>[] = [];
   if (options.tombstone) {
-    await createDeleteTombstone(db, {
+    ops.push(createDeleteTombstoneOp(db, {
       ...options.tombstone,
       resourceType: "recipe_step",
       resourceId: stepId,
       parentResourceId: recipeId,
       payload: { recipeId, stepNum: step.data.stepNum },
-    });
+    }));
   }
-
-  await db.recipeStep.delete({ where: { id: stepId } });
+  ops.push(db.recipeStep.delete({ where: { id: stepId } }));
+  await db.$transaction(ops);
 
   return success({ recipeId, step: { id: stepId, stepNum: step.data.stepNum } });
 }
@@ -910,17 +895,18 @@ export async function deleteNativeRecipeStepIngredient(
     return failure("not_found", "Recipe step ingredient not found", { resource: "recipe_step_ingredient", ingredientId });
   }
 
+  const ops: Prisma.PrismaPromise<unknown>[] = [];
   if (options.tombstone) {
-    await createDeleteTombstone(db, {
+    ops.push(createDeleteTombstoneOp(db, {
       ...options.tombstone,
       resourceType: "recipe_step_ingredient",
       resourceId: ingredient.id,
       parentResourceId: stepId,
       payload: { recipeId, stepId, stepNum: step.data.stepNum },
-    });
+    }));
   }
-
-  await db.ingredient.delete({ where: { id: ingredient.id } });
+  ops.push(db.ingredient.delete({ where: { id: ingredient.id } }));
+  await db.$transaction(ops);
 
   return success({ recipeId, stepId, ingredient: { id: ingredient.id } });
 }
@@ -989,23 +975,24 @@ export async function reorderNativeRecipeStep(
   const [moved] = reorderedSteps.splice(currentIndex, 1);
   reorderedSteps.splice(targetIndex, 0, moved!);
 
-  try {
-    for (const [index, candidate] of reorderedSteps.entries()) {
-      await db.recipeStep.update({
+  const ops: Prisma.PrismaPromise<unknown>[] = [];
+  for (const [index, candidate] of reorderedSteps.entries()) {
+    ops.push(
+      db.recipeStep.update({
         where: { id: candidate.id },
         data: { stepNum: -(index + 1) },
-      });
-    }
-    for (const [index, candidate] of reorderedSteps.entries()) {
-      await db.recipeStep.update({
+      }),
+    );
+  }
+  for (const [index, candidate] of reorderedSteps.entries()) {
+    ops.push(
+      db.recipeStep.update({
         where: { id: candidate.id },
         data: { stepNum: index + 1 },
-      });
-    }
-  } catch (error) {
-    await restoreRecipeStepOrder(db, steps).catch(() => undefined);
-    throw error;
+      }),
+    );
   }
+  await db.$transaction(ops);
 
   return success({ recipeId, stepId: input.stepId, reordered: true });
 }
@@ -1039,13 +1026,7 @@ export async function replaceNativeRecipeStepOutputUses(
   );
   if (contentError) return contentError;
 
-  const originalOutputStepNums = await outputStepNumsFor(db, recipeId, step.data.stepNum);
-  try {
-    await replaceStepOutputUses(db, recipeId, step.data.stepNum, input.outputStepNums);
-  } catch (error) {
-    await restoreStepOutputUses(db, recipeId, step.data.stepNum, originalOutputStepNums).catch(() => undefined);
-    throw error;
-  }
+  await db.$transaction(replaceStepOutputUseOps(db, recipeId, step.data.stepNum, input.outputStepNums));
 
   return success({ recipeId, stepId: input.inputStepId, replaced: true });
 }
