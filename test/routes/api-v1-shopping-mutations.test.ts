@@ -109,13 +109,32 @@ function expectMutationShape(mutation: any, clientMutationId: string, replayed: 
   expect(mutation).toEqual({ clientMutationId, replayed });
 }
 
+function expectRecipeShoppingMutationData(data: any, clientMutationId: string, replayed = false) {
+  expectExactKeys(data, ["created", "items", "mutation", "recipe", "updated"]);
+  expect(typeof data.created).toBe("number");
+  expect(typeof data.updated).toBe("number");
+  expectExactKeys(data.recipe, ["id", "title"]);
+  expect(Array.isArray(data.items)).toBe(true);
+  for (const item of data.items) expectShoppingItemShape(item);
+  expectMutationShape(data.mutation, clientMutationId, replayed);
+}
+
+function expectClearShoppingMutationData(data: any, clientMutationId: string, replayed = false) {
+  expectExactKeys(data, ["cleared", "items", "mutation"]);
+  expect(typeof data.cleared).toBe("number");
+  expect(Array.isArray(data.items)).toBe(true);
+  for (const item of data.items) expectShoppingItemShape(item);
+  expectMutationShape(data.mutation, clientMutationId, replayed);
+}
+
 async function createShoppingMutationFixture(db: Awaited<ReturnType<typeof getLocalDb>>) {
   const user = await db.user.create({ data: createTestUser() });
+  const otherUser = await db.user.create({ data: createTestUser() });
   const credential = await createApiCredential(db, user.id, "Shopping writer", { scopes: ["shopping_list:write"] });
   const legacyCredential = await createApiCredential(db, user.id, "Legacy shopping writer", { scopes: ["kitchen:write"] });
   const readOnlyCredential = await createApiCredential(db, user.id, "Shopping reader", { scopes: ["shopping_list:read"] });
   const list = await db.shoppingList.create({ data: { authorId: user.id } });
-  return { user, credential, legacyCredential, readOnlyCredential, list };
+  return { user, otherUser, credential, legacyCredential, readOnlyCredential, list };
 }
 
 async function createExistingItem(db: Awaited<ReturnType<typeof getLocalDb>>, userId: string, name: string) {
@@ -129,6 +148,38 @@ async function createExistingItem(db: Awaited<ReturnType<typeof getLocalDb>>, us
       sortIndex: 0,
     },
   });
+}
+
+async function createRecipeWithIngredients(
+  db: Awaited<ReturnType<typeof getLocalDb>>,
+  chefId: string,
+  ingredients: Array<{ name: string; quantity: number; unit: string }>,
+) {
+  const recipe = await db.recipe.create({
+    data: {
+      title: `Shopping Recipe ${faker.string.alphanumeric(8)}`,
+      chefId,
+    },
+  });
+  await db.recipeStep.create({
+    data: { recipeId: recipe.id, stepNum: 1, description: "Add ingredients to shopping list" },
+  });
+
+  for (const ingredient of ingredients) {
+    const unit = await getOrCreateUnit(db, ingredient.unit);
+    const ingredientRef = await getOrCreateIngredientRef(db, ingredient.name);
+    await db.ingredient.create({
+      data: {
+        recipeId: recipe.id,
+        stepNum: 1,
+        quantity: ingredient.quantity,
+        unitId: unit.id,
+        ingredientRefId: ingredientRef.id,
+      },
+    });
+  }
+
+  return recipe;
 }
 
 describe("API v1 shopping-list mutations", () => {
@@ -153,6 +204,18 @@ describe("API v1 shopping-list mutations", () => {
       scopes: ["shopping_list:write"],
     });
     expect(resolveApiV1ScopeRequirement("DELETE", "shopping-list/items/item_1")).toEqual({
+      auth: "bearer",
+      scopes: ["shopping_list:write"],
+    });
+    expect(resolveApiV1ScopeRequirement("POST", "shopping-list/add-from-recipe")).toEqual({
+      auth: "bearer",
+      scopes: ["shopping_list:write"],
+    });
+    expect(resolveApiV1ScopeRequirement("POST", "shopping-list/clear-completed")).toEqual({
+      auth: "bearer",
+      scopes: ["shopping_list:write"],
+    });
+    expect(resolveApiV1ScopeRequirement("POST", "shopping-list/clear-all")).toEqual({
       auth: "bearer",
       scopes: ["shopping_list:write"],
     });
@@ -620,6 +683,314 @@ describe("API v1 shopping-list mutations", () => {
     expect(reuseAfterExpiry.status).toBe(201);
     expectSuccessEnvelope(reuseAfterExpiryPayload, "req_idem_expired_reuse");
     expect(reuseAfterExpiryPayload.data.mutation).toEqual({ clientMutationId: "idem-add", replayed: false });
+  });
+
+  it("adds owner and public recipe ingredients with scale, merge, restore, and exact mutation envelopes", async () => {
+    const fixture = await createShoppingMutationFixture(db);
+    const existingUnitName = `cup_bulk_${faker.string.alphanumeric(6)}`.toLowerCase();
+    const existingIngredientName = `flour_bulk_${faker.string.alphanumeric(6)}`.toLowerCase();
+    const newUnitName = `tsp_bulk_${faker.string.alphanumeric(6)}`.toLowerCase();
+    const newIngredientName = `salt_bulk_${faker.string.alphanumeric(6)}`.toLowerCase();
+    const existingUnit = await getOrCreateUnit(db, existingUnitName);
+    const existingIngredient = await getOrCreateIngredientRef(db, existingIngredientName);
+    const existingItem = await db.shoppingListItem.create({
+      data: {
+        shoppingListId: fixture.list.id,
+        ingredientRefId: existingIngredient.id,
+        unitId: existingUnit.id,
+        quantity: 1,
+        checked: true,
+        checkedAt: new Date(),
+        deletedAt: new Date(),
+        sortIndex: 0,
+        categoryKey: "pantry",
+        iconKey: "bag",
+      },
+    });
+    const ownerRecipe = await createRecipeWithIngredients(db, fixture.user.id, [
+      { name: existingIngredientName, quantity: 1.5, unit: existingUnitName },
+      { name: newIngredientName, quantity: 2, unit: newUnitName },
+    ]);
+    const addOwnerBody = {
+      clientMutationId: "bulk-add-owner-recipe",
+      recipeId: ownerRecipe.id,
+      scaleFactor: 2,
+    };
+
+    const addOwner = await action(routeArgs(
+      mutationRequest("POST", "shopping-list/add-from-recipe", fixture.credential.token, "req_bulk_add_owner_recipe", addOwnerBody),
+      "shopping-list/add-from-recipe",
+    ));
+    const addOwnerPayload = await readJson(addOwner);
+
+    expect(addOwner.status).toBe(200);
+    expectEnvelopeHeaders(addOwner, "req_bulk_add_owner_recipe");
+    expectSuccessEnvelope(addOwnerPayload, "req_bulk_add_owner_recipe");
+    expectRecipeShoppingMutationData(addOwnerPayload.data, "bulk-add-owner-recipe");
+    expect(addOwnerPayload.data).toMatchObject({
+      created: 1,
+      updated: 1,
+      recipe: { id: ownerRecipe.id, title: ownerRecipe.title },
+    });
+    expect(addOwnerPayload.data.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: existingItem.id,
+        name: existingIngredientName,
+        quantity: 4,
+        unit: existingUnitName,
+        checked: false,
+        checkedAt: null,
+        deletedAt: null,
+        categoryKey: "pantry",
+      }),
+      expect.objectContaining({
+        name: newIngredientName,
+        quantity: 4,
+        unit: newUnitName,
+        checked: false,
+        deletedAt: null,
+      }),
+    ]));
+
+    const replayOwner = await action(routeArgs(
+      mutationRequest("POST", "shopping-list/add-from-recipe", fixture.credential.token, "req_bulk_add_owner_recipe_replay", addOwnerBody),
+      "shopping-list/add-from-recipe",
+    ));
+    const replayOwnerPayload = await readJson(replayOwner);
+    const expectedReplay = structuredClone(addOwnerPayload);
+    expectedReplay.requestId = "req_bulk_add_owner_recipe_replay";
+    expectedReplay.data.mutation.replayed = true;
+
+    expect(replayOwner.status).toBe(200);
+    expect(replayOwnerPayload).toEqual(expectedReplay);
+
+    const conflict = await action(routeArgs(
+      mutationRequest("POST", "shopping-list/add-from-recipe", fixture.credential.token, "req_bulk_add_owner_recipe_conflict", {
+        ...addOwnerBody,
+        scaleFactor: 3,
+      }),
+      "shopping-list/add-from-recipe",
+    ));
+    expect(conflict.status).toBe(409);
+    expectEnvelopeHeaders(conflict, "req_bulk_add_owner_recipe_conflict");
+    expectErrorEnvelope(await readJson(conflict), "req_bulk_add_owner_recipe_conflict", "idempotency_conflict", 409);
+
+    const publicIngredientName = `public_oats_${faker.string.alphanumeric(6)}`.toLowerCase();
+    const publicUnitName = `bag_public_${faker.string.alphanumeric(6)}`.toLowerCase();
+    const publicRecipe = await createRecipeWithIngredients(db, fixture.otherUser.id, [
+      { name: publicIngredientName, quantity: 5, unit: publicUnitName },
+    ]);
+    const addPublic = await action(routeArgs(
+      mutationRequest("POST", "shopping-list/add-from-recipe", fixture.credential.token, "req_bulk_add_public_recipe", {
+        clientMutationId: "bulk-add-public-recipe",
+        recipeId: publicRecipe.id,
+      }),
+      "shopping-list/add-from-recipe",
+    ));
+    const addPublicPayload = await readJson(addPublic);
+
+    expect(addPublic.status).toBe(200);
+    expectSuccessEnvelope(addPublicPayload, "req_bulk_add_public_recipe");
+    expectRecipeShoppingMutationData(addPublicPayload.data, "bulk-add-public-recipe");
+    expect(addPublicPayload.data).toMatchObject({
+      created: 1,
+      updated: 0,
+      recipe: { id: publicRecipe.id, title: publicRecipe.title },
+    });
+    expect(addPublicPayload.data.items).toEqual([
+      expect.objectContaining({ name: publicIngredientName, quantity: 5, unit: publicUnitName }),
+    ]);
+  });
+
+  it("handles recipe-add empty ingredients and clear operations with checked, deleted, and empty-list rows", async () => {
+    const fixture = await createShoppingMutationFixture(db);
+    const emptyRecipe = await db.recipe.create({
+      data: { title: `Empty Shopping Recipe ${faker.string.alphanumeric(8)}`, chefId: fixture.user.id },
+    });
+    await db.recipeStep.create({
+      data: { recipeId: emptyRecipe.id, stepNum: 1, description: "No ingredients today" },
+    });
+
+    const emptyAdd = await action(routeArgs(
+      mutationRequest("POST", "shopping-list/add-from-recipe", fixture.credential.token, "req_bulk_add_empty_recipe", {
+        clientMutationId: "bulk-add-empty-recipe",
+        recipeId: emptyRecipe.id,
+      }),
+      "shopping-list/add-from-recipe",
+    ));
+    const emptyAddPayload = await readJson(emptyAdd);
+    expect(emptyAdd.status).toBe(200);
+    expectSuccessEnvelope(emptyAddPayload, "req_bulk_add_empty_recipe");
+    expectRecipeShoppingMutationData(emptyAddPayload.data, "bulk-add-empty-recipe");
+    expect(emptyAddPayload.data).toMatchObject({
+      created: 0,
+      updated: 0,
+      items: [],
+      recipe: { id: emptyRecipe.id, title: emptyRecipe.title },
+    });
+
+    const unchecked = await createExistingItem(db, fixture.user.id, `Unchecked Carrots ${faker.string.alphanumeric(6)}`);
+    const checked = await createExistingItem(db, fixture.user.id, `Checked Kale ${faker.string.alphanumeric(6)}`);
+    const legacyChecked = await createExistingItem(db, fixture.user.id, `Legacy Checked Beans ${faker.string.alphanumeric(6)}`);
+    const alreadyDeleted = await createExistingItem(db, fixture.user.id, `Deleted Lentils ${faker.string.alphanumeric(6)}`);
+    await db.shoppingListItem.update({
+      where: { id: checked.id },
+      data: { checked: true, checkedAt: new Date(), sortIndex: 1 },
+    });
+    await db.shoppingListItem.update({
+      where: { id: legacyChecked.id },
+      data: { checked: true, checkedAt: null, sortIndex: 2 },
+    });
+    await db.shoppingListItem.update({
+      where: { id: alreadyDeleted.id },
+      data: { checked: true, checkedAt: new Date(), deletedAt: new Date(), sortIndex: 3 },
+    });
+
+    const clearCompletedBody = { clientMutationId: "bulk-clear-completed" };
+    const clearCompleted = await action(routeArgs(
+      mutationRequest("POST", "shopping-list/clear-completed", fixture.credential.token, "req_clear_completed", clearCompletedBody),
+      "shopping-list/clear-completed",
+    ));
+    const clearCompletedPayload = await readJson(clearCompleted);
+
+    expect(clearCompleted.status).toBe(200);
+    expectEnvelopeHeaders(clearCompleted, "req_clear_completed");
+    expectSuccessEnvelope(clearCompletedPayload, "req_clear_completed");
+    expectClearShoppingMutationData(clearCompletedPayload.data, "bulk-clear-completed");
+    expect(clearCompletedPayload.data.cleared).toBe(2);
+    expect(clearCompletedPayload.data.items.map((item: { id: string }) => item.id).sort()).toEqual([checked.id, legacyChecked.id].sort());
+    expect(clearCompletedPayload.data.items.every((item: { deletedAt: string | null }) => item.deletedAt)).toBe(true);
+    await expect(db.shoppingListItem.findMany({
+      where: { shoppingListId: fixture.list.id, deletedAt: null },
+      orderBy: { id: "asc" },
+    })).resolves.toEqual([expect.objectContaining({ id: unchecked.id })]);
+
+    const replayClearCompleted = await action(routeArgs(
+      mutationRequest("POST", "shopping-list/clear-completed", fixture.credential.token, "req_clear_completed_replay", clearCompletedBody),
+      "shopping-list/clear-completed",
+    ));
+    const replayClearCompletedPayload = await readJson(replayClearCompleted);
+    const expectedClearReplay = structuredClone(clearCompletedPayload);
+    expectedClearReplay.requestId = "req_clear_completed_replay";
+    expectedClearReplay.data.mutation.replayed = true;
+    expect(replayClearCompleted.status).toBe(200);
+    expect(replayClearCompletedPayload).toEqual(expectedClearReplay);
+
+    const clearAllBody = { clientMutationId: "bulk-clear-all" };
+    const clearAll = await action(routeArgs(
+      mutationRequest("POST", "shopping-list/clear-all", fixture.credential.token, "req_clear_all", clearAllBody),
+      "shopping-list/clear-all",
+    ));
+    const clearAllPayload = await readJson(clearAll);
+
+    expect(clearAll.status).toBe(200);
+    expectEnvelopeHeaders(clearAll, "req_clear_all");
+    expectSuccessEnvelope(clearAllPayload, "req_clear_all");
+    expectClearShoppingMutationData(clearAllPayload.data, "bulk-clear-all");
+    expect(clearAllPayload.data).toMatchObject({
+      cleared: 1,
+      items: [expect.objectContaining({ id: unchecked.id, deletedAt: expect.any(String) })],
+    });
+    await expect(db.shoppingListItem.count({
+      where: { shoppingListId: fixture.list.id, deletedAt: null },
+    })).resolves.toBe(0);
+
+    const clearEmpty = await action(routeArgs(
+      mutationRequest("POST", "shopping-list/clear-all", fixture.credential.token, "req_clear_all_empty", {
+        clientMutationId: "bulk-clear-all-empty",
+      }),
+      "shopping-list/clear-all",
+    ));
+    const clearEmptyPayload = await readJson(clearEmpty);
+    expect(clearEmpty.status).toBe(200);
+    expectSuccessEnvelope(clearEmptyPayload, "req_clear_all_empty");
+    expectClearShoppingMutationData(clearEmptyPayload.data, "bulk-clear-all-empty");
+    expect(clearEmptyPayload.data).toMatchObject({ cleared: 0, items: [] });
+  });
+
+  it("enforces auth, scope, and body validation for shopping parity mutations", async () => {
+    const fixture = await createShoppingMutationFixture(db);
+    const recipe = await createRecipeWithIngredients(db, fixture.user.id, [
+      {
+        name: `validation_oats_${faker.string.alphanumeric(6)}`.toLowerCase(),
+        quantity: 1,
+        unit: `box_validation_${faker.string.alphanumeric(6)}`.toLowerCase(),
+      },
+    ]);
+
+    const missingAuth = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/shopping-list/add-from-recipe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Request-Id": "req_bulk_missing_auth" },
+      body: JSON.stringify({ clientMutationId: "bulk-missing-auth", recipeId: recipe.id }),
+    }) as unknown as Request, "shopping-list/add-from-recipe"));
+    expect(missingAuth.status).toBe(401);
+    expectEnvelopeHeaders(missingAuth, "req_bulk_missing_auth");
+    expectErrorEnvelope(await readJson(missingAuth), "req_bulk_missing_auth", "authentication_required", 401);
+
+    const insufficientScope = await action(routeArgs(
+      mutationRequest("POST", "shopping-list/clear-all", fixture.readOnlyCredential.token, "req_bulk_missing_scope", {
+        clientMutationId: "bulk-missing-scope",
+        unexpected: true,
+      }),
+      "shopping-list/clear-all",
+    ));
+    expect(insufficientScope.status).toBe(403);
+    expectEnvelopeHeaders(insufficientScope, "req_bulk_missing_scope");
+    expectErrorEnvelope(await readJson(insufficientScope), "req_bulk_missing_scope", "insufficient_scope", 403);
+
+    const validationCases = [
+      {
+        path: "shopping-list/add-from-recipe",
+        requestId: "req_bulk_add_missing_mutation",
+        body: { recipeId: recipe.id },
+      },
+      {
+        path: "shopping-list/add-from-recipe",
+        requestId: "req_bulk_add_missing_recipe",
+        body: { clientMutationId: "bulk-missing-recipe" },
+      },
+      {
+        path: "shopping-list/add-from-recipe",
+        requestId: "req_bulk_add_bad_scale",
+        body: { clientMutationId: "bulk-bad-scale", recipeId: recipe.id, scaleFactor: 0 },
+      },
+      {
+        path: "shopping-list/add-from-recipe",
+        requestId: "req_bulk_add_unknown",
+        body: { clientMutationId: "bulk-add-unknown", recipeId: recipe.id, unknown: true },
+      },
+      {
+        path: "shopping-list/clear-completed",
+        requestId: "req_bulk_clear_completed_unknown",
+        body: { clientMutationId: "bulk-clear-completed-unknown", unknown: true },
+      },
+      {
+        path: "shopping-list/clear-all",
+        requestId: "req_bulk_clear_all_blank_mutation",
+        body: { clientMutationId: " " },
+      },
+    ];
+
+    for (const testCase of validationCases) {
+      const response = await action(routeArgs(
+        mutationRequest("POST", testCase.path, fixture.credential.token, testCase.requestId, testCase.body),
+        testCase.path,
+      ));
+      expect(response.status).toBe(400);
+      expectEnvelopeHeaders(response, testCase.requestId);
+      expectErrorEnvelope(await readJson(response), testCase.requestId, "validation_error", 400);
+    }
+
+    const missingRecipe = await action(routeArgs(
+      mutationRequest("POST", "shopping-list/add-from-recipe", fixture.credential.token, "req_bulk_add_not_found", {
+        clientMutationId: "bulk-recipe-not-found",
+        recipeId: "missing-recipe",
+      }),
+      "shopping-list/add-from-recipe",
+    ));
+    expect(missingRecipe.status).toBe(404);
+    expectEnvelopeHeaders(missingRecipe, "req_bulk_add_not_found");
+    expectErrorEnvelope(await readJson(missingRecipe), "req_bulk_add_not_found", "not_found", 404);
   });
 
   it("enforces shopping_list:write before mutation body handling", async () => {
