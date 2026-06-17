@@ -75,6 +75,18 @@ const coverVariantSchema = {
   enum: ["image", "stylized", null],
   description: "Active cover variant: image is verbatim/pure AI/imported display; stylized is an editorialized chef photo. Null when no active cover is available.",
 };
+const recipeCoverSourceTypeSchema = {
+  type: "string",
+  enum: ["ai-placeholder", "chef-upload", "import", "spoon"],
+};
+const recipeCoverStatusSchema = {
+  type: "string",
+  enum: ["processing", "ready", "failed", "archived"],
+};
+const recipeCoverGenerationStatusSchema = {
+  type: "string",
+  enum: ["none", "processing", "succeeded", "failed"],
+};
 const uriSchema = { type: "string", format: "uri" };
 const redirectUriSchema = {
   ...uriSchema,
@@ -745,6 +757,112 @@ const schemas = {
     clientMutationId: shortTextSchema,
     replayed: { type: "boolean" },
   }),
+  RecipeCover: objectSchema(["activeVariant", "archivedAt", "createdAt", "createdById", "displayUrl", "failureReason", "generationStatus", "id", "imageUrl", "provenanceLabel", "recipeId", "sourceImageUrl", "sourceSpoonId", "sourceType", "status", "stylizedImageUrl"], {
+    id: idSchema,
+    recipeId: idSchema,
+    imageUrl: { type: "string", description: "Private lifecycle responses keep Spoonjoy photo URLs relative when stored that way." },
+    stylizedImageUrl: nullableStringSchema,
+    displayUrl: nullableStringSchema,
+    activeVariant: coverVariantSchema,
+    provenanceLabel: nullableStringSchema,
+    sourceType: recipeCoverSourceTypeSchema,
+    sourceSpoonId: nullableStringSchema,
+    createdById: nullableStringSchema,
+    archivedAt: nullableDateTimeSchema,
+    generationStatus: recipeCoverGenerationStatusSchema,
+    failureReason: nullableStringSchema,
+    sourceImageUrl: nullableStringSchema,
+    status: recipeCoverStatusSchema,
+    createdAt: dateTimeSchema,
+  }),
+  RecipeCoverSpoonImageChef: objectSchema(["id", "photoUrl", "username"], {
+    id: idSchema,
+    photoUrl: nullableStringSchema,
+    username: { type: "string" },
+  }),
+  RecipeCoverSpoonImage: objectSchema(["chef", "chefId", "cookedAt", "createdAt", "id", "photoUrl", "recipeId", "updatedAt"], {
+    id: idSchema,
+    recipeId: idSchema,
+    chefId: idSchema,
+    photoUrl: { type: "string" },
+    cookedAt: dateTimeSchema,
+    createdAt: dateTimeSchema,
+    updatedAt: dateTimeSchema,
+    chef: ref("RecipeCoverSpoonImageChef"),
+  }),
+  RecipeCoverPagination: objectSchema(["limit", "offset", "count", "hasMore"], {
+    limit: { type: "integer", minimum: 1, maximum: 50 },
+    offset: { type: "integer", minimum: 0 },
+    count: { type: "integer", minimum: 0 },
+    hasMore: { type: "boolean" },
+  }),
+  RecipeCoverListData: objectSchema(["activeCover", "covers", "pagination", "spoonImages"], {
+    activeCover: { oneOf: [ref("RecipeCover"), { type: "null" }] },
+    covers: arrayOf(ref("RecipeCover")),
+    pagination: ref("RecipeCoverPagination"),
+    spoonImages: arrayOf(ref("RecipeCoverSpoonImage")),
+  }),
+  ProviderSecretBlocker: objectSchema(["blocked", "capability", "command", "domain", "outputPath", "ownerAction", "reason"], {
+    blocked: { const: true },
+    capability: { const: "ProviderSecret" },
+    command: { type: "string" },
+    domain: { const: "recipe-covers" },
+    outputPath: { type: "string" },
+    ownerAction: { type: "string" },
+    reason: { type: "string" },
+  }),
+  RecipeCoverMutationData: objectSchema(["activeCover", "blockers", "createdCover", "generationStatus", "mutation", "nextActions", "previousActiveCover", "warnings"], {
+    activeCover: { oneOf: [ref("RecipeCover"), { type: "null" }] },
+    previousActiveCover: { oneOf: [ref("RecipeCover"), { type: "null" }] },
+    createdCover: { oneOf: [ref("RecipeCover"), { type: "null" }] },
+    generationStatus: recipeCoverGenerationStatusSchema,
+    warnings: arrayOf({ type: "string" }),
+    blockers: arrayOf(ref("ProviderSecretBlocker")),
+    nextActions: arrayOf({ type: "string" }),
+    mutation: ref("MutationMetadata"),
+  }),
+  ActiveRecipeCoverMutationData: objectSchema(["activeCover", "archivedCover", "blockers", "mutation", "nextActions", "previousActiveCover", "warnings"], {
+    activeCover: { oneOf: [ref("RecipeCover"), { type: "null" }] },
+    previousActiveCover: { oneOf: [ref("RecipeCover"), { type: "null" }] },
+    archivedCover: { oneOf: [ref("RecipeCover"), { type: "null" }] },
+    warnings: arrayOf({ type: "string" }),
+    blockers: arrayOf(ref("ProviderSecretBlocker")),
+    nextActions: arrayOf({ type: "string" }),
+    mutation: ref("MutationMetadata"),
+  }),
+  RecipeImageUploadRequest: objectSchema(["clientMutationId", "image"], {
+    clientMutationId: shortTextSchema,
+    image: { type: "string", format: "binary", description: "Recipe cover image file. Accepted media types are JPG, PNG, and WebP." },
+    activate: { type: "boolean" },
+    generateEditorial: { type: "boolean", description: "Defaults to true. When provider secrets are missing, the raw cover remains usable and the response includes a ProviderSecret blocker." },
+  }),
+  CreateRecipeCoverRequest: objectSchema(["clientMutationId", "imageUrl"], {
+    clientMutationId: shortTextSchema,
+    imageUrl: { type: "string", description: "Owner-owned Spoonjoy uploaded image URL under /photos/recipes/{ownerId}/... or /photos/spoons/{ownerId}/..." },
+    activate: { type: "boolean" },
+    generateEditorial: { type: "boolean", description: "Defaults to true." },
+  }),
+  ActivateRecipeCoverRequest: objectSchema(["clientMutationId", "variant"], {
+    clientMutationId: shortTextSchema,
+    variant: { type: "string", enum: ["image", "stylized"] },
+  }),
+  ArchiveRecipeCoverRequest: objectSchema(["clientMutationId"], {
+    clientMutationId: shortTextSchema,
+    replacementCoverId: nullableStringSchema,
+    replacementVariant: coverVariantSchema,
+    confirmNoCover: { type: "boolean" },
+    deleteSafeObjects: { type: "boolean", description: "Accepted for client intent tracking; object deletion is not implemented yet and returns a warning." },
+  }),
+  RegenerateRecipeCoverRequest: objectSchema(["clientMutationId", "coverId"], {
+    clientMutationId: shortTextSchema,
+    coverId: idSchema,
+    activateWhenReady: { type: "boolean" },
+  }),
+  RecipeCoverFromSpoonRequest: objectSchema(["clientMutationId"], {
+    clientMutationId: shortTextSchema,
+    activate: { type: "boolean" },
+    generateEditorial: { type: "boolean", description: "Defaults to true." },
+  }),
   CreateTokenRequest: objectSchema(["name"], {
     name: shortTextSchema,
     scopes: {
@@ -946,6 +1064,9 @@ const schemas = {
     recipe: ref("RecipeDetail"),
     mutation: ref("MutationMetadata"),
   }),
+  RecipeCoverListEnvelope: successEnvelope(ref("RecipeCoverListData")),
+  RecipeCoverMutationEnvelope: successEnvelope(ref("RecipeCoverMutationData")),
+  ActiveRecipeCoverMutationEnvelope: successEnvelope(ref("ActiveRecipeCoverMutationData")),
   CookbookListData: objectSchema(["query", "limit", "cursor", "nextCursor", "hasMore", "cookbooks"], {
     query: nullableStringSchema,
     limit: { type: "integer" },
@@ -1127,21 +1248,21 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
     PUT: { operationId: "putApiV1RecipeStepOutputUses", tags: ["Recipe Steps"], summary: "Replace step-output dependency uses", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "ReplaceRecipeStepOutputUsesEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.id], requestBody: "ReplaceRecipeStepOutputUsesRequest" },
   },
   "/api/v1/recipes/{id}/image": {
-    POST: { operationId: "postApiV1RecipeImage", tags: ["Recipe Covers"], summary: "Upload or assign a recipe image", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, parameters: [pathParameters.id], requestBody: "NativeMutationRequest" },
+    POST: { operationId: "postApiV1RecipeImage", tags: ["Recipe Covers"], summary: "Upload a recipe image as a cover candidate", auth: "bearer", scopes: ["kitchen:write"], success: { 201: "RecipeCoverMutationEnvelope", 202: "RecipeCoverMutationEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.id], requestBody: "RecipeImageUploadRequest" },
   },
   "/api/v1/recipes/{id}/covers": {
-    GET: { operationId: "getApiV1RecipeCovers", tags: ["Recipe Covers"], summary: "List recipe cover history", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerReadErrors, parameters: [pathParameters.id] },
-    POST: { operationId: "postApiV1RecipeCovers", tags: ["Recipe Covers"], summary: "Create a recipe cover", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractCreated, errors: bearerMutationErrors, parameters: [pathParameters.id], requestBody: "NativeMutationRequest" },
+    GET: { operationId: "getApiV1RecipeCovers", tags: ["Recipe Covers"], summary: "List owner cover history and spoon photo sources", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "RecipeCoverListEnvelope" }, errors: bearerReadErrors, parameters: [pathParameters.id] },
+    POST: { operationId: "postApiV1RecipeCovers", tags: ["Recipe Covers"], summary: "Create a recipe cover from an uploaded Spoonjoy image URL", auth: "bearer", scopes: ["kitchen:write"], success: { 201: "RecipeCoverMutationEnvelope", 202: "RecipeCoverMutationEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.id], requestBody: "CreateRecipeCoverRequest" },
   },
   "/api/v1/recipes/{id}/covers/{coverId}": {
-    PATCH: { operationId: "patchApiV1RecipeCover", tags: ["Recipe Covers"], summary: "Update a recipe cover", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.coverId], requestBody: "NativeMutationRequest" },
-    DELETE: { operationId: "deleteApiV1RecipeCover", tags: ["Recipe Covers"], summary: "Delete or archive a recipe cover", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.coverId, pathParameters.clientMutationIdHeader] },
+    PATCH: { operationId: "patchApiV1RecipeCover", tags: ["Recipe Covers"], summary: "Set a cover variant as active", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "ActiveRecipeCoverMutationEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.coverId], requestBody: "ActivateRecipeCoverRequest" },
+    DELETE: { operationId: "deleteApiV1RecipeCover", tags: ["Recipe Covers"], summary: "Archive a recipe cover", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "ActiveRecipeCoverMutationEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.coverId, pathParameters.clientMutationIdHeader, pathParameters.clientMutationIdQuery], requestBody: "ArchiveRecipeCoverRequest", requestBodyRequired: false },
   },
   "/api/v1/recipes/{id}/covers/regenerate": {
-    POST: { operationId: "postApiV1RecipeCoversRegenerate", tags: ["Recipe Covers"], summary: "Regenerate a recipe cover", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, parameters: [pathParameters.id], requestBody: "NativeMutationRequest" },
+    POST: { operationId: "postApiV1RecipeCoversRegenerate", tags: ["Recipe Covers"], summary: "Regenerate a cover's editorial variant", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "RecipeCoverMutationEnvelope", 202: "RecipeCoverMutationEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.id], requestBody: "RegenerateRecipeCoverRequest" },
   },
   "/api/v1/recipes/{id}/covers/from-spoon/{spoonId}": {
-    POST: { operationId: "postApiV1RecipeCoverFromSpoon", tags: ["Recipe Covers"], summary: "Create a recipe cover from a spoon", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.spoonId], requestBody: "NativeMutationRequest" },
+    POST: { operationId: "postApiV1RecipeCoverFromSpoon", tags: ["Recipe Covers"], summary: "Create a recipe cover from an existing spoon photo", auth: "bearer", scopes: ["kitchen:write"], success: { 201: "RecipeCoverMutationEnvelope", 202: "RecipeCoverMutationEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.spoonId], requestBody: "RecipeCoverFromSpoonRequest" },
   },
   "/api/v1/recipes/{id}/spoons": {
     GET: { operationId: "getApiV1RecipeSpoons", tags: ["Spoons"], summary: "List recipe spoons and cook logs", auth: "optional", scopes: ["recipes:read"], success: nativeContractSuccess, errors: optionalReadErrors, parameters: [pathParameters.id, queryParameters.cursor, queryParameters.limit] },
@@ -1538,6 +1659,44 @@ const exampleShoppingList = {
   updatedAt: exampleTimestamp,
 };
 const exampleMutation = { clientMutationId: "device-uuid-1", replayed: false };
+const exampleRecipeCover = {
+  id: "cover_1",
+  recipeId: "recipe_1",
+  status: "ready",
+  sourceType: "chef-upload",
+  imageUrl: "/photos/recipes/chef_1/recipe_1/raw.jpg",
+  stylizedImageUrl: "/photos/recipes/chef_1/recipe_1/editorial.jpg",
+  displayUrl: "/photos/recipes/chef_1/recipe_1/editorial.jpg",
+  activeVariant: "stylized",
+  provenanceLabel: "Editorialized chef photo",
+  sourceSpoonId: null,
+  createdById: "chef_1",
+  archivedAt: null,
+  generationStatus: "succeeded",
+  failureReason: null,
+  sourceImageUrl: "/photos/recipes/chef_1/recipe_1/raw.jpg",
+  createdAt: exampleTimestamp,
+};
+const exampleInactiveRecipeCover = {
+  ...exampleRecipeCover,
+  id: "cover_2",
+  stylizedImageUrl: null,
+  displayUrl: "/photos/recipes/chef_1/recipe_1/raw-2.jpg",
+  activeVariant: null,
+  imageUrl: "/photos/recipes/chef_1/recipe_1/raw-2.jpg",
+  provenanceLabel: "Chef photo",
+  generationStatus: "none",
+  sourceImageUrl: "/photos/recipes/chef_1/recipe_1/raw-2.jpg",
+};
+const exampleProviderSecretBlocker = {
+  blocked: true,
+  capability: "ProviderSecret",
+  command: "Set OPENAI_API_KEY, GEMINI_API_KEY, or GOOGLE_API_KEY and rerun the recipe cover mutation.",
+  domain: "recipe-covers",
+  outputPath: "/tmp/spoonjoy/web/provider-secret-blocker-recipe-covers.json",
+  ownerAction: "Provide OPENAI_API_KEY, GEMINI_API_KEY, or GOOGLE_API_KEY for local recipe cover editorial generation.",
+  reason: "Recipe cover editorial image generation requires an image provider secret.",
+};
 const exampleCheckedShoppingItem = { ...exampleShoppingItem, checked: true, checkedAt: exampleTimestamp };
 const exampleDeletedShoppingItem = { ...exampleShoppingItem, deletedAt: exampleTimestamp };
 
@@ -1765,6 +1924,52 @@ const responseExamples: Record<string, unknown> = {
       mutation: exampleMutation,
     },
   },
+  RecipeCoverListEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      activeCover: exampleRecipeCover,
+      covers: [exampleRecipeCover, exampleInactiveRecipeCover],
+      pagination: { limit: 20, offset: 0, count: 2, hasMore: false },
+      spoonImages: [{
+        id: "spoon_1",
+        recipeId: "recipe_1",
+        chefId: "chef_2",
+        photoUrl: "/photos/spoons/chef_2/cooked.jpg",
+        cookedAt: exampleTimestamp,
+        createdAt: exampleTimestamp,
+        updatedAt: exampleTimestamp,
+        chef: { id: "chef_2", username: "jules", photoUrl: null },
+      }],
+    },
+  },
+  RecipeCoverMutationEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      activeCover: exampleRecipeCover,
+      previousActiveCover: null,
+      createdCover: exampleRecipeCover,
+      generationStatus: "succeeded",
+      warnings: [],
+      blockers: [exampleProviderSecretBlocker],
+      nextActions: ["list_recipe_covers", "get_recipe"],
+      mutation: exampleMutation,
+    },
+  },
+  ActiveRecipeCoverMutationEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      activeCover: exampleRecipeCover,
+      previousActiveCover: exampleInactiveRecipeCover,
+      archivedCover: null,
+      warnings: [],
+      blockers: [],
+      nextActions: ["list_recipe_covers", "get_recipe"],
+      mutation: exampleMutation,
+    },
+  },
   CookbookListEnvelope: {
     ok: true,
     requestId: "req_example",
@@ -1918,6 +2123,39 @@ const requestExamples: Record<string, unknown> = {
     inputStepId: "step_2",
     outputStepNums: [1],
   },
+  RecipeImageUploadRequest: {
+    clientMutationId: "cover-upload-device-uuid-1",
+    image: "<binary JPG, PNG, or WebP file>",
+    activate: true,
+    generateEditorial: false,
+  },
+  CreateRecipeCoverRequest: {
+    clientMutationId: "cover-url-device-uuid-1",
+    imageUrl: "/photos/recipes/chef_1/uploads/raw.png",
+    activate: true,
+    generateEditorial: false,
+  },
+  ActivateRecipeCoverRequest: {
+    clientMutationId: "cover-active-device-uuid-1",
+    variant: "stylized",
+  },
+  ArchiveRecipeCoverRequest: {
+    clientMutationId: "cover-archive-device-uuid-1",
+    replacementCoverId: "cover_2",
+    replacementVariant: "image",
+    confirmNoCover: false,
+    deleteSafeObjects: false,
+  },
+  RegenerateRecipeCoverRequest: {
+    clientMutationId: "cover-regenerate-device-uuid-1",
+    coverId: "cover_1",
+    activateWhenReady: true,
+  },
+  RecipeCoverFromSpoonRequest: {
+    clientMutationId: "cover-spoon-device-uuid-1",
+    activate: true,
+    generateEditorial: false,
+  },
   NativeProfileRequest: { email: "ari@example.com", username: "ari" },
   ProfilePhotoUploadRequest: { photo: "<binary image file>" },
   NativeNotificationPreferencesRequest: {
@@ -1948,7 +2186,7 @@ const requestExamples: Record<string, unknown> = {
 };
 
 function requestContentFor(schemaName: string) {
-  if (schemaName === "ProfilePhotoUploadRequest") {
+  if (schemaName === "ProfilePhotoUploadRequest" || schemaName === "RecipeImageUploadRequest") {
     return {
       "multipart/form-data": {
         schema: ref(schemaName),

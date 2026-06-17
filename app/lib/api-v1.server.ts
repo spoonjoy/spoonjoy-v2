@@ -78,6 +78,26 @@ import {
   type NativeRecipeStepIngredientInput,
   type NativeRecipeStepIngredientCreateInput,
 } from "~/lib/api-v1-recipe-steps.server";
+import {
+  activateNativeRecipeCover,
+  archiveNativeRecipeCover,
+  createNativeRecipeCoverFromSpoon,
+  createNativeRecipeCoverFromUrl,
+  listNativeRecipeCovers,
+  loadOwnedNativeRecipeCoverRecipe,
+  nativeRecipeCoverUploadIdempotencyBody,
+  parseNativeRecipeCoverActivateBody,
+  parseNativeRecipeCoverArchiveBody,
+  parseNativeRecipeCoverCreateBody,
+  parseNativeRecipeCoverFromSpoonBody,
+  parseNativeRecipeCoverListUrl,
+  parseNativeRecipeCoverRegenerateBody,
+  parseNativeRecipeCoverUploadRequest,
+  recoverNativeRecipeCoverMutation,
+  regenerateNativeRecipeCover,
+  uploadNativeRecipeImageCover,
+  type ApiV1RecipeCoverResult,
+} from "~/lib/api-v1-recipe-covers.server";
 import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
 import { notifyForkOfMyRecipe } from "~/lib/notification-triggers.server";
 import { enforceRateLimit } from "~/lib/rate-limit.server";
@@ -383,6 +403,20 @@ function apiV1OperationFor(method: string, path: string): string | undefined {
       return "recipes.steps.ingredients.delete";
     case "PUT recipe-step-output-uses":
       return "recipes.steps.output-uses.replace";
+    case "POST recipe-image":
+      return "recipes.image.upload";
+    case "GET recipe-covers":
+      return "recipes.covers.list";
+    case "POST recipe-covers":
+      return "recipes.covers.create";
+    case "PATCH recipe-cover":
+      return "recipes.covers.activate";
+    case "DELETE recipe-cover":
+      return "recipes.covers.archive";
+    case "POST recipe-cover-regenerate":
+      return "recipes.covers.regenerate";
+    case "POST recipe-cover-from-spoon":
+      return "recipes.covers.from-spoon";
     case "GET cookbooks":
       return "cookbooks.list";
     case "GET cookbook":
@@ -1701,6 +1735,15 @@ function recipeStepResultOrThrow<T>(
   return result;
 }
 
+function recipeCoverResultOrThrow<T>(
+  result: ApiV1RecipeCoverResult<T>,
+): { status: number; data: T } {
+  if (!result.ok) {
+    throw new ApiV1Error(result.code, result.message, result.details);
+  }
+  return result;
+}
+
 async function serializedRecipeOrThrow(db: ApiV1WriteDb, recipeId: string, origin: string) {
   const recipe = await loadRecipeById(db, recipeId);
   /* istanbul ignore next -- @preserve post-write reads are covered on every recipe write path; this is a defensive invariant tripwire. */
@@ -2526,6 +2569,249 @@ async function handleRecipeStepOutputUsesReplace(args: ApiV1RouteArgs, requestId
   }));
 }
 
+async function ownedNativeRecipeCoverRecipe(args: ApiV1RouteArgs, principal: ApiPrincipal, recipeId: string) {
+  const db = await getRequestDb(args.context);
+  return recipeCoverResultOrThrow(await loadOwnedNativeRecipeCoverRecipe(db, principal.id, recipeId)).data;
+}
+
+async function handleRecipeCoverList(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string) {
+  const url = new URL(args.request.url);
+  const parsed = parseNativeRecipeCoverListUrl(url);
+  if (!parsed.ok) {
+    throw new ApiV1Error(parsed.code, parsed.message, parsed.details);
+  }
+  const db = await getRequestDb(args.context);
+  const recipe = recipeCoverResultOrThrow(await loadOwnedNativeRecipeCoverRecipe(db, principal.id, recipeId)).data;
+  const result = recipeCoverResultOrThrow(await listNativeRecipeCovers(db, recipe, parsed.data));
+  return apiV1PrivateSuccess(requestId, result.data, result.status);
+}
+
+async function handleRecipeImageUpload(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string) {
+  const parsed = await parseNativeRecipeCoverUploadRequest(args.request);
+  if (!parsed.ok) {
+    throw new ApiV1Error(parsed.code, parsed.message, parsed.details);
+  }
+  const recipe = await ownedNativeRecipeCoverRecipe(args, principal, recipeId);
+  const body = nativeRecipeCoverUploadIdempotencyBody(parsed.data);
+
+  return await runIdempotentApiV1Mutation(
+    args,
+    requestId,
+    principal,
+    body,
+    parsed.data.clientMutationId,
+    "recipes.image.upload",
+    async (db, reservation) => {
+      const result = recipeCoverResultOrThrow(await uploadNativeRecipeImageCover(
+        db,
+        args.context.cloudflare?.env ?? null,
+        principal.id,
+        recipe,
+        parsed.data,
+        reservation,
+      ));
+      return result.data;
+    },
+    (db, reservation) => recoverNativeRecipeCoverMutation(db, args.context.cloudflare?.env ?? null, reservation, {
+      clientMutationId: parsed.data.clientMutationId,
+      principalId: principal.id,
+      recipeId,
+      coverId: reservation.id,
+      operation: "recipes.image.upload",
+      mutationKind: "cover",
+      expectedStatus: 201,
+    }),
+  );
+}
+
+async function handleRecipeCoverCreate(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string) {
+  const body = await parseApiV1JsonBody(args.request);
+  const parsed = parseNativeRecipeCoverCreateBody(body);
+  if (!parsed.ok) {
+    throw new ApiV1Error(parsed.code, parsed.message, parsed.details);
+  }
+  const recipe = await ownedNativeRecipeCoverRecipe(args, principal, recipeId);
+
+  return await runIdempotentApiV1Mutation(
+    args,
+    requestId,
+    principal,
+    body,
+    parsed.data.clientMutationId,
+    "recipes.covers.create",
+    async (db, reservation) => {
+      const result = recipeCoverResultOrThrow(await createNativeRecipeCoverFromUrl(
+        db,
+        args.context.cloudflare?.env ?? null,
+        principal.id,
+        recipe,
+        parsed.data,
+        reservation,
+      ));
+      return result.data;
+    },
+    (db, reservation) => recoverNativeRecipeCoverMutation(db, args.context.cloudflare?.env ?? null, reservation, {
+      clientMutationId: parsed.data.clientMutationId,
+      principalId: principal.id,
+      recipeId,
+      coverId: reservation.id,
+      operation: "recipes.covers.create",
+      mutationKind: "cover",
+      expectedStatus: 201,
+    }),
+  );
+}
+
+async function handleRecipeCoverActivate(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string, coverId: string) {
+  const body = await parseApiV1JsonBody(args.request);
+  const parsed = parseNativeRecipeCoverActivateBody(body);
+  if (!parsed.ok) {
+    throw new ApiV1Error(parsed.code, parsed.message, parsed.details);
+  }
+  const recipe = await ownedNativeRecipeCoverRecipe(args, principal, recipeId);
+
+  return await runIdempotentApiV1Mutation(
+    args,
+    requestId,
+    principal,
+    body,
+    parsed.data.clientMutationId,
+    "recipes.covers.activate",
+    async (db, reservation) => {
+      const result = recipeCoverResultOrThrow(await activateNativeRecipeCover(db, recipe, coverId, parsed.data, reservation));
+      return result.data;
+    },
+    (db, reservation) => recoverNativeRecipeCoverMutation(db, args.context.cloudflare?.env ?? null, reservation, {
+      clientMutationId: parsed.data.clientMutationId,
+      principalId: principal.id,
+      recipeId,
+      coverId,
+      operation: "recipes.covers.activate",
+      mutationKind: "active",
+      expectedStatus: 200,
+    }),
+  );
+}
+
+async function handleRecipeCoverArchive(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string, coverId: string) {
+  const body = await parseApiV1JsonBody(args.request);
+  const url = new URL(args.request.url);
+  const parsed = parseNativeRecipeCoverArchiveBody(
+    body,
+    args.request.headers.get("X-Client-Mutation-Id") ?? url.searchParams.get("clientMutationId"),
+  );
+  if (!parsed.ok) {
+    throw new ApiV1Error(parsed.code, parsed.message, parsed.details);
+  }
+  const idempotencyBody = {
+    clientMutationId: parsed.data.clientMutationId,
+    replacementCoverId: parsed.data.replacementCoverId,
+    replacementVariant: parsed.data.replacementVariant,
+    confirmNoCover: parsed.data.confirmNoCover,
+    deleteSafeObjects: parsed.data.deleteSafeObjects,
+  };
+  const recipe = await ownedNativeRecipeCoverRecipe(args, principal, recipeId);
+
+  return await runIdempotentApiV1Mutation(
+    args,
+    requestId,
+    principal,
+    idempotencyBody,
+    parsed.data.clientMutationId,
+    "recipes.covers.archive",
+    async (db, reservation) => {
+      const result = recipeCoverResultOrThrow(await archiveNativeRecipeCover(db, recipe, coverId, parsed.data, reservation));
+      return result.data;
+    },
+    (db, reservation) => recoverNativeRecipeCoverMutation(db, args.context.cloudflare?.env ?? null, reservation, {
+      clientMutationId: parsed.data.clientMutationId,
+      principalId: principal.id,
+      recipeId,
+      coverId,
+      operation: "recipes.covers.archive",
+      mutationKind: "active",
+      expectedStatus: 200,
+    }),
+  );
+}
+
+async function handleRecipeCoverRegenerate(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string) {
+  const body = await parseApiV1JsonBody(args.request);
+  const parsed = parseNativeRecipeCoverRegenerateBody(body);
+  if (!parsed.ok) {
+    throw new ApiV1Error(parsed.code, parsed.message, parsed.details);
+  }
+  const recipe = await ownedNativeRecipeCoverRecipe(args, principal, recipeId);
+
+  return await runIdempotentApiV1Mutation(
+    args,
+    requestId,
+    principal,
+    body,
+    parsed.data.clientMutationId,
+    "recipes.covers.regenerate",
+    async (db, reservation) => {
+      const result = recipeCoverResultOrThrow(await regenerateNativeRecipeCover(
+        db,
+        args.context.cloudflare?.env ?? null,
+        principal.id,
+        recipe,
+        parsed.data,
+        reservation,
+      ));
+      return result.data;
+    },
+    (db, reservation) => recoverNativeRecipeCoverMutation(db, args.context.cloudflare?.env ?? null, reservation, {
+      clientMutationId: parsed.data.clientMutationId,
+      principalId: principal.id,
+      recipeId,
+      coverId: parsed.data.coverId,
+      operation: "recipes.covers.regenerate",
+      mutationKind: "cover",
+      expectedStatus: 200,
+    }),
+  );
+}
+
+async function handleRecipeCoverFromSpoon(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string, spoonId: string) {
+  const body = await parseApiV1JsonBody(args.request);
+  const parsed = parseNativeRecipeCoverFromSpoonBody(body);
+  if (!parsed.ok) {
+    throw new ApiV1Error(parsed.code, parsed.message, parsed.details);
+  }
+  const recipe = await ownedNativeRecipeCoverRecipe(args, principal, recipeId);
+
+  return await runIdempotentApiV1Mutation(
+    args,
+    requestId,
+    principal,
+    body,
+    parsed.data.clientMutationId,
+    "recipes.covers.from-spoon",
+    async (db, reservation) => {
+      const result = recipeCoverResultOrThrow(await createNativeRecipeCoverFromSpoon(
+        db,
+        args.context.cloudflare?.env ?? null,
+        principal.id,
+        recipe,
+        spoonId,
+        parsed.data,
+        reservation,
+      ));
+      return result.data;
+    },
+    (db, reservation) => recoverNativeRecipeCoverMutation(db, args.context.cloudflare?.env ?? null, reservation, {
+      clientMutationId: parsed.data.clientMutationId,
+      principalId: principal.id,
+      recipeId,
+      coverId: reservation.id,
+      operation: "recipes.covers.from-spoon",
+      mutationKind: "cover",
+      expectedStatus: 201,
+    }),
+  );
+}
+
 function credentialMetadata(credential: ApiCredential) {
   return {
     id: credential.id,
@@ -2755,6 +3041,48 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
     if (args.request.method === "POST" && segments[0] === "recipes" && segments[2] === "fork" && segments.length === 3) {
       const principal = await authorize(path) as ApiPrincipal;
       const response = await handleRecipeFork(args, requestId, principal, segments[1]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "POST" && segments[0] === "recipes" && segments[2] === "image" && segments.length === 3) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeImageUpload(args, requestId, principal, segments[1]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "GET" && segments[0] === "recipes" && segments[2] === "covers" && segments.length === 3) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeCoverList(args, requestId, principal, segments[1]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "POST" && segments[0] === "recipes" && segments[2] === "covers" && segments.length === 3) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeCoverCreate(args, requestId, principal, segments[1]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "POST" && segments[0] === "recipes" && segments[2] === "covers" && segments[3] === "regenerate" && segments.length === 4) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeCoverRegenerate(args, requestId, principal, segments[1]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "POST" && segments[0] === "recipes" && segments[2] === "covers" && segments[3] === "from-spoon" && segments.length === 5) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeCoverFromSpoon(args, requestId, principal, segments[1], segments[4]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "PATCH" && segments[0] === "recipes" && segments[2] === "covers" && segments.length === 4) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeCoverActivate(args, requestId, principal, segments[1], segments[3]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "DELETE" && segments[0] === "recipes" && segments[2] === "covers" && segments.length === 4) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeCoverArchive(args, requestId, principal, segments[1], segments[3]);
       return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
     }
 

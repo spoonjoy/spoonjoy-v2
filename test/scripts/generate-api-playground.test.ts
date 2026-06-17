@@ -38,6 +38,15 @@ describe("generate-api-playground", () => {
         example: expect.stringContaining("\"name\": \"Tiny client\""),
       },
     });
+    expect(manifest.operations.find((operation) => operation.id === "POST /api/v1/recipes/{id}/image")).toMatchObject({
+      auth: "authenticated",
+      scopes: ["kitchen:write"],
+      requestBody: {
+        contentType: "multipart/form-data",
+        fileFields: ["image"],
+        example: expect.stringContaining("\"clientMutationId\": \"cover-upload-device-uuid-1\""),
+      },
+    });
     expect(manifest.operations.find((operation) => operation.id === "GET /api/v1/recipes/{id}")).toMatchObject({
       params: expect.arrayContaining([
         expect.objectContaining({ name: "id", in: "path", placeholder: "recipe_1" }),

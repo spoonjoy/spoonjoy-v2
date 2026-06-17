@@ -135,6 +135,11 @@ describe("/developers/playground", () => {
     expect(data.manifest.operations.find((operation) => operation.id === "GET /api/v1/recipes")?.profiles).toEqual(["full", "connector", "sdk"]);
     expect(data.manifest.operations.find((operation) => operation.id === "POST /oauth/token")?.profiles).toEqual(["full", "sdk"]);
     expect(data.manifest.operations.find((operation) => operation.id === "POST /mcp")?.profiles).toEqual(["full"]);
+    expect(data.manifest.operations.find((operation) => operation.id === "POST /api/v1/recipes/{id}/image")?.requestBody)
+      .toMatchObject({
+        contentType: "multipart/form-data",
+        fileFields: ["image"],
+      });
     expect(data.manifest.operations.length).toBe(PLAYGROUND_OPERATIONS.length);
   });
 
@@ -279,6 +284,7 @@ describe("/developers/playground", () => {
     const root = PLAYGROUND_OPERATIONS.find((operation) => operation.id === "GET /api/v1")!;
     const createToken = PLAYGROUND_OPERATIONS.find((operation) => operation.id === "POST /api/v1/tokens")!;
     const deleteItem = PLAYGROUND_OPERATIONS.find((operation) => operation.id === "DELETE /api/v1/shopping-list/items/{itemId}")!;
+    const uploadImage = PLAYGROUND_OPERATIONS.find((operation) => operation.id === "POST /api/v1/recipes/{id}/image")!;
 
     expect(playgroundFetchOptions(root, "session", "", "", "pg_session")).toEqual({
       method: "GET",
@@ -320,9 +326,25 @@ describe("/developers/playground", () => {
     });
     const generatedRequestId = playgroundFetchOptions(root, "anonymous", "", "");
     expect(generatedRequestId.headers).toEqual({ "X-Request-Id": expect.stringMatching(/^pg_/) });
+    const imageFile = new File(["fake-image"], "cover.jpg", { type: "image/jpeg" });
+    const uploadOptions = playgroundFetchOptions(uploadImage, "session", "", uploadImage.requestBody!.example, "pg_upload", {
+      id: "recipe_1",
+    }, {
+      image: imageFile,
+    });
+    expect(uploadOptions.headers).toEqual({ "X-Request-Id": "pg_upload" });
+    expect(uploadOptions.body).toBeInstanceOf(FormData);
+    const uploadForm = uploadOptions.body as FormData;
+    expect(uploadForm.get("clientMutationId")).toBe("cover-upload-device-uuid-1");
+    expect(uploadForm.get("activate")).toBe("true");
+    expect(uploadForm.get("generateEditorial")).toBe("false");
+    expect(uploadForm.get("image")).toBe(imageFile);
     expect(playgroundBodyError(createToken, "")).toBe("This operation requires a request body.");
     expect(playgroundBodyError(createToken, "{bad")).toBe("JSON body is not valid.");
     expect(playgroundBodyError(createToken, "{\"name\":\"Client\"}")).toBeNull();
+    expect(playgroundBodyError(uploadImage, uploadImage.requestBody!.example)).toBe("Select a file for image before sending.");
+    expect(playgroundBodyError(uploadImage, "{bad", { image: imageFile })).toBe("Multipart fields must be a JSON object.");
+    expect(playgroundBodyError(uploadImage, uploadImage.requestBody!.example, { image: imageFile })).toBeNull();
   });
 
   it("renders all operations and sends the default public recipes request anonymously", async () => {
@@ -647,6 +669,36 @@ describe("/developers/playground", () => {
     expect(await screen.findByText("201 Created")).toBeInTheDocument();
   });
 
+  it("sends generated multipart operations as FormData without a manual content-type boundary", async () => {
+    const fetchMock = vi.fn(async () => mockApiResponse({
+      ok: true,
+      requestId: "req_upload",
+      data: { cover: { id: "cover_1" } },
+    }, { status: 201, statusText: "Created" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await renderPlayground();
+    await screen.findByRole("heading", { name: "Spoonjoy API Playground" });
+    fireEvent.change(screen.getByLabelText(/Search operations/i), { target: { value: "Upload a recipe image" } });
+    fireEvent.click(await screen.findByRole("button", { name: /Upload a recipe image as a cover candidate/i }));
+    fireEvent.change(document.querySelector<HTMLInputElement>("#param-path-id")!, { target: { value: "recipe_1" } });
+    fireEvent.change(screen.getByLabelText("Image file"), {
+      target: { files: [new File(["fake-image"], "cover.jpg", { type: "image/jpeg" })] },
+    });
+    fireEvent.click(screen.getByLabelText(/I understand this request can change real Spoonjoy data/i));
+    fireEvent.click(screen.getByRole("button", { name: "Send Request" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const [path, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(path).toBe("/api/v1/recipes/recipe_1/image");
+    expect(options.headers).toEqual({ "X-Request-Id": expect.stringMatching(/^pg_/) });
+    expect(options.body).toBeInstanceOf(FormData);
+    const body = options.body as FormData;
+    expect(body.get("clientMutationId")).toBe("cover-upload-device-uuid-1");
+    expect((body.get("image") as File).name).toBe("cover.jpg");
+    expect(await screen.findByText("201 Created")).toBeInTheDocument();
+  });
+
   it("blocks blank bearer mode before sending private requests", async () => {
     const fetchMock = vi.fn(async () => mockApiResponse({ ok: true }));
     vi.stubGlobal("fetch", fetchMock);
@@ -767,6 +819,7 @@ describe("/developers/playground", () => {
     const createToken = PLAYGROUND_OPERATIONS.find((operation) => operation.id === "POST /api/v1/tokens")!;
     const authorize = PLAYGROUND_OPERATIONS.find((operation) => operation.id === "GET /oauth/authorize")!;
     const deleteItem = PLAYGROUND_OPERATIONS.find((operation) => operation.id === "DELETE /api/v1/shopping-list/items/{itemId}")!;
+    const uploadImage = PLAYGROUND_OPERATIONS.find((operation) => operation.id === "POST /api/v1/recipes/{id}/image")!;
 
     expect(curlFor("/api/v1", root, "session", "")).toContain("Session mode is browser-only");
     expect(curlFor("/api/v1", root, "session", "")).toContain("await fetch(\"/api/v1\"");
@@ -783,6 +836,15 @@ describe("/developers/playground", () => {
     );
     expect(curlFor("/api/v1/tokens", createToken, "bearer", "{\"name\":\"Client\"}")).toContain(
       "--data '{\"name\":\"Client\"}'",
+    );
+    expect(curlFor("/api/v1/recipes/recipe_1/image", uploadImage, "bearer", uploadImage.requestBody!.example)).toContain(
+      "--form 'image=@/path/to/image'",
+    );
+    expect(curlFor("/api/v1/recipes/recipe_1/image", uploadImage, "bearer", uploadImage.requestBody!.example)).not.toContain(
+      "Content-Type: multipart/form-data",
+    );
+    expect(curlFor("/api/v1/recipes/recipe_1/image", uploadImage, "session", uploadImage.requestBody!.example)).toContain(
+      "const form = new FormData();",
     );
     expect(curlFor("/oauth/authorize?client_id=cm_1", authorize, "anonymous", "")).toContain(
       "open 'https://spoonjoy.app/oauth/authorize?client_id=cm_1'",

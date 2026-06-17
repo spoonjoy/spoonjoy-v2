@@ -45,7 +45,8 @@ export type ApiV1PlaygroundOperation = {
   params: readonly ApiV1PlaygroundParam[];
   requestBody: null | {
     required: boolean;
-    contentType: "application/json" | "application/x-www-form-urlencoded";
+    contentType: "application/json" | "application/x-www-form-urlencoded" | "multipart/form-data";
+    fileFields: readonly string[];
     example: string;
     examples: readonly {
       name: string;
@@ -1244,6 +1245,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": true,
         "contentType": "application/json",
+        "fileFields": [],
         "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"title\": \"Pasta\",\n  \"description\": \"Weeknight pasta\",\n  \"servings\": \"4\",\n  \"steps\": [\n    {\n      \"stepTitle\": null,\n      \"description\": \"Boil pasta.\",\n      \"duration\": null,\n      \"ingredients\": [\n        {\n          \"quantity\": 1,\n          \"unit\": \"lb\",\n          \"name\": \"pasta\"\n        }\n      ]\n    }\n  ]\n}",
         "examples": [
           {
@@ -1613,6 +1615,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": true,
         "contentType": "application/json",
+        "fileFields": [],
         "example": "{\n  \"clientMutationId\": \"device-uuid-2\",\n  \"title\": \"Better Pasta\",\n  \"description\": null,\n  \"servings\": \"6\"\n}",
         "examples": [
           {
@@ -1818,6 +1821,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": true,
         "contentType": "application/json",
+        "fileFields": [],
         "example": "{\n  \"clientMutationId\": \"device-uuid-3\"\n}",
         "examples": [
           {
@@ -2010,6 +2014,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": true,
         "contentType": "application/json",
+        "fileFields": [],
         "example": "{\n  \"clientMutationId\": \"device-uuid-4\",\n  \"title\": \"My Pasta\"\n}",
         "examples": [
           {
@@ -2202,6 +2207,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": true,
         "contentType": "application/json",
+        "fileFields": [],
         "example": "{\n  \"clientMutationId\": \"step-device-uuid-1\",\n  \"stepTitle\": \"Sauce\",\n  \"description\": \"Toss pasta with sauce.\",\n  \"duration\": 3,\n  \"ingredients\": [\n    {\n      \"quantity\": 2,\n      \"unit\": \"cloves\",\n      \"name\": \"garlic\"\n    }\n  ],\n  \"outputStepNums\": [\n    1\n  ]\n}",
         "examples": [
           {
@@ -2406,6 +2412,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": true,
         "contentType": "application/json",
+        "fileFields": [],
         "example": "{\n  \"clientMutationId\": \"step-device-uuid-2\",\n  \"stepTitle\": null,\n  \"description\": \"Toss pasta with glossy sauce.\",\n  \"duration\": null,\n  \"outputStepNums\": [\n    1\n  ]\n}",
         "examples": [
           {
@@ -2634,6 +2641,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": false,
         "contentType": "application/json",
+        "fileFields": [],
         "example": "{\n  \"clientMutationId\": \"step-device-uuid-3\"\n}",
         "examples": [
           {
@@ -2826,6 +2834,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": true,
         "contentType": "application/json",
+        "fileFields": [],
         "example": "{\n  \"clientMutationId\": \"step-reorder-device-uuid-1\",\n  \"stepId\": \"step_2\",\n  \"toStepNum\": 2\n}",
         "examples": [
           {
@@ -3030,6 +3039,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": true,
         "contentType": "application/json",
+        "fileFields": [],
         "example": "{\n  \"clientMutationId\": \"step-ingredient-device-uuid-1\",\n  \"quantity\": 2,\n  \"unit\": \"cloves\",\n  \"name\": \"garlic\"\n}",
         "examples": [
           {
@@ -3270,6 +3280,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": false,
         "contentType": "application/json",
+        "fileFields": [],
         "example": "{\n  \"clientMutationId\": \"step-ingredient-device-uuid-2\"\n}",
         "examples": [
           {
@@ -3462,6 +3473,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": true,
         "contentType": "application/json",
+        "fileFields": [],
         "example": "{\n  \"clientMutationId\": \"step-output-device-uuid-1\",\n  \"inputStepId\": \"step_2\",\n  \"outputStepNums\": [\n    1\n  ]\n}",
         "examples": [
           {
@@ -3574,7 +3586,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
     {
       "id": "POST /api/v1/recipes/{id}/image",
       "operationId": "postApiV1RecipeImage",
-      "label": "Upload or assign a recipe image",
+      "label": "Upload a recipe image as a cover candidate",
       "method": "POST",
       "path": "/api/v1/recipes/{id}/image",
       "profiles": [
@@ -3643,18 +3655,22 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       ],
       "requestBody": {
         "required": true,
-        "contentType": "application/json",
-        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "contentType": "multipart/form-data",
+        "fileFields": [
+          "image"
+        ],
+        "example": "{\n  \"clientMutationId\": \"cover-upload-device-uuid-1\",\n  \"image\": \"<binary JPG, PNG, or WebP file>\",\n  \"activate\": true,\n  \"generateEditorial\": false\n}",
         "examples": [
           {
             "name": "example",
             "label": "Example",
-            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+            "example": "{\n  \"clientMutationId\": \"cover-upload-device-uuid-1\",\n  \"image\": \"<binary JPG, PNG, or WebP file>\",\n  \"activate\": true,\n  \"generateEditorial\": false\n}"
           }
         ]
       },
       "responseStatuses": [
-        "200",
+        "201",
+        "202",
         "400",
         "401",
         "403",
@@ -3666,7 +3682,11 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       ],
       "responseSummaries": [
         {
-          "status": "200",
+          "status": "201",
+          "description": "Success"
+        },
+        {
+          "status": "202",
           "description": "Success"
         },
         {
@@ -3704,10 +3724,16 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       ],
       "responseExamples": [
         {
-          "status": "200",
+          "status": "201",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"activeCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"chef-upload\",\n      \"imageUrl\": \"/photos/recipes/chef_1/recipe_1/raw.jpg\",\n      \"stylizedImageUrl\": \"/photos/recipes/chef_1/recipe_1/editorial.jpg\",\n      \"displayUrl\": \"/photos/recipes/chef_1/recipe_1/editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": null,\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"/photos/recipes/chef_1/recipe_1/raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"previousActiveCover\": null,\n    \"createdCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"chef-upload\",\n      \"imageUrl\": \"/photos/recipes/chef_1/recipe_1/raw.jpg\",\n      \"stylizedImageUrl\": \"/photos/recipes/chef_1/recipe_1/editorial.jpg\",\n      \"displayUrl\": \"/photos/recipes/chef_1/recipe_1/editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": null,\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"/photos/recipes/chef_1/recipe_1/raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"generationStatus\": \"succeeded\",\n    \"warnings\": [],\n    \"blockers\": [\n      {\n        \"blocked\": true,\n        \"capability\": \"ProviderSecret\",\n        \"command\": \"Set OPENAI_API_KEY, GEMINI_API_KEY, or GOOGLE_API_KEY and rerun the recipe cover mutation.\",\n        \"domain\": \"recipe-covers\",\n        \"outputPath\": \"/tmp/spoonjoy/web/provider-secret-blocker-recipe-covers.json\",\n        \"ownerAction\": \"Provide OPENAI_API_KEY, GEMINI_API_KEY, or GOOGLE_API_KEY for local recipe cover editorial generation.\",\n        \"reason\": \"Recipe cover editorial image generation requires an image provider secret.\"\n      }\n    ],\n    \"nextActions\": [\n      \"list_recipe_covers\",\n      \"get_recipe\"\n    ],\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
+        },
+        {
+          "status": "202",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"activeCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"chef-upload\",\n      \"imageUrl\": \"/photos/recipes/chef_1/recipe_1/raw.jpg\",\n      \"stylizedImageUrl\": \"/photos/recipes/chef_1/recipe_1/editorial.jpg\",\n      \"displayUrl\": \"/photos/recipes/chef_1/recipe_1/editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": null,\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"/photos/recipes/chef_1/recipe_1/raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"previousActiveCover\": null,\n    \"createdCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"chef-upload\",\n      \"imageUrl\": \"/photos/recipes/chef_1/recipe_1/raw.jpg\",\n      \"stylizedImageUrl\": \"/photos/recipes/chef_1/recipe_1/editorial.jpg\",\n      \"displayUrl\": \"/photos/recipes/chef_1/recipe_1/editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": null,\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"/photos/recipes/chef_1/recipe_1/raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"generationStatus\": \"succeeded\",\n    \"warnings\": [],\n    \"blockers\": [\n      {\n        \"blocked\": true,\n        \"capability\": \"ProviderSecret\",\n        \"command\": \"Set OPENAI_API_KEY, GEMINI_API_KEY, or GOOGLE_API_KEY and rerun the recipe cover mutation.\",\n        \"domain\": \"recipe-covers\",\n        \"outputPath\": \"/tmp/spoonjoy/web/provider-secret-blocker-recipe-covers.json\",\n        \"ownerAction\": \"Provide OPENAI_API_KEY, GEMINI_API_KEY, or GOOGLE_API_KEY for local recipe cover editorial generation.\",\n        \"reason\": \"Recipe cover editorial image generation requires an image provider secret.\"\n      }\n    ],\n    \"nextActions\": [\n      \"list_recipe_covers\",\n      \"get_recipe\"\n    ],\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -3744,19 +3770,13 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "name": "not_found",
           "label": "Not Found",
           "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
-        },
-        {
-          "status": "405",
-          "name": "method_not_allowed",
-          "label": "Method Not Allowed",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
         }
       ]
     },
     {
       "id": "GET /api/v1/recipes/{id}/covers",
       "operationId": "getApiV1RecipeCovers",
-      "label": "List recipe cover history",
+      "label": "List owner cover history and spoon photo sources",
       "method": "GET",
       "path": "/api/v1/recipes/{id}/covers",
       "profiles": [
@@ -3872,7 +3892,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"activeCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"chef-upload\",\n      \"imageUrl\": \"/photos/recipes/chef_1/recipe_1/raw.jpg\",\n      \"stylizedImageUrl\": \"/photos/recipes/chef_1/recipe_1/editorial.jpg\",\n      \"displayUrl\": \"/photos/recipes/chef_1/recipe_1/editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": null,\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"/photos/recipes/chef_1/recipe_1/raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"covers\": [\n      {\n        \"id\": \"cover_1\",\n        \"recipeId\": \"recipe_1\",\n        \"status\": \"ready\",\n        \"sourceType\": \"chef-upload\",\n        \"imageUrl\": \"/photos/recipes/chef_1/recipe_1/raw.jpg\",\n        \"stylizedImageUrl\": \"/photos/recipes/chef_1/recipe_1/editorial.jpg\",\n        \"displayUrl\": \"/photos/recipes/chef_1/recipe_1/editorial.jpg\",\n        \"activeVariant\": \"stylized\",\n        \"provenanceLabel\": \"Editorialized chef photo\",\n        \"sourceSpoonId\": null,\n        \"createdById\": \"chef_1\",\n        \"archivedAt\": null,\n        \"generationStatus\": \"succeeded\",\n        \"failureReason\": null,\n        \"sourceImageUrl\": \"/photos/recipes/chef_1/recipe_1/raw.jpg\",\n        \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n      },\n      {\n        \"id\": \"cover_2\",\n        \"recipeId\": \"recipe_1\",\n        \"status\": \"ready\",\n        \"sourceType\": \"chef-upload\",\n        \"imageUrl\": \"/photos/recipes/chef_1/recipe_1/raw-2.jpg\",\n        \"stylizedImageUrl\": null,\n        \"displayUrl\": \"/photos/recipes/chef_1/recipe_1/raw-2.jpg\",\n        \"activeVariant\": null,\n        \"provenanceLabel\": \"Chef photo\",\n        \"sourceSpoonId\": null,\n        \"createdById\": \"chef_1\",\n        \"archivedAt\": null,\n        \"generationStatus\": \"none\",\n        \"failureReason\": null,\n        \"sourceImageUrl\": \"/photos/recipes/chef_1/recipe_1/raw-2.jpg\",\n        \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n      }\n    ],\n    \"pagination\": {\n      \"limit\": 20,\n      \"offset\": 0,\n      \"count\": 2,\n      \"hasMore\": false\n    },\n    \"spoonImages\": [\n      {\n        \"id\": \"spoon_1\",\n        \"recipeId\": \"recipe_1\",\n        \"chefId\": \"chef_2\",\n        \"photoUrl\": \"/photos/spoons/chef_2/cooked.jpg\",\n        \"cookedAt\": \"2026-06-01T00:00:00.000Z\",\n        \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n        \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n        \"chef\": {\n          \"id\": \"chef_2\",\n          \"username\": \"jules\",\n          \"photoUrl\": null\n        }\n      }\n    ]\n  }\n}"
         },
         {
           "status": "400",
@@ -3921,7 +3941,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
     {
       "id": "POST /api/v1/recipes/{id}/covers",
       "operationId": "postApiV1RecipeCovers",
-      "label": "Create a recipe cover",
+      "label": "Create a recipe cover from an uploaded Spoonjoy image URL",
       "method": "POST",
       "path": "/api/v1/recipes/{id}/covers",
       "profiles": [
@@ -3991,17 +4011,19 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": true,
         "contentType": "application/json",
-        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "fileFields": [],
+        "example": "{\n  \"clientMutationId\": \"cover-url-device-uuid-1\",\n  \"imageUrl\": \"/photos/recipes/chef_1/uploads/raw.png\",\n  \"activate\": true,\n  \"generateEditorial\": false\n}",
         "examples": [
           {
             "name": "example",
             "label": "Example",
-            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+            "example": "{\n  \"clientMutationId\": \"cover-url-device-uuid-1\",\n  \"imageUrl\": \"/photos/recipes/chef_1/uploads/raw.png\",\n  \"activate\": true,\n  \"generateEditorial\": false\n}"
           }
         ]
       },
       "responseStatuses": [
         "201",
+        "202",
         "400",
         "401",
         "403",
@@ -4014,6 +4036,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "responseSummaries": [
         {
           "status": "201",
+          "description": "Success"
+        },
+        {
+          "status": "202",
           "description": "Success"
         },
         {
@@ -4054,7 +4080,13 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "201",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"activeCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"chef-upload\",\n      \"imageUrl\": \"/photos/recipes/chef_1/recipe_1/raw.jpg\",\n      \"stylizedImageUrl\": \"/photos/recipes/chef_1/recipe_1/editorial.jpg\",\n      \"displayUrl\": \"/photos/recipes/chef_1/recipe_1/editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": null,\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"/photos/recipes/chef_1/recipe_1/raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"previousActiveCover\": null,\n    \"createdCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"chef-upload\",\n      \"imageUrl\": \"/photos/recipes/chef_1/recipe_1/raw.jpg\",\n      \"stylizedImageUrl\": \"/photos/recipes/chef_1/recipe_1/editorial.jpg\",\n      \"displayUrl\": \"/photos/recipes/chef_1/recipe_1/editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": null,\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"/photos/recipes/chef_1/recipe_1/raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"generationStatus\": \"succeeded\",\n    \"warnings\": [],\n    \"blockers\": [\n      {\n        \"blocked\": true,\n        \"capability\": \"ProviderSecret\",\n        \"command\": \"Set OPENAI_API_KEY, GEMINI_API_KEY, or GOOGLE_API_KEY and rerun the recipe cover mutation.\",\n        \"domain\": \"recipe-covers\",\n        \"outputPath\": \"/tmp/spoonjoy/web/provider-secret-blocker-recipe-covers.json\",\n        \"ownerAction\": \"Provide OPENAI_API_KEY, GEMINI_API_KEY, or GOOGLE_API_KEY for local recipe cover editorial generation.\",\n        \"reason\": \"Recipe cover editorial image generation requires an image provider secret.\"\n      }\n    ],\n    \"nextActions\": [\n      \"list_recipe_covers\",\n      \"get_recipe\"\n    ],\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
+        },
+        {
+          "status": "202",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"activeCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"chef-upload\",\n      \"imageUrl\": \"/photos/recipes/chef_1/recipe_1/raw.jpg\",\n      \"stylizedImageUrl\": \"/photos/recipes/chef_1/recipe_1/editorial.jpg\",\n      \"displayUrl\": \"/photos/recipes/chef_1/recipe_1/editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": null,\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"/photos/recipes/chef_1/recipe_1/raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"previousActiveCover\": null,\n    \"createdCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"chef-upload\",\n      \"imageUrl\": \"/photos/recipes/chef_1/recipe_1/raw.jpg\",\n      \"stylizedImageUrl\": \"/photos/recipes/chef_1/recipe_1/editorial.jpg\",\n      \"displayUrl\": \"/photos/recipes/chef_1/recipe_1/editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": null,\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"/photos/recipes/chef_1/recipe_1/raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"generationStatus\": \"succeeded\",\n    \"warnings\": [],\n    \"blockers\": [\n      {\n        \"blocked\": true,\n        \"capability\": \"ProviderSecret\",\n        \"command\": \"Set OPENAI_API_KEY, GEMINI_API_KEY, or GOOGLE_API_KEY and rerun the recipe cover mutation.\",\n        \"domain\": \"recipe-covers\",\n        \"outputPath\": \"/tmp/spoonjoy/web/provider-secret-blocker-recipe-covers.json\",\n        \"ownerAction\": \"Provide OPENAI_API_KEY, GEMINI_API_KEY, or GOOGLE_API_KEY for local recipe cover editorial generation.\",\n        \"reason\": \"Recipe cover editorial image generation requires an image provider secret.\"\n      }\n    ],\n    \"nextActions\": [\n      \"list_recipe_covers\",\n      \"get_recipe\"\n    ],\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -4091,19 +4123,13 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "name": "not_found",
           "label": "Not Found",
           "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
-        },
-        {
-          "status": "405",
-          "name": "method_not_allowed",
-          "label": "Method Not Allowed",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
         }
       ]
     },
     {
       "id": "PATCH /api/v1/recipes/{id}/covers/{coverId}",
       "operationId": "patchApiV1RecipeCover",
-      "label": "Update a recipe cover",
+      "label": "Set a cover variant as active",
       "method": "PATCH",
       "path": "/api/v1/recipes/{id}/covers/{coverId}",
       "profiles": [
@@ -4185,12 +4211,13 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": true,
         "contentType": "application/json",
-        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "fileFields": [],
+        "example": "{\n  \"clientMutationId\": \"cover-active-device-uuid-1\",\n  \"variant\": \"stylized\"\n}",
         "examples": [
           {
             "name": "example",
             "label": "Example",
-            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+            "example": "{\n  \"clientMutationId\": \"cover-active-device-uuid-1\",\n  \"variant\": \"stylized\"\n}"
           }
         ]
       },
@@ -4248,7 +4275,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"activeCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"chef-upload\",\n      \"imageUrl\": \"/photos/recipes/chef_1/recipe_1/raw.jpg\",\n      \"stylizedImageUrl\": \"/photos/recipes/chef_1/recipe_1/editorial.jpg\",\n      \"displayUrl\": \"/photos/recipes/chef_1/recipe_1/editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": null,\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"/photos/recipes/chef_1/recipe_1/raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"previousActiveCover\": {\n      \"id\": \"cover_2\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"chef-upload\",\n      \"imageUrl\": \"/photos/recipes/chef_1/recipe_1/raw-2.jpg\",\n      \"stylizedImageUrl\": null,\n      \"displayUrl\": \"/photos/recipes/chef_1/recipe_1/raw-2.jpg\",\n      \"activeVariant\": null,\n      \"provenanceLabel\": \"Chef photo\",\n      \"sourceSpoonId\": null,\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"none\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"/photos/recipes/chef_1/recipe_1/raw-2.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"archivedCover\": null,\n    \"warnings\": [],\n    \"blockers\": [],\n    \"nextActions\": [\n      \"list_recipe_covers\",\n      \"get_recipe\"\n    ],\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -4297,7 +4324,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
     {
       "id": "DELETE /api/v1/recipes/{id}/covers/{coverId}",
       "operationId": "deleteApiV1RecipeCover",
-      "label": "Delete or archive a recipe cover",
+      "label": "Archive a recipe cover",
       "method": "DELETE",
       "path": "/api/v1/recipes/{id}/covers/{coverId}",
       "profiles": [
@@ -4376,6 +4403,18 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         },
         {
+          "name": "clientMutationId",
+          "in": "query",
+          "label": "Client Mutation Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "clientMutationId",
+          "description": "Chef-wide idempotency key fallback for clients that cannot send a JSON body with DELETE. Prefer the JSON body or X-Client-Mutation-Id header.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
           "name": "X-Request-Id",
           "in": "header",
           "label": "X Request Id",
@@ -4388,7 +4427,19 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         }
       ],
-      "requestBody": null,
+      "requestBody": {
+        "required": false,
+        "contentType": "application/json",
+        "fileFields": [],
+        "example": "{\n  \"clientMutationId\": \"cover-archive-device-uuid-1\",\n  \"replacementCoverId\": \"cover_2\",\n  \"replacementVariant\": \"image\",\n  \"confirmNoCover\": false,\n  \"deleteSafeObjects\": false\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"cover-archive-device-uuid-1\",\n  \"replacementCoverId\": \"cover_2\",\n  \"replacementVariant\": \"image\",\n  \"confirmNoCover\": false,\n  \"deleteSafeObjects\": false\n}"
+          }
+        ]
+      },
       "responseStatuses": [
         "200",
         "400",
@@ -4443,7 +4494,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"activeCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"chef-upload\",\n      \"imageUrl\": \"/photos/recipes/chef_1/recipe_1/raw.jpg\",\n      \"stylizedImageUrl\": \"/photos/recipes/chef_1/recipe_1/editorial.jpg\",\n      \"displayUrl\": \"/photos/recipes/chef_1/recipe_1/editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": null,\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"/photos/recipes/chef_1/recipe_1/raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"previousActiveCover\": {\n      \"id\": \"cover_2\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"chef-upload\",\n      \"imageUrl\": \"/photos/recipes/chef_1/recipe_1/raw-2.jpg\",\n      \"stylizedImageUrl\": null,\n      \"displayUrl\": \"/photos/recipes/chef_1/recipe_1/raw-2.jpg\",\n      \"activeVariant\": null,\n      \"provenanceLabel\": \"Chef photo\",\n      \"sourceSpoonId\": null,\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"none\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"/photos/recipes/chef_1/recipe_1/raw-2.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"archivedCover\": null,\n    \"warnings\": [],\n    \"blockers\": [],\n    \"nextActions\": [\n      \"list_recipe_covers\",\n      \"get_recipe\"\n    ],\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -4492,7 +4543,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
     {
       "id": "POST /api/v1/recipes/{id}/covers/regenerate",
       "operationId": "postApiV1RecipeCoversRegenerate",
-      "label": "Regenerate a recipe cover",
+      "label": "Regenerate a cover's editorial variant",
       "method": "POST",
       "path": "/api/v1/recipes/{id}/covers/regenerate",
       "profiles": [
@@ -4562,17 +4613,19 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": true,
         "contentType": "application/json",
-        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "fileFields": [],
+        "example": "{\n  \"clientMutationId\": \"cover-regenerate-device-uuid-1\",\n  \"coverId\": \"cover_1\",\n  \"activateWhenReady\": true\n}",
         "examples": [
           {
             "name": "example",
             "label": "Example",
-            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+            "example": "{\n  \"clientMutationId\": \"cover-regenerate-device-uuid-1\",\n  \"coverId\": \"cover_1\",\n  \"activateWhenReady\": true\n}"
           }
         ]
       },
       "responseStatuses": [
         "200",
+        "202",
         "400",
         "401",
         "403",
@@ -4585,6 +4638,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "responseSummaries": [
         {
           "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "202",
           "description": "Success"
         },
         {
@@ -4625,7 +4682,13 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"activeCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"chef-upload\",\n      \"imageUrl\": \"/photos/recipes/chef_1/recipe_1/raw.jpg\",\n      \"stylizedImageUrl\": \"/photos/recipes/chef_1/recipe_1/editorial.jpg\",\n      \"displayUrl\": \"/photos/recipes/chef_1/recipe_1/editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": null,\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"/photos/recipes/chef_1/recipe_1/raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"previousActiveCover\": null,\n    \"createdCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"chef-upload\",\n      \"imageUrl\": \"/photos/recipes/chef_1/recipe_1/raw.jpg\",\n      \"stylizedImageUrl\": \"/photos/recipes/chef_1/recipe_1/editorial.jpg\",\n      \"displayUrl\": \"/photos/recipes/chef_1/recipe_1/editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": null,\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"/photos/recipes/chef_1/recipe_1/raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"generationStatus\": \"succeeded\",\n    \"warnings\": [],\n    \"blockers\": [\n      {\n        \"blocked\": true,\n        \"capability\": \"ProviderSecret\",\n        \"command\": \"Set OPENAI_API_KEY, GEMINI_API_KEY, or GOOGLE_API_KEY and rerun the recipe cover mutation.\",\n        \"domain\": \"recipe-covers\",\n        \"outputPath\": \"/tmp/spoonjoy/web/provider-secret-blocker-recipe-covers.json\",\n        \"ownerAction\": \"Provide OPENAI_API_KEY, GEMINI_API_KEY, or GOOGLE_API_KEY for local recipe cover editorial generation.\",\n        \"reason\": \"Recipe cover editorial image generation requires an image provider secret.\"\n      }\n    ],\n    \"nextActions\": [\n      \"list_recipe_covers\",\n      \"get_recipe\"\n    ],\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
+        },
+        {
+          "status": "202",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"activeCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"chef-upload\",\n      \"imageUrl\": \"/photos/recipes/chef_1/recipe_1/raw.jpg\",\n      \"stylizedImageUrl\": \"/photos/recipes/chef_1/recipe_1/editorial.jpg\",\n      \"displayUrl\": \"/photos/recipes/chef_1/recipe_1/editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": null,\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"/photos/recipes/chef_1/recipe_1/raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"previousActiveCover\": null,\n    \"createdCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"chef-upload\",\n      \"imageUrl\": \"/photos/recipes/chef_1/recipe_1/raw.jpg\",\n      \"stylizedImageUrl\": \"/photos/recipes/chef_1/recipe_1/editorial.jpg\",\n      \"displayUrl\": \"/photos/recipes/chef_1/recipe_1/editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": null,\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"/photos/recipes/chef_1/recipe_1/raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"generationStatus\": \"succeeded\",\n    \"warnings\": [],\n    \"blockers\": [\n      {\n        \"blocked\": true,\n        \"capability\": \"ProviderSecret\",\n        \"command\": \"Set OPENAI_API_KEY, GEMINI_API_KEY, or GOOGLE_API_KEY and rerun the recipe cover mutation.\",\n        \"domain\": \"recipe-covers\",\n        \"outputPath\": \"/tmp/spoonjoy/web/provider-secret-blocker-recipe-covers.json\",\n        \"ownerAction\": \"Provide OPENAI_API_KEY, GEMINI_API_KEY, or GOOGLE_API_KEY for local recipe cover editorial generation.\",\n        \"reason\": \"Recipe cover editorial image generation requires an image provider secret.\"\n      }\n    ],\n    \"nextActions\": [\n      \"list_recipe_covers\",\n      \"get_recipe\"\n    ],\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -4662,19 +4725,13 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "name": "not_found",
           "label": "Not Found",
           "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
-        },
-        {
-          "status": "405",
-          "name": "method_not_allowed",
-          "label": "Method Not Allowed",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
         }
       ]
     },
     {
       "id": "POST /api/v1/recipes/{id}/covers/from-spoon/{spoonId}",
       "operationId": "postApiV1RecipeCoverFromSpoon",
-      "label": "Create a recipe cover from a spoon",
+      "label": "Create a recipe cover from an existing spoon photo",
       "method": "POST",
       "path": "/api/v1/recipes/{id}/covers/from-spoon/{spoonId}",
       "profiles": [
@@ -4756,17 +4813,19 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": true,
         "contentType": "application/json",
-        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "fileFields": [],
+        "example": "{\n  \"clientMutationId\": \"cover-spoon-device-uuid-1\",\n  \"activate\": true,\n  \"generateEditorial\": false\n}",
         "examples": [
           {
             "name": "example",
             "label": "Example",
-            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+            "example": "{\n  \"clientMutationId\": \"cover-spoon-device-uuid-1\",\n  \"activate\": true,\n  \"generateEditorial\": false\n}"
           }
         ]
       },
       "responseStatuses": [
-        "200",
+        "201",
+        "202",
         "400",
         "401",
         "403",
@@ -4778,7 +4837,11 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       ],
       "responseSummaries": [
         {
-          "status": "200",
+          "status": "201",
+          "description": "Success"
+        },
+        {
+          "status": "202",
           "description": "Success"
         },
         {
@@ -4816,10 +4879,16 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       ],
       "responseExamples": [
         {
-          "status": "200",
+          "status": "201",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"activeCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"chef-upload\",\n      \"imageUrl\": \"/photos/recipes/chef_1/recipe_1/raw.jpg\",\n      \"stylizedImageUrl\": \"/photos/recipes/chef_1/recipe_1/editorial.jpg\",\n      \"displayUrl\": \"/photos/recipes/chef_1/recipe_1/editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": null,\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"/photos/recipes/chef_1/recipe_1/raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"previousActiveCover\": null,\n    \"createdCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"chef-upload\",\n      \"imageUrl\": \"/photos/recipes/chef_1/recipe_1/raw.jpg\",\n      \"stylizedImageUrl\": \"/photos/recipes/chef_1/recipe_1/editorial.jpg\",\n      \"displayUrl\": \"/photos/recipes/chef_1/recipe_1/editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": null,\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"/photos/recipes/chef_1/recipe_1/raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"generationStatus\": \"succeeded\",\n    \"warnings\": [],\n    \"blockers\": [\n      {\n        \"blocked\": true,\n        \"capability\": \"ProviderSecret\",\n        \"command\": \"Set OPENAI_API_KEY, GEMINI_API_KEY, or GOOGLE_API_KEY and rerun the recipe cover mutation.\",\n        \"domain\": \"recipe-covers\",\n        \"outputPath\": \"/tmp/spoonjoy/web/provider-secret-blocker-recipe-covers.json\",\n        \"ownerAction\": \"Provide OPENAI_API_KEY, GEMINI_API_KEY, or GOOGLE_API_KEY for local recipe cover editorial generation.\",\n        \"reason\": \"Recipe cover editorial image generation requires an image provider secret.\"\n      }\n    ],\n    \"nextActions\": [\n      \"list_recipe_covers\",\n      \"get_recipe\"\n    ],\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
+        },
+        {
+          "status": "202",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"activeCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"chef-upload\",\n      \"imageUrl\": \"/photos/recipes/chef_1/recipe_1/raw.jpg\",\n      \"stylizedImageUrl\": \"/photos/recipes/chef_1/recipe_1/editorial.jpg\",\n      \"displayUrl\": \"/photos/recipes/chef_1/recipe_1/editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": null,\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"/photos/recipes/chef_1/recipe_1/raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"previousActiveCover\": null,\n    \"createdCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"chef-upload\",\n      \"imageUrl\": \"/photos/recipes/chef_1/recipe_1/raw.jpg\",\n      \"stylizedImageUrl\": \"/photos/recipes/chef_1/recipe_1/editorial.jpg\",\n      \"displayUrl\": \"/photos/recipes/chef_1/recipe_1/editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": null,\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"/photos/recipes/chef_1/recipe_1/raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"generationStatus\": \"succeeded\",\n    \"warnings\": [],\n    \"blockers\": [\n      {\n        \"blocked\": true,\n        \"capability\": \"ProviderSecret\",\n        \"command\": \"Set OPENAI_API_KEY, GEMINI_API_KEY, or GOOGLE_API_KEY and rerun the recipe cover mutation.\",\n        \"domain\": \"recipe-covers\",\n        \"outputPath\": \"/tmp/spoonjoy/web/provider-secret-blocker-recipe-covers.json\",\n        \"ownerAction\": \"Provide OPENAI_API_KEY, GEMINI_API_KEY, or GOOGLE_API_KEY for local recipe cover editorial generation.\",\n        \"reason\": \"Recipe cover editorial image generation requires an image provider secret.\"\n      }\n    ],\n    \"nextActions\": [\n      \"list_recipe_covers\",\n      \"get_recipe\"\n    ],\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -4856,12 +4925,6 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "name": "not_found",
           "label": "Not Found",
           "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
-        },
-        {
-          "status": "405",
-          "name": "method_not_allowed",
-          "label": "Method Not Allowed",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
         }
       ]
     },
@@ -5137,6 +5200,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": true,
         "contentType": "application/json",
+        "fileFields": [],
         "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
         "examples": [
           {
@@ -5331,6 +5395,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": true,
         "contentType": "application/json",
+        "fileFields": [],
         "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
         "examples": [
           {
@@ -5928,6 +5993,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": true,
         "contentType": "application/json",
+        "fileFields": [],
         "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
         "examples": [
           {
@@ -6286,6 +6352,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": true,
         "contentType": "application/json",
+        "fileFields": [],
         "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
         "examples": [
           {
@@ -6663,6 +6730,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": true,
         "contentType": "application/json",
+        "fileFields": [],
         "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
         "examples": [
           {
@@ -7401,6 +7469,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": true,
         "contentType": "application/json",
+        "fileFields": [],
         "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"name\": \"Eggs\",\n  \"quantity\": 12,\n  \"unit\": \"Each\",\n  \"categoryKey\": null,\n  \"iconKey\": null\n}",
         "examples": [
           {
@@ -7604,6 +7673,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": true,
         "contentType": "application/json",
+        "fileFields": [],
         "example": "{\n  \"clientMutationId\": \"device-uuid-2\",\n  \"checked\": true\n}",
         "examples": [
           {
@@ -7975,6 +8045,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": true,
         "contentType": "application/json",
+        "fileFields": [],
         "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
         "examples": [
           {
@@ -8148,6 +8219,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": true,
         "contentType": "application/json",
+        "fileFields": [],
         "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
         "examples": [
           {
@@ -8321,6 +8393,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": true,
         "contentType": "application/json",
+        "fileFields": [],
         "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
         "examples": [
           {
@@ -8643,6 +8716,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": true,
         "contentType": "application/json",
+        "fileFields": [],
         "example": "{\n  \"email\": \"ari@example.com\",\n  \"username\": \"ari\"\n}",
         "examples": [
           {
@@ -8809,7 +8883,21 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         }
       ],
-      "requestBody": null,
+      "requestBody": {
+        "required": true,
+        "contentType": "multipart/form-data",
+        "fileFields": [
+          "photo"
+        ],
+        "example": "{\n  \"photo\": \"<binary image file>\"\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"photo\": \"<binary image file>\"\n}"
+          }
+        ]
+      },
       "responseStatuses": [
         "200",
         "400",
@@ -9434,6 +9522,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": true,
         "contentType": "application/json",
+        "fileFields": [],
         "example": "{\n  \"notifySpoonOnMyRecipe\": false,\n  \"notifyForkOfMyRecipe\": true,\n  \"notifyCookbookSaveOfMine\": false,\n  \"notifyFellowChefOriginCook\": true\n}",
         "examples": [
           {
@@ -9603,6 +9692,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": true,
         "contentType": "application/json",
+        "fileFields": [],
         "example": "{\n  \"deviceId\": \"ios-simulator-1\",\n  \"platform\": \"ios\",\n  \"environment\": \"development\",\n  \"token\": \"apns-token-...\",\n  \"deviceName\": \"iPhone\",\n  \"appVersion\": \"1.0.0\"\n}",
         "examples": [
           {
@@ -10412,6 +10502,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": true,
         "contentType": "application/json",
+        "fileFields": [],
         "example": "{\n  \"name\": \"Tiny client\",\n  \"scopes\": [\n    \"recipes:read\",\n    \"shopping_list:read\",\n    \"shopping_list:write\"\n  ]\n}",
         "examples": [
           {
@@ -11686,6 +11777,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": true,
         "contentType": "application/json",
+        "fileFields": [],
         "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
         "examples": [
           {
@@ -11826,6 +11918,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": true,
         "contentType": "application/json",
+        "fileFields": [],
         "example": "{\n  \"client_name\": \"Grocery helper\",\n  \"redirect_uris\": [\n    \"https://example.com/oauth/callback\"\n  ],\n  \"token_endpoint_auth_method\": \"none\",\n  \"grant_types\": [\n    \"authorization_code\",\n    \"refresh_token\"\n  ],\n  \"response_types\": [\n    \"code\"\n  ]\n}",
         "examples": [
           {
@@ -12059,6 +12152,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": true,
         "contentType": "application/x-www-form-urlencoded",
+        "fileFields": [],
         "example": "grant_type=authorization_code&client_id=cm_client_id_from_register&redirect_uri=https%3A%2F%2Fexample.com%2Foauth%2Fcallback&code=oac_...&code_verifier=pkce_verifier_0123456789_abcdefghijklmnopqrstuvwxyz_ABCDEF",
         "examples": [
           {
@@ -12144,6 +12238,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": true,
         "contentType": "application/x-www-form-urlencoded",
+        "fileFields": [],
         "example": "token=ort_...&client_id=cm_client_id_from_register&token_type_hint=refresh_token",
         "examples": [
           {
@@ -12223,6 +12318,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": false,
         "contentType": "application/json",
+        "fileFields": [],
         "example": "{\n  \"agentName\": \"Kitchen display\",\n  \"scopes\": \"shopping_list:read shopping_list:write\"\n}",
         "examples": [
           {
@@ -12303,6 +12399,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": true,
         "contentType": "application/json",
+        "fileFields": [],
         "example": "{\n  \"deviceCode\": \"sjdc_...\"\n}",
         "examples": [
           {
@@ -12410,6 +12507,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": true,
         "contentType": "application/json",
+        "fileFields": [],
         "example": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/list\",\n  \"params\": {}\n}",
         "examples": [
           {

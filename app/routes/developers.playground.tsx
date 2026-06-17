@@ -18,6 +18,7 @@ import { CookbookHeader, CookbookPage, CookbookSectionTitle } from "~/components
 
 type PlaygroundAuthMode = "session" | "bearer" | "anonymous";
 type PlaygroundSurface = "full" | "connector" | "sdk";
+type PlaygroundMultipartFiles = Record<string, File>;
 
 type PlaygroundResponse = {
   status: number;
@@ -69,6 +70,18 @@ function defaultBodies(operations: readonly ApiV1PlaygroundOperation[]): Record<
   );
 }
 
+function requestBodyLabel(operation: ApiV1PlaygroundOperation) {
+  if (operation.requestBody?.contentType === "application/x-www-form-urlencoded") return "Form body";
+  if (operation.requestBody?.contentType === "multipart/form-data") return "Multipart fields";
+  return "JSON body";
+}
+
+function bodyFieldLabel(name: string) {
+  return name
+    .replace(/[-_]+/g, " ")
+    .replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
 function defaultParamsByOperation(operations: readonly ApiV1PlaygroundOperation[]) {
   return Object.fromEntries(operations.map((operation) => [operation.id, defaultParams(operation)]));
 }
@@ -110,6 +123,59 @@ function shellQuote(value: string) {
   return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
+function isMultipartBody(operation: ApiV1PlaygroundOperation) {
+  return operation.requestBody?.contentType === "multipart/form-data";
+}
+
+function parseObjectBody(bodyText: string) {
+  const parsed = JSON.parse(bodyText) as unknown;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("Request body must be a JSON object.");
+  }
+  return parsed as Record<string, unknown>;
+}
+
+function multipartFieldValue(value: unknown) {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return JSON.stringify(value);
+}
+
+function multipartFields(operation: ApiV1PlaygroundOperation, bodyText: string) {
+  const parsed = parseObjectBody(bodyText);
+  const fileFields = new Set(operation.requestBody?.fileFields ?? []);
+  return Object.entries(parsed).filter(([name]) => !fileFields.has(name));
+}
+
+function multipartFormData(operation: ApiV1PlaygroundOperation, bodyText: string, files: PlaygroundMultipartFiles = {}) {
+  const formData = new FormData();
+  for (const [name, value] of multipartFields(operation, bodyText)) {
+    formData.append(name, multipartFieldValue(value));
+  }
+  for (const name of operation.requestBody?.fileFields ?? []) {
+    const file = files[name];
+    if (file) formData.append(name, file);
+  }
+  return formData;
+}
+
+function multipartFilePlaceholder(name: string) {
+  return `@/path/to/${name}`;
+}
+
+function multipartFormRows(operation: ApiV1PlaygroundOperation, bodyText: string) {
+  const rows = multipartFields(operation, bodyText).map(([name, value]) => ({
+    name,
+    value: multipartFieldValue(value),
+    isFile: false,
+  }));
+  for (const name of operation.requestBody?.fileFields ?? []) {
+    rows.push({ name, value: multipartFilePlaceholder(name), isFile: true });
+  }
+  return rows;
+}
+
 export function curlFor(
   path: string,
   operation: ApiV1PlaygroundOperation,
@@ -130,6 +196,29 @@ export function curlFor(
     const headers = operation.params
       .filter((param) => param.in === "header" && params[param.name]?.trim())
       .map((param) => `    ${JSON.stringify(param.name)}: ${JSON.stringify(params[param.name]!.trim())},`);
+    if (isMultipartBody(operation) && bodyText.trim()) {
+      return [
+        "// Session mode is browser-only: run from a signed-in Spoonjoy page.",
+        "const form = new FormData();",
+        ...multipartFormRows(operation, bodyText).map((row) => (
+          row.isFile
+            ? `form.append(${JSON.stringify(row.name)}, ${row.name}File);`
+            : `form.append(${JSON.stringify(row.name)}, ${JSON.stringify(row.value)});`
+        )),
+        `await fetch(${JSON.stringify(path)}, {`,
+        `  method: ${JSON.stringify(operation.method)},`,
+        `  credentials: "same-origin",`,
+        ...(headers.length
+          ? [
+              "  headers: {",
+              ...headers,
+              "  },",
+            ]
+          : []),
+        "  body: form,",
+        "});",
+      ].join("\n");
+    }
     return [
       "// Session mode is browser-only: run from a signed-in Spoonjoy page.",
       `await fetch(${JSON.stringify(path)}, {`,
@@ -158,8 +247,14 @@ export function curlFor(
     }
   }
   if (bodyText.trim()) {
-    lines.push(`  -H 'Content-Type: ${operation.requestBody?.contentType ?? "application/json"}'`);
-    lines.push(`  --data ${shellQuote(bodyText.trim())}`);
+    if (isMultipartBody(operation)) {
+      for (const row of multipartFormRows(operation, bodyText)) {
+        lines.push(`  --form ${shellQuote(`${row.name}=${row.value}`)}`);
+      }
+    } else {
+      lines.push(`  -H 'Content-Type: ${operation.requestBody?.contentType ?? "application/json"}'`);
+      lines.push(`  --data ${shellQuote(bodyText.trim())}`);
+    }
   }
 
   return lines.join(" \\\n");
@@ -215,6 +310,7 @@ export function playgroundFetchOptions(
   bodyText: string,
   requestId = playgroundRequestId(),
   params: Record<string, string> = {},
+  multipartFiles: PlaygroundMultipartFiles = {},
 ): RequestInit {
   const headers: Record<string, string> = { "X-Request-Id": requestId };
   if (authMode === "bearer" && token.trim()) headers.Authorization = `Bearer ${token.trim()}`;
@@ -225,22 +321,38 @@ export function playgroundFetchOptions(
   }
   const trimmedBody = bodyText.trim();
   if (trimmedBody && operation.method !== "GET") {
-    headers["Content-Type"] = operation.requestBody!.contentType;
+    if (!isMultipartBody(operation)) headers["Content-Type"] = operation.requestBody!.contentType;
   }
 
   return {
     method: operation.method,
     credentials: authMode === "session" ? "same-origin" : "omit",
     headers,
-    ...(trimmedBody && operation.method !== "GET" ? { body: trimmedBody } : {}),
+    ...(trimmedBody && operation.method !== "GET"
+      ? { body: isMultipartBody(operation) ? multipartFormData(operation, trimmedBody, multipartFiles) : trimmedBody }
+      : {}),
   };
 }
 
-export function playgroundBodyError(operation: ApiV1PlaygroundOperation, bodyText: string) {
+export function playgroundBodyError(
+  operation: ApiV1PlaygroundOperation,
+  bodyText: string,
+  multipartFiles: PlaygroundMultipartFiles = {},
+) {
   if (!operation.requestBody) return null;
   const trimmedBody = bodyText.trim();
   if (operation.requestBody.required && !trimmedBody) return "This operation requires a request body.";
-  if (!trimmedBody || operation.requestBody.contentType !== "application/json") return null;
+  if (!trimmedBody) return null;
+  if (isMultipartBody(operation)) {
+    try {
+      parseObjectBody(trimmedBody);
+    } catch {
+      return "Multipart fields must be a JSON object.";
+    }
+    const missingFile = operation.requestBody.fileFields.find((name) => !multipartFiles[name]);
+    return missingFile ? `Select a file for ${missingFile} before sending.` : null;
+  }
+  if (operation.requestBody.contentType !== "application/json") return null;
   try {
     JSON.parse(trimmedBody);
     return null;
@@ -546,6 +658,7 @@ export default function DeveloperPlayground() {
     defaultParamsByOperation(operations)
   ));
   const [bodiesByOperation, setBodiesByOperation] = useState<Record<string, string>>(() => defaultBodies(operations));
+  const [multipartFilesByOperation, setMultipartFilesByOperation] = useState<Record<string, PlaygroundMultipartFiles>>({});
   const [authMode, setAuthMode] = useState<PlaygroundAuthMode>(() => defaultAuthModeFor(selected, isAuthenticated));
   const [token, setToken] = useState("");
   const [pkceVerifier, setPkceVerifier] = useState("");
@@ -561,6 +674,7 @@ export default function DeveloperPlayground() {
 
   const params = paramsByOperation[selected.id]!;
   const bodyText = bodiesByOperation[selected.id]!;
+  const multipartFiles = multipartFilesByOperation[selected.id] ?? {};
   const path = useMemo(() => playgroundPath(selected, params), [selected, params]);
   /* istanbul ignore next -- @preserve SSR fallback for non-interactive rendering; playground tests run with a browser-like window. */
   const curlBaseUrl = typeof window === "undefined" ? "https://spoonjoy.app" : window.location.origin;
@@ -568,7 +682,7 @@ export default function DeveloperPlayground() {
   const missingParams = missingRequiredParams(selected, params);
   const authModeAllowed = selected.credentialModes.includes(authMode);
   const bearerError = authMode === "bearer" && !token.trim() ? "Paste a bearer token before sending in Bearer mode." : null;
-  const bodyError = playgroundBodyError(selected, bodyText);
+  const bodyError = playgroundBodyError(selected, bodyText, multipartFiles);
   const riskNeedsConfirmation = selected.risk !== "safe";
   const riskError = riskNeedsConfirmation && !confirmedRisk ? "Confirm this real-data operation before sending." : null;
   const validationErrors = [
@@ -582,7 +696,7 @@ export default function DeveloperPlayground() {
   const canSend = validationErrors.length === 0 && !isSending;
   const visibleAuthModes = allowedAuthModes(selected);
   const validationId = validationErrors.length ? "playground-validation-errors" : undefined;
-  const hasBodyMutationId = selected.requestBody?.contentType === "application/json" && (
+  const hasBodyMutationId = (selected.requestBody?.contentType === "application/json" || selected.requestBody?.contentType === "multipart/form-data") && (
     bodyHasClientMutationId(bodyText) || bodyHasClientMutationId(selected.requestBody.example)
   );
   const hasHeaderMutationId = selected.params.some((param) => param.name === "X-Client-Mutation-Id");
@@ -680,6 +794,19 @@ export default function DeveloperPlayground() {
     }));
   }
 
+  function updateMultipartFile(name: string, file: File | null) {
+    setConfirmedRisk(false);
+    setMultipartFilesByOperation((current) => {
+      const operationFiles = { ...(current[selected.id] ?? {}) };
+      if (file) {
+        operationFiles[name] = file;
+      } else {
+        delete operationFiles[name];
+      }
+      return { ...current, [selected.id]: operationFiles };
+    });
+  }
+
   function generateBodyMutationId() {
     try {
       const parsed = JSON.parse(bodyText) as Record<string, unknown>;
@@ -693,7 +820,7 @@ export default function DeveloperPlayground() {
 	    event.preventDefault();
 	    if (validationErrors.length) return;
 	    capturePlaygroundTelemetry("spoonjoy.developer.playground.request_submitted", {
-	      request_body_present: Boolean(bodyText.trim() && selected.method !== "GET"),
+	      request_body_present: Boolean((bodyText.trim() || Object.keys(multipartFiles).length) && selected.method !== "GET"),
 	      validation_error_count: validationErrors.length,
 	    }, selected);
 	    if (selected.kind === "redirect") {
@@ -712,7 +839,15 @@ export default function DeveloperPlayground() {
     setIsSending(true);
     const startedAt = Date.now();
     try {
-      const result = await fetch(path, playgroundFetchOptions(selected, authMode, token, bodyText, playgroundRequestId(), params));
+      const result = await fetch(path, playgroundFetchOptions(
+        selected,
+        authMode,
+        token,
+        bodyText,
+        playgroundRequestId(),
+        params,
+        multipartFiles,
+      ));
       const elapsedMs = Date.now() - startedAt;
       setResponse(await playgroundResponseFromFetchResult(result, {
         method: selected.method,
@@ -813,7 +948,7 @@ export default function DeveloperPlayground() {
     }
   }
 
-  const bodyLabel = selected.requestBody?.contentType === "application/x-www-form-urlencoded" ? "Form body" : "JSON body";
+  const bodyLabel = requestBodyLabel(selected);
 
   function capturePlaygroundTelemetry(
     event: string,
@@ -1189,6 +1324,29 @@ export default function DeveloperPlayground() {
                         {example.label}
                       </button>
                     ))}
+                  </div>
+                ) : null}
+                {isMultipartBody(selected) && selected.requestBody.fileFields.length ? (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {selected.requestBody.fileFields.map((field) => {
+                      const inputId = `multipart-file-${field}`;
+                      const selectedFile = multipartFiles[field];
+                      return (
+                        <label key={field} htmlFor={inputId} className="grid gap-2 border border-[var(--sj-border)] bg-[var(--sj-paper)] p-3 text-sm font-semibold text-[var(--sj-ink)]">
+                          {bodyFieldLabel(field)} file
+                          <input
+                            id={inputId}
+                            aria-label={`${bodyFieldLabel(field)} file`}
+                            type="file"
+                            onChange={(event) => updateMultipartFile(field, event.currentTarget.files?.[0] ?? null)}
+                            className="min-h-11 text-sm font-normal text-[var(--sj-ink-soft)] file:mr-3 file:min-h-9 file:border file:border-[var(--sj-border)] file:bg-[var(--sj-panel-solid)] file:px-3 file:font-sj-ui file:text-xs file:font-bold file:text-[var(--sj-ink)]"
+                          />
+                          <span className="font-mono text-xs font-normal text-[var(--sj-ink-soft)]">
+                            {selectedFile ? selectedFile.name : multipartFilePlaceholder(field)}
+                          </span>
+                        </label>
+                      );
+                    })}
                   </div>
                 ) : null}
                 <textarea
