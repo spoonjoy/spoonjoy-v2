@@ -502,7 +502,7 @@ describe("API v1 cookbook write mutations", () => {
     const fixture = await createFixture(db);
     const addBody = { clientMutationId: "cookbook-add-recipe" };
 
-    const firstAdd = await action(routeArgs(
+    const firstAddContext = routeArgs(
       mutationRequest(
         "POST",
         `cookbooks/${fixture.cookbook.id}/recipes/${fixture.otherRecipe.id}`,
@@ -511,18 +511,21 @@ describe("API v1 cookbook write mutations", () => {
         addBody,
       ),
       `cookbooks/${fixture.cookbook.id}/recipes/${fixture.otherRecipe.id}`,
-    ).args);
+    );
+    const firstAdd = await action(firstAddContext.args);
     const addPayload = await readJson(firstAdd);
 
     expect(firstAdd.status).toBe(201);
     expectPrivateEnvelopeHeaders(firstAdd, "req_cookbook_add_recipe");
     expectCookbookRecipeMutationData(addPayload.data, addBody.clientMutationId, "added", true);
     expect(addPayload.data.cookbook.recipes.map((recipe: { id: string }) => recipe.id)).toEqual([fixture.otherRecipe.id]);
+    expect(firstAddContext.scheduled).toHaveLength(1);
+    await Promise.all(firstAddContext.scheduled);
     await expect(db.notificationEvent.findMany({
       where: { recipientId: fixture.recipeOwner.id, kind: "cookbook_save_of_mine" },
     })).resolves.toHaveLength(1);
 
-    const replayAdd = await action(routeArgs(
+    const replayAddContext = routeArgs(
       mutationRequest(
         "POST",
         `cookbooks/${fixture.cookbook.id}/recipes/${fixture.otherRecipe.id}`,
@@ -531,7 +534,8 @@ describe("API v1 cookbook write mutations", () => {
         addBody,
       ),
       `cookbooks/${fixture.cookbook.id}/recipes/${fixture.otherRecipe.id}`,
-    ).args);
+    );
+    const replayAdd = await action(replayAddContext.args);
     const replayAddPayload = await readJson(replayAdd);
     const expectedAddReplay = structuredClone(addPayload);
     expectedAddReplay.requestId = "req_cookbook_add_recipe_replay";
@@ -539,11 +543,12 @@ describe("API v1 cookbook write mutations", () => {
 
     expect(replayAdd.status).toBe(201);
     expect(replayAddPayload).toEqual(expectedAddReplay);
+    expect(replayAddContext.scheduled).toEqual([]);
     await expect(db.notificationEvent.count({
       where: { recipientId: fixture.recipeOwner.id, kind: "cookbook_save_of_mine" },
     })).resolves.toBe(1);
 
-    const idempotentReAdd = await action(routeArgs(
+    const idempotentReAddContext = routeArgs(
       mutationRequest(
         "POST",
         `cookbooks/${fixture.cookbook.id}/recipes/${fixture.otherRecipe.id}`,
@@ -552,10 +557,12 @@ describe("API v1 cookbook write mutations", () => {
         { clientMutationId: "cookbook-add-existing" },
       ),
       `cookbooks/${fixture.cookbook.id}/recipes/${fixture.otherRecipe.id}`,
-    ).args);
+    );
+    const idempotentReAdd = await action(idempotentReAddContext.args);
     const idempotentReAddPayload = await readJson(idempotentReAdd);
     expect(idempotentReAdd.status).toBe(200);
     expectCookbookRecipeMutationData(idempotentReAddPayload.data, "cookbook-add-existing", "added", false);
+    expect(idempotentReAddContext.scheduled).toEqual([]);
     await expect(db.notificationEvent.count({
       where: { recipientId: fixture.recipeOwner.id, kind: "cookbook_save_of_mine" },
     })).resolves.toBe(1);
