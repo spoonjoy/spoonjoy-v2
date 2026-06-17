@@ -416,6 +416,16 @@ describe("API v1 recipe image and cover lifecycle endpoints", () => {
         createdAt: new Date("2026-01-02T00:00:00.000Z"),
       },
     });
+    const placeholder = await db.recipeCover.create({
+      data: {
+        recipeId: recipe.id,
+        imageUrl: "/photos/recipes/owner/ai-placeholder.jpg",
+        sourceType: "ai-placeholder",
+        status: "ready",
+        generationStatus: "succeeded",
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      },
+    });
     await db.recipeSpoon.create({
       data: {
         recipeId: recipe.id,
@@ -442,11 +452,12 @@ describe("API v1 recipe image and cover lifecycle endpoints", () => {
     expectPrivateEnvelopeHeaders(response, "req_cover_history");
     expectSuccessEnvelope(payload, "req_cover_history");
     expectExactKeys(payload.data, ["activeCover", "covers", "pagination", "spoonImages"]);
-    expect(payload.data.covers).toHaveLength(3);
+    expect(payload.data.covers).toHaveLength(4);
     expect(payload.data.covers.map((cover: Record<string, unknown>) => cover.id)).toEqual([
       processing.id,
       active.id,
       archived.id,
+      placeholder.id,
     ]);
     for (const cover of payload.data.covers) expectCoverShape(cover);
     expect(payload.data.activeCover).toMatchObject({
@@ -459,6 +470,15 @@ describe("API v1 recipe image and cover lifecycle endpoints", () => {
       status: "archived",
       archivedAt: "2026-01-02T00:00:00.000Z",
     });
+    expect(payload.data.covers.find((cover: Record<string, unknown>) => cover.id === placeholder.id)).toMatchObject({
+      sourceType: "ai-placeholder",
+      imageUrl: "/photos/recipes/owner/ai-placeholder.jpg",
+      displayUrl: "/photos/recipes/owner/ai-placeholder.jpg",
+      activeVariant: null,
+      provenanceLabel: "AI generated",
+      status: "ready",
+      generationStatus: "succeeded",
+    });
     expect(payload.data.spoonImages).toHaveLength(1);
     expectSpoonImageShape(payload.data.spoonImages[0]);
     expect(payload.data.spoonImages[0]).toMatchObject({
@@ -468,7 +488,7 @@ describe("API v1 recipe image and cover lifecycle endpoints", () => {
       photoUrl: "/photos/spoons/other/source.jpg",
       chef: { id: otherChef.id, username: otherChef.username },
     });
-    expect(payload.data.pagination).toEqual({ limit: 10, offset: 0, count: 3, hasMore: false });
+    expect(payload.data.pagination).toEqual({ limit: 10, offset: 0, count: 4, hasMore: false });
 
     const foreign = await loader(routeArgs(
       getRequest(`recipes/${recipe.id}/covers`, otherWriter.token, "req_cover_history_foreign"),
@@ -476,6 +496,133 @@ describe("API v1 recipe image and cover lifecycle endpoints", () => {
     ));
     expect(foreign.status).toBe(403);
     expectErrorEnvelope(await readJson(foreign), "req_cover_history_foreign", "insufficient_scope", 403);
+  });
+
+  it("rejects foreign writer cover mutations before storage, cover, or active-state side effects", async () => {
+    const { chef, otherChef, otherWriter, recipe } = await createCoverFixture(db);
+    const active = await db.recipeCover.create({
+      data: {
+        recipeId: recipe.id,
+        imageUrl: "/photos/recipes/owner/active.jpg",
+        sourceType: "chef-upload",
+        status: "ready",
+        generationStatus: "none",
+        createdById: chef.id,
+      },
+    });
+    const inactive = await db.recipeCover.create({
+      data: {
+        recipeId: recipe.id,
+        imageUrl: "/photos/recipes/owner/inactive.jpg",
+        stylizedImageUrl: "/photos/recipes/owner/inactive-editorial.jpg",
+        sourceType: "chef-upload",
+        status: "ready",
+        generationStatus: "succeeded",
+        createdById: chef.id,
+      },
+    });
+    const spoon = await db.recipeSpoon.create({
+      data: {
+        recipeId: recipe.id,
+        chefId: otherChef.id,
+        photoUrl: "/photos/spoons/other/foreign-denied-source.jpg",
+      },
+    });
+    await db.recipe.update({
+      where: { id: recipe.id },
+      data: { activeCoverId: active.id, activeCoverVariant: "image", coverMode: "manual" },
+    });
+    const imageKey = `recipes/${chef.id}/uploads/foreign-denied.png`;
+    const photos = createMemoryPhotosBucket([imageKey]);
+
+    const attempts = [
+      [
+        "req_cover_foreign_image_upload",
+        () => action(routeArgs(
+          multipartImageRequest(
+            `recipes/${recipe.id}/image`,
+            otherWriter.token,
+            "req_cover_foreign_image_upload",
+            "native-foreign-image-upload",
+            new File([VALID_PNG_BYTES], "cover.png", { type: "image/png" }),
+            { activate: "true", generateEditorial: "false" },
+          ),
+          `recipes/${recipe.id}/image`,
+          { PHOTOS: photos.bucket },
+        )),
+      ],
+      [
+        "req_cover_foreign_create_url",
+        () => action(routeArgs(
+          jsonMutationRequest("POST", `recipes/${recipe.id}/covers`, otherWriter.token, "req_cover_foreign_create_url", {
+            clientMutationId: "native-foreign-create-cover-url",
+            imageUrl: `/photos/${imageKey}`,
+            activate: true,
+            generateEditorial: false,
+          }),
+          `recipes/${recipe.id}/covers`,
+          { PHOTOS: photos.bucket },
+        )),
+      ],
+      [
+        "req_cover_foreign_activate",
+        () => action(routeArgs(
+          jsonMutationRequest("PATCH", `recipes/${recipe.id}/covers/${inactive.id}`, otherWriter.token, "req_cover_foreign_activate", {
+            clientMutationId: "native-foreign-activate-cover",
+            variant: "stylized",
+          }),
+          `recipes/${recipe.id}/covers/${inactive.id}`,
+        )),
+      ],
+      [
+        "req_cover_foreign_archive",
+        () => action(routeArgs(
+          jsonMutationRequest("DELETE", `recipes/${recipe.id}/covers/${inactive.id}`, otherWriter.token, "req_cover_foreign_archive", {
+            clientMutationId: "native-foreign-archive-cover",
+          }),
+          `recipes/${recipe.id}/covers/${inactive.id}`,
+        )),
+      ],
+      [
+        "req_cover_foreign_regenerate",
+        () => action(routeArgs(
+          jsonMutationRequest("POST", `recipes/${recipe.id}/covers/regenerate`, otherWriter.token, "req_cover_foreign_regenerate", {
+            clientMutationId: "native-foreign-regenerate-cover",
+            coverId: inactive.id,
+            activateWhenReady: true,
+          }),
+          `recipes/${recipe.id}/covers/regenerate`,
+        )),
+      ],
+      [
+        "req_cover_foreign_from_spoon",
+        () => action(routeArgs(
+          jsonMutationRequest("POST", `recipes/${recipe.id}/covers/from-spoon/${spoon.id}`, otherWriter.token, "req_cover_foreign_from_spoon", {
+            clientMutationId: "native-foreign-cover-from-spoon",
+            activate: true,
+            generateEditorial: false,
+          }),
+          `recipes/${recipe.id}/covers/from-spoon/${spoon.id}`,
+        )),
+      ],
+    ] as const;
+
+    for (const [requestId, dispatch] of attempts) {
+      const response = await dispatch();
+      expect(response.status).toBe(403);
+      expectErrorEnvelope(await readJson(response), requestId, "insufficient_scope", 403);
+    }
+
+    expect(photos.puts).toEqual([]);
+    await expect(db.recipeCover.count({ where: { recipeId: recipe.id } })).resolves.toBe(2);
+    await expect(db.recipeCover.findUniqueOrThrow({
+      where: { id: inactive.id },
+      select: { status: true, generationStatus: true, archivedAt: true },
+    })).resolves.toEqual({ status: "ready", generationStatus: "succeeded", archivedAt: null });
+    await expect(db.recipe.findUniqueOrThrow({
+      where: { id: recipe.id },
+      select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
+    })).resolves.toEqual({ activeCoverId: active.id, activeCoverVariant: "image", coverMode: "manual" });
   });
 
   it("uploads a recipe image as an active raw cover and rejects malformed uploads without side effects", async () => {
