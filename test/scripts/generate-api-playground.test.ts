@@ -6,6 +6,10 @@ import {
   OPENAPI_OPERATION_METHODS,
   serializeApiPlaygroundManifest,
 } from "../../scripts/generate-api-playground";
+import {
+  endpointKey,
+  NATIVE_REST_ENDPOINT_SCOPE,
+} from "../config/api-v1-native-endpoint-scope";
 
 describe("generate-api-playground", () => {
   it("derives every playground operation from the OpenAPI document", () => {
@@ -21,6 +25,11 @@ describe("generate-api-playground", () => {
     expect(manifest.source).toBe("buildApiV1OpenApiDocument");
     expect(manifest.version).toBe("v1");
     expect(manifest.operations.map((operation) => operation.id)).toEqual(openApiOperations);
+    expect(
+      NATIVE_REST_ENDPOINT_SCOPE
+        .filter((row) => !manifest.operations.some((operation) => operation.id === endpointKey(row)))
+        .map(endpointKey),
+    ).toEqual([]);
     expect(manifest.operations.find((operation) => operation.id === "POST /api/v1/tokens")).toMatchObject({
       auth: "authenticated",
       scopes: ["tokens:write"],

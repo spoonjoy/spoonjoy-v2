@@ -6,6 +6,10 @@ import {
   API_V1_RESOURCES,
   API_V1_SCOPE_REQUIREMENTS,
 } from "~/lib/api-v1-contract.server";
+import {
+  endpointKey,
+  NATIVE_REST_ENDPOINT_SCOPE,
+} from "../config/api-v1-native-endpoint-scope";
 
 function readProjectFile(path: string) {
   return readFileSync(resolve(__dirname, "..", "..", path), "utf8");
@@ -36,6 +40,22 @@ describe("developer platform docs drift", () => {
     for (const scope of uniqueScopes) {
       expect(apiDocs).toContain(scope);
     }
+  });
+
+  it("documents every native REST Endpoint Scope row and removes stale unsupported-copy", () => {
+    expect(
+      NATIVE_REST_ENDPOINT_SCOPE
+        .filter((row) => !apiDocs.includes(`| \`${row.method}\` | \`${row.path}\``))
+        .map(endpointKey),
+    ).toEqual([]);
+
+    expect(apiDocs).toContain("Native app contract");
+    expect(apiDocs).toContain("private no-store");
+    expect(apiDocs).toContain("profile photo");
+    expect(apiDocs).toContain("APNs");
+    expect(apiDocs).toContain("offline cache");
+    expect(apiDocs).not.toMatch(/API v1 does not create or import recipes yet/i);
+    expect(apiDocs).not.toMatch(/not in API v1 yet/i);
   });
 
   it("documents REST auth entry points for personal tokens, OAuth, delegated auth, and MCP", () => {

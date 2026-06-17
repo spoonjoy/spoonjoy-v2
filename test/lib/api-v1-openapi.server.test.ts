@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { buildApiV1ConnectorOpenApiDocument, buildApiV1OpenApiDocument, buildApiV1SdkOpenApiDocument } from "~/lib/api-v1-openapi.server";
 import { API_V1_ERROR_STATUS, API_V1_RESOURCES } from "~/lib/api-v1-contract.server";
+import {
+  endpointKey,
+  nativeRestOperationScopes,
+  NATIVE_REST_ENDPOINT_SCOPE,
+  type NativeRestEndpointScopeRow,
+} from "../config/api-v1-native-endpoint-scope";
 
 const RESOURCE_PATHS = Array.from(new Set(API_V1_RESOURCES.map((resource) => resource.path))).sort();
 const AUTH_PATHS = [
@@ -12,28 +18,14 @@ const AUTH_PATHS = [
   "/oauth/revoke",
   "/oauth/token",
 ];
-const OPERATION_SCOPES = {
-  "GET /api/v1": [],
-  "GET /api/v1/health": [],
-  "GET /api/v1/openapi.json": [],
-  "GET /api/v1/openapi.sdk.json": [],
-  "GET /api/v1/openapi.connector.json": [],
-  "GET /api/v1/recipes": ["recipes:read"],
-  "GET /api/v1/recipes/{id}": ["recipes:read"],
-  "GET /api/v1/cookbooks": ["cookbooks:read"],
-  "GET /api/v1/cookbooks/{id}": ["cookbooks:read"],
-  "GET /api/v1/shopping-list": ["shopping_list:read"],
-  "GET /api/v1/shopping-list/sync": ["shopping_list:read"],
-  "POST /api/v1/shopping-list/items": ["shopping_list:write"],
-  "PATCH /api/v1/shopping-list/items/{itemId}": ["shopping_list:write"],
-  "DELETE /api/v1/shopping-list/items/{itemId}": ["shopping_list:write"],
-  "GET /api/v1/tokens": ["tokens:read"],
-  "POST /api/v1/tokens": ["tokens:write"],
-  "DELETE /api/v1/tokens/{credentialId}": ["tokens:write"],
-} satisfies Record<string, string[]>;
+const OPERATION_SCOPES = nativeRestOperationScopes();
 
 function operation(document: any, path: string, method: string) {
   return document.paths[path][method.toLowerCase()];
+}
+
+function existingOperation(document: any, row: NativeRestEndpointScopeRow) {
+  return document.paths[row.path]?.[row.method.toLowerCase()];
 }
 
 function responseExample(document: any, path: string, method: string, status: string) {
@@ -204,6 +196,51 @@ describe("API v1 OpenAPI document", () => {
       expect.objectContaining({ name: "itemId", in: "path", required: true, schema: { type: "string", minLength: 1 } }),
       expect.objectContaining({ name: "X-Request-Id", in: "header", required: false }),
     ]));
+  });
+
+  it("declares every accepted native REST endpoint with auth, schemas, examples, and error envelopes", () => {
+    const document = buildApiV1OpenApiDocument();
+
+    expect(
+      NATIVE_REST_ENDPOINT_SCOPE
+        .filter((row) => !existingOperation(document, row))
+        .map(endpointKey),
+    ).toEqual([]);
+
+    for (const row of NATIVE_REST_ENDPOINT_SCOPE) {
+      const op = existingOperation(document, row);
+
+      expect(op.operationId).toMatch(new RegExp(`^${row.method.toLowerCase()}ApiV1`));
+      expect(op["x-auth"]).toBe(row.auth);
+      expect(op["x-scopes"]).toEqual([...row.scopes]);
+      expect(op["x-credential-modes"]).toEqual(expect.any(Array));
+
+      const successStatuses = Object.keys(op.responses).filter((status) => status.startsWith("2"));
+      expect(successStatuses.length).toBeGreaterThan(0);
+      for (const status of successStatuses) {
+        expect(op.responses[status].content["application/json"].schema.$ref).toEqual(expect.any(String));
+        expect(op.responses[status].content["application/json"].examples).toEqual(expect.any(Object));
+      }
+
+      for (const status of ["405", "429", "500"]) {
+        expect(op.responses[status].content["application/json"].schema.$ref).toBe("#/components/schemas/ErrorEnvelope");
+        expect(Object.values(op.responses[status].content["application/json"].examples).length).toBeGreaterThan(0);
+      }
+
+      if (row.auth === "bearer") {
+        for (const status of ["401", "403"]) {
+          expect(op.responses[status].content["application/json"].schema.$ref).toBe("#/components/schemas/ErrorEnvelope");
+        }
+      }
+
+      if (["POST", "PATCH", "PUT"].includes(row.method)) {
+        const requestContent = op.requestBody?.content ?? {};
+        expect(Object.keys(requestContent).length).toBeGreaterThan(0);
+        expect(
+          Object.values(requestContent).some((content: any) => content.schema && content.examples),
+        ).toBe(true);
+      }
+    }
   });
 
   it("documents raw OpenAPI, method-level token scopes, health principal source, and concrete examples", () => {

@@ -6,6 +6,10 @@ import {
   buildApiV1OpenApiDocument,
   buildApiV1SdkOpenApiDocument,
 } from "~/lib/api-v1-openapi.server";
+import {
+  endpointKey,
+  NATIVE_REST_ENDPOINT_SCOPE,
+} from "../config/api-v1-native-endpoint-scope";
 
 function routeArgs(request: Request, splat: string) {
   return { request, params: { "*": splat }, context: { cloudflare: { env: null } } } as any;
@@ -28,6 +32,11 @@ describe("GET /api/v1/openapi.json", () => {
     const document = await readJson(response);
 
     expect(document).toEqual(buildApiV1OpenApiDocument({ serverUrl: "http://localhost" }));
+    expect(
+      NATIVE_REST_ENDPOINT_SCOPE
+        .filter((row) => !document.paths[row.path]?.[row.method.toLowerCase()])
+        .map(endpointKey),
+    ).toEqual([]);
     expect(document.ok).toBeUndefined();
     expect(document.paths["/api/v1/openapi.json"].get.responses["200"].content["application/json"].schema.$ref)
       .toBe("#/components/schemas/OpenApiDocument");

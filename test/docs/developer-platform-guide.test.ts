@@ -8,6 +8,10 @@ import {
   API_V1_DISCOVERY_DATA,
   API_V1_SCOPE_REQUIREMENTS,
 } from "~/lib/api-v1-contract.server";
+import {
+  endpointKey,
+  NATIVE_REST_ENDPOINT_SCOPE,
+} from "../config/api-v1-native-endpoint-scope";
 import { createTestRoutesStub } from "../utils";
 
 function readProjectFile(path: string) {
@@ -51,8 +55,13 @@ const GUIDE_MARKERS = [
   "POST /api/tools/start_agent_connection",
   "POST /api/tools/poll_agent_connection",
   "full login surface",
-  "not in API v1 yet",
-  "Recipe write, import, or export endpoints",
+  "Native parity REST contract",
+  "GET /api/v1/me",
+  "POST /api/v1/me/photo",
+  "POST /api/v1/me/apns-devices",
+  "PATCH /api/v1/me/notification-preferences",
+  "POST /api/v1/recipes/import",
+  "Private mobile cache",
   "Meal plan or \"today's recipes\" APIs",
   "Full account export APIs",
   "Canonical unit registry or density-based ingredient conversion",
@@ -112,6 +121,18 @@ const GUIDE_MARKERS = [
   API_V1_DISCOVERY_DATA.openapiUrl,
 ] as const;
 
+const STALE_GUIDE_MARKERS = [
+  "not in API v1 yet",
+  "Recipe write, import, or export endpoints",
+  "API v1 does not create or import recipes yet",
+] as const;
+
+function missingEndpointRows(text: string) {
+  return NATIVE_REST_ENDPOINT_SCOPE
+    .filter((row) => !text.includes(`${row.method} ${row.path}`) && !text.includes(`| \`${row.method}\` | \`${row.path}\``))
+    .map(endpointKey);
+}
+
 describe("external client guide", () => {
   it("publishes a complete guide in docs/api.md", () => {
     const apiDocs = readProjectFile("docs/api.md");
@@ -126,6 +147,7 @@ describe("external client guide", () => {
     expect(apiDocs).toContain("curl 'https://spoonjoy.app/api/v1/recipes");
     expect(apiDocs).toContain("curl 'https://spoonjoy.app/api/v1/cookbooks");
     expect(apiDocs).toContain("POST /api/v1/tokens");
+    expect(missingEndpointRows(apiDocs)).toEqual([]);
     expect(apiDocs).toContain('fetch("/api/v1/shopping-list"');
     expect(apiDocs).toContain("grant_type=authorization_code");
     expect(apiDocs).toContain("access_token: \"sj_...\"");
@@ -137,6 +159,9 @@ describe("external client guide", () => {
     expect(apiDocs).toContain(scopesFor("POST", "/api/v1/shopping-list/items")[0]);
     expect(apiDocs).not.toContain("sj_owner_token");
     expect(apiDocs).not.toMatch(/pebble/i);
+    for (const marker of STALE_GUIDE_MARKERS) {
+      expect(apiDocs).not.toContain(marker);
+    }
   });
 
   it("renders the same guide on /developers", async () => {
@@ -160,6 +185,7 @@ describe("external client guide", () => {
     expect(renderedText).toContain("GET /api/v1/cookbooks");
     expect(renderedText).toContain("POST /api/v1/tokens");
     expect(renderedText).toContain("Generated operation: POST /api/v1/tokens");
+    expect(missingEndpointRows(renderedText)).toEqual([]);
     expect(renderedText).toContain('fetch("/api/v1/shopping-list"');
     expect(renderedText).toContain("grant_type=authorization_code");
     expect(renderedText).toContain("Response: { \"ok\": true");
@@ -170,5 +196,8 @@ describe("external client guide", () => {
     expect(renderedText).toContain(scopesFor("POST", "/api/v1/shopping-list/items")[0]);
     expect(renderedText).not.toContain("sj_owner_token");
     expect(document.body).not.toHaveTextContent(/pebble/i);
+    for (const marker of STALE_GUIDE_MARKERS) {
+      expect(renderedText).not.toContain(marker);
+    }
   });
 });
