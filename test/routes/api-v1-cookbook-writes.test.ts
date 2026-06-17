@@ -634,7 +634,7 @@ describe("API v1 cookbook write mutations", () => {
     expectErrorEnvelope(await readJson(differentOperation), "req_cookbook_conflict_operation", "idempotency_conflict", 409);
 
     const inProgressBody = { clientMutationId: "cookbook-in-progress", title: "In Progress" };
-    const inProgressPath = "cookbooks";
+    const inProgressPath = "/api/v1/cookbooks";
     const inProgressRequestHash = await hashIdempotencyRequest({
       method: "POST",
       path: inProgressPath,
