@@ -23,6 +23,7 @@ interface StoreImageOptions {
   bucket?: R2Bucket;
   file: File;
   namespace: string;
+  key?: string;
   now?: () => number;
   randomId?: () => string;
 }
@@ -312,6 +313,7 @@ export async function storeImage({
   bucket,
   file,
   namespace,
+  key: providedKey,
   now = Date.now,
   randomId = () => crypto.randomUUID(),
 }: StoreImageOptions): Promise<string> {
@@ -319,7 +321,7 @@ export async function storeImage({
     return fileToDataUrl(file);
   }
 
-  const key = `${namespace}/${now()}-${randomId()}.${getImageExtension(file.name)}`;
+  const key = providedKey ?? `${namespace}/${now()}-${randomId()}.${getImageExtension(file.name)}`;
   const storedFile = await stripUploadMetadata(file);
 
   await bucket.put(key, storedFile, {

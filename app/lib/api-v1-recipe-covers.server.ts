@@ -3,6 +3,8 @@ import { ApiAuthError } from "~/lib/api-auth.server";
 import type { ApiV1ErrorCode } from "~/lib/api-v1-contract.server";
 import {
   hasUploadedImageFile,
+  deleteStoredImage,
+  getImageExtension,
   storeImage,
   validateImageFileForStorage,
 } from "~/lib/image-storage.server";
@@ -652,11 +654,11 @@ function missingProviderConfig(env: Env | null | undefined) {
   return !envString(env, "OPENAI_API_KEY") && !envString(env, "GEMINI_API_KEY") && !envString(env, "GOOGLE_API_KEY");
 }
 
-function providerSecretBlocker(env: Env | null | undefined): ProviderSecretBlocker | null {
-  const artifactRoot = envString(env, "ARTIFACT_ROOT" as keyof Env);
-  if (!artifactRoot) return null;
-  const root = artifactRoot.replace(/\/+$/, "");
-  const outputPath = `${root}/web/provider-secret-blocker-recipe-covers.json`;
+function providerSecretBlocker(env: Env | null | undefined): ProviderSecretBlocker {
+  const artifactRoot = envString(env, "ARTIFACT_ROOT");
+  const outputPath = artifactRoot
+    ? `${artifactRoot.replace(/\/+$/, "")}/web/provider-secret-blocker-recipe-covers.json`
+    : "web/provider-secret-blocker-recipe-covers.json";
   return {
     blocked: true,
     capability: "ProviderSecret",
@@ -673,7 +675,8 @@ type FsPromisesModule = {
   writeFile(path: string, data: string, encoding: string): Promise<unknown>;
 };
 
-async function writeProviderSecretBlocker(blocker: ProviderSecretBlocker): Promise<void> {
+async function writeProviderSecretBlocker(blocker: ProviderSecretBlocker, env: Env | null | undefined): Promise<void> {
+  if (!envString(env, "ARTIFACT_ROOT")) return;
   const slashIndex = blocker.outputPath.lastIndexOf("/");
   const directory = slashIndex >= 0 ? blocker.outputPath.slice(0, slashIndex) : ".";
   try {
@@ -692,13 +695,17 @@ async function providerBlockersForCover(
 ): Promise<ProviderSecretBlocker[]> {
   if (cover.generationStatus !== "failed" || cover.failureReason !== "missing_image_provider_config") return [];
   const blocker = providerSecretBlocker(env);
-  if (!blocker) return [];
-  await writeProviderSecretBlocker(blocker);
+  await writeProviderSecretBlocker(blocker, env);
   return [blocker];
 }
 
 function imageGenerationStatusCode(blockers: ProviderSecretBlocker[], fallback = 201) {
   return blockers.length > 0 ? 202 : fallback;
+}
+
+async function hashText(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return bytesToHex(new Uint8Array(digest));
 }
 
 function createCoverOp(
@@ -892,20 +899,50 @@ export async function uploadNativeRecipeImageCover(
   input: NativeRecipeCoverUploadInput,
   reservation: ApiIdempotencyKey,
 ): Promise<ApiV1RecipeCoverResult<NativeCoverMutationResult>> {
+  const idempotencyDigest = await hashText(input.clientMutationId);
+  const storageKey = `recipes/${principalId}/${recipe.id}/idempotent-${idempotencyDigest.slice(0, 24)}-${input.fileHash.slice(0, 16)}.${getImageExtension(input.file.name)}`;
   const imageUrl = await storeImage({
     bucket: env?.PHOTOS,
     file: input.file,
     namespace: `recipes/${principalId}/${recipe.id}`,
+    key: storageKey,
   });
-  return createNativeCoverFromImageUrl(
-    db,
-    env,
-    principalId,
-    recipe,
-    { ...input, imageUrl },
-    reservation,
-    { operation: "recipes.image.upload", sourceType: "chef-upload" },
-  );
+  try {
+    return await createNativeCoverFromImageUrl(
+      db,
+      env,
+      principalId,
+      recipe,
+      { ...input, imageUrl },
+      reservation,
+      { operation: "recipes.image.upload", sourceType: "chef-upload" },
+    );
+  } catch (error) {
+    await cleanupUncommittedUpload(db, env, reservation, recipe.id, imageUrl);
+    throw error;
+  }
+}
+
+async function cleanupUncommittedUpload(
+  db: Database,
+  env: Env | null | undefined,
+  reservation: ApiIdempotencyKey,
+  recipeId: string,
+  imageUrl: string,
+): Promise<void> {
+  try {
+    const [cover, tombstone] = await Promise.all([
+      db.recipeCover.findFirst({ where: { id: reservation.id, recipeId }, select: { id: true } }),
+      db.apiMutationTombstone.findFirst({
+        where: { idempotencyKeyId: reservation.id, resourceType: "recipe_cover", resourceId: reservation.id, parentResourceId: recipeId },
+        select: { id: true },
+      }),
+    ]);
+    if (cover || tombstone) return;
+    await deleteStoredImage({ bucket: env?.PHOTOS, imageUrl });
+  } catch {
+    // If cleanup state checks fail, keep the uploaded object rather than risking deletion of a committed cover image.
+  }
 }
 
 function apiAuthErrorToFailure<T>(error: unknown): ApiV1RecipeCoverResult<T> {

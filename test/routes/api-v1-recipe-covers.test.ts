@@ -667,7 +667,7 @@ describe("API v1 recipe image and cover lifecycle endpoints", () => {
     expect(payload.data.nextActions).toEqual(["list_recipe_covers", "get_recipe"]);
     expect(photos.puts).toHaveLength(1);
     expect(photos.puts[0]).toMatchObject({
-      key: expect.stringMatching(new RegExp(`^recipes/${chef.id}/${recipe.id}/\\d+-[a-f0-9-]+\\.png$`)),
+      key: expect.stringMatching(new RegExp(`^recipes/${chef.id}/${recipe.id}/idempotent-[a-f0-9]{24}-[a-f0-9]{16}\\.png$`)),
       options: { httpMetadata: { contentType: "image/png" } },
     });
 
@@ -766,12 +766,12 @@ describe("API v1 recipe image and cover lifecycle endpoints", () => {
       `recipes/${recipe.id}/image`,
       { PHOTOS: photos.bucket },
     ));
-      expect(oversized.status).toBe(400);
-      expectErrorEnvelope(await readJson(oversized), "req_cover_image_too_large", "validation_error", 400, true);
+    expect(oversized.status).toBe(400);
+    expectErrorEnvelope(await readJson(oversized), "req_cover_image_too_large", "validation_error", 400, true);
 
-      expect(photos.puts).toHaveLength(1);
-      await expect(db.recipeCover.count({ where: { recipeId: recipe.id } })).resolves.toBe(1);
-    });
+    expect(photos.puts).toHaveLength(1);
+    await expect(db.recipeCover.count({ where: { recipeId: recipe.id } })).resolves.toBe(1);
+  });
 
   it("creates idempotent uploaded-image cover candidates only from safe owner-owned Spoonjoy photo URLs", async () => {
     const { chef, writer, recipe } = await createCoverFixture(db);
@@ -1216,6 +1216,29 @@ describe("API v1 recipe image and cover lifecycle endpoints", () => {
       GOOGLE_API_KEY: "",
     };
 
+    const noArtifactRootClientMutationId = "native-create-cover-provider-no-artifact-root";
+    const noArtifactRoot = await action(routeArgs(
+      jsonMutationRequest("POST", `recipes/${recipe.id}/covers`, writer.token, "req_cover_create_url_provider_no_artifact_root", {
+        clientMutationId: noArtifactRootClientMutationId,
+        imageUrl: `/photos/${imageKey}`,
+        activate: false,
+        generateEditorial: true,
+      }),
+      `recipes/${recipe.id}/covers`,
+      {
+        PHOTOS: photos.bucket,
+        OPENAI_API_KEY: "",
+        GEMINI_API_KEY: "",
+        GOOGLE_API_KEY: "",
+      },
+    ));
+    const noArtifactRootPayload = await readJson(noArtifactRoot);
+    expect(noArtifactRoot.status).toBe(202);
+    expectSuccessEnvelope(noArtifactRootPayload, "req_cover_create_url_provider_no_artifact_root");
+    expectCoverMutationData(noArtifactRootPayload.data, noArtifactRootClientMutationId, false, { created: true, blockers: true });
+    expectProviderBlockerShape(noArtifactRootPayload.data.blockers[0], "web/provider-secret-blocker-recipe-covers.json");
+    await expect(readFile(blockerPath, "utf8")).rejects.toThrow();
+
     const uploadClientMutationId = "native-upload-cover-provider-blocked-1";
     const upload = await action(routeArgs(
       multipartImageRequest(
@@ -1325,7 +1348,7 @@ describe("API v1 recipe image and cover lifecycle endpoints", () => {
     const blockerFiles = (await readdir(path.dirname(blockerPath)))
       .filter((fileName) => fileName.startsWith("provider-secret-blocker-"));
     expect(blockerFiles).toEqual(["provider-secret-blocker-recipe-covers.json"]);
-    await expect(db.recipeCover.count({ where: { recipeId: recipe.id } })).resolves.toBe(3);
+    await expect(db.recipeCover.count({ where: { recipeId: recipe.id } })).resolves.toBe(4);
   });
 
   it("creates cover candidates from existing spoon photos without inventing comments or social surfaces", async () => {

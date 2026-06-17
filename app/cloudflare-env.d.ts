@@ -58,6 +58,7 @@ declare global {
     AUTH_IP_RATE_LIMITER?: RateLimitBinding;
     SESSION_SECRET?: string;
     SPOONJOY_BASE_URL?: string;
+    ARTIFACT_ROOT?: string;
     OPENAI_API_KEY?: string;
     GOOGLE_API_KEY?: string;
     GEMINI_API_KEY?: string;
