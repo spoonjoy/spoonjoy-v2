@@ -7,6 +7,7 @@
   },
   "include": [
     "scripts/script-environment.mjs",
+    "scripts/build.ts",
     "scripts/deployment-preflight.ts",
     "scripts/qa-preflight.ts"
   ]

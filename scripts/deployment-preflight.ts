@@ -105,6 +105,8 @@ const REQUIRED_CLEANUP_PACKAGE_SCRIPTS = {
 
 const REQUIRED_SCRIPT_COVERAGE_INCLUDES = [
   "scripts/script-environment.mjs",
+  "scripts/build.ts",
+  "scripts/build-output-hygiene.ts",
   "scripts/cleanup-local-qa-data.mjs",
   "scripts/smoke-api-live.mjs",
   "scripts/qa-preflight.ts",
@@ -112,6 +114,7 @@ const REQUIRED_SCRIPT_COVERAGE_INCLUDES = [
 ] as const;
 
 const REQUIRED_SCRIPT_TYPECHECK_INCLUDES = [
+  "scripts/build.ts",
   "scripts/deployment-preflight.ts",
   "scripts/qa-preflight.ts",
 ] as const;

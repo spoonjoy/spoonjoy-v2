@@ -31,6 +31,8 @@ export default defineConfig({
         "scripts/smoke-live-helpers.mjs",
         "scripts/smoke-image-cover-live.mjs",
         "scripts/smoke-api-live.mjs",
+        "scripts/build.ts",
+        "scripts/build-output-hygiene.ts",
         "scripts/qa-preflight.ts",
         "scripts/deployment-preflight.ts",
       ],
