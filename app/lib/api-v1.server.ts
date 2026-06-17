@@ -28,6 +28,19 @@ import {
   buildApiV1OpenApiDocument,
   buildApiV1SdkOpenApiDocument,
 } from "~/lib/api-v1-openapi.server";
+import {
+  disconnectNativeOAuthConnection,
+  listNativeOAuthConnections,
+  loadNativeAccountSnapshot,
+  readNativeNotificationPreferences,
+  registerNativePushDevice,
+  removeNativeAccountPhoto,
+  revokeNativePushDevice,
+  updateNativeAccountProfile,
+  updateNativeNotificationPreferences,
+  uploadNativeAccountPhoto,
+  type ApiV1AccountResult,
+} from "~/lib/api-v1-account.server";
 import { enforceRateLimit } from "~/lib/rate-limit.server";
 import { getRequestDb } from "~/lib/route-platform.server";
 import {
@@ -147,6 +160,13 @@ const TOKEN_RESPONSE_HEADERS = {
   "Cache-Control": "no-store",
   Pragma: "no-cache",
 } as const;
+
+function apiV1AccountResponse<T>(requestId: string, result: ApiV1AccountResult<T>): Response {
+  if (!result.ok) {
+    throw new ApiV1Error(result.code, result.message, result.details);
+  }
+  return apiV1PrivateSuccess(requestId, result.data, result.status);
+}
 
 export function apiV1ErrorResponse(requestId: string, error: ApiV1Error): Response {
   const body: {
@@ -297,6 +317,28 @@ function apiV1OperationFor(method: string, path: string): string | undefined {
       return "shopping-list.items.check";
     case "DELETE shopping-list-item":
       return "shopping-list.items.delete";
+    case "GET me":
+      return "account.read";
+    case "PATCH me":
+      return "account.update";
+    case "POST me-photo":
+      return "account.photo.upload";
+    case "DELETE me-photo":
+      return "account.photo.remove";
+    case "GET me-kitchen":
+      return "account.kitchen.bootstrap";
+    case "GET me-notification-preferences":
+      return "account.notifications.read";
+    case "PATCH me-notification-preferences":
+      return "account.notifications.update";
+    case "POST me-apns-devices":
+      return "account.apns.register";
+    case "DELETE me-apns-device":
+      return "account.apns.revoke";
+    case "GET me-connections":
+      return "account.connections.list";
+    case "DELETE me-connection":
+      return "account.connections.disconnect";
     case "GET tokens":
       return "tokens.list";
     case "POST tokens":
@@ -486,6 +528,7 @@ function principalSummary(principal: ApiPrincipal | null) {
 
 function principalHasScope(principal: ApiPrincipal | null, scope: string) {
   if (!principal) return true;
+  if (principal.source !== "bearer") return true;
   if (principal.scopes.includes(scope)) return true;
   return principal.scopes.includes("public:read") && (scope === "recipes:read" || scope === "cookbooks:read");
 }
@@ -1533,7 +1576,7 @@ function assertBearerScopeSubset(principal: ApiPrincipal, storedScopes: string) 
 async function handleTokenList(args: ApiV1RouteArgs, requestId: string, authenticated: ApiPrincipal) {
   const db = await getRequestDb(args.context);
   const credentials = await db.apiCredential.findMany({
-    where: { userId: authenticated.id },
+    where: { userId: authenticated.id, revokedAt: null, oauthClientId: null },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
   });
 
@@ -1712,6 +1755,93 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
     if (args.request.method === "DELETE" && segments[0] === "shopping-list" && segments[1] === "items" && segments.length === 3) {
       const principal = await authorize(path) as ApiPrincipal;
       const response = await handleShoppingItemDelete(args, requestId, principal, segments[2]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "GET" && path === "me") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const db = await getRequestDb(args.context);
+      const response = apiV1AccountResponse(requestId, await loadNativeAccountSnapshot(db, principal.id));
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "PATCH" && path === "me") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const body = await parseApiV1JsonBody(args.request);
+      const db = await getRequestDb(args.context);
+      const response = apiV1AccountResponse(requestId, await updateNativeAccountProfile(db, principal.id, body));
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "GET" && path === "me/kitchen") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const db = await getRequestDb(args.context);
+      const response = apiV1AccountResponse(requestId, await loadNativeAccountSnapshot(db, principal.id));
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "POST" && path === "me/photo") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const formData = await args.request.formData();
+      const db = await getRequestDb(args.context);
+      const response = apiV1AccountResponse(
+        requestId,
+        await uploadNativeAccountPhoto(db, principal.id, formData, args.context.cloudflare?.env?.PHOTOS),
+      );
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "DELETE" && path === "me/photo") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const db = await getRequestDb(args.context);
+      const response = apiV1AccountResponse(
+        requestId,
+        await removeNativeAccountPhoto(db, principal.id, args.context.cloudflare?.env?.PHOTOS),
+      );
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "GET" && path === "me/notification-preferences") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const db = await getRequestDb(args.context);
+      const response = apiV1AccountResponse(requestId, await readNativeNotificationPreferences(db, principal.id));
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "PATCH" && path === "me/notification-preferences") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const body = await parseApiV1JsonBody(args.request);
+      const db = await getRequestDb(args.context);
+      const response = apiV1AccountResponse(requestId, await updateNativeNotificationPreferences(db, principal.id, body));
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "POST" && path === "me/apns-devices") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const body = await parseApiV1JsonBody(args.request);
+      const db = await getRequestDb(args.context);
+      const response = apiV1AccountResponse(requestId, await registerNativePushDevice(db, principal.id, body));
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "DELETE" && segments[0] === "me" && segments[1] === "apns-devices" && segments.length === 3) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const db = await getRequestDb(args.context);
+      const response = apiV1AccountResponse(requestId, await revokeNativePushDevice(db, principal.id, segments[2]));
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "GET" && path === "me/connections") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const db = await getRequestDb(args.context);
+      const response = apiV1AccountResponse(requestId, await listNativeOAuthConnections(db, principal.id));
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "DELETE" && segments[0] === "me" && segments[1] === "connections" && segments.length === 3) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const db = await getRequestDb(args.context);
+      const response = apiV1AccountResponse(requestId, await disconnectNativeOAuthConnection(db, principal.id, segments[2]));
       return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
     }
 

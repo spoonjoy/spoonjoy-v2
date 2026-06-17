@@ -8350,7 +8350,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"me\": {\n      \"id\": \"chef_1\",\n      \"email\": \"ari@example.com\",\n      \"username\": \"ari\",\n      \"hasPassword\": true,\n      \"photoUrl\": \"/photos/profiles/chef_1/avatar.gif\",\n      \"oauthAccounts\": [\n        {\n          \"provider\": \"github\",\n          \"providerUsername\": \"ari\"\n        }\n      ],\n      \"passkeys\": [\n        {\n          \"id\": \"pk_1\",\n          \"name\": \"MacBook Touch ID\",\n          \"transports\": \"internal\",\n          \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n        }\n      ],\n      \"handoffs\": {\n        \"accountSettings\": {\n          \"method\": \"GET\",\n          \"url\": \"/account/settings\",\n          \"onlineOnly\": true\n        },\n        \"password\": {\n          \"method\": \"GET\",\n          \"url\": \"/account/settings\",\n          \"onlineOnly\": true,\n          \"actions\": [\n            \"changePassword\",\n            \"removePassword\"\n          ]\n        },\n        \"passkeys\": {\n          \"method\": \"GET\",\n          \"url\": \"/account/settings\",\n          \"onlineOnly\": true,\n          \"registrationOptionsUrl\": \"/auth/webauthn/register/options\",\n          \"registrationVerifyUrl\": \"/auth/webauthn/register/verify\",\n          \"actions\": [\n            \"addPasskey\",\n            \"renamePasskey\",\n            \"removePasskey\"\n          ]\n        },\n        \"providerLinks\": {\n          \"google\": {\n            \"method\": \"GET\",\n            \"url\": \"/auth/google?linking=true\",\n            \"onlineOnly\": true\n          },\n          \"github\": {\n            \"method\": \"GET\",\n            \"url\": \"/auth/github?linking=true\",\n            \"onlineOnly\": true\n          },\n          \"apple\": {\n            \"method\": \"GET\",\n            \"url\": \"/auth/apple?linking=true\",\n            \"onlineOnly\": true\n          }\n        }\n      },\n      \"apiCredentials\": [\n        {\n          \"id\": \"cred_1\",\n          \"name\": \"Tiny client\",\n          \"tokenPrefix\": \"sj_abc123456\",\n          \"scopes\": [\n            \"recipes:read\",\n            \"shopping_list:read\",\n            \"shopping_list:write\"\n          ],\n          \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n          \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n          \"lastUsedAt\": null,\n          \"revokedAt\": null,\n          \"expiresAt\": null\n        }\n      ],\n      \"oauthConnections\": [\n        {\n          \"id\": \"oauth_eyJjbGllbnRJZCI6ImNtX2NsaWVudF9pZCIsInJlc291cmNlIjoiaHR0cHM6Ly9zcG9vbmpveS5hcHAvbWNwIn0\",\n          \"clientId\": \"cm_client_id\",\n          \"clientName\": \"Grocery helper\",\n          \"resource\": \"https://spoonjoy.app/mcp\",\n          \"scopes\": [\n            \"recipes:read\",\n            \"shopping_list:read\"\n          ],\n          \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n          \"refreshTokenCount\": 1,\n          \"accessTokenCount\": 1\n        }\n      ]\n    },\n    \"notifications\": {\n      \"pushSubscribed\": true,\n      \"preferences\": {\n        \"notifySpoonOnMyRecipe\": true,\n        \"notifyForkOfMyRecipe\": true,\n        \"notifyCookbookSaveOfMine\": true,\n        \"notifyFellowChefOriginCook\": true\n      }\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -8456,12 +8456,12 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": true,
         "contentType": "application/json",
-        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "example": "{\n  \"email\": \"ari@example.com\",\n  \"username\": \"ari\"\n}",
         "examples": [
           {
             "name": "example",
             "label": "Example",
-            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+            "example": "{\n  \"email\": \"ari@example.com\",\n  \"username\": \"ari\"\n}"
           }
         ]
       },
@@ -8519,7 +8519,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"me\": {\n      \"id\": \"chef_1\",\n      \"email\": \"ari@example.com\",\n      \"username\": \"ari\",\n      \"hasPassword\": true,\n      \"photoUrl\": \"/photos/profiles/chef_1/avatar.gif\",\n      \"oauthAccounts\": [\n        {\n          \"provider\": \"github\",\n          \"providerUsername\": \"ari\"\n        }\n      ],\n      \"passkeys\": [\n        {\n          \"id\": \"pk_1\",\n          \"name\": \"MacBook Touch ID\",\n          \"transports\": \"internal\",\n          \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n        }\n      ],\n      \"handoffs\": {\n        \"accountSettings\": {\n          \"method\": \"GET\",\n          \"url\": \"/account/settings\",\n          \"onlineOnly\": true\n        },\n        \"password\": {\n          \"method\": \"GET\",\n          \"url\": \"/account/settings\",\n          \"onlineOnly\": true,\n          \"actions\": [\n            \"changePassword\",\n            \"removePassword\"\n          ]\n        },\n        \"passkeys\": {\n          \"method\": \"GET\",\n          \"url\": \"/account/settings\",\n          \"onlineOnly\": true,\n          \"registrationOptionsUrl\": \"/auth/webauthn/register/options\",\n          \"registrationVerifyUrl\": \"/auth/webauthn/register/verify\",\n          \"actions\": [\n            \"addPasskey\",\n            \"renamePasskey\",\n            \"removePasskey\"\n          ]\n        },\n        \"providerLinks\": {\n          \"google\": {\n            \"method\": \"GET\",\n            \"url\": \"/auth/google?linking=true\",\n            \"onlineOnly\": true\n          },\n          \"github\": {\n            \"method\": \"GET\",\n            \"url\": \"/auth/github?linking=true\",\n            \"onlineOnly\": true\n          },\n          \"apple\": {\n            \"method\": \"GET\",\n            \"url\": \"/auth/apple?linking=true\",\n            \"onlineOnly\": true\n          }\n        }\n      },\n      \"apiCredentials\": [\n        {\n          \"id\": \"cred_1\",\n          \"name\": \"Tiny client\",\n          \"tokenPrefix\": \"sj_abc123456\",\n          \"scopes\": [\n            \"recipes:read\",\n            \"shopping_list:read\",\n            \"shopping_list:write\"\n          ],\n          \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n          \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n          \"lastUsedAt\": null,\n          \"revokedAt\": null,\n          \"expiresAt\": null\n        }\n      ],\n      \"oauthConnections\": [\n        {\n          \"id\": \"oauth_eyJjbGllbnRJZCI6ImNtX2NsaWVudF9pZCIsInJlc291cmNlIjoiaHR0cHM6Ly9zcG9vbmpveS5hcHAvbWNwIn0\",\n          \"clientId\": \"cm_client_id\",\n          \"clientName\": \"Grocery helper\",\n          \"resource\": \"https://spoonjoy.app/mcp\",\n          \"scopes\": [\n            \"recipes:read\",\n            \"shopping_list:read\"\n          ],\n          \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n          \"refreshTokenCount\": 1,\n          \"accessTokenCount\": 1\n        }\n      ]\n    },\n    \"notifications\": {\n      \"pushSubscribed\": true,\n      \"preferences\": {\n        \"notifySpoonOnMyRecipe\": true,\n        \"notifyForkOfMyRecipe\": true,\n        \"notifyCookbookSaveOfMine\": true,\n        \"notifyFellowChefOriginCook\": true\n      }\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -8622,18 +8622,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         }
       ],
-      "requestBody": {
-        "required": true,
-        "contentType": "application/json",
-        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
-        "examples": [
-          {
-            "name": "example",
-            "label": "Example",
-            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
-          }
-        ]
-      },
+      "requestBody": null,
       "responseStatuses": [
         "200",
         "400",
@@ -8688,7 +8677,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"photoUrl\": \"/photos/profiles/chef_1/avatar.gif\",\n    \"me\": {\n      \"id\": \"chef_1\",\n      \"photoUrl\": \"/photos/profiles/chef_1/avatar.gif\"\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -8779,18 +8768,6 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
       "params": [
         {
-          "name": "X-Client-Mutation-Id",
-          "in": "header",
-          "label": "X Client Mutation Id",
-          "required": true,
-          "defaultValue": "",
-          "placeholder": "delete:item_1:uuid-or-hash",
-          "description": "Chef-wide idempotency key for this delete. Use the same value when retrying the exact same request after a timeout.",
-          "schema": {
-            "type": "string"
-          }
-        },
-        {
           "name": "X-Request-Id",
           "in": "header",
           "label": "X Request Id",
@@ -8858,7 +8835,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"removed\": true,\n    \"photoUrl\": null,\n    \"me\": {\n      \"id\": \"chef_1\",\n      \"photoUrl\": null\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -9011,7 +8988,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"me\": {\n      \"id\": \"chef_1\",\n      \"email\": \"ari@example.com\",\n      \"username\": \"ari\",\n      \"hasPassword\": true,\n      \"photoUrl\": \"/photos/profiles/chef_1/avatar.gif\",\n      \"oauthAccounts\": [\n        {\n          \"provider\": \"github\",\n          \"providerUsername\": \"ari\"\n        }\n      ],\n      \"passkeys\": [\n        {\n          \"id\": \"pk_1\",\n          \"name\": \"MacBook Touch ID\",\n          \"transports\": \"internal\",\n          \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n        }\n      ],\n      \"handoffs\": {\n        \"accountSettings\": {\n          \"method\": \"GET\",\n          \"url\": \"/account/settings\",\n          \"onlineOnly\": true\n        },\n        \"password\": {\n          \"method\": \"GET\",\n          \"url\": \"/account/settings\",\n          \"onlineOnly\": true,\n          \"actions\": [\n            \"changePassword\",\n            \"removePassword\"\n          ]\n        },\n        \"passkeys\": {\n          \"method\": \"GET\",\n          \"url\": \"/account/settings\",\n          \"onlineOnly\": true,\n          \"registrationOptionsUrl\": \"/auth/webauthn/register/options\",\n          \"registrationVerifyUrl\": \"/auth/webauthn/register/verify\",\n          \"actions\": [\n            \"addPasskey\",\n            \"renamePasskey\",\n            \"removePasskey\"\n          ]\n        },\n        \"providerLinks\": {\n          \"google\": {\n            \"method\": \"GET\",\n            \"url\": \"/auth/google?linking=true\",\n            \"onlineOnly\": true\n          },\n          \"github\": {\n            \"method\": \"GET\",\n            \"url\": \"/auth/github?linking=true\",\n            \"onlineOnly\": true\n          },\n          \"apple\": {\n            \"method\": \"GET\",\n            \"url\": \"/auth/apple?linking=true\",\n            \"onlineOnly\": true\n          }\n        }\n      },\n      \"apiCredentials\": [\n        {\n          \"id\": \"cred_1\",\n          \"name\": \"Tiny client\",\n          \"tokenPrefix\": \"sj_abc123456\",\n          \"scopes\": [\n            \"recipes:read\",\n            \"shopping_list:read\",\n            \"shopping_list:write\"\n          ],\n          \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n          \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n          \"lastUsedAt\": null,\n          \"revokedAt\": null,\n          \"expiresAt\": null\n        }\n      ],\n      \"oauthConnections\": [\n        {\n          \"id\": \"oauth_eyJjbGllbnRJZCI6ImNtX2NsaWVudF9pZCIsInJlc291cmNlIjoiaHR0cHM6Ly9zcG9vbmpveS5hcHAvbWNwIn0\",\n          \"clientId\": \"cm_client_id\",\n          \"clientName\": \"Grocery helper\",\n          \"resource\": \"https://spoonjoy.app/mcp\",\n          \"scopes\": [\n            \"recipes:read\",\n            \"shopping_list:read\"\n          ],\n          \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n          \"refreshTokenCount\": 1,\n          \"accessTokenCount\": 1\n        }\n      ]\n    },\n    \"notifications\": {\n      \"pushSubscribed\": true,\n      \"preferences\": {\n        \"notifySpoonOnMyRecipe\": true,\n        \"notifyForkOfMyRecipe\": true,\n        \"notifyCookbookSaveOfMine\": true,\n        \"notifyFellowChefOriginCook\": true\n      }\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -9164,7 +9141,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"preferences\": {\n      \"notifySpoonOnMyRecipe\": true,\n      \"notifyForkOfMyRecipe\": true,\n      \"notifyCookbookSaveOfMine\": true,\n      \"notifyFellowChefOriginCook\": true\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -9270,12 +9247,12 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": true,
         "contentType": "application/json",
-        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "example": "{\n  \"notifySpoonOnMyRecipe\": false,\n  \"notifyForkOfMyRecipe\": true,\n  \"notifyCookbookSaveOfMine\": false,\n  \"notifyFellowChefOriginCook\": true\n}",
         "examples": [
           {
             "name": "example",
             "label": "Example",
-            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+            "example": "{\n  \"notifySpoonOnMyRecipe\": false,\n  \"notifyForkOfMyRecipe\": true,\n  \"notifyCookbookSaveOfMine\": false,\n  \"notifyFellowChefOriginCook\": true\n}"
           }
         ]
       },
@@ -9333,7 +9310,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"preferences\": {\n      \"notifySpoonOnMyRecipe\": true,\n      \"notifyForkOfMyRecipe\": true,\n      \"notifyCookbookSaveOfMine\": true,\n      \"notifyFellowChefOriginCook\": true\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -9439,16 +9416,17 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": true,
         "contentType": "application/json",
-        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "example": "{\n  \"deviceId\": \"ios-simulator-1\",\n  \"platform\": \"ios\",\n  \"environment\": \"development\",\n  \"token\": \"apns-token-...\",\n  \"deviceName\": \"iPhone\",\n  \"appVersion\": \"1.0.0\"\n}",
         "examples": [
           {
             "name": "example",
             "label": "Example",
-            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+            "example": "{\n  \"deviceId\": \"ios-simulator-1\",\n  \"platform\": \"ios\",\n  \"environment\": \"development\",\n  \"token\": \"apns-token-...\",\n  \"deviceName\": \"iPhone\",\n  \"appVersion\": \"1.0.0\"\n}"
           }
         ]
       },
       "responseStatuses": [
+        "200",
         "201",
         "400",
         "401",
@@ -9460,6 +9438,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "500"
       ],
       "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
         {
           "status": "201",
           "description": "Success"
@@ -9499,10 +9481,16 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       ],
       "responseExamples": [
         {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"created\": true,\n    \"device\": {\n      \"id\": \"npd_1\",\n      \"deviceId\": \"ios-simulator-1\",\n      \"platform\": \"ios\",\n      \"environment\": \"development\",\n      \"tokenPrefix\": \"apns-token-\",\n      \"deviceName\": \"iPhone\",\n      \"appVersion\": \"1.0.0\",\n      \"enabledAt\": \"2026-06-01T00:00:00.000Z\",\n      \"revokedAt\": null,\n      \"lastRegisteredAt\": \"2026-06-01T00:00:00.000Z\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\"\n    }\n  }\n}"
+        },
+        {
           "status": "201",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"created\": true,\n    \"device\": {\n      \"id\": \"npd_1\",\n      \"deviceId\": \"ios-simulator-1\",\n      \"platform\": \"ios\",\n      \"environment\": \"development\",\n      \"tokenPrefix\": \"apns-token-\",\n      \"deviceName\": \"iPhone\",\n      \"appVersion\": \"1.0.0\",\n      \"enabledAt\": \"2026-06-01T00:00:00.000Z\",\n      \"revokedAt\": null,\n      \"lastRegisteredAt\": \"2026-06-01T00:00:00.000Z\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\"\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -9539,12 +9527,6 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "name": "not_found",
           "label": "Not Found",
           "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
-        },
-        {
-          "status": "405",
-          "name": "method_not_allowed",
-          "label": "Method Not Allowed",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
         }
       ]
     },
@@ -9600,18 +9582,6 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "defaultValue": "",
           "placeholder": "apns_device_1",
           "description": "Native APNs device registration id.",
-          "schema": {
-            "type": "string"
-          }
-        },
-        {
-          "name": "X-Client-Mutation-Id",
-          "in": "header",
-          "label": "X Client Mutation Id",
-          "required": true,
-          "defaultValue": "",
-          "placeholder": "delete:item_1:uuid-or-hash",
-          "description": "Chef-wide idempotency key for this delete. Use the same value when retrying the exact same request after a timeout.",
           "schema": {
             "type": "string"
           }
@@ -9684,7 +9654,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"revoked\": true,\n    \"device\": {\n      \"id\": \"npd_1\",\n      \"deviceId\": \"ios-simulator-1\",\n      \"platform\": \"ios\",\n      \"environment\": \"development\",\n      \"tokenPrefix\": \"apns-token-\",\n      \"deviceName\": \"iPhone\",\n      \"appVersion\": \"1.0.0\",\n      \"enabledAt\": \"2026-06-01T00:00:00.000Z\",\n      \"revokedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"lastRegisteredAt\": \"2026-06-01T00:00:00.000Z\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\"\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -9837,7 +9807,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"connections\": [\n      {\n        \"id\": \"oauth_eyJjbGllbnRJZCI6ImNtX2NsaWVudF9pZCIsInJlc291cmNlIjoiaHR0cHM6Ly9zcG9vbmpveS5hcHAvbWNwIn0\",\n        \"clientId\": \"cm_client_id\",\n        \"clientName\": \"Grocery helper\",\n        \"resource\": \"https://spoonjoy.app/mcp\",\n        \"scopes\": [\n          \"recipes:read\",\n          \"shopping_list:read\"\n        ],\n        \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n        \"refreshTokenCount\": 1,\n        \"accessTokenCount\": 1\n      }\n    ]\n  }\n}"
         },
         {
           "status": "400",
@@ -9940,18 +9910,6 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         },
         {
-          "name": "X-Client-Mutation-Id",
-          "in": "header",
-          "label": "X Client Mutation Id",
-          "required": true,
-          "defaultValue": "",
-          "placeholder": "delete:item_1:uuid-or-hash",
-          "description": "Chef-wide idempotency key for this delete. Use the same value when retrying the exact same request after a timeout.",
-          "schema": {
-            "type": "string"
-          }
-        },
-        {
           "name": "X-Request-Id",
           "in": "header",
           "label": "X Request Id",
@@ -10019,7 +9977,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"disconnected\": true,\n    \"connection\": {\n      \"id\": \"oauth_eyJjbGllbnRJZCI6ImNtX2NsaWVudF9pZCIsInJlc291cmNlIjoiaHR0cHM6Ly9zcG9vbmpveS5hcHAvbWNwIn0\",\n      \"clientId\": \"cm_client_id\",\n      \"clientName\": \"Grocery helper\",\n      \"resource\": \"https://spoonjoy.app/mcp\",\n      \"scopes\": [\n        \"recipes:read\",\n        \"shopping_list:read\"\n      ],\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"refreshTokenCount\": 1,\n      \"accessTokenCount\": 1\n    }\n  }\n}"
         },
         {
           "status": "400",

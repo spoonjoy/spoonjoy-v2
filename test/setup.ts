@@ -150,6 +150,7 @@ beforeAll(async () => {
   // and by running `pnpm prisma:push` locally (see README / DEPLOY.md).
   await db.notificationPreference.deleteMany({});
   await db.notificationEvent.deleteMany({});
+  await db.nativePushDevice.deleteMany({});
   await db.pushSubscription.deleteMany({});
   await db.shoppingListItem.deleteMany({});
   await db.shoppingList.deleteMany({});

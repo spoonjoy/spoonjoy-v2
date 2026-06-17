@@ -4,6 +4,7 @@ import { faker } from "@faker-js/faker";
 import { FormData as UndiciFormData, Request as UndiciRequest } from "undici";
 import { action, loader } from "~/routes/api.v1.$";
 import { createApiCredential } from "~/lib/api-auth.server";
+import { loadNativeAccountSnapshot, removeNativeAccountPhoto, updateNativeAccountProfile } from "~/lib/api-v1-account.server";
 import { DEFAULT_NOTIFICATION_PREFERENCES } from "~/lib/account-settings.server";
 import { getLocalDb } from "~/lib/db.server";
 import { IMAGE_MAX_FILE_SIZE, PROFILE_IMAGE_TYPES } from "~/lib/recipe-image";
@@ -418,6 +419,60 @@ describe("API v1 native account and bootstrap endpoints", () => {
         },
       },
     });
+
+    const passkeyOnly = await db.user.create({
+      data: {
+        ...createTestUser(),
+        hashedPassword: null,
+        salt: null,
+      },
+    });
+    await db.userCredential.create({
+      data: {
+        id: "pk_passkey_only",
+        userId: passkeyOnly.id,
+        publicKey: new Uint8Array([7, 8, 9]),
+        counter: 0n,
+        transports: null,
+        name: null,
+        createdAt: null,
+      },
+    });
+    const passkeyOnlyReader = await createApiCredential(db, passkeyOnly.id, "Native passkey-only reader", {
+      scopes: ["kitchen:read"],
+    });
+
+    const passkeyOnlyResponse = await loader(routeArgs(getRequest(
+      "me",
+      passkeyOnlyReader.token,
+      "req_me_passkey_only_bootstrap",
+    ), "me"));
+    const passkeyOnlyPayload = await readJson(passkeyOnlyResponse);
+
+    expect(passkeyOnlyResponse.status).toBe(200);
+    expectPrivateEnvelopeHeaders(passkeyOnlyResponse, "req_me_passkey_only_bootstrap");
+    expectSuccessEnvelope(passkeyOnlyPayload, "req_me_passkey_only_bootstrap");
+    expect(passkeyOnlyPayload.data.me).toMatchObject({
+      id: passkeyOnly.id,
+      hasPassword: false,
+      oauthAccounts: [],
+      passkeys: [
+        {
+          id: "pk_passkey_only",
+          name: null,
+          transports: null,
+          createdAt: null,
+        },
+      ],
+      handoffs: {
+        password: {
+          actions: ["setPassword"],
+        },
+        passkeys: {
+          actions: ["addPasskey", "renamePasskey"],
+        },
+      },
+    });
   });
 
   it("manages native account personal tokens without leaking OAuth access credentials or token secrets", async () => {
@@ -580,6 +635,47 @@ describe("API v1 native account and bootstrap endpoints", () => {
     await expect(db.user.findUniqueOrThrow({ where: { id: user.id } }))
       .resolves.toMatchObject({ email: nextEmail.toLowerCase(), username: nextUsername });
 
+    const emailOnly = `email-only-${faker.string.alphanumeric(8)}@example.com`;
+    const emailOnlyResponse = await action(routeArgs(jsonRequest("me", "PATCH", writer.token, "req_me_patch_email_only", {
+      email: emailOnly,
+    }), "me"));
+    const emailOnlyPayload = await readJson(emailOnlyResponse);
+
+    expect(emailOnlyResponse.status).toBe(200);
+    expectPrivateEnvelopeHeaders(emailOnlyResponse, "req_me_patch_email_only");
+    expectSuccessEnvelope(emailOnlyPayload, "req_me_patch_email_only");
+    expect(emailOnlyPayload.data.me).toMatchObject({ email: emailOnly.toLowerCase(), username: nextUsername });
+
+    const usernameOnly = `native_only_${faker.string.alphanumeric(10)}`;
+    const usernameOnlyResponse = await action(routeArgs(jsonRequest("me", "PATCH", writer.token, "req_me_patch_username_only", {
+      username: usernameOnly,
+    }), "me"));
+    const usernameOnlyPayload = await readJson(usernameOnlyResponse);
+
+    expect(usernameOnlyResponse.status).toBe(200);
+    expectPrivateEnvelopeHeaders(usernameOnlyResponse, "req_me_patch_username_only");
+    expectSuccessEnvelope(usernameOnlyPayload, "req_me_patch_username_only");
+    expect(usernameOnlyPayload.data.me).toMatchObject({ email: emailOnly.toLowerCase(), username: usernameOnly });
+
+    const noChanges = await action(routeArgs(jsonRequest("me", "PATCH", writer.token, "req_me_patch_no_changes", {}), "me"));
+    const noChangesPayload = await readJson(noChanges);
+
+    expect(noChanges.status).toBe(200);
+    expectPrivateEnvelopeHeaders(noChanges, "req_me_patch_no_changes");
+    expectSuccessEnvelope(noChangesPayload, "req_me_patch_no_changes");
+    expect(noChangesPayload.data.me).toMatchObject({ email: emailOnly.toLowerCase(), username: usernameOnly });
+
+    const sameValues = await action(routeArgs(jsonRequest("me", "PATCH", writer.token, "req_me_patch_same_values", {
+      email: emailOnly.toUpperCase(),
+      username: usernameOnly,
+    }), "me"));
+    const sameValuesPayload = await readJson(sameValues);
+
+    expect(sameValues.status).toBe(200);
+    expectPrivateEnvelopeHeaders(sameValues, "req_me_patch_same_values");
+    expectSuccessEnvelope(sameValuesPayload, "req_me_patch_same_values");
+    expect(sameValuesPayload.data.me).toMatchObject({ email: emailOnly.toLowerCase(), username: usernameOnly });
+
     const invalid = await action(routeArgs(jsonRequest("me", "PATCH", writer.token, "req_me_patch_invalid", {
       email: "not-an-email",
       username: " ",
@@ -610,6 +706,18 @@ describe("API v1 native account and bootstrap endpoints", () => {
         email: expect.any(String),
         username: expect.any(String),
       },
+    });
+
+    const overlong = await action(routeArgs(jsonRequest("me", "PATCH", writer.token, "req_me_patch_overlong", {
+      username: "u".repeat(161),
+    }), "me"));
+    const overlongPayload = await readJson(overlong);
+
+    expect(overlong.status).toBe(400);
+    expectPrivateEnvelopeHeaders(overlong, "req_me_patch_overlong");
+    expectErrorEnvelope(overlongPayload, "req_me_patch_overlong", "validation_error", 400, true);
+    expect(overlongPayload.error.details).toMatchObject({
+      fieldErrors: { username: expect.stringContaining("at most 160") },
     });
   });
 
@@ -651,6 +759,18 @@ describe("API v1 native account and bootstrap endpoints", () => {
     expect(updatedPayload.data.preferences).toEqual(nextPreferences);
     await expect(db.notificationPreference.findUniqueOrThrow({ where: { userId: user.id } }))
       .resolves.toMatchObject(nextPreferences);
+
+    const saved = await loader(routeArgs(getRequest(
+      "me/notification-preferences",
+      reader.token,
+      "req_me_prefs_saved",
+    ), "me/notification-preferences"));
+    const savedPayload = await readJson(saved);
+
+    expect(saved.status).toBe(200);
+    expectPrivateEnvelopeHeaders(saved, "req_me_prefs_saved");
+    expectSuccessEnvelope(savedPayload, "req_me_prefs_saved");
+    expect(savedPayload.data.preferences).toEqual(nextPreferences);
 
     const invalid = await action(routeArgs(jsonRequest(
       "me/notification-preferences",
@@ -764,6 +884,11 @@ describe("API v1 native account and bootstrap endpoints", () => {
     expect(missingPayload.error.details).toMatchObject({
       reason: "no_file",
       fieldErrors: { photo: expect.any(String) },
+    });
+
+    await expect(removeNativeAccountPhoto(db, "missing-user", env.PHOTOS as R2Bucket)).resolves.toMatchObject({
+      ok: false,
+      code: "not_found",
     });
   });
 
@@ -936,6 +1061,16 @@ describe("API v1 native account and bootstrap endpoints", () => {
         extra: expect.any(String),
       },
     });
+
+    const missing = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/me/apns-devices/missing-device", {
+      method: "DELETE",
+      headers: bearerHeaders(writer.token, "req_me_apns_missing"),
+    }) as unknown as Request, "me/apns-devices/missing-device"));
+    const missingPayload = await readJson(missing);
+
+    expect(missing.status).toBe(404);
+    expectPrivateEnvelopeHeaders(missing, "req_me_apns_missing");
+    expectErrorEnvelope(missingPayload, "req_me_apns_missing", "not_found", 404);
   });
 
   it("lists and disconnects OAuth account connections by stable resource-aware IDs", async () => {
@@ -970,6 +1105,35 @@ describe("API v1 native account and bootstrap endpoints", () => {
         createdAt: new Date("2026-06-04T10:00:00.000Z"),
       },
     });
+    const missingClientId = `missing-client-${faker.string.alphanumeric(8)}`;
+    await db.oAuthRefreshToken.create({
+      data: {
+        tokenHash: `refresh-${faker.string.alphanumeric(12)}`,
+        userId: user.id,
+        clientId: missingClientId,
+        resource: null,
+        scope: "public:read",
+        createdAt: new Date("2026-06-06T10:00:00.000Z"),
+      },
+    });
+    await createApiCredential(db, user.id, "Resource-less OAuth access", {
+      scopes: ["public:read"],
+      oauthClientId: missingClientId,
+      oauthResource: null,
+      expiresAt: new Date("2026-07-02T10:00:00.000Z"),
+    });
+    const zeroAccessClientId = `zero-access-client-${faker.string.alphanumeric(8)}`;
+    const zeroAccessResource = "https://spoonjoy.app/recipes";
+    await db.oAuthRefreshToken.create({
+      data: {
+        tokenHash: `refresh-${faker.string.alphanumeric(12)}`,
+        userId: user.id,
+        clientId: zeroAccessClientId,
+        resource: zeroAccessResource,
+        scope: "recipes:read",
+        createdAt: new Date("2026-06-07T10:00:00.000Z"),
+      },
+    });
     const access = await createApiCredential(db, user.id, "Meal planner access", {
       scopes: ["recipes:read"],
       oauthClientId: client.id,
@@ -993,6 +1157,26 @@ describe("API v1 native account and bootstrap endpoints", () => {
         createdAt: "2026-06-04T10:00:00.000Z",
         refreshTokenCount: 2,
         accessTokenCount: 1,
+      },
+      {
+        id: nativeConnectionIdFor(missingClientId, null),
+        clientId: missingClientId,
+        clientName: null,
+        resource: null,
+        scopes: ["public:read"],
+        createdAt: "2026-06-06T10:00:00.000Z",
+        refreshTokenCount: 1,
+        accessTokenCount: 1,
+      },
+      {
+        id: nativeConnectionIdFor(zeroAccessClientId, zeroAccessResource),
+        clientId: zeroAccessClientId,
+        clientName: null,
+        resource: zeroAccessResource,
+        scopes: ["recipes:read"],
+        createdAt: "2026-06-07T10:00:00.000Z",
+        refreshTokenCount: 1,
+        accessTokenCount: 0,
       },
     ]);
 
@@ -1029,6 +1213,37 @@ describe("API v1 native account and bootstrap endpoints", () => {
     expect(missing.status).toBe(404);
     expectPrivateEnvelopeHeaders(missing, "req_me_connection_missing");
     expectErrorEnvelope(missingPayload, "req_me_connection_missing", "not_found", 404);
+
+    const malformed = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/me/connections/not-oauth", {
+      method: "DELETE",
+      headers: bearerHeaders(writer.token, "req_me_connection_malformed"),
+    }) as unknown as Request, "me/connections/not-oauth"));
+    const malformedPayload = await readJson(malformed);
+
+    expect(malformed.status).toBe(404);
+    expectPrivateEnvelopeHeaders(malformed, "req_me_connection_malformed");
+    expectErrorEnvelope(malformedPayload, "req_me_connection_malformed", "not_found", 404);
+
+    const invalidEncoded = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/me/connections/oauth_not-valid-base64", {
+      method: "DELETE",
+      headers: bearerHeaders(writer.token, "req_me_connection_invalid_encoded"),
+    }) as unknown as Request, "me/connections/oauth_not-valid-base64"));
+    const invalidEncodedPayload = await readJson(invalidEncoded);
+
+    expect(invalidEncoded.status).toBe(404);
+    expectPrivateEnvelopeHeaders(invalidEncoded, "req_me_connection_invalid_encoded");
+    expectErrorEnvelope(invalidEncodedPayload, "req_me_connection_invalid_encoded", "not_found", 404);
+
+    const wrongShapeConnectionId = `oauth_${Buffer.from(JSON.stringify({ clientId: 123, resource: null })).toString("base64url")}`;
+    const wrongShape = await action(routeArgs(new UndiciRequest(`http://localhost/api/v1/me/connections/${wrongShapeConnectionId}`, {
+      method: "DELETE",
+      headers: bearerHeaders(writer.token, "req_me_connection_wrong_shape"),
+    }) as unknown as Request, `me/connections/${wrongShapeConnectionId}`));
+    const wrongShapePayload = await readJson(wrongShape);
+
+    expect(wrongShape.status).toBe(404);
+    expectPrivateEnvelopeHeaders(wrongShape, "req_me_connection_wrong_shape");
+    expectErrorEnvelope(wrongShapePayload, "req_me_connection_wrong_shape", "not_found", 404);
   });
 
   it("enforces authentication and kitchen scopes before account payload parsing", async () => {
@@ -1097,5 +1312,14 @@ describe("API v1 native account and bootstrap endpoints", () => {
     expectPrivateEnvelopeHeaders(sessionResponse, "req_me_session");
     expectSuccessEnvelope(sessionPayload, "req_me_session");
     expect(sessionPayload.data.me).toMatchObject({ id: sessionOnly.id });
+
+    await expect(loadNativeAccountSnapshot(db, "missing-user")).resolves.toMatchObject({
+      ok: false,
+      code: "not_found",
+    });
+    await expect(updateNativeAccountProfile(db, "missing-user", { username: "missing_user" })).resolves.toMatchObject({
+      ok: false,
+      code: "not_found",
+    });
   });
 });

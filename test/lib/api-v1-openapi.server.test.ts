@@ -431,6 +431,74 @@ describe("API v1 OpenAPI document", () => {
       .toBe("#/components/schemas/ErrorEnvelope");
   });
 
+  it("declares exact request and response schemas for native account endpoints", () => {
+    const document = buildApiV1OpenApiDocument();
+
+    expect(operation(document, "/api/v1/me", "GET").responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/NativeAccountSnapshotEnvelope");
+    expect(operation(document, "/api/v1/me", "PATCH").requestBody.content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/NativeProfileRequest");
+    expect(operation(document, "/api/v1/me", "PATCH").responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/NativeAccountSnapshotEnvelope");
+    expect(responseExample(document, "/api/v1/me", "GET", "200").data.me).toMatchObject({
+      handoffs: {
+        accountSettings: { url: "/account/settings", onlineOnly: true },
+        passkeys: {
+          registrationOptionsUrl: "/auth/webauthn/register/options",
+          registrationVerifyUrl: "/auth/webauthn/register/verify",
+        },
+        providerLinks: {
+          google: { url: "/auth/google?linking=true", onlineOnly: true },
+          github: { url: "/auth/github?linking=true", onlineOnly: true },
+          apple: { url: "/auth/apple?linking=true", onlineOnly: true },
+        },
+      },
+      apiCredentials: [expect.not.objectContaining({ tokenHash: expect.anything() })],
+      oauthConnections: [expect.objectContaining({ accessTokenCount: 1, refreshTokenCount: 1 })],
+    });
+
+    expect(operation(document, "/api/v1/me/photo", "POST").requestBody.content["multipart/form-data"].schema.$ref)
+      .toBe("#/components/schemas/ProfilePhotoUploadRequest");
+    expect(operation(document, "/api/v1/me/photo", "POST").requestBody.content["application/json"]).toBeUndefined();
+    expect(operation(document, "/api/v1/me/photo", "POST").responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/NativeProfilePhotoEnvelope");
+    expect(operation(document, "/api/v1/me/photo", "DELETE").responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/NativeProfilePhotoRemoveEnvelope");
+    expect(operation(document, "/api/v1/me/photo", "DELETE").parameters.map((parameter: { name: string }) => parameter.name))
+      .not.toContain("X-Client-Mutation-Id");
+
+    expect(operation(document, "/api/v1/me/kitchen", "GET").responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/NativeAccountSnapshotEnvelope");
+    expect(operation(document, "/api/v1/me/notification-preferences", "GET").responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/NativeNotificationPreferencesEnvelope");
+    expect(operation(document, "/api/v1/me/notification-preferences", "PATCH").requestBody.content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/NativeNotificationPreferencesRequest");
+    expect(operation(document, "/api/v1/me/notification-preferences", "PATCH").responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/NativeNotificationPreferencesEnvelope");
+
+    expect(operation(document, "/api/v1/me/apns-devices", "POST").requestBody.content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/NativeApnsDeviceRequest");
+    expect(operation(document, "/api/v1/me/apns-devices", "POST").responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/NativeApnsDeviceEnvelope");
+    expect(operation(document, "/api/v1/me/apns-devices", "POST").responses["201"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/NativeApnsDeviceEnvelope");
+    expect(responseExample(document, "/api/v1/me/apns-devices", "POST", "201").data.device)
+      .not.toEqual(expect.objectContaining({ token: expect.anything(), tokenHash: expect.anything() }));
+    expect(operation(document, "/api/v1/me/apns-devices/{deviceId}", "DELETE").responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/NativeApnsDeviceRevokeEnvelope");
+    expect(operation(document, "/api/v1/me/apns-devices/{deviceId}", "DELETE").parameters.map((parameter: { name: string }) => parameter.name))
+      .toEqual(expect.arrayContaining(["deviceId", "X-Request-Id"]));
+    expect(operation(document, "/api/v1/me/apns-devices/{deviceId}", "DELETE").parameters.map((parameter: { name: string }) => parameter.name))
+      .not.toContain("X-Client-Mutation-Id");
+
+    expect(operation(document, "/api/v1/me/connections", "GET").responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/NativeOAuthConnectionsEnvelope");
+    expect(operation(document, "/api/v1/me/connections/{connectionId}", "DELETE").responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/NativeOAuthConnectionDisconnectEnvelope");
+    expect(operation(document, "/api/v1/me/connections/{connectionId}", "DELETE").parameters.map((parameter: { name: string }) => parameter.name))
+      .not.toContain("X-Client-Mutation-Id");
+  });
+
   it("defines reusable schemas with strict objects, nullable fields, and error enums", () => {
     const { components } = buildApiV1OpenApiDocument();
 

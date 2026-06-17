@@ -1,6 +1,7 @@
+import { Buffer } from "node:buffer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { faker } from "@faker-js/faker";
-import { Request as UndiciRequest } from "undici";
+import { FormData as UndiciFormData, Request as UndiciRequest } from "undici";
 import { action, loader } from "~/routes/api.v1.$";
 import * as apiAuth from "~/lib/api-auth.server";
 import { createApiCredential } from "~/lib/api-auth.server";
@@ -255,6 +256,37 @@ function expectApiV1OperationEvent(input: {
   expect(serialized).not.toContain("Authorization");
   expect(serialized).not.toContain("Bearer ");
   expect(serialized).not.toContain("clientMutationId");
+  return eventInput;
+}
+
+function expectApiV1OperationName(input: {
+  routeTemplate: string;
+  requestId: string;
+  operation: string;
+  status?: number;
+  forbidden?: readonly string[];
+}) {
+  const eventInput = apiV1Event(input.routeTemplate, input.requestId);
+
+  expect(eventInput).toMatchObject({
+    event: "spoonjoy.api_v1.request",
+    properties: {
+      route_template: input.routeTemplate,
+      request_id: input.requestId,
+      operation: input.operation,
+      status: input.status ?? 200,
+      privacy_class: "authenticated",
+      latency_ms: expect.any(Number),
+    },
+  });
+
+  const serialized = JSON.stringify(eventInput);
+  for (const forbidden of input.forbidden ?? []) {
+    expect(serialized).not.toContain(forbidden);
+  }
+  expect(serialized).not.toContain("Authorization");
+  expect(serialized).not.toContain("Bearer ");
+  expect(serialized).not.toContain("__session=");
   return eventInput;
 }
 
@@ -638,6 +670,166 @@ describe("API v1 mutation and validation telemetry", () => {
         createPayload.data.credential.tokenPrefix,
         revoke.bodyText,
       ],
+    });
+  });
+
+  it("captures native account operation names without account secrets", async () => {
+    const user = await db.user.create({ data: createTestUser() });
+    const cookie = await sessionCookie(user.id);
+    const client = await db.oAuthClient.create({
+      data: {
+        clientName: "Telemetry account client",
+        redirectUris: "https://telemetry.example/callback",
+      },
+    });
+    const resource = "https://spoonjoy.app/mcp";
+    await db.oAuthRefreshToken.create({
+      data: {
+        tokenHash: `refresh-${faker.string.alphanumeric(16)}`,
+        userId: user.id,
+        clientId: client.id,
+        resource,
+        scope: "recipes:read",
+      },
+    });
+
+    const read = await loader(routeArgs(apiRequest("http://localhost/api/v1/me", "req_account_operation_read", {
+      Cookie: cookie,
+    }), "me").args);
+    expect(read.status).toBe(200);
+    expectApiV1OperationName({
+      routeTemplate: "/api/v1/me",
+      requestId: "req_account_operation_read",
+      operation: "account.read",
+      forbidden: [user.email],
+    });
+
+    const update = apiJsonRequest("PATCH", "me", "req_account_operation_update", { Cookie: cookie }, {
+      username: `telemetry_${faker.string.alphanumeric(8)}`,
+    });
+    expect((await action(routeArgs(update.request, "me").args)).status).toBe(200);
+    expectApiV1OperationName({
+      routeTemplate: "/api/v1/me",
+      requestId: "req_account_operation_update",
+      operation: "account.update",
+      forbidden: [update.bodyText],
+    });
+
+    const formData = new UndiciFormData();
+    formData.append("photo", new File([new TextEncoder().encode("GIF89a")], "profile.gif", { type: "image/gif" }));
+    const upload = new UndiciRequest("http://localhost/api/v1/me/photo", {
+      method: "POST",
+      headers: {
+        Cookie: cookie,
+        "X-Request-Id": "req_account_operation_photo_upload",
+        Origin: "https://client.example",
+        Referer: "https://docs.example/start?token=secret",
+        "User-Agent": "PostmanRuntime/7.39.0",
+      },
+      body: formData,
+    }) as unknown as Request;
+    expect((await action(routeArgs(upload, "me/photo").args)).status).toBe(200);
+    expectApiV1OperationName({
+      routeTemplate: "/api/v1/me/photo",
+      requestId: "req_account_operation_photo_upload",
+      operation: "account.photo.upload",
+      forbidden: ["GIF89a"],
+    });
+
+    expect((await action(routeArgs(new UndiciRequest("http://localhost/api/v1/me/photo", {
+      method: "DELETE",
+      headers: { Cookie: cookie, "X-Request-Id": "req_account_operation_photo_remove" },
+    }) as unknown as Request, "me/photo").args)).status).toBe(200);
+    expectApiV1OperationName({
+      routeTemplate: "/api/v1/me/photo",
+      requestId: "req_account_operation_photo_remove",
+      operation: "account.photo.remove",
+    });
+
+    expect((await loader(routeArgs(apiRequest("http://localhost/api/v1/me/kitchen", "req_account_operation_kitchen", {
+      Cookie: cookie,
+    }), "me/kitchen").args)).status).toBe(200);
+    expectApiV1OperationName({
+      routeTemplate: "/api/v1/me/kitchen",
+      requestId: "req_account_operation_kitchen",
+      operation: "account.kitchen.bootstrap",
+    });
+
+    expect((await loader(routeArgs(apiRequest(
+      "http://localhost/api/v1/me/notification-preferences",
+      "req_account_operation_notifications_read",
+      { Cookie: cookie },
+    ), "me/notification-preferences").args)).status).toBe(200);
+    expectApiV1OperationName({
+      routeTemplate: "/api/v1/me/notification-preferences",
+      requestId: "req_account_operation_notifications_read",
+      operation: "account.notifications.read",
+    });
+
+    const prefs = apiJsonRequest(
+      "PATCH",
+      "me/notification-preferences",
+      "req_account_operation_notifications_update",
+      { Cookie: cookie },
+      { notifySpoonOnMyRecipe: false },
+    );
+    expect((await action(routeArgs(prefs.request, "me/notification-preferences").args)).status).toBe(200);
+    expectApiV1OperationName({
+      routeTemplate: "/api/v1/me/notification-preferences",
+      requestId: "req_account_operation_notifications_update",
+      operation: "account.notifications.update",
+      forbidden: [prefs.bodyText],
+    });
+
+    const apnsToken = `apns-token-${faker.string.alphanumeric(32)}`;
+    const apns = apiJsonRequest("POST", "me/apns-devices", "req_account_operation_apns_register", { Cookie: cookie }, {
+      deviceId: "telemetry-device",
+      platform: "ios",
+      environment: "development",
+      token: apnsToken,
+    });
+    expect((await action(routeArgs(apns.request, "me/apns-devices").args)).status).toBe(201);
+    expectApiV1OperationName({
+      routeTemplate: "/api/v1/me/apns-devices",
+      requestId: "req_account_operation_apns_register",
+      operation: "account.apns.register",
+      status: 201,
+      forbidden: [apnsToken, apns.bodyText],
+    });
+
+    expect((await action(routeArgs(new UndiciRequest("http://localhost/api/v1/me/apns-devices/telemetry-device", {
+      method: "DELETE",
+      headers: { Cookie: cookie, "X-Request-Id": "req_account_operation_apns_revoke" },
+    }) as unknown as Request, "me/apns-devices/telemetry-device").args)).status).toBe(200);
+    expectApiV1OperationName({
+      routeTemplate: "/api/v1/me/apns-devices/{deviceId}",
+      requestId: "req_account_operation_apns_revoke",
+      operation: "account.apns.revoke",
+      forbidden: ["telemetry-device"],
+    });
+
+    expect((await loader(routeArgs(apiRequest(
+      "http://localhost/api/v1/me/connections",
+      "req_account_operation_connections_list",
+      { Cookie: cookie },
+    ), "me/connections").args)).status).toBe(200);
+    expectApiV1OperationName({
+      routeTemplate: "/api/v1/me/connections",
+      requestId: "req_account_operation_connections_list",
+      operation: "account.connections.list",
+      forbidden: [client.clientName ?? "", client.id],
+    });
+
+    const connectionId = `oauth_${Buffer.from(JSON.stringify({ clientId: client.id, resource })).toString("base64url")}`;
+    expect((await action(routeArgs(new UndiciRequest(`http://localhost/api/v1/me/connections/${connectionId}`, {
+      method: "DELETE",
+      headers: { Cookie: cookie, "X-Request-Id": "req_account_operation_connection_disconnect" },
+    }) as unknown as Request, `me/connections/${connectionId}`).args)).status).toBe(200);
+    expectApiV1OperationName({
+      routeTemplate: "/api/v1/me/connections/{connectionId}",
+      requestId: "req_account_operation_connection_disconnect",
+      operation: "account.connections.disconnect",
+      forbidden: [connectionId, client.id],
     });
   });
 

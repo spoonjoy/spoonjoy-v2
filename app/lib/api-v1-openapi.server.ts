@@ -440,6 +440,156 @@ const schemas = {
     revokedAt: nullableDateTimeSchema,
     expiresAt: nullableDateTimeSchema,
   }),
+  NativeOAuthAccount: objectSchema(["provider", "providerUsername"], {
+    provider: { type: "string", enum: ["apple", "github", "google"] },
+    providerUsername: { type: "string" },
+  }),
+  NativePasskey: objectSchema(["id", "name", "transports", "createdAt"], {
+    id: idSchema,
+    name: nullableStringSchema,
+    transports: nullableStringSchema,
+    createdAt: nullableDateTimeSchema,
+  }),
+  NativeAccountWebHandoff: objectSchema(["method", "url", "onlineOnly"], {
+    method: { type: "string", enum: ["GET"] },
+    url: { type: "string" },
+    onlineOnly: { type: "boolean", const: true },
+  }),
+  NativePasswordHandoff: objectSchema(["method", "url", "onlineOnly", "actions"], {
+    method: { type: "string", enum: ["GET"] },
+    url: { type: "string" },
+    onlineOnly: { type: "boolean", const: true },
+    actions: arrayOf({ type: "string", enum: ["changePassword", "removePassword", "setPassword"] }),
+  }),
+  NativePasskeyHandoff: objectSchema(["method", "url", "onlineOnly", "registrationOptionsUrl", "registrationVerifyUrl", "actions"], {
+    method: { type: "string", enum: ["GET"] },
+    url: { type: "string" },
+    onlineOnly: { type: "boolean", const: true },
+    registrationOptionsUrl: { type: "string" },
+    registrationVerifyUrl: { type: "string" },
+    actions: arrayOf({ type: "string", enum: ["addPasskey", "renamePasskey", "removePasskey"] }),
+  }),
+  NativeProviderHandoffs: objectSchema(["google", "github", "apple"], {
+    google: ref("NativeAccountWebHandoff"),
+    github: ref("NativeAccountWebHandoff"),
+    apple: ref("NativeAccountWebHandoff"),
+  }),
+  NativeAccountHandoffs: objectSchema(["accountSettings", "password", "passkeys", "providerLinks"], {
+    accountSettings: ref("NativeAccountWebHandoff"),
+    password: ref("NativePasswordHandoff"),
+    passkeys: ref("NativePasskeyHandoff"),
+    providerLinks: ref("NativeProviderHandoffs"),
+  }),
+  NativeOAuthConnection: objectSchema(["id", "clientId", "clientName", "resource", "scopes", "createdAt", "refreshTokenCount", "accessTokenCount"], {
+    id: idSchema,
+    clientId: idSchema,
+    clientName: nullableStringSchema,
+    resource: nullableStringSchema,
+    scopes: arrayOf({ type: "string" }),
+    createdAt: dateTimeSchema,
+    refreshTokenCount: { type: "integer", minimum: 1 },
+    accessTokenCount: { type: "integer", minimum: 0 },
+  }),
+  NativeAccount: objectSchema(["id", "email", "username", "hasPassword", "photoUrl", "oauthAccounts", "passkeys", "handoffs", "apiCredentials", "oauthConnections"], {
+    id: idSchema,
+    email: { type: "string", format: "email" },
+    username: { type: "string", minLength: 1 },
+    hasPassword: { type: "boolean" },
+    photoUrl: nullableStringSchema,
+    oauthAccounts: arrayOf(ref("NativeOAuthAccount")),
+    passkeys: arrayOf(ref("NativePasskey")),
+    handoffs: ref("NativeAccountHandoffs"),
+    apiCredentials: arrayOf(ref("CredentialMetadata")),
+    oauthConnections: arrayOf(ref("NativeOAuthConnection")),
+  }),
+  NativeNotificationPreferences: objectSchema(["notifySpoonOnMyRecipe", "notifyForkOfMyRecipe", "notifyCookbookSaveOfMine", "notifyFellowChefOriginCook"], {
+    notifySpoonOnMyRecipe: { type: "boolean" },
+    notifyForkOfMyRecipe: { type: "boolean" },
+    notifyCookbookSaveOfMine: { type: "boolean" },
+    notifyFellowChefOriginCook: { type: "boolean" },
+  }),
+  NativeNotificationStatus: objectSchema(["pushSubscribed", "preferences"], {
+    pushSubscribed: { type: "boolean" },
+    preferences: ref("NativeNotificationPreferences"),
+  }),
+  NativeAccountSnapshotData: objectSchema(["me", "notifications"], {
+    me: ref("NativeAccount"),
+    notifications: ref("NativeNotificationStatus"),
+  }),
+  NativeAccountSnapshotEnvelope: successEnvelope(ref("NativeAccountSnapshotData")),
+  NativeProfileRequest: objectSchema([], {
+    email: { type: "string", format: "email" },
+    username: { type: "string", minLength: 1, maxLength: 160 },
+  }),
+  ProfilePhotoUploadRequest: objectSchema(["photo"], {
+    photo: { type: "string", format: "binary", description: "Profile image file. Accepted media types match the web profile-image allow-list, including GIF and excluding SVG." },
+  }),
+  NativeProfilePhotoAccount: objectSchema(["id", "photoUrl"], {
+    id: idSchema,
+    photoUrl: nullableStringSchema,
+  }),
+  NativeProfilePhotoData: objectSchema(["photoUrl", "me"], {
+    photoUrl: nullableStringSchema,
+    me: ref("NativeProfilePhotoAccount"),
+  }),
+  NativeProfilePhotoEnvelope: successEnvelope(ref("NativeProfilePhotoData")),
+  NativeProfilePhotoRemoveData: objectSchema(["removed", "photoUrl", "me"], {
+    removed: { type: "boolean" },
+    photoUrl: { type: "null" },
+    me: ref("NativeProfilePhotoAccount"),
+  }),
+  NativeProfilePhotoRemoveEnvelope: successEnvelope(ref("NativeProfilePhotoRemoveData")),
+  NativeNotificationPreferencesRequest: objectSchema([], {
+    notifySpoonOnMyRecipe: { type: "boolean" },
+    notifyForkOfMyRecipe: { type: "boolean" },
+    notifyCookbookSaveOfMine: { type: "boolean" },
+    notifyFellowChefOriginCook: { type: "boolean" },
+  }),
+  NativeNotificationPreferencesData: objectSchema(["preferences"], {
+    preferences: ref("NativeNotificationPreferences"),
+  }),
+  NativeNotificationPreferencesEnvelope: successEnvelope(ref("NativeNotificationPreferencesData")),
+  NativeApnsDeviceRequest: objectSchema(["deviceId", "platform", "environment", "token"], {
+    deviceId: shortTextSchema,
+    platform: { type: "string", enum: ["ios", "ipados", "macos"] },
+    environment: { type: "string", enum: ["development", "production"] },
+    token: { type: "string", minLength: 1, maxLength: 4096, description: "Raw APNs device token. Spoonjoy stores only a SHA-256 hash plus tokenPrefix." },
+    deviceName: nullableStringSchema,
+    appVersion: nullableStringSchema,
+  }),
+  NativeApnsDevice: objectSchema(["id", "deviceId", "platform", "environment", "tokenPrefix", "deviceName", "appVersion", "enabledAt", "revokedAt", "lastRegisteredAt", "createdAt", "updatedAt"], {
+    id: idSchema,
+    deviceId: idSchema,
+    platform: { type: "string", enum: ["ios", "ipados", "macos"] },
+    environment: { type: "string", enum: ["development", "production"] },
+    tokenPrefix: { type: "string" },
+    deviceName: nullableStringSchema,
+    appVersion: nullableStringSchema,
+    enabledAt: dateTimeSchema,
+    revokedAt: nullableDateTimeSchema,
+    lastRegisteredAt: dateTimeSchema,
+    createdAt: dateTimeSchema,
+    updatedAt: dateTimeSchema,
+  }),
+  NativeApnsDeviceData: objectSchema(["created", "device"], {
+    created: { type: "boolean" },
+    device: ref("NativeApnsDevice"),
+  }),
+  NativeApnsDeviceEnvelope: successEnvelope(ref("NativeApnsDeviceData")),
+  NativeApnsDeviceRevokeData: objectSchema(["revoked", "device"], {
+    revoked: { type: "boolean" },
+    device: ref("NativeApnsDevice"),
+  }),
+  NativeApnsDeviceRevokeEnvelope: successEnvelope(ref("NativeApnsDeviceRevokeData")),
+  NativeOAuthConnectionsData: objectSchema(["connections"], {
+    connections: arrayOf(ref("NativeOAuthConnection")),
+  }),
+  NativeOAuthConnectionsEnvelope: successEnvelope(ref("NativeOAuthConnectionsData")),
+  NativeOAuthConnectionDisconnectData: objectSchema(["disconnected", "connection"], {
+    disconnected: { type: "boolean" },
+    connection: ref("NativeOAuthConnection"),
+  }),
+  NativeOAuthConnectionDisconnectEnvelope: successEnvelope(ref("NativeOAuthConnectionDisconnectData")),
   ShoppingItem: objectSchema(["id", "name", "quantity", "unit", "checked", "checkedAt", "deletedAt", "categoryKey", "iconKey", "sortIndex", "updatedAt"], {
     id: idSchema,
     name: shortTextSchema,
@@ -725,31 +875,31 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
     POST: { operationId: "postApiV1ShoppingListClearAll", tags: ["Shopping List"], summary: "Clear all shopping-list items", auth: "bearer", scopes: ["shopping_list:write"], success: nativeContractSuccess, errors: bearerMutationErrors, requestBody: "NativeMutationRequest" },
   },
   "/api/v1/me": {
-    GET: { operationId: "getApiV1Me", tags: ["Account"], summary: "Read the current chef account", auth: "bearer", scopes: ["kitchen:read"], success: nativeContractSuccess, errors: bearerReadErrors },
-    PATCH: { operationId: "patchApiV1Me", tags: ["Account"], summary: "Update current chef profile fields", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, requestBody: "NativeMutationRequest" },
+    GET: { operationId: "getApiV1Me", tags: ["Account"], summary: "Read the current chef account", auth: "bearer", scopes: ["kitchen:read"], success: { 200: "NativeAccountSnapshotEnvelope" }, errors: bearerReadErrors },
+    PATCH: { operationId: "patchApiV1Me", tags: ["Account"], summary: "Update current chef profile fields", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "NativeAccountSnapshotEnvelope" }, errors: bearerMutationErrors, requestBody: "NativeProfileRequest" },
   },
   "/api/v1/me/photo": {
-    POST: { operationId: "postApiV1MePhoto", tags: ["Account"], summary: "Upload current chef profile photo", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, requestBody: "NativeMutationRequest" },
-    DELETE: { operationId: "deleteApiV1MePhoto", tags: ["Account"], summary: "Remove current chef profile photo", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, parameters: [pathParameters.clientMutationIdHeader] },
+    POST: { operationId: "postApiV1MePhoto", tags: ["Account"], summary: "Upload current chef profile photo", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "NativeProfilePhotoEnvelope" }, errors: bearerMutationErrors, requestBody: "ProfilePhotoUploadRequest" },
+    DELETE: { operationId: "deleteApiV1MePhoto", tags: ["Account"], summary: "Remove current chef profile photo", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "NativeProfilePhotoRemoveEnvelope" }, errors: bearerMutationErrors },
   },
   "/api/v1/me/kitchen": {
-    GET: { operationId: "getApiV1MeKitchen", tags: ["Account"], summary: "Bootstrap current chef kitchen data", auth: "bearer", scopes: ["kitchen:read"], success: nativeContractSuccess, errors: bearerReadErrors },
+    GET: { operationId: "getApiV1MeKitchen", tags: ["Account"], summary: "Bootstrap current chef kitchen data", auth: "bearer", scopes: ["kitchen:read"], success: { 200: "NativeAccountSnapshotEnvelope" }, errors: bearerReadErrors },
   },
   "/api/v1/me/notification-preferences": {
-    GET: { operationId: "getApiV1MeNotificationPreferences", tags: ["Account"], summary: "Read notification preferences", auth: "bearer", scopes: ["kitchen:read"], success: nativeContractSuccess, errors: bearerReadErrors },
-    PATCH: { operationId: "patchApiV1MeNotificationPreferences", tags: ["Account"], summary: "Update notification preferences", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, requestBody: "NativeMutationRequest" },
+    GET: { operationId: "getApiV1MeNotificationPreferences", tags: ["Account"], summary: "Read notification preferences", auth: "bearer", scopes: ["kitchen:read"], success: { 200: "NativeNotificationPreferencesEnvelope" }, errors: bearerReadErrors },
+    PATCH: { operationId: "patchApiV1MeNotificationPreferences", tags: ["Account"], summary: "Update notification preferences", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "NativeNotificationPreferencesEnvelope" }, errors: bearerMutationErrors, requestBody: "NativeNotificationPreferencesRequest" },
   },
   "/api/v1/me/apns-devices": {
-    POST: { operationId: "postApiV1MeApnsDevices", tags: ["Account"], summary: "Register a native APNs device", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractCreated, errors: bearerMutationErrors, requestBody: "NativeMutationRequest" },
+    POST: { operationId: "postApiV1MeApnsDevices", tags: ["Account"], summary: "Register a native APNs device", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "NativeApnsDeviceEnvelope", 201: "NativeApnsDeviceEnvelope" }, errors: bearerMutationErrors, requestBody: "NativeApnsDeviceRequest" },
   },
   "/api/v1/me/apns-devices/{deviceId}": {
-    DELETE: { operationId: "deleteApiV1MeApnsDevice", tags: ["Account"], summary: "Revoke a native APNs device", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, parameters: [pathParameters.deviceId, pathParameters.clientMutationIdHeader] },
+    DELETE: { operationId: "deleteApiV1MeApnsDevice", tags: ["Account"], summary: "Revoke a native APNs device", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "NativeApnsDeviceRevokeEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.deviceId] },
   },
   "/api/v1/me/connections": {
-    GET: { operationId: "getApiV1MeConnections", tags: ["Account"], summary: "List connected OAuth apps", auth: "bearer", scopes: ["kitchen:read"], success: nativeContractSuccess, errors: bearerReadErrors },
+    GET: { operationId: "getApiV1MeConnections", tags: ["Account"], summary: "List connected OAuth apps", auth: "bearer", scopes: ["kitchen:read"], success: { 200: "NativeOAuthConnectionsEnvelope" }, errors: bearerReadErrors },
   },
   "/api/v1/me/connections/{connectionId}": {
-    DELETE: { operationId: "deleteApiV1MeConnection", tags: ["Account"], summary: "Disconnect an OAuth app connection", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, parameters: [pathParameters.connectionId, pathParameters.clientMutationIdHeader] },
+    DELETE: { operationId: "deleteApiV1MeConnection", tags: ["Account"], summary: "Disconnect an OAuth app connection", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "NativeOAuthConnectionDisconnectEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.connectionId] },
   },
   "/api/v1/tokens": {
     GET: { operationId: "getApiV1Tokens", tags: ["Tokens"], summary: "List bearer credentials", auth: "bearer", scopes: ["tokens:read"], success: { 200: "TokenListEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "method_not_allowed", "rate_limited", "internal_error"] },
@@ -850,6 +1000,64 @@ const exampleCredential = {
   revokedAt: null,
   expiresAt: null,
 };
+const exampleNotificationPreferences = {
+  notifySpoonOnMyRecipe: true,
+  notifyForkOfMyRecipe: true,
+  notifyCookbookSaveOfMine: true,
+  notifyFellowChefOriginCook: true,
+};
+const exampleOAuthConnection = {
+  id: "oauth_eyJjbGllbnRJZCI6ImNtX2NsaWVudF9pZCIsInJlc291cmNlIjoiaHR0cHM6Ly9zcG9vbmpveS5hcHAvbWNwIn0",
+  clientId: "cm_client_id",
+  clientName: "Grocery helper",
+  resource: "https://spoonjoy.app/mcp",
+  scopes: ["recipes:read", "shopping_list:read"],
+  createdAt: exampleTimestamp,
+  refreshTokenCount: 1,
+  accessTokenCount: 1,
+};
+const exampleNativeAccount = {
+  id: "chef_1",
+  email: "ari@example.com",
+  username: "ari",
+  hasPassword: true,
+  photoUrl: "/photos/profiles/chef_1/avatar.gif",
+  oauthAccounts: [{ provider: "github", providerUsername: "ari" }],
+  passkeys: [{ id: "pk_1", name: "MacBook Touch ID", transports: "internal", createdAt: exampleTimestamp }],
+  handoffs: {
+    accountSettings: { method: "GET", url: "/account/settings", onlineOnly: true },
+    password: { method: "GET", url: "/account/settings", onlineOnly: true, actions: ["changePassword", "removePassword"] },
+    passkeys: {
+      method: "GET",
+      url: "/account/settings",
+      onlineOnly: true,
+      registrationOptionsUrl: "/auth/webauthn/register/options",
+      registrationVerifyUrl: "/auth/webauthn/register/verify",
+      actions: ["addPasskey", "renamePasskey", "removePasskey"],
+    },
+    providerLinks: {
+      google: { method: "GET", url: "/auth/google?linking=true", onlineOnly: true },
+      github: { method: "GET", url: "/auth/github?linking=true", onlineOnly: true },
+      apple: { method: "GET", url: "/auth/apple?linking=true", onlineOnly: true },
+    },
+  },
+  apiCredentials: [exampleCredential],
+  oauthConnections: [exampleOAuthConnection],
+};
+const exampleNativeApnsDevice = {
+  id: "npd_1",
+  deviceId: "ios-simulator-1",
+  platform: "ios",
+  environment: "development",
+  tokenPrefix: "apns-token-",
+  deviceName: "iPhone",
+  appVersion: "1.0.0",
+  enabledAt: exampleTimestamp,
+  revokedAt: null,
+  lastRegisteredAt: exampleTimestamp,
+  createdAt: exampleTimestamp,
+  updatedAt: exampleTimestamp,
+};
 const exampleShoppingItem = {
   id: "item_1",
   name: "eggs",
@@ -934,6 +1142,59 @@ const responseExamples: Record<string, unknown> = {
       message: "This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.",
     },
   },
+  NativeAccountSnapshotEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      me: exampleNativeAccount,
+      notifications: {
+        pushSubscribed: true,
+        preferences: exampleNotificationPreferences,
+      },
+    },
+  },
+  NativeProfilePhotoEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      photoUrl: "/photos/profiles/chef_1/avatar.gif",
+      me: { id: "chef_1", photoUrl: "/photos/profiles/chef_1/avatar.gif" },
+    },
+  },
+  NativeProfilePhotoRemoveEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      removed: true,
+      photoUrl: null,
+      me: { id: "chef_1", photoUrl: null },
+    },
+  },
+  NativeNotificationPreferencesEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: { preferences: exampleNotificationPreferences },
+  },
+  NativeApnsDeviceEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: { created: true, device: exampleNativeApnsDevice },
+  },
+  NativeApnsDeviceRevokeEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: { revoked: true, device: { ...exampleNativeApnsDevice, revokedAt: exampleTimestamp } },
+  },
+  NativeOAuthConnectionsEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: { connections: [exampleOAuthConnection] },
+  },
+  NativeOAuthConnectionDisconnectEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: { disconnected: true, connection: exampleOAuthConnection },
+  },
   RecipeListEnvelope: {
     ok: true,
     requestId: "req_example",
@@ -1004,6 +1265,22 @@ const requestExamples: Record<string, unknown> = {
       note: "Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.",
     },
   },
+  NativeProfileRequest: { email: "ari@example.com", username: "ari" },
+  ProfilePhotoUploadRequest: { photo: "<binary image file>" },
+  NativeNotificationPreferencesRequest: {
+    notifySpoonOnMyRecipe: false,
+    notifyForkOfMyRecipe: true,
+    notifyCookbookSaveOfMine: false,
+    notifyFellowChefOriginCook: true,
+  },
+  NativeApnsDeviceRequest: {
+    deviceId: "ios-simulator-1",
+    platform: "ios",
+    environment: "development",
+    token: "apns-token-...",
+    deviceName: "iPhone",
+    appVersion: "1.0.0",
+  },
   CreateTokenRequest: { name: "Tiny client", scopes: ["recipes:read", "shopping_list:read", "shopping_list:write"] },
   CreateShoppingItemRequest: {
     clientMutationId: "device-uuid-1",
@@ -1016,6 +1293,20 @@ const requestExamples: Record<string, unknown> = {
   CheckShoppingItemRequest: { clientMutationId: "device-uuid-2", checked: true },
   DeleteShoppingItemRequest: { clientMutationId: "device-uuid-3" },
 };
+
+function requestContentFor(schemaName: string) {
+  if (schemaName === "ProfilePhotoUploadRequest") {
+    return {
+      "multipart/form-data": {
+        schema: ref(schemaName),
+        examples: {
+          example: { value: requestExamples[schemaName] },
+        },
+      },
+    };
+  }
+  return jsonContent(ref(schemaName), requestExamples[schemaName]);
+}
 
 const errorMessages: Record<ApiV1ErrorCode, string> = {
   invalid_json: "Invalid JSON body",
@@ -1620,7 +1911,7 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
           ? {
               requestBody: {
                 required: true,
-                content: jsonContent(ref(meta.requestBody), requestExamples[meta.requestBody]),
+                content: requestContentFor(meta.requestBody),
               },
             }
           : {}),

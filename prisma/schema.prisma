@@ -37,6 +37,7 @@ model User {
   imageGenLedger      ImageGenLedger[]
 
   pushSubscriptions      PushSubscription[]
+  nativePushDevices      NativePushDevice[]
   notificationEvents     NotificationEvent[]
   notificationPreference NotificationPreference?
 
@@ -454,6 +455,30 @@ model PushSubscription {
   lastSeenAt DateTime @default(now()) @updatedAt
 
   @@index([userId])
+}
+
+model NativePushDevice {
+  id               String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceId         String
+  platform         String
+  environment      String
+  tokenHash        String
+  tokenPrefix      String
+  deviceName       String?
+  appVersion       String?
+  enabledAt        DateTime @default(now())
+  // ISO text keeps D1/SQLite raw reads stable while API payloads still expose an ISO timestamp.
+  revokedAt        String?
+  lastRegisteredAt DateTime @default(now())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @default(now()) @updatedAt
+
+  @@unique([userId, deviceId])
+  @@index([userId])
+  @@index([tokenHash])
+  @@index([userId, platform, environment])
 }
 
 model NotificationEvent {
