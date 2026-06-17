@@ -8592,7 +8592,17 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         ]
       },
       "cursorPolicy": null,
-      "idempotency": null,
+      "idempotency": {
+        "key": "clientMutationId",
+        "location": "jsonBody",
+        "retentionHours": 24,
+        "replayStatus": [
+          200
+        ],
+        "conflictStatus": 409,
+        "inProgressRetryAfterSeconds": 2,
+        "retryBodyRule": "Persist and retry the same parsed JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts."
+      },
       "personalTokenOnly": false,
       "oauthNote": "",
       "selfRevokeException": "",
@@ -8617,12 +8627,12 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "required": true,
         "contentType": "application/json",
         "fileFields": [],
-        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "example": "{\n  \"clientMutationId\": \"device-uuid-4\",\n  \"recipeId\": \"recipe_1\",\n  \"scaleFactor\": 2\n}",
         "examples": [
           {
             "name": "example",
             "label": "Example",
-            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+            "example": "{\n  \"clientMutationId\": \"device-uuid-4\",\n  \"recipeId\": \"recipe_1\",\n  \"scaleFactor\": 2\n}"
           }
         ]
       },
@@ -8631,12 +8641,12 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "required": true,
           "contentType": "application/json",
           "fileFields": [],
-          "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+          "example": "{\n  \"clientMutationId\": \"device-uuid-4\",\n  \"recipeId\": \"recipe_1\",\n  \"scaleFactor\": 2\n}",
           "examples": [
             {
               "name": "example",
               "label": "Example",
-              "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+              "example": "{\n  \"clientMutationId\": \"device-uuid-4\",\n  \"recipeId\": \"recipe_1\",\n  \"scaleFactor\": 2\n}"
             }
           ]
         }
@@ -8695,7 +8705,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"created\": 1,\n    \"updated\": 1,\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Weeknight Pasta\"\n    },\n    \"items\": [\n      {\n        \"id\": \"item_1\",\n        \"name\": \"eggs\",\n        \"quantity\": 12,\n        \"unit\": \"each\",\n        \"checked\": false,\n        \"checkedAt\": null,\n        \"deletedAt\": null,\n        \"categoryKey\": null,\n        \"iconKey\": null,\n        \"sortIndex\": 0,\n        \"updatedAt\": \"2026-06-01T00:00:00.000Z\"\n      },\n      {\n        \"id\": \"item_2\",\n        \"name\": \"flour\",\n        \"quantity\": 4,\n        \"unit\": \"cup\",\n        \"checked\": false,\n        \"checkedAt\": null,\n        \"deletedAt\": null,\n        \"categoryKey\": \"pantry\",\n        \"iconKey\": \"wheat\",\n        \"sortIndex\": 0,\n        \"updatedAt\": \"2026-06-01T00:00:00.000Z\"\n      }\n    ],\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-4\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -8781,7 +8791,17 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         ]
       },
       "cursorPolicy": null,
-      "idempotency": null,
+      "idempotency": {
+        "key": "clientMutationId",
+        "location": "jsonBody",
+        "retentionHours": 24,
+        "replayStatus": [
+          200
+        ],
+        "conflictStatus": 409,
+        "inProgressRetryAfterSeconds": 2,
+        "retryBodyRule": "Persist and retry the same parsed JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts."
+      },
       "personalTokenOnly": false,
       "oauthNote": "",
       "selfRevokeException": "",
@@ -8806,12 +8826,12 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "required": true,
         "contentType": "application/json",
         "fileFields": [],
-        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "example": "{\n  \"clientMutationId\": \"device-uuid-5\"\n}",
         "examples": [
           {
             "name": "example",
             "label": "Example",
-            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+            "example": "{\n  \"clientMutationId\": \"device-uuid-5\"\n}"
           }
         ]
       },
@@ -8820,12 +8840,12 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "required": true,
           "contentType": "application/json",
           "fileFields": [],
-          "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+          "example": "{\n  \"clientMutationId\": \"device-uuid-5\"\n}",
           "examples": [
             {
               "name": "example",
               "label": "Example",
-              "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+              "example": "{\n  \"clientMutationId\": \"device-uuid-5\"\n}"
             }
           ]
         }
@@ -8884,7 +8904,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"cleared\": 1,\n    \"items\": [\n      {\n        \"id\": \"item_1\",\n        \"name\": \"eggs\",\n        \"quantity\": 12,\n        \"unit\": \"each\",\n        \"checked\": false,\n        \"checkedAt\": null,\n        \"deletedAt\": \"2026-06-01T00:00:00.000Z\",\n        \"categoryKey\": null,\n        \"iconKey\": null,\n        \"sortIndex\": 0,\n        \"updatedAt\": \"2026-06-01T00:00:00.000Z\"\n      }\n    ],\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-5\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -8970,7 +8990,17 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         ]
       },
       "cursorPolicy": null,
-      "idempotency": null,
+      "idempotency": {
+        "key": "clientMutationId",
+        "location": "jsonBody",
+        "retentionHours": 24,
+        "replayStatus": [
+          200
+        ],
+        "conflictStatus": 409,
+        "inProgressRetryAfterSeconds": 2,
+        "retryBodyRule": "Persist and retry the same parsed JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts."
+      },
       "personalTokenOnly": false,
       "oauthNote": "",
       "selfRevokeException": "",
@@ -8995,12 +9025,12 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "required": true,
         "contentType": "application/json",
         "fileFields": [],
-        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "example": "{\n  \"clientMutationId\": \"device-uuid-5\"\n}",
         "examples": [
           {
             "name": "example",
             "label": "Example",
-            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+            "example": "{\n  \"clientMutationId\": \"device-uuid-5\"\n}"
           }
         ]
       },
@@ -9009,12 +9039,12 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "required": true,
           "contentType": "application/json",
           "fileFields": [],
-          "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+          "example": "{\n  \"clientMutationId\": \"device-uuid-5\"\n}",
           "examples": [
             {
               "name": "example",
               "label": "Example",
-              "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+              "example": "{\n  \"clientMutationId\": \"device-uuid-5\"\n}"
             }
           ]
         }
@@ -9073,7 +9103,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"cleared\": 1,\n    \"items\": [\n      {\n        \"id\": \"item_1\",\n        \"name\": \"eggs\",\n        \"quantity\": 12,\n        \"unit\": \"each\",\n        \"checked\": false,\n        \"checkedAt\": null,\n        \"deletedAt\": \"2026-06-01T00:00:00.000Z\",\n        \"categoryKey\": null,\n        \"iconKey\": null,\n        \"sortIndex\": 0,\n        \"updatedAt\": \"2026-06-01T00:00:00.000Z\"\n      }\n    ],\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-5\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",

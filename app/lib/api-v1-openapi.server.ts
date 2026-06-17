@@ -1006,6 +1006,14 @@ const schemas = {
   DeleteShoppingItemRequest: objectSchema(["clientMutationId"], {
     clientMutationId: shortTextSchema,
   }),
+  AddRecipeToShoppingListRequest: objectSchema(["clientMutationId", "recipeId"], {
+    clientMutationId: shortTextSchema,
+    recipeId: idSchema,
+    scaleFactor: { type: "number", exclusiveMinimum: 0, default: 1 },
+  }),
+  ClearShoppingItemsRequest: objectSchema(["clientMutationId"], {
+    clientMutationId: shortTextSchema,
+  }),
   DiscoveryData: objectSchema(["app", "version", "status", "docsUrl", "openapiUrl", "sdkOpenapiUrl", "connectorOpenapiUrl", "resources", "auth"], {
     app: { const: "spoonjoy" },
     version: { const: "v1" },
@@ -1265,6 +1273,22 @@ const schemas = {
     item: ref("ShoppingItem"),
     mutation: ref("MutationMetadata"),
   }),
+  ShoppingRecipeReference: objectSchema(["id", "title"], {
+    id: idSchema,
+    title: { type: "string" },
+  }),
+  AddRecipeToShoppingListData: objectSchema(["created", "updated", "recipe", "items", "mutation"], {
+    created: { type: "integer", minimum: 0 },
+    updated: { type: "integer", minimum: 0 },
+    recipe: ref("ShoppingRecipeReference"),
+    items: arrayOf(ref("ShoppingItem")),
+    mutation: ref("MutationMetadata"),
+  }),
+  ClearShoppingItemsData: objectSchema(["cleared", "items", "mutation"], {
+    cleared: { type: "integer", minimum: 0 },
+    items: arrayOf(ref("ShoppingItem")),
+    mutation: ref("MutationMetadata"),
+  }),
   DiscoveryEnvelope: successEnvelope(ref("DiscoveryData")),
   HealthEnvelope: successEnvelope(ref("HealthData")),
   RecipeListEnvelope: successEnvelope(ref("RecipeListData")),
@@ -1299,6 +1323,8 @@ const schemas = {
   CreateShoppingItemEnvelope: successEnvelope(ref("CreateShoppingItemData")),
   UpdateShoppingItemEnvelope: successEnvelope(ref("UpdateShoppingItemData")),
   DeleteShoppingItemEnvelope: successEnvelope(ref("DeleteShoppingItemData")),
+  AddRecipeToShoppingListEnvelope: successEnvelope(ref("AddRecipeToShoppingListData")),
+  ClearShoppingItemsEnvelope: successEnvelope(ref("ClearShoppingItemsData")),
 } satisfies Record<string, JsonSchema>;
 
 const pathParameters = {
@@ -1459,13 +1485,13 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
     DELETE: { operationId: "deleteApiV1ShoppingListItem", tags: ["Shopping List"], summary: "Remove a shopping-list item", auth: "bearer", scopes: ["shopping_list:write"], success: { 200: "DeleteShoppingItemEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.itemId, pathParameters.clientMutationIdHeader] },
   },
   "/api/v1/shopping-list/add-from-recipe": {
-    POST: { operationId: "postApiV1ShoppingListAddFromRecipe", tags: ["Shopping List"], summary: "Add recipe ingredients to the shopping list", auth: "bearer", scopes: ["shopping_list:write"], success: nativeContractSuccess, errors: bearerMutationErrors, requestBody: "NativeMutationRequest" },
+    POST: { operationId: "postApiV1ShoppingListAddFromRecipe", tags: ["Shopping List"], summary: "Add recipe ingredients to the shopping list", auth: "bearer", scopes: ["shopping_list:write"], success: { 200: "AddRecipeToShoppingListEnvelope" }, errors: bearerMutationErrors, requestBody: "AddRecipeToShoppingListRequest" },
   },
   "/api/v1/shopping-list/clear-completed": {
-    POST: { operationId: "postApiV1ShoppingListClearCompleted", tags: ["Shopping List"], summary: "Clear completed shopping-list items", auth: "bearer", scopes: ["shopping_list:write"], success: nativeContractSuccess, errors: bearerMutationErrors, requestBody: "NativeMutationRequest" },
+    POST: { operationId: "postApiV1ShoppingListClearCompleted", tags: ["Shopping List"], summary: "Clear completed shopping-list items", auth: "bearer", scopes: ["shopping_list:write"], success: { 200: "ClearShoppingItemsEnvelope" }, errors: bearerMutationErrors, requestBody: "ClearShoppingItemsRequest" },
   },
   "/api/v1/shopping-list/clear-all": {
-    POST: { operationId: "postApiV1ShoppingListClearAll", tags: ["Shopping List"], summary: "Clear all shopping-list items", auth: "bearer", scopes: ["shopping_list:write"], success: nativeContractSuccess, errors: bearerMutationErrors, requestBody: "NativeMutationRequest" },
+    POST: { operationId: "postApiV1ShoppingListClearAll", tags: ["Shopping List"], summary: "Clear all shopping-list items", auth: "bearer", scopes: ["shopping_list:write"], success: { 200: "ClearShoppingItemsEnvelope" }, errors: bearerMutationErrors, requestBody: "ClearShoppingItemsRequest" },
   },
   "/api/v1/me": {
     GET: { operationId: "getApiV1Me", tags: ["Account"], summary: "Read the current chef account", auth: "bearer", scopes: ["kitchen:read"], success: { 200: "NativeAccountSnapshotEnvelope" }, errors: bearerReadErrors },
@@ -1845,6 +1871,16 @@ const exampleShoppingItem = {
   sortIndex: 0,
   updatedAt: exampleTimestamp,
 };
+const exampleRecipeShoppingItem = {
+  ...exampleShoppingItem,
+  id: "item_2",
+  name: "flour",
+  quantity: 4,
+  unit: "cup",
+  categoryKey: "pantry",
+  iconKey: "wheat",
+};
+const exampleShoppingRecipeReference = { id: "recipe_1", title: "Weeknight Pasta" };
 const exampleShoppingList = {
   id: "list_1",
   chef: exampleChef,
@@ -2364,6 +2400,26 @@ const responseExamples: Record<string, unknown> = {
       mutation: { clientMutationId: "device-uuid-3", replayed: false },
     },
   },
+  AddRecipeToShoppingListEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      created: 1,
+      updated: 1,
+      recipe: exampleShoppingRecipeReference,
+      items: [exampleShoppingItem, exampleRecipeShoppingItem],
+      mutation: { clientMutationId: "device-uuid-4", replayed: false },
+    },
+  },
+  ClearShoppingItemsEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      cleared: 1,
+      items: [exampleDeletedShoppingItem],
+      mutation: { clientMutationId: "device-uuid-5", replayed: false },
+    },
+  },
 };
 
 const requestExamples: Record<string, unknown> = {
@@ -2522,6 +2578,8 @@ const requestExamples: Record<string, unknown> = {
   },
   CheckShoppingItemRequest: { clientMutationId: "device-uuid-2", checked: true },
   DeleteShoppingItemRequest: { clientMutationId: "device-uuid-3" },
+  AddRecipeToShoppingListRequest: { clientMutationId: "device-uuid-4", recipeId: "recipe_1", scaleFactor: 2 },
+  ClearShoppingItemsRequest: { clientMutationId: "device-uuid-5" },
 };
 
 function requestContentFor(schemaName: string) {
@@ -2919,6 +2977,24 @@ function idempotencyPolicyFor(path: ResourcePath, method: HttpMethod) {
       replayStatus: [200],
       conflictStatus: 409,
       inProgressRetryAfterSeconds: 2,
+    };
+  }
+  if (
+    (
+      path === "/api/v1/shopping-list/add-from-recipe" ||
+      path === "/api/v1/shopping-list/clear-completed" ||
+      path === "/api/v1/shopping-list/clear-all"
+    ) &&
+    method === "POST"
+  ) {
+    return {
+      key: "clientMutationId",
+      location: "jsonBody",
+      retentionHours: 24,
+      replayStatus: [200],
+      conflictStatus: 409,
+      inProgressRetryAfterSeconds: 2,
+      retryBodyRule: "Persist and retry the same parsed JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts.",
     };
   }
   return null;

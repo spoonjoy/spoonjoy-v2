@@ -127,6 +127,12 @@ import {
   updateNativeCookbook,
   type ApiV1CookbookWriteResult,
 } from "~/lib/api-v1-cookbook-writes.server";
+import {
+  addNativeRecipeIngredientsToShoppingList,
+  clearAllNativeShoppingItems,
+  clearCompletedNativeShoppingItems,
+  type ApiV1ShoppingResult,
+} from "~/lib/api-v1-shopping.server";
 import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
 import { notifyCookbookSaveOfMine, notifyForkOfMyRecipe } from "~/lib/notification-triggers.server";
 import { enforceRateLimit } from "~/lib/rate-limit.server";
@@ -478,6 +484,12 @@ function apiV1OperationFor(method: string, path: string): string | undefined {
       return "shopping-list.items.check";
     case "DELETE shopping-list-item":
       return "shopping-list.items.delete";
+    case "POST shopping-list-add-from-recipe":
+      return "shopping-list.add-from-recipe";
+    case "POST shopping-list-clear-completed":
+      return "shopping-list.clear-completed";
+    case "POST shopping-list-clear-all":
+      return "shopping-list.clear-all";
     case "GET me":
       return "account.read";
     case "PATCH me":
@@ -523,7 +535,7 @@ function apiV1OperationFor(method: string, path: string): string | undefined {
 function defaultIdempotencyOutcome(operation: string | undefined, errorCode: ApiV1ErrorCode | undefined) {
   if (!operation) return undefined;
   if (operation.startsWith("tokens.")) return "none";
-  if (!operation.startsWith("shopping-list.items.") && !operation.startsWith("recipes.") && !operation.startsWith("cookbooks.")) return undefined;
+  if (!operation.startsWith("shopping-list.") && !operation.startsWith("recipes.") && !operation.startsWith("cookbooks.")) return undefined;
   if (errorCode === "idempotency_conflict") return "conflict";
   if (errorCode === "idempotency_in_progress") return "in_progress";
   if (errorCode === "invalid_json" || errorCode === "validation_error") return "not_attempted";
@@ -1561,8 +1573,15 @@ async function loadShoppingListForUser(db: ApiV1WriteDb, userId: string) {
 
 type ShoppingListRow = NonNullable<Awaited<ReturnType<typeof loadShoppingListForUser>>>;
 type ShoppingItemRow = ShoppingListRow["items"][number];
+type SerializableShoppingItemRow = Pick<
+  ShoppingItemRow,
+  "id" | "quantity" | "checked" | "checkedAt" | "deletedAt" | "categoryKey" | "iconKey" | "sortIndex" | "updatedAt"
+> & {
+  unit: { name: string } | null;
+  ingredientRef: { name: string };
+};
 
-function shoppingItem(item: ShoppingItemRow) {
+function shoppingItem(item: SerializableShoppingItemRow) {
   return {
     id: item.id,
     name: item.ingredientRef.name,
@@ -1719,6 +1738,10 @@ function optionalPositiveNumber(value: unknown, field: string): number | null {
   return value;
 }
 
+function optionalPositiveNumberWithDefault(value: unknown, field: string, fallback: number): number {
+  return optionalPositiveNumber(value, field) ?? fallback;
+}
+
 function optionalNullableString(value: unknown, field: string, maxLength = MAX_SHORT_TEXT_LENGTH): string | null {
   if (value === undefined || value === null) return null;
   if (typeof value !== "string") {
@@ -1736,6 +1759,22 @@ function requiredBoolean(value: unknown, field: string): boolean {
     throw new ApiV1Error("validation_error", `${field} must be a boolean`);
   }
   return value;
+}
+
+function parseShoppingAddFromRecipeBody(body: Record<string, unknown>) {
+  assertKnownFields(body, ["clientMutationId", "recipeId", "scaleFactor"]);
+  return {
+    clientMutationId: nonblankString(body.clientMutationId, "clientMutationId"),
+    recipeId: nonblankString(body.recipeId, "recipeId"),
+    scaleFactor: optionalPositiveNumberWithDefault(body.scaleFactor, "scaleFactor", 1),
+  };
+}
+
+function parseShoppingClearBody(body: Record<string, unknown>) {
+  assertKnownFields(body, ["clientMutationId"]);
+  return {
+    clientMutationId: nonblankString(body.clientMutationId, "clientMutationId"),
+  };
 }
 
 function idempotentMutationBody(
@@ -2009,6 +2048,59 @@ async function handleShoppingItemDelete(args: ApiV1RouteArgs, requestId: string,
   });
 }
 
+async function handleShoppingAddFromRecipe(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
+  const body = await parseApiV1JsonBody(args.request);
+  const input = parseShoppingAddFromRecipeBody(body);
+
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, input.clientMutationId, "shopping-list.add-from-recipe", async (db) => {
+    const result = shoppingResultOrThrow(await addNativeRecipeIngredientsToShoppingList(db, principal.id, input));
+    return {
+      status: result.status,
+      data: {
+        recipe: result.data.recipe,
+        created: result.data.created,
+        updated: result.data.updated,
+        items: result.data.items.map(shoppingItem),
+        mutation: { clientMutationId: input.clientMutationId, replayed: false },
+      },
+    };
+  });
+}
+
+async function handleShoppingClearCompleted(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
+  const body = await parseApiV1JsonBody(args.request);
+  const input = parseShoppingClearBody(body);
+
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, input.clientMutationId, "shopping-list.clear-completed", async (db) => {
+    const result = shoppingResultOrThrow(await clearCompletedNativeShoppingItems(db, principal.id, input));
+    return {
+      status: result.status,
+      data: {
+        cleared: result.data.cleared,
+        items: result.data.items.map(shoppingItem),
+        mutation: { clientMutationId: input.clientMutationId, replayed: false },
+      },
+    };
+  });
+}
+
+async function handleShoppingClearAll(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
+  const body = await parseApiV1JsonBody(args.request);
+  const input = parseShoppingClearBody(body);
+
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, input.clientMutationId, "shopping-list.clear-all", async (db) => {
+    const result = shoppingResultOrThrow(await clearAllNativeShoppingItems(db, principal.id, input));
+    return {
+      status: result.status,
+      data: {
+        cleared: result.data.cleared,
+        items: result.data.items.map(shoppingItem),
+        mutation: { clientMutationId: input.clientMutationId, replayed: false },
+      },
+    };
+  });
+}
+
 function recipeWriteResultOrThrow<T>(
   result: ApiV1RecipeWriteResult<T>,
 ): { status: number; data: T } {
@@ -2047,6 +2139,15 @@ function spoonResultOrThrow<T>(
 
 function cookbookWriteResultOrThrow<T>(
   result: ApiV1CookbookWriteResult<T>,
+): { status: number; data: T } {
+  if (!result.ok) {
+    throw new ApiV1Error(result.code, result.message, result.details);
+  }
+  return result;
+}
+
+function shoppingResultOrThrow<T>(
+  result: ApiV1ShoppingResult<T>,
 ): { status: number; data: T } {
   if (!result.ok) {
     throw new ApiV1Error(result.code, result.message, result.details);
@@ -3825,6 +3926,24 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
     if (args.request.method === "DELETE" && segments[0] === "shopping-list" && segments[1] === "items" && segments.length === 3) {
       const principal = await authorize(path) as ApiPrincipal;
       const response = await handleShoppingItemDelete(args, requestId, principal, segments[2]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "POST" && path === "shopping-list/add-from-recipe") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleShoppingAddFromRecipe(args, requestId, principal);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "POST" && path === "shopping-list/clear-completed") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleShoppingClearCompleted(args, requestId, principal);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "POST" && path === "shopping-list/clear-all") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleShoppingClearAll(args, requestId, principal);
       return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
     }
 
