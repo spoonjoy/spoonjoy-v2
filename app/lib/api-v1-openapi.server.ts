@@ -785,6 +785,68 @@ const schemas = {
     recipes: arrayOf(ref("RecipeSummary")),
   }),
   RecipeDetailData: objectSchema(["recipe"], { recipe: ref("RecipeDetail") }),
+  RecipeIngredientInput: objectSchema(["quantity", "unit", "name"], {
+    quantity: { type: "number", minimum: 0.001, maximum: 99999 },
+    unit: { type: "string", minLength: 1, maxLength: 50 },
+    name: { type: "string", minLength: 1, maxLength: 100 },
+  }),
+  RecipeStepInput: objectSchema(["description"], {
+    stepTitle: { type: ["string", "null"], maxLength: 200 },
+    description: { type: "string", minLength: 1, maxLength: 5000 },
+    duration: { type: ["integer", "null"], minimum: 1 },
+    ingredients: arrayOf(ref("RecipeIngredientInput")),
+  }),
+  CreateRecipeRequest: objectSchema(["clientMutationId", "title"], {
+    clientMutationId: shortTextSchema,
+    title: { type: "string", minLength: 1, maxLength: 200 },
+    description: { type: ["string", "null"], maxLength: 2000 },
+    servings: { type: ["string", "null"], maxLength: 100 },
+    steps: arrayOf(ref("RecipeStepInput")),
+  }),
+  UpdateRecipeRequest: objectSchema(["clientMutationId"], {
+    clientMutationId: shortTextSchema,
+    title: { type: "string", minLength: 1, maxLength: 200 },
+    description: { type: ["string", "null"], maxLength: 2000 },
+    servings: { type: ["string", "null"], maxLength: 100 },
+  }),
+  DeleteRecipeRequest: objectSchema(["clientMutationId"], {
+    clientMutationId: shortTextSchema,
+  }),
+  ForkRecipeRequest: objectSchema(["clientMutationId"], {
+    clientMutationId: shortTextSchema,
+    title: { type: ["string", "null"], minLength: 1, maxLength: 200 },
+  }),
+  DeletedRecipeTombstone: objectSchema(["id", "deletedAt", "updatedAt"], {
+    id: idSchema,
+    deletedAt: dateTimeSchema,
+    updatedAt: dateTimeSchema,
+  }),
+  RecipeForkMetadata: objectSchema(["appliedTitle", "sourceChef", "sourceRecipeId", "titleWasSuffixed"], {
+    appliedTitle: { type: "string" },
+    sourceChef: ref("ChefSummary"),
+    sourceRecipeId: idSchema,
+    titleWasSuffixed: { type: "boolean" },
+  }),
+  CreateRecipeData: objectSchema(["created", "recipe", "mutation"], {
+    created: { type: "boolean" },
+    recipe: ref("RecipeDetail"),
+    mutation: ref("MutationMetadata"),
+  }),
+  UpdateRecipeData: objectSchema(["updated", "recipe", "mutation"], {
+    updated: { type: "boolean" },
+    recipe: ref("RecipeDetail"),
+    mutation: ref("MutationMetadata"),
+  }),
+  DeleteRecipeData: objectSchema(["deleted", "recipe", "mutation"], {
+    deleted: { type: "boolean" },
+    recipe: ref("DeletedRecipeTombstone"),
+    mutation: ref("MutationMetadata"),
+  }),
+  ForkRecipeData: objectSchema(["fork", "recipe", "mutation"], {
+    fork: ref("RecipeForkMetadata"),
+    recipe: ref("RecipeDetail"),
+    mutation: ref("MutationMetadata"),
+  }),
   CookbookListData: objectSchema(["query", "limit", "cursor", "nextCursor", "hasMore", "cookbooks"], {
     query: nullableStringSchema,
     limit: { type: "integer" },
@@ -834,6 +896,10 @@ const schemas = {
   HealthEnvelope: successEnvelope(ref("HealthData")),
   RecipeListEnvelope: successEnvelope(ref("RecipeListData")),
   RecipeDetailEnvelope: successEnvelope(ref("RecipeDetailData")),
+  CreateRecipeEnvelope: successEnvelope(ref("CreateRecipeData")),
+  UpdateRecipeEnvelope: successEnvelope(ref("UpdateRecipeData")),
+  DeleteRecipeEnvelope: successEnvelope(ref("DeleteRecipeData")),
+  ForkRecipeEnvelope: successEnvelope(ref("ForkRecipeData")),
   CookbookListEnvelope: successEnvelope(ref("CookbookListData")),
   CookbookDetailEnvelope: successEnvelope(ref("CookbookDetailData")),
   UserProfileEnvelope: successEnvelope(ref("UserProfileData")),
@@ -912,15 +978,15 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
   },
   "/api/v1/recipes": {
     GET: { operationId: "getApiV1Recipes", tags: ["Recipes"], summary: "Search public recipes", auth: "optional", scopes: ["recipes:read"], success: { 200: "RecipeListEnvelope" }, errors: optionalReadErrors, parameters: [queryParameters.query, queryParameters.q, queryParameters.cursor, queryParameters.limit] },
-    POST: { operationId: "postApiV1Recipes", tags: ["Recipes"], summary: "Create a recipe", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractCreated, errors: bearerMutationErrors, requestBody: "NativeMutationRequest" },
+    POST: { operationId: "postApiV1Recipes", tags: ["Recipes"], summary: "Create a recipe", auth: "bearer", scopes: ["kitchen:write"], success: { 201: "CreateRecipeEnvelope" }, errors: bearerMutationErrors, requestBody: "CreateRecipeRequest" },
   },
   "/api/v1/recipes/{id}": {
     GET: { operationId: "getApiV1Recipe", tags: ["Recipes"], summary: "Read one public recipe", auth: "optional", scopes: ["recipes:read"], success: { 200: "RecipeDetailEnvelope" }, errors: optionalReadErrors, parameters: [pathParameters.id] },
-    PATCH: { operationId: "patchApiV1Recipe", tags: ["Recipes"], summary: "Update a recipe", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, parameters: [pathParameters.id], requestBody: "NativeMutationRequest" },
-    DELETE: { operationId: "deleteApiV1Recipe", tags: ["Recipes"], summary: "Delete a recipe", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.clientMutationIdHeader] },
+    PATCH: { operationId: "patchApiV1Recipe", tags: ["Recipes"], summary: "Update a recipe", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "UpdateRecipeEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.id], requestBody: "UpdateRecipeRequest" },
+    DELETE: { operationId: "deleteApiV1Recipe", tags: ["Recipes"], summary: "Delete a recipe", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "DeleteRecipeEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.clientMutationIdHeader], requestBody: "DeleteRecipeRequest" },
   },
   "/api/v1/recipes/{id}/fork": {
-    POST: { operationId: "postApiV1RecipeFork", tags: ["Recipes"], summary: "Fork a recipe", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractCreated, errors: bearerMutationErrors, parameters: [pathParameters.id], requestBody: "NativeMutationRequest" },
+    POST: { operationId: "postApiV1RecipeFork", tags: ["Recipes"], summary: "Fork a recipe", auth: "bearer", scopes: ["kitchen:write"], success: { 201: "ForkRecipeEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.id], requestBody: "ForkRecipeRequest" },
   },
   "/api/v1/recipes/{id}/steps": {
     POST: { operationId: "postApiV1RecipeSteps", tags: ["Recipe Steps"], summary: "Create a recipe step", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractCreated, errors: bearerMutationErrors, parameters: [pathParameters.id], requestBody: "NativeMutationRequest" },
@@ -1099,6 +1165,17 @@ const exampleRecipeDetail = {
   ...exampleRecipeSummary,
   steps: [exampleRecipeStep],
   cookbooks: [exampleCookbookLink],
+};
+const exampleDeletedRecipe = {
+  id: "recipe_1",
+  deletedAt: exampleTimestamp,
+  updatedAt: exampleTimestamp,
+};
+const exampleRecipeFork = {
+  appliedTitle: "Pasta (variation 2)",
+  sourceChef: exampleChef,
+  sourceRecipeId: "recipe_source_1",
+  titleWasSuffixed: true,
 };
 const exampleCookbookSummary = {
   id: "cookbook_1",
@@ -1417,6 +1494,26 @@ const responseExamples: Record<string, unknown> = {
     },
   },
   RecipeDetailEnvelope: { ok: true, requestId: "req_example", data: { recipe: exampleRecipeDetail } },
+  CreateRecipeEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: { created: true, recipe: exampleRecipeDetail, mutation: exampleMutation },
+  },
+  UpdateRecipeEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: { updated: true, recipe: exampleRecipeDetail, mutation: exampleMutation },
+  },
+  DeleteRecipeEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: { deleted: true, recipe: exampleDeletedRecipe, mutation: exampleMutation },
+  },
+  ForkRecipeEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: { fork: exampleRecipeFork, recipe: exampleRecipeDetail, mutation: exampleMutation },
+  },
   CookbookListEnvelope: {
     ok: true,
     requestId: "req_example",
@@ -1515,6 +1612,28 @@ const requestExamples: Record<string, unknown> = {
       note: "Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.",
     },
   },
+  CreateRecipeRequest: {
+    clientMutationId: "device-uuid-1",
+    title: "Pasta",
+    description: "Weeknight pasta",
+    servings: "4",
+    steps: [
+      {
+        stepTitle: null,
+        description: "Boil pasta.",
+        duration: null,
+        ingredients: [{ quantity: 1, unit: "lb", name: "pasta" }],
+      },
+    ],
+  },
+  UpdateRecipeRequest: {
+    clientMutationId: "device-uuid-2",
+    title: "Better Pasta",
+    description: null,
+    servings: "6",
+  },
+  DeleteRecipeRequest: { clientMutationId: "device-uuid-3" },
+  ForkRecipeRequest: { clientMutationId: "device-uuid-4", title: "My Pasta" },
   NativeProfileRequest: { email: "ari@example.com", username: "ari" },
   ProfilePhotoUploadRequest: { photo: "<binary image file>" },
   NativeNotificationPreferencesRequest: {
@@ -1773,6 +1892,49 @@ function cursorPolicyFor(path: ResourcePath) {
 }
 
 function idempotencyPolicyFor(path: ResourcePath, method: HttpMethod) {
+  if (path === "/api/v1/recipes" && method === "POST") {
+    return {
+      key: "clientMutationId",
+      location: "jsonBody",
+      retentionHours: 24,
+      replayStatus: [201],
+      conflictStatus: 409,
+      inProgressRetryAfterSeconds: 2,
+      retryBodyRule: "Persist and retry the same parsed JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts.",
+    };
+  }
+  if (path === "/api/v1/recipes/{id}" && method === "PATCH") {
+    return {
+      key: "clientMutationId",
+      location: "jsonBody",
+      retentionHours: 24,
+      replayStatus: [200],
+      conflictStatus: 409,
+      inProgressRetryAfterSeconds: 2,
+      retryBodyRule: "Persist and retry the same parsed JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts.",
+    };
+  }
+  if (path === "/api/v1/recipes/{id}" && method === "DELETE") {
+    return {
+      key: "clientMutationId",
+      location: "jsonBodyOrXClientMutationIdHeader",
+      retentionHours: 24,
+      replayStatus: [200],
+      conflictStatus: 409,
+      inProgressRetryAfterSeconds: 2,
+    };
+  }
+  if (path === "/api/v1/recipes/{id}/fork" && method === "POST") {
+    return {
+      key: "clientMutationId",
+      location: "jsonBody",
+      retentionHours: 24,
+      replayStatus: [201],
+      conflictStatus: 409,
+      inProgressRetryAfterSeconds: 2,
+      retryBodyRule: "Persist and retry the same parsed JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts.",
+    };
+  }
   if (path === "/api/v1/shopping-list/items" && method === "POST") {
     return {
       key: "clientMutationId",

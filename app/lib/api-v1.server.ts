@@ -47,6 +47,19 @@ import {
   searchNativeSpoonjoy,
   type ApiV1UsersSearchResult,
 } from "~/lib/api-v1-users-search.server";
+import {
+  createNativeRecipe,
+  deleteNativeRecipe,
+  forkNativeRecipe,
+  parseNativeRecipeCreateBody,
+  parseNativeRecipeDeleteBody,
+  parseNativeRecipeForkBody,
+  parseNativeRecipePatchBody,
+  updateNativeRecipe,
+  type ApiV1RecipeWriteResult,
+} from "~/lib/api-v1-recipe-writes.server";
+import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
+import { notifyForkOfMyRecipe } from "~/lib/notification-triggers.server";
 import { enforceRateLimit } from "~/lib/rate-limit.server";
 import { getRequestDb } from "~/lib/route-platform.server";
 import {
@@ -328,6 +341,14 @@ function apiV1OperationFor(method: string, path: string): string | undefined {
       return "recipes.list";
     case "GET recipe":
       return "recipes.get";
+    case "POST recipe-create":
+      return "recipes.create";
+    case "PATCH recipe-write":
+      return "recipes.update";
+    case "DELETE recipe-write":
+      return "recipes.delete";
+    case "POST recipe-fork":
+      return "recipes.fork";
     case "GET cookbooks":
       return "cookbooks.list";
     case "GET cookbook":
@@ -387,7 +408,7 @@ function apiV1OperationFor(method: string, path: string): string | undefined {
 function defaultIdempotencyOutcome(operation: string | undefined, errorCode: ApiV1ErrorCode | undefined) {
   if (!operation) return undefined;
   if (operation.startsWith("tokens.")) return "none";
-  if (!operation.startsWith("shopping-list.items.")) return undefined;
+  if (!operation.startsWith("shopping-list.items.") && !operation.startsWith("recipes.")) return undefined;
   if (errorCode === "idempotency_conflict") return "conflict";
   if (errorCode === "idempotency_in_progress") return "in_progress";
   if (errorCode === "invalid_json" || errorCode === "validation_error") return "not_attempted";
@@ -1344,7 +1365,7 @@ function idempotentMutationBody(
   return { ok: true, requestId, data };
 }
 
-async function runIdempotentShoppingMutation(
+async function runIdempotentApiV1Mutation(
   args: ApiV1RouteArgs,
   requestId: string,
   principal: ApiPrincipal,
@@ -1420,7 +1441,7 @@ async function handleShoppingItemCreate(args: ApiV1RouteArgs, requestId: string,
   const categoryKey = optionalNullableString(body.categoryKey, "categoryKey");
   const iconKey = optionalNullableString(body.iconKey, "iconKey");
 
-  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "shopping-list.items.create", async (db) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "shopping-list.items.create", async (db) => {
     const list = await loadShoppingListForUser(db, principal.id);
     const ingredientRef = await getOrCreateApiV1IngredientRef(db, name);
     const unit = unitName ? await getOrCreateApiV1Unit(db, unitName) : null;
@@ -1478,7 +1499,7 @@ async function handleShoppingItemCheck(args: ApiV1RouteArgs, requestId: string, 
   const clientMutationId = nonblankString(body.clientMutationId, "clientMutationId");
   const checked = requiredBoolean(body.checked, "checked");
 
-  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "shopping-list.items.check", async (db) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "shopping-list.items.check", async (db) => {
     const list = await loadShoppingListForUser(db, principal.id);
     const existing = await db.shoppingListItem.findFirst({
       where: { id: itemId, shoppingListId: list.id },
@@ -1520,7 +1541,7 @@ async function handleShoppingItemDelete(args: ApiV1RouteArgs, requestId: string,
   );
   const idempotencyBody = { clientMutationId };
 
-  return await runIdempotentShoppingMutation(args, requestId, principal, idempotencyBody, clientMutationId, "shopping-list.items.delete", async (db) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, clientMutationId, "shopping-list.items.delete", async (db) => {
     const list = await loadShoppingListForUser(db, principal.id);
     const existing = await db.shoppingListItem.findFirst({
       where: { id: itemId, shoppingListId: list.id },
@@ -1540,6 +1561,157 @@ async function handleShoppingItemDelete(args: ApiV1RouteArgs, requestId: string,
         removed: true,
         item: shoppingItem(item),
         mutation: { clientMutationId, replayed: false },
+      },
+    };
+  });
+}
+
+function recipeWriteResultOrThrow<T>(
+  result: ApiV1RecipeWriteResult<T>,
+): { status: number; data: T } {
+  if (!result.ok) {
+    throw new ApiV1Error(result.code, result.message, result.details);
+  }
+  return result;
+}
+
+async function serializedRecipeOrThrow(db: ApiV1WriteDb, recipeId: string, origin: string) {
+  const recipe = await loadRecipeById(db, recipeId);
+  if (!recipe) {
+    throw new Error(`Recipe ${recipeId} was not readable after write`);
+  }
+  return recipeDetail(recipe, origin);
+}
+
+async function handleRecipeCreate(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
+  const body = await parseApiV1JsonBody(args.request);
+  const parsed = parseNativeRecipeCreateBody(body);
+  if (!parsed.ok) {
+    throw new ApiV1Error(parsed.code, parsed.message, parsed.details);
+  }
+
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, parsed.data.clientMutationId, "recipes.create", async (db) => {
+    const created = recipeWriteResultOrThrow(await createNativeRecipe(db, principal.id, parsed.data));
+    const recipe = await serializedRecipeOrThrow(db, created.data.recipeId, publicContentOrigin(args));
+    return {
+      status: created.status,
+      data: {
+        created: true,
+        recipe,
+        mutation: { clientMutationId: parsed.data.clientMutationId, replayed: false },
+      },
+    };
+  });
+}
+
+async function handleRecipeUpdate(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string) {
+  const body = await parseApiV1JsonBody(args.request);
+  const parsed = parseNativeRecipePatchBody(body);
+  if (!parsed.ok) {
+    throw new ApiV1Error(parsed.code, parsed.message, parsed.details);
+  }
+
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, parsed.data.clientMutationId, "recipes.update", async (db) => {
+    const updated = recipeWriteResultOrThrow(await updateNativeRecipe(db, principal.id, recipeId, parsed.data));
+    const recipe = await serializedRecipeOrThrow(db, updated.data.recipeId, publicContentOrigin(args));
+    return {
+      status: updated.status,
+      data: {
+        updated: updated.data.updated,
+        recipe,
+        mutation: { clientMutationId: parsed.data.clientMutationId, replayed: false },
+      },
+    };
+  });
+}
+
+async function handleRecipeDelete(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string) {
+  const body = await parseApiV1JsonBody(args.request);
+  const url = new URL(args.request.url);
+  const parsed = parseNativeRecipeDeleteBody(
+    body,
+    args.request.headers.get("X-Client-Mutation-Id") ?? url.searchParams.get("clientMutationId"),
+  );
+  if (!parsed.ok) {
+    throw new ApiV1Error(parsed.code, parsed.message, parsed.details);
+  }
+
+  const idempotencyBody = { clientMutationId: parsed.data.clientMutationId };
+  return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, parsed.data.clientMutationId, "recipes.delete", async (db) => {
+    const deleted = recipeWriteResultOrThrow(await deleteNativeRecipe(db, principal.id, recipeId));
+    return {
+      status: deleted.status,
+      data: {
+        deleted: true,
+        recipe: {
+          id: deleted.data.recipe.id,
+          deletedAt: deleted.data.recipe.deletedAt.toISOString(),
+          updatedAt: deleted.data.recipe.updatedAt.toISOString(),
+        },
+        mutation: { clientMutationId: parsed.data.clientMutationId, replayed: false },
+      },
+    };
+  });
+}
+
+async function notifyNativeRecipeFork(
+  args: ApiV1RouteArgs,
+  db: ApiV1WriteDb,
+  input: {
+    appliedTitle: string;
+    forkerId: string;
+    forkedRecipeId: string;
+    sourceChefId: string;
+    sourceRecipeId: string;
+  },
+) {
+  try {
+    const vapid = getVapidConfig((args.context.cloudflare?.env ?? {}) as VapidEnv);
+    const waitUntil = apiV1WaitUntilFor(args);
+    const notifyTask = notifyForkOfMyRecipe(
+      db,
+      {
+        forkedRecipeId: input.forkedRecipeId,
+        sourceRecipeId: input.sourceRecipeId,
+        forkerId: input.forkerId,
+        sourceChefId: input.sourceChefId,
+        appliedTitle: input.appliedTitle,
+      },
+      { vapid, waitUntil },
+    );
+    if (waitUntil) {
+      waitUntil(notifyTask);
+    } else {
+      await notifyTask;
+    }
+  } catch {
+    // VAPID is optional in local/dev environments; missing push config must not break a fork.
+  }
+}
+
+async function handleRecipeFork(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, sourceRecipeId: string) {
+  const body = await parseApiV1JsonBody(args.request);
+  const parsed = parseNativeRecipeForkBody(body);
+  if (!parsed.ok) {
+    throw new ApiV1Error(parsed.code, parsed.message, parsed.details);
+  }
+
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, parsed.data.clientMutationId, "recipes.fork", async (db) => {
+    const forked = recipeWriteResultOrThrow(await forkNativeRecipe(db, principal.id, sourceRecipeId, parsed.data));
+    await notifyNativeRecipeFork(args, db, {
+      appliedTitle: forked.data.fork.appliedTitle,
+      forkerId: principal.id,
+      forkedRecipeId: forked.data.recipeId,
+      sourceChefId: forked.data.fork.sourceChef.id,
+      sourceRecipeId: forked.data.fork.sourceRecipeId,
+    });
+    const recipe = await serializedRecipeOrThrow(db, forked.data.recipeId, publicContentOrigin(args));
+    return {
+      status: forked.status,
+      data: {
+        fork: forked.data.fork,
+        recipe,
+        mutation: { clientMutationId: parsed.data.clientMutationId, replayed: false },
       },
     };
   });
@@ -1746,10 +1918,34 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
       return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
     }
 
+    if (args.request.method === "POST" && path === "recipes") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeCreate(args, requestId, principal);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
     const segments = path.split("/").filter(Boolean);
     if (args.request.method === "GET" && segments[0] === "recipes" && segments.length === 2) {
       const principal = await authorize(path);
       const response = await handleRecipeDetail(args, requestId, principal, segments[1]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "PATCH" && segments[0] === "recipes" && segments.length === 2) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeUpdate(args, requestId, principal, segments[1]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "DELETE" && segments[0] === "recipes" && segments.length === 2) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeDelete(args, requestId, principal, segments[1]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "POST" && segments[0] === "recipes" && segments[2] === "fork" && segments.length === 3) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeFork(args, requestId, principal, segments[1]);
       return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
     }
 
