@@ -127,6 +127,24 @@ function expectClearShoppingMutationData(data: any, clientMutationId: string, re
   expectMutationShape(data.mutation, clientMutationId, replayed);
 }
 
+function shoppingItemContractSummary(item: any) {
+  return {
+    id: item.id,
+    name: item.name,
+    quantity: item.quantity,
+    unit: item.unit,
+    checked: item.checked,
+    checkedAt: item.checkedAt,
+    deletedAt: item.deletedAt,
+    categoryKey: item.categoryKey,
+    iconKey: item.iconKey,
+  };
+}
+
+function sortShoppingItemSummaries(items: any[]) {
+  return items.map(shoppingItemContractSummary).sort((left, right) => left.name.localeCompare(right.name));
+}
+
 async function createShoppingMutationFixture(db: Awaited<ReturnType<typeof getLocalDb>>) {
   const user = await db.user.create({ data: createTestUser() });
   const otherUser = await db.user.create({ data: createTestUser() });
@@ -732,8 +750,10 @@ describe("API v1 shopping-list mutations", () => {
       updated: 1,
       recipe: { id: ownerRecipe.id, title: ownerRecipe.title },
     });
-    expect(addOwnerPayload.data.items).toEqual(expect.arrayContaining([
-      expect.objectContaining({
+    const ownerItemSummaries = sortShoppingItemSummaries(addOwnerPayload.data.items);
+    expect(ownerItemSummaries).toHaveLength(2);
+    expect(ownerItemSummaries).toEqual([
+      {
         id: existingItem.id,
         name: existingIngredientName,
         quantity: 4,
@@ -742,15 +762,21 @@ describe("API v1 shopping-list mutations", () => {
         checkedAt: null,
         deletedAt: null,
         categoryKey: "pantry",
-      }),
-      expect.objectContaining({
+        iconKey: expect.any(String),
+      },
+      {
+        id: expect.any(String),
         name: newIngredientName,
         quantity: 4,
         unit: newUnitName,
         checked: false,
+        checkedAt: null,
         deletedAt: null,
-      }),
-    ]));
+        categoryKey: expect.any(String),
+        iconKey: expect.any(String),
+      },
+    ].sort((left, right) => left.name.localeCompare(right.name)));
+    expect(ownerItemSummaries.find((item) => item.name === newIngredientName)?.id).not.toBe(existingItem.id);
 
     const replayOwner = await action(routeArgs(
       mutationRequest("POST", "shopping-list/add-from-recipe", fixture.credential.token, "req_bulk_add_owner_recipe_replay", addOwnerBody),
@@ -876,6 +902,14 @@ describe("API v1 shopping-list mutations", () => {
     expect(replayClearCompleted.status).toBe(200);
     expect(replayClearCompletedPayload).toEqual(expectedClearReplay);
 
+    const clearCompletedConflict = await action(routeArgs(
+      mutationRequest("POST", "shopping-list/clear-all", fixture.credential.token, "req_clear_completed_conflict", clearCompletedBody),
+      "shopping-list/clear-all",
+    ));
+    expect(clearCompletedConflict.status).toBe(409);
+    expectEnvelopeHeaders(clearCompletedConflict, "req_clear_completed_conflict");
+    expectErrorEnvelope(await readJson(clearCompletedConflict), "req_clear_completed_conflict", "idempotency_conflict", 409);
+
     const clearAllBody = { clientMutationId: "bulk-clear-all" };
     const clearAll = await action(routeArgs(
       mutationRequest("POST", "shopping-list/clear-all", fixture.credential.token, "req_clear_all", clearAllBody),
@@ -894,6 +928,25 @@ describe("API v1 shopping-list mutations", () => {
     await expect(db.shoppingListItem.count({
       where: { shoppingListId: fixture.list.id, deletedAt: null },
     })).resolves.toBe(0);
+
+    const replayClearAll = await action(routeArgs(
+      mutationRequest("POST", "shopping-list/clear-all", fixture.credential.token, "req_clear_all_replay", clearAllBody),
+      "shopping-list/clear-all",
+    ));
+    const replayClearAllPayload = await readJson(replayClearAll);
+    const expectedClearAllReplay = structuredClone(clearAllPayload);
+    expectedClearAllReplay.requestId = "req_clear_all_replay";
+    expectedClearAllReplay.data.mutation.replayed = true;
+    expect(replayClearAll.status).toBe(200);
+    expect(replayClearAllPayload).toEqual(expectedClearAllReplay);
+
+    const clearAllConflict = await action(routeArgs(
+      mutationRequest("POST", "shopping-list/clear-completed", fixture.credential.token, "req_clear_all_conflict", clearAllBody),
+      "shopping-list/clear-completed",
+    ));
+    expect(clearAllConflict.status).toBe(409);
+    expectEnvelopeHeaders(clearAllConflict, "req_clear_all_conflict");
+    expectErrorEnvelope(await readJson(clearAllConflict), "req_clear_all_conflict", "idempotency_conflict", 409);
 
     const clearEmpty = await action(routeArgs(
       mutationRequest("POST", "shopping-list/clear-all", fixture.credential.token, "req_clear_all_empty", {
@@ -991,6 +1044,31 @@ describe("API v1 shopping-list mutations", () => {
     expect(missingRecipe.status).toBe(404);
     expectEnvelopeHeaders(missingRecipe, "req_bulk_add_not_found");
     expectErrorEnvelope(await readJson(missingRecipe), "req_bulk_add_not_found", "not_found", 404);
+
+    const deletedRecipe = await createRecipeWithIngredients(db, fixture.user.id, [
+      {
+        name: `deleted_recipe_oats_${faker.string.alphanumeric(6)}`.toLowerCase(),
+        quantity: 1,
+        unit: `box_deleted_${faker.string.alphanumeric(6)}`.toLowerCase(),
+      },
+    ]);
+    await db.recipe.update({ where: { id: deletedRecipe.id }, data: { deletedAt: new Date() } });
+    const itemCountBeforeDeletedRecipe = await db.shoppingListItem.count({
+      where: { shoppingListId: fixture.list.id },
+    });
+    const deletedRecipeResponse = await action(routeArgs(
+      mutationRequest("POST", "shopping-list/add-from-recipe", fixture.credential.token, "req_bulk_add_deleted_recipe", {
+        clientMutationId: "bulk-deleted-recipe",
+        recipeId: deletedRecipe.id,
+      }),
+      "shopping-list/add-from-recipe",
+    ));
+    expect(deletedRecipeResponse.status).toBe(404);
+    expectEnvelopeHeaders(deletedRecipeResponse, "req_bulk_add_deleted_recipe");
+    expectErrorEnvelope(await readJson(deletedRecipeResponse), "req_bulk_add_deleted_recipe", "not_found", 404);
+    await expect(db.shoppingListItem.count({
+      where: { shoppingListId: fixture.list.id },
+    })).resolves.toBe(itemCountBeforeDeletedRecipe);
   });
 
   it("enforces shopping_list:write before mutation body handling", async () => {
