@@ -38,6 +38,17 @@ function expectPrivateEnvelopeHeaders(response: Response, requestId: string) {
   expect(response.headers.get("Access-Control-Expose-Headers")).toBe("X-Request-Id, Retry-After");
 }
 
+function expectNoStoreEnvelopeHeaders(response: Response, requestId: string) {
+  expect(response.headers.get("Content-Type")).toContain("application/json");
+  expect(response.headers.get("X-Request-Id")).toBe(requestId);
+  expect(response.headers.get("Cache-Control")).toContain("no-store");
+  expect(response.headers.get("Pragma")).toBe("no-cache");
+  expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
+  expect(response.headers.get("Access-Control-Allow-Headers")).toBe("Authorization, Content-Type, X-Request-Id, X-Client-Mutation-Id");
+  expect(response.headers.get("Access-Control-Allow-Methods")).toBe("GET, POST, PATCH, PUT, DELETE, OPTIONS");
+  expect(response.headers.get("Access-Control-Expose-Headers")).toBe("X-Request-Id, Retry-After");
+}
+
 function expectSuccessEnvelope(payload: any, requestId: string) {
   expect(Object.keys(payload).sort()).toEqual(["data", "ok", "requestId"]);
   expect(payload.ok).toBe(true);
@@ -87,6 +98,10 @@ async function clearNativePushDevicesIfPresent(db: LocalDb) {
   } catch {
     // The implementation unit creates this table; red tests run before it exists.
   }
+}
+
+function isoFromDbDate(value: string | Date) {
+  return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
 }
 
 function createMemoryPhotosBucket() {
@@ -146,6 +161,25 @@ describe("API v1 native account and bootstrap endpoints", () => {
         userAgent: "Safari",
       },
     });
+    await db.oAuth.create({
+      data: {
+        provider: "google",
+        providerUserId: `google-${faker.string.alphanumeric(10)}`,
+        providerUsername: "chef@example.com",
+        userId: user.id,
+      },
+    });
+    await db.userCredential.create({
+      data: {
+        id: "pk_native_bootstrap",
+        userId: user.id,
+        publicKey: new Uint8Array([1, 2, 3]),
+        transports: "internal",
+        counter: 0n,
+        name: "MacBook Touch ID",
+        createdAt: new Date("2026-06-03T10:00:00.000Z"),
+      },
+    });
     const personal = await createApiCredential(db, user.id, "Native shell", {
       scopes: ["kitchen:read", "kitchen:write", "tokens:read"],
     });
@@ -196,6 +230,42 @@ describe("API v1 native account and bootstrap endpoints", () => {
       username: user.username,
       hasPassword: true,
       photoUrl: "/photos/profiles/bootstrap/avatar.jpg",
+      oauthAccounts: [
+        {
+          provider: "google",
+          providerUsername: "chef@example.com",
+        },
+      ],
+      passkeys: [
+        {
+          id: "pk_native_bootstrap",
+          name: "MacBook Touch ID",
+          transports: "internal",
+          createdAt: "2026-06-03T10:00:00.000Z",
+        },
+      ],
+      handoffs: {
+        accountSettings: { method: "GET", url: "/account/settings", onlineOnly: true },
+        password: {
+          method: "GET",
+          url: "/account/settings",
+          onlineOnly: true,
+          actions: ["changePassword", "setPassword", "removePassword"],
+        },
+        passkeys: {
+          method: "GET",
+          url: "/account/settings",
+          onlineOnly: true,
+          registrationOptionsUrl: "/auth/webauthn/register/options",
+          registrationVerifyUrl: "/auth/webauthn/register/verify",
+          actions: ["addPasskey", "renamePasskey", "removePasskey"],
+        },
+        providerLinks: {
+          google: { method: "GET", url: "/auth/google?linking=true", onlineOnly: true },
+          github: { method: "GET", url: "/auth/github?linking=true", onlineOnly: true },
+          apple: { method: "GET", url: "/auth/apple?linking=true", onlineOnly: true },
+        },
+      },
       apiCredentials: expect.arrayContaining([
         expect.objectContaining({
           id: personal.credential.id,
@@ -244,6 +314,134 @@ describe("API v1 native account and bootstrap endpoints", () => {
       me: { id: user.id, username: user.username },
       notifications: { pushSubscribed: true },
     });
+  });
+
+  it("manages native account personal tokens without leaking OAuth access credentials or token secrets", async () => {
+    const user = await db.user.create({ data: createTestUser() });
+    const otherUser = await db.user.create({ data: createTestUser() });
+    const cookie = await sessionCookie(user.id);
+    const personal = await createApiCredential(db, user.id, "Native personal token", {
+      scopes: ["kitchen:read", "tokens:read"],
+    });
+    const reader = await createApiCredential(db, user.id, "Native token reader", { scopes: ["tokens:read"] });
+    const writer = await createApiCredential(db, user.id, "Native token writer", { scopes: ["tokens:write"] });
+    const otherOwnerToken = await createApiCredential(db, otherUser.id, "Other owner token", { scopes: ["tokens:read"] });
+    const client = await db.oAuthClient.create({
+      data: {
+        clientName: "OAuth native client",
+        redirectUris: "https://native.example/callback",
+      },
+    });
+    const oauthAccess = await createApiCredential(db, user.id, "OAuth access credential", {
+      scopes: ["recipes:read"],
+      oauthClientId: client.id,
+      oauthResource: "https://spoonjoy.app/mcp",
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+
+    const list = await loader(routeArgs(new UndiciRequest("http://localhost/api/v1/tokens", {
+      headers: { Cookie: cookie, "X-Request-Id": "req_native_tokens_list" },
+    }) as unknown as Request, "tokens"));
+    const listPayload = await readJson(list);
+
+    expect(list.status).toBe(200);
+    expectPrivateEnvelopeHeaders(list, "req_native_tokens_list");
+    expectSuccessEnvelope(listPayload, "req_native_tokens_list");
+    const listedIds = listPayload.data.tokens.map((credential: { id: string }) => credential.id);
+    expect(listedIds).toEqual(expect.arrayContaining([personal.credential.id, reader.credential.id, writer.credential.id]));
+    expect(listedIds).not.toContain(oauthAccess.credential.id);
+    expect(listedIds).not.toContain(otherOwnerToken.credential.id);
+    expect(listPayload.data.tokens.every((credential: { token?: unknown }) => credential.token === undefined)).toBe(true);
+
+    const created = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/tokens", {
+      method: "POST",
+      headers: {
+        Cookie: cookie,
+        "Content-Type": "application/json",
+        "X-Request-Id": "req_native_tokens_create",
+      },
+      body: JSON.stringify({ name: "Native account cache", scopes: ["kitchen:read", "tokens:read"] }),
+    }) as unknown as Request, "tokens"));
+    const createdPayload = await readJson(created);
+
+    expect(created.status).toBe(201);
+    expectNoStoreEnvelopeHeaders(created, "req_native_tokens_create");
+    expectSuccessEnvelope(createdPayload, "req_native_tokens_create");
+    expect(createdPayload.data.token).toMatch(/^sj_/);
+    expect(createdPayload.data.credential).toMatchObject({
+      id: expect.any(String),
+      name: "Native account cache",
+      tokenPrefix: createdPayload.data.token.slice(0, 12),
+      scopes: expect.arrayContaining(["kitchen:read", "tokens:read"]),
+      revokedAt: null,
+    });
+    await expect(db.apiCredential.findUniqueOrThrow({ where: { id: createdPayload.data.credential.id } }))
+      .resolves.toMatchObject({ tokenHash: expect.not.stringContaining(createdPayload.data.token) });
+
+    const revoke = await action(routeArgs(new UndiciRequest(`http://localhost/api/v1/tokens/${createdPayload.data.credential.id}`, {
+      method: "DELETE",
+      headers: { Cookie: cookie, "X-Request-Id": "req_native_tokens_revoke" },
+    }) as unknown as Request, `tokens/${createdPayload.data.credential.id}`));
+    const revokePayload = await readJson(revoke);
+
+    expect(revoke.status).toBe(200);
+    expectPrivateEnvelopeHeaders(revoke, "req_native_tokens_revoke");
+    expectSuccessEnvelope(revokePayload, "req_native_tokens_revoke");
+    expect(revokePayload.data).toMatchObject({
+      revoked: true,
+      credential: { id: createdPayload.data.credential.id, revokedAt: expect.any(String) },
+    });
+
+    const revokeAgain = await action(routeArgs(new UndiciRequest(`http://localhost/api/v1/tokens/${createdPayload.data.credential.id}`, {
+      method: "DELETE",
+      headers: { Cookie: cookie, "X-Request-Id": "req_native_tokens_revoke_again" },
+    }) as unknown as Request, `tokens/${createdPayload.data.credential.id}`));
+    const revokeAgainPayload = await readJson(revokeAgain);
+
+    expect(revokeAgain.status).toBe(200);
+    expectPrivateEnvelopeHeaders(revokeAgain, "req_native_tokens_revoke_again");
+    expectSuccessEnvelope(revokeAgainPayload, "req_native_tokens_revoke_again");
+    expect(revokeAgainPayload.data).toMatchObject({
+      revoked: false,
+      credential: { id: createdPayload.data.credential.id, revokedAt: expect.any(String) },
+    });
+
+    const afterRevokeList = await loader(routeArgs(new UndiciRequest("http://localhost/api/v1/tokens", {
+      headers: { Cookie: cookie, "X-Request-Id": "req_native_tokens_after_revoke" },
+    }) as unknown as Request, "tokens"));
+    const afterRevokePayload = await readJson(afterRevokeList);
+    expect(afterRevokeList.status).toBe(200);
+    expectPrivateEnvelopeHeaders(afterRevokeList, "req_native_tokens_after_revoke");
+    expect(afterRevokePayload.data.tokens.map((credential: { id: string }) => credential.id))
+      .not.toContain(createdPayload.data.credential.id);
+
+    const readWithoutScope = await loader(routeArgs(new UndiciRequest("http://localhost/api/v1/tokens", {
+      headers: { Authorization: `Bearer ${writer.token}`, "X-Request-Id": "req_native_tokens_read_scope" },
+    }) as unknown as Request, "tokens"));
+    expect(readWithoutScope.status).toBe(403);
+    expectPrivateEnvelopeHeaders(readWithoutScope, "req_native_tokens_read_scope");
+    expectErrorEnvelope(await readJson(readWithoutScope), "req_native_tokens_read_scope", "insufficient_scope", 403);
+
+    const writeWithoutScope = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/tokens", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${reader.token}`,
+        "Content-Type": "application/json",
+        "X-Request-Id": "req_native_tokens_write_scope_bad_json",
+      },
+      body: "{",
+    }) as unknown as Request, "tokens"));
+    expect(writeWithoutScope.status).toBe(403);
+    expectPrivateEnvelopeHeaders(writeWithoutScope, "req_native_tokens_write_scope_bad_json");
+    expectErrorEnvelope(await readJson(writeWithoutScope), "req_native_tokens_write_scope_bad_json", "insufficient_scope", 403);
+
+    const deleteWithoutScope = await action(routeArgs(new UndiciRequest(`http://localhost/api/v1/tokens/${personal.credential.id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${reader.token}`, "X-Request-Id": "req_native_tokens_delete_scope" },
+    }) as unknown as Request, `tokens/${personal.credential.id}`));
+    expect(deleteWithoutScope.status).toBe(403);
+    expectPrivateEnvelopeHeaders(deleteWithoutScope, "req_native_tokens_delete_scope");
+    expectErrorEnvelope(await readJson(deleteWithoutScope), "req_native_tokens_delete_scope", "insufficient_scope", 403);
   });
 
   it("updates current profile fields and returns validation envelopes for invalid or duplicate input", async () => {
@@ -483,12 +681,17 @@ describe("API v1 native account and bootstrap endpoints", () => {
       tokenPrefix: token.slice(0, 12),
       deviceName: "iPhone 17",
       appVersion: "1.0.0",
+      enabledAt: expect.any(String),
       revokedAt: null,
       lastRegisteredAt: expect.any(String),
+      createdAt: expect.any(String),
+      updatedAt: expect.any(String),
     });
     expect(createPayload.data.device.token).toBeUndefined();
     expect(createPayload.data.device.tokenHash).toBeUndefined();
     const rows = await db.$queryRawUnsafe<Array<{
+      id: string;
+      userId: string;
       deviceId: string;
       platform: string;
       environment: string;
@@ -496,10 +699,16 @@ describe("API v1 native account and bootstrap endpoints", () => {
       tokenPrefix: string;
       deviceName: string | null;
       appVersion: string | null;
+      enabledAt: string | Date;
       revokedAt: string | null;
-    }>>('SELECT "deviceId", "platform", "environment", "tokenHash", "tokenPrefix", "deviceName", "appVersion", "revokedAt" FROM "NativePushDevice" WHERE "userId" = ? AND "deviceId" = ?', user.id, "ios-simulator-1");
+      lastRegisteredAt: string | Date;
+      createdAt: string | Date;
+      updatedAt: string | Date;
+    }>>('SELECT "id", "userId", "deviceId", "platform", "environment", "tokenHash", "tokenPrefix", "deviceName", "appVersion", "enabledAt", "revokedAt", "lastRegisteredAt", "createdAt", "updatedAt" FROM "NativePushDevice" WHERE "userId" = ? AND "deviceId" = ?', user.id, "ios-simulator-1");
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
+      id: createPayload.data.device.id,
+      userId: user.id,
       deviceId: "ios-simulator-1",
       platform: "ios",
       environment: "development",
@@ -509,6 +718,52 @@ describe("API v1 native account and bootstrap endpoints", () => {
       revokedAt: null,
     });
     expect(rows[0].tokenHash).not.toBe(token);
+    expect(isoFromDbDate(rows[0].enabledAt)).toBe(createPayload.data.device.enabledAt);
+    expect(isoFromDbDate(rows[0].lastRegisteredAt)).toBe(createPayload.data.device.lastRegisteredAt);
+    expect(isoFromDbDate(rows[0].createdAt)).toBe(createPayload.data.device.createdAt);
+    expect(isoFromDbDate(rows[0].updatedAt)).toBe(createPayload.data.device.updatedAt);
+    expect(await db.pushSubscription.count({ where: { userId: user.id } })).toBe(0);
+
+    const newToken = `apns-token-${faker.string.alphanumeric(32)}`;
+    const update = await action(routeArgs(jsonRequest("me/apns-devices", "POST", writer.token, "req_me_apns_update", {
+      deviceId: "ios-simulator-1",
+      platform: "ios",
+      environment: "development",
+      token: newToken,
+      deviceName: "iPhone 17 Pro",
+      appVersion: "1.0.1",
+    }), "me/apns-devices"));
+    const updatePayload = await readJson(update);
+
+    expect(update.status).toBe(200);
+    expectPrivateEnvelopeHeaders(update, "req_me_apns_update");
+    expectSuccessEnvelope(updatePayload, "req_me_apns_update");
+    expect(updatePayload.data).toMatchObject({
+      created: false,
+      device: {
+        id: createPayload.data.device.id,
+        deviceId: "ios-simulator-1",
+        tokenPrefix: newToken.slice(0, 12),
+        deviceName: "iPhone 17 Pro",
+        appVersion: "1.0.1",
+        revokedAt: null,
+        enabledAt: expect.any(String),
+        lastRegisteredAt: expect.any(String),
+      },
+    });
+    const updatedRows = await db.$queryRawUnsafe<Array<{ id: string; tokenHash: string; tokenPrefix: string; revokedAt: string | null }>>(
+      'SELECT "id", "tokenHash", "tokenPrefix", "revokedAt" FROM "NativePushDevice" WHERE "userId" = ? AND "deviceId" = ?',
+      user.id,
+      "ios-simulator-1",
+    );
+    expect(updatedRows).toHaveLength(1);
+    expect(updatedRows[0]).toMatchObject({
+      id: createPayload.data.device.id,
+      tokenPrefix: newToken.slice(0, 12),
+      revokedAt: null,
+    });
+    expect(updatedRows[0].tokenHash).not.toBe(rows[0].tokenHash);
+    expect(updatedRows[0].tokenHash).not.toBe(newToken);
     expect(await db.pushSubscription.count({ where: { userId: user.id } })).toBe(0);
 
     const revoke = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/me/apns-devices/ios-simulator-1", {
