@@ -707,6 +707,12 @@ describe("API v1 recipe step and dependency mutations", () => {
       ["req_step_ingredient_delete_foreign_ingredient", "DELETE", `recipes/${fixture.recipe.id}/steps/${fixture.steps[0].id}/ingredients/${foreign.ingredient.id}`, {
         clientMutationId: "ingredient-delete-foreign-ingredient",
       }],
+      ["req_step_ingredient_delete_wrong_step", "DELETE", `recipes/${fixture.recipe.id}/steps/${fixture.steps[1].id}/ingredients/${fixture.ingredient.id}`, {
+        clientMutationId: "ingredient-delete-wrong-step",
+      }],
+      ["req_step_ingredient_delete_missing_ingredient", "DELETE", `recipes/${fixture.recipe.id}/steps/${fixture.steps[0].id}/ingredients/missing`, {
+        clientMutationId: "ingredient-delete-missing-ingredient",
+      }],
       ["req_step_reorder_missing_step", "POST", `recipes/${fixture.recipe.id}/steps/reorder`, {
         clientMutationId: "reorder-missing-step",
         stepId: "missing",
