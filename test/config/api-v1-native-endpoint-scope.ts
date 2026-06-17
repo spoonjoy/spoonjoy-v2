@@ -71,7 +71,7 @@ export const NATIVE_REST_ENDPOINT_SCOPE = [
   { method: "GET", path: "/api/v1/users/{identifier}", auth: "optional", scopes: ["public:read"] },
   { method: "GET", path: "/api/v1/users/{identifier}/fellow-chefs", auth: "optional", scopes: ["public:read"] },
   { method: "GET", path: "/api/v1/users/{identifier}/kitchen-visitors", auth: "optional", scopes: ["public:read"] },
-  { method: "GET", path: "/api/v1/search", auth: "optional", scopes: ["public:read"] },
+  { method: "GET", path: "/api/v1/search", auth: "optional", scopes: [] },
   { method: "POST", path: "/api/v1/recipes/import", auth: "bearer", scopes: ["kitchen:write"] },
 ] as const satisfies readonly NativeRestEndpointScopeRow[];
 

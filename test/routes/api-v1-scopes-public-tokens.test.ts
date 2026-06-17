@@ -53,6 +53,7 @@ describe("API v1 public/token scope matrix", () => {
     expect(resolveApiV1ScopeRequirement("GET", "recipes/recipe_1")).toEqual({ auth: "optional", scopes: ["recipes:read"] });
     expect(resolveApiV1ScopeRequirement("GET", "cookbooks")).toEqual({ auth: "optional", scopes: ["cookbooks:read"] });
     expect(resolveApiV1ScopeRequirement("GET", "cookbooks/cookbook_1")).toEqual({ auth: "optional", scopes: ["cookbooks:read"] });
+    expect(resolveApiV1ScopeRequirement("GET", "search")).toEqual({ auth: "optional", scopes: [] });
     expect(resolveApiV1ScopeRequirement("GET", "tokens")).toEqual({ auth: "bearer", scopes: ["tokens:read"] });
     expect(resolveApiV1ScopeRequirement("POST", "tokens")).toEqual({ auth: "bearer", scopes: ["tokens:write"] });
     expect(resolveApiV1ScopeRequirement("DELETE", "tokens/credential_1")).toEqual({ auth: "bearer", scopes: ["tokens:write"] });

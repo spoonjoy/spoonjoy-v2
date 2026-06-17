@@ -104,6 +104,7 @@ describe("API v1 complete scope matrix", () => {
     expect(resolveApiV1ScopeRequirement("GET", "tokens")).toEqual({ auth: "bearer", scopes: ["tokens:read"] });
     expect(resolveApiV1ScopeRequirement("POST", "tokens")).toEqual({ auth: "bearer", scopes: ["tokens:write"] });
     expect(resolveApiV1ScopeRequirement("DELETE", "tokens/token_1")).toEqual({ auth: "bearer", scopes: ["tokens:write"] });
+    expect(resolveApiV1ScopeRequirement("GET", "search")).toEqual({ auth: "optional", scopes: [] });
   });
 
   it("allows anonymous public routes and enforces bearer public read scopes when credentials are present", async () => {
@@ -113,6 +114,7 @@ describe("API v1 complete scope matrix", () => {
       ["health", "http://localhost/api/v1/health", "health", fixture.noScopes.token],
       ["openapi", "http://localhost/api/v1/openapi.json", "openapi.json", fixture.noScopes.token],
       ["openapi-sdk", "http://localhost/api/v1/openapi.sdk.json", "openapi.sdk.json", fixture.noScopes.token],
+      ["search", "http://localhost/api/v1/search?q=matrix", "search", fixture.noScopes.token],
       ["recipes", "http://localhost/api/v1/recipes", "recipes", fixture.recipesRead.token],
       ["recipe", `http://localhost/api/v1/recipes/${fixture.recipe.id}`, `recipes/${fixture.recipe.id}`, fixture.recipesRead.token],
       ["cookbooks", "http://localhost/api/v1/cookbooks", "cookbooks", fixture.cookbooksRead.token],

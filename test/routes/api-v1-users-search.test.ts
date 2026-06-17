@@ -295,7 +295,7 @@ describe("API v1 profile, chef graph, and search reads", () => {
       },
     });
     const publicOnlyToken = await createApiCredential(db, chef.id, "Public search owner", { scopes: ["public:read"] });
-    const shoppingToken = await createApiCredential(db, chef.id, "Shopping search owner", { scopes: ["public:read", "shopping_list:read"] });
+    const shoppingToken = await createApiCredential(db, chef.id, "Shopping search owner", { scopes: ["shopping_list:read"] });
 
     const publicSearch = await loader(routeArgs(new UndiciRequest("http://localhost/api/v1/search?q=tomato&scope=all&limit=20", {
       headers: { "X-Request-Id": "req_search_public" },

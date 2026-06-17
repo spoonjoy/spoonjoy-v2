@@ -49,7 +49,7 @@ export const API_V1_RESOURCES = [
   { name: "user-profile", path: "/api/v1/users/{identifier}", methods: ["GET"], auth: "optional", scopes: ["public:read"] },
   { name: "user-fellow-chefs", path: "/api/v1/users/{identifier}/fellow-chefs", methods: ["GET"], auth: "optional", scopes: ["public:read"] },
   { name: "user-kitchen-visitors", path: "/api/v1/users/{identifier}/kitchen-visitors", methods: ["GET"], auth: "optional", scopes: ["public:read"] },
-  { name: "search", path: "/api/v1/search", methods: ["GET"], auth: "optional", scopes: ["public:read"] },
+  { name: "search", path: "/api/v1/search", methods: ["GET"], auth: "optional", scopes: [] },
   { name: "recipe-import", path: "/api/v1/recipes/import", methods: ["POST"], auth: "bearer", scopes: ["kitchen:write"] },
 ] as const;
 
@@ -116,7 +116,7 @@ export const API_V1_SCOPE_REQUIREMENTS = [
   { path: "/api/v1/users/{identifier}", method: "GET", auth: "optional", scopes: ["public:read"] },
   { path: "/api/v1/users/{identifier}/fellow-chefs", method: "GET", auth: "optional", scopes: ["public:read"] },
   { path: "/api/v1/users/{identifier}/kitchen-visitors", method: "GET", auth: "optional", scopes: ["public:read"] },
-  { path: "/api/v1/search", method: "GET", auth: "optional", scopes: ["public:read"] },
+  { path: "/api/v1/search", method: "GET", auth: "optional", scopes: [] },
   { path: "/api/v1/recipes/import", method: "POST", auth: "bearer", scopes: ["kitchen:write"] },
 ] as const;
 

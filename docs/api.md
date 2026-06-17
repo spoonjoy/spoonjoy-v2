@@ -478,7 +478,7 @@ API v1 is rate limited by IP and credential before authentication work. Anonymou
 | `GET` | `/api/v1/users/{identifier}` | Optional | `public:read` when authenticated |
 | `GET` | `/api/v1/users/{identifier}/fellow-chefs` | Optional | `public:read` when authenticated |
 | `GET` | `/api/v1/users/{identifier}/kitchen-visitors` | Optional | `public:read` when authenticated |
-| `GET` | `/api/v1/search` | Optional | `public:read` when authenticated |
+| `GET` | `/api/v1/search` | Optional | None for public results; `shopping_list:read` or `kitchen:read` for shopping-list results |
 | `POST` | `/api/v1/recipes/import` | Authenticated chef | `kitchen:write` |
 
 ### Native app contract
