@@ -45,6 +45,8 @@ const OPERATION_SCOPES = {
   "DELETE /api/v1/me/photo": ["account:write"],
   "GET /api/v1/me/notification-preferences": ["account:read"],
   "PATCH /api/v1/me/notification-preferences": ["account:write"],
+  "POST /api/v1/me/apns-devices": ["account:write"],
+  "DELETE /api/v1/me/apns-devices/{deviceId}": ["account:write"],
   "GET /api/v1/me/connections": ["tokens:read"],
   "DELETE /api/v1/me/connections/{connectionId}": ["tokens:write"],
   "GET /api/v1/shopping-list": ["shopping_list:read"],
@@ -487,6 +489,16 @@ describe("API v1 OpenAPI document", () => {
     });
     expect(responseExample(document, "/api/v1/me/notification-preferences", "GET", "200").data)
       .toMatchObject({ notifySpoonOnMyRecipe: true, notifyFellowChefOriginCook: true });
+    expect(responseExample(document, "/api/v1/me/apns-devices", "POST", "201").data).toMatchObject({
+      created: true,
+      device: {
+        deviceId: "ios-simulator-1",
+        environment: "development",
+        tokenPrefix: "apns-token-",
+      },
+    });
+    expect(responseExample(document, "/api/v1/me/apns-devices/{deviceId}", "DELETE", "200").data)
+      .toMatchObject({ revoked: true, revokedCount: 1, devices: [expect.objectContaining({ deviceId: "ios-simulator-1" })] });
     expect(responseExample(document, "/api/v1/me/connections", "GET", "200").data.connections[0])
       .toMatchObject({ id: expect.stringMatching(/^conn_/), clientName: "Meal planner" });
     expect(responseExample(document, "/api/v1/me/connections/{connectionId}", "DELETE", "200").data)
@@ -516,6 +528,13 @@ describe("API v1 OpenAPI document", () => {
       .toEqual({ name: "Tiny client", scopes: ["recipes:read", "shopping_list:read", "shopping_list:write"] });
     expect(operation(document, "/api/v1/me/photo", "POST").requestBody.content["multipart/form-data"].schema.$ref)
       .toBe("#/components/schemas/ProfilePhotoUploadRequest");
+    expect(operation(document, "/api/v1/me/apns-devices", "POST").requestBody.content["application/json"].examples.example.value)
+      .toMatchObject({ deviceId: "ios-simulator-1", environment: "development" });
+    expect(operation(document, "/api/v1/me/apns-devices/{deviceId}", "DELETE").parameters)
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ name: "deviceId", in: "path", required: true }),
+        expect.objectContaining({ name: "X-Request-Id", in: "header", required: false }),
+      ]));
     expect(operation(document, "/oauth/revoke", "POST").requestBody.content["application/x-www-form-urlencoded"].examples.refresh_token.value)
       .toMatchObject({ token: "ort_...", client_id: "cm_client_id_from_register" });
     expect(operation(document, "/api/v1/shopping-list/items", "POST").requestBody.content["application/json"].examples.example.value)
@@ -674,6 +693,62 @@ describe("API v1 OpenAPI document", () => {
       .toBe("#/components/schemas/ErrorEnvelope");
     expect(operation(document, "/api/v1/shopping-list/add-from-recipe", "POST").responses["404"].content["application/json"].schema.$ref)
       .toBe("#/components/schemas/ErrorEnvelope");
+  });
+
+  it("declares exact request and response schemas for native account endpoints", () => {
+    const document = buildApiV1OpenApiDocument();
+
+    expect(operation(document, "/api/v1/me", "GET").responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/AccountProfileEnvelope");
+    expect(operation(document, "/api/v1/me", "PATCH").requestBody.content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/UpdateAccountProfileRequest");
+    expect(operation(document, "/api/v1/me", "PATCH").responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/AccountProfileEnvelope");
+    expect(responseExample(document, "/api/v1/me", "GET", "200").data).toMatchObject({
+      email: "ari@spoonjoy.app",
+      username: "ari",
+      oauthAccounts: [expect.objectContaining({ provider: "google" })],
+      passkeys: [expect.objectContaining({ name: "Kitchen Mac" })],
+    });
+
+    expect(operation(document, "/api/v1/me/photo", "POST").requestBody.content["multipart/form-data"].schema.$ref)
+      .toBe("#/components/schemas/ProfilePhotoUploadRequest");
+    expect(operation(document, "/api/v1/me/photo", "POST").requestBody.content["application/json"]).toBeUndefined();
+    expect(operation(document, "/api/v1/me/photo", "POST").responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/AccountProfileEnvelope");
+    expect(operation(document, "/api/v1/me/photo", "DELETE").responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/AccountProfileEnvelope");
+    expect(operation(document, "/api/v1/me/photo", "DELETE").parameters.map((parameter: { name: string }) => parameter.name))
+      .not.toContain("X-Client-Mutation-Id");
+
+    expect(operation(document, "/api/v1/me/notification-preferences", "GET").responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/NotificationPreferencesEnvelope");
+    expect(operation(document, "/api/v1/me/notification-preferences", "PATCH").requestBody.content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/UpdateNotificationPreferencesRequest");
+    expect(operation(document, "/api/v1/me/notification-preferences", "PATCH").responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/NotificationPreferencesEnvelope");
+
+    expect(operation(document, "/api/v1/me/apns-devices", "POST").requestBody.content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/ApnsDeviceRegistrationRequest");
+    expect(operation(document, "/api/v1/me/apns-devices", "POST").responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/ApnsDeviceRegistrationEnvelope");
+    expect(operation(document, "/api/v1/me/apns-devices", "POST").responses["201"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/ApnsDeviceRegistrationEnvelope");
+    expect(responseExample(document, "/api/v1/me/apns-devices", "POST", "201").data.device)
+      .not.toEqual(expect.objectContaining({ token: expect.anything(), tokenHash: expect.anything() }));
+    expect(operation(document, "/api/v1/me/apns-devices/{deviceId}", "DELETE").responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/ApnsDeviceRevokeEnvelope");
+    expect(operation(document, "/api/v1/me/apns-devices/{deviceId}", "DELETE").parameters.map((parameter: { name: string }) => parameter.name))
+      .toEqual(expect.arrayContaining(["deviceId", "X-Request-Id"]));
+    expect(operation(document, "/api/v1/me/apns-devices/{deviceId}", "DELETE").parameters.map((parameter: { name: string }) => parameter.name))
+      .not.toContain("X-Client-Mutation-Id");
+
+    expect(operation(document, "/api/v1/me/connections", "GET").responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/OAuthConnectionListEnvelope");
+    expect(operation(document, "/api/v1/me/connections/{connectionId}", "DELETE").responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/DisconnectOAuthConnectionEnvelope");
+    expect(operation(document, "/api/v1/me/connections/{connectionId}", "DELETE").parameters.map((parameter: { name: string }) => parameter.name))
+      .not.toContain("X-Client-Mutation-Id");
   });
 
   it("defines reusable schemas with strict objects, nullable fields, and error enums", () => {

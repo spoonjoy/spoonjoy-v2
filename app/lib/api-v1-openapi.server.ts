@@ -538,6 +538,38 @@ const schemas = {
     notifyFellowChefOriginCook: { type: "boolean" },
     clientMutationId: shortTextSchema,
   }),
+  ApnsDeviceRegistrationRequest: objectSchema(["deviceId", "platform", "environment", "token"], {
+    deviceId: { type: "string", minLength: 1, maxLength: 160 },
+    platform: { type: "string", enum: ["ios", "ipados", "macos"] },
+    environment: { type: "string", enum: ["development", "production"] },
+    token: { type: "string", minLength: 1, maxLength: 4096, description: "Raw APNs token. Spoonjoy stores only a hash and returns only tokenPrefix." },
+    deviceName: nullableStringSchema,
+    appVersion: nullableStringSchema,
+  }),
+  ApnsDevice: objectSchema(["id", "deviceId", "platform", "environment", "tokenPrefix", "deviceName", "appVersion", "enabledAt", "revokedAt", "lastRegisteredAt", "createdAt", "updatedAt"], {
+    id: idSchema,
+    deviceId: idSchema,
+    platform: { type: "string", enum: ["ios", "ipados", "macos"] },
+    environment: { type: "string", enum: ["development", "production"] },
+    tokenPrefix: { type: "string", description: "First characters of the APNs token for diagnostics. The full token is never returned." },
+    deviceName: nullableStringSchema,
+    appVersion: nullableStringSchema,
+    enabledAt: dateTimeSchema,
+    revokedAt: nullableDateTimeSchema,
+    lastRegisteredAt: dateTimeSchema,
+    createdAt: dateTimeSchema,
+    updatedAt: dateTimeSchema,
+  }),
+  ApnsDeviceRegistrationData: objectSchema(["created", "device"], {
+    created: { type: "boolean" },
+    device: ref("ApnsDevice"),
+  }),
+  ApnsDeviceRevokeData: objectSchema(["revoked", "revokedCount", "device", "devices"], {
+    revoked: { type: "boolean" },
+    revokedCount: { type: "integer", minimum: 0 },
+    device: ref("ApnsDevice"),
+    devices: arrayOf(ref("ApnsDevice")),
+  }),
   OAuthConnectionSummary: objectSchema(["id", "clientId", "clientName", "resource", "scopes", "createdAt", "refreshTokenCount", "accessTokenCount"], {
     id: { type: "string", pattern: "^conn_" },
     clientId: idSchema,
@@ -904,6 +936,8 @@ const schemas = {
   CookbookRecipeRemoveEnvelope: successEnvelope(ref("CookbookRecipeMutationData")),
   AccountProfileEnvelope: successEnvelope(ref("AccountProfile")),
   NotificationPreferencesEnvelope: successEnvelope(ref("NotificationPreferences")),
+  ApnsDeviceRegistrationEnvelope: successEnvelope(ref("ApnsDeviceRegistrationData")),
+  ApnsDeviceRevokeEnvelope: successEnvelope(ref("ApnsDeviceRevokeData")),
   OAuthConnectionListEnvelope: successEnvelope(ref("OAuthConnectionListData")),
   DisconnectOAuthConnectionEnvelope: successEnvelope(ref("DisconnectOAuthConnectionData")),
   TokenListEnvelope: successEnvelope(ref("TokenListData")),
@@ -925,6 +959,7 @@ const pathParameters = {
   spoonId: { name: "spoonId", in: "path", required: true, description: "Recipe spoon id from a cover-management spoon image candidate.", schema: idSchema },
   itemId: { name: "itemId", in: "path", required: true, description: "Shopping-list item id from GET /api/v1/shopping-list or /sync.", schema: idSchema },
   credentialId: { name: "credentialId", in: "path", required: true, description: "Bearer credential id from GET /api/v1/tokens.", schema: idSchema },
+  deviceId: { name: "deviceId", in: "path", required: true, description: "Native APNs device id provided during registration.", schema: idSchema },
   connectionId: { name: "connectionId", in: "path", required: true, description: "Opaque OAuth app connection id from GET /api/v1/me/connections.", schema: { type: "string", pattern: "^conn_" } },
   requestIdHeader: {
     name: "X-Request-Id",
@@ -1033,6 +1068,12 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
   "/api/v1/me/notification-preferences": {
     GET: { operationId: "getApiV1MeNotificationPreferences", tags: ["Account"], summary: "Read account notification preferences", auth: "bearer", scopes: ["account:read"], success: { 200: "NotificationPreferencesEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "method_not_allowed", "rate_limited", "internal_error"] },
     PATCH: { operationId: "patchApiV1MeNotificationPreferences", tags: ["Account"], summary: "Update account notification preferences", auth: "bearer", scopes: ["account:write"], success: { 200: "NotificationPreferencesEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "UpdateNotificationPreferencesRequest" },
+  },
+  "/api/v1/me/apns-devices": {
+    POST: { operationId: "postApiV1MeApnsDevices", tags: ["Account"], summary: "Register or refresh a native APNs device", auth: "bearer", scopes: ["account:write"], success: { 200: "ApnsDeviceRegistrationEnvelope", 201: "ApnsDeviceRegistrationEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "ApnsDeviceRegistrationRequest" },
+  },
+  "/api/v1/me/apns-devices/{deviceId}": {
+    DELETE: { operationId: "deleteApiV1MeApnsDevice", tags: ["Account"], summary: "Revoke native APNs registrations for one device", auth: "bearer", scopes: ["account:write"], success: { 200: "ApnsDeviceRevokeEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.deviceId] },
   },
   "/api/v1/me/connections": {
     GET: { operationId: "getApiV1MeConnections", tags: ["Account"], summary: "List OAuth app connections for the authenticated account", auth: "bearer", scopes: ["tokens:read"], success: { 200: "OAuthConnectionListEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "method_not_allowed", "rate_limited", "internal_error"] },
@@ -1197,6 +1238,20 @@ const exampleNotificationPreferences = {
   notifyForkOfMyRecipe: true,
   notifyCookbookSaveOfMine: true,
   notifyFellowChefOriginCook: true,
+};
+const exampleApnsDevice = {
+  id: "npd_1",
+  deviceId: "ios-simulator-1",
+  platform: "ios",
+  environment: "development",
+  tokenPrefix: "apns-token-",
+  deviceName: "Ari's iPhone",
+  appVersion: "1.0.0",
+  enabledAt: exampleTimestamp,
+  revokedAt: null,
+  lastRegisteredAt: exampleTimestamp,
+  createdAt: exampleTimestamp,
+  updatedAt: exampleTimestamp,
 };
 const exampleOAuthConnection = {
   id: "conn_eyJjbGllbnRJZCI6ImNtXzEiLCJyZXNvdXJjZSI6bnVsbCwiY29ubmVjdGlvbktleSI6Im9jbl9leGFtcGxlIn0",
@@ -1478,6 +1533,12 @@ const responseExamples: Record<string, unknown> = {
   },
   AccountProfileEnvelope: { ok: true, requestId: "req_example", data: exampleAccountProfile },
   NotificationPreferencesEnvelope: { ok: true, requestId: "req_example", data: exampleNotificationPreferences },
+  ApnsDeviceRegistrationEnvelope: { ok: true, requestId: "req_example", data: { created: true, device: exampleApnsDevice } },
+  ApnsDeviceRevokeEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: { revoked: true, revokedCount: 1, device: { ...exampleApnsDevice, revokedAt: exampleTimestamp }, devices: [{ ...exampleApnsDevice, revokedAt: exampleTimestamp }] },
+  },
   OAuthConnectionListEnvelope: { ok: true, requestId: "req_example", data: { connections: [exampleOAuthConnection] } },
   DisconnectOAuthConnectionEnvelope: {
     ok: true,
@@ -1556,6 +1617,14 @@ const requestExamples: Record<string, unknown> = {
     notifyForkOfMyRecipe: true,
     notifyCookbookSaveOfMine: false,
     notifyFellowChefOriginCook: true,
+  },
+  ApnsDeviceRegistrationRequest: {
+    deviceId: "ios-simulator-1",
+    platform: "ios",
+    environment: "development",
+    token: "apns-token-example-secret",
+    deviceName: "Ari's iPhone",
+    appVersion: "1.0.0",
   },
   CreateTokenRequest: { name: "Tiny client", scopes: ["recipes:read", "shopping_list:read", "shopping_list:write"] },
   CreateRecipeSpoonRequest: {

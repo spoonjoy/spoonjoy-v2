@@ -133,6 +133,8 @@ describe("API v1 complete scope matrix", () => {
     expect(resolveApiV1ScopeRequirement("DELETE", "me/photo")).toEqual({ auth: "bearer", scopes: ["account:write"] });
     expect(resolveApiV1ScopeRequirement("GET", "me/notification-preferences")).toEqual({ auth: "bearer", scopes: ["account:read"] });
     expect(resolveApiV1ScopeRequirement("PATCH", "me/notification-preferences")).toEqual({ auth: "bearer", scopes: ["account:write"] });
+    expect(resolveApiV1ScopeRequirement("POST", "me/apns-devices")).toEqual({ auth: "bearer", scopes: ["account:write"] });
+    expect(resolveApiV1ScopeRequirement("DELETE", "me/apns-devices/device-main")).toEqual({ auth: "bearer", scopes: ["account:write"] });
     expect(resolveApiV1ScopeRequirement("GET", "me/connections")).toEqual({ auth: "bearer", scopes: ["tokens:read"] });
     expect(resolveApiV1ScopeRequirement("DELETE", "me/connections/conn_1")).toEqual({ auth: "bearer", scopes: ["tokens:write"] });
     expect(resolveApiV1ScopeRequirement("GET", "shopping-list")).toEqual({ auth: "bearer", scopes: ["shopping_list:read"] });

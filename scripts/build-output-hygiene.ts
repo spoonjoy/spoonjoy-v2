@@ -47,3 +47,11 @@ export function shouldLogRollupBuildMessage(
   const names = emptyBundleChunkNames(log);
   return names.length === 0 || !names.every((name) => SERVER_ONLY_ROUTE_CHUNKS.has(name));
 }
+
+function stripAnsi(value: string) {
+  return value.replace(/\u001b\[[0-9;]*m/g, "");
+}
+
+export function shouldLogViteBuildErrorMessage(message: string) {
+  return stripAnsi(message).trim() !== "✘ [ERROR] The build was canceled";
+}

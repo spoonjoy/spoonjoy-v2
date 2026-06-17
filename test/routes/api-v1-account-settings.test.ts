@@ -34,7 +34,7 @@ function expectEnvelopeHeaders(response: Response, requestId: string) {
   expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
 }
 
-function jsonRequest(path: string, method: "GET" | "PATCH" | "DELETE", headers: HeadersInit, body?: unknown) {
+function jsonRequest(path: string, method: "GET" | "POST" | "PATCH" | "DELETE", headers: HeadersInit, body?: unknown) {
   return new UndiciRequest(`http://localhost/api/v1/${path}`, {
     method,
     headers: {
@@ -51,6 +51,10 @@ async function apiGet(path: string, headers: HeadersInit, requestId: string) {
 
 async function apiPatch(path: string, headers: HeadersInit, requestId: string, body: unknown) {
   return await action(routeArgs(jsonRequest(path, "PATCH", { "X-Request-Id": requestId, ...headers }, body), path));
+}
+
+async function apiPost(path: string, headers: HeadersInit, requestId: string, body: unknown) {
+  return await action(routeArgs(jsonRequest(path, "POST", { "X-Request-Id": requestId, ...headers }, body), path));
 }
 
 async function apiDelete(path: string, headers: HeadersInit, requestId: string) {
@@ -305,6 +309,108 @@ describe("API v1 native account settings", () => {
     expect(invalidPayload.error).toMatchObject({
       code: "validation_error",
       details: { field: "notifySpoonOnMyRecipe" },
+    });
+  });
+
+  it("registers, refreshes, and revokes native APNs device registrations", async () => {
+    const token = await createApiCredential(db, userId, "Native APNs writer", { scopes: ["account:write"] });
+    const auth = { Authorization: `Bearer ${token.token}` };
+
+    const development = await apiPost("me/apns-devices", auth, "req_me_apns_register_dev", {
+      deviceId: "device-main",
+      platform: "ios",
+      environment: "development",
+      token: "apns-token-development-secret",
+      deviceName: "Kitchen iPhone",
+      appVersion: "1.0.0",
+    });
+    const developmentPayload = await readJson(development);
+
+    expect(development.status).toBe(201);
+    expectEnvelopeHeaders(development, "req_me_apns_register_dev");
+    expect(developmentPayload.data).toMatchObject({
+      created: true,
+      device: {
+        deviceId: "device-main",
+        platform: "ios",
+        environment: "development",
+        tokenPrefix: "apns-token-d",
+        deviceName: "Kitchen iPhone",
+        appVersion: "1.0.0",
+        revokedAt: null,
+      },
+    });
+    expect(JSON.stringify(developmentPayload)).not.toContain("development-secret");
+    expect(JSON.stringify(developmentPayload)).not.toContain("tokenHash");
+
+    const production = await apiPost("me/apns-devices", auth, "req_me_apns_register_prod", {
+      deviceId: "device-main",
+      platform: "ios",
+      environment: "production",
+      token: "apns-token-production-secret",
+    });
+    expect(production.status).toBe(201);
+
+    const refreshed = await apiPost("me/apns-devices", auth, "req_me_apns_refresh_dev", {
+      deviceId: "device-main",
+      platform: "ios",
+      environment: "development",
+      token: "apns-token-development-rotated",
+      deviceName: "Ari's iPhone",
+      appVersion: "1.0.1",
+    });
+    const refreshedPayload = await readJson(refreshed);
+
+    expect(refreshed.status).toBe(200);
+    expect(refreshedPayload.data).toMatchObject({
+      created: false,
+      device: {
+        deviceId: "device-main",
+        environment: "development",
+        tokenPrefix: "apns-token-d",
+        deviceName: "Ari's iPhone",
+        appVersion: "1.0.1",
+        revokedAt: null,
+      },
+    });
+    await expect(db.nativePushDevice.count({ where: { userId, deviceId: "device-main" } })).resolves.toBe(2);
+
+    const revoke = await apiDelete("me/apns-devices/device-main", auth, "req_me_apns_revoke");
+    const revokePayload = await readJson(revoke);
+
+    expect(revoke.status).toBe(200);
+    expectEnvelopeHeaders(revoke, "req_me_apns_revoke");
+    expect(revokePayload.data).toMatchObject({
+      revoked: true,
+      revokedCount: 2,
+      device: { deviceId: "device-main" },
+    });
+    expect(revokePayload.data.devices).toHaveLength(2);
+    expect(revokePayload.data.devices.every((device: { revokedAt: string | null }) => device.revokedAt !== null)).toBe(true);
+
+    const alreadyRevoked = await apiDelete("me/apns-devices/device-main", auth, "req_me_apns_revoke_again");
+    const alreadyRevokedPayload = await readJson(alreadyRevoked);
+    expect(alreadyRevoked.status).toBe(200);
+    expect(alreadyRevokedPayload.data).toMatchObject({ revoked: false, revokedCount: 0 });
+
+    const invalid = await apiPost("me/apns-devices", auth, "req_me_apns_invalid", {
+      deviceId: "device-main",
+      platform: "watchos",
+      environment: "development",
+      token: "",
+      unexpected: true,
+    });
+    const invalidPayload = await readJson(invalid);
+    expect(invalid.status).toBe(400);
+    expect(invalidPayload.error).toMatchObject({
+      code: "validation_error",
+      details: {
+        fieldErrors: {
+          platform: "platform must be ios, ipados, or macos",
+          token: "token must be a nonblank string",
+          unexpected: "Unknown field",
+        },
+      },
     });
   });
 

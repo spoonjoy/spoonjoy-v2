@@ -1,7 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { shouldLogRollupBuildMessage } from "../scripts/build-output-hygiene";
+import { shouldLogRollupBuildMessage, shouldLogViteBuildErrorMessage } from "../scripts/build-output-hygiene";
 
 async function findSourceFiles(rootDir: string): Promise<string[]> {
   const entries = await readdir(rootDir, { withFileTypes: true });
@@ -46,6 +46,13 @@ describe("build output hygiene", () => {
       code: "EMPTY_BUNDLE",
       message: 'Generated an empty chunk: "api.v1._".',
     })).toBe(false);
+    expect(shouldLogRollupBuildMessage("warn", {
+      code: "EMPTY_BUNDLE",
+      message: "Generated an empty chunk without a quoted route name.",
+    })).toBe(true);
+    expect(shouldLogRollupBuildMessage("warn", {
+      code: "EMPTY_BUNDLE",
+    })).toBe(true);
     expect(shouldLogRollupBuildMessage("info", {
       code: "EMPTY_BUNDLE",
       message: 'Generated an empty chunk: "api.v1._".',
@@ -55,6 +62,13 @@ describe("build output hygiene", () => {
       code: "UNRESOLVED_IMPORT",
       message: "Could not resolve import.",
     })).toBe(true);
+  });
+
+  it("suppresses only Vite's benign esbuild cancellation diagnostic", () => {
+    expect(shouldLogViteBuildErrorMessage("✘ [ERROR] The build was canceled")).toBe(false);
+    expect(shouldLogViteBuildErrorMessage("\u001b[31m✘ [ERROR] The build was canceled\u001b[39m")).toBe(false);
+    expect(shouldLogViteBuildErrorMessage("✘ [ERROR] Could not resolve ./missing")).toBe(true);
+    expect(shouldLogViteBuildErrorMessage("The build was canceled while compiling app code")).toBe(true);
   });
 
   it("keeps inert client directives out of local app source", async () => {

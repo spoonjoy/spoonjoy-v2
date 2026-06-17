@@ -503,6 +503,7 @@ describe("cleanup-local-qa-data", () => {
       "DELETE FROM OAuthAuthCode",
       "DELETE FROM OAuthRefreshToken",
       "DELETE FROM OAuthClient",
+      "DELETE FROM NativePushDevice",
       "DELETE FROM RecipeCover",
       "DELETE FROM RecipeSpoon",
       "DELETE FROM RecipeInCookbook",

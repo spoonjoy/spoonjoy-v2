@@ -1,4 +1,4 @@
-import type { ApiCredential, ApiIdempotencyKey, Prisma, RecipeCover, RecipeSpoon } from "@prisma/client";
+import type { ApiCredential, ApiIdempotencyKey, NativePushDevice, Prisma, RecipeCover, RecipeSpoon } from "@prisma/client";
 import type { AppLoadContext } from "react-router";
 import {
   ApiAuthError,
@@ -382,6 +382,10 @@ function apiV1OperationFor(method: string, path: string): string | undefined {
       return "account.notification-preferences.read";
     case "PATCH me-notification-preferences":
       return "account.notification-preferences.update";
+    case "POST me-apns-devices":
+      return "account.apns.register";
+    case "DELETE me-apns-device":
+      return "account.apns.revoke";
     case "GET me-connections":
       return "account.connections.list";
     case "DELETE me-connection":
@@ -3634,6 +3638,179 @@ async function handleNotificationPreferencesUpdate(args: ApiV1RouteArgs, request
   );
 }
 
+const APNS_DEVICE_FIELDS = [
+  "deviceId",
+  "platform",
+  "environment",
+  "token",
+  "deviceName",
+  "appVersion",
+] as const;
+const APNS_PLATFORMS = new Set(["ios", "ipados", "macos"]);
+const APNS_ENVIRONMENTS = new Set(["development", "production"]);
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function hashApnsToken(token: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
+  return bytesToHex(new Uint8Array(digest));
+}
+
+function apnsRequiredText(
+  body: Record<string, unknown>,
+  field: typeof APNS_DEVICE_FIELDS[number],
+  errors: Record<string, string>,
+  maxLength = MAX_SHORT_TEXT_LENGTH,
+) {
+  const value = body[field];
+  if (typeof value !== "string" || value.trim() === "") {
+    errors[field] = `${field} must be a nonblank string`;
+    return "";
+  }
+  const trimmed = value.trim();
+  if (trimmed.length > maxLength) {
+    errors[field] = `${field} must be at most ${maxLength} characters`;
+    return "";
+  }
+  return trimmed;
+}
+
+function apnsOptionalText(
+  body: Record<string, unknown>,
+  field: typeof APNS_DEVICE_FIELDS[number],
+  errors: Record<string, string>,
+) {
+  if (body[field] === undefined || body[field] === null) return null;
+  return apnsRequiredText(body, field, errors);
+}
+
+function apiDateTime(value: Date | string): string {
+  return typeof value === "string" ? value : value.toISOString();
+}
+
+function nullableApiDateTime(value: Date | string | null): string | null {
+  return value === null ? null : apiDateTime(value);
+}
+
+function apnsDevicePayload(device: NativePushDevice) {
+  return {
+    id: device.id,
+    deviceId: device.deviceId,
+    platform: device.platform,
+    environment: device.environment,
+    tokenPrefix: device.tokenPrefix,
+    deviceName: device.deviceName,
+    appVersion: device.appVersion,
+    enabledAt: apiDateTime(device.enabledAt),
+    revokedAt: nullableApiDateTime(device.revokedAt),
+    lastRegisteredAt: apiDateTime(device.lastRegisteredAt),
+    createdAt: apiDateTime(device.createdAt),
+    updatedAt: apiDateTime(device.updatedAt),
+  };
+}
+
+async function handleApnsDeviceRegister(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
+  const body = await parseApiV1JsonBody(args.request);
+  const fieldErrors: Record<string, string> = {};
+  for (const field of Object.keys(body)) {
+    if (!(APNS_DEVICE_FIELDS as readonly string[]).includes(field)) {
+      fieldErrors[field] = "Unknown field";
+    }
+  }
+  const deviceId = apnsRequiredText(body, "deviceId", fieldErrors);
+  const platform = apnsRequiredText(body, "platform", fieldErrors);
+  const environment = apnsRequiredText(body, "environment", fieldErrors);
+  const token = apnsRequiredText(body, "token", fieldErrors, 4096);
+  const deviceName = apnsOptionalText(body, "deviceName", fieldErrors);
+  const appVersion = apnsOptionalText(body, "appVersion", fieldErrors);
+
+  if (platform && !APNS_PLATFORMS.has(platform)) {
+    fieldErrors.platform = "platform must be ios, ipados, or macos";
+  }
+  if (environment && !APNS_ENVIRONMENTS.has(environment)) {
+    fieldErrors.environment = "environment must be development or production";
+  }
+  if (Object.keys(fieldErrors).length > 0) {
+    throw new ApiV1Error("validation_error", "Invalid APNs device registration", { fieldErrors });
+  }
+
+  const db = await getRequestDb(args.context);
+  const tokenHash = await hashApnsToken(token);
+  const now = new Date();
+  const existing = await db.nativePushDevice.findFirst({
+    where: { userId: principal.id, deviceId, platform, environment },
+  });
+  const device = existing
+    ? await db.nativePushDevice.update({
+        where: { id: existing.id },
+        data: {
+          tokenHash,
+          tokenPrefix: token.slice(0, 12),
+          deviceName,
+          appVersion,
+          enabledAt: now,
+          revokedAt: null,
+          lastRegisteredAt: now,
+        },
+      })
+    : await db.nativePushDevice.create({
+        data: {
+          userId: principal.id,
+          deviceId,
+          platform,
+          environment,
+          tokenHash,
+          tokenPrefix: token.slice(0, 12),
+          deviceName,
+          appVersion,
+          enabledAt: now,
+          lastRegisteredAt: now,
+        },
+      });
+
+  return withApiV1Telemetry(
+    apiV1PrivateSuccess(requestId, { created: !existing, device: apnsDevicePayload(device) }, existing ? 200 : 201),
+    { idempotencyOutcome: "none" },
+  );
+}
+
+async function handleApnsDeviceRevoke(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, deviceId: string) {
+  const db = await getRequestDb(args.context);
+  const existingDevices = await db.nativePushDevice.findMany({
+    where: { userId: principal.id, deviceId },
+    orderBy: [{ lastRegisteredAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+  });
+  if (existingDevices.length === 0) {
+    throw new ApiV1Error("not_found", "Native push device not found");
+  }
+
+  const activeDeviceIds = existingDevices
+    .filter((device) => device.revokedAt === null)
+    .map((device) => device.id);
+  if (activeDeviceIds.length > 0) {
+    await db.nativePushDevice.updateMany({
+      where: { id: { in: activeDeviceIds } },
+      data: { revokedAt: new Date().toISOString() },
+    });
+  }
+  const devices = await db.nativePushDevice.findMany({
+    where: { userId: principal.id, deviceId },
+    orderBy: [{ lastRegisteredAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+  });
+
+  return withApiV1Telemetry(
+    apiV1PrivateSuccess(requestId, {
+      revoked: activeDeviceIds.length > 0,
+      revokedCount: activeDeviceIds.length,
+      device: apnsDevicePayload(devices[0]!),
+      devices: devices.map(apnsDevicePayload),
+    }),
+    { idempotencyOutcome: "none" },
+  );
+}
+
 function accountConnectionId(clientId: string, resource: string | null, connectionKey: string): string {
   return `conn_${base64UrlEncodeText(JSON.stringify({ clientId, resource, connectionKey }))}`;
 }
@@ -4161,6 +4338,18 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
     if (args.request.method === "PATCH" && path === "me/notification-preferences") {
       const principal = await authorize(path) as ApiPrincipal;
       const response = await handleNotificationPreferencesUpdate(args, requestId, principal);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "POST" && path === "me/apns-devices") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleApnsDeviceRegister(args, requestId, principal);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "DELETE" && segments[0] === "me" && segments[1] === "apns-devices" && segments.length === 3) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleApnsDeviceRevoke(args, requestId, principal, segments[2]);
       return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
     }
 
