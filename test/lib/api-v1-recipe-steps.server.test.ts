@@ -423,4 +423,339 @@ describe("API v1 recipe step helper contracts", () => {
     const result = expectError(await deleteNativeRecipeStep(dbMock, "chef_1", "recipe_1", "step_1"));
     expect(result.details).toMatchObject({ dependentStepNums: [2] });
   });
+
+  it("supports successful step deletes with and without route idempotency tombstones", async () => {
+    const fixture = await createRecipeWithSteps(db, [1]);
+    expectOk(await deleteNativeRecipeStep(db, fixture.chef.id, fixture.recipe.id, fixture.steps[0].id));
+
+    const tombstoneDb = {
+      recipe: {
+        findUnique: vi.fn().mockResolvedValue({ id: "recipe_1", chefId: "chef_1", deletedAt: null }),
+      },
+      recipeStep: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "step_1",
+          recipeId: "recipe_1",
+          stepNum: 1,
+          stepTitle: "First",
+          description: "First.",
+          duration: null,
+        }),
+        delete: vi.fn().mockResolvedValue({ id: "step_1" }),
+      },
+      stepOutputUse: {
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+      apiMutationTombstone: {
+        upsert: vi.fn().mockResolvedValue({ id: "tombstone_1" }),
+      },
+    } as unknown as LocalDb;
+
+    expectOk(await deleteNativeRecipeStep(tombstoneDb, "chef_1", "recipe_1", "step_1", {
+      tombstone: {
+        idempotencyKeyId: "idem_1",
+        operation: "recipes.steps.delete",
+      },
+    }));
+    expect(tombstoneDb.apiMutationTombstone.upsert).toHaveBeenCalledWith({
+      where: {
+        idempotencyKeyId_resourceType_resourceId: {
+          idempotencyKeyId: "idem_1",
+          resourceType: "recipe_step",
+          resourceId: "step_1",
+        },
+      },
+      update: {
+        operation: "recipes.steps.delete",
+        parentResourceId: "recipe_1",
+        payload: JSON.stringify({ recipeId: "recipe_1", stepNum: 1 }),
+      },
+      create: {
+        idempotencyKeyId: "idem_1",
+        operation: "recipes.steps.delete",
+        resourceType: "recipe_step",
+        resourceId: "step_1",
+        parentResourceId: "recipe_1",
+        payload: JSON.stringify({ recipeId: "recipe_1", stepNum: 1 }),
+      },
+    });
+  });
+
+  it("rolls back partial step creates when dependent writes fail", async () => {
+    const createFailure = new Error("recipe step insert failed");
+    const createRejectDb = {
+      recipe: {
+        findUnique: vi.fn().mockResolvedValue({ id: "recipe_1", chefId: "chef_1", deletedAt: null }),
+      },
+      recipeStep: {
+        findFirst: vi.fn().mockResolvedValue({ stepNum: 1 }),
+        findMany: vi.fn().mockResolvedValue([{ stepNum: 1 }]),
+        create: vi.fn().mockRejectedValue(createFailure),
+        delete: vi.fn(),
+      },
+      ingredientRef: {
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+      stepOutputUse: {
+        createMany: vi.fn(),
+      },
+    } as unknown as LocalDb;
+
+    await expect(createNativeRecipeStep(createRejectDb, "chef_1", "recipe_1", {
+      clientMutationId: "create-fails-before-step-id",
+      stepTitle: null,
+      description: "Create before id.",
+      duration: null,
+      ingredients: [],
+      outputStepNums: [1],
+    })).rejects.toThrow(createFailure);
+    expect(createRejectDb.recipeStep.delete).not.toHaveBeenCalled();
+
+    const outputFailure = new Error("output use insert failed");
+    const cleanupDb = {
+      recipe: {
+        findUnique: vi.fn().mockResolvedValue({ id: "recipe_1", chefId: "chef_1", deletedAt: null }),
+      },
+      recipeStep: {
+        findFirst: vi.fn().mockResolvedValue({ stepNum: 1 }),
+        findMany: vi.fn().mockResolvedValue([{ stepNum: 1 }]),
+        create: vi.fn().mockResolvedValue({ id: "created_step" }),
+        delete: vi.fn().mockRejectedValue(new Error("cleanup failed")),
+      },
+      ingredientRef: {
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+      stepOutputUse: {
+        createMany: vi.fn().mockRejectedValue(outputFailure),
+      },
+    } as unknown as LocalDb;
+
+    await expect(createNativeRecipeStep(cleanupDb, "chef_1", "recipe_1", {
+      clientMutationId: "create-cleans-created-step",
+      stepTitle: null,
+      description: "Create then output failure.",
+      duration: null,
+      ingredients: [],
+      outputStepNums: [1],
+    })).rejects.toThrow(outputFailure);
+    expect(cleanupDb.recipeStep.delete).toHaveBeenCalledWith({ where: { id: "created_step" } });
+  });
+
+  it("restores step fields and output uses when patch replacement fails", async () => {
+    const replaceFailure = new Error("output replacement failed");
+    const update = vi.fn()
+      .mockResolvedValueOnce({ id: "step_2" })
+      .mockResolvedValueOnce({ id: "step_2" });
+    const deleteMany = vi.fn()
+      .mockRejectedValueOnce(replaceFailure)
+      .mockResolvedValueOnce({ count: 0 });
+    const createMany = vi.fn().mockResolvedValue({ count: 1 });
+    const dbMock = {
+      recipe: {
+        findUnique: vi.fn().mockResolvedValue({ id: "recipe_1", chefId: "chef_1", deletedAt: null }),
+      },
+      recipeStep: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "step_2",
+          recipeId: "recipe_1",
+          stepNum: 2,
+          stepTitle: "Original title",
+          description: "Original description.",
+          duration: 5,
+        }),
+        findMany: vi.fn().mockResolvedValue([{ stepNum: 1 }]),
+        update,
+      },
+      stepOutputUse: {
+        findMany: vi.fn().mockResolvedValue([{ outputStepNum: 1 }]),
+        deleteMany,
+        createMany,
+      },
+      ingredient: {
+        count: vi.fn().mockResolvedValue(0),
+      },
+    } as unknown as LocalDb;
+
+    await expect(updateNativeRecipeStep(dbMock, "chef_1", "recipe_1", "step_2", {
+      clientMutationId: "patch-rolls-back",
+      fields: {
+        description: "Broken replacement.",
+        outputStepNums: [1],
+      },
+    })).rejects.toThrow(replaceFailure);
+
+    expect(update).toHaveBeenNthCalledWith(1, {
+      where: { id: "step_2" },
+      data: { description: "Broken replacement." },
+    });
+    expect(update).toHaveBeenNthCalledWith(2, {
+      where: { id: "step_2" },
+      data: {
+        stepTitle: "Original title",
+        description: "Original description.",
+        duration: 5,
+      },
+    });
+    expect(deleteMany).toHaveBeenCalledTimes(2);
+    expect(createMany).toHaveBeenCalledWith({
+      data: [{ recipeId: "recipe_1", inputStepNum: 2, outputStepNum: 1 }],
+    });
+  });
+
+  it("restores recipe order on reorder failure and preserves the original error if restore also fails", async () => {
+    const reorderFailure = new Error("renumber failed");
+    const restoreSuccessUpdate = vi.fn()
+      .mockRejectedValueOnce(reorderFailure)
+      .mockResolvedValue({ id: "step" });
+    const restoreSuccessDb = {
+      recipe: {
+        findUnique: vi.fn().mockResolvedValue({ id: "recipe_1", chefId: "chef_1", deletedAt: null }),
+      },
+      recipeStep: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "step_2",
+          recipeId: "recipe_1",
+          stepNum: 2,
+          stepTitle: "Second",
+          description: "Second.",
+          duration: null,
+        }),
+        findMany: vi.fn().mockResolvedValue([
+          { id: "step_1", stepNum: 1 },
+          { id: "step_2", stepNum: 2 },
+        ]),
+        update: restoreSuccessUpdate,
+      },
+      stepOutputUse: {
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+    } as unknown as LocalDb;
+
+    await expect(reorderNativeRecipeStep(restoreSuccessDb, "chef_1", "recipe_1", {
+      clientMutationId: "reorder-restores",
+      stepId: "step_2",
+      toStepNum: 1,
+    })).rejects.toThrow(reorderFailure);
+    expect(restoreSuccessUpdate).toHaveBeenCalledTimes(5);
+    expect(restoreSuccessUpdate).toHaveBeenNthCalledWith(2, {
+      where: { id: "step_1" },
+      data: { stepNum: -1 },
+    });
+    expect(restoreSuccessUpdate).toHaveBeenNthCalledWith(5, {
+      where: { id: "step_2" },
+      data: { stepNum: 2 },
+    });
+
+    const restoreFailure = new Error("restore failed");
+    const restoreFailureUpdate = vi.fn()
+      .mockRejectedValueOnce(reorderFailure)
+      .mockRejectedValueOnce(restoreFailure);
+    const restoreFailureDb = {
+      recipe: {
+        findUnique: vi.fn().mockResolvedValue({ id: "recipe_1", chefId: "chef_1", deletedAt: null }),
+      },
+      recipeStep: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "step_2",
+          recipeId: "recipe_1",
+          stepNum: 2,
+          stepTitle: "Second",
+          description: "Second.",
+          duration: null,
+        }),
+        findMany: vi.fn().mockResolvedValue([
+          { id: "step_1", stepNum: 1 },
+          { id: "step_2", stepNum: 2 },
+        ]),
+        update: restoreFailureUpdate,
+      },
+      stepOutputUse: {
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+    } as unknown as LocalDb;
+
+    await expect(reorderNativeRecipeStep(restoreFailureDb, "chef_1", "recipe_1", {
+      clientMutationId: "reorder-restore-also-fails",
+      stepId: "step_2",
+      toStepNum: 1,
+    })).rejects.toThrow(reorderFailure);
+    expect(restoreFailureUpdate).toHaveBeenCalledTimes(2);
+  });
+
+  it("restores output uses on replacement failure and preserves the original error if restore also fails", async () => {
+    const replaceFailure = new Error("replace failed");
+    const restoreSuccessDeleteMany = vi.fn()
+      .mockRejectedValueOnce(replaceFailure)
+      .mockResolvedValueOnce({ count: 0 });
+    const restoreSuccessDb = {
+      recipe: {
+        findUnique: vi.fn().mockResolvedValue({ id: "recipe_1", chefId: "chef_1", deletedAt: null }),
+      },
+      recipeStep: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "step_2",
+          recipeId: "recipe_1",
+          stepNum: 2,
+          stepTitle: "Second",
+          description: "Second.",
+          duration: null,
+        }),
+        findMany: vi.fn().mockResolvedValue([{ stepNum: 1 }]),
+      },
+      ingredient: {
+        count: vi.fn().mockResolvedValue(0),
+      },
+      stepOutputUse: {
+        findMany: vi.fn().mockResolvedValue([{ outputStepNum: 1 }]),
+        deleteMany: restoreSuccessDeleteMany,
+        createMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+    } as unknown as LocalDb;
+
+    await expect(replaceNativeRecipeStepOutputUses(restoreSuccessDb, "chef_1", "recipe_1", {
+      clientMutationId: "replace-restores",
+      inputStepId: "step_2",
+      outputStepNums: [1],
+    })).rejects.toThrow(replaceFailure);
+    expect(restoreSuccessDeleteMany).toHaveBeenCalledTimes(2);
+    expect(restoreSuccessDb.stepOutputUse.createMany).toHaveBeenCalledWith({
+      data: [{ recipeId: "recipe_1", inputStepNum: 2, outputStepNum: 1 }],
+    });
+
+    const restoreFailure = new Error("restore failed");
+    const restoreFailureDeleteMany = vi.fn()
+      .mockRejectedValueOnce(replaceFailure)
+      .mockRejectedValueOnce(restoreFailure);
+    const restoreFailureDb = {
+      recipe: {
+        findUnique: vi.fn().mockResolvedValue({ id: "recipe_1", chefId: "chef_1", deletedAt: null }),
+      },
+      recipeStep: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "step_2",
+          recipeId: "recipe_1",
+          stepNum: 2,
+          stepTitle: "Second",
+          description: "Second.",
+          duration: null,
+        }),
+        findMany: vi.fn().mockResolvedValue([{ stepNum: 1 }]),
+      },
+      ingredient: {
+        count: vi.fn().mockResolvedValue(0),
+      },
+      stepOutputUse: {
+        findMany: vi.fn().mockResolvedValue([{ outputStepNum: 1 }]),
+        deleteMany: restoreFailureDeleteMany,
+        createMany: vi.fn(),
+      },
+    } as unknown as LocalDb;
+
+    await expect(replaceNativeRecipeStepOutputUses(restoreFailureDb, "chef_1", "recipe_1", {
+      clientMutationId: "replace-restore-also-fails",
+      inputStepId: "step_2",
+      outputStepNums: [1],
+    })).rejects.toThrow(replaceFailure);
+    expect(restoreFailureDeleteMany).toHaveBeenCalledTimes(2);
+  });
 });

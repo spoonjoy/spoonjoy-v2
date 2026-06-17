@@ -3,6 +3,11 @@ import { faker } from "@faker-js/faker";
 import { Request as UndiciRequest } from "undici";
 import { action } from "~/routes/api.v1.$";
 import { createApiCredential } from "~/lib/api-auth.server";
+import {
+  hashIdempotencyRequest,
+  idempotencyClientKey,
+  reserveIdempotencyKey,
+} from "~/lib/api-idempotency.server";
 import { resolveApiV1ScopeRequirement } from "~/lib/api-v1.server";
 import { getLocalDb } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
@@ -55,6 +60,31 @@ function anonymousMutationRequest(
 
 async function readJson(response: Response) {
   return await response.json() as Record<string, any>;
+}
+
+async function reserveRouteMutation(
+  db: LocalDb,
+  fixture: Awaited<ReturnType<typeof createRecipeStepFixture>>,
+  input: { method: MutationMethod; path: string; body: Record<string, unknown>; operation: string },
+) {
+  const reserved = await reserveIdempotencyKey(db, {
+    userId: fixture.chef.id,
+    credentialId: fixture.writer.credential.id,
+    clientKey: idempotencyClientKey({
+      id: fixture.chef.id,
+      source: "bearer",
+      credentialId: fixture.writer.credential.id,
+    }),
+    key: input.body.clientMutationId as string,
+    operation: input.operation,
+    requestHash: await hashIdempotencyRequest({
+      method: input.method,
+      path: `/api/v1/${input.path}`,
+      body: input.body,
+    }),
+  });
+  if (reserved.status !== "reserved") throw new Error("expected idempotency reservation");
+  return reserved.record;
 }
 
 function expectExactKeys(value: Record<string, unknown>, keys: string[]) {
@@ -674,6 +704,10 @@ describe("API v1 recipe step and dependency mutations", () => {
         inputStepId: fixture.steps[1].id,
         outputStepNums: [],
       }],
+      ["req_step_patch_empty_without_dependencies", "PATCH", `recipes/${fixture.recipe.id}/steps/${fixture.steps[2].id}`, {
+        clientMutationId: "step-patch-empty-without-dependencies",
+        description: "Still empty.",
+      }],
     ] as const) {
       const response = await action(routeArgs(
         mutationRequest(method, path, fixture.writer.token, requestId, body),
@@ -746,6 +780,135 @@ describe("API v1 recipe step and dependency mutations", () => {
       expect(response.status).toBe(404);
       expectErrorEnvelope(await readJson(response), requestId, "not_found", 404);
     }
+  });
+
+  it("only recovers incomplete step create idempotency when the full requested graph committed", async () => {
+    const fixture = await createRecipeStepFixture(db);
+    const path = `recipes/${fixture.recipe.id}/steps`;
+    const body = {
+      clientMutationId: "step-create-partial-recovery",
+      stepTitle: "Recoverable sauce",
+      description: "Recover only when full graph exists.",
+      duration: 6,
+      ingredients: [{ quantity: 2, unit: "tbsp", name: "miso" }],
+      outputStepNums: [1, 2],
+    };
+    const reservation = await reserveRouteMutation(db, fixture, {
+      method: "POST",
+      path,
+      body,
+      operation: "recipes.steps.create",
+    });
+
+    await db.recipeStep.create({
+      data: {
+        id: reservation.id,
+        recipeId: fixture.recipe.id,
+        stepNum: 4,
+        stepTitle: body.stepTitle,
+        description: body.description,
+        duration: body.duration,
+      },
+    });
+
+    const partial = await action(routeArgs(
+      mutationRequest("POST", path, fixture.writer.token, "req_step_create_partial_recovery", body),
+      path,
+    ));
+    expect(partial.status).toBe(409);
+    expectErrorEnvelope(await readJson(partial), "req_step_create_partial_recovery", "idempotency_in_progress", 409);
+
+    await db.stepOutputUse.createMany({
+      data: body.outputStepNums.map((outputStepNum) => ({
+        recipeId: fixture.recipe.id,
+        inputStepNum: 4,
+        outputStepNum,
+      })),
+    });
+    const unit = await getOrCreateUnit(db, body.ingredients[0].unit);
+    const ingredientRef = await getOrCreateIngredientRef(db, body.ingredients[0].name);
+    await db.ingredient.create({
+      data: {
+        recipeId: fixture.recipe.id,
+        stepNum: 4,
+        quantity: body.ingredients[0].quantity,
+        unitId: unit.id,
+        ingredientRefId: ingredientRef.id,
+      },
+    });
+
+    const recovered = await action(routeArgs(
+      mutationRequest("POST", path, fixture.writer.token, "req_step_create_full_recovery", body),
+      path,
+    ));
+    const payload = await readJson(recovered);
+    expect(recovered.status).toBe(201);
+    expectSuccessEnvelope(payload, "req_step_create_full_recovery");
+    expect(payload.data).toMatchObject({
+      created: true,
+      step: {
+        id: reservation.id,
+        ingredients: [{ quantity: 2, unit: "tbsp", name: "miso" }],
+        usingSteps: [{ outputStepNum: 1 }, { outputStepNum: 2 }],
+      },
+    });
+    expectMutationShape(payload.data.mutation, body.clientMutationId, true);
+  });
+
+  it("requires reservation tombstones before recovering incomplete hard deletes", async () => {
+    const fixture = await createRecipeStepFixture(db);
+    const stepPath = `recipes/${fixture.recipe.id}/steps/${fixture.steps[2].id}`;
+    const stepBody = { clientMutationId: "step-delete-without-tombstone" };
+    await reserveRouteMutation(db, fixture, {
+      method: "DELETE",
+      path: stepPath,
+      body: stepBody,
+      operation: "recipes.steps.delete",
+    });
+    await db.recipeStep.delete({ where: { id: fixture.steps[2].id } });
+
+    const noTombstone = await action(routeArgs(
+      mutationRequest("DELETE", stepPath, fixture.writer.token, "req_step_delete_no_tombstone", stepBody),
+      stepPath,
+    ));
+    expect(noTombstone.status).toBe(409);
+    expectErrorEnvelope(await readJson(noTombstone), "req_step_delete_no_tombstone", "idempotency_in_progress", 409);
+
+    const ingredientFixture = await createRecipeStepFixture(db);
+    const ingredientPath = `recipes/${ingredientFixture.recipe.id}/steps/${ingredientFixture.steps[0].id}/ingredients/${ingredientFixture.ingredient.id}`;
+    const ingredientBody = { clientMutationId: "ingredient-delete-with-tombstone" };
+    const reservation = await reserveRouteMutation(db, ingredientFixture, {
+      method: "DELETE",
+      path: ingredientPath,
+      body: ingredientBody,
+      operation: "recipes.steps.ingredients.delete",
+    });
+    await db.apiMutationTombstone.create({
+      data: {
+        idempotencyKeyId: reservation.id,
+        operation: "recipes.steps.ingredients.delete",
+        resourceType: "recipe_step_ingredient",
+        resourceId: ingredientFixture.ingredient.id,
+        parentResourceId: ingredientFixture.steps[0].id,
+        payload: JSON.stringify({ recipeId: ingredientFixture.recipe.id, stepId: ingredientFixture.steps[0].id }),
+      },
+    });
+    await db.ingredient.delete({ where: { id: ingredientFixture.ingredient.id } });
+
+    const recovered = await action(routeArgs(
+      mutationRequest("DELETE", ingredientPath, ingredientFixture.writer.token, "req_ingredient_delete_tombstone", ingredientBody),
+      ingredientPath,
+    ));
+    const payload = await readJson(recovered);
+    expect(recovered.status).toBe(200);
+    expectSuccessEnvelope(payload, "req_ingredient_delete_tombstone");
+    expect(payload.data).toMatchObject({
+      deleted: true,
+      ingredient: { id: ingredientFixture.ingredient.id },
+      step: { id: ingredientFixture.steps[0].id },
+      recipe: { id: ingredientFixture.recipe.id },
+    });
+    expectMutationShape(payload.data.mutation, ingredientBody.clientMutationId, true);
   });
 
   it("protects step deletion and reorder operations that would break step-output dependencies", async () => {

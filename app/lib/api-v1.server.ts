@@ -74,6 +74,9 @@ import {
   replaceNativeRecipeStepOutputUses,
   updateNativeRecipeStep,
   type ApiV1RecipeStepResult,
+  type NativeRecipeStepCreateInput,
+  type NativeRecipeStepIngredientInput,
+  type NativeRecipeStepIngredientCreateInput,
 } from "~/lib/api-v1-recipe-steps.server";
 import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
 import { notifyForkOfMyRecipe } from "~/lib/notification-triggers.server";
@@ -1756,6 +1759,70 @@ function numericArraysEqual(actual: number[], expected: number[]) {
   return actual.every((value, index) => value === expected[index]);
 }
 
+function normalizedText(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function outputStepNumsForSerializedStep(step: SerializedRecipeStep) {
+  return step.usingSteps.map((use) => use.outputStepNum).sort((a, b) => a - b);
+}
+
+function requestedOutputStepNums(outputStepNums: number[]) {
+  return [...new Set(outputStepNums)].sort((a, b) => a - b);
+}
+
+function ingredientInputsMatch(
+  actual: SerializedRecipeStep["ingredients"],
+  expected: NativeRecipeStepIngredientInput[],
+) {
+  if (actual.length !== expected.length) return false;
+  const actualKeys = actual
+    .map((ingredient) => `${normalizedText(ingredient.name)}\u0000${normalizedText(ingredient.unit)}\u0000${ingredient.quantity}`)
+    .sort();
+  const expectedKeys = expected
+    .map((ingredient) => `${normalizedText(ingredient.ingredientName)}\u0000${normalizedText(ingredient.unit)}\u0000${ingredient.quantity}`)
+    .sort();
+  return actualKeys.every((key, index) => key === expectedKeys[index]);
+}
+
+function stepMatchesCreateInput(step: SerializedRecipeStep, input: NativeRecipeStepCreateInput) {
+  if (input.stepNum !== undefined && step.stepNum !== input.stepNum) return false;
+  if (step.stepTitle !== input.stepTitle) return false;
+  if (step.description !== input.description) return false;
+  if (step.duration !== input.duration) return false;
+  if (!numericArraysEqual(outputStepNumsForSerializedStep(step), requestedOutputStepNums(input.outputStepNums))) return false;
+  if (!ingredientInputsMatch(step.ingredients, input.ingredients)) return false;
+  return true;
+}
+
+function ingredientMatchesCreateInput(
+  actual: SerializedRecipeStep["ingredients"][number],
+  expected: NativeRecipeStepIngredientCreateInput,
+) {
+  return actual.quantity === expected.quantity &&
+    normalizedText(actual.unit) === normalizedText(expected.unit) &&
+    normalizedText(actual.name) === normalizedText(expected.ingredientName);
+}
+
+async function findMutationTombstone(
+  db: ApiV1WriteDb,
+  reservation: ApiIdempotencyKey,
+  input: { operation: string; resourceType: string; resourceId: string; parentResourceId?: string },
+) {
+  const tombstone = await db.apiMutationTombstone.findUnique({
+    where: {
+      idempotencyKeyId_resourceType_resourceId: {
+        idempotencyKeyId: reservation.id,
+        resourceType: input.resourceType,
+        resourceId: input.resourceId,
+      },
+    },
+  });
+  if (!tombstone || tombstone.operation !== input.operation) return null;
+  if (input.parentResourceId !== undefined && tombstone.parentResourceId !== input.parentResourceId) return null;
+  return tombstone;
+}
+
 async function recoverNativeRecipeCreate(
   db: ApiV1WriteDb,
   reservation: ApiIdempotencyKey,
@@ -2031,13 +2098,13 @@ async function handleRecipeFork(args: ApiV1RouteArgs, requestId: string, princip
 async function recoverNativeRecipeStepCreate(
   db: ApiV1WriteDb,
   reservation: ApiIdempotencyKey,
-  input: { clientMutationId: string; origin: string; principalId: string; recipeId: string },
+  input: { clientMutationId: string; origin: string; principalId: string; recipeId: string; request: NativeRecipeStepCreateInput },
 ): Promise<ApiV1IdempotentMutationResult | null> {
   const recipeRow = await loadRecipeById(db, input.recipeId);
   if (!recipeRow || recipeRow.chef.id !== input.principalId) return null;
   const recipe = recipeDetail(recipeRow, input.origin);
   const step = findSerializedStep(recipe, reservation.id);
-  if (!step) return null;
+  if (!step || !stepMatchesCreateInput(step, input.request)) return null;
   return {
     status: 201,
     data: {
@@ -2078,8 +2145,8 @@ async function recoverNativeRecipeStepUpdate(
   if (
     input.fields.outputStepNums !== undefined &&
     !numericArraysEqual(
-      step.usingSteps.map((use) => use.outputStepNum).sort((a, b) => a - b),
-      [...new Set(input.fields.outputStepNums)].sort((a, b) => a - b),
+      outputStepNumsForSerializedStep(step),
+      requestedOutputStepNums(input.fields.outputStepNums),
     )
   ) {
     return null;
@@ -2097,9 +2164,17 @@ async function recoverNativeRecipeStepUpdate(
 
 async function recoverNativeRecipeStepDelete(
   db: ApiV1WriteDb,
-  _reservation: ApiIdempotencyKey,
+  reservation: ApiIdempotencyKey,
   input: { clientMutationId: string; origin: string; principalId: string; recipeId: string; stepId: string },
 ): Promise<ApiV1IdempotentMutationResult | null> {
+  const tombstone = await findMutationTombstone(db, reservation, {
+    operation: "recipes.steps.delete",
+    resourceType: "recipe_step",
+    resourceId: input.stepId,
+    parentResourceId: input.recipeId,
+  });
+  if (!tombstone) return null;
+
   const recipeRow = await loadRecipeById(db, input.recipeId);
   if (!recipeRow || recipeRow.chef.id !== input.principalId) return null;
   const recipe = recipeDetail(recipeRow, input.origin);
@@ -2118,13 +2193,13 @@ async function recoverNativeRecipeStepDelete(
 async function recoverNativeRecipeStepIngredientCreate(
   db: ApiV1WriteDb,
   reservation: ApiIdempotencyKey,
-  input: { clientMutationId: string; origin: string; principalId: string; recipeId: string; stepId: string },
+  input: { clientMutationId: string; origin: string; principalId: string; recipeId: string; stepId: string; request: NativeRecipeStepIngredientCreateInput },
 ): Promise<ApiV1IdempotentMutationResult | null> {
   const recipeRow = await loadRecipeById(db, input.recipeId);
   if (!recipeRow || recipeRow.chef.id !== input.principalId) return null;
   const recipe = recipeDetail(recipeRow, input.origin);
   const match = findSerializedIngredient(recipe, input.stepId, reservation.id);
-  if (!match) return null;
+  if (!match || !ingredientMatchesCreateInput(match.ingredient, input.request)) return null;
   return {
     status: 201,
     data: {
@@ -2139,9 +2214,17 @@ async function recoverNativeRecipeStepIngredientCreate(
 
 async function recoverNativeRecipeStepIngredientDelete(
   db: ApiV1WriteDb,
-  _reservation: ApiIdempotencyKey,
+  reservation: ApiIdempotencyKey,
   input: { clientMutationId: string; origin: string; principalId: string; recipeId: string; stepId: string; ingredientId: string },
 ): Promise<ApiV1IdempotentMutationResult | null> {
+  const tombstone = await findMutationTombstone(db, reservation, {
+    operation: "recipes.steps.ingredients.delete",
+    resourceType: "recipe_step_ingredient",
+    resourceId: input.ingredientId,
+    parentResourceId: input.stepId,
+  });
+  if (!tombstone) return null;
+
   const recipeRow = await loadRecipeById(db, input.recipeId);
   if (!recipeRow || recipeRow.chef.id !== input.principalId) return null;
   const recipe = recipeDetail(recipeRow, input.origin);
@@ -2191,8 +2274,8 @@ async function recoverNativeRecipeStepOutputUses(
   const step = findSerializedStep(recipe, input.stepId);
   if (!step) return null;
   if (!numericArraysEqual(
-    step.usingSteps.map((use) => use.outputStepNum).sort((a, b) => a - b),
-    [...new Set(input.outputStepNums)].sort((a, b) => a - b),
+    outputStepNumsForSerializedStep(step),
+    requestedOutputStepNums(input.outputStepNums),
   )) {
     return null;
   }
@@ -2232,6 +2315,7 @@ async function handleRecipeStepCreate(args: ApiV1RouteArgs, requestId: string, p
     origin,
     principalId: principal.id,
     recipeId,
+    request: parsed.data,
   }));
 }
 
@@ -2280,8 +2364,10 @@ async function handleRecipeStepDelete(args: ApiV1RouteArgs, requestId: string, p
 
   const origin = publicContentOrigin(args);
   const idempotencyBody = { clientMutationId: parsed.data.clientMutationId };
-  return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, parsed.data.clientMutationId, "recipes.steps.delete", async (db) => {
-    const deleted = recipeStepResultOrThrow(await deleteNativeRecipeStep(db, principal.id, recipeId, stepId));
+  return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, parsed.data.clientMutationId, "recipes.steps.delete", async (db, reservation) => {
+    const deleted = recipeStepResultOrThrow(await deleteNativeRecipeStep(db, principal.id, recipeId, stepId, {
+      tombstone: { idempotencyKeyId: reservation.id, operation: "recipes.steps.delete" },
+    }));
     const recipe = await serializedRecipeOrThrow(db, deleted.data.recipeId, origin);
     return {
       status: deleted.status,
@@ -2328,6 +2414,7 @@ async function handleRecipeStepIngredientCreate(args: ApiV1RouteArgs, requestId:
     principalId: principal.id,
     recipeId,
     stepId,
+    request: parsed.data,
   }));
 }
 
@@ -2344,8 +2431,10 @@ async function handleRecipeStepIngredientDelete(args: ApiV1RouteArgs, requestId:
 
   const origin = publicContentOrigin(args);
   const idempotencyBody = { clientMutationId: parsed.data.clientMutationId };
-  return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, parsed.data.clientMutationId, "recipes.steps.ingredients.delete", async (db) => {
-    const deleted = recipeStepResultOrThrow(await deleteNativeRecipeStepIngredient(db, principal.id, recipeId, stepId, ingredientId));
+  return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, parsed.data.clientMutationId, "recipes.steps.ingredients.delete", async (db, reservation) => {
+    const deleted = recipeStepResultOrThrow(await deleteNativeRecipeStepIngredient(db, principal.id, recipeId, stepId, ingredientId, {
+      tombstone: { idempotencyKeyId: reservation.id, operation: "recipes.steps.ingredients.delete" },
+    }));
     const recipe = await serializedRecipeOrThrow(db, deleted.data.recipeId, origin);
     const step = findSerializedStep(recipe, deleted.data.stepId);
     if (!step) {

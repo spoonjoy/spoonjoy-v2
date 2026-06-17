@@ -75,6 +75,20 @@ export interface NativeRecipeStepOutputUsesInput {
   outputStepNums: number[];
 }
 
+interface NativeRecipeStepDeleteOptions {
+  tombstone?: {
+    idempotencyKeyId: string;
+    operation: string;
+  };
+}
+
+interface NativeRecipeStepIngredientDeleteOptions {
+  tombstone?: {
+    idempotencyKeyId: string;
+    operation: string;
+  };
+}
+
 function success<T>(data: T, status = 200): ApiV1RecipeStepResult<T> {
   return { ok: true, status, data };
 }
@@ -440,7 +454,7 @@ async function loadOwnedRecipe(db: Database, chefId: string, recipeId: string) {
 async function loadStepForRecipe(db: Database, recipeId: string, stepId: string) {
   const step = await db.recipeStep.findUnique({
     where: { id: stepId },
-    select: { id: true, recipeId: true, stepNum: true },
+    select: { id: true, recipeId: true, stepNum: true, stepTitle: true, description: true, duration: true },
   });
   if (!step || step.recipeId !== recipeId) {
     return failure<NonNullable<typeof step>>("not_found", "Recipe step not found", { resource: "recipe_step", stepId });
@@ -467,6 +481,60 @@ async function getOrCreateIngredientRef(db: Database, name: string) {
     where: { name: normalized },
     update: {},
     create: { name: normalized },
+  });
+}
+
+async function outputStepNumsFor(db: Database, recipeId: string, inputStepNum: number) {
+  const rows = await db.stepOutputUse.findMany({
+    where: { recipeId, inputStepNum },
+    select: { outputStepNum: true },
+    orderBy: { outputStepNum: "asc" },
+  });
+  return rows.map((row) => row.outputStepNum);
+}
+
+async function replaceStepOutputUses(db: Database, recipeId: string, inputStepNum: number, outputStepNums: number[]) {
+  await deleteExistingStepOutputUses(db, recipeId, inputStepNum);
+  await createStepOutputUses(db, recipeId, inputStepNum, outputStepNums);
+}
+
+async function restoreStepOutputUses(db: Database, recipeId: string, inputStepNum: number, outputStepNums: number[]) {
+  await replaceStepOutputUses(db, recipeId, inputStepNum, outputStepNums);
+}
+
+async function createDeleteTombstone(
+  db: Database,
+  input: {
+    idempotencyKeyId: string;
+    operation: string;
+    resourceType: string;
+    resourceId: string;
+    parentResourceId: string;
+    payload: unknown;
+  },
+) {
+  const payload = JSON.stringify(input.payload);
+  await db.apiMutationTombstone.upsert({
+    where: {
+      idempotencyKeyId_resourceType_resourceId: {
+        idempotencyKeyId: input.idempotencyKeyId,
+        resourceType: input.resourceType,
+        resourceId: input.resourceId,
+      },
+    },
+    update: {
+      operation: input.operation,
+      parentResourceId: input.parentResourceId,
+      payload,
+    },
+    create: {
+      idempotencyKeyId: input.idempotencyKeyId,
+      operation: input.operation,
+      resourceType: input.resourceType,
+      resourceId: input.resourceId,
+      parentResourceId: input.parentResourceId,
+      payload,
+    },
   });
 }
 
@@ -532,6 +600,57 @@ async function validateOutputStepRefs<T>(
   return null;
 }
 
+function hasPatchFields(fields: NativeRecipeStepPatchInput["fields"]) {
+  return Object.keys(fields).length > 0;
+}
+
+async function validateStepWillHaveContent<T>(
+  db: Database,
+  recipeId: string,
+  inputStepNum: number,
+  outputStepNums: number[],
+): Promise<ApiV1RecipeStepResult<T> | null> {
+  const ingredientCount = await db.ingredient.count({
+    where: { recipeId, stepNum: inputStepNum },
+  });
+  if (ingredientCount === 0 && outputStepNums.length === 0) {
+    return failure("validation_error", "Add at least 1 ingredient or 1 step output use before saving this step.", {
+      fieldErrors: { outputStepNums: "Add at least 1 ingredient or 1 step output use before saving this step." },
+    });
+  }
+  return null;
+}
+
+async function restoreStepFields(
+  db: Database,
+  stepId: string,
+  fields: { stepTitle: string | null; description: string; duration: number | null },
+) {
+  await db.recipeStep.update({
+    where: { id: stepId },
+    data: fields,
+  });
+}
+
+async function restoreRecipeStepOrder(
+  db: Database,
+  originalSteps: Array<{ id: string; stepNum: number }>,
+) {
+  const ordered = [...originalSteps].sort((a, b) => a.stepNum - b.stepNum);
+  for (const [index, candidate] of ordered.entries()) {
+    await db.recipeStep.update({
+      where: { id: candidate.id },
+      data: { stepNum: -(index + 1) },
+    });
+  }
+  for (const candidate of ordered) {
+    await db.recipeStep.update({
+      where: { id: candidate.id },
+      data: { stepNum: candidate.stepNum },
+    });
+  }
+}
+
 export async function createNativeRecipeStep(
   db: Database,
   chefId: string,
@@ -579,36 +698,45 @@ export async function createNativeRecipeStep(
   );
   if (invalidRefs) return invalidRefs;
 
-  const step = await db.recipeStep.create({
-    data: {
-      id: options.stepId ?? crypto.randomUUID(),
-      recipeId,
-      stepNum,
-      stepTitle: input.stepTitle,
-      description: input.description,
-      duration: input.duration,
-    },
-  });
-
-  if (input.outputStepNums.length > 0) {
-    await createStepOutputUses(db, recipeId, stepNum, input.outputStepNums);
-  }
-
-  for (const ingredient of input.ingredients) {
-    const unit = await getOrCreateUnit(db, ingredient.unit);
-    const ingredientRef = await getOrCreateIngredientRef(db, ingredient.ingredientName);
-    await db.ingredient.create({
+  let createdStepId: string | null = null;
+  try {
+    const step = await db.recipeStep.create({
       data: {
+        id: options.stepId ?? crypto.randomUUID(),
         recipeId,
         stepNum,
-        quantity: ingredient.quantity,
-        unitId: unit.id,
-        ingredientRefId: ingredientRef.id,
+        stepTitle: input.stepTitle,
+        description: input.description,
+        duration: input.duration,
       },
     });
-  }
+    createdStepId = step.id;
 
-  return success({ recipeId, stepId: step.id, stepNum }, 201);
+    if (input.outputStepNums.length > 0) {
+      await createStepOutputUses(db, recipeId, stepNum, input.outputStepNums);
+    }
+
+    for (const ingredient of input.ingredients) {
+      const unit = await getOrCreateUnit(db, ingredient.unit);
+      const ingredientRef = await getOrCreateIngredientRef(db, ingredient.ingredientName);
+      await db.ingredient.create({
+        data: {
+          recipeId,
+          stepNum,
+          quantity: ingredient.quantity,
+          unitId: unit.id,
+          ingredientRefId: ingredientRef.id,
+        },
+      });
+    }
+
+    return success({ recipeId, stepId: step.id, stepNum }, 201);
+  } catch (error) {
+    if (createdStepId) {
+      await db.recipeStep.delete({ where: { id: createdStepId } }).catch(() => undefined);
+    }
+    throw error;
+  }
 }
 
 export async function updateNativeRecipeStep(
@@ -624,6 +752,8 @@ export async function updateNativeRecipeStep(
   const step = await loadStepForRecipe(db, recipeId, stepId);
   if (!step.ok) return step;
 
+  const existingOutputStepNums = await outputStepNumsFor(db, recipeId, step.data.stepNum);
+
   if (input.fields.outputStepNums !== undefined) {
     const invalidRefs = await validateOutputStepRefs<{ recipeId: string; stepId: string; updated: boolean }>(
       db,
@@ -633,15 +763,17 @@ export async function updateNativeRecipeStep(
       "outputStepNums",
     );
     if (invalidRefs) return invalidRefs;
+  }
 
-    const ingredientCount = await db.ingredient.count({
-      where: { recipeId, stepNum: step.data.stepNum },
-    });
-    if (ingredientCount === 0 && input.fields.outputStepNums.length === 0) {
-      return failure("validation_error", "Add at least 1 ingredient or 1 step output use before saving this step.", {
-        fieldErrors: { outputStepNums: "Add at least 1 ingredient or 1 step output use before saving this step." },
-      });
-    }
+  if (hasPatchFields(input.fields)) {
+    const outputStepNums = input.fields.outputStepNums ?? existingOutputStepNums;
+    const contentError = await validateStepWillHaveContent<{ recipeId: string; stepId: string; updated: boolean }>(
+      db,
+      recipeId,
+      step.data.stepNum,
+      outputStepNums,
+    );
+    if (contentError) return contentError;
   }
 
   const stepFields = {
@@ -651,19 +783,30 @@ export async function updateNativeRecipeStep(
   };
   const updated = Object.keys(stepFields).length > 0 || input.fields.outputStepNums !== undefined;
 
-  if (Object.keys(stepFields).length > 0) {
-    await db.recipeStep.update({
-      where: { id: stepId },
-      data: stepFields,
-    });
-  }
+  try {
+    if (Object.keys(stepFields).length > 0) {
+      await db.recipeStep.update({
+        where: { id: stepId },
+        data: stepFields,
+      });
+    }
 
-  if (input.fields.outputStepNums !== undefined) {
-    await deleteExistingStepOutputUses(db, recipeId, step.data.stepNum);
-    await createStepOutputUses(db, recipeId, step.data.stepNum, input.fields.outputStepNums);
-  }
+    if (input.fields.outputStepNums !== undefined) {
+      await replaceStepOutputUses(db, recipeId, step.data.stepNum, input.fields.outputStepNums);
+    }
 
-  return success({ recipeId, stepId, updated });
+    return success({ recipeId, stepId, updated });
+  } catch (error) {
+    await Promise.allSettled([
+      restoreStepFields(db, stepId, {
+        stepTitle: step.data.stepTitle,
+        description: step.data.description,
+        duration: step.data.duration,
+      }),
+      restoreStepOutputUses(db, recipeId, step.data.stepNum, existingOutputStepNums),
+    ]);
+    throw error;
+  }
 }
 
 export async function deleteNativeRecipeStep(
@@ -671,6 +814,7 @@ export async function deleteNativeRecipeStep(
   chefId: string,
   recipeId: string,
   stepId: string,
+  options: NativeRecipeStepDeleteOptions = {},
 ): Promise<ApiV1RecipeStepResult<{ recipeId: string; step: { id: string; stepNum: number } }>> {
   const recipe = await loadOwnedRecipe(db, chefId, recipeId);
   if (!recipe.ok) return recipe;
@@ -685,6 +829,16 @@ export async function deleteNativeRecipeStep(
     return failure("validation_error", message, {
       reason: "step_output_dependency",
       dependentStepNums: dependentSteps.map((dependentStep) => dependentStep.inputStepNum).sort((a, b) => a - b),
+    });
+  }
+
+  if (options.tombstone) {
+    await createDeleteTombstone(db, {
+      ...options.tombstone,
+      resourceType: "recipe_step",
+      resourceId: stepId,
+      parentResourceId: recipeId,
+      payload: { recipeId, stepNum: step.data.stepNum },
     });
   }
 
@@ -736,6 +890,7 @@ export async function deleteNativeRecipeStepIngredient(
   recipeId: string,
   stepId: string,
   ingredientId: string,
+  options: NativeRecipeStepIngredientDeleteOptions = {},
 ): Promise<ApiV1RecipeStepResult<{ recipeId: string; stepId: string; ingredient: { id: string } }>> {
   const recipe = await loadOwnedRecipe(db, chefId, recipeId);
   if (!recipe.ok) return recipe;
@@ -753,6 +908,16 @@ export async function deleteNativeRecipeStepIngredient(
   });
   if (!ingredient) {
     return failure("not_found", "Recipe step ingredient not found", { resource: "recipe_step_ingredient", ingredientId });
+  }
+
+  if (options.tombstone) {
+    await createDeleteTombstone(db, {
+      ...options.tombstone,
+      resourceType: "recipe_step_ingredient",
+      resourceId: ingredient.id,
+      parentResourceId: stepId,
+      payload: { recipeId, stepId, stepNum: step.data.stepNum },
+    });
   }
 
   await db.ingredient.delete({ where: { id: ingredient.id } });
@@ -824,17 +989,22 @@ export async function reorderNativeRecipeStep(
   const [moved] = reorderedSteps.splice(currentIndex, 1);
   reorderedSteps.splice(targetIndex, 0, moved!);
 
-  for (const [index, candidate] of reorderedSteps.entries()) {
-    await db.recipeStep.update({
-      where: { id: candidate.id },
-      data: { stepNum: -(index + 1) },
-    });
-  }
-  for (const [index, candidate] of reorderedSteps.entries()) {
-    await db.recipeStep.update({
-      where: { id: candidate.id },
-      data: { stepNum: index + 1 },
-    });
+  try {
+    for (const [index, candidate] of reorderedSteps.entries()) {
+      await db.recipeStep.update({
+        where: { id: candidate.id },
+        data: { stepNum: -(index + 1) },
+      });
+    }
+    for (const [index, candidate] of reorderedSteps.entries()) {
+      await db.recipeStep.update({
+        where: { id: candidate.id },
+        data: { stepNum: index + 1 },
+      });
+    }
+  } catch (error) {
+    await restoreRecipeStepOrder(db, steps).catch(() => undefined);
+    throw error;
   }
 
   return success({ recipeId, stepId: input.stepId, reordered: true });
@@ -861,19 +1031,21 @@ export async function replaceNativeRecipeStepOutputUses(
   );
   if (invalidRefs) return invalidRefs;
 
-  if (input.outputStepNums.length === 0) {
-    const ingredientCount = await db.ingredient.count({
-      where: { recipeId, stepNum: step.data.stepNum },
-    });
-    if (ingredientCount === 0) {
-      return failure("validation_error", "Add at least 1 ingredient or 1 step output use before saving this step.", {
-        fieldErrors: { outputStepNums: "Add at least 1 ingredient or 1 step output use before saving this step." },
-      });
-    }
-  }
+  const contentError = await validateStepWillHaveContent<{ recipeId: string; stepId: string; replaced: boolean }>(
+    db,
+    recipeId,
+    step.data.stepNum,
+    input.outputStepNums,
+  );
+  if (contentError) return contentError;
 
-  await deleteExistingStepOutputUses(db, recipeId, step.data.stepNum);
-  await createStepOutputUses(db, recipeId, step.data.stepNum, input.outputStepNums);
+  const originalOutputStepNums = await outputStepNumsFor(db, recipeId, step.data.stepNum);
+  try {
+    await replaceStepOutputUses(db, recipeId, step.data.stepNum, input.outputStepNums);
+  } catch (error) {
+    await restoreStepOutputUses(db, recipeId, step.data.stepNum, originalOutputStepNums).catch(() => undefined);
+    throw error;
+  }
 
   return success({ recipeId, stepId: input.inputStepId, replaced: true });
 }
