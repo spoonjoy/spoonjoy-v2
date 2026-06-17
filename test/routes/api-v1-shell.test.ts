@@ -32,7 +32,7 @@ function expectV1Headers(response: Response, requestId: string) {
   expect(response.headers.get("X-Request-Id")).toBe(requestId);
   expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
   expect(response.headers.get("Access-Control-Allow-Headers")).toBe("Authorization, Content-Type, X-Request-Id, X-Client-Mutation-Id");
-  expect(response.headers.get("Access-Control-Allow-Methods")).toBe("GET, POST, PATCH, DELETE, OPTIONS");
+  expect(response.headers.get("Access-Control-Allow-Methods")).toBe("GET, POST, PATCH, PUT, DELETE, OPTIONS");
   expect(response.headers.get("Access-Control-Expose-Headers")).toContain("X-Request-Id");
 }
 
@@ -310,7 +310,7 @@ describe("/api/v1 shell", () => {
     expect(response.headers.get("X-Request-Id")).toBe("req_options");
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
     expect(response.headers.get("Access-Control-Allow-Headers")).toBe("Authorization, Content-Type, X-Request-Id, X-Client-Mutation-Id");
-    expect(response.headers.get("Access-Control-Allow-Methods")).toBe("GET, POST, PATCH, DELETE, OPTIONS");
+    expect(response.headers.get("Access-Control-Allow-Methods")).toBe("GET, POST, PATCH, PUT, DELETE, OPTIONS");
     expect(response.headers.get("Access-Control-Expose-Headers")).toBe("X-Request-Id, Retry-After");
     expect(response.headers.has("Content-Type")).toBe(false);
     expect(await response.text()).toBe("");
@@ -363,14 +363,25 @@ describe("/api/v1 shell", () => {
       error: { code: "method_not_allowed", status: 405 },
     });
 
-    const unsupportedUnknownPath = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/nope", {
+    const putUnknownPath = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/nope", {
       method: "PUT",
       headers: { "X-Request-Id": "req_put_unknown" },
+    }) as unknown as Request, "nope"));
+    expect(putUnknownPath.status).toBe(404);
+    await expect(readJson(putUnknownPath)).resolves.toMatchObject({
+      ok: false,
+      requestId: "req_put_unknown",
+      error: { code: "not_found", status: 404 },
+    });
+
+    const unsupportedUnknownPath = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/nope", {
+      method: "HEAD",
+      headers: { "X-Request-Id": "req_head_unknown" },
     }) as unknown as Request, "nope"));
     expect(unsupportedUnknownPath.status).toBe(405);
     await expect(readJson(unsupportedUnknownPath)).resolves.toMatchObject({
       ok: false,
-      requestId: "req_put_unknown",
+      requestId: "req_head_unknown",
       error: { code: "method_not_allowed", status: 405 },
     });
 
