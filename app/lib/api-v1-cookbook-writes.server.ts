@@ -131,7 +131,7 @@ export async function createNativeCookbook(
   db: Database,
   authorId: string,
   input: NativeCookbookTitleInput,
-  options: { cookbookId?: string } = {},
+  options: { cookbookId?: string },
 ): Promise<ApiV1CookbookWriteResult<{ cookbookId: string; created: boolean }>> {
   const existing = await duplicateCookbookTitle(db, authorId, input.title);
   if (existing) {
@@ -232,7 +232,7 @@ export async function addNativeRecipeToCookbook(
   authorId: string,
   cookbookId: string,
   recipeId: string,
-  options: { relationId?: string } = {},
+  options: { relationId?: string },
 ): Promise<ApiV1CookbookWriteResult<{ cookbookId: string; recipeId: string; added: boolean }>> {
   const cookbook = await loadOwnedCookbook<{ cookbookId: string; recipeId: string; added: boolean }>(db, authorId, cookbookId);
   if (!cookbook.ok) return cookbook.result;

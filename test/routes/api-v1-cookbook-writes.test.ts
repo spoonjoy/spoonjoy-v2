@@ -34,6 +34,26 @@ function routeArgs(request: Request, splat: string, env: Record<string, unknown>
   } as const;
 }
 
+function routeArgsWithoutWaitUntil(request: Request, splat: string, env: Record<string, unknown> = VAPID_ENV) {
+  return {
+    args: {
+      request,
+      params: { "*": splat },
+      context: { cloudflare: { env } },
+    },
+  } as const;
+}
+
+function routeArgsNoCloudflare(request: Request, splat: string) {
+  return {
+    args: {
+      request,
+      params: { "*": splat },
+      context: {},
+    },
+  } as const;
+}
+
 function bearerHeaders(token: string, requestId: string, extra: Record<string, string> = {}) {
   return {
     Authorization: `Bearer ${token}`,
@@ -357,6 +377,29 @@ describe("API v1 cookbook write mutations", () => {
     expect(replay.status).toBe(200);
     expect(replayPayload).toEqual(expectedReplay);
 
+    const sameTitle = await action(routeArgs(
+      mutationRequest("PATCH", `cookbooks/${fixture.cookbook.id}`, fixture.writer.token, "req_cookbook_update_same_title", {
+        clientMutationId: "cookbook-update-same-title",
+        title: "Picnic Binder",
+      }),
+      `cookbooks/${fixture.cookbook.id}`,
+    ).args);
+    const sameTitlePayload = await readJson(sameTitle);
+    expect(sameTitle.status).toBe(200);
+    expectUpdateCookbookData(sameTitlePayload.data, "cookbook-update-same-title");
+    expect(sameTitlePayload.data.cookbook.title).toBe("Picnic Binder");
+
+    const missing = await action(routeArgs(
+      mutationRequest("PATCH", "cookbooks/missing-cookbook", fixture.writer.token, "req_cookbook_update_missing", {
+        clientMutationId: "cookbook-update-missing",
+        title: "Missing Cookbook",
+      }),
+      "cookbooks/missing-cookbook",
+    ).args);
+    expect(missing.status).toBe(404);
+    expectPrivateEnvelopeHeaders(missing, "req_cookbook_update_missing");
+    expectErrorEnvelope(await readJson(missing), "req_cookbook_update_missing", "not_found", 404);
+
     const duplicateResponse = await action(routeArgs(
       mutationRequest("PATCH", `cookbooks/${fixture.cookbook.id}`, fixture.writer.token, "req_cookbook_update_duplicate", {
         clientMutationId: "cookbook-update-duplicate",
@@ -422,6 +465,19 @@ describe("API v1 cookbook write mutations", () => {
     expect(missing.status).toBe(404);
     expectPrivateEnvelopeHeaders(missing, "req_cookbook_delete_missing");
     expectErrorEnvelope(await readJson(missing), "req_cookbook_delete_missing", "not_found", 404);
+
+    const crossOwnerCookbook = await db.cookbook.create({
+      data: { title: createCookbookTitle(), authorId: fixture.owner.id },
+    });
+    const crossOwner = await action(routeArgs(
+      mutationRequest("DELETE", `cookbooks/${crossOwnerCookbook.id}`, fixture.otherWriter.token, "req_cookbook_delete_cross_owner", {
+        clientMutationId: "cookbook-delete-cross-owner",
+      }),
+      `cookbooks/${crossOwnerCookbook.id}`,
+    ).args);
+    expect(crossOwner.status).toBe(403);
+    expectPrivateEnvelopeHeaders(crossOwner, "req_cookbook_delete_cross_owner");
+    expectErrorEnvelope(await readJson(crossOwner), "req_cookbook_delete_cross_owner", "insufficient_scope", 403);
 
     const queryFallbackCookbook = await db.cookbook.create({
       data: { title: createCookbookTitle(), authorId: fixture.owner.id },
@@ -504,6 +560,49 @@ describe("API v1 cookbook write mutations", () => {
       where: { recipientId: fixture.recipeOwner.id, kind: "cookbook_save_of_mine" },
     })).resolves.toBe(1);
 
+    const otherNoWaitUntilRecipe = await db.recipe.create({
+      data: {
+        ...createTestRecipe(fixture.recipeOwner.id),
+        title: `Other Chef No WaitUntil ${faker.string.alphanumeric(8)}`,
+      },
+    });
+    const noWaitUntilAdd = await action(routeArgsWithoutWaitUntil(
+      mutationRequest(
+        "POST",
+        `cookbooks/${fixture.cookbook.id}/recipes/${otherNoWaitUntilRecipe.id}`,
+        fixture.writer.token,
+        "req_cookbook_add_recipe_no_wait_until",
+        { clientMutationId: "cookbook-add-no-wait-until" },
+      ),
+      `cookbooks/${fixture.cookbook.id}/recipes/${otherNoWaitUntilRecipe.id}`,
+    ).args);
+    const noWaitUntilPayload = await readJson(noWaitUntilAdd);
+    expect(noWaitUntilAdd.status).toBe(201);
+    expectCookbookRecipeMutationData(noWaitUntilPayload.data, "cookbook-add-no-wait-until", "added", true);
+    await expect(db.notificationEvent.count({
+      where: { recipientId: fixture.recipeOwner.id, kind: "cookbook_save_of_mine" },
+    })).resolves.toBe(2);
+
+    const noCloudflareRecipe = await db.recipe.create({
+      data: {
+        ...createTestRecipe(fixture.recipeOwner.id),
+        title: `Other Chef No Cloudflare ${faker.string.alphanumeric(8)}`,
+      },
+    });
+    const noCloudflareAdd = await action(routeArgsNoCloudflare(
+      mutationRequest(
+        "POST",
+        `cookbooks/${fixture.cookbook.id}/recipes/${noCloudflareRecipe.id}`,
+        fixture.writer.token,
+        "req_cookbook_add_recipe_no_cloudflare",
+        { clientMutationId: "cookbook-add-no-cloudflare" },
+      ),
+      `cookbooks/${fixture.cookbook.id}/recipes/${noCloudflareRecipe.id}`,
+    ).args);
+    const noCloudflarePayload = await readJson(noCloudflareAdd);
+    expect(noCloudflareAdd.status).toBe(201);
+    expectCookbookRecipeMutationData(noCloudflarePayload.data, "cookbook-add-no-cloudflare", "added", true);
+
     const removeBody = { clientMutationId: "cookbook-remove-recipe" };
     const firstRemove = await action(routeArgs(
       mutationRequest(
@@ -520,7 +619,10 @@ describe("API v1 cookbook write mutations", () => {
     expect(firstRemove.status).toBe(200);
     expectPrivateEnvelopeHeaders(firstRemove, "req_cookbook_remove_recipe");
     expectCookbookRecipeMutationData(removePayload.data, removeBody.clientMutationId, "removed", true);
-    expect(removePayload.data.cookbook.recipes).toEqual([]);
+    expect(removePayload.data.cookbook.recipes.map((recipe: { id: string }) => recipe.id)).toEqual(
+      expect.arrayContaining([otherNoWaitUntilRecipe.id, noCloudflareRecipe.id]),
+    );
+    expect(removePayload.data.cookbook.recipes.map((recipe: { id: string }) => recipe.id)).not.toContain(fixture.otherRecipe.id);
     await expect(db.recipe.findUnique({ where: { id: fixture.otherRecipe.id } })).resolves.not.toBeNull();
 
     const replayRemove = await action(routeArgs(
@@ -570,7 +672,10 @@ describe("API v1 cookbook write mutations", () => {
     expect(queryFallbackRemove.status).toBe(200);
     expectPrivateEnvelopeHeaders(queryFallbackRemove, "req_cookbook_remove_recipe_query_fallback");
     expectCookbookRecipeMutationData(queryFallbackRemovePayload.data, "cookbook-remove-query-fallback", "removed", true);
-    expect(queryFallbackRemovePayload.data.cookbook.recipes).toEqual([]);
+    expect(queryFallbackRemovePayload.data.cookbook.recipes.map((recipe: { id: string }) => recipe.id)).toEqual(
+      expect.arrayContaining([otherNoWaitUntilRecipe.id, noCloudflareRecipe.id]),
+    );
+    expect(queryFallbackRemovePayload.data.cookbook.recipes.map((recipe: { id: string }) => recipe.id)).not.toContain(fixture.ownRecipe.id);
   });
 
   it("validates auth, scope, title, recipe state, and owner checks before writes", async () => {
@@ -601,12 +706,15 @@ describe("API v1 cookbook write mutations", () => {
     for (const [requestId, method, path, body] of [
       ["req_cookbook_create_blank", "POST", "cookbooks", { clientMutationId: "cookbook-create-blank", title: "  " }],
       ["req_cookbook_create_title_type", "POST", "cookbooks", { clientMutationId: "cookbook-create-title-type", title: 12 }],
+      ["req_cookbook_create_mutation_id_blank", "POST", "cookbooks", { clientMutationId: "   ", title: "Blank Mutation Id" }],
       ["req_cookbook_create_mutation_id_long", "POST", "cookbooks", { clientMutationId: "x".repeat(161), title: "Too Long Mutation" }],
       ["req_cookbook_update_blank", "PATCH", `cookbooks/${fixture.cookbook.id}`, { clientMutationId: "cookbook-update-blank", title: "" }],
       ["req_cookbook_update_unknown", "PATCH", `cookbooks/${fixture.cookbook.id}`, { clientMutationId: "cookbook-update-unknown", unknown: true }],
       ["req_cookbook_delete_missing_mutation", "DELETE", `cookbooks/${fixture.cookbook.id}`, {}],
+      ["req_cookbook_delete_unknown_body", "DELETE", `cookbooks/${fixture.cookbook.id}`, { clientMutationId: "cookbook-delete-unknown", unknown: true }],
       ["req_cookbook_add_unknown_body", "POST", `cookbooks/${fixture.cookbook.id}/recipes/${fixture.ownRecipe.id}`, { clientMutationId: "cookbook-add-unknown", unknown: true }],
       ["req_cookbook_remove_missing_mutation", "DELETE", `cookbooks/${fixture.cookbook.id}/recipes/${fixture.ownRecipe.id}`, {}],
+      ["req_cookbook_remove_unknown_body", "DELETE", `cookbooks/${fixture.cookbook.id}/recipes/${fixture.ownRecipe.id}`, { clientMutationId: "cookbook-remove-unknown", unknown: true }],
     ] as const) {
       const response = await action(routeArgs(
         mutationRequest(method, path, fixture.writer.token, requestId, body),
@@ -669,6 +777,48 @@ describe("API v1 cookbook write mutations", () => {
     expect(crossOwnerAdd.status).toBe(403);
     expectPrivateEnvelopeHeaders(crossOwnerAdd, "req_cookbook_add_cross_owner");
     expectErrorEnvelope(await readJson(crossOwnerAdd), "req_cookbook_add_cross_owner", "insufficient_scope", 403);
+
+    const addMissingCookbook = await action(routeArgs(
+      mutationRequest(
+        "POST",
+        `cookbooks/missing-cookbook/recipes/${fixture.ownRecipe.id}`,
+        fixture.writer.token,
+        "req_cookbook_add_missing_cookbook",
+        { clientMutationId: "cookbook-add-missing-cookbook" },
+      ),
+      `cookbooks/missing-cookbook/recipes/${fixture.ownRecipe.id}`,
+    ).args);
+    expect(addMissingCookbook.status).toBe(404);
+    expectPrivateEnvelopeHeaders(addMissingCookbook, "req_cookbook_add_missing_cookbook");
+    expectErrorEnvelope(await readJson(addMissingCookbook), "req_cookbook_add_missing_cookbook", "not_found", 404);
+
+    const removeMissingCookbook = await action(routeArgs(
+      mutationRequest(
+        "DELETE",
+        `cookbooks/missing-cookbook/recipes/${fixture.ownRecipe.id}`,
+        fixture.writer.token,
+        "req_cookbook_remove_missing_cookbook",
+        { clientMutationId: "cookbook-remove-missing-cookbook" },
+      ),
+      `cookbooks/missing-cookbook/recipes/${fixture.ownRecipe.id}`,
+    ).args);
+    expect(removeMissingCookbook.status).toBe(404);
+    expectPrivateEnvelopeHeaders(removeMissingCookbook, "req_cookbook_remove_missing_cookbook");
+    expectErrorEnvelope(await readJson(removeMissingCookbook), "req_cookbook_remove_missing_cookbook", "not_found", 404);
+
+    const crossOwnerRemove = await action(routeArgs(
+      mutationRequest(
+        "DELETE",
+        `cookbooks/${fixture.cookbook.id}/recipes/${fixture.ownRecipe.id}`,
+        fixture.otherWriter.token,
+        "req_cookbook_remove_cross_owner",
+        { clientMutationId: "cookbook-remove-cross-owner" },
+      ),
+      `cookbooks/${fixture.cookbook.id}/recipes/${fixture.ownRecipe.id}`,
+    ).args);
+    expect(crossOwnerRemove.status).toBe(403);
+    expectPrivateEnvelopeHeaders(crossOwnerRemove, "req_cookbook_remove_cross_owner");
+    expectErrorEnvelope(await readJson(crossOwnerRemove), "req_cookbook_remove_cross_owner", "insufficient_scope", 403);
   });
 
   it("recovers committed in-flight cookbook mutations through the real route callbacks", async () => {
@@ -832,6 +982,336 @@ describe("API v1 cookbook write mutations", () => {
       cookbook: { id: fixture.cookbook.id, recipes: [] },
       mutation: { replayed: true },
     });
+  });
+
+  it("rejects incomplete cookbook recovery when committed state is missing or mismatched", async () => {
+    const fixture = await createFixture(db);
+
+    const createWrongOwnerBody = { clientMutationId: "cookbook-recover-create-wrong-owner", title: "Wrong Owner Cookbook" };
+    const createWrongOwnerReservation = await reserveCookbookMutation(db, {
+      body: createWrongOwnerBody,
+      credentialId: fixture.writer.credential.id,
+      method: "POST",
+      operation: "cookbooks.create",
+      path: "cookbooks",
+      userId: fixture.owner.id,
+    });
+    await db.cookbook.create({
+      data: { id: createWrongOwnerReservation.id, title: createWrongOwnerBody.title, authorId: fixture.other.id },
+    });
+    await expectInProgress(await action(routeArgs(
+      mutationRequest("POST", "cookbooks", fixture.writer.token, "req_cookbook_recover_create_wrong_owner", createWrongOwnerBody),
+      "cookbooks",
+    ).args), "req_cookbook_recover_create_wrong_owner");
+
+    const updateMissingBody = { clientMutationId: "cookbook-recover-update-missing", title: "Missing Update" };
+    await reserveCookbookMutation(db, {
+      body: updateMissingBody,
+      credentialId: fixture.writer.credential.id,
+      method: "PATCH",
+      operation: "cookbooks.update",
+      path: "cookbooks/missing-cookbook",
+      userId: fixture.owner.id,
+    });
+    await expectInProgress(await action(routeArgs(
+      mutationRequest("PATCH", "cookbooks/missing-cookbook", fixture.writer.token, "req_cookbook_recover_update_missing", updateMissingBody),
+      "cookbooks/missing-cookbook",
+    ).args), "req_cookbook_recover_update_missing");
+
+    const updateMismatchCookbook = await db.cookbook.create({
+      data: { title: createCookbookTitle(), authorId: fixture.owner.id },
+    });
+    const updateMismatchBody = { clientMutationId: "cookbook-recover-update-mismatch", title: "Expected Recovery Title" };
+    await reserveCookbookMutation(db, {
+      body: updateMismatchBody,
+      credentialId: fixture.writer.credential.id,
+      method: "PATCH",
+      operation: "cookbooks.update",
+      path: `cookbooks/${updateMismatchCookbook.id}`,
+      userId: fixture.owner.id,
+    });
+    await db.cookbook.update({
+      where: { id: updateMismatchCookbook.id },
+      data: { title: "Different recovery title" },
+    });
+    await expectInProgress(await action(routeArgs(
+      mutationRequest(
+        "PATCH",
+        `cookbooks/${updateMismatchCookbook.id}`,
+        fixture.writer.token,
+        "req_cookbook_recover_update_mismatch",
+        updateMismatchBody,
+      ),
+      `cookbooks/${updateMismatchCookbook.id}`,
+    ).args), "req_cookbook_recover_update_mismatch");
+
+    const noTombstoneCookbook = await db.cookbook.create({
+      data: { title: createCookbookTitle(), authorId: fixture.owner.id },
+    });
+    const noTombstoneDeleteBody = { clientMutationId: "cookbook-recover-delete-no-tombstone" };
+    await reserveCookbookMutation(db, {
+      body: noTombstoneDeleteBody,
+      credentialId: fixture.writer.credential.id,
+      method: "DELETE",
+      operation: "cookbooks.delete",
+      path: `cookbooks/${noTombstoneCookbook.id}`,
+      userId: fixture.owner.id,
+    });
+    await expectInProgress(await action(routeArgs(
+      deleteRequest(
+        `cookbooks/${noTombstoneCookbook.id}`,
+        fixture.writer.token,
+        "req_cookbook_recover_delete_no_tombstone",
+        noTombstoneDeleteBody.clientMutationId,
+      ),
+      `cookbooks/${noTombstoneCookbook.id}`,
+    ).args), "req_cookbook_recover_delete_no_tombstone");
+
+    const stillExistingCookbook = await db.cookbook.create({
+      data: { title: createCookbookTitle(), authorId: fixture.owner.id },
+    });
+    const stillExistingDeleteBody = { clientMutationId: "cookbook-recover-delete-still-existing" };
+    const stillExistingReservation = await reserveCookbookMutation(db, {
+      body: stillExistingDeleteBody,
+      credentialId: fixture.writer.credential.id,
+      method: "DELETE",
+      operation: "cookbooks.delete",
+      path: `cookbooks/${stillExistingCookbook.id}`,
+      userId: fixture.owner.id,
+    });
+    await db.apiMutationTombstone.create({
+      data: {
+        idempotencyKeyId: stillExistingReservation.id,
+        operation: "cookbooks.delete",
+        resourceType: "cookbook",
+        resourceId: stillExistingCookbook.id,
+        payload: JSON.stringify({ title: stillExistingCookbook.title, deletedAt: new Date().toISOString() }),
+      },
+    });
+    await expectInProgress(await action(routeArgs(
+      deleteRequest(
+        `cookbooks/${stillExistingCookbook.id}`,
+        fixture.writer.token,
+        "req_cookbook_recover_delete_still_existing",
+        stillExistingDeleteBody.clientMutationId,
+      ),
+      `cookbooks/${stillExistingCookbook.id}`,
+    ).args), "req_cookbook_recover_delete_still_existing");
+
+    for (const [suffix, payload] of [
+      ["null_payload", null],
+      ["malformed_payload", "{bad json"],
+      ["wrong_shape_payload", JSON.stringify({ title: 42, deletedAt: new Date().toISOString() })],
+      ["invalid_payload", JSON.stringify({ title: "Invalid Payload", deletedAt: "not-a-date" })],
+    ] as const) {
+      const cookbook = await db.cookbook.create({
+        data: { title: createCookbookTitle(), authorId: fixture.owner.id },
+      });
+      const body = { clientMutationId: `cookbook-recover-delete-${suffix}` };
+      const reservation = await reserveCookbookMutation(db, {
+        body,
+        credentialId: fixture.writer.credential.id,
+        method: "DELETE",
+        operation: "cookbooks.delete",
+        path: `cookbooks/${cookbook.id}`,
+        userId: fixture.owner.id,
+      });
+      await db.$transaction([
+        db.apiMutationTombstone.create({
+          data: {
+            idempotencyKeyId: reservation.id,
+            operation: "cookbooks.delete",
+            resourceType: "cookbook",
+            resourceId: cookbook.id,
+            payload,
+          },
+        }),
+        db.cookbook.delete({ where: { id: cookbook.id } }),
+      ]);
+      await expectInProgress(await action(routeArgs(
+        deleteRequest(
+          `cookbooks/${cookbook.id}`,
+          fixture.writer.token,
+          `req_cookbook_recover_delete_${suffix}`,
+          body.clientMutationId,
+        ),
+        `cookbooks/${cookbook.id}`,
+      ).args), `req_cookbook_recover_delete_${suffix}`);
+    }
+
+    const addMissingCookbookBody = { clientMutationId: "cookbook-recover-add-missing-cookbook" };
+    await reserveCookbookMutation(db, {
+      body: addMissingCookbookBody,
+      credentialId: fixture.writer.credential.id,
+      method: "POST",
+      operation: "cookbooks.recipes.add",
+      path: `cookbooks/missing-cookbook/recipes/${fixture.ownRecipe.id}`,
+      userId: fixture.owner.id,
+    });
+    await expectInProgress(await action(routeArgs(
+      mutationRequest(
+        "POST",
+        `cookbooks/missing-cookbook/recipes/${fixture.ownRecipe.id}`,
+        fixture.writer.token,
+        "req_cookbook_recover_add_missing_cookbook",
+        addMissingCookbookBody,
+      ),
+      `cookbooks/missing-cookbook/recipes/${fixture.ownRecipe.id}`,
+    ).args), "req_cookbook_recover_add_missing_cookbook");
+
+    const addMissingRelationBody = { clientMutationId: "cookbook-recover-add-missing-relation" };
+    await reserveCookbookMutation(db, {
+      body: addMissingRelationBody,
+      credentialId: fixture.writer.credential.id,
+      method: "POST",
+      operation: "cookbooks.recipes.add",
+      path: `cookbooks/${fixture.cookbook.id}/recipes/${fixture.otherRecipe.id}`,
+      userId: fixture.owner.id,
+    });
+    await expectInProgress(await action(routeArgs(
+      mutationRequest(
+        "POST",
+        `cookbooks/${fixture.cookbook.id}/recipes/${fixture.otherRecipe.id}`,
+        fixture.writer.token,
+        "req_cookbook_recover_add_missing_relation",
+        addMissingRelationBody,
+      ),
+      `cookbooks/${fixture.cookbook.id}/recipes/${fixture.otherRecipe.id}`,
+    ).args), "req_cookbook_recover_add_missing_relation");
+
+    const addDeletedRecipeBody = { clientMutationId: "cookbook-recover-add-deleted-recipe" };
+    const addDeletedRecipeReservation = await reserveCookbookMutation(db, {
+      body: addDeletedRecipeBody,
+      credentialId: fixture.writer.credential.id,
+      method: "POST",
+      operation: "cookbooks.recipes.add",
+      path: `cookbooks/${fixture.cookbook.id}/recipes/${fixture.deletedRecipe.id}`,
+      userId: fixture.owner.id,
+    });
+    await db.recipeInCookbook.create({
+      data: {
+        id: addDeletedRecipeReservation.id,
+        cookbookId: fixture.cookbook.id,
+        recipeId: fixture.deletedRecipe.id,
+        addedById: fixture.owner.id,
+      },
+    });
+    await expectInProgress(await action(routeArgs(
+      mutationRequest(
+        "POST",
+        `cookbooks/${fixture.cookbook.id}/recipes/${fixture.deletedRecipe.id}`,
+        fixture.writer.token,
+        "req_cookbook_recover_add_deleted_recipe",
+        addDeletedRecipeBody,
+      ),
+      `cookbooks/${fixture.cookbook.id}/recipes/${fixture.deletedRecipe.id}`,
+    ).args), "req_cookbook_recover_add_deleted_recipe");
+
+    const existingAddBody = { clientMutationId: "cookbook-recover-add-existing-relation" };
+    await reserveCookbookMutation(db, {
+      body: existingAddBody,
+      credentialId: fixture.writer.credential.id,
+      method: "POST",
+      operation: "cookbooks.recipes.add",
+      path: `cookbooks/${fixture.cookbook.id}/recipes/${fixture.ownRecipe.id}`,
+      userId: fixture.owner.id,
+    });
+    await db.recipeInCookbook.create({
+      data: {
+        id: `relation_${faker.string.alphanumeric(16)}`,
+        cookbookId: fixture.cookbook.id,
+        recipeId: fixture.ownRecipe.id,
+        addedById: fixture.owner.id,
+      },
+    });
+    const recoveredExistingAdd = await action(routeArgs(
+      mutationRequest(
+        "POST",
+        `cookbooks/${fixture.cookbook.id}/recipes/${fixture.ownRecipe.id}`,
+        fixture.writer.token,
+        "req_cookbook_recover_add_existing_relation",
+        existingAddBody,
+      ),
+      `cookbooks/${fixture.cookbook.id}/recipes/${fixture.ownRecipe.id}`,
+    ).args);
+    const recoveredExistingAddPayload = await readJson(recoveredExistingAdd);
+    expect(recoveredExistingAdd.status).toBe(200);
+    expectCookbookRecipeMutationData(recoveredExistingAddPayload.data, existingAddBody.clientMutationId, "added", false, true);
+
+    const removeMissingCookbookBody = { clientMutationId: "cookbook-recover-remove-missing-cookbook" };
+    await reserveCookbookMutation(db, {
+      body: removeMissingCookbookBody,
+      credentialId: fixture.writer.credential.id,
+      method: "DELETE",
+      operation: "cookbooks.recipes.remove",
+      path: `cookbooks/missing-cookbook/recipes/${fixture.ownRecipe.id}`,
+      userId: fixture.owner.id,
+    });
+    await expectInProgress(await action(routeArgs(
+      deleteRequest(
+        `cookbooks/missing-cookbook/recipes/${fixture.ownRecipe.id}`,
+        fixture.writer.token,
+        "req_cookbook_recover_remove_missing_cookbook",
+        removeMissingCookbookBody.clientMutationId,
+      ),
+      `cookbooks/missing-cookbook/recipes/${fixture.ownRecipe.id}`,
+    ).args), "req_cookbook_recover_remove_missing_cookbook");
+
+    const stillLinkedRecipe = await db.recipe.create({
+      data: {
+        ...createTestRecipe(fixture.recipeOwner.id),
+        title: `Still Linked Recipe ${faker.string.alphanumeric(8)}`,
+      },
+    });
+    await db.recipeInCookbook.create({
+      data: { cookbookId: fixture.cookbook.id, recipeId: stillLinkedRecipe.id, addedById: fixture.owner.id },
+    });
+    const removeStillLinkedBody = { clientMutationId: "cookbook-recover-remove-still-linked" };
+    await reserveCookbookMutation(db, {
+      body: removeStillLinkedBody,
+      credentialId: fixture.writer.credential.id,
+      method: "DELETE",
+      operation: "cookbooks.recipes.remove",
+      path: `cookbooks/${fixture.cookbook.id}/recipes/${stillLinkedRecipe.id}`,
+      userId: fixture.owner.id,
+    });
+    await expectInProgress(await action(routeArgs(
+      deleteRequest(
+        `cookbooks/${fixture.cookbook.id}/recipes/${stillLinkedRecipe.id}`,
+        fixture.writer.token,
+        "req_cookbook_recover_remove_still_linked",
+        removeStillLinkedBody.clientMutationId,
+      ),
+      `cookbooks/${fixture.cookbook.id}/recipes/${stillLinkedRecipe.id}`,
+    ).args), "req_cookbook_recover_remove_still_linked");
+
+    const removeNoTombstoneBody = { clientMutationId: "cookbook-recover-remove-no-tombstone" };
+    await reserveCookbookMutation(db, {
+      body: removeNoTombstoneBody,
+      credentialId: fixture.writer.credential.id,
+      method: "DELETE",
+      operation: "cookbooks.recipes.remove",
+      path: `cookbooks/${fixture.cookbook.id}/recipes/${fixture.otherRecipe.id}`,
+      userId: fixture.owner.id,
+    });
+    const recoveredRemoveNoTombstone = await action(routeArgs(
+      deleteRequest(
+        `cookbooks/${fixture.cookbook.id}/recipes/${fixture.otherRecipe.id}`,
+        fixture.writer.token,
+        "req_cookbook_recover_remove_no_tombstone",
+        removeNoTombstoneBody.clientMutationId,
+      ),
+      `cookbooks/${fixture.cookbook.id}/recipes/${fixture.otherRecipe.id}`,
+    ).args);
+    const recoveredRemoveNoTombstonePayload = await readJson(recoveredRemoveNoTombstone);
+    expect(recoveredRemoveNoTombstone.status).toBe(200);
+    expectCookbookRecipeMutationData(
+      recoveredRemoveNoTombstonePayload.data,
+      removeNoTombstoneBody.clientMutationId,
+      "removed",
+      false,
+      true,
+    );
   });
 
   it("rejects cookbook idempotency conflicts across bodies, paths, operations, and in-progress reservations", async () => {

@@ -589,6 +589,55 @@ describe("API v1 mutation and validation telemetry", () => {
     }
   });
 
+  it("captures cookbook write operation names on authentication failures", async () => {
+    const fixture = await createCookbookFixture(db);
+
+    for (const [method, path, routeTemplate, requestId, operation, body] of [
+      ["POST", "cookbooks", "/api/v1/cookbooks", "req_cookbook_create_auth_operation", "cookbooks.create", {
+        clientMutationId: "telemetry-cookbook-create",
+        title: "Telemetry Cookbook Create",
+      }],
+      ["PATCH", `cookbooks/${fixture.cookbook.id}`, "/api/v1/cookbooks/{id}", "req_cookbook_update_auth_operation", "cookbooks.update", {
+        clientMutationId: "telemetry-cookbook-update",
+        title: "Telemetry Cookbook Update",
+      }],
+      ["DELETE", `cookbooks/${fixture.cookbook.id}`, "/api/v1/cookbooks/{id}", "req_cookbook_delete_auth_operation", "cookbooks.delete", {
+        clientMutationId: "telemetry-cookbook-delete",
+      }],
+      [
+        "POST",
+        `cookbooks/${fixture.cookbook.id}/recipes/${fixture.recipe.id}`,
+        "/api/v1/cookbooks/{id}/recipes/{recipeId}",
+        "req_cookbook_recipe_add_auth_operation",
+        "cookbooks.recipes.add",
+        { clientMutationId: "telemetry-cookbook-recipe-add" },
+      ],
+      [
+        "DELETE",
+        `cookbooks/${fixture.cookbook.id}/recipes/${fixture.recipe.id}`,
+        "/api/v1/cookbooks/{id}/recipes/{recipeId}",
+        "req_cookbook_recipe_remove_auth_operation",
+        "cookbooks.recipes.remove",
+        { clientMutationId: "telemetry-cookbook-recipe-remove" },
+      ],
+    ] as const) {
+      const request = apiJsonRequest(method, path, requestId, {}, body);
+      const response = await action(routeArgs(request.request, path).args);
+
+      expect(response.status).toBe(401);
+      expectApiV1ErrorEvent({
+        routeTemplate,
+        requestId,
+        status: 401,
+        errorCode: "authentication_required",
+        authMode: "anonymous",
+        operation,
+        privacyClass: "private",
+        forbidden: [request.bodyText, fixture.cookbook.id, fixture.recipe.id, fixture.cookbook.title],
+      });
+    }
+  });
+
   it("captures recipe cover operation names on validation failures without leaking native payloads", async () => {
     const fixture = await createRecipeFixture(db);
     const credential = await createApiCredential(db, fixture.chef.id, "Telemetry Cover Writer", {
