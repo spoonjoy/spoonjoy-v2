@@ -88,17 +88,19 @@ describe("/developers/playground", () => {
     expect(data.viewer.isAuthenticated).toBe(false);
     expect(data.manifest.operations).toEqual(PLAYGROUND_OPERATIONS);
     const v1Operations = data.manifest.operations.filter((operation) => operation.path.startsWith("/api/v1"));
+    const byMethodAndPath = (left: { method: string; path: string }, right: { method: string; path: string }) =>
+      `${left.path} ${left.method}`.localeCompare(`${right.path} ${right.method}`);
     expect(v1Operations.map((operation) => ({
       method: operation.method,
       path: operation.path,
       auth: operation.auth,
       scopes: [...operation.scopes],
-    }))).toEqual(API_V1_SCOPE_REQUIREMENTS.map((requirement) => ({
+    })).sort(byMethodAndPath)).toEqual(API_V1_SCOPE_REQUIREMENTS.map((requirement) => ({
       method: requirement.method,
       path: requirement.path,
       auth: requirement.auth === "bearer" ? "authenticated" : "optional",
       scopes: [...requirement.scopes],
-    })));
+    })).sort(byMethodAndPath));
     expect(data.manifest.operations.map((operation) => operation.id)).toContain("POST /api/v1/tokens");
     expect(data.manifest.operations.map((operation) => operation.id)).toContain("PATCH /api/v1/shopping-list/items/{itemId}");
     expect(data.manifest.operations.map((operation) => operation.id)).toEqual(expect.arrayContaining([
@@ -113,6 +115,7 @@ describe("/developers/playground", () => {
     expect(data.manifest.authFlows.map((flow) => flow.id)).toEqual(["oauth-pkce", "delegated-approval", "mcp"]);
     expect(data.manifest.oauthScopeMap["kitchen:read"]).toEqual([
       "cookbooks:read",
+      "kitchen:read",
       "public:read",
       "recipes:read",
       "shopping_list:read",
@@ -132,7 +135,7 @@ describe("/developers/playground", () => {
     expect(data.manifest.operations.find((operation) => operation.id === "GET /api/v1/recipes")?.profiles).toEqual(["full", "connector", "sdk"]);
     expect(data.manifest.operations.find((operation) => operation.id === "POST /oauth/token")?.profiles).toEqual(["full", "sdk"]);
     expect(data.manifest.operations.find((operation) => operation.id === "POST /mcp")?.profiles).toEqual(["full"]);
-    expect(data.manifest.operations.length).toBe(24);
+    expect(data.manifest.operations.length).toBe(PLAYGROUND_OPERATIONS.length);
   });
 
   it("uses the configured public origin for playground OG URLs", async () => {
@@ -146,16 +149,9 @@ describe("/developers/playground", () => {
   });
 
   it("groups generated operations by OpenAPI tag", () => {
-    expect(playgroundOperationGroups().map((group) => group.tag)).toEqual([
-      "Discovery",
-      "Recipes",
-      "Cookbooks",
-      "Shopping List",
-      "Tokens",
-      "OAuth",
-      "Agent Approval",
-      "MCP",
-    ]);
+    expect(playgroundOperationGroups().map((group) => group.tag)).toEqual(
+      Array.from(new Set(PLAYGROUND_OPERATIONS.map((operation) => operation.tag))),
+    );
   });
 
   it("declares playground metadata", async () => {

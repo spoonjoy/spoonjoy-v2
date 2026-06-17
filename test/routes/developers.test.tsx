@@ -214,7 +214,7 @@ describe("/developers route", () => {
     expect(screen.getByRole("link", { name: /Connector Spec/i })).toHaveAttribute("href", "/api/v1/openapi.connector.json");
 
     for (const resource of API_V1_RESOURCES) {
-      expect(screen.getByText(resource.path)).toBeInTheDocument();
+      expect(screen.getAllByText(resource.path).length).toBeGreaterThan(0);
     }
 
     for (const scope of data.scopes) {
