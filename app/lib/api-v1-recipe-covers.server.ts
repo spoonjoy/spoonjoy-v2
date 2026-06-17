@@ -610,7 +610,7 @@ function coverMutationResponse(input: {
   generationStatus: string;
   clientMutationId: string;
   warnings?: string[];
-  blockers?: ProviderSecretBlocker[];
+  blockers: ProviderSecretBlocker[];
   nextActions: string[];
 }): CoverMutationPayload {
   return {
@@ -619,7 +619,7 @@ function coverMutationResponse(input: {
     createdCover: input.createdCover,
     generationStatus: input.generationStatus,
     warnings: input.warnings ?? [],
-    blockers: input.blockers ?? [],
+    blockers: input.blockers,
     nextActions: input.nextActions,
     mutation: { clientMutationId: input.clientMutationId, replayed: false },
   };
@@ -650,10 +650,6 @@ function envString(env: Env | null | undefined, key: keyof Env): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function missingProviderConfig(env: Env | null | undefined) {
-  return !envString(env, "OPENAI_API_KEY") && !envString(env, "GEMINI_API_KEY") && !envString(env, "GOOGLE_API_KEY");
-}
-
 function providerSecretBlocker(env: Env | null | undefined): ProviderSecretBlocker {
   const artifactRoot = envString(env, "ARTIFACT_ROOT");
   const outputPath = artifactRoot
@@ -678,12 +674,11 @@ type FsPromisesModule = {
 async function writeProviderSecretBlocker(blocker: ProviderSecretBlocker, env: Env | null | undefined): Promise<void> {
   if (!envString(env, "ARTIFACT_ROOT")) return;
   const slashIndex = blocker.outputPath.lastIndexOf("/");
-  const directory = slashIndex >= 0 ? blocker.outputPath.slice(0, slashIndex) : ".";
+  const directory = blocker.outputPath.slice(0, slashIndex);
   try {
     const fsModule = await import("node:fs/promises") as Partial<FsPromisesModule>;
-    if (typeof fsModule.mkdir !== "function" || typeof fsModule.writeFile !== "function") return;
-    await fsModule.mkdir(directory, { recursive: true });
-    await fsModule.writeFile(blocker.outputPath, `${JSON.stringify(blocker, null, 2)}\n`, "utf8");
+    await fsModule.mkdir!(directory, { recursive: true });
+    await fsModule.writeFile!(blocker.outputPath, `${JSON.stringify(blocker, null, 2)}\n`, "utf8");
   } catch {
     // File-system blocker artifacts are a local validation convenience; the JSON response remains authoritative in Workers.
   }

@@ -6,6 +6,7 @@ import { faker } from "@faker-js/faker";
 import { FormData as UndiciFormData, Request as UndiciRequest } from "undici";
 import { action, loader } from "~/routes/api.v1.$";
 import { createApiCredential } from "~/lib/api-auth.server";
+import { hashIdempotencyRequest } from "~/lib/api-idempotency.server";
 import { resolveApiV1ScopeRequirement } from "~/lib/api-v1.server";
 import { getLocalDb } from "~/lib/db.server";
 import { IMAGE_MAX_FILE_SIZE } from "~/lib/recipe-image";
@@ -24,6 +25,11 @@ function b64(bytes: Uint8Array) {
 
 function dataUrl(bytes = VALID_PNG_BYTES) {
   return `data:image/png;base64,${b64(bytes)}`;
+}
+
+async function sha256Hex(bytes: Uint8Array) {
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Buffer.from(digest).toString("hex");
 }
 
 function routeArgs(request: Request, splat: string, env: Record<string, unknown> | null = null) {
@@ -296,6 +302,50 @@ async function createCoverFixture(db: LocalDb) {
     },
   });
   return { chef, otherChef, writer, reader, otherWriter, recipe };
+}
+
+async function seedInFlightCoverMutation(
+  db: LocalDb,
+  input: {
+    chefId: string;
+    credentialId?: string | null;
+    clientMutationId: string;
+    operation: string;
+    method: string;
+    pathSuffix: string;
+    body: unknown;
+    coverId?: string;
+    recipeId: string;
+    payload?: unknown;
+  },
+) {
+  const reservation = await db.apiIdempotencyKey.create({
+    data: {
+      userId: input.chefId,
+      credentialId: input.credentialId ?? null,
+      clientKey: `chef:${input.chefId}`,
+      key: input.clientMutationId,
+      operation: input.operation,
+      requestHash: await hashIdempotencyRequest({
+        method: input.method,
+        path: `/api/v1/${input.pathSuffix}`,
+        body: input.body,
+      }),
+      expiresAt: new Date(Date.now() + 60_000),
+    },
+  });
+  const coverId = input.coverId ?? reservation.id;
+  await db.apiMutationTombstone.create({
+    data: {
+      idempotencyKeyId: reservation.id,
+      operation: input.operation,
+      resourceType: "recipe_cover",
+      resourceId: coverId,
+      parentResourceId: input.recipeId,
+      payload: JSON.stringify(input.payload ?? { previousActiveCover: null }),
+    },
+  });
+  return reservation;
 }
 
 function artifactRoot() {
@@ -771,6 +821,285 @@ describe("API v1 recipe image and cover lifecycle endpoints", () => {
 
     expect(photos.puts).toHaveLength(1);
     await expect(db.recipeCover.count({ where: { recipeId: recipe.id } })).resolves.toBe(1);
+  });
+
+  it("supports env-less local image fallback for native upload and URL cover creation", async () => {
+    const { chef, writer, recipe } = await createCoverFixture(db);
+    const uploadClientMutationId = "native-upload-cover-local-fallback";
+    const upload = await action(routeArgs(
+      multipartImageRequest(
+        `recipes/${recipe.id}/image`,
+        writer.token,
+        "req_cover_image_upload_local_fallback",
+        uploadClientMutationId,
+        new File([VALID_PNG_BYTES], "cover.png", { type: "image/png" }),
+        { activate: "false", generateEditorial: "false" },
+      ),
+      `recipes/${recipe.id}/image`,
+    ));
+    const uploadPayload = await readJson(upload);
+
+    expect(upload.status).toBe(201);
+    expectSuccessEnvelope(uploadPayload, "req_cover_image_upload_local_fallback");
+    expectCoverMutationData(uploadPayload.data, uploadClientMutationId, false);
+    expect(uploadPayload.data.createdCover).toMatchObject({
+      recipeId: recipe.id,
+      sourceType: "chef-upload",
+      status: "ready",
+      generationStatus: "none",
+      createdById: chef.id,
+      imageUrl: expect.stringMatching(/^data:image\/png;base64,/),
+    });
+
+    const createClientMutationId = "native-create-cover-local-fallback";
+    const create = await action(routeArgs(
+      jsonMutationRequest("POST", `recipes/${recipe.id}/covers`, writer.token, "req_cover_create_url_local_fallback", {
+        clientMutationId: createClientMutationId,
+        imageUrl: dataUrl(),
+        activate: false,
+        generateEditorial: false,
+      }),
+      `recipes/${recipe.id}/covers`,
+    ));
+    const createPayload = await readJson(create);
+
+    expect(create.status).toBe(201);
+    expectSuccessEnvelope(createPayload, "req_cover_create_url_local_fallback");
+    expectCoverMutationData(createPayload.data, createClientMutationId, false);
+    expect(createPayload.data.createdCover).toMatchObject({
+      recipeId: recipe.id,
+      sourceType: "chef-upload",
+      status: "ready",
+      generationStatus: "none",
+      createdById: chef.id,
+      imageUrl: dataUrl(),
+    });
+    await expect(db.recipeCover.count({ where: { recipeId: recipe.id } })).resolves.toBe(2);
+  });
+
+  it("recovers in-flight idempotent cover mutations through every route wrapper", async () => {
+    const { chef, otherChef, writer, recipe } = await createCoverFixture(db);
+    const uploadClientMutationId = "native-route-recover-upload";
+    const uploadBody = {
+      clientMutationId: uploadClientMutationId,
+      activate: false,
+      generateEditorial: false,
+      image: {
+        name: "cover.png",
+        type: "image/png",
+        size: VALID_PNG_BYTES.length,
+        sha256: await sha256Hex(VALID_PNG_BYTES),
+      },
+    };
+    const uploadReservation = await seedInFlightCoverMutation(db, {
+      chefId: chef.id,
+      credentialId: writer.credential.id,
+      clientMutationId: uploadClientMutationId,
+      operation: "recipes.image.upload",
+      method: "POST",
+      pathSuffix: `recipes/${recipe.id}/image`,
+      body: uploadBody,
+      recipeId: recipe.id,
+    });
+    await db.recipeCover.create({
+      data: {
+        id: uploadReservation.id,
+        recipeId: recipe.id,
+        imageUrl: "/photos/recipes/recovered-upload.png",
+        sourceType: "chef-upload",
+        status: "ready",
+        generationStatus: "none",
+        createdById: chef.id,
+      },
+    });
+    const recoveredUpload = await action(routeArgs(
+      multipartImageRequest(
+        `recipes/${recipe.id}/image`,
+        writer.token,
+        "req_cover_recover_upload",
+        uploadClientMutationId,
+        new File([VALID_PNG_BYTES], "cover.png", { type: "image/png" }),
+        { activate: "false", generateEditorial: "false" },
+      ),
+      `recipes/${recipe.id}/image`,
+    ));
+    expect(recoveredUpload.status).toBe(201);
+    expectCoverMutationData((await readJson(recoveredUpload)).data, uploadClientMutationId, true);
+
+    const createBody = {
+      clientMutationId: "native-route-recover-create",
+      imageUrl: `/photos/recipes/${chef.id}/uploads/recovered-url.png`,
+      activate: false,
+      generateEditorial: false,
+    };
+    const createReservation = await seedInFlightCoverMutation(db, {
+      chefId: chef.id,
+      credentialId: writer.credential.id,
+      clientMutationId: createBody.clientMutationId,
+      operation: "recipes.covers.create",
+      method: "POST",
+      pathSuffix: `recipes/${recipe.id}/covers`,
+      body: createBody,
+      recipeId: recipe.id,
+    });
+    await db.recipeCover.create({
+      data: {
+        id: createReservation.id,
+        recipeId: recipe.id,
+        imageUrl: createBody.imageUrl,
+        sourceType: "chef-upload",
+        status: "ready",
+        generationStatus: "none",
+        createdById: chef.id,
+      },
+    });
+    const recoveredCreate = await action(routeArgs(
+      jsonMutationRequest("POST", `recipes/${recipe.id}/covers`, writer.token, "req_cover_recover_create", createBody),
+      `recipes/${recipe.id}/covers`,
+    ));
+    expect(recoveredCreate.status).toBe(201);
+    expectCoverMutationData((await readJson(recoveredCreate)).data, createBody.clientMutationId, true);
+
+    const activateCover = await db.recipeCover.create({
+      data: {
+        recipeId: recipe.id,
+        imageUrl: "/photos/recipes/activate-recovered.png",
+        sourceType: "chef-upload",
+        status: "ready",
+        generationStatus: "none",
+        createdById: chef.id,
+      },
+    });
+    const activateBody = { clientMutationId: "native-route-recover-activate", variant: "image" };
+    await seedInFlightCoverMutation(db, {
+      chefId: chef.id,
+      credentialId: writer.credential.id,
+      clientMutationId: activateBody.clientMutationId,
+      operation: "recipes.covers.activate",
+      method: "PATCH",
+      pathSuffix: `recipes/${recipe.id}/covers/${activateCover.id}`,
+      body: activateBody,
+      coverId: activateCover.id,
+      recipeId: recipe.id,
+    });
+    const recoveredActivate = await action(routeArgs(
+      jsonMutationRequest("PATCH", `recipes/${recipe.id}/covers/${activateCover.id}`, writer.token, "req_cover_recover_activate", activateBody),
+      `recipes/${recipe.id}/covers/${activateCover.id}`,
+    ));
+    expect(recoveredActivate.status).toBe(200);
+    expectActiveCoverMutationData((await readJson(recoveredActivate)).data, activateBody.clientMutationId, true);
+
+    const archiveCover = await db.recipeCover.create({
+      data: {
+        recipeId: recipe.id,
+        imageUrl: "/photos/recipes/archive-recovered.png",
+        sourceType: "chef-upload",
+        status: "archived",
+        generationStatus: "none",
+        archivedAt: new Date(),
+        createdById: chef.id,
+      },
+    });
+    const archiveRequestBody = { clientMutationId: "native-route-recover-archive", confirmNoCover: true };
+    const archiveIdempotencyBody = {
+      clientMutationId: archiveRequestBody.clientMutationId,
+      replacementCoverId: null,
+      replacementVariant: null,
+      confirmNoCover: true,
+      deleteSafeObjects: false,
+    };
+    await seedInFlightCoverMutation(db, {
+      chefId: chef.id,
+      credentialId: writer.credential.id,
+      clientMutationId: archiveRequestBody.clientMutationId,
+      operation: "recipes.covers.archive",
+      method: "DELETE",
+      pathSuffix: `recipes/${recipe.id}/covers/${archiveCover.id}`,
+      body: archiveIdempotencyBody,
+      coverId: archiveCover.id,
+      recipeId: recipe.id,
+    });
+    const recoveredArchive = await action(routeArgs(
+      jsonMutationRequest("DELETE", `recipes/${recipe.id}/covers/${archiveCover.id}`, writer.token, "req_cover_recover_archive", archiveRequestBody),
+      `recipes/${recipe.id}/covers/${archiveCover.id}`,
+    ));
+    expect(recoveredArchive.status).toBe(200);
+    expectActiveCoverMutationData((await readJson(recoveredArchive)).data, archiveRequestBody.clientMutationId, true);
+
+    const regenerateCover = await db.recipeCover.create({
+      data: {
+        recipeId: recipe.id,
+        imageUrl: "/photos/recipes/regenerate-recovered.png",
+        sourceType: "chef-upload",
+        status: "ready",
+        generationStatus: "none",
+        createdById: chef.id,
+      },
+    });
+    const regenerateBody = {
+      clientMutationId: "native-route-recover-regenerate",
+      coverId: regenerateCover.id,
+      activateWhenReady: false,
+    };
+    await seedInFlightCoverMutation(db, {
+      chefId: chef.id,
+      credentialId: writer.credential.id,
+      clientMutationId: regenerateBody.clientMutationId,
+      operation: "recipes.covers.regenerate",
+      method: "POST",
+      pathSuffix: `recipes/${recipe.id}/covers/regenerate`,
+      body: regenerateBody,
+      coverId: regenerateCover.id,
+      recipeId: recipe.id,
+    });
+    const recoveredRegenerate = await action(routeArgs(
+      jsonMutationRequest("POST", `recipes/${recipe.id}/covers/regenerate`, writer.token, "req_cover_recover_regenerate", regenerateBody),
+      `recipes/${recipe.id}/covers/regenerate`,
+    ));
+    expect(recoveredRegenerate.status).toBe(200);
+    expectCoverMutationData((await readJson(recoveredRegenerate)).data, regenerateBody.clientMutationId, true);
+
+    const spoon = await db.recipeSpoon.create({
+      data: {
+        recipeId: recipe.id,
+        chefId: otherChef.id,
+        photoUrl: "/photos/spoons/route-recovered.jpg",
+      },
+    });
+    const fromSpoonBody = {
+      clientMutationId: "native-route-recover-from-spoon",
+      activate: false,
+      generateEditorial: false,
+    };
+    const fromSpoonReservation = await seedInFlightCoverMutation(db, {
+      chefId: chef.id,
+      credentialId: writer.credential.id,
+      clientMutationId: fromSpoonBody.clientMutationId,
+      operation: "recipes.covers.from-spoon",
+      method: "POST",
+      pathSuffix: `recipes/${recipe.id}/covers/from-spoon/${spoon.id}`,
+      body: fromSpoonBody,
+      recipeId: recipe.id,
+    });
+    await db.recipeCover.create({
+      data: {
+        id: fromSpoonReservation.id,
+        recipeId: recipe.id,
+        imageUrl: "/photos/spoons/route-recovered.jpg",
+        sourceType: "spoon",
+        sourceSpoonId: spoon.id,
+        sourceImageUrl: "/photos/spoons/route-recovered.jpg",
+        status: "ready",
+        generationStatus: "none",
+        createdById: chef.id,
+      },
+    });
+    const recoveredFromSpoon = await action(routeArgs(
+      jsonMutationRequest("POST", `recipes/${recipe.id}/covers/from-spoon/${spoon.id}`, writer.token, "req_cover_recover_from_spoon", fromSpoonBody),
+      `recipes/${recipe.id}/covers/from-spoon/${spoon.id}`,
+    ));
+    expect(recoveredFromSpoon.status).toBe(201);
+    expectCoverMutationData((await readJson(recoveredFromSpoon)).data, fromSpoonBody.clientMutationId, true);
   });
 
   it("creates idempotent uploaded-image cover candidates only from safe owner-owned Spoonjoy photo URLs", async () => {

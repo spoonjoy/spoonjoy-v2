@@ -589,6 +589,96 @@ describe("API v1 mutation and validation telemetry", () => {
     }
   });
 
+  it("captures recipe cover operation names on validation failures without leaking native payloads", async () => {
+    const fixture = await createRecipeFixture(db);
+    const credential = await createApiCredential(db, fixture.chef.id, "Telemetry Cover Writer", {
+      scopes: ["kitchen:write"],
+    });
+    const auth = { Authorization: `Bearer ${credential.token}` };
+
+    const coverList = routeArgs(
+      apiRequest(`http://localhost/api/v1/recipes/${fixture.recipe.id}/covers?includeArchived=maybe`, "req_cover_operation_list", auth),
+      `recipes/${fixture.recipe.id}/covers`,
+    );
+    const coverListResponse = await loader(coverList.args);
+    await Promise.all(coverList.scheduled);
+    expect(coverListResponse.status).toBe(400);
+    expectApiV1ErrorEvent({
+      routeTemplate: "/api/v1/recipes/{id}/covers",
+      requestId: "req_cover_operation_list",
+      status: 400,
+      errorCode: "validation_error",
+      authMode: "bearer",
+      operation: "recipes.covers.list",
+      privacyClass: "authenticated",
+      forbidden: [credential.token, credential.credential.tokenPrefix, fixture.recipe.id, "includeArchived=maybe"],
+    });
+
+    const upload = apiJsonRequest("POST", `recipes/${fixture.recipe.id}/image`, "req_cover_operation_upload", auth, {
+      clientMutationId: "raw-upload-cover-mutation",
+    });
+    const uploadContext = routeArgs(upload.request, `recipes/${fixture.recipe.id}/image`);
+    const uploadResponse = await action(uploadContext.args);
+    await Promise.all(uploadContext.scheduled);
+    expect(uploadResponse.status).toBe(400);
+    expectApiV1ErrorEvent({
+      routeTemplate: "/api/v1/recipes/{id}/image",
+      requestId: "req_cover_operation_upload",
+      status: 400,
+      errorCode: "validation_error",
+      authMode: "bearer",
+      operation: "recipes.image.upload",
+      privacyClass: "authenticated",
+      forbidden: [upload.bodyText, "raw-upload-cover-mutation", credential.token, credential.credential.tokenPrefix],
+    });
+
+    for (const [method, path, routeTemplate, requestId, operation, body] of [
+      ["POST", `recipes/${fixture.recipe.id}/covers`, "/api/v1/recipes/{id}/covers", "req_cover_operation_create", "recipes.covers.create", {
+        clientMutationId: "raw-create-cover-mutation",
+      }],
+      ["PATCH", `recipes/${fixture.recipe.id}/covers/cover_telemetry`, "/api/v1/recipes/{id}/covers/{coverId}", "req_cover_operation_activate", "recipes.covers.activate", {
+        clientMutationId: "raw-activate-cover-mutation",
+        variant: "thumbnail",
+      }],
+      ["DELETE", `recipes/${fixture.recipe.id}/covers/cover_telemetry`, "/api/v1/recipes/{id}/covers/{coverId}", "req_cover_operation_archive", "recipes.covers.archive", {
+        confirmNoCover: true,
+      }],
+      ["POST", `recipes/${fixture.recipe.id}/covers/regenerate`, "/api/v1/recipes/{id}/covers/regenerate", "req_cover_operation_regenerate", "recipes.covers.regenerate", {
+        clientMutationId: "raw-regenerate-cover-mutation",
+      }],
+      ["POST", `recipes/${fixture.recipe.id}/covers/from-spoon/spoon_telemetry`, "/api/v1/recipes/{id}/covers/from-spoon/{spoonId}", "req_cover_operation_from_spoon", "recipes.covers.from-spoon", {
+        activate: true,
+      }],
+    ] as const) {
+      const request = apiJsonRequest(method, path, requestId, auth, body);
+      const context = routeArgs(request.request, path);
+      const response = await action(context.args);
+      await Promise.all(context.scheduled);
+
+      expect(response.status).toBe(400);
+      expectApiV1ErrorEvent({
+        routeTemplate,
+        requestId,
+        status: 400,
+        errorCode: "validation_error",
+        authMode: "bearer",
+        operation,
+        privacyClass: "authenticated",
+        forbidden: [
+          request.bodyText,
+          fixture.recipe.id,
+          "cover_telemetry",
+          "spoon_telemetry",
+          "raw-create-cover-mutation",
+          "raw-activate-cover-mutation",
+          "raw-regenerate-cover-mutation",
+          credential.token,
+          credential.credential.tokenPrefix,
+        ],
+      });
+    }
+  });
+
   it("captures recipe step operation names on authentication failures", async () => {
     const fixture = await createRecipeFixture(db);
     const stepId = "telemetry-step";

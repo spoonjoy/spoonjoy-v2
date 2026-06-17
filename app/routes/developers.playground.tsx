@@ -148,7 +148,7 @@ function multipartFields(operation: ApiV1PlaygroundOperation, bodyText: string) 
   return Object.entries(parsed).filter(([name]) => !fileFields.has(name));
 }
 
-function multipartFormData(operation: ApiV1PlaygroundOperation, bodyText: string, files: PlaygroundMultipartFiles = {}) {
+function multipartFormData(operation: ApiV1PlaygroundOperation, bodyText: string, files: PlaygroundMultipartFiles) {
   const formData = new FormData();
   for (const [name, value] of multipartFields(operation, bodyText)) {
     formData.append(name, multipartFieldValue(value));

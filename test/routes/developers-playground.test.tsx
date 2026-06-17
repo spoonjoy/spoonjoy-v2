@@ -285,6 +285,22 @@ describe("/developers/playground", () => {
     const createToken = PLAYGROUND_OPERATIONS.find((operation) => operation.id === "POST /api/v1/tokens")!;
     const deleteItem = PLAYGROUND_OPERATIONS.find((operation) => operation.id === "DELETE /api/v1/shopping-list/items/{itemId}")!;
     const uploadImage = PLAYGROUND_OPERATIONS.find((operation) => operation.id === "POST /api/v1/recipes/{id}/image")!;
+    const optionalBody = {
+      ...createToken,
+      requestBody: { ...createToken.requestBody!, required: false },
+    } as typeof createToken;
+    const uploadImageWithoutFileFields = {
+      ...uploadImage,
+      requestBody: {
+        ...uploadImage.requestBody!,
+        fileFields: undefined as unknown as string[],
+        example: JSON.stringify({
+          clientMutationId: null,
+          activate: true,
+          metadata: { source: "phone" },
+        }),
+      },
+    } as typeof uploadImage;
 
     expect(playgroundFetchOptions(root, "session", "", "", "pg_session")).toEqual({
       method: "GET",
@@ -327,6 +343,11 @@ describe("/developers/playground", () => {
     const generatedRequestId = playgroundFetchOptions(root, "anonymous", "", "");
     expect(generatedRequestId.headers).toEqual({ "X-Request-Id": expect.stringMatching(/^pg_/) });
     const imageFile = new File(["fake-image"], "cover.jpg", { type: "image/jpeg" });
+    const missingFileOptions = playgroundFetchOptions(uploadImage, "session", "", uploadImage.requestBody!.example, "pg_upload_missing_file", {
+      id: "recipe_1",
+    });
+    expect(missingFileOptions.body).toBeInstanceOf(FormData);
+    expect((missingFileOptions.body as FormData).get("image")).toBeNull();
     const uploadOptions = playgroundFetchOptions(uploadImage, "session", "", uploadImage.requestBody!.example, "pg_upload", {
       id: "recipe_1",
     }, {
@@ -339,11 +360,27 @@ describe("/developers/playground", () => {
     expect(uploadForm.get("activate")).toBe("true");
     expect(uploadForm.get("generateEditorial")).toBe("false");
     expect(uploadForm.get("image")).toBe(imageFile);
+    const multipartOptions = playgroundFetchOptions(
+      uploadImageWithoutFileFields,
+      "session",
+      "",
+      uploadImageWithoutFileFields.requestBody!.example,
+      "pg_multipart_no_files",
+      { id: "recipe_1" },
+    );
+    expect(multipartOptions.headers).toEqual({ "X-Request-Id": "pg_multipart_no_files" });
+    expect(multipartOptions.body).toBeInstanceOf(FormData);
+    const multipartForm = multipartOptions.body as FormData;
+    expect(multipartForm.get("clientMutationId")).toBe("");
+    expect(multipartForm.get("activate")).toBe("true");
+    expect(multipartForm.get("metadata")).toBe("{\"source\":\"phone\"}");
     expect(playgroundBodyError(createToken, "")).toBe("This operation requires a request body.");
+    expect(playgroundBodyError(optionalBody, "")).toBeNull();
     expect(playgroundBodyError(createToken, "{bad")).toBe("JSON body is not valid.");
     expect(playgroundBodyError(createToken, "{\"name\":\"Client\"}")).toBeNull();
     expect(playgroundBodyError(uploadImage, uploadImage.requestBody!.example)).toBe("Select a file for image before sending.");
     expect(playgroundBodyError(uploadImage, "{bad", { image: imageFile })).toBe("Multipart fields must be a JSON object.");
+    expect(playgroundBodyError(uploadImage, "[]", { image: imageFile })).toBe("Multipart fields must be a JSON object.");
     expect(playgroundBodyError(uploadImage, uploadImage.requestBody!.example, { image: imageFile })).toBeNull();
   });
 
@@ -682,9 +719,14 @@ describe("/developers/playground", () => {
     fireEvent.change(screen.getByLabelText(/Search operations/i), { target: { value: "Upload a recipe image" } });
     fireEvent.click(await screen.findByRole("button", { name: /Upload a recipe image as a cover candidate/i }));
     fireEvent.change(document.querySelector<HTMLInputElement>("#param-path-id")!, { target: { value: "recipe_1" } });
+    const uploadFile = new File(["fake-image"], "cover.jpg", { type: "image/jpeg" });
     fireEvent.change(screen.getByLabelText("Image file"), {
-      target: { files: [new File(["fake-image"], "cover.jpg", { type: "image/jpeg" })] },
+      target: { files: [uploadFile] },
     });
+    expect(screen.getByText("cover.jpg")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Image file"), { target: { files: [] } });
+    expect(screen.getAllByText("@/path/to/image").length).toBeGreaterThan(0);
+    fireEvent.change(screen.getByLabelText("Image file"), { target: { files: [uploadFile] } });
     fireEvent.click(screen.getByLabelText(/I understand this request can change real Spoonjoy data/i));
     fireEvent.click(screen.getByRole("button", { name: "Send Request" }));
 
@@ -820,6 +862,22 @@ describe("/developers/playground", () => {
     const authorize = PLAYGROUND_OPERATIONS.find((operation) => operation.id === "GET /oauth/authorize")!;
     const deleteItem = PLAYGROUND_OPERATIONS.find((operation) => operation.id === "DELETE /api/v1/shopping-list/items/{itemId}")!;
     const uploadImage = PLAYGROUND_OPERATIONS.find((operation) => operation.id === "POST /api/v1/recipes/{id}/image")!;
+    const uploadImageWithoutFileFields = {
+      ...uploadImage,
+      params: [
+        ...uploadImage.params,
+        { name: "X-Client-Mutation-Id", in: "header", required: false, example: "cover-header-id" },
+      ],
+      requestBody: {
+        ...uploadImage.requestBody!,
+        fileFields: undefined as unknown as string[],
+        example: JSON.stringify({
+          clientMutationId: null,
+          activate: true,
+          metadata: { source: "phone" },
+        }),
+      },
+    } as typeof uploadImage;
 
     expect(curlFor("/api/v1", root, "session", "")).toContain("Session mode is browser-only");
     expect(curlFor("/api/v1", root, "session", "")).toContain("await fetch(\"/api/v1\"");
@@ -846,6 +904,20 @@ describe("/developers/playground", () => {
     expect(curlFor("/api/v1/recipes/recipe_1/image", uploadImage, "session", uploadImage.requestBody!.example)).toContain(
       "const form = new FormData();",
     );
+    expect(curlFor(
+      "/api/v1/recipes/recipe_1/image",
+      uploadImageWithoutFileFields,
+      "session",
+      uploadImageWithoutFileFields.requestBody!.example,
+      "https://spoonjoy.app",
+      { "X-Client-Mutation-Id": "cover-header-id" },
+    )).toContain("\"X-Client-Mutation-Id\": \"cover-header-id\"");
+    expect(curlFor(
+      "/api/v1/recipes/recipe_1/image",
+      uploadImageWithoutFileFields,
+      "bearer",
+      uploadImageWithoutFileFields.requestBody!.example,
+    )).toContain("--form 'metadata={\"source\":\"phone\"}'");
     expect(curlFor("/oauth/authorize?client_id=cm_1", authorize, "anonymous", "")).toContain(
       "open 'https://spoonjoy.app/oauth/authorize?client_id=cm_1'",
     );
