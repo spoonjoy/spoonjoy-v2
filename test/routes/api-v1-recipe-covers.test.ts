@@ -226,12 +226,16 @@ function expectCoverMutationData(
   }
   if (data.activeCover) expectCoverShape(data.activeCover);
   if (data.previousActiveCover) expectCoverShape(data.previousActiveCover);
-  expect(Array.isArray(data.warnings)).toBe(true);
-  expect(Array.isArray(data.nextActions)).toBe(true);
-  expect(Array.isArray(data.blockers)).toBe(true);
-  if (options.blockers) expect(data.blockers).not.toEqual([]);
-  expectMutationShape(data.mutation, clientMutationId, replayed);
-}
+    expect(Array.isArray(data.warnings)).toBe(true);
+    expect(Array.isArray(data.nextActions)).toBe(true);
+    expect(Array.isArray(data.blockers)).toBe(true);
+    if (options.blockers) {
+      expect(data.blockers).not.toEqual([]);
+    } else {
+      expect(data.blockers).toEqual([]);
+    }
+    expectMutationShape(data.mutation, clientMutationId, replayed);
+  }
 
 function expectActiveCoverMutationData(data: Record<string, any>, clientMutationId: string, replayed: boolean) {
   expectExactKeys(data, [
@@ -1335,16 +1339,24 @@ describe("API v1 recipe image and cover lifecycle endpoints", () => {
         cookedAt: new Date("2026-01-10T00:00:00.000Z"),
       },
     });
-    const noPhotoSpoon = await db.recipeSpoon.create({
-      data: {
-        recipeId: recipe.id,
-        chefId: chef.id,
-        note: "No photo here",
-      },
-    });
-    const otherRecipe = await db.recipe.create({
-      data: {
-        ...createTestRecipe(chef.id),
+      const noPhotoSpoon = await db.recipeSpoon.create({
+        data: {
+          recipeId: recipe.id,
+          chefId: chef.id,
+          note: "No photo here",
+        },
+      });
+      const deletedSpoon = await db.recipeSpoon.create({
+        data: {
+          recipeId: recipe.id,
+          chefId: otherChef.id,
+          photoUrl: "/photos/spoons/other/deleted.jpg",
+          deletedAt: new Date("2026-01-11T00:00:00.000Z"),
+        },
+      });
+      const otherRecipe = await db.recipe.create({
+        data: {
+          ...createTestRecipe(chef.id),
         title: `Other Spoon Recipe ${faker.string.alphanumeric(8)}`,
         chefId: chef.id,
       },
@@ -1418,19 +1430,21 @@ describe("API v1 recipe image and cover lifecycle endpoints", () => {
     expectErrorEnvelope(await readJson(conflict), "req_cover_from_spoon_conflict", "idempotency_conflict", 409);
     await expect(db.recipeCover.count({ where: { recipeId: recipe.id } })).resolves.toBe(1);
 
-    for (const [requestId, spoonId] of [
-      ["req_cover_from_missing_spoon", "missing-spoon"],
-      ["req_cover_from_no_photo_spoon", noPhotoSpoon.id],
-      ["req_cover_from_other_recipe_spoon", otherRecipeSpoon.id],
-    ] as const) {
-      const invalid = await action(routeArgs(
+      for (const [requestId, spoonId] of [
+        ["req_cover_from_missing_spoon", "missing-spoon"],
+        ["req_cover_from_no_photo_spoon", noPhotoSpoon.id],
+        ["req_cover_from_deleted_spoon", deletedSpoon.id],
+        ["req_cover_from_other_recipe_spoon", otherRecipeSpoon.id],
+      ] as const) {
+        const invalid = await action(routeArgs(
         jsonMutationRequest("POST", `recipes/${recipe.id}/covers/from-spoon/${spoonId}`, writer.token, requestId, {
           clientMutationId: `${requestId}-mutation`,
         }),
         `recipes/${recipe.id}/covers/from-spoon/${spoonId}`,
       ));
-      expect(invalid.status).toBe(404);
-      expectErrorEnvelope(await readJson(invalid), requestId, "not_found", 404);
-    }
+        expect(invalid.status).toBe(404);
+        expectErrorEnvelope(await readJson(invalid), requestId, "not_found", 404);
+      }
+      await expect(db.recipeCover.count({ where: { recipeId: recipe.id } })).resolves.toBe(1);
+    });
   });
-});
