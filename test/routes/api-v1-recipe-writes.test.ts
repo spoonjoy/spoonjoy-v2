@@ -262,7 +262,7 @@ describe("API v1 recipe write mutations", () => {
           stepTitle: " Mix ",
           description: " Mix dry ingredients ",
           duration: 5,
-          ingredients: [{ quantity: 2, unit: " Cup ", ingredientName: " Flour " }],
+          ingredients: [{ quantity: 2, unit: " Cup ", name: " Flour " }],
         },
         {
           stepTitle: null,
@@ -411,9 +411,9 @@ describe("API v1 recipe write mutations", () => {
       }),
       `recipes/${recipe.id}`,
     ));
-    expect(crossOwner.status).toBe(404);
+    expect(crossOwner.status).toBe(403);
     expectPrivateEnvelopeHeaders(crossOwner, "req_recipe_patch_cross_owner");
-    expectErrorEnvelope(await readJson(crossOwner), "req_recipe_patch_cross_owner", "not_found", 404);
+    expectErrorEnvelope(await readJson(crossOwner), "req_recipe_patch_cross_owner", "insufficient_scope", 403);
 
     const missing = await action(routeArgs(
       mutationRequest("PATCH", "recipes/missing-recipe", fixture.writer.token, "req_recipe_patch_missing", {
@@ -427,10 +427,21 @@ describe("API v1 recipe write mutations", () => {
     expectErrorEnvelope(await readJson(missing), "req_recipe_patch_missing", "not_found", 404);
   });
 
-  it("soft deletes owned recipes with tombstone response and idempotent replay", async () => {
+  it("soft deletes owned recipes with tombstone response, owner checks, and idempotent replay", async () => {
     const fixture = await createRecipeWriteFixture(db);
     const recipe = await createRecipeGraph(db, fixture.chef.id, { title: "Delete Through API" });
+    const otherRecipe = await createRecipeGraph(db, fixture.chef.id, { title: "Delete Cross Owner" });
     const body = { clientMutationId: "recipe-delete-owned" };
+
+    const crossOwner = await action(routeArgs(
+      mutationRequest("DELETE", `recipes/${otherRecipe.id}`, fixture.otherWriter.token, "req_recipe_delete_cross_owner", {
+        clientMutationId: "recipe-delete-cross-owner",
+      }),
+      `recipes/${otherRecipe.id}`,
+    ));
+    expect(crossOwner.status).toBe(403);
+    expectPrivateEnvelopeHeaders(crossOwner, "req_recipe_delete_cross_owner");
+    expectErrorEnvelope(await readJson(crossOwner), "req_recipe_delete_cross_owner", "insufficient_scope", 403);
 
     const first = await action(routeArgs(
       mutationRequest("DELETE", `recipes/${recipe.id}`, fixture.writer.token, "req_recipe_delete", body),
