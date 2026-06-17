@@ -490,8 +490,8 @@ describe("API v1 recipe step helper contracts", () => {
     const stepOp = { op: "create-step" };
     const outputOp = { op: "create-output-use" };
     const ingredientOp = { op: "create-ingredient" };
-    const unitUpsert = vi.fn().mockResolvedValue({ id: "unit_1" });
-    const ingredientRefUpsert = vi.fn().mockResolvedValue({ id: "ingredient_ref_1" });
+    const unitUpsert = vi.fn();
+    const ingredientRefUpsert = vi.fn();
     const transaction = vi.fn().mockResolvedValue([stepOp, outputOp, ingredientOp]);
     const dbMock = {
       recipe: {
@@ -527,8 +527,8 @@ describe("API v1 recipe step helper contracts", () => {
       outputStepNums: [1],
     }, { stepId: "step_2" }));
     expect(result.data.stepId).toBe("step_2");
-    expect(unitUpsert.mock.invocationCallOrder[0]).toBeLessThan(transaction.mock.invocationCallOrder[0]);
-    expect(ingredientRefUpsert.mock.invocationCallOrder[0]).toBeLessThan(transaction.mock.invocationCallOrder[0]);
+    expect(unitUpsert).not.toHaveBeenCalled();
+    expect(ingredientRefUpsert).not.toHaveBeenCalled();
     expect(dbMock.recipeStep.create).toHaveBeenCalledWith({
       data: {
         id: "step_2",
@@ -544,14 +544,89 @@ describe("API v1 recipe step helper contracts", () => {
     });
     expect(dbMock.ingredient.create).toHaveBeenCalledWith({
       data: {
-        recipeId: "recipe_1",
-        stepNum: 2,
+        id: expect.any(String),
         quantity: 2,
-        unitId: "unit_1",
-        ingredientRefId: "ingredient_ref_1",
+        recipeStep: {
+          connect: { recipeId_stepNum: { recipeId: "recipe_1", stepNum: 2 } },
+        },
+        unit: {
+          connectOrCreate: {
+            where: { name: "cup" },
+            create: { name: "cup" },
+          },
+        },
+        ingredientRef: {
+          connectOrCreate: {
+            where: { name: "flour" },
+            create: { name: "flour" },
+          },
+        },
       },
     });
     expect(transaction).toHaveBeenCalledWith([stepOp, outputOp, ingredientOp]);
+  });
+
+  it("batches step ingredient creation with reference connect-or-create in one transaction", async () => {
+    const ingredientOp = { op: "create-ingredient" };
+    const transaction = vi.fn().mockResolvedValue([ingredientOp]);
+    const dbMock = {
+      recipe: {
+        findUnique: vi.fn().mockResolvedValue({ id: "recipe_1", chefId: "chef_1", deletedAt: null }),
+      },
+      recipeStep: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "step_2",
+          recipeId: "recipe_1",
+          stepNum: 2,
+          stepTitle: "Second",
+          description: "Second.",
+          duration: null,
+        }),
+      },
+      ingredientRef: {
+        findMany: vi.fn().mockResolvedValue([]),
+        upsert: vi.fn(),
+      },
+      unit: {
+        upsert: vi.fn(),
+      },
+      ingredient: {
+        create: vi.fn().mockReturnValue(ingredientOp),
+      },
+      $transaction: transaction,
+    } as unknown as LocalDb;
+
+    const result = expectOk(await createNativeRecipeStepIngredient(dbMock, "chef_1", "recipe_1", "step_2", {
+      clientMutationId: "ingredient-transaction",
+      quantity: 3,
+      unit: "Tbsp",
+      ingredientName: "Fresh Thyme",
+    }, { ingredientId: "ingredient_1" }));
+    expect(result.data.ingredientId).toBe("ingredient_1");
+    expect(dbMock.unit.upsert).not.toHaveBeenCalled();
+    expect(dbMock.ingredientRef.upsert).not.toHaveBeenCalled();
+    expect(dbMock.ingredient.create).toHaveBeenCalledWith({
+      data: {
+        id: "ingredient_1",
+        quantity: 3,
+        recipeStep: {
+          connect: { recipeId_stepNum: { recipeId: "recipe_1", stepNum: 2 } },
+        },
+        unit: {
+          connectOrCreate: {
+            where: { name: "tbsp" },
+            create: { name: "tbsp" },
+          },
+        },
+        ingredientRef: {
+          connectOrCreate: {
+            where: { name: "fresh thyme" },
+            create: { name: "fresh thyme" },
+          },
+        },
+      },
+    });
+    expect(transaction).toHaveBeenCalledWith([ingredientOp]);
   });
 
   it("batches patch field and output-use replacement writes without a restore pass", async () => {

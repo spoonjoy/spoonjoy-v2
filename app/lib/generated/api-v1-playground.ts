@@ -2598,10 +2598,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "name": "X-Client-Mutation-Id",
           "in": "header",
           "label": "X Client Mutation Id",
-          "required": true,
+          "required": false,
           "defaultValue": "",
           "placeholder": "delete:item_1:uuid-or-hash",
-          "description": "Chef-wide idempotency key for this delete. Use the same value when retrying the exact same request after a timeout.",
+          "description": "Chef-wide idempotency key fallback for clients that cannot send a JSON body with DELETE. Prefer the JSON body when available; otherwise use this header or clientMutationId query.",
           "schema": {
             "type": "string"
           }
@@ -2632,7 +2632,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         }
       ],
       "requestBody": {
-        "required": true,
+        "required": false,
         "contentType": "application/json",
         "example": "{\n  \"clientMutationId\": \"step-device-uuid-3\"\n}",
         "examples": [
@@ -3234,10 +3234,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "name": "X-Client-Mutation-Id",
           "in": "header",
           "label": "X Client Mutation Id",
-          "required": true,
+          "required": false,
           "defaultValue": "",
           "placeholder": "delete:item_1:uuid-or-hash",
-          "description": "Chef-wide idempotency key for this delete. Use the same value when retrying the exact same request after a timeout.",
+          "description": "Chef-wide idempotency key fallback for clients that cannot send a JSON body with DELETE. Prefer the JSON body when available; otherwise use this header or clientMutationId query.",
           "schema": {
             "type": "string"
           }
@@ -3268,7 +3268,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         }
       ],
       "requestBody": {
-        "required": true,
+        "required": false,
         "contentType": "application/json",
         "example": "{\n  \"clientMutationId\": \"step-ingredient-device-uuid-2\"\n}",
         "examples": [

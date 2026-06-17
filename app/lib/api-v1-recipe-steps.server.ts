@@ -462,24 +462,6 @@ function normalizeName(value: string) {
   return value.trim().toLowerCase();
 }
 
-async function getOrCreateUnit(db: Database, name: string) {
-  const normalized = normalizeName(name);
-  return await db.unit.upsert({
-    where: { name: normalized },
-    update: {},
-    create: { name: normalized },
-  });
-}
-
-async function getOrCreateIngredientRef(db: Database, name: string) {
-  const normalized = normalizeName(name);
-  return await db.ingredientRef.upsert({
-    where: { name: normalized },
-    update: {},
-    create: { name: normalized },
-  });
-}
-
 async function outputStepNumsFor(db: Database, recipeId: string, inputStepNum: number) {
   const rows = await db.stepOutputUse.findMany({
     where: { recipeId, inputStepNum },
@@ -520,6 +502,47 @@ function replaceStepOutputUseOps(
     }),
     ...createStepOutputUseOps(db, recipeId, inputStepNum, outputStepNums),
   ];
+}
+
+function ingredientCreateData(
+  recipeId: string,
+  stepNum: number,
+  ingredient: NativeRecipeStepIngredientInput,
+  ingredientId: string = crypto.randomUUID(),
+): Prisma.IngredientCreateInput {
+  const unitName = normalizeName(ingredient.unit);
+  const ingredientName = normalizeName(ingredient.ingredientName);
+  return {
+    id: ingredientId,
+    quantity: ingredient.quantity,
+    recipeStep: {
+      connect: { recipeId_stepNum: { recipeId, stepNum } },
+    },
+    unit: {
+      connectOrCreate: {
+        where: { name: unitName },
+        create: { name: unitName },
+      },
+    },
+    ingredientRef: {
+      connectOrCreate: {
+        where: { name: ingredientName },
+        create: { name: ingredientName },
+      },
+    },
+  };
+}
+
+function createIngredientOp(
+  db: Database,
+  recipeId: string,
+  stepNum: number,
+  ingredient: NativeRecipeStepIngredientInput,
+  ingredientId?: string,
+): Prisma.PrismaPromise<unknown> {
+  return db.ingredient.create({
+    data: ingredientCreateData(recipeId, stepNum, ingredient, ingredientId),
+  });
 }
 
 function createDeleteTombstoneOp(
@@ -689,17 +712,6 @@ export async function createNativeRecipeStep(
   if (invalidRefs) return invalidRefs;
 
   const stepId = options.stepId ?? crypto.randomUUID();
-  const resolvedIngredients: Array<{ quantity: number; unitId: string; ingredientRefId: string }> = [];
-  for (const ingredient of input.ingredients) {
-    const unit = await getOrCreateUnit(db, ingredient.unit);
-    const ingredientRef = await getOrCreateIngredientRef(db, ingredient.ingredientName);
-    resolvedIngredients.push({
-      quantity: ingredient.quantity,
-      unitId: unit.id,
-      ingredientRefId: ingredientRef.id,
-    });
-  }
-
   const ops: Prisma.PrismaPromise<unknown>[] = [
     db.recipeStep.create({
       data: {
@@ -712,15 +724,7 @@ export async function createNativeRecipeStep(
       },
     }),
     ...createStepOutputUseOps(db, recipeId, stepNum, input.outputStepNums),
-    ...resolvedIngredients.map((ingredient) => db.ingredient.create({
-      data: {
-        recipeId,
-        stepNum,
-        quantity: ingredient.quantity,
-        unitId: ingredient.unitId,
-        ingredientRefId: ingredient.ingredientRefId,
-      },
-    })),
+    ...input.ingredients.map((ingredient) => createIngredientOp(db, recipeId, stepNum, ingredient)),
   ];
 
   await db.$transaction(ops);
@@ -853,20 +857,10 @@ export async function createNativeRecipeStepIngredient(
   );
   if (ingredientConflict) return ingredientConflict;
 
-  const unit = await getOrCreateUnit(db, input.unit);
-  const ingredientRef = await getOrCreateIngredientRef(db, input.ingredientName);
-  const ingredient = await db.ingredient.create({
-    data: {
-      id: options.ingredientId ?? crypto.randomUUID(),
-      recipeId,
-      stepNum: step.data.stepNum,
-      quantity: input.quantity,
-      unitId: unit.id,
-      ingredientRefId: ingredientRef.id,
-    },
-  });
+  const ingredientId = options.ingredientId ?? crypto.randomUUID();
+  await db.$transaction([createIngredientOp(db, recipeId, step.data.stepNum, input, ingredientId)]);
 
-  return success({ recipeId, stepId, ingredientId: ingredient.id }, 201);
+  return success({ recipeId, stepId, ingredientId }, 201);
 }
 
 export async function deleteNativeRecipeStepIngredient(

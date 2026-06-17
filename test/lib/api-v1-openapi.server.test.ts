@@ -455,9 +455,11 @@ describe("API v1 OpenAPI document", () => {
       .toBe("#/components/schemas/UpdateRecipeStepEnvelope");
     expect(operation(document, "/api/v1/recipes/{id}/steps/{stepId}", "DELETE").requestBody.content["application/json"].schema.$ref)
       .toBe("#/components/schemas/DeleteRecipeStepRequest");
+    expect(operation(document, "/api/v1/recipes/{id}/steps/{stepId}", "DELETE").requestBody.required)
+      .toBe(false);
     expect(operation(document, "/api/v1/recipes/{id}/steps/{stepId}", "DELETE").parameters)
       .toEqual(expect.arrayContaining([
-        expect.objectContaining({ name: "X-Client-Mutation-Id", in: "header", required: true }),
+        expect.objectContaining({ name: "X-Client-Mutation-Id", in: "header", required: false }),
         expect.objectContaining({ name: "clientMutationId", in: "query", required: false }),
       ]));
     expect(operation(document, "/api/v1/recipes/{id}/steps/{stepId}", "DELETE").responses["200"].content["application/json"].schema.$ref)
@@ -468,9 +470,11 @@ describe("API v1 OpenAPI document", () => {
       .toBe("#/components/schemas/CreateRecipeStepIngredientRequest");
     expect(operation(document, "/api/v1/recipes/{id}/steps/{stepId}/ingredients/{ingredientId}", "DELETE").requestBody.content["application/json"].schema.$ref)
       .toBe("#/components/schemas/DeleteRecipeStepIngredientRequest");
+    expect(operation(document, "/api/v1/recipes/{id}/steps/{stepId}/ingredients/{ingredientId}", "DELETE").requestBody.required)
+      .toBe(false);
     expect(operation(document, "/api/v1/recipes/{id}/steps/{stepId}/ingredients/{ingredientId}", "DELETE").parameters)
       .toEqual(expect.arrayContaining([
-        expect.objectContaining({ name: "X-Client-Mutation-Id", in: "header", required: true }),
+        expect.objectContaining({ name: "X-Client-Mutation-Id", in: "header", required: false }),
         expect.objectContaining({ name: "clientMutationId", in: "query", required: false }),
       ]));
     expect(operation(document, "/api/v1/recipes/{id}/step-output-uses", "PUT").requestBody.content["application/json"].schema.$ref)

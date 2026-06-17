@@ -24,6 +24,7 @@ interface OperationConfig {
   errorScopes?: string[];
   parameters?: unknown[];
   requestBody?: string;
+  requestBodyRequired?: boolean;
 }
 
 interface BuildOpenApiOptions {
@@ -1055,6 +1056,12 @@ const pathParameters = {
   },
 };
 
+const stepDeleteClientMutationIdHeader = {
+  ...pathParameters.clientMutationIdHeader,
+  required: false,
+  description: "Chef-wide idempotency key fallback for clients that cannot send a JSON body with DELETE. Prefer the JSON body when available; otherwise use this header or clientMutationId query.",
+};
+
 const queryParameters = {
   query: { name: "query", in: "query", required: false, description: "Search text. When both query and q are sent, query wins.", schema: { type: "string" } },
   q: { name: "q", in: "query", required: false, description: "Search-text alias for clients that conventionally use q. Ignored when query is also present.", schema: { type: "string" } },
@@ -1105,7 +1112,7 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
   },
   "/api/v1/recipes/{id}/steps/{stepId}": {
     PATCH: { operationId: "patchApiV1RecipeStep", tags: ["Recipe Steps"], summary: "Update a recipe step", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "UpdateRecipeStepEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.stepId], requestBody: "UpdateRecipeStepRequest" },
-    DELETE: { operationId: "deleteApiV1RecipeStep", tags: ["Recipe Steps"], summary: "Delete a recipe step", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "DeleteRecipeStepEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.stepId, pathParameters.clientMutationIdHeader, pathParameters.clientMutationIdQuery], requestBody: "DeleteRecipeStepRequest" },
+    DELETE: { operationId: "deleteApiV1RecipeStep", tags: ["Recipe Steps"], summary: "Delete a recipe step", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "DeleteRecipeStepEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.stepId, stepDeleteClientMutationIdHeader, pathParameters.clientMutationIdQuery], requestBody: "DeleteRecipeStepRequest", requestBodyRequired: false },
   },
   "/api/v1/recipes/{id}/steps/reorder": {
     POST: { operationId: "postApiV1RecipeStepsReorder", tags: ["Recipe Steps"], summary: "Reorder recipe steps", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "ReorderRecipeStepEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.id], requestBody: "ReorderRecipeStepRequest" },
@@ -1114,7 +1121,7 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
     POST: { operationId: "postApiV1RecipeStepIngredients", tags: ["Recipe Steps"], summary: "Add a step ingredient", auth: "bearer", scopes: ["kitchen:write"], success: { 201: "CreateRecipeStepIngredientEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.stepId], requestBody: "CreateRecipeStepIngredientRequest" },
   },
   "/api/v1/recipes/{id}/steps/{stepId}/ingredients/{ingredientId}": {
-    DELETE: { operationId: "deleteApiV1RecipeStepIngredient", tags: ["Recipe Steps"], summary: "Delete a step ingredient", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "DeleteRecipeStepIngredientEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.stepId, pathParameters.ingredientId, pathParameters.clientMutationIdHeader, pathParameters.clientMutationIdQuery], requestBody: "DeleteRecipeStepIngredientRequest" },
+    DELETE: { operationId: "deleteApiV1RecipeStepIngredient", tags: ["Recipe Steps"], summary: "Delete a step ingredient", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "DeleteRecipeStepIngredientEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.stepId, pathParameters.ingredientId, stepDeleteClientMutationIdHeader, pathParameters.clientMutationIdQuery], requestBody: "DeleteRecipeStepIngredientRequest", requestBodyRequired: false },
   },
   "/api/v1/recipes/{id}/step-output-uses": {
     PUT: { operationId: "putApiV1RecipeStepOutputUses", tags: ["Recipe Steps"], summary: "Replace step-output dependency uses", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "ReplaceRecipeStepOutputUsesEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.id], requestBody: "ReplaceRecipeStepOutputUsesRequest" },
@@ -2649,7 +2656,7 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
         ...(meta.requestBody
           ? {
               requestBody: {
-                required: true,
+                required: meta.requestBodyRequired ?? true,
                 content: requestContentFor(meta.requestBody),
               },
             }
