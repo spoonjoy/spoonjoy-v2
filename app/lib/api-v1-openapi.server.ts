@@ -576,9 +576,11 @@ const schemas = {
     device: ref("NativeApnsDevice"),
   }),
   NativeApnsDeviceEnvelope: successEnvelope(ref("NativeApnsDeviceData")),
-  NativeApnsDeviceRevokeData: objectSchema(["revoked", "device"], {
+  NativeApnsDeviceRevokeData: objectSchema(["revoked", "revokedCount", "device", "devices"], {
     revoked: { type: "boolean" },
+    revokedCount: { type: "integer", minimum: 0 },
     device: ref("NativeApnsDevice"),
+    devices: arrayOf(ref("NativeApnsDevice")),
   }),
   NativeApnsDeviceRevokeEnvelope: successEnvelope(ref("NativeApnsDeviceRevokeData")),
   NativeOAuthConnectionsData: objectSchema(["connections"], {
@@ -893,7 +895,7 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
     POST: { operationId: "postApiV1MeApnsDevices", tags: ["Account"], summary: "Register a native APNs device", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "NativeApnsDeviceEnvelope", 201: "NativeApnsDeviceEnvelope" }, errors: bearerMutationErrors, requestBody: "NativeApnsDeviceRequest" },
   },
   "/api/v1/me/apns-devices/{deviceId}": {
-    DELETE: { operationId: "deleteApiV1MeApnsDevice", tags: ["Account"], summary: "Revoke a native APNs device", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "NativeApnsDeviceRevokeEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.deviceId] },
+    DELETE: { operationId: "deleteApiV1MeApnsDevice", tags: ["Account"], summary: "Revoke native APNs registrations for a device", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "NativeApnsDeviceRevokeEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.deviceId] },
   },
   "/api/v1/me/connections": {
     GET: { operationId: "getApiV1MeConnections", tags: ["Account"], summary: "List connected OAuth apps", auth: "bearer", scopes: ["kitchen:read"], success: { 200: "NativeOAuthConnectionsEnvelope" }, errors: bearerReadErrors },
@@ -1183,7 +1185,12 @@ const responseExamples: Record<string, unknown> = {
   NativeApnsDeviceRevokeEnvelope: {
     ok: true,
     requestId: "req_example",
-    data: { revoked: true, device: { ...exampleNativeApnsDevice, revokedAt: exampleTimestamp } },
+    data: {
+      revoked: true,
+      revokedCount: 1,
+      device: { ...exampleNativeApnsDevice, revokedAt: exampleTimestamp },
+      devices: [{ ...exampleNativeApnsDevice, revokedAt: exampleTimestamp }],
+    },
   },
   NativeOAuthConnectionsEnvelope: {
     ok: true,

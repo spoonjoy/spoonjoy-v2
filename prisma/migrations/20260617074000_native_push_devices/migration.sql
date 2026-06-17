@@ -16,7 +16,7 @@ CREATE TABLE "NativePushDevice" (
   CONSTRAINT "NativePushDevice_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
-CREATE UNIQUE INDEX "NativePushDevice_userId_deviceId_key" ON "NativePushDevice"("userId", "deviceId");
+CREATE UNIQUE INDEX "NativePushDevice_userId_deviceId_platform_environment_key" ON "NativePushDevice"("userId", "deviceId", "platform", "environment");
 CREATE INDEX "NativePushDevice_userId_idx" ON "NativePushDevice"("userId");
 CREATE INDEX "NativePushDevice_tokenHash_idx" ON "NativePushDevice"("tokenHash");
 CREATE INDEX "NativePushDevice_userId_platform_environment_idx" ON "NativePushDevice"("userId", "platform", "environment");

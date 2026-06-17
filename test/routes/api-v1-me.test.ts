@@ -420,6 +420,55 @@ describe("API v1 native account and bootstrap endpoints", () => {
       },
     });
 
+    const oauthOnly = await db.user.create({
+      data: {
+        ...createTestUser(),
+        hashedPassword: null,
+        salt: null,
+      },
+    });
+    await db.oAuth.create({
+      data: {
+        provider: "apple",
+        providerUserId: `apple-${faker.string.alphanumeric(10)}`,
+        providerUsername: "applechef",
+        userId: oauthOnly.id,
+      },
+    });
+    const oauthOnlyReader = await createApiCredential(db, oauthOnly.id, "Native OAuth-only no-passkey reader", {
+      scopes: ["kitchen:read"],
+    });
+
+    const oauthOnlyResponse = await loader(routeArgs(getRequest(
+      "me",
+      oauthOnlyReader.token,
+      "req_me_oauth_only_no_passkey_bootstrap",
+    ), "me"));
+    const oauthOnlyPayload = await readJson(oauthOnlyResponse);
+
+    expect(oauthOnlyResponse.status).toBe(200);
+    expectPrivateEnvelopeHeaders(oauthOnlyResponse, "req_me_oauth_only_no_passkey_bootstrap");
+    expectSuccessEnvelope(oauthOnlyPayload, "req_me_oauth_only_no_passkey_bootstrap");
+    expect(oauthOnlyPayload.data.me).toMatchObject({
+      id: oauthOnly.id,
+      hasPassword: false,
+      oauthAccounts: [
+        {
+          provider: "apple",
+          providerUsername: "applechef",
+        },
+      ],
+      passkeys: [],
+      handoffs: {
+        password: {
+          actions: ["setPassword"],
+        },
+        passkeys: {
+          actions: ["addPasskey"],
+        },
+      },
+    });
+
     const passkeyOnly = await db.user.create({
       data: {
         ...createTestUser(),
@@ -1003,6 +1052,56 @@ describe("API v1 native account and bootstrap endpoints", () => {
     expect(updatedRows[0].tokenHash).not.toBe(newToken);
     expect(await db.pushSubscription.count({ where: { userId: user.id } })).toBe(0);
 
+    const productionToken = `apns-token-${faker.string.alphanumeric(32)}`;
+    const productionCreate = await action(routeArgs(jsonRequest("me/apns-devices", "POST", writer.token, "req_me_apns_production_create", {
+      deviceId: "ios-simulator-1",
+      platform: "ios",
+      environment: "production",
+      token: productionToken,
+      deviceName: "iPhone 17 Pro",
+      appVersion: "1.0.1",
+    }), "me/apns-devices"));
+    const productionCreatePayload = await readJson(productionCreate);
+
+    expect(productionCreate.status).toBe(201);
+    expectPrivateEnvelopeHeaders(productionCreate, "req_me_apns_production_create");
+    expectSuccessEnvelope(productionCreatePayload, "req_me_apns_production_create");
+    expect(productionCreatePayload.data).toMatchObject({
+      created: true,
+      device: {
+        deviceId: "ios-simulator-1",
+        platform: "ios",
+        environment: "production",
+        tokenPrefix: productionToken.slice(0, 12),
+        revokedAt: null,
+      },
+    });
+    expect(productionCreatePayload.data.device.id).not.toBe(createPayload.data.device.id);
+    const environmentRows = await db.$queryRawUnsafe<Array<{
+      id: string;
+      environment: string;
+      tokenPrefix: string;
+      revokedAt: string | null;
+    }>>(
+      'SELECT "id", "environment", "tokenPrefix", "revokedAt" FROM "NativePushDevice" WHERE "userId" = ? AND "deviceId" = ? ORDER BY "environment"',
+      user.id,
+      "ios-simulator-1",
+    );
+    expect(environmentRows).toEqual([
+      {
+        id: createPayload.data.device.id,
+        environment: "development",
+        tokenPrefix: newToken.slice(0, 12),
+        revokedAt: null,
+      },
+      {
+        id: productionCreatePayload.data.device.id,
+        environment: "production",
+        tokenPrefix: productionToken.slice(0, 12),
+        revokedAt: null,
+      },
+    ]);
+
     const revoke = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/me/apns-devices/ios-simulator-1", {
       method: "DELETE",
       headers: bearerHeaders(writer.token, "req_me_apns_revoke"),
@@ -1014,17 +1113,34 @@ describe("API v1 native account and bootstrap endpoints", () => {
     expectSuccessEnvelope(revokePayload, "req_me_apns_revoke");
     expect(revokePayload.data).toMatchObject({
       revoked: true,
+      revokedCount: 2,
       device: {
         deviceId: "ios-simulator-1",
         revokedAt: expect.any(String),
       },
+      devices: expect.arrayContaining([
+        expect.objectContaining({
+          id: createPayload.data.device.id,
+          environment: "development",
+          revokedAt: expect.any(String),
+        }),
+        expect.objectContaining({
+          id: productionCreatePayload.data.device.id,
+          environment: "production",
+          revokedAt: expect.any(String),
+        }),
+      ]),
     });
-    const revokedRows = await db.$queryRawUnsafe<Array<{ revokedAt: string | null }>>(
-      'SELECT "revokedAt" FROM "NativePushDevice" WHERE "userId" = ? AND "deviceId" = ?',
+    expect(revokePayload.data.devices).toHaveLength(2);
+    const revokedRows = await db.$queryRawUnsafe<Array<{ environment: string; revokedAt: string | null }>>(
+      'SELECT "environment", "revokedAt" FROM "NativePushDevice" WHERE "userId" = ? AND "deviceId" = ? ORDER BY "environment"',
       user.id,
       "ios-simulator-1",
     );
-    expect(revokedRows[0].revokedAt).toEqual(expect.any(String));
+    expect(revokedRows).toEqual([
+      { environment: "development", revokedAt: expect.any(String) },
+      { environment: "production", revokedAt: expect.any(String) },
+    ]);
 
     const revokeAgain = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/me/apns-devices/ios-simulator-1", {
       method: "DELETE",
@@ -1037,8 +1153,14 @@ describe("API v1 native account and bootstrap endpoints", () => {
     expectSuccessEnvelope(revokeAgainPayload, "req_me_apns_revoke_again");
     expect(revokeAgainPayload.data).toMatchObject({
       revoked: false,
+      revokedCount: 0,
       device: { deviceId: "ios-simulator-1", revokedAt: expect.any(String) },
+      devices: expect.arrayContaining([
+        expect.objectContaining({ environment: "development", revokedAt: expect.any(String) }),
+        expect.objectContaining({ environment: "production", revokedAt: expect.any(String) }),
+      ]),
     });
+    expect(revokeAgainPayload.data.devices).toHaveLength(2);
 
     const invalid = await action(routeArgs(jsonRequest("me/apns-devices", "POST", writer.token, "req_me_apns_invalid", {
       deviceId: "",

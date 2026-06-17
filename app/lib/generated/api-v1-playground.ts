@@ -9533,7 +9533,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
     {
       "id": "DELETE /api/v1/me/apns-devices/{deviceId}",
       "operationId": "deleteApiV1MeApnsDevice",
-      "label": "Revoke a native APNs device",
+      "label": "Revoke native APNs registrations for a device",
       "method": "DELETE",
       "path": "/api/v1/me/apns-devices/{deviceId}",
       "profiles": [
@@ -9654,7 +9654,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"revoked\": true,\n    \"device\": {\n      \"id\": \"npd_1\",\n      \"deviceId\": \"ios-simulator-1\",\n      \"platform\": \"ios\",\n      \"environment\": \"development\",\n      \"tokenPrefix\": \"apns-token-\",\n      \"deviceName\": \"iPhone\",\n      \"appVersion\": \"1.0.0\",\n      \"enabledAt\": \"2026-06-01T00:00:00.000Z\",\n      \"revokedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"lastRegisteredAt\": \"2026-06-01T00:00:00.000Z\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\"\n    }\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"revoked\": true,\n    \"revokedCount\": 1,\n    \"device\": {\n      \"id\": \"npd_1\",\n      \"deviceId\": \"ios-simulator-1\",\n      \"platform\": \"ios\",\n      \"environment\": \"development\",\n      \"tokenPrefix\": \"apns-token-\",\n      \"deviceName\": \"iPhone\",\n      \"appVersion\": \"1.0.0\",\n      \"enabledAt\": \"2026-06-01T00:00:00.000Z\",\n      \"revokedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"lastRegisteredAt\": \"2026-06-01T00:00:00.000Z\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"devices\": [\n      {\n        \"id\": \"npd_1\",\n        \"deviceId\": \"ios-simulator-1\",\n        \"platform\": \"ios\",\n        \"environment\": \"development\",\n        \"tokenPrefix\": \"apns-token-\",\n        \"deviceName\": \"iPhone\",\n        \"appVersion\": \"1.0.0\",\n        \"enabledAt\": \"2026-06-01T00:00:00.000Z\",\n        \"revokedAt\": \"2026-06-01T00:00:00.000Z\",\n        \"lastRegisteredAt\": \"2026-06-01T00:00:00.000Z\",\n        \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n        \"updatedAt\": \"2026-06-01T00:00:00.000Z\"\n      }\n    ]\n  }\n}"
         },
         {
           "status": "400",

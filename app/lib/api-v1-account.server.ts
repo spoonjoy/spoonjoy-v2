@@ -201,11 +201,15 @@ function accountHandoffs(input: {
   passkeyCount: number;
 }) {
   const canRemovePassword = input.oauthAccountCount > 0 || input.passkeyCount > 0;
-  const canRemovePasskey = input.hasPassword || input.oauthAccountCount > 0 || input.passkeyCount > 1;
+  const canRemovePasskey = input.passkeyCount > 0
+    && (input.hasPassword || input.oauthAccountCount > 0 || input.passkeyCount > 1);
   const passwordActions = input.hasPassword
     ? ["changePassword", ...(canRemovePassword ? ["removePassword"] : [])]
     : ["setPassword"];
-  const passkeyActions = ["addPasskey", "renamePasskey", ...(canRemovePasskey ? ["removePasskey"] : [])];
+  const existingPasskeyActions = input.passkeyCount > 0
+    ? ["renamePasskey", ...(canRemovePasskey ? ["removePasskey"] : [])]
+    : [];
+  const passkeyActions = ["addPasskey", ...existingPasskeyActions];
 
   return {
     accountSettings: { method: "GET", url: "/account/settings", onlineOnly: true },
@@ -545,8 +549,8 @@ export async function registerNativePushDevice(
 
   const tokenHash = await hashApnsToken(token);
   const now = new Date();
-  const existing = await db.nativePushDevice.findUnique({
-    where: { userId_deviceId: { userId, deviceId } },
+  const existing = await db.nativePushDevice.findFirst({
+    where: { userId, deviceId, platform, environment },
   });
   const device = existing
     ? await db.nativePushDevice.update({
@@ -582,22 +586,35 @@ export async function registerNativePushDevice(
 }
 
 export async function revokeNativePushDevice(db: Database, userId: string, deviceId: string) {
-  const existing = await db.nativePushDevice.findUnique({
-    where: { userId_deviceId: { userId, deviceId } },
+  const existingDevices = await db.nativePushDevice.findMany({
+    where: { userId, deviceId },
+    orderBy: [{ lastRegisteredAt: "desc" }, { createdAt: "desc" }],
   });
-  if (!existing) {
+  if (existingDevices.length === 0) {
     return failure("not_found", "Native push device not found");
   }
 
-  const revoked = existing.revokedAt === null;
-  const device = revoked
-    ? await db.nativePushDevice.update({
-        where: { id: existing.id },
-        data: { revokedAt: new Date().toISOString() },
-      })
-    : existing;
+  const activeDeviceIds = existingDevices
+    .filter((device) => device.revokedAt === null)
+    .map((device) => device.id);
+  if (activeDeviceIds.length > 0) {
+    await db.nativePushDevice.updateMany({
+      where: { id: { in: activeDeviceIds } },
+      data: { revokedAt: new Date().toISOString() },
+    });
+  }
 
-  return success({ revoked, device: devicePayload(device) });
+  const devices = await db.nativePushDevice.findMany({
+    where: { userId, deviceId },
+    orderBy: [{ lastRegisteredAt: "desc" }, { createdAt: "desc" }],
+  });
+
+  return success({
+    revoked: activeDeviceIds.length > 0,
+    revokedCount: activeDeviceIds.length,
+    device: devicePayload(devices[0]!),
+    devices: devices.map(devicePayload),
+  });
 }
 
 export async function listNativeOAuthConnections(db: Database, userId: string) {

@@ -486,6 +486,12 @@ describe("API v1 OpenAPI document", () => {
       .not.toEqual(expect.objectContaining({ token: expect.anything(), tokenHash: expect.anything() }));
     expect(operation(document, "/api/v1/me/apns-devices/{deviceId}", "DELETE").responses["200"].content["application/json"].schema.$ref)
       .toBe("#/components/schemas/NativeApnsDeviceRevokeEnvelope");
+    expect(responseExample(document, "/api/v1/me/apns-devices/{deviceId}", "DELETE", "200").data).toMatchObject({
+      revoked: true,
+      revokedCount: 1,
+      device: expect.objectContaining({ deviceId: "ios-simulator-1" }),
+      devices: [expect.objectContaining({ deviceId: "ios-simulator-1" })],
+    });
     expect(operation(document, "/api/v1/me/apns-devices/{deviceId}", "DELETE").parameters.map((parameter: { name: string }) => parameter.name))
       .toEqual(expect.arrayContaining(["deviceId", "X-Request-Id"]));
     expect(operation(document, "/api/v1/me/apns-devices/{deviceId}", "DELETE").parameters.map((parameter: { name: string }) => parameter.name))

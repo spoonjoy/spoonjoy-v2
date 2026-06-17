@@ -93,7 +93,7 @@ describe("migration 0019 — native push devices", () => {
   });
 
   it("creates uniqueness and lookup indexes used by native registration", () => {
-    expect(hasIndex(db, "NativePushDevice", ["userId", "deviceId"], true)).toBe(true);
+    expect(hasIndex(db, "NativePushDevice", ["userId", "deviceId", "platform", "environment"], true)).toBe(true);
     expect(hasIndex(db, "NativePushDevice", ["userId"], false)).toBe(true);
     expect(hasIndex(db, "NativePushDevice", ["tokenHash"], false)).toBe(true);
     expect(hasIndex(db, "NativePushDevice", ["userId", "platform", "environment"], false)).toBe(true);
