@@ -212,6 +212,35 @@ async function createRecipeStepFixture(db: LocalDb) {
   return { chef, otherChef, writer, reader, otherWriter, recipe, steps, ingredient };
 }
 
+async function createForeignRecipeGraph(db: LocalDb, chefId: string) {
+  const recipe = await db.recipe.create({
+    data: {
+      ...createTestRecipe(chefId),
+      title: `Foreign Step Recipe ${faker.string.alphanumeric(8)}`,
+    },
+  });
+  const step = await db.recipeStep.create({
+    data: {
+      recipeId: recipe.id,
+      stepNum: 1,
+      stepTitle: "Foreign prep",
+      description: "This step must not be reachable from another recipe route.",
+    },
+  });
+  const unit = await getOrCreateUnit(db, `oz-${faker.string.alphanumeric(6)}`.toLowerCase());
+  const ingredientRef = await getOrCreateIngredientRef(db, `foreign-garlic-${faker.string.alphanumeric(6)}`.toLowerCase());
+  const ingredient = await db.ingredient.create({
+    data: {
+      recipeId: recipe.id,
+      stepNum: step.stepNum,
+      quantity: 1,
+      unitId: unit.id,
+      ingredientRefId: ingredientRef.id,
+    },
+  });
+  return { recipe, step, ingredient };
+}
+
 describe("API v1 recipe step and dependency mutations", () => {
   let db: LocalDb;
 
@@ -284,6 +313,12 @@ describe("API v1 recipe step and dependency mutations", () => {
     ));
     const replayPayload = await readJson(replayedCreate);
     expect(replayedCreate.status).toBe(201);
+    expectSuccessEnvelope(replayPayload, "req_step_create_replay");
+    expect(replayPayload.data).toMatchObject({
+      created: true,
+      step: { id: createPayload.data.step.id, stepNum: 4 },
+      recipe: { id: fixture.recipe.id },
+    });
     expectMutationShape(replayPayload.data.mutation, "step-create", true);
     await expect(db.recipeStep.count({ where: { recipeId: fixture.recipe.id, stepTitle: "Finish sauce" } })).resolves.toBe(1);
 
@@ -314,6 +349,21 @@ describe("API v1 recipe step and dependency mutations", () => {
     });
     expectMutationShape(updatePayload.data.mutation, "step-update", false);
 
+    const replayedUpdate = await action(routeArgs(
+      mutationRequest("PATCH", `recipes/${fixture.recipe.id}/steps/${createdStepId}`, fixture.writer.token, "req_step_update_replay", patchBody),
+      `recipes/${fixture.recipe.id}/steps/${createdStepId}`,
+    ));
+    const replayUpdatePayload = await readJson(replayedUpdate);
+    expect(replayedUpdate.status).toBe(200);
+    expectSuccessEnvelope(replayUpdatePayload, "req_step_update_replay");
+    expect(replayUpdatePayload.data).toMatchObject({
+      updated: true,
+      step: { id: createdStepId, description: "Finish with herbs.", usingSteps: [{ outputStepNum: 1 }] },
+      recipe: { id: fixture.recipe.id },
+    });
+    expectMutationShape(replayUpdatePayload.data.mutation, "step-update", true);
+    await expect(db.stepOutputUse.count({ where: { recipeId: fixture.recipe.id, inputStepNum: 4 } })).resolves.toBe(1);
+
     const deleted = await action(routeArgs(
       mutationRequest("DELETE", `recipes/${fixture.recipe.id}/steps/${createdStepId}`, fixture.writer.token, "req_step_delete", {
         clientMutationId: "step-delete",
@@ -329,6 +379,23 @@ describe("API v1 recipe step and dependency mutations", () => {
       recipe: { id: fixture.recipe.id },
     });
     expectMutationShape(deletePayload.data.mutation, "step-delete", false);
+    await expect(db.recipeStep.findUnique({ where: { id: createdStepId } })).resolves.toBeNull();
+
+    const replayedDelete = await action(routeArgs(
+      mutationRequest("DELETE", `recipes/${fixture.recipe.id}/steps/${createdStepId}`, fixture.writer.token, "req_step_delete_replay", {
+        clientMutationId: "step-delete",
+      }),
+      `recipes/${fixture.recipe.id}/steps/${createdStepId}`,
+    ));
+    const replayDeletePayload = await readJson(replayedDelete);
+    expect(replayedDelete.status).toBe(200);
+    expectSuccessEnvelope(replayDeletePayload, "req_step_delete_replay");
+    expect(replayDeletePayload.data).toMatchObject({
+      deleted: true,
+      step: { id: createdStepId },
+      recipe: { id: fixture.recipe.id },
+    });
+    expectMutationShape(replayDeletePayload.data.mutation, "step-delete", true);
     await expect(db.recipeStep.findUnique({ where: { id: createdStepId } })).resolves.toBeNull();
   });
 
@@ -364,6 +431,28 @@ describe("API v1 recipe step and dependency mutations", () => {
     expectMutationShape(addPayload.data.mutation, "ingredient-add", false);
 
     const ingredientId = addPayload.data.ingredient.id as string;
+    const replayedAdd = await action(routeArgs(
+      mutationRequest(
+        "POST",
+        `recipes/${fixture.recipe.id}/steps/${fixture.steps[1].id}/ingredients`,
+        fixture.writer.token,
+        "req_step_ingredient_add_replay",
+        body,
+      ),
+      `recipes/${fixture.recipe.id}/steps/${fixture.steps[1].id}/ingredients`,
+    ));
+    const replayAddPayload = await readJson(replayedAdd);
+    expect(replayedAdd.status).toBe(201);
+    expectSuccessEnvelope(replayAddPayload, "req_step_ingredient_add_replay");
+    expect(replayAddPayload.data).toMatchObject({
+      created: true,
+      ingredient: { id: ingredientId, quantity: 3, unit: "cloves", name: "garlic" },
+      step: { id: fixture.steps[1].id },
+      recipe: { id: fixture.recipe.id },
+    });
+    expectMutationShape(replayAddPayload.data.mutation, "ingredient-add", true);
+    await expect(db.ingredient.count({ where: { recipeId: fixture.recipe.id, stepNum: 2 } })).resolves.toBe(1);
+
     const removed = await action(routeArgs(
       mutationRequest(
         "DELETE",
@@ -384,6 +473,28 @@ describe("API v1 recipe step and dependency mutations", () => {
       recipe: { id: fixture.recipe.id },
     });
     expectMutationShape(removePayload.data.mutation, "ingredient-delete", false);
+    await expect(db.ingredient.findUnique({ where: { id: ingredientId } })).resolves.toBeNull();
+
+    const replayedRemove = await action(routeArgs(
+      mutationRequest(
+        "DELETE",
+        `recipes/${fixture.recipe.id}/steps/${fixture.steps[1].id}/ingredients/${ingredientId}`,
+        fixture.writer.token,
+        "req_step_ingredient_delete_replay",
+        { clientMutationId: "ingredient-delete" },
+      ),
+      `recipes/${fixture.recipe.id}/steps/${fixture.steps[1].id}/ingredients/${ingredientId}`,
+    ));
+    const replayRemovePayload = await readJson(replayedRemove);
+    expect(replayedRemove.status).toBe(200);
+    expectSuccessEnvelope(replayRemovePayload, "req_step_ingredient_delete_replay");
+    expect(replayRemovePayload.data).toMatchObject({
+      deleted: true,
+      ingredient: { id: ingredientId },
+      step: { id: fixture.steps[1].id },
+      recipe: { id: fixture.recipe.id },
+    });
+    expectMutationShape(replayRemovePayload.data.mutation, "ingredient-delete", true);
     await expect(db.ingredient.findUnique({ where: { id: ingredientId } })).resolves.toBeNull();
   });
 
@@ -415,6 +526,20 @@ describe("API v1 recipe step and dependency mutations", () => {
       fixture.steps[1].id,
     ]);
 
+    const replayedReorder = await action(routeArgs(
+      mutationRequest("POST", `recipes/${fixture.recipe.id}/steps/reorder`, fixture.writer.token, "req_step_reorder_replay", reorderBody),
+      `recipes/${fixture.recipe.id}/steps/reorder`,
+    ));
+    const replayReorderPayload = await readJson(replayedReorder);
+    expect(replayedReorder.status).toBe(200);
+    expectSuccessEnvelope(replayReorderPayload, "req_step_reorder_replay");
+    expect(replayReorderPayload.data.recipe.steps.map((step: Record<string, unknown>) => step.id)).toEqual([
+      fixture.steps[0].id,
+      fixture.steps[2].id,
+      fixture.steps[1].id,
+    ]);
+    expectMutationShape(replayReorderPayload.data.mutation, "step-reorder", true);
+
     const stepTwoAfterReorder = reorderPayload.data.recipe.steps[1];
     const dependencyBody = {
       clientMutationId: "step-output-uses",
@@ -440,6 +565,24 @@ describe("API v1 recipe step and dependency mutations", () => {
     expectStepShape(replacePayload.data.step);
     expectRecipeGraphShape(replacePayload.data.recipe);
     expectMutationShape(replacePayload.data.mutation, "step-output-uses", false);
+
+    const replayedReplace = await action(routeArgs(
+      mutationRequest("PUT", `recipes/${fixture.recipe.id}/step-output-uses`, fixture.writer.token, "req_step_output_uses_replay", dependencyBody),
+      `recipes/${fixture.recipe.id}/step-output-uses`,
+    ));
+    const replayReplacePayload = await readJson(replayedReplace);
+    expect(replayedReplace.status).toBe(200);
+    expectSuccessEnvelope(replayReplacePayload, "req_step_output_uses_replay");
+    expect(replayReplacePayload.data).toMatchObject({
+      replaced: true,
+      step: {
+        id: stepTwoAfterReorder.id,
+        usingSteps: [{ inputStepNum: 2, outputStepNum: 1, outputOfStep: { stepNum: 1, stepTitle: "Prep" } }],
+      },
+      recipe: { id: fixture.recipe.id },
+    });
+    expectMutationShape(replayReplacePayload.data.mutation, "step-output-uses", true);
+    await expect(db.stepOutputUse.count({ where: { recipeId: fixture.recipe.id, inputStepNum: 2 } })).resolves.toBe(1);
 
     const publicDetail = await action(routeArgs(
       new UndiciRequest(`http://localhost/api/v1/recipes/${fixture.recipe.id}`, {
@@ -538,6 +681,59 @@ describe("API v1 recipe step and dependency mutations", () => {
         requestId === "req_step_missing_id" ? "not_found" : "validation_error",
         requestId === "req_step_missing_id" ? 404 : 400,
       );
+    }
+  });
+
+  it("rejects nested step and ingredient ids that do not belong to the routed recipe graph", async () => {
+    const fixture = await createRecipeStepFixture(db);
+    const foreign = await createForeignRecipeGraph(db, fixture.chef.id);
+
+    for (const [requestId, method, path, body] of [
+      ["req_step_ingredient_missing_step", "POST", `recipes/${fixture.recipe.id}/steps/missing/ingredients`, {
+        clientMutationId: "ingredient-missing-step",
+        quantity: 1,
+        unit: "cup",
+        name: "salt",
+      }],
+      ["req_step_ingredient_foreign_step", "POST", `recipes/${fixture.recipe.id}/steps/${foreign.step.id}/ingredients`, {
+        clientMutationId: "ingredient-foreign-step",
+        quantity: 1,
+        unit: "cup",
+        name: "salt",
+      }],
+      ["req_step_ingredient_delete_foreign_step", "DELETE", `recipes/${fixture.recipe.id}/steps/${foreign.step.id}/ingredients/${fixture.ingredient.id}`, {
+        clientMutationId: "ingredient-delete-foreign-step",
+      }],
+      ["req_step_ingredient_delete_foreign_ingredient", "DELETE", `recipes/${fixture.recipe.id}/steps/${fixture.steps[0].id}/ingredients/${foreign.ingredient.id}`, {
+        clientMutationId: "ingredient-delete-foreign-ingredient",
+      }],
+      ["req_step_reorder_missing_step", "POST", `recipes/${fixture.recipe.id}/steps/reorder`, {
+        clientMutationId: "reorder-missing-step",
+        stepId: "missing",
+        toStepNum: 2,
+      }],
+      ["req_step_reorder_foreign_step", "POST", `recipes/${fixture.recipe.id}/steps/reorder`, {
+        clientMutationId: "reorder-foreign-step",
+        stepId: foreign.step.id,
+        toStepNum: 2,
+      }],
+      ["req_step_output_uses_missing_input", "PUT", `recipes/${fixture.recipe.id}/step-output-uses`, {
+        clientMutationId: "output-uses-missing-input",
+        inputStepId: "missing",
+        outputStepNums: [1],
+      }],
+      ["req_step_output_uses_foreign_input", "PUT", `recipes/${fixture.recipe.id}/step-output-uses`, {
+        clientMutationId: "output-uses-foreign-input",
+        inputStepId: foreign.step.id,
+        outputStepNums: [1],
+      }],
+    ] as const) {
+      const response = await action(routeArgs(
+        mutationRequest(method, path, fixture.writer.token, requestId, body),
+        path,
+      ));
+      expect(response.status).toBe(404);
+      expectErrorEnvelope(await readJson(response), requestId, "not_found", 404);
     }
   });
 
