@@ -343,8 +343,8 @@ const scenarioQuickstarts = [
   {
     title: "Recipe blog embeds",
     mode: "REST-powered embeds only",
-    body: "Fetch public JSON and render your own HTML with textContent, not innerHTML. Spoonjoy pages are not iframe embeds. Recipe steps are returned in ascending stepNum order, step duration is minutes when present, and ingredients are step-attached in API order. Validate sourceUrl as http/https before linking, write your own image alt text, and avoid copying photos where removals cannot be honored.",
-    sample: "GET /api/v1/recipes/{id}\nIf 404 not_found, hide or replace the embed before rendering stale content.\nRender servings, step ingredients, ordered steps, and attribution.creditText as a link to attribution.canonicalUrl.\nIf attribution.sourceRecipe.deleted is true, credit it as unavailable instead of linking it.",
+    body: "Fetch public JSON and render your own HTML with textContent, not innerHTML. Spoonjoy pages are not iframe embeds. Recipe steps are returned in ascending stepNum order, step duration is minutes when present, ingredients are step-attached in API order, and usingSteps lists prior step outputs used by a step. Validate sourceUrl as http/https before linking, write your own image alt text, and avoid copying photos where removals cannot be honored.",
+    sample: "GET /api/v1/recipes/{id}\nIf 404 not_found, hide or replace the embed before rendering stale content.\nRender servings, step ingredients, ordered steps, step output dependencies, and attribution.creditText as a link to attribution.canonicalUrl.\nIf attribution.sourceRecipe.deleted is true, credit it as unavailable instead of linking it.",
   },
 ] as const;
 

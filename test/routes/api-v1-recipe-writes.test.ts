@@ -141,13 +141,14 @@ function expectRecipeDetailShape(recipe: Record<string, any>) {
   expect(Array.isArray(recipe.steps)).toBe(true);
   expect(Array.isArray(recipe.cookbooks)).toBe(true);
   for (const step of recipe.steps) {
-    expectExactKeys(step, ["description", "duration", "id", "ingredients", "stepNum", "stepTitle"]);
+    expectExactKeys(step, ["description", "duration", "id", "ingredients", "stepNum", "stepTitle", "usingSteps"]);
     expect(typeof step.id).toBe("string");
     expect(typeof step.stepNum).toBe("number");
     expect(step.stepTitle === null || typeof step.stepTitle === "string").toBe(true);
     expect(typeof step.description).toBe("string");
     expect(step.duration === null || typeof step.duration === "number").toBe(true);
     expect(Array.isArray(step.ingredients)).toBe(true);
+    expect(Array.isArray(step.usingSteps)).toBe(true);
     for (const ingredient of step.ingredients) {
       expectExactKeys(ingredient, ["id", "name", "quantity", "unit"]);
       expect(typeof ingredient.id).toBe("string");

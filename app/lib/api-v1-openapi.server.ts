@@ -338,13 +338,23 @@ const schemas = {
     quantity: { type: "number", description: "Author-provided numeric quantity. API v1 does not expose a separate free-form display line or conversion metadata." },
     unit: { ...nullableStringSchema, description: "Author-provided free-form display unit. Null when unset; not a canonical unit registry value." },
   }),
-  RecipeStep: objectSchema(["id", "stepNum", "stepTitle", "description", "duration", "ingredients"], {
+  RecipeStepOutputUse: objectSchema(["id", "inputStepNum", "outputStepNum", "outputOfStep"], {
+    id: idSchema,
+    inputStepNum: { type: "integer", description: "Step number that consumes output from another step." },
+    outputStepNum: { type: "integer", description: "Step number whose output is used by inputStepNum." },
+    outputOfStep: objectSchema(["stepNum", "stepTitle"], {
+      stepNum: { type: "integer" },
+      stepTitle: nullableStringSchema,
+    }),
+  }),
+  RecipeStep: objectSchema(["id", "stepNum", "stepTitle", "description", "duration", "ingredients", "usingSteps"], {
     id: idSchema,
     stepNum: { type: "integer", description: "Display order. Recipe detail responses return steps in ascending stepNum order." },
     stepTitle: { ...nullableStringSchema, description: "Optional author-provided step heading. Render as text, not HTML." },
     description: { type: "string", description: "Author-provided instruction text. Render as text, not HTML." },
     duration: { type: ["integer", "null"], description: "Minutes, when the author supplied a duration. Null means no duration was set." },
     ingredients: { ...arrayOf(ref("RecipeIngredient")), description: "Ingredients attached to this step, in API order. API v1 does not expose a separate ingredient display-text field." },
+    usingSteps: { ...arrayOf(ref("RecipeStepOutputUse")), description: "Prior recipe steps whose outputs this step uses, ordered by outputStepNum." },
   }),
   CookbookLink: objectSchema(["id", "title", "href", "canonicalUrl"], {
     id: idSchema,
@@ -816,10 +826,54 @@ const schemas = {
     clientMutationId: shortTextSchema,
     title: { type: ["string", "null"], minLength: 1, maxLength: 200 },
   }),
+  CreateRecipeStepRequest: objectSchema(["clientMutationId", "description"], {
+    clientMutationId: shortTextSchema,
+    stepNum: { type: "integer", minimum: 1, description: "Optional next step number assertion. Omit to append." },
+    stepTitle: { type: ["string", "null"], maxLength: 200 },
+    description: { type: "string", minLength: 1, maxLength: 5000 },
+    duration: { type: ["integer", "null"], minimum: 1 },
+    ingredients: arrayOf(ref("RecipeIngredientInput")),
+    outputStepNums: arrayOf({ type: "integer", minimum: 1 }),
+  }),
+  UpdateRecipeStepRequest: objectSchema(["clientMutationId"], {
+    clientMutationId: shortTextSchema,
+    stepTitle: { type: ["string", "null"], maxLength: 200 },
+    description: { type: "string", minLength: 1, maxLength: 5000 },
+    duration: { type: ["integer", "null"], minimum: 1 },
+    outputStepNums: arrayOf({ type: "integer", minimum: 1 }),
+  }),
+  DeleteRecipeStepRequest: objectSchema(["clientMutationId"], {
+    clientMutationId: shortTextSchema,
+  }),
+  CreateRecipeStepIngredientRequest: objectSchema(["clientMutationId", "quantity", "unit", "name"], {
+    clientMutationId: shortTextSchema,
+    quantity: { type: "number", minimum: 0.001, maximum: 99999 },
+    unit: { type: "string", minLength: 1, maxLength: 50 },
+    name: { type: "string", minLength: 1, maxLength: 100 },
+  }),
+  DeleteRecipeStepIngredientRequest: objectSchema(["clientMutationId"], {
+    clientMutationId: shortTextSchema,
+  }),
+  ReorderRecipeStepRequest: objectSchema(["clientMutationId", "stepId", "toStepNum"], {
+    clientMutationId: shortTextSchema,
+    stepId: idSchema,
+    toStepNum: { type: "integer", minimum: 1 },
+  }),
+  ReplaceRecipeStepOutputUsesRequest: objectSchema(["clientMutationId", "inputStepId", "outputStepNums"], {
+    clientMutationId: shortTextSchema,
+    inputStepId: idSchema,
+    outputStepNums: arrayOf({ type: "integer", minimum: 1 }),
+  }),
   DeletedRecipeTombstone: objectSchema(["id", "deletedAt", "updatedAt"], {
     id: idSchema,
     deletedAt: dateTimeSchema,
     updatedAt: dateTimeSchema,
+  }),
+  DeletedRecipeStepTombstone: objectSchema(["id"], {
+    id: idSchema,
+  }),
+  DeletedRecipeIngredientTombstone: objectSchema(["id"], {
+    id: idSchema,
   }),
   RecipeForkMetadata: objectSchema(["appliedTitle", "sourceChef", "sourceRecipeId", "titleWasSuffixed"], {
     appliedTitle: { type: "string" },
@@ -844,6 +898,50 @@ const schemas = {
   }),
   ForkRecipeData: objectSchema(["fork", "recipe", "mutation"], {
     fork: ref("RecipeForkMetadata"),
+    recipe: ref("RecipeDetail"),
+    mutation: ref("MutationMetadata"),
+  }),
+  CreateRecipeStepData: objectSchema(["created", "step", "recipe", "mutation"], {
+    created: { type: "boolean" },
+    step: ref("RecipeStep"),
+    recipe: ref("RecipeDetail"),
+    mutation: ref("MutationMetadata"),
+  }),
+  UpdateRecipeStepData: objectSchema(["updated", "step", "recipe", "mutation"], {
+    updated: { type: "boolean" },
+    step: ref("RecipeStep"),
+    recipe: ref("RecipeDetail"),
+    mutation: ref("MutationMetadata"),
+  }),
+  DeleteRecipeStepData: objectSchema(["deleted", "step", "recipe", "mutation"], {
+    deleted: { type: "boolean" },
+    step: ref("DeletedRecipeStepTombstone"),
+    recipe: ref("RecipeDetail"),
+    mutation: ref("MutationMetadata"),
+  }),
+  CreateRecipeStepIngredientData: objectSchema(["created", "ingredient", "step", "recipe", "mutation"], {
+    created: { type: "boolean" },
+    ingredient: ref("RecipeIngredient"),
+    step: ref("RecipeStep"),
+    recipe: ref("RecipeDetail"),
+    mutation: ref("MutationMetadata"),
+  }),
+  DeleteRecipeStepIngredientData: objectSchema(["deleted", "ingredient", "step", "recipe", "mutation"], {
+    deleted: { type: "boolean" },
+    ingredient: ref("DeletedRecipeIngredientTombstone"),
+    step: ref("RecipeStep"),
+    recipe: ref("RecipeDetail"),
+    mutation: ref("MutationMetadata"),
+  }),
+  ReorderRecipeStepData: objectSchema(["reordered", "step", "recipe", "mutation"], {
+    reordered: { type: "boolean" },
+    step: ref("RecipeStep"),
+    recipe: ref("RecipeDetail"),
+    mutation: ref("MutationMetadata"),
+  }),
+  ReplaceRecipeStepOutputUsesData: objectSchema(["replaced", "step", "recipe", "mutation"], {
+    replaced: { type: "boolean" },
+    step: ref("RecipeStep"),
     recipe: ref("RecipeDetail"),
     mutation: ref("MutationMetadata"),
   }),
@@ -900,6 +998,13 @@ const schemas = {
   UpdateRecipeEnvelope: successEnvelope(ref("UpdateRecipeData")),
   DeleteRecipeEnvelope: successEnvelope(ref("DeleteRecipeData")),
   ForkRecipeEnvelope: successEnvelope(ref("ForkRecipeData")),
+  CreateRecipeStepEnvelope: successEnvelope(ref("CreateRecipeStepData")),
+  UpdateRecipeStepEnvelope: successEnvelope(ref("UpdateRecipeStepData")),
+  DeleteRecipeStepEnvelope: successEnvelope(ref("DeleteRecipeStepData")),
+  CreateRecipeStepIngredientEnvelope: successEnvelope(ref("CreateRecipeStepIngredientData")),
+  DeleteRecipeStepIngredientEnvelope: successEnvelope(ref("DeleteRecipeStepIngredientData")),
+  ReorderRecipeStepEnvelope: successEnvelope(ref("ReorderRecipeStepData")),
+  ReplaceRecipeStepOutputUsesEnvelope: successEnvelope(ref("ReplaceRecipeStepOutputUsesData")),
   CookbookListEnvelope: successEnvelope(ref("CookbookListData")),
   CookbookDetailEnvelope: successEnvelope(ref("CookbookDetailData")),
   UserProfileEnvelope: successEnvelope(ref("UserProfileData")),
@@ -989,23 +1094,23 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
     POST: { operationId: "postApiV1RecipeFork", tags: ["Recipes"], summary: "Fork a recipe", auth: "bearer", scopes: ["kitchen:write"], success: { 201: "ForkRecipeEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.id], requestBody: "ForkRecipeRequest" },
   },
   "/api/v1/recipes/{id}/steps": {
-    POST: { operationId: "postApiV1RecipeSteps", tags: ["Recipe Steps"], summary: "Create a recipe step", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractCreated, errors: bearerMutationErrors, parameters: [pathParameters.id], requestBody: "NativeMutationRequest" },
+    POST: { operationId: "postApiV1RecipeSteps", tags: ["Recipe Steps"], summary: "Create a recipe step", auth: "bearer", scopes: ["kitchen:write"], success: { 201: "CreateRecipeStepEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.id], requestBody: "CreateRecipeStepRequest" },
   },
   "/api/v1/recipes/{id}/steps/{stepId}": {
-    PATCH: { operationId: "patchApiV1RecipeStep", tags: ["Recipe Steps"], summary: "Update a recipe step", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.stepId], requestBody: "NativeMutationRequest" },
-    DELETE: { operationId: "deleteApiV1RecipeStep", tags: ["Recipe Steps"], summary: "Delete a recipe step", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.stepId, pathParameters.clientMutationIdHeader] },
+    PATCH: { operationId: "patchApiV1RecipeStep", tags: ["Recipe Steps"], summary: "Update a recipe step", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "UpdateRecipeStepEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.stepId], requestBody: "UpdateRecipeStepRequest" },
+    DELETE: { operationId: "deleteApiV1RecipeStep", tags: ["Recipe Steps"], summary: "Delete a recipe step", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "DeleteRecipeStepEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.stepId], requestBody: "DeleteRecipeStepRequest" },
   },
   "/api/v1/recipes/{id}/steps/reorder": {
-    POST: { operationId: "postApiV1RecipeStepsReorder", tags: ["Recipe Steps"], summary: "Reorder recipe steps", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, parameters: [pathParameters.id], requestBody: "NativeMutationRequest" },
+    POST: { operationId: "postApiV1RecipeStepsReorder", tags: ["Recipe Steps"], summary: "Reorder recipe steps", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "ReorderRecipeStepEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.id], requestBody: "ReorderRecipeStepRequest" },
   },
   "/api/v1/recipes/{id}/steps/{stepId}/ingredients": {
-    POST: { operationId: "postApiV1RecipeStepIngredients", tags: ["Recipe Steps"], summary: "Add a step ingredient", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractCreated, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.stepId], requestBody: "NativeMutationRequest" },
+    POST: { operationId: "postApiV1RecipeStepIngredients", tags: ["Recipe Steps"], summary: "Add a step ingredient", auth: "bearer", scopes: ["kitchen:write"], success: { 201: "CreateRecipeStepIngredientEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.stepId], requestBody: "CreateRecipeStepIngredientRequest" },
   },
   "/api/v1/recipes/{id}/steps/{stepId}/ingredients/{ingredientId}": {
-    DELETE: { operationId: "deleteApiV1RecipeStepIngredient", tags: ["Recipe Steps"], summary: "Delete a step ingredient", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.stepId, pathParameters.ingredientId, pathParameters.clientMutationIdHeader] },
+    DELETE: { operationId: "deleteApiV1RecipeStepIngredient", tags: ["Recipe Steps"], summary: "Delete a step ingredient", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "DeleteRecipeStepIngredientEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.id, pathParameters.stepId, pathParameters.ingredientId], requestBody: "DeleteRecipeStepIngredientRequest" },
   },
   "/api/v1/recipes/{id}/step-output-uses": {
-    PUT: { operationId: "putApiV1RecipeStepOutputUses", tags: ["Recipe Steps"], summary: "Replace step-output dependency uses", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, parameters: [pathParameters.id], requestBody: "NativeMutationRequest" },
+    PUT: { operationId: "putApiV1RecipeStepOutputUses", tags: ["Recipe Steps"], summary: "Replace step-output dependency uses", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "ReplaceRecipeStepOutputUsesEnvelope" }, errors: bearerMutationErrors, parameters: [pathParameters.id], requestBody: "ReplaceRecipeStepOutputUsesRequest" },
   },
   "/api/v1/recipes/{id}/image": {
     POST: { operationId: "postApiV1RecipeImage", tags: ["Recipe Covers"], summary: "Upload or assign a recipe image", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractSuccess, errors: bearerMutationErrors, parameters: [pathParameters.id], requestBody: "NativeMutationRequest" },
@@ -1126,6 +1231,7 @@ const exampleChef = { id: "chef_1", username: "ari" };
 const exampleSourceChef = { id: "chef_source", username: "jules" };
 const examplePrincipal = { ...exampleChef, source: "bearer" };
 const exampleRecipeIngredient = { id: "ingredient_1", name: "pasta", quantity: 1, unit: "lb" };
+const exampleGarlicIngredient = { id: "ingredient_2", name: "garlic", quantity: 2, unit: "cloves" };
 const exampleRecipeStep = {
   id: "step_1",
   stepNum: 1,
@@ -1133,6 +1239,26 @@ const exampleRecipeStep = {
   description: "Boil pasta.",
   duration: null,
   ingredients: [exampleRecipeIngredient],
+  usingSteps: [],
+};
+const exampleRecipeStepOutputUse = {
+  id: "step_use_1",
+  inputStepNum: 2,
+  outputStepNum: 1,
+  outputOfStep: { stepNum: 1, stepTitle: null },
+};
+const exampleDependentRecipeStep = {
+  id: "step_2",
+  stepNum: 2,
+  stepTitle: "Sauce",
+  description: "Toss pasta with sauce.",
+  duration: 3,
+  ingredients: [],
+  usingSteps: [exampleRecipeStepOutputUse],
+};
+const exampleDependentRecipeStepWithGarlic = {
+  ...exampleDependentRecipeStep,
+  ingredients: [exampleGarlicIngredient],
 };
 const exampleCookbookLink = {
   id: "cookbook_1",
@@ -1164,8 +1290,16 @@ const exampleRecipeSummary = {
 };
 const exampleRecipeDetail = {
   ...exampleRecipeSummary,
-  steps: [exampleRecipeStep],
+  steps: [exampleRecipeStep, exampleDependentRecipeStep],
   cookbooks: [exampleCookbookLink],
+};
+const exampleRecipeDetailAfterStepDelete = {
+  ...exampleRecipeDetail,
+  steps: [exampleRecipeStep],
+};
+const exampleRecipeDetailWithGarlic = {
+  ...exampleRecipeDetail,
+  steps: [exampleRecipeStep, exampleDependentRecipeStepWithGarlic],
 };
 const exampleCreatedRecipeDetail = {
   ...exampleRecipeDetail,
@@ -1545,6 +1679,78 @@ const responseExamples: Record<string, unknown> = {
     requestId: "req_example",
     data: { fork: exampleRecipeFork, recipe: exampleForkedRecipeDetail, mutation: exampleMutation },
   },
+  CreateRecipeStepEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      created: true,
+      step: exampleDependentRecipeStep,
+      recipe: exampleRecipeDetail,
+      mutation: exampleMutation,
+    },
+  },
+  UpdateRecipeStepEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      updated: true,
+      step: { ...exampleDependentRecipeStep, description: "Toss pasta with glossy sauce.", duration: null },
+      recipe: exampleRecipeDetail,
+      mutation: exampleMutation,
+    },
+  },
+  DeleteRecipeStepEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      deleted: true,
+      step: { id: "step_2" },
+      recipe: exampleRecipeDetailAfterStepDelete,
+      mutation: exampleMutation,
+    },
+  },
+  CreateRecipeStepIngredientEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      created: true,
+      ingredient: exampleGarlicIngredient,
+      step: exampleDependentRecipeStepWithGarlic,
+      recipe: exampleRecipeDetailWithGarlic,
+      mutation: exampleMutation,
+    },
+  },
+  DeleteRecipeStepIngredientEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      deleted: true,
+      ingredient: { id: "ingredient_2" },
+      step: exampleDependentRecipeStep,
+      recipe: exampleRecipeDetail,
+      mutation: exampleMutation,
+    },
+  },
+  ReorderRecipeStepEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      reordered: true,
+      step: exampleDependentRecipeStep,
+      recipe: exampleRecipeDetail,
+      mutation: exampleMutation,
+    },
+  },
+  ReplaceRecipeStepOutputUsesEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      replaced: true,
+      step: exampleDependentRecipeStep,
+      recipe: exampleRecipeDetail,
+      mutation: exampleMutation,
+    },
+  },
   CookbookListEnvelope: {
     ok: true,
     requestId: "req_example",
@@ -1665,6 +1871,39 @@ const requestExamples: Record<string, unknown> = {
   },
   DeleteRecipeRequest: { clientMutationId: "device-uuid-3" },
   ForkRecipeRequest: { clientMutationId: "device-uuid-4", title: "My Pasta" },
+  CreateRecipeStepRequest: {
+    clientMutationId: "step-device-uuid-1",
+    stepTitle: "Sauce",
+    description: "Toss pasta with sauce.",
+    duration: 3,
+    ingredients: [{ quantity: 2, unit: "cloves", name: "garlic" }],
+    outputStepNums: [1],
+  },
+  UpdateRecipeStepRequest: {
+    clientMutationId: "step-device-uuid-2",
+    stepTitle: null,
+    description: "Toss pasta with glossy sauce.",
+    duration: null,
+    outputStepNums: [1],
+  },
+  DeleteRecipeStepRequest: { clientMutationId: "step-device-uuid-3" },
+  CreateRecipeStepIngredientRequest: {
+    clientMutationId: "step-ingredient-device-uuid-1",
+    quantity: 2,
+    unit: "cloves",
+    name: "garlic",
+  },
+  DeleteRecipeStepIngredientRequest: { clientMutationId: "step-ingredient-device-uuid-2" },
+  ReorderRecipeStepRequest: {
+    clientMutationId: "step-reorder-device-uuid-1",
+    stepId: "step_2",
+    toStepNum: 2,
+  },
+  ReplaceRecipeStepOutputUsesRequest: {
+    clientMutationId: "step-output-device-uuid-1",
+    inputStepId: "step_2",
+    outputStepNums: [1],
+  },
   NativeProfileRequest: { email: "ari@example.com", username: "ari" },
   ProfilePhotoUploadRequest: { photo: "<binary image file>" },
   NativeNotificationPreferencesRequest: {
@@ -1887,6 +2126,14 @@ function retryPolicyFor(path: ResourcePath, method: HttpMethod) {
       doNotRetryUnchanged: ["validation_error", "insufficient_scope", "idempotency_conflict"],
     };
   }
+  if (isMutation && path.startsWith("/api/v1/recipes")) {
+    return {
+      retryOn: ["network_timeout", "429", "5xx", "idempotency_in_progress"],
+      retryAfterHeader: "Retry-After",
+      preserveClientMutationId: true,
+      doNotRetryUnchanged: ["validation_error", "insufficient_scope", "idempotency_conflict"],
+    };
+  }
   return {
     retryOn: isMutation ? ["network_timeout", "429", "5xx"] : ["network_timeout", "429", "5xx"],
     retryAfterHeader: "Retry-After",
@@ -1961,6 +2208,27 @@ function idempotencyPolicyFor(path: ResourcePath, method: HttpMethod) {
       location: "jsonBody",
       retentionHours: 24,
       replayStatus: [201],
+      conflictStatus: 409,
+      inProgressRetryAfterSeconds: 2,
+      retryBodyRule: "Persist and retry the same parsed JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts.",
+    };
+  }
+  if (
+    (
+      path === "/api/v1/recipes/{id}/steps" ||
+      path === "/api/v1/recipes/{id}/steps/{stepId}" ||
+      path === "/api/v1/recipes/{id}/steps/reorder" ||
+      path === "/api/v1/recipes/{id}/steps/{stepId}/ingredients" ||
+      path === "/api/v1/recipes/{id}/steps/{stepId}/ingredients/{ingredientId}" ||
+      path === "/api/v1/recipes/{id}/step-output-uses"
+    ) &&
+    (method === "POST" || method === "PATCH" || method === "PUT" || method === "DELETE")
+  ) {
+    return {
+      key: "clientMutationId",
+      location: "jsonBody",
+      retentionHours: 24,
+      replayStatus: [method === "POST" && (path === "/api/v1/recipes/{id}/steps" || path === "/api/v1/recipes/{id}/steps/{stepId}/ingredients") ? 201 : 200],
       conflictStatus: 409,
       inProgressRetryAfterSeconds: 2,
       retryBodyRule: "Persist and retry the same parsed JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts.",

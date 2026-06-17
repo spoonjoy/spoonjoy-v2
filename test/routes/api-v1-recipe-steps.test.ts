@@ -669,6 +669,11 @@ describe("API v1 recipe step and dependency mutations", () => {
         inputStepId: fixture.steps[1].id,
         outputStepNums: [2],
       }],
+      ["req_step_dependency_empty", "PUT", `recipes/${fixture.recipe.id}/step-output-uses`, {
+        clientMutationId: "step-dependency-empty",
+        inputStepId: fixture.steps[1].id,
+        outputStepNums: [],
+      }],
     ] as const) {
       const response = await action(routeArgs(
         mutationRequest(method, path, fixture.writer.token, requestId, body),

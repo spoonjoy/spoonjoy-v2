@@ -1189,14 +1189,15 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "retryOn": [
           "network_timeout",
           "429",
-          "5xx"
+          "5xx",
+          "idempotency_in_progress"
         ],
         "retryAfterHeader": "Retry-After",
-        "preserveClientMutationId": false,
+        "preserveClientMutationId": true,
         "doNotRetryUnchanged": [
           "validation_error",
-          "invalid_cursor",
-          "insufficient_scope"
+          "insufficient_scope",
+          "idempotency_conflict"
         ]
       },
       "cursorPolicy": {
@@ -1306,7 +1307,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "201",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"created\": true,\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": null,\n        \"sourceHost\": null,\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"created\": true,\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": null,\n        \"sourceHost\": null,\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -1481,7 +1482,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    }\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -1554,14 +1555,15 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "retryOn": [
           "network_timeout",
           "429",
-          "5xx"
+          "5xx",
+          "idempotency_in_progress"
         ],
         "retryAfterHeader": "Retry-After",
-        "preserveClientMutationId": false,
+        "preserveClientMutationId": true,
         "doNotRetryUnchanged": [
           "validation_error",
-          "invalid_cursor",
-          "insufficient_scope"
+          "insufficient_scope",
+          "idempotency_conflict"
         ]
       },
       "cursorPolicy": null,
@@ -1674,7 +1676,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"updated\": true,\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"updated\": true,\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -1747,14 +1749,15 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "retryOn": [
           "network_timeout",
           "429",
-          "5xx"
+          "5xx",
+          "idempotency_in_progress"
         ],
         "retryAfterHeader": "Retry-After",
-        "preserveClientMutationId": false,
+        "preserveClientMutationId": true,
         "doNotRetryUnchanged": [
           "validation_error",
-          "invalid_cursor",
-          "insufficient_scope"
+          "insufficient_scope",
+          "idempotency_conflict"
         ]
       },
       "cursorPolicy": null,
@@ -1949,14 +1952,15 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "retryOn": [
           "network_timeout",
           "429",
-          "5xx"
+          "5xx",
+          "idempotency_in_progress"
         ],
         "retryAfterHeader": "Retry-After",
-        "preserveClientMutationId": false,
+        "preserveClientMutationId": true,
         "doNotRetryUnchanged": [
           "validation_error",
-          "invalid_cursor",
-          "insufficient_scope"
+          "insufficient_scope",
+          "idempotency_conflict"
         ]
       },
       "cursorPolicy": null,
@@ -2069,7 +2073,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "201",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"fork\": {\n      \"appliedTitle\": \"Pasta (variation 2)\",\n      \"sourceChef\": {\n        \"id\": \"chef_source\",\n        \"username\": \"jules\"\n      },\n      \"sourceRecipeId\": \"recipe_source_1\",\n      \"titleWasSuffixed\": true\n    },\n    \"recipe\": {\n      \"id\": \"recipe_fork_1\",\n      \"title\": \"Pasta (variation 2)\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_fork_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_fork_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta (variation 2) by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_fork_1\",\n        \"sourceUrl\": null,\n        \"sourceHost\": null,\n        \"sourceRecipe\": {\n          \"id\": \"recipe_source_1\",\n          \"title\": \"Pasta\",\n          \"chef\": {\n            \"id\": \"chef_source\",\n            \"username\": \"jules\"\n          },\n          \"href\": \"/recipes/recipe_source_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_source_1\",\n          \"deleted\": false\n        }\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"fork\": {\n      \"appliedTitle\": \"Pasta (variation 2)\",\n      \"sourceChef\": {\n        \"id\": \"chef_source\",\n        \"username\": \"jules\"\n      },\n      \"sourceRecipeId\": \"recipe_source_1\",\n      \"titleWasSuffixed\": true\n    },\n    \"recipe\": {\n      \"id\": \"recipe_fork_1\",\n      \"title\": \"Pasta (variation 2)\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_fork_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_fork_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta (variation 2) by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_fork_1\",\n        \"sourceUrl\": null,\n        \"sourceHost\": null,\n        \"sourceRecipe\": {\n          \"id\": \"recipe_source_1\",\n          \"title\": \"Pasta\",\n          \"chef\": {\n            \"id\": \"chef_source\",\n            \"username\": \"jules\"\n          },\n          \"href\": \"/recipes/recipe_source_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_source_1\",\n          \"deleted\": false\n        }\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -2140,18 +2144,29 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "retryOn": [
           "network_timeout",
           "429",
-          "5xx"
+          "5xx",
+          "idempotency_in_progress"
         ],
         "retryAfterHeader": "Retry-After",
-        "preserveClientMutationId": false,
+        "preserveClientMutationId": true,
         "doNotRetryUnchanged": [
           "validation_error",
-          "invalid_cursor",
-          "insufficient_scope"
+          "insufficient_scope",
+          "idempotency_conflict"
         ]
       },
       "cursorPolicy": null,
-      "idempotency": null,
+      "idempotency": {
+        "key": "clientMutationId",
+        "location": "jsonBody",
+        "retentionHours": 24,
+        "replayStatus": [
+          201
+        ],
+        "conflictStatus": 409,
+        "inProgressRetryAfterSeconds": 2,
+        "retryBodyRule": "Persist and retry the same parsed JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts."
+      },
       "personalTokenOnly": false,
       "oauthNote": "",
       "selfRevokeException": "",
@@ -2187,12 +2202,12 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": true,
         "contentType": "application/json",
-        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "example": "{\n  \"clientMutationId\": \"step-device-uuid-1\",\n  \"stepTitle\": \"Sauce\",\n  \"description\": \"Toss pasta with sauce.\",\n  \"duration\": 3,\n  \"ingredients\": [\n    {\n      \"quantity\": 2,\n      \"unit\": \"cloves\",\n      \"name\": \"garlic\"\n    }\n  ],\n  \"outputStepNums\": [\n    1\n  ]\n}",
         "examples": [
           {
             "name": "example",
             "label": "Example",
-            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+            "example": "{\n  \"clientMutationId\": \"step-device-uuid-1\",\n  \"stepTitle\": \"Sauce\",\n  \"description\": \"Toss pasta with sauce.\",\n  \"duration\": 3,\n  \"ingredients\": [\n    {\n      \"quantity\": 2,\n      \"unit\": \"cloves\",\n      \"name\": \"garlic\"\n    }\n  ],\n  \"outputStepNums\": [\n    1\n  ]\n}"
           }
         ]
       },
@@ -2250,7 +2265,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "201",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"created\": true,\n    \"step\": {\n      \"id\": \"step_2\",\n      \"stepNum\": 2,\n      \"stepTitle\": \"Sauce\",\n      \"description\": \"Toss pasta with sauce.\",\n      \"duration\": 3,\n      \"ingredients\": [],\n      \"usingSteps\": [\n        {\n          \"id\": \"step_use_1\",\n          \"inputStepNum\": 2,\n          \"outputStepNum\": 1,\n          \"outputOfStep\": {\n            \"stepNum\": 1,\n            \"stepTitle\": null\n          }\n        }\n      ]\n    },\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -2321,18 +2336,29 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "retryOn": [
           "network_timeout",
           "429",
-          "5xx"
+          "5xx",
+          "idempotency_in_progress"
         ],
         "retryAfterHeader": "Retry-After",
-        "preserveClientMutationId": false,
+        "preserveClientMutationId": true,
         "doNotRetryUnchanged": [
           "validation_error",
-          "invalid_cursor",
-          "insufficient_scope"
+          "insufficient_scope",
+          "idempotency_conflict"
         ]
       },
       "cursorPolicy": null,
-      "idempotency": null,
+      "idempotency": {
+        "key": "clientMutationId",
+        "location": "jsonBody",
+        "retentionHours": 24,
+        "replayStatus": [
+          200
+        ],
+        "conflictStatus": 409,
+        "inProgressRetryAfterSeconds": 2,
+        "retryBodyRule": "Persist and retry the same parsed JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts."
+      },
       "personalTokenOnly": false,
       "oauthNote": "",
       "selfRevokeException": "",
@@ -2380,12 +2406,12 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": true,
         "contentType": "application/json",
-        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "example": "{\n  \"clientMutationId\": \"step-device-uuid-2\",\n  \"stepTitle\": null,\n  \"description\": \"Toss pasta with glossy sauce.\",\n  \"duration\": null,\n  \"outputStepNums\": [\n    1\n  ]\n}",
         "examples": [
           {
             "name": "example",
             "label": "Example",
-            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+            "example": "{\n  \"clientMutationId\": \"step-device-uuid-2\",\n  \"stepTitle\": null,\n  \"description\": \"Toss pasta with glossy sauce.\",\n  \"duration\": null,\n  \"outputStepNums\": [\n    1\n  ]\n}"
           }
         ]
       },
@@ -2443,7 +2469,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"updated\": true,\n    \"step\": {\n      \"id\": \"step_2\",\n      \"stepNum\": 2,\n      \"stepTitle\": \"Sauce\",\n      \"description\": \"Toss pasta with glossy sauce.\",\n      \"duration\": null,\n      \"ingredients\": [],\n      \"usingSteps\": [\n        {\n          \"id\": \"step_use_1\",\n          \"inputStepNum\": 2,\n          \"outputStepNum\": 1,\n          \"outputOfStep\": {\n            \"stepNum\": 1,\n            \"stepTitle\": null\n          }\n        }\n      ]\n    },\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -2514,18 +2540,29 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "retryOn": [
           "network_timeout",
           "429",
-          "5xx"
+          "5xx",
+          "idempotency_in_progress"
         ],
         "retryAfterHeader": "Retry-After",
-        "preserveClientMutationId": false,
+        "preserveClientMutationId": true,
         "doNotRetryUnchanged": [
           "validation_error",
-          "invalid_cursor",
-          "insufficient_scope"
+          "insufficient_scope",
+          "idempotency_conflict"
         ]
       },
       "cursorPolicy": null,
-      "idempotency": null,
+      "idempotency": {
+        "key": "clientMutationId",
+        "location": "jsonBody",
+        "retentionHours": 24,
+        "replayStatus": [
+          200
+        ],
+        "conflictStatus": 409,
+        "inProgressRetryAfterSeconds": 2,
+        "retryBodyRule": "Persist and retry the same parsed JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts."
+      },
       "personalTokenOnly": false,
       "oauthNote": "",
       "selfRevokeException": "",
@@ -2558,18 +2595,6 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         },
         {
-          "name": "X-Client-Mutation-Id",
-          "in": "header",
-          "label": "X Client Mutation Id",
-          "required": true,
-          "defaultValue": "",
-          "placeholder": "delete:item_1:uuid-or-hash",
-          "description": "Chef-wide idempotency key for this delete. Use the same value when retrying the exact same request after a timeout.",
-          "schema": {
-            "type": "string"
-          }
-        },
-        {
           "name": "X-Request-Id",
           "in": "header",
           "label": "X Request Id",
@@ -2582,7 +2607,18 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         }
       ],
-      "requestBody": null,
+      "requestBody": {
+        "required": true,
+        "contentType": "application/json",
+        "example": "{\n  \"clientMutationId\": \"step-device-uuid-3\"\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"step-device-uuid-3\"\n}"
+          }
+        ]
+      },
       "responseStatuses": [
         "200",
         "400",
@@ -2637,7 +2673,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"deleted\": true,\n    \"step\": {\n      \"id\": \"step_2\"\n    },\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -2708,18 +2744,29 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "retryOn": [
           "network_timeout",
           "429",
-          "5xx"
+          "5xx",
+          "idempotency_in_progress"
         ],
         "retryAfterHeader": "Retry-After",
-        "preserveClientMutationId": false,
+        "preserveClientMutationId": true,
         "doNotRetryUnchanged": [
           "validation_error",
-          "invalid_cursor",
-          "insufficient_scope"
+          "insufficient_scope",
+          "idempotency_conflict"
         ]
       },
       "cursorPolicy": null,
-      "idempotency": null,
+      "idempotency": {
+        "key": "clientMutationId",
+        "location": "jsonBody",
+        "retentionHours": 24,
+        "replayStatus": [
+          200
+        ],
+        "conflictStatus": 409,
+        "inProgressRetryAfterSeconds": 2,
+        "retryBodyRule": "Persist and retry the same parsed JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts."
+      },
       "personalTokenOnly": false,
       "oauthNote": "",
       "selfRevokeException": "",
@@ -2755,12 +2802,12 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": true,
         "contentType": "application/json",
-        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "example": "{\n  \"clientMutationId\": \"step-reorder-device-uuid-1\",\n  \"stepId\": \"step_2\",\n  \"toStepNum\": 2\n}",
         "examples": [
           {
             "name": "example",
             "label": "Example",
-            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+            "example": "{\n  \"clientMutationId\": \"step-reorder-device-uuid-1\",\n  \"stepId\": \"step_2\",\n  \"toStepNum\": 2\n}"
           }
         ]
       },
@@ -2818,7 +2865,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"reordered\": true,\n    \"step\": {\n      \"id\": \"step_2\",\n      \"stepNum\": 2,\n      \"stepTitle\": \"Sauce\",\n      \"description\": \"Toss pasta with sauce.\",\n      \"duration\": 3,\n      \"ingredients\": [],\n      \"usingSteps\": [\n        {\n          \"id\": \"step_use_1\",\n          \"inputStepNum\": 2,\n          \"outputStepNum\": 1,\n          \"outputOfStep\": {\n            \"stepNum\": 1,\n            \"stepTitle\": null\n          }\n        }\n      ]\n    },\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -2889,18 +2936,29 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "retryOn": [
           "network_timeout",
           "429",
-          "5xx"
+          "5xx",
+          "idempotency_in_progress"
         ],
         "retryAfterHeader": "Retry-After",
-        "preserveClientMutationId": false,
+        "preserveClientMutationId": true,
         "doNotRetryUnchanged": [
           "validation_error",
-          "invalid_cursor",
-          "insufficient_scope"
+          "insufficient_scope",
+          "idempotency_conflict"
         ]
       },
       "cursorPolicy": null,
-      "idempotency": null,
+      "idempotency": {
+        "key": "clientMutationId",
+        "location": "jsonBody",
+        "retentionHours": 24,
+        "replayStatus": [
+          201
+        ],
+        "conflictStatus": 409,
+        "inProgressRetryAfterSeconds": 2,
+        "retryBodyRule": "Persist and retry the same parsed JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts."
+      },
       "personalTokenOnly": false,
       "oauthNote": "",
       "selfRevokeException": "",
@@ -2948,12 +3006,12 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": true,
         "contentType": "application/json",
-        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "example": "{\n  \"clientMutationId\": \"step-ingredient-device-uuid-1\",\n  \"quantity\": 2,\n  \"unit\": \"cloves\",\n  \"name\": \"garlic\"\n}",
         "examples": [
           {
             "name": "example",
             "label": "Example",
-            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+            "example": "{\n  \"clientMutationId\": \"step-ingredient-device-uuid-1\",\n  \"quantity\": 2,\n  \"unit\": \"cloves\",\n  \"name\": \"garlic\"\n}"
           }
         ]
       },
@@ -3011,7 +3069,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "201",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"created\": true,\n    \"ingredient\": {\n      \"id\": \"ingredient_2\",\n      \"name\": \"garlic\",\n      \"quantity\": 2,\n      \"unit\": \"cloves\"\n    },\n    \"step\": {\n      \"id\": \"step_2\",\n      \"stepNum\": 2,\n      \"stepTitle\": \"Sauce\",\n      \"description\": \"Toss pasta with sauce.\",\n      \"duration\": 3,\n      \"ingredients\": [\n        {\n          \"id\": \"ingredient_2\",\n          \"name\": \"garlic\",\n          \"quantity\": 2,\n          \"unit\": \"cloves\"\n        }\n      ],\n      \"usingSteps\": [\n        {\n          \"id\": \"step_use_1\",\n          \"inputStepNum\": 2,\n          \"outputStepNum\": 1,\n          \"outputOfStep\": {\n            \"stepNum\": 1,\n            \"stepTitle\": null\n          }\n        }\n      ]\n    },\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_2\",\n              \"name\": \"garlic\",\n              \"quantity\": 2,\n              \"unit\": \"cloves\"\n            }\n          ],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -3082,18 +3140,29 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "retryOn": [
           "network_timeout",
           "429",
-          "5xx"
+          "5xx",
+          "idempotency_in_progress"
         ],
         "retryAfterHeader": "Retry-After",
-        "preserveClientMutationId": false,
+        "preserveClientMutationId": true,
         "doNotRetryUnchanged": [
           "validation_error",
-          "invalid_cursor",
-          "insufficient_scope"
+          "insufficient_scope",
+          "idempotency_conflict"
         ]
       },
       "cursorPolicy": null,
-      "idempotency": null,
+      "idempotency": {
+        "key": "clientMutationId",
+        "location": "jsonBody",
+        "retentionHours": 24,
+        "replayStatus": [
+          200
+        ],
+        "conflictStatus": 409,
+        "inProgressRetryAfterSeconds": 2,
+        "retryBodyRule": "Persist and retry the same parsed JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts."
+      },
       "personalTokenOnly": false,
       "oauthNote": "",
       "selfRevokeException": "",
@@ -3138,18 +3207,6 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         },
         {
-          "name": "X-Client-Mutation-Id",
-          "in": "header",
-          "label": "X Client Mutation Id",
-          "required": true,
-          "defaultValue": "",
-          "placeholder": "delete:item_1:uuid-or-hash",
-          "description": "Chef-wide idempotency key for this delete. Use the same value when retrying the exact same request after a timeout.",
-          "schema": {
-            "type": "string"
-          }
-        },
-        {
           "name": "X-Request-Id",
           "in": "header",
           "label": "X Request Id",
@@ -3162,7 +3219,18 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         }
       ],
-      "requestBody": null,
+      "requestBody": {
+        "required": true,
+        "contentType": "application/json",
+        "example": "{\n  \"clientMutationId\": \"step-ingredient-device-uuid-2\"\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"step-ingredient-device-uuid-2\"\n}"
+          }
+        ]
+      },
       "responseStatuses": [
         "200",
         "400",
@@ -3217,7 +3285,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"deleted\": true,\n    \"ingredient\": {\n      \"id\": \"ingredient_2\"\n    },\n    \"step\": {\n      \"id\": \"step_2\",\n      \"stepNum\": 2,\n      \"stepTitle\": \"Sauce\",\n      \"description\": \"Toss pasta with sauce.\",\n      \"duration\": 3,\n      \"ingredients\": [],\n      \"usingSteps\": [\n        {\n          \"id\": \"step_use_1\",\n          \"inputStepNum\": 2,\n          \"outputStepNum\": 1,\n          \"outputOfStep\": {\n            \"stepNum\": 1,\n            \"stepTitle\": null\n          }\n        }\n      ]\n    },\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -3288,18 +3356,29 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "retryOn": [
           "network_timeout",
           "429",
-          "5xx"
+          "5xx",
+          "idempotency_in_progress"
         ],
         "retryAfterHeader": "Retry-After",
-        "preserveClientMutationId": false,
+        "preserveClientMutationId": true,
         "doNotRetryUnchanged": [
           "validation_error",
-          "invalid_cursor",
-          "insufficient_scope"
+          "insufficient_scope",
+          "idempotency_conflict"
         ]
       },
       "cursorPolicy": null,
-      "idempotency": null,
+      "idempotency": {
+        "key": "clientMutationId",
+        "location": "jsonBody",
+        "retentionHours": 24,
+        "replayStatus": [
+          200
+        ],
+        "conflictStatus": 409,
+        "inProgressRetryAfterSeconds": 2,
+        "retryBodyRule": "Persist and retry the same parsed JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts."
+      },
       "personalTokenOnly": false,
       "oauthNote": "",
       "selfRevokeException": "",
@@ -3335,12 +3414,12 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "requestBody": {
         "required": true,
         "contentType": "application/json",
-        "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}",
+        "example": "{\n  \"clientMutationId\": \"step-output-device-uuid-1\",\n  \"inputStepId\": \"step_2\",\n  \"outputStepNums\": [\n    1\n  ]\n}",
         "examples": [
           {
             "name": "example",
             "label": "Example",
-            "example": "{\n  \"clientMutationId\": \"device-uuid-1\",\n  \"payload\": {\n    \"note\": \"Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.\"\n  }\n}"
+            "example": "{\n  \"clientMutationId\": \"step-output-device-uuid-1\",\n  \"inputStepId\": \"step_2\",\n  \"outputStepNums\": [\n    1\n  ]\n}"
           }
         ]
       },
@@ -3398,7 +3477,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"status\": \"declared\",\n    \"resource\": \"native-api-contract\",\n    \"message\": \"This REST contract row is declared for native clients; endpoint-family units replace this example with the handler-specific response shape before returning success.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"replaced\": true,\n    \"step\": {\n      \"id\": \"step_2\",\n      \"stepNum\": 2,\n      \"stepTitle\": \"Sauce\",\n      \"description\": \"Toss pasta with sauce.\",\n      \"duration\": 3,\n      \"ingredients\": [],\n      \"usingSteps\": [\n        {\n          \"id\": \"step_use_1\",\n          \"inputStepNum\": 2,\n          \"outputStepNum\": 1,\n          \"outputOfStep\": {\n            \"stepNum\": 1,\n            \"stepTitle\": null\n          }\n        }\n      ]\n    },\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -3469,14 +3548,15 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "retryOn": [
           "network_timeout",
           "429",
-          "5xx"
+          "5xx",
+          "idempotency_in_progress"
         ],
         "retryAfterHeader": "Retry-After",
-        "preserveClientMutationId": false,
+        "preserveClientMutationId": true,
         "doNotRetryUnchanged": [
           "validation_error",
-          "invalid_cursor",
-          "insufficient_scope"
+          "insufficient_scope",
+          "idempotency_conflict"
         ]
       },
       "cursorPolicy": null,
@@ -3815,14 +3895,15 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "retryOn": [
           "network_timeout",
           "429",
-          "5xx"
+          "5xx",
+          "idempotency_in_progress"
         ],
         "retryAfterHeader": "Retry-After",
-        "preserveClientMutationId": false,
+        "preserveClientMutationId": true,
         "doNotRetryUnchanged": [
           "validation_error",
-          "invalid_cursor",
-          "insufficient_scope"
+          "insufficient_scope",
+          "idempotency_conflict"
         ]
       },
       "cursorPolicy": null,
@@ -3996,14 +4077,15 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "retryOn": [
           "network_timeout",
           "429",
-          "5xx"
+          "5xx",
+          "idempotency_in_progress"
         ],
         "retryAfterHeader": "Retry-After",
-        "preserveClientMutationId": false,
+        "preserveClientMutationId": true,
         "doNotRetryUnchanged": [
           "validation_error",
-          "invalid_cursor",
-          "insufficient_scope"
+          "insufficient_scope",
+          "idempotency_conflict"
         ]
       },
       "cursorPolicy": null,
@@ -4189,14 +4271,15 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "retryOn": [
           "network_timeout",
           "429",
-          "5xx"
+          "5xx",
+          "idempotency_in_progress"
         ],
         "retryAfterHeader": "Retry-After",
-        "preserveClientMutationId": false,
+        "preserveClientMutationId": true,
         "doNotRetryUnchanged": [
           "validation_error",
-          "invalid_cursor",
-          "insufficient_scope"
+          "insufficient_scope",
+          "idempotency_conflict"
         ]
       },
       "cursorPolicy": null,
@@ -4383,14 +4466,15 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "retryOn": [
           "network_timeout",
           "429",
-          "5xx"
+          "5xx",
+          "idempotency_in_progress"
         ],
         "retryAfterHeader": "Retry-After",
-        "preserveClientMutationId": false,
+        "preserveClientMutationId": true,
         "doNotRetryUnchanged": [
           "validation_error",
-          "invalid_cursor",
-          "insufficient_scope"
+          "insufficient_scope",
+          "idempotency_conflict"
         ]
       },
       "cursorPolicy": null,
@@ -4564,14 +4648,15 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "retryOn": [
           "network_timeout",
           "429",
-          "5xx"
+          "5xx",
+          "idempotency_in_progress"
         ],
         "retryAfterHeader": "Retry-After",
-        "preserveClientMutationId": false,
+        "preserveClientMutationId": true,
         "doNotRetryUnchanged": [
           "validation_error",
-          "invalid_cursor",
-          "insufficient_scope"
+          "insufficient_scope",
+          "idempotency_conflict"
         ]
       },
       "cursorPolicy": null,
@@ -4956,14 +5041,15 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "retryOn": [
           "network_timeout",
           "429",
-          "5xx"
+          "5xx",
+          "idempotency_in_progress"
         ],
         "retryAfterHeader": "Retry-After",
-        "preserveClientMutationId": false,
+        "preserveClientMutationId": true,
         "doNotRetryUnchanged": [
           "validation_error",
-          "invalid_cursor",
-          "insufficient_scope"
+          "insufficient_scope",
+          "idempotency_conflict"
         ]
       },
       "cursorPolicy": null,
@@ -5137,14 +5223,15 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "retryOn": [
           "network_timeout",
           "429",
-          "5xx"
+          "5xx",
+          "idempotency_in_progress"
         ],
         "retryAfterHeader": "Retry-After",
-        "preserveClientMutationId": false,
+        "preserveClientMutationId": true,
         "doNotRetryUnchanged": [
           "validation_error",
-          "invalid_cursor",
-          "insufficient_scope"
+          "insufficient_scope",
+          "idempotency_conflict"
         ]
       },
       "cursorPolicy": null,
@@ -5330,14 +5417,15 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "retryOn": [
           "network_timeout",
           "429",
-          "5xx"
+          "5xx",
+          "idempotency_in_progress"
         ],
         "retryAfterHeader": "Retry-After",
-        "preserveClientMutationId": false,
+        "preserveClientMutationId": true,
         "doNotRetryUnchanged": [
           "validation_error",
-          "invalid_cursor",
-          "insufficient_scope"
+          "insufficient_scope",
+          "idempotency_conflict"
         ]
       },
       "cursorPolicy": null,
@@ -11514,14 +11602,15 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "retryOn": [
           "network_timeout",
           "429",
-          "5xx"
+          "5xx",
+          "idempotency_in_progress"
         ],
         "retryAfterHeader": "Retry-After",
-        "preserveClientMutationId": false,
+        "preserveClientMutationId": true,
         "doNotRetryUnchanged": [
           "validation_error",
-          "invalid_cursor",
-          "insufficient_scope"
+          "insufficient_scope",
+          "idempotency_conflict"
         ]
       },
       "cursorPolicy": null,

@@ -45,7 +45,7 @@ Generated SDKs should use `/api/v1/openapi.sdk.json`; it keeps REST v1 resources
 
 | Surface | Build with it | Current boundary |
 | --- | --- | --- |
-| REST API v1 | Public catalog clients, native app parity, shopping-list sync, bearer-token scripts, generated SDKs | Native parity REST contract rows are declared; endpoint-family implementation units replace placeholder OpenAPI examples before those new write resources return success. |
+| REST API v1 | Public catalog clients, native app parity, shopping-list sync, bearer-token scripts, generated SDKs | Native parity REST rows use exact schemas as endpoint-family implementations ship; remaining declared-but-unimplemented families keep placeholder OpenAPI examples until their handlers return success. |
 | No-code connector profile | Zapier/Make/n8n-style searches, actions, and polling triggers | No webhooks, REST Hooks, SSE, event subscriptions, or DELETE request bodies. |
 | OAuth/PKCE | Third-party mobile, SaaS, extension, and connector account linking | Public clients only; no client secret, password grant, token-management scopes, or custom schemes. |
 | Delegated approval | CLIs, appliances, voice clients, and agents without a callback URL | Custom Spoonjoy approval flow, not OAuth Device Authorization Grant. |
@@ -487,7 +487,7 @@ The Native parity REST contract is the source of truth for the iOS, iPadOS, and 
 
 Private mobile cache clients should treat authenticated responses as private no-store data. Anonymous public recipe, cookbook, profile, chef graph, and public search responses may be cached briefly, but once a request carries a session or bearer credential the native app should place the data in its account/environment-scoped offline cache, mark it with freshness and source metadata, and purge it on logout, account switch, token revocation, or a server tombstone. Offline cache entries for private kitchen data must not leak into Spotlight, App Intents, share payloads, logs, screenshots, or public caches unless a field is deliberately user-visible.
 
-Endpoint-family implementation units replace the placeholder `NativeContractEnvelope` schemas with exact request and response bodies before those new write resources return HTTP success. Until a row has a real handler, clients should discover it through OpenAPI for code generation and planning, but treat live non-success responses as not-yet-implemented behavior rather than retryable domain failures.
+Endpoint-family implementation units replace the placeholder `NativeContractEnvelope` schemas with exact request and response bodies before those new write resources return HTTP success. Recipe create/update/delete/fork, recipe step/dependency mutations, and shopping-list item mutations now use exact idempotent request and response schemas. Until a row has a real handler, clients should discover it through OpenAPI for code generation and planning, but treat live non-success responses as not-yet-implemented behavior rather than retryable domain failures.
 
 Native app bootstrap sequence:
 
@@ -910,7 +910,7 @@ Spoonjoy supports REST-powered embeds, not iframe embeds. Spoonjoy pages intenti
 
 Treat recipe titles, descriptions, steps, ingredient names, units, and `attribution.sourceUrl` as user-provided content. Render text with DOM text APIs, validate `sourceUrl` before linking, and avoid copying Spoonjoy images or source-site URLs into contexts where you cannot honor removal requests.
 
-Recipe detail responses return `steps` in ascending `stepNum` order. Each step includes the ingredients attached to that step in API order. Ingredient `unit` values are free-form display strings, `duration` is minutes when present, and API v1 does not expose ingredient display-text, image alt text, or unit conversion metadata.
+Recipe detail responses return `steps` in ascending `stepNum` order. Each step includes attached ingredients and `usingSteps`, the prior step outputs this step depends on. Ingredient `unit` values are free-form display strings, `duration` is minutes when present, and API v1 does not expose ingredient display-text, image alt text, or unit conversion metadata.
 
 ```html
 <article id="spoonjoy-recipe"></article>
@@ -968,6 +968,9 @@ Recipe detail responses return `steps` in ascending `stepNum` order. Each step i
   for (const step of recipe.steps) {
     const row = document.createElement("li");
     appendText(row, "strong", step.stepTitle || `Step ${step.stepNum}`);
+    if (step.usingSteps?.length) {
+      appendText(row, "small", `Uses output from step ${step.usingSteps.map((use) => use.outputStepNum).join(", ")}`);
+    }
     appendText(row, "p", step.description);
     appendText(row, "small", step.duration == null ? "" : `${step.duration} min`);
     steps.append(row);

@@ -58,6 +58,23 @@ import {
   updateNativeRecipe,
   type ApiV1RecipeWriteResult,
 } from "~/lib/api-v1-recipe-writes.server";
+import {
+  createNativeRecipeStep,
+  createNativeRecipeStepIngredient,
+  deleteNativeRecipeStep,
+  deleteNativeRecipeStepIngredient,
+  parseNativeRecipeStepCreateBody,
+  parseNativeRecipeStepDeleteBody,
+  parseNativeRecipeStepIngredientCreateBody,
+  parseNativeRecipeStepIngredientDeleteBody,
+  parseNativeRecipeStepOutputUsesBody,
+  parseNativeRecipeStepPatchBody,
+  parseNativeRecipeStepReorderBody,
+  reorderNativeRecipeStep,
+  replaceNativeRecipeStepOutputUses,
+  updateNativeRecipeStep,
+  type ApiV1RecipeStepResult,
+} from "~/lib/api-v1-recipe-steps.server";
 import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
 import { notifyForkOfMyRecipe } from "~/lib/notification-triggers.server";
 import { enforceRateLimit } from "~/lib/rate-limit.server";
@@ -349,6 +366,20 @@ function apiV1OperationFor(method: string, path: string): string | undefined {
       return "recipes.delete";
     case "POST recipe-fork":
       return "recipes.fork";
+    case "POST recipe-steps":
+      return "recipes.steps.create";
+    case "PATCH recipe-step":
+      return "recipes.steps.update";
+    case "DELETE recipe-step":
+      return "recipes.steps.delete";
+    case "POST recipe-step-reorder":
+      return "recipes.steps.reorder";
+    case "POST recipe-step-ingredients":
+      return "recipes.steps.ingredients.create";
+    case "DELETE recipe-step-ingredient":
+      return "recipes.steps.ingredients.delete";
+    case "PUT recipe-step-output-uses":
+      return "recipes.steps.output-uses.replace";
     case "GET cookbooks":
       return "cookbooks.list";
     case "GET cookbook":
@@ -861,6 +892,17 @@ function recipeDetail(recipe: RecipeRow, origin: string) {
             quantity: ingredient.quantity,
             unit: ingredient.unit.name,
           })),
+        usingSteps: [...step.usingSteps]
+          .sort((a, b) => a.outputStepNum - b.outputStepNum)
+          .map((use) => ({
+            id: use.id,
+            inputStepNum: use.inputStepNum,
+            outputStepNum: use.outputStepNum,
+            outputOfStep: {
+              stepNum: use.outputOfStep.stepNum,
+              stepTitle: use.outputOfStep.stepTitle,
+            },
+          })),
       })),
     cookbooks: recipe.cookbooks.map((entry) => ({
       id: entry.cookbook.id,
@@ -912,6 +954,15 @@ async function loadRecipeById(db: Awaited<ReturnType<typeof getRequestDb>>, id: 
               ingredientRef: { select: { name: true } },
               unit: { select: { name: true } },
             },
+          },
+          usingSteps: {
+            select: {
+              id: true,
+              inputStepNum: true,
+              outputStepNum: true,
+              outputOfStep: { select: { stepNum: true, stepTitle: true } },
+            },
+            orderBy: { outputStepNum: "asc" },
           },
         },
       },
@@ -1467,7 +1518,9 @@ export async function runIdempotentApiV1Mutation(
   try {
     result = await write(db, reservation.record);
   } catch (error) {
-    const recovered = recoverIncomplete ? await recoverIncomplete(db, reservation.record) : null;
+    const recovered = recoverIncomplete && !(error instanceof ApiV1Error)
+      ? await recoverIncomplete(db, reservation.record)
+      : null;
     if (recovered) {
       await completeRecoveredIdempotencyKey(db, reservation.record, requestId, recovered);
       return apiV1IdempotentResponse(requestId, operation, recovered, "committed");
@@ -1636,6 +1689,15 @@ function recipeWriteResultOrThrow<T>(
   return result;
 }
 
+function recipeStepResultOrThrow<T>(
+  result: ApiV1RecipeStepResult<T>,
+): { status: number; data: T } {
+  if (!result.ok) {
+    throw new ApiV1Error(result.code, result.message, result.details);
+  }
+  return result;
+}
+
 async function serializedRecipeOrThrow(db: ApiV1WriteDb, recipeId: string, origin: string) {
   const recipe = await loadRecipeById(db, recipeId);
   /* istanbul ignore next -- @preserve post-write reads are covered on every recipe write path; this is a defensive invariant tripwire. */
@@ -1643,6 +1705,55 @@ async function serializedRecipeOrThrow(db: ApiV1WriteDb, recipeId: string, origi
     throw new Error(`Recipe ${recipeId} was not readable after write`);
   }
   return recipeDetail(recipe, origin);
+}
+
+type SerializedRecipe = Awaited<ReturnType<typeof serializedRecipeOrThrow>>;
+type SerializedRecipeStep = SerializedRecipe["steps"][number];
+
+function findSerializedStep(recipe: SerializedRecipe, stepId: string): SerializedRecipeStep | null {
+  return recipe.steps.find((step) => step.id === stepId) ?? null;
+}
+
+function findSerializedIngredient(recipe: SerializedRecipe, stepId: string, ingredientId: string) {
+  const step = findSerializedStep(recipe, stepId);
+  const ingredient = step?.ingredients.find((candidate) => candidate.id === ingredientId) ?? null;
+  return step && ingredient ? { step, ingredient } : null;
+}
+
+async function serializedRecipeStepOrThrow(
+  db: ApiV1WriteDb,
+  recipeId: string,
+  stepId: string,
+  origin: string,
+) {
+  const recipe = await serializedRecipeOrThrow(db, recipeId, origin);
+  const step = findSerializedStep(recipe, stepId);
+  /* istanbul ignore next -- @preserve post-write reads are covered on every step write path; this is a defensive invariant tripwire. */
+  if (!step) {
+    throw new Error(`Recipe step ${stepId} was not readable after write`);
+  }
+  return { recipe, step };
+}
+
+async function serializedRecipeStepIngredientOrThrow(
+  db: ApiV1WriteDb,
+  recipeId: string,
+  stepId: string,
+  ingredientId: string,
+  origin: string,
+) {
+  const recipe = await serializedRecipeOrThrow(db, recipeId, origin);
+  const match = findSerializedIngredient(recipe, stepId, ingredientId);
+  /* istanbul ignore next -- @preserve post-write reads are covered on every step ingredient write path; this is a defensive invariant tripwire. */
+  if (!match) {
+    throw new Error(`Recipe step ingredient ${ingredientId} was not readable after write`);
+  }
+  return { recipe, step: match.step, ingredient: match.ingredient };
+}
+
+function numericArraysEqual(actual: number[], expected: number[]) {
+  if (actual.length !== expected.length) return false;
+  return actual.every((value, index) => value === expected[index]);
 }
 
 async function recoverNativeRecipeCreate(
@@ -1917,6 +2028,410 @@ async function handleRecipeFork(args: ApiV1RouteArgs, requestId: string, princip
   }));
 }
 
+async function recoverNativeRecipeStepCreate(
+  db: ApiV1WriteDb,
+  reservation: ApiIdempotencyKey,
+  input: { clientMutationId: string; origin: string; principalId: string; recipeId: string },
+): Promise<ApiV1IdempotentMutationResult | null> {
+  const recipeRow = await loadRecipeById(db, input.recipeId);
+  if (!recipeRow || recipeRow.chef.id !== input.principalId) return null;
+  const recipe = recipeDetail(recipeRow, input.origin);
+  const step = findSerializedStep(recipe, reservation.id);
+  if (!step) return null;
+  return {
+    status: 201,
+    data: {
+      created: true,
+      step,
+      recipe,
+      mutation: { clientMutationId: input.clientMutationId, replayed: false },
+    },
+  };
+}
+
+async function recoverNativeRecipeStepUpdate(
+  db: ApiV1WriteDb,
+  _reservation: ApiIdempotencyKey,
+  input: {
+    clientMutationId: string;
+    origin: string;
+    principalId: string;
+    recipeId: string;
+    stepId: string;
+    fields: {
+      stepTitle?: string | null;
+      description?: string;
+      duration?: number | null;
+      outputStepNums?: number[];
+    };
+    updated: boolean;
+  },
+): Promise<ApiV1IdempotentMutationResult | null> {
+  const recipeRow = await loadRecipeById(db, input.recipeId);
+  if (!recipeRow || recipeRow.chef.id !== input.principalId) return null;
+  const recipe = recipeDetail(recipeRow, input.origin);
+  const step = findSerializedStep(recipe, input.stepId);
+  if (!step) return null;
+  if (input.fields.stepTitle !== undefined && step.stepTitle !== input.fields.stepTitle) return null;
+  if (input.fields.description !== undefined && step.description !== input.fields.description) return null;
+  if (input.fields.duration !== undefined && step.duration !== input.fields.duration) return null;
+  if (
+    input.fields.outputStepNums !== undefined &&
+    !numericArraysEqual(
+      step.usingSteps.map((use) => use.outputStepNum).sort((a, b) => a - b),
+      [...new Set(input.fields.outputStepNums)].sort((a, b) => a - b),
+    )
+  ) {
+    return null;
+  }
+  return {
+    status: 200,
+    data: {
+      updated: input.updated,
+      step,
+      recipe,
+      mutation: { clientMutationId: input.clientMutationId, replayed: false },
+    },
+  };
+}
+
+async function recoverNativeRecipeStepDelete(
+  db: ApiV1WriteDb,
+  _reservation: ApiIdempotencyKey,
+  input: { clientMutationId: string; origin: string; principalId: string; recipeId: string; stepId: string },
+): Promise<ApiV1IdempotentMutationResult | null> {
+  const recipeRow = await loadRecipeById(db, input.recipeId);
+  if (!recipeRow || recipeRow.chef.id !== input.principalId) return null;
+  const recipe = recipeDetail(recipeRow, input.origin);
+  if (findSerializedStep(recipe, input.stepId)) return null;
+  return {
+    status: 200,
+    data: {
+      deleted: true,
+      step: { id: input.stepId },
+      recipe,
+      mutation: { clientMutationId: input.clientMutationId, replayed: false },
+    },
+  };
+}
+
+async function recoverNativeRecipeStepIngredientCreate(
+  db: ApiV1WriteDb,
+  reservation: ApiIdempotencyKey,
+  input: { clientMutationId: string; origin: string; principalId: string; recipeId: string; stepId: string },
+): Promise<ApiV1IdempotentMutationResult | null> {
+  const recipeRow = await loadRecipeById(db, input.recipeId);
+  if (!recipeRow || recipeRow.chef.id !== input.principalId) return null;
+  const recipe = recipeDetail(recipeRow, input.origin);
+  const match = findSerializedIngredient(recipe, input.stepId, reservation.id);
+  if (!match) return null;
+  return {
+    status: 201,
+    data: {
+      created: true,
+      ingredient: match.ingredient,
+      step: match.step,
+      recipe,
+      mutation: { clientMutationId: input.clientMutationId, replayed: false },
+    },
+  };
+}
+
+async function recoverNativeRecipeStepIngredientDelete(
+  db: ApiV1WriteDb,
+  _reservation: ApiIdempotencyKey,
+  input: { clientMutationId: string; origin: string; principalId: string; recipeId: string; stepId: string; ingredientId: string },
+): Promise<ApiV1IdempotentMutationResult | null> {
+  const recipeRow = await loadRecipeById(db, input.recipeId);
+  if (!recipeRow || recipeRow.chef.id !== input.principalId) return null;
+  const recipe = recipeDetail(recipeRow, input.origin);
+  const step = findSerializedStep(recipe, input.stepId);
+  if (!step || step.ingredients.some((ingredient) => ingredient.id === input.ingredientId)) return null;
+  return {
+    status: 200,
+    data: {
+      deleted: true,
+      ingredient: { id: input.ingredientId },
+      step,
+      recipe,
+      mutation: { clientMutationId: input.clientMutationId, replayed: false },
+    },
+  };
+}
+
+async function recoverNativeRecipeStepReorder(
+  db: ApiV1WriteDb,
+  _reservation: ApiIdempotencyKey,
+  input: { clientMutationId: string; origin: string; principalId: string; recipeId: string; stepId: string; toStepNum: number; reordered: boolean },
+): Promise<ApiV1IdempotentMutationResult | null> {
+  const recipeRow = await loadRecipeById(db, input.recipeId);
+  if (!recipeRow || recipeRow.chef.id !== input.principalId) return null;
+  const recipe = recipeDetail(recipeRow, input.origin);
+  const step = findSerializedStep(recipe, input.stepId);
+  if (!step || step.stepNum !== input.toStepNum) return null;
+  return {
+    status: 200,
+    data: {
+      reordered: input.reordered,
+      step,
+      recipe,
+      mutation: { clientMutationId: input.clientMutationId, replayed: false },
+    },
+  };
+}
+
+async function recoverNativeRecipeStepOutputUses(
+  db: ApiV1WriteDb,
+  _reservation: ApiIdempotencyKey,
+  input: { clientMutationId: string; origin: string; principalId: string; recipeId: string; stepId: string; outputStepNums: number[] },
+): Promise<ApiV1IdempotentMutationResult | null> {
+  const recipeRow = await loadRecipeById(db, input.recipeId);
+  if (!recipeRow || recipeRow.chef.id !== input.principalId) return null;
+  const recipe = recipeDetail(recipeRow, input.origin);
+  const step = findSerializedStep(recipe, input.stepId);
+  if (!step) return null;
+  if (!numericArraysEqual(
+    step.usingSteps.map((use) => use.outputStepNum).sort((a, b) => a - b),
+    [...new Set(input.outputStepNums)].sort((a, b) => a - b),
+  )) {
+    return null;
+  }
+  return {
+    status: 200,
+    data: {
+      replaced: true,
+      step,
+      recipe,
+      mutation: { clientMutationId: input.clientMutationId, replayed: false },
+    },
+  };
+}
+
+async function handleRecipeStepCreate(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string) {
+  const body = await parseApiV1JsonBody(args.request);
+  const parsed = parseNativeRecipeStepCreateBody(body);
+  if (!parsed.ok) {
+    throw new ApiV1Error(parsed.code, parsed.message, parsed.details);
+  }
+  const origin = publicContentOrigin(args);
+
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, parsed.data.clientMutationId, "recipes.steps.create", async (db, reservation) => {
+    const created = recipeStepResultOrThrow(await createNativeRecipeStep(db, principal.id, recipeId, parsed.data, { stepId: reservation.id }));
+    const { recipe, step } = await serializedRecipeStepOrThrow(db, created.data.recipeId, created.data.stepId, origin);
+    return {
+      status: created.status,
+      data: {
+        created: true,
+        step,
+        recipe,
+        mutation: { clientMutationId: parsed.data.clientMutationId, replayed: false },
+      },
+    };
+  }, (db, reservation) => recoverNativeRecipeStepCreate(db, reservation, {
+    clientMutationId: parsed.data.clientMutationId,
+    origin,
+    principalId: principal.id,
+    recipeId,
+  }));
+}
+
+async function handleRecipeStepUpdate(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string, stepId: string) {
+  const body = await parseApiV1JsonBody(args.request);
+  const parsed = parseNativeRecipeStepPatchBody(body);
+  if (!parsed.ok) {
+    throw new ApiV1Error(parsed.code, parsed.message, parsed.details);
+  }
+  const origin = publicContentOrigin(args);
+  const updated = Object.keys(parsed.data.fields).length > 0;
+
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, parsed.data.clientMutationId, "recipes.steps.update", async (db) => {
+    const saved = recipeStepResultOrThrow(await updateNativeRecipeStep(db, principal.id, recipeId, stepId, parsed.data));
+    const { recipe, step } = await serializedRecipeStepOrThrow(db, saved.data.recipeId, saved.data.stepId, origin);
+    return {
+      status: saved.status,
+      data: {
+        updated: saved.data.updated,
+        step,
+        recipe,
+        mutation: { clientMutationId: parsed.data.clientMutationId, replayed: false },
+      },
+    };
+  }, (db, reservation) => recoverNativeRecipeStepUpdate(db, reservation, {
+    clientMutationId: parsed.data.clientMutationId,
+    origin,
+    principalId: principal.id,
+    recipeId,
+    stepId,
+    fields: parsed.data.fields,
+    updated,
+  }));
+}
+
+async function handleRecipeStepDelete(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string, stepId: string) {
+  const body = await parseApiV1JsonBody(args.request);
+  const url = new URL(args.request.url);
+  const parsed = parseNativeRecipeStepDeleteBody(
+    body,
+    args.request.headers.get("X-Client-Mutation-Id") ?? url.searchParams.get("clientMutationId"),
+  );
+  if (!parsed.ok) {
+    throw new ApiV1Error(parsed.code, parsed.message, parsed.details);
+  }
+
+  const origin = publicContentOrigin(args);
+  const idempotencyBody = { clientMutationId: parsed.data.clientMutationId };
+  return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, parsed.data.clientMutationId, "recipes.steps.delete", async (db) => {
+    const deleted = recipeStepResultOrThrow(await deleteNativeRecipeStep(db, principal.id, recipeId, stepId));
+    const recipe = await serializedRecipeOrThrow(db, deleted.data.recipeId, origin);
+    return {
+      status: deleted.status,
+      data: {
+        deleted: true,
+        step: deleted.data.step,
+        recipe,
+        mutation: { clientMutationId: parsed.data.clientMutationId, replayed: false },
+      },
+    };
+  }, (db, reservation) => recoverNativeRecipeStepDelete(db, reservation, {
+    clientMutationId: parsed.data.clientMutationId,
+    origin,
+    principalId: principal.id,
+    recipeId,
+    stepId,
+  }));
+}
+
+async function handleRecipeStepIngredientCreate(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string, stepId: string) {
+  const body = await parseApiV1JsonBody(args.request);
+  const parsed = parseNativeRecipeStepIngredientCreateBody(body);
+  if (!parsed.ok) {
+    throw new ApiV1Error(parsed.code, parsed.message, parsed.details);
+  }
+  const origin = publicContentOrigin(args);
+
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, parsed.data.clientMutationId, "recipes.steps.ingredients.create", async (db, reservation) => {
+    const created = recipeStepResultOrThrow(await createNativeRecipeStepIngredient(db, principal.id, recipeId, stepId, parsed.data, { ingredientId: reservation.id }));
+    const { recipe, step, ingredient } = await serializedRecipeStepIngredientOrThrow(db, created.data.recipeId, created.data.stepId, created.data.ingredientId, origin);
+    return {
+      status: created.status,
+      data: {
+        created: true,
+        ingredient,
+        step,
+        recipe,
+        mutation: { clientMutationId: parsed.data.clientMutationId, replayed: false },
+      },
+    };
+  }, (db, reservation) => recoverNativeRecipeStepIngredientCreate(db, reservation, {
+    clientMutationId: parsed.data.clientMutationId,
+    origin,
+    principalId: principal.id,
+    recipeId,
+    stepId,
+  }));
+}
+
+async function handleRecipeStepIngredientDelete(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string, stepId: string, ingredientId: string) {
+  const body = await parseApiV1JsonBody(args.request);
+  const url = new URL(args.request.url);
+  const parsed = parseNativeRecipeStepIngredientDeleteBody(
+    body,
+    args.request.headers.get("X-Client-Mutation-Id") ?? url.searchParams.get("clientMutationId"),
+  );
+  if (!parsed.ok) {
+    throw new ApiV1Error(parsed.code, parsed.message, parsed.details);
+  }
+
+  const origin = publicContentOrigin(args);
+  const idempotencyBody = { clientMutationId: parsed.data.clientMutationId };
+  return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, parsed.data.clientMutationId, "recipes.steps.ingredients.delete", async (db) => {
+    const deleted = recipeStepResultOrThrow(await deleteNativeRecipeStepIngredient(db, principal.id, recipeId, stepId, ingredientId));
+    const recipe = await serializedRecipeOrThrow(db, deleted.data.recipeId, origin);
+    const step = findSerializedStep(recipe, deleted.data.stepId);
+    if (!step) {
+      throw new Error(`Recipe step ${deleted.data.stepId} was not readable after ingredient delete`);
+    }
+    return {
+      status: deleted.status,
+      data: {
+        deleted: true,
+        ingredient: deleted.data.ingredient,
+        step,
+        recipe,
+        mutation: { clientMutationId: parsed.data.clientMutationId, replayed: false },
+      },
+    };
+  }, (db, reservation) => recoverNativeRecipeStepIngredientDelete(db, reservation, {
+    clientMutationId: parsed.data.clientMutationId,
+    origin,
+    principalId: principal.id,
+    recipeId,
+    stepId,
+    ingredientId,
+  }));
+}
+
+async function handleRecipeStepReorder(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string) {
+  const body = await parseApiV1JsonBody(args.request);
+  const parsed = parseNativeRecipeStepReorderBody(body);
+  if (!parsed.ok) {
+    throw new ApiV1Error(parsed.code, parsed.message, parsed.details);
+  }
+  const origin = publicContentOrigin(args);
+
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, parsed.data.clientMutationId, "recipes.steps.reorder", async (db) => {
+    const reordered = recipeStepResultOrThrow(await reorderNativeRecipeStep(db, principal.id, recipeId, parsed.data));
+    const { recipe, step } = await serializedRecipeStepOrThrow(db, reordered.data.recipeId, reordered.data.stepId, origin);
+    return {
+      status: reordered.status,
+      data: {
+        reordered: reordered.data.reordered,
+        step,
+        recipe,
+        mutation: { clientMutationId: parsed.data.clientMutationId, replayed: false },
+      },
+    };
+  }, (db, reservation) => recoverNativeRecipeStepReorder(db, reservation, {
+    clientMutationId: parsed.data.clientMutationId,
+    origin,
+    principalId: principal.id,
+    recipeId,
+    stepId: parsed.data.stepId,
+    toStepNum: parsed.data.toStepNum,
+    reordered: true,
+  }));
+}
+
+async function handleRecipeStepOutputUsesReplace(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string) {
+  const body = await parseApiV1JsonBody(args.request);
+  const parsed = parseNativeRecipeStepOutputUsesBody(body);
+  if (!parsed.ok) {
+    throw new ApiV1Error(parsed.code, parsed.message, parsed.details);
+  }
+  const origin = publicContentOrigin(args);
+
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, parsed.data.clientMutationId, "recipes.steps.output-uses.replace", async (db) => {
+    const replaced = recipeStepResultOrThrow(await replaceNativeRecipeStepOutputUses(db, principal.id, recipeId, parsed.data));
+    const { recipe, step } = await serializedRecipeStepOrThrow(db, replaced.data.recipeId, replaced.data.stepId, origin);
+    return {
+      status: replaced.status,
+      data: {
+        replaced: replaced.data.replaced,
+        step,
+        recipe,
+        mutation: { clientMutationId: parsed.data.clientMutationId, replayed: false },
+      },
+    };
+  }, (db, reservation) => recoverNativeRecipeStepOutputUses(db, reservation, {
+    clientMutationId: parsed.data.clientMutationId,
+    origin,
+    principalId: principal.id,
+    recipeId,
+    stepId: parsed.data.inputStepId,
+    outputStepNums: parsed.data.outputStepNums,
+  }));
+}
+
 function credentialMetadata(credential: ApiCredential) {
   return {
     id: credential.id,
@@ -2146,6 +2661,48 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
     if (args.request.method === "POST" && segments[0] === "recipes" && segments[2] === "fork" && segments.length === 3) {
       const principal = await authorize(path) as ApiPrincipal;
       const response = await handleRecipeFork(args, requestId, principal, segments[1]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "POST" && segments[0] === "recipes" && segments[2] === "steps" && segments.length === 3) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeStepCreate(args, requestId, principal, segments[1]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "PATCH" && segments[0] === "recipes" && segments[2] === "steps" && segments.length === 4) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeStepUpdate(args, requestId, principal, segments[1], segments[3]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "DELETE" && segments[0] === "recipes" && segments[2] === "steps" && segments.length === 4) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeStepDelete(args, requestId, principal, segments[1], segments[3]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "POST" && segments[0] === "recipes" && segments[2] === "steps" && segments[3] === "reorder" && segments.length === 4) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeStepReorder(args, requestId, principal, segments[1]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "POST" && segments[0] === "recipes" && segments[2] === "steps" && segments[4] === "ingredients" && segments.length === 5) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeStepIngredientCreate(args, requestId, principal, segments[1], segments[3]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "DELETE" && segments[0] === "recipes" && segments[2] === "steps" && segments[4] === "ingredients" && segments.length === 6) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeStepIngredientDelete(args, requestId, principal, segments[1], segments[3], segments[5]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "PUT" && segments[0] === "recipes" && segments[2] === "step-output-uses" && segments.length === 3) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeStepOutputUsesReplace(args, requestId, principal, segments[1]);
       return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
     }
 
