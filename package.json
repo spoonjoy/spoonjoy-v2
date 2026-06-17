@@ -12,7 +12,7 @@
     "postinstall": "prisma generate",
     "dev": "react-router dev",
     "api:playground:generate": "tsx scripts/generate-api-playground.ts",
-    "build": "pnpm run api:playground:generate && react-router build",
+    "build": "tsx scripts/build.ts",
     "preview": "wrangler pages dev",
     "deploy": "pnpm run deploy:preflight && pnpm run build && pnpm exec wrangler deploy",
     "deploy:auto": "SPOONJOY_PREFLIGHT_SKIP_REMOTE=1 pnpm run deploy:preflight && pnpm run build && pnpm exec wrangler d1 migrations apply DB --remote && pnpm run deploy:preflight && pnpm exec wrangler deploy",
