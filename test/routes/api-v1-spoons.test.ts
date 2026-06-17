@@ -560,7 +560,7 @@ describe("API v1 recipe spoon endpoints", () => {
         { useAsRecipeCover: "false" },
       ),
       `recipes/${recipe.id}/spoons`,
-      { PHOTOS: bucket },
+      { ...vapidEnv, PHOTOS: bucket },
     ));
     const ownerPayload = await readJson(ownerResponse);
 
