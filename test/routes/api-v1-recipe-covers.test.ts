@@ -762,11 +762,12 @@ describe("API v1 recipe image and cover lifecycle endpoints", () => {
       `recipes/${recipe.id}/image`,
       { PHOTOS: photos.bucket },
     ));
-    expect(oversized.status).toBe(400);
-    expectErrorEnvelope(await readJson(oversized), "req_cover_image_too_large", "validation_error", 400, true);
+      expect(oversized.status).toBe(400);
+      expectErrorEnvelope(await readJson(oversized), "req_cover_image_too_large", "validation_error", 400, true);
 
-    await expect(db.recipeCover.count({ where: { recipeId: recipe.id } })).resolves.toBe(1);
-  });
+      expect(photos.puts).toHaveLength(1);
+      await expect(db.recipeCover.count({ where: { recipeId: recipe.id } })).resolves.toBe(1);
+    });
 
   it("creates idempotent uploaded-image cover candidates only from safe owner-owned Spoonjoy photo URLs", async () => {
     const { chef, writer, recipe } = await createCoverFixture(db);
@@ -915,10 +916,20 @@ describe("API v1 recipe image and cover lifecycle endpoints", () => {
       archivedCover: null,
     });
     expect(activatePayload.data.nextActions).toContain("list_recipe_covers");
-    expect(activateReplay.status).toBe(200);
-    expectActiveCoverMutationData(activateReplayPayload.data, activateBody.clientMutationId, true);
+      expect(activateReplay.status).toBe(200);
+      expectActiveCoverMutationData(activateReplayPayload.data, activateBody.clientMutationId, true);
 
-    const invalidVariant = await action(routeArgs(
+      const activateConflict = await action(routeArgs(
+        jsonMutationRequest("PATCH", `recipes/${recipe.id}/covers/${replacement.id}`, writer.token, "req_cover_activate_conflict", {
+          clientMutationId: activateBody.clientMutationId,
+          variant: "image",
+        }),
+        `recipes/${recipe.id}/covers/${replacement.id}`,
+      ));
+      expect(activateConflict.status).toBe(409);
+      expectErrorEnvelope(await readJson(activateConflict), "req_cover_activate_conflict", "idempotency_conflict", 409);
+
+      const invalidVariant = await action(routeArgs(
       jsonMutationRequest("PATCH", `recipes/${recipe.id}/covers/${replacement.id}`, writer.token, "req_cover_invalid_variant", {
         clientMutationId: "native-set-active-cover-invalid",
         variant: "poster",
@@ -1227,11 +1238,12 @@ describe("API v1 recipe image and cover lifecycle endpoints", () => {
       createdById: chef.id,
       activeVariant: "image",
     });
-    expect(uploadPayload.data.activeCover).toMatchObject({
-      id: uploadPayload.data.createdCover.id,
-      activeVariant: "image",
-    });
-    expectProviderBlockerShape(uploadPayload.data.blockers[0], blockerPath);
+      expect(uploadPayload.data.activeCover).toMatchObject({
+        id: uploadPayload.data.createdCover.id,
+        activeVariant: "image",
+      });
+      expect(uploadPayload.data.blockers).toHaveLength(1);
+      expectProviderBlockerShape(uploadPayload.data.blockers[0], blockerPath);
 
     const createClientMutationId = "native-create-cover-provider-blocked-1";
     const create = await action(routeArgs(
@@ -1257,11 +1269,12 @@ describe("API v1 recipe image and cover lifecycle endpoints", () => {
       failureReason: "missing_image_provider_config",
       activeVariant: "image",
     });
-    expect(createPayload.data.previousActiveCover).toMatchObject({
-      id: uploadPayload.data.createdCover.id,
-      activeVariant: "image",
-    });
-    expectProviderBlockerShape(createPayload.data.blockers[0], blockerPath);
+      expect(createPayload.data.previousActiveCover).toMatchObject({
+        id: uploadPayload.data.createdCover.id,
+        activeVariant: "image",
+      });
+      expect(createPayload.data.blockers).toHaveLength(1);
+      expectProviderBlockerShape(createPayload.data.blockers[0], blockerPath);
 
     const spoon = await db.recipeSpoon.create({
       data: {
@@ -1296,11 +1309,12 @@ describe("API v1 recipe image and cover lifecycle endpoints", () => {
       createdById: chef.id,
       activeVariant: "image",
     });
-    expect(fromSpoonPayload.data.previousActiveCover).toMatchObject({
-      id: createPayload.data.createdCover.id,
-      activeVariant: "image",
-    });
-    expectProviderBlockerShape(fromSpoonPayload.data.blockers[0], blockerPath);
+      expect(fromSpoonPayload.data.previousActiveCover).toMatchObject({
+        id: createPayload.data.createdCover.id,
+        activeVariant: "image",
+      });
+      expect(fromSpoonPayload.data.blockers).toHaveLength(1);
+      expectProviderBlockerShape(fromSpoonPayload.data.blockers[0], blockerPath);
 
     const blocker = JSON.parse(await readFile(blockerPath, "utf8")) as Record<string, unknown>;
     expectProviderBlockerShape(blocker, blockerPath);
