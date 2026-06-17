@@ -360,7 +360,7 @@ describe("API v1 recipe write mutations", () => {
       error: {
         code: "validation_error",
         status: 400,
-        details: { title: ACTIVE_RECIPE_TITLE_CONFLICT_ERROR },
+        details: { fieldErrors: { title: ACTIVE_RECIPE_TITLE_CONFLICT_ERROR } },
       },
     });
 
@@ -390,6 +390,19 @@ describe("API v1 recipe write mutations", () => {
       servings: "6",
       steps: expect.any(Array),
     });
+
+    const updateReplay = await action(routeArgs(
+      mutationRequest("PATCH", `recipes/${recipe.id}`, fixture.writer.token, "req_recipe_patch_replay", updateBody),
+      `recipes/${recipe.id}`,
+    ));
+    const updateReplayPayload = await readJson(updateReplay);
+    const expectedUpdateReplay = structuredClone(updatePayload);
+    expectedUpdateReplay.requestId = "req_recipe_patch_replay";
+    expectedUpdateReplay.data.mutation.replayed = true;
+
+    expect(updateReplay.status).toBe(200);
+    expectPrivateEnvelopeHeaders(updateReplay, "req_recipe_patch_replay");
+    expect(updateReplayPayload).toEqual(expectedUpdateReplay);
 
     const crossOwner = await action(routeArgs(
       mutationRequest("PATCH", `recipes/${recipe.id}`, fixture.otherWriter.token, "req_recipe_patch_cross_owner", {
@@ -486,7 +499,7 @@ describe("API v1 recipe write mutations", () => {
     });
     const token = await createApiCredential(db, forker.id, "Fork writer", { scopes: ["kitchen:write"] });
     const captured: Promise<unknown>[] = [];
-    const body = { clientMutationId: "recipe-fork-pasta", titleOverride: " My Pasta " };
+    const body = { clientMutationId: "recipe-fork-pasta", title: " My Pasta " };
 
     const response = await action(routeArgs(
       mutationRequest("POST", `recipes/${source.id}/fork`, token.token, "req_recipe_fork", body),
@@ -543,6 +556,29 @@ describe("API v1 recipe write mutations", () => {
       recipeTitle: "My Pasta (variation 2)",
       forkerUsername: forker.username,
     });
+
+    const replayCaptured: Promise<unknown>[] = [];
+    const replay = await action(routeArgs(
+      mutationRequest("POST", `recipes/${source.id}/fork`, token.token, "req_recipe_fork_replay", body),
+      `recipes/${source.id}/fork`,
+      {
+        env: VAPID_ENV,
+        ctx: { waitUntil: (promise: Promise<unknown>) => replayCaptured.push(promise) },
+      },
+    ));
+    const replayPayload = await readJson(replay);
+    const expectedReplay = structuredClone(payload);
+    expectedReplay.requestId = "req_recipe_fork_replay";
+    expectedReplay.data.mutation.replayed = true;
+
+    expect(replay.status).toBe(201);
+    expectPrivateEnvelopeHeaders(replay, "req_recipe_fork_replay");
+    expect(replayPayload).toEqual(expectedReplay);
+    expect(replayCaptured).toHaveLength(0);
+    await expect(db.recipe.count({ where: { chefId: forker.id, sourceRecipeId: source.id } })).resolves.toBe(1);
+    await expect(db.notificationEvent.count({
+      where: { recipientId: owner.id, kind: "fork_of_my_recipe" },
+    })).resolves.toBe(1);
   });
 
   it("validates mutation bodies, duplicate titles, deleted fork sources, auth, and scope before writes", async () => {
@@ -614,7 +650,7 @@ describe("API v1 recipe write mutations", () => {
         method: "POST" as const,
         path: `recipes/${recipe.id}/fork`,
         requestId: "req_recipe_fork_blank_client_mutation",
-        body: { clientMutationId: " ", titleOverride: "Fork" },
+        body: { clientMutationId: " ", title: "Fork" },
       },
     ];
 
@@ -649,7 +685,7 @@ describe("API v1 recipe write mutations", () => {
       error: {
         code: "validation_error",
         status: 400,
-        details: { title: ACTIVE_RECIPE_TITLE_CONFLICT_ERROR },
+        details: { fieldErrors: { title: ACTIVE_RECIPE_TITLE_CONFLICT_ERROR } },
       },
     });
 
