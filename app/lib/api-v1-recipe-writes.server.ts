@@ -317,6 +317,7 @@ export async function createNativeRecipe(
   db: Database,
   chefId: string,
   input: NativeRecipeCreateInput,
+  options: { recipeId?: string } = {},
 ): Promise<ApiV1RecipeWriteResult<{ recipeId: string }>> {
   const uniqueTitle = await validateActiveRecipeTitleUnique(db, {
     chefId,
@@ -327,7 +328,7 @@ export async function createNativeRecipe(
   }
 
   const recipe = await createRecipeDraft(db, {
-    id: crypto.randomUUID(),
+    id: options.recipeId ?? crypto.randomUUID(),
     title: input.title,
     description: input.description,
     servings: input.servings,
@@ -407,6 +408,7 @@ export async function forkNativeRecipe(
   chefId: string,
   sourceRecipeId: string,
   input: NativeRecipeForkInput,
+  options: { recipeId?: string } = {},
 ): Promise<ApiV1RecipeWriteResult<{
   recipeId: string;
   fork: {
@@ -421,6 +423,7 @@ export async function forkNativeRecipe(
       sourceRecipeId,
       viewerId: chefId,
       titleOverride: input.titleOverride,
+      recipeId: options.recipeId,
     });
 
     return success({

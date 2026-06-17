@@ -478,6 +478,25 @@ describe("API v1 recipe write mutations", () => {
     expect(replayPayload).toEqual(expectedReplay);
   });
 
+  it("does not recover deletes for recipes deleted before the idempotency attempt", async () => {
+    const fixture = await createRecipeWriteFixture(db);
+    const deletedRecipe = await createRecipeGraph(db, fixture.chef.id, {
+      title: "Already Deleted Through API",
+      deletedAt: new Date(Date.now() - 60_000),
+    });
+
+    const response = await action(routeArgs(
+      mutationRequest("DELETE", `recipes/${deletedRecipe.id}`, fixture.writer.token, "req_recipe_delete_already_deleted", {
+        clientMutationId: "recipe-delete-already-deleted",
+      }),
+      `recipes/${deletedRecipe.id}`,
+    ));
+
+    expect(response.status).toBe(404);
+    expectPrivateEnvelopeHeaders(response, "req_recipe_delete_already_deleted");
+    expectErrorEnvelope(await readJson(response), "req_recipe_delete_already_deleted", "not_found", 404);
+  });
+
   it("forks recipes with source graph, title suffixing, cover copy, and notification side effects", async () => {
     const owner = await db.user.create({ data: createTestUser() });
     const forker = await db.user.create({ data: createTestUser() });

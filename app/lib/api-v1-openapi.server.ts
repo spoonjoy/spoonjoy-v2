@@ -1123,6 +1123,7 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
 
 const exampleTimestamp = "2026-06-01T00:00:00.000Z";
 const exampleChef = { id: "chef_1", username: "ari" };
+const exampleSourceChef = { id: "chef_source", username: "jules" };
 const examplePrincipal = { ...exampleChef, source: "bearer" };
 const exampleRecipeIngredient = { id: "ingredient_1", name: "pasta", quantity: 1, unit: "lb" };
 const exampleRecipeStep = {
@@ -1166,6 +1167,36 @@ const exampleRecipeDetail = {
   steps: [exampleRecipeStep],
   cookbooks: [exampleCookbookLink],
 };
+const exampleCreatedRecipeDetail = {
+  ...exampleRecipeDetail,
+  attribution: {
+    ...exampleRecipeDetail.attribution,
+    sourceUrl: null,
+    sourceHost: null,
+    sourceRecipe: null,
+  },
+};
+const exampleForkedRecipeDetail = {
+  ...exampleRecipeDetail,
+  id: "recipe_fork_1",
+  title: "Pasta (variation 2)",
+  href: "/recipes/recipe_fork_1",
+  canonicalUrl: "https://spoonjoy.app/recipes/recipe_fork_1",
+  attribution: {
+    creditText: "Pasta (variation 2) by ari on Spoonjoy",
+    canonicalUrl: "https://spoonjoy.app/recipes/recipe_fork_1",
+    sourceUrl: null,
+    sourceHost: null,
+    sourceRecipe: {
+      id: "recipe_source_1",
+      title: "Pasta",
+      chef: exampleSourceChef,
+      href: "/recipes/recipe_source_1",
+      canonicalUrl: "https://spoonjoy.app/recipes/recipe_source_1",
+      deleted: false,
+    },
+  },
+};
 const exampleDeletedRecipe = {
   id: "recipe_1",
   deletedAt: exampleTimestamp,
@@ -1173,7 +1204,7 @@ const exampleDeletedRecipe = {
 };
 const exampleRecipeFork = {
   appliedTitle: "Pasta (variation 2)",
-  sourceChef: exampleChef,
+  sourceChef: exampleSourceChef,
   sourceRecipeId: "recipe_source_1",
   titleWasSuffixed: true,
 };
@@ -1497,7 +1528,7 @@ const responseExamples: Record<string, unknown> = {
   CreateRecipeEnvelope: {
     ok: true,
     requestId: "req_example",
-    data: { created: true, recipe: exampleRecipeDetail, mutation: exampleMutation },
+    data: { created: true, recipe: exampleCreatedRecipeDetail, mutation: exampleMutation },
   },
   UpdateRecipeEnvelope: {
     ok: true,
@@ -1512,7 +1543,7 @@ const responseExamples: Record<string, unknown> = {
   ForkRecipeEnvelope: {
     ok: true,
     requestId: "req_example",
-    data: { fork: exampleRecipeFork, recipe: exampleRecipeDetail, mutation: exampleMutation },
+    data: { fork: exampleRecipeFork, recipe: exampleForkedRecipeDetail, mutation: exampleMutation },
   },
   CookbookListEnvelope: {
     ok: true,
