@@ -21,6 +21,7 @@ interface OperationConfig {
   scopes: string[];
   success: Record<number, string>;
   errors: ApiV1ErrorCode[];
+  errorScopes?: string[];
   parameters?: unknown[];
   requestBody?: string;
 }
@@ -1047,7 +1048,7 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
     GET: { operationId: "getApiV1UserKitchenVisitors", tags: ["Profiles"], summary: "List kitchen visitors for a profile", auth: "optional", scopes: ["public:read"], success: { 200: "ProfileGraphEnvelope" }, errors: optionalReadErrors, parameters: [pathParameters.identifier, queryParameters.page, queryParameters.graphLimit] },
   },
   "/api/v1/search": {
-    GET: { operationId: "getApiV1Search", tags: ["Search"], summary: "Search recipes, cookbooks, chefs, and private shopping-list items", auth: "optional", scopes: ["public:read"], success: { 200: "SearchEnvelope" }, errors: optionalReadErrors, parameters: [queryParameters.query, queryParameters.q, queryParameters.scope, queryParameters.limit] },
+    GET: { operationId: "getApiV1Search", tags: ["Search"], summary: "Search recipes, cookbooks, chefs, and private shopping-list items", auth: "optional", scopes: [], success: { 200: "SearchEnvelope" }, errors: [...optionalReadErrors, "authentication_required"], errorScopes: ["shopping_list:read"], parameters: [queryParameters.query, queryParameters.q, queryParameters.scope, queryParameters.limit] },
   },
   "/api/v1/recipes/import": {
     POST: { operationId: "postApiV1RecipesImport", tags: ["Recipes"], summary: "Import a recipe from a URL, text, or captured draft", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractCreated, errors: bearerMutationErrors, requestBody: "NativeMutationRequest" },
@@ -1608,7 +1609,7 @@ function successResponse(schemaName: string, options: { publicCache?: boolean; n
 }
 
 function errorMessageFor(code: ApiV1ErrorCode, scopes: readonly string[]) {
-  if (code === "insufficient_scope") return `Missing required scope: ${scopes[0]!}`;
+  if (code === "insufficient_scope") return scopes[0] ? `Missing required scope: ${scopes[0]}` : "Missing required scope";
   return errorMessages[code];
 }
 
@@ -2154,7 +2155,7 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
         });
       }
       for (const [status, codes] of errorCodesByStatus(meta.errors)) {
-        responses[String(status)] = errorResponse(codes, requirement.scopes);
+        responses[String(status)] = errorResponse(codes, meta.errorScopes ?? requirement.scopes);
       }
 
       const parameters = [...(meta.parameters ?? []), pathParameters.requestIdHeader];

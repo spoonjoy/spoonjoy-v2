@@ -241,6 +241,17 @@ describe("API v1 OpenAPI document", () => {
         ).toBe(true);
       }
     }
+
+    expect(errorExample(document, "/api/v1/search", "GET", "401", "authentication_required").error).toMatchObject({
+      code: "authentication_required",
+      status: 401,
+    });
+    expect(errorExample(document, "/api/v1/search", "GET", "403", "insufficient_scope").error).toMatchObject({
+      code: "insufficient_scope",
+      message: "Missing required scope: shopping_list:read",
+      status: 403,
+    });
+    expect(JSON.stringify(document)).not.toContain("Missing required scope: undefined");
   });
 
   it("documents raw OpenAPI, method-level token scopes, health principal source, and concrete examples", () => {

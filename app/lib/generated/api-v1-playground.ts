@@ -11365,7 +11365,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         },
         {
           "status": "401",
-          "description": "Errors: invalid_token"
+          "description": "Errors: invalid_token, authentication_required"
         },
         {
           "status": "403",
@@ -11414,10 +11414,16 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
         },
         {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
           "status": "403",
           "name": "insufficient_scope",
           "label": "Insufficient Scope",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: undefined\",\n    \"status\": 403\n  }\n}"
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: shopping_list:read\",\n    \"status\": 403\n  }\n}"
         },
         {
           "status": "404",
@@ -11430,12 +11436,6 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "name": "method_not_allowed",
           "label": "Method Not Allowed",
           "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
-        },
-        {
-          "status": "429",
-          "name": "rate_limited",
-          "label": "Rate Limited",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"rate_limited\",\n    \"message\": \"Too many requests\",\n    \"status\": 429\n  }\n}"
         }
       ]
     },
