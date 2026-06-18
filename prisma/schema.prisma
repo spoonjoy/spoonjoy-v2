@@ -30,6 +30,7 @@ model User {
   addedToCookbooks    RecipeInCookbook[]
   apiCredentials      ApiCredential[]
   apiIdempotencyKeys  ApiIdempotencyKey[]
+  nativeSyncTombstones NativeSyncTombstone[]
   agentConnections    AgentConnectionRequest[]
   oauthAuthCodes      OAuthAuthCode[]
   oauthRefreshTokens  OAuthRefreshToken[]
@@ -111,6 +112,23 @@ model ApiMutationTombstone {
 
   @@unique([idempotencyKeyId, resourceType, resourceId])
   @@index([idempotencyKeyId])
+  @@index([resourceType, resourceId])
+}
+
+model NativeSyncTombstone {
+  id               String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resourceType     String
+  resourceId       String
+  parentResourceId String?
+  title            String?
+  deletedAt        DateTime
+  updatedAt        DateTime
+  createdAt        DateTime @default(now())
+
+  @@unique([userId, resourceType, resourceId])
+  @@index([userId, updatedAt])
   @@index([resourceType, resourceId])
 }
 

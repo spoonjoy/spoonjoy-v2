@@ -2,10 +2,12 @@ import { Buffer } from "node:buffer";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { faker } from "@faker-js/faker";
 import { Request as UndiciRequest } from "undici";
-import { loader } from "~/routes/api.v1.$";
+import { action, loader } from "~/routes/api.v1.$";
 import { createApiCredential } from "~/lib/api-auth.server";
+import { loadNativeSyncSnapshot } from "~/lib/api-v1-native-sync.server";
 import { resolveApiV1ScopeRequirement } from "~/lib/api-v1.server";
 import { getLocalDb } from "~/lib/db.server";
+import { createCover } from "~/lib/recipe-cover.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import {
   createIngredientName,
@@ -18,8 +20,8 @@ import {
 
 type LocalDb = Awaited<ReturnType<typeof getLocalDb>>;
 
-function routeArgs(request: Request, splat: string) {
-  return { request, params: { "*": splat }, context: { cloudflare: { env: null } } } as any;
+function routeArgs(request: Request, splat: string, env: Record<string, unknown> | null = null) {
+  return { request, params: { "*": splat }, context: { cloudflare: { env } } } as any;
 }
 
 async function readJson(response: Response) {
@@ -125,6 +127,17 @@ function syncRequest(path: string, token: string, requestId: string) {
   }) as unknown as Request;
 }
 
+function deleteRequest(path: string, token: string, requestId: string, clientMutationId: string) {
+  return new UndiciRequest(`http://localhost/api/v1/${path}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "X-Request-Id": requestId,
+      "X-Client-Mutation-Id": clientMutationId,
+    },
+  }) as unknown as Request;
+}
+
 async function createSyncUser(db: LocalDb, updatedAt = new Date("2026-06-01T00:00:00.000Z")) {
   const user = await db.user.create({
     data: {
@@ -142,6 +155,13 @@ async function createNativeSyncFixture(db: LocalDb, options: { tiedUpdatedAt?: D
   const base = options.tiedUpdatedAt ?? new Date("2026-06-01T00:00:00.000Z");
   const at = (minutes: number) => options.tiedUpdatedAt ?? new Date(base.getTime() + minutes * 60_000);
   const { user, reader, writeOnly } = await createSyncUser(db, at(0));
+  const sourceOwner = await db.user.create({
+    data: {
+      ...createTestUser(),
+      photoUrl: `/photos/profiles/source_${faker.string.alphanumeric(10)}.jpg`,
+      updatedAt: at(0),
+    },
+  });
 
   await db.notificationPreference.create({
     data: {
@@ -154,14 +174,43 @@ async function createNativeSyncFixture(db: LocalDb, options: { tiedUpdatedAt?: D
     },
   });
 
-  const recipe = await db.recipe.create({
+  const sourceRecipe = await db.recipe.create({
+    data: {
+      title: `Native Sync Source Recipe ${faker.string.alphanumeric(8)}`,
+      description: "Original public source recipe.",
+      chefId: sourceOwner.id,
+      createdAt: at(1),
+      updatedAt: at(1),
+    },
+  });
+  const createdRecipe = await db.recipe.create({
     data: {
       title: `Native Sync Recipe ${faker.string.alphanumeric(8)}`,
       description: "A recipe that proves the native cache can rebuild recipe detail.",
       servings: "4",
       chefId: user.id,
+      sourceRecipeId: sourceRecipe.id,
       sourceUrl: "https://example.com/native-sync-recipe",
       createdAt: at(2),
+      updatedAt: at(2),
+    },
+  });
+  const createdCover = await createCover(db, {
+    recipeId: createdRecipe.id,
+    imageUrl: "/photos/recipes/native-sync-original.jpg",
+    stylizedImageUrl: "/photos/recipes/native-sync-stylized.jpg",
+    sourceType: "chef-upload",
+  });
+  const cover = await db.recipeCover.update({
+    where: { id: createdCover.id },
+    data: { createdAt: at(2) },
+  });
+  const recipe = await db.recipe.update({
+    where: { id: createdRecipe.id },
+    data: {
+      activeCoverId: cover.id,
+      activeCoverVariant: "stylized",
+      coverMode: "manual",
       updatedAt: at(2),
     },
   });
@@ -248,6 +297,9 @@ async function createNativeSyncFixture(db: LocalDb, options: { tiedUpdatedAt?: D
     recipe,
     cookbook,
     spoon,
+    sourceOwner,
+    sourceRecipe,
+    cover,
     list,
     shoppingItem,
     unit,
@@ -300,32 +352,67 @@ async function createDeletedSyncFixture(db: LocalDb) {
   });
 
   const deletedCookbookId = `cookbook_deleted_${faker.string.alphanumeric(12)}`;
-  const idempotency = await db.apiIdempotencyKey.create({
+  const cookbookDeletedAt = "2026-06-02T00:05:30.000Z";
+  const cookbookTombstone = await db.nativeSyncTombstone.create({
     data: {
       userId: user.id,
-      credentialId: reader.credential.id,
-      clientKey: "native-sync-deleted-cookbook",
-      key: `delete-cookbook-${faker.string.alphanumeric(8)}`,
-      operation: "cookbooks.delete",
-      requestHash: `hash-${faker.string.alphanumeric(16)}`,
-      expiresAt: new Date("2026-06-09T00:00:00.000Z"),
-      createdAt: new Date("2026-06-02T00:05:00.000Z"),
-      updatedAt: new Date("2026-06-02T00:05:00.000Z"),
-    },
-  });
-  const cookbookDeletedAt = "2026-06-02T00:05:30.000Z";
-  const cookbookTombstone = await db.apiMutationTombstone.create({
-    data: {
-      idempotencyKeyId: idempotency.id,
-      operation: "cookbooks.delete",
       resourceType: "cookbook",
       resourceId: deletedCookbookId,
-      payload: JSON.stringify({ title: "Deleted Native Sync Cookbook", deletedAt: cookbookDeletedAt }),
+      title: "Deleted Native Sync Cookbook",
+      deletedAt: new Date(cookbookDeletedAt),
+      updatedAt: new Date(cookbookDeletedAt),
       createdAt: new Date(cookbookDeletedAt),
     },
   });
 
   return { user, reader, deletedRecipe, deletedSpoon, deletedShoppingItem, cookbookTombstone, deletedCookbookId, cookbookDeletedAt };
+}
+
+async function createNativeSyncGraphFixture(db: LocalDb) {
+  const { user, reader } = await createSyncUser(db, new Date("2026-06-04T00:00:00.000Z"));
+  const recipeUpdatedAt = new Date("2026-06-04T00:02:00.000Z");
+  const unit = await getOrCreateUnit(db, `native graph unit ${faker.string.alphanumeric(8)}`);
+  const appleRef = await getOrCreateIngredientRef(db, `apple native graph ${faker.string.alphanumeric(8)}`);
+  const zucchiniRef = await getOrCreateIngredientRef(db, `zucchini native graph ${faker.string.alphanumeric(8)}`);
+  const firstRecipe = await db.recipe.create({
+    data: {
+      id: `recipe_sync_a_${faker.string.alphanumeric(8)}`,
+      title: `A Native Graph Recipe ${faker.string.alphanumeric(8)}`,
+      chefId: user.id,
+      createdAt: recipeUpdatedAt,
+      updatedAt: recipeUpdatedAt,
+    },
+  });
+  const secondRecipe = await db.recipe.create({
+    data: {
+      id: `recipe_sync_b_${faker.string.alphanumeric(8)}`,
+      title: `B Native Graph Recipe ${faker.string.alphanumeric(8)}`,
+      chefId: user.id,
+      createdAt: recipeUpdatedAt,
+      updatedAt: recipeUpdatedAt,
+    },
+  });
+  await db.recipeStep.createMany({
+    data: [
+      { recipeId: firstRecipe.id, stepNum: 1, stepTitle: "Prep", description: "Prep ingredients.", duration: 5, updatedAt: recipeUpdatedAt },
+      { recipeId: firstRecipe.id, stepNum: 2, stepTitle: "Cook", description: "Cook aromatics.", duration: 8, updatedAt: recipeUpdatedAt },
+      { recipeId: firstRecipe.id, stepNum: 3, stepTitle: "Finish", description: "Finish the plate.", duration: 2, updatedAt: recipeUpdatedAt },
+    ],
+  });
+  await db.ingredient.createMany({
+    data: [
+      { recipeId: firstRecipe.id, stepNum: 1, quantity: 1, unitId: unit.id, ingredientRefId: zucchiniRef.id, updatedAt: recipeUpdatedAt },
+      { recipeId: firstRecipe.id, stepNum: 1, quantity: 2, unitId: unit.id, ingredientRefId: appleRef.id, updatedAt: recipeUpdatedAt },
+    ],
+  });
+  await db.stepOutputUse.createMany({
+    data: [
+      { recipeId: firstRecipe.id, outputStepNum: 2, inputStepNum: 3, updatedAt: recipeUpdatedAt },
+      { recipeId: firstRecipe.id, outputStepNum: 1, inputStepNum: 3, updatedAt: recipeUpdatedAt },
+    ],
+  });
+
+  return { user, reader, firstRecipe, secondRecipe, appleRef, zucchiniRef, recipeUpdatedAt };
 }
 
 describe("API v1 private native sync", () => {
@@ -377,8 +464,8 @@ describe("API v1 private native sync", () => {
     expect(payload.data.entries.map((entry: { kind: string }) => entry.kind)).toEqual([
       "profile",
       "notificationPreferences",
-      "recipe",
       "cookbook",
+      "recipe",
       "spoon",
       "shoppingItem",
     ]);
@@ -412,12 +499,41 @@ describe("API v1 private native sync", () => {
         updatedAt: fixture.updatedAt.preferences.toISOString(),
       },
     });
-    expect(payload.data.entries[2]).toMatchObject({
+    const recipeEntry = payload.data.entries.find((entry: { resourceId: string }) => entry.resourceId === fixture.recipe.id);
+    const cookbookEntry = payload.data.entries.find((entry: { resourceId: string }) => entry.resourceId === fixture.cookbook.id);
+    expect(recipeEntry).toMatchObject({
       kind: "recipe",
       resourceId: fixture.recipe.id,
       payload: {
         id: fixture.recipe.id,
         title: fixture.recipe.title,
+        chef: {
+          id: fixture.user.id,
+          username: fixture.user.username,
+        },
+        coverImageUrl: "https://spoonjoy.app/photos/recipes/native-sync-stylized.jpg",
+        coverProvenanceLabel: expect.any(String),
+        coverSourceType: "chef-upload",
+        coverVariant: "stylized",
+        href: `/recipes/${fixture.recipe.id}`,
+        canonicalUrl: `https://spoonjoy.app/recipes/${fixture.recipe.id}`,
+        attribution: {
+          creditText: `${fixture.recipe.title} by ${fixture.user.username} on Spoonjoy`,
+          canonicalUrl: `https://spoonjoy.app/recipes/${fixture.recipe.id}`,
+          sourceUrl: "https://example.com/native-sync-recipe",
+          sourceHost: "example.com",
+          sourceRecipe: {
+            id: fixture.sourceRecipe.id,
+            title: fixture.sourceRecipe.title,
+            chef: {
+              id: fixture.sourceOwner.id,
+              username: fixture.sourceOwner.username,
+            },
+            href: `/recipes/${fixture.sourceRecipe.id}`,
+            canonicalUrl: `https://spoonjoy.app/recipes/${fixture.sourceRecipe.id}`,
+            deleted: false,
+          },
+        },
         deletedAt: null,
         steps: [{
           stepNum: 1,
@@ -427,16 +543,55 @@ describe("API v1 private native sync", () => {
             unit: fixture.unit.name,
           }],
         }],
+        cookbooks: [{
+          id: fixture.cookbook.id,
+          title: fixture.cookbook.title,
+          href: `/cookbooks/${fixture.cookbook.id}`,
+          canonicalUrl: `https://spoonjoy.app/cookbooks/${fixture.cookbook.id}`,
+        }],
+        recentSpoons: [{
+          id: fixture.spoon.id,
+          recipeId: fixture.recipe.id,
+          note: "Cooked from native sync fixture.",
+          deletedAt: null,
+          chef: {
+            id: fixture.user.id,
+            username: fixture.user.username,
+            photoUrl: fixture.user.photoUrl,
+          },
+        }],
       },
     });
-    expect(payload.data.entries[3]).toMatchObject({
+    expect(cookbookEntry).toMatchObject({
       kind: "cookbook",
       resourceId: fixture.cookbook.id,
       payload: {
         id: fixture.cookbook.id,
         title: fixture.cookbook.title,
+        chef: {
+          id: fixture.user.id,
+          username: fixture.user.username,
+        },
+        recipeCount: 1,
+        coverImageUrls: ["https://spoonjoy.app/photos/recipes/native-sync-stylized.jpg"],
+        href: `/cookbooks/${fixture.cookbook.id}`,
+        canonicalUrl: `https://spoonjoy.app/cookbooks/${fixture.cookbook.id}`,
+        attribution: {
+          creditText: `${fixture.cookbook.title} by ${fixture.user.username} on Spoonjoy`,
+          canonicalUrl: `https://spoonjoy.app/cookbooks/${fixture.cookbook.id}`,
+        },
         deletedAt: null,
-        recipes: [{ id: fixture.recipe.id, title: fixture.recipe.title }],
+        recipes: [{
+          id: fixture.recipe.id,
+          title: fixture.recipe.title,
+          coverImageUrl: "https://spoonjoy.app/photos/recipes/native-sync-stylized.jpg",
+          href: `/recipes/${fixture.recipe.id}`,
+          canonicalUrl: `https://spoonjoy.app/recipes/${fixture.recipe.id}`,
+          attribution: {
+            canonicalUrl: `https://spoonjoy.app/recipes/${fixture.recipe.id}`,
+            sourceHost: "example.com",
+          },
+        }],
       },
     });
     expect(payload.data.entries[4]).toMatchObject({
@@ -460,6 +615,114 @@ describe("API v1 private native sync", () => {
         checked: true,
         deletedAt: null,
       },
+    });
+  });
+
+  it("derives freshness environment and public URLs from the route context", async () => {
+    const fixture = await createNativeSyncFixture(db);
+
+    const response = await loader(routeArgs(
+      syncRequest("me/sync?limit=20", fixture.reader.token, "req_native_sync_env"),
+      "me/sync",
+      { SPOONJOY_ENV: "preview", SPOONJOY_BASE_URL: "https://preview.spoonjoy.app" },
+    ));
+    const payload = await readJson(response);
+
+    expect(response.status).toBe(200);
+    expectSuccessEnvelope(payload, "req_native_sync_env");
+    expect(payload.data.freshness).toMatchObject({
+      accountId: fixture.user.id,
+      environment: "preview",
+    });
+    const recipeEntry = payload.data.entries.find((entry: { kind: string }) => entry.kind === "recipe");
+    const cookbookEntry = payload.data.entries.find((entry: { kind: string }) => entry.kind === "cookbook");
+    expect(recipeEntry.payload).toMatchObject({
+      canonicalUrl: `https://preview.spoonjoy.app/recipes/${fixture.recipe.id}`,
+      coverImageUrl: "https://preview.spoonjoy.app/photos/recipes/native-sync-stylized.jpg",
+    });
+    expect(cookbookEntry.payload).toMatchObject({
+      canonicalUrl: `https://preview.spoonjoy.app/cookbooks/${fixture.cookbook.id}`,
+      coverImageUrls: ["https://preview.spoonjoy.app/photos/recipes/native-sync-stylized.jpg"],
+    });
+  });
+
+  it("drops malformed public cover URLs and source hosts from native sync payloads", async () => {
+    const fixture = await createNativeSyncFixture(db);
+    await db.recipeCover.update({
+      where: { id: fixture.cover.id },
+      data: { stylizedImageUrl: "data:image/png;base64,abc123" },
+    });
+    const dataUrlCover = await loader(routeArgs(syncRequest("me/sync?limit=20", fixture.reader.token, "req_native_sync_data_url_cover"), "me/sync"));
+    const dataUrlCoverPayload = await readJson(dataUrlCover);
+    const dataUrlRecipeEntry = dataUrlCoverPayload.data.entries.find((entry: { resourceId: string }) => entry.resourceId === fixture.recipe.id);
+    expect(dataUrlRecipeEntry.payload).toMatchObject({
+      coverImageUrl: null,
+      coverProvenanceLabel: null,
+      coverSourceType: null,
+      coverVariant: null,
+    });
+
+    await db.recipeCover.update({
+      where: { id: fixture.cover.id },
+      data: { stylizedImageUrl: "https://[broken-cover-url" },
+    });
+    await db.recipe.update({
+      where: { id: fixture.recipe.id },
+      data: { sourceUrl: "https://[broken-source-url" },
+    });
+
+    const response = await loader(routeArgs(syncRequest("me/sync?limit=20", fixture.reader.token, "req_native_sync_malformed_urls"), "me/sync"));
+    const payload = await readJson(response);
+
+    expect(response.status).toBe(200);
+    expectSuccessEnvelope(payload, "req_native_sync_malformed_urls");
+    const recipeEntry = payload.data.entries.find((entry: { resourceId: string }) => entry.resourceId === fixture.recipe.id);
+    const cookbookEntry = payload.data.entries.find((entry: { resourceId: string }) => entry.resourceId === fixture.cookbook.id);
+    expect(recipeEntry.payload).toMatchObject({
+      coverImageUrl: null,
+      coverProvenanceLabel: null,
+      coverSourceType: null,
+      coverVariant: null,
+      attribution: {
+        sourceUrl: "https://[broken-source-url",
+        sourceHost: null,
+      },
+    });
+    expect(cookbookEntry.payload).toMatchObject({ coverImageUrls: [] });
+
+    await db.recipe.update({
+      where: { id: fixture.recipe.id },
+      data: { sourceUrl: "file:///tmp/native-sync-source" },
+    });
+    const fileSource = await loader(routeArgs(syncRequest("me/sync?limit=20", fixture.reader.token, "req_native_sync_file_source"), "me/sync"));
+    const fileSourcePayload = await readJson(fileSource);
+    const fileSourceRecipeEntry = fileSourcePayload.data.entries.find((entry: { resourceId: string }) => entry.resourceId === fixture.recipe.id);
+    expect(fileSourceRecipeEntry.payload.attribution).toMatchObject({
+      sourceUrl: "file:///tmp/native-sync-source",
+      sourceHost: null,
+    });
+  });
+
+  it("keeps deleted source recipe attribution private-safe in native sync payloads", async () => {
+    const fixture = await createNativeSyncFixture(db);
+    await db.recipe.update({
+      where: { id: fixture.sourceRecipe.id },
+      data: {
+        deletedAt: new Date("2026-06-01T00:07:00.000Z"),
+        updatedAt: new Date("2026-06-01T00:07:00.000Z"),
+      },
+    });
+
+    const response = await loader(routeArgs(syncRequest("me/sync?limit=20", fixture.reader.token, "req_native_sync_deleted_source"), "me/sync"));
+    const payload = await readJson(response);
+    const recipeEntry = payload.data.entries.find((entry: { resourceId: string }) => entry.resourceId === fixture.recipe.id);
+    expect(recipeEntry.payload.attribution.sourceRecipe).toEqual({
+      id: fixture.sourceRecipe.id,
+      title: null,
+      chef: null,
+      href: null,
+      canonicalUrl: null,
+      deleted: true,
     });
   });
 
@@ -585,6 +848,288 @@ describe("API v1 private native sync", () => {
     });
   });
 
+  it("keeps hard-deleted cookbook sync tombstones after idempotency cleanup", async () => {
+    const fixture = await createNativeSyncFixture(db);
+    const deleteCookbook = await db.cookbook.create({
+      data: {
+        title: `Native durable tombstone ${faker.string.alphanumeric(8)}`,
+        authorId: fixture.user.id,
+      },
+    });
+
+    const deleted = await action(routeArgs(
+      deleteRequest(`cookbooks/${deleteCookbook.id}`, fixture.writeOnly.token, "req_native_sync_durable_delete", "native-sync-durable-delete"),
+      `cookbooks/${deleteCookbook.id}`,
+    ));
+    const deletedPayload = await readJson(deleted);
+    expect(deleted.status).toBe(200);
+    expectSuccessEnvelope(deletedPayload, "req_native_sync_durable_delete");
+
+    await db.apiIdempotencyKey.deleteMany({ where: { userId: fixture.user.id } });
+    expect(await db.apiMutationTombstone.count()).toBe(0);
+
+    const response = await loader(routeArgs(syncRequest("me/sync?limit=20", fixture.reader.token, "req_native_sync_durable_tombstone"), "me/sync"));
+    const payload = await readJson(response);
+    expect(response.status).toBe(200);
+    const deletedEntry = payload.data.entries.find((entry: { resourceId: string }) => entry.resourceId === deleteCookbook.id);
+    expect(deletedEntry).toMatchObject({
+      action: "delete",
+      kind: "cookbook",
+      payload: null,
+      tombstone: {
+        resourceType: "cookbook",
+        resourceId: deleteCookbook.id,
+        title: deleteCookbook.title,
+        parentResourceId: null,
+        deletedAt: deletedPayload.data.cookbook.deletedAt,
+        updatedAt: deletedPayload.data.cookbook.deletedAt,
+      },
+    });
+  });
+
+  it("uses recipe children and cookbook membership changes as incremental sync revisions", async () => {
+    const fixture = await createNativeSyncFixture(db);
+    const recipeParentCursor = nativeSyncCursor({
+      updatedAt: fixture.updatedAt.recipe.toISOString(),
+      kind: "recipe",
+      resourceId: fixture.recipe.id,
+    });
+    const childUpdatedAt = new Date("2026-06-01T00:12:00.000Z");
+    await db.recipeStep.update({
+      where: { recipeId_stepNum: { recipeId: fixture.recipe.id, stepNum: 1 } },
+      data: { description: "Changed child step after parent cursor.", updatedAt: childUpdatedAt },
+    });
+
+    const afterChild = await loader(routeArgs(syncRequest(
+      `me/sync?cursor=${encodeURIComponent(recipeParentCursor)}`,
+      fixture.reader.token,
+      "req_native_sync_after_child",
+    ), "me/sync"));
+    const afterChildPayload = await readJson(afterChild);
+    expect(afterChild.status).toBe(200);
+    const recipeAfterChild = afterChildPayload.data.entries.find((entry: { resourceId: string }) => entry.resourceId === fixture.recipe.id);
+    expect(recipeAfterChild).toMatchObject({
+      kind: "recipe",
+      updatedAt: childUpdatedAt.toISOString(),
+      payload: {
+        steps: [expect.objectContaining({ description: "Changed child step after parent cursor." })],
+      },
+    });
+
+    const membershipCursor = nativeSyncCursor({
+      updatedAt: childUpdatedAt.toISOString(),
+      kind: "cookbook",
+      resourceId: fixture.cookbook.id,
+    });
+    const removed = await action(routeArgs(
+      deleteRequest(
+        `cookbooks/${fixture.cookbook.id}/recipes/${fixture.recipe.id}`,
+        fixture.writeOnly.token,
+        "req_native_sync_remove_membership",
+        "native-sync-remove-membership",
+      ),
+      `cookbooks/${fixture.cookbook.id}/recipes/${fixture.recipe.id}`,
+    ));
+    expect(removed.status).toBe(200);
+
+    const afterMembership = await loader(routeArgs(syncRequest(
+      `me/sync?cursor=${encodeURIComponent(membershipCursor)}`,
+      fixture.reader.token,
+      "req_native_sync_after_membership",
+    ), "me/sync"));
+    const afterMembershipPayload = await readJson(afterMembership);
+    expect(afterMembership.status).toBe(200);
+    const recipeAfterMembership = afterMembershipPayload.data.entries.find((entry: { resourceId: string }) => entry.resourceId === fixture.recipe.id);
+    const cookbookAfterMembership = afterMembershipPayload.data.entries.find((entry: { resourceId: string }) => entry.resourceId === fixture.cookbook.id);
+    expect(new Date(recipeAfterMembership.updatedAt).getTime()).toBeGreaterThan(childUpdatedAt.getTime());
+    expect(new Date(cookbookAfterMembership.updatedAt).getTime()).toBeGreaterThan(childUpdatedAt.getTime());
+    expect(recipeAfterMembership.payload.cookbooks).toEqual([]);
+    expect(cookbookAfterMembership.payload).toMatchObject({
+      recipes: [],
+      recipeCount: 0,
+      coverImageUrls: [],
+    });
+  });
+
+  it("handles default preferences, empty private domains, blank limits, ISO cursors, and helper not-found results", async () => {
+    const { user, reader } = await createSyncUser(db, new Date("2026-06-05T00:00:00.000Z"));
+
+    const blankParams = await loader(routeArgs(syncRequest(
+      "me/sync?limit=&cursor=%20%20",
+      reader.token,
+      "req_native_sync_blank_params",
+    ), "me/sync"));
+    const blankPayload = await readJson(blankParams);
+
+    expect(blankParams.status).toBe(200);
+    expectSuccessEnvelope(blankPayload, "req_native_sync_blank_params");
+    expectNativeSyncDataShape(blankPayload.data);
+    expect(blankPayload.data.entries.map((entry: { kind: string }) => entry.kind)).toEqual([
+      "profile",
+      "notificationPreferences",
+    ]);
+    expect(blankPayload.data.entries[1]).toMatchObject({
+      action: "upsert",
+      kind: "notificationPreferences",
+      resourceId: user.id,
+      updatedAt: user.updatedAt.toISOString(),
+      payload: {
+        userId: user.id,
+        notifySpoonOnMyRecipe: true,
+        notifyForkOfMyRecipe: true,
+        notifyCookbookSaveOfMine: true,
+        notifyFellowChefOriginCook: true,
+        updatedAt: user.updatedAt.toISOString(),
+      },
+      tombstone: null,
+    });
+
+    const isoCursor = await loader(routeArgs(syncRequest(
+      `me/sync?cursor=${encodeURIComponent(new Date(user.updatedAt.getTime() - 1_000).toISOString())}`,
+      reader.token,
+      "req_native_sync_iso_cursor",
+    ), "me/sync"));
+    const isoPayload = await readJson(isoCursor);
+    expect(isoCursor.status).toBe(200);
+    expectSuccessEnvelope(isoPayload, "req_native_sync_iso_cursor");
+    expect(isoPayload.data.entries.map((entry: { kind: string }) => entry.kind)).toEqual([
+      "profile",
+      "notificationPreferences",
+    ]);
+
+    const futureIsoCursor = user.updatedAt.toISOString();
+    const empty = await loader(routeArgs(syncRequest(
+      `me/sync?cursor=${encodeURIComponent(futureIsoCursor)}`,
+      reader.token,
+      "req_native_sync_iso_empty",
+    ), "me/sync"));
+    const emptyPayload = await readJson(empty);
+    expect(empty.status).toBe(200);
+    expectSuccessEnvelope(emptyPayload, "req_native_sync_iso_empty");
+    expect(emptyPayload.data.entries).toEqual([]);
+    expect(emptyPayload.data.nextCursor).toBe(futureIsoCursor);
+
+    await expect(loadNativeSyncSnapshot(db, "missing-user", new URL("http://localhost/api/v1/me/sync")))
+      .resolves.toMatchObject({ ok: false, code: "not_found" });
+    await expect(loadNativeSyncSnapshot(db, user.id, new URL("http://localhost/api/v1/me/sync")))
+      .resolves.toMatchObject({
+        ok: true,
+        data: { freshness: { accountId: user.id, environment: "local" } },
+      });
+    await expect(loadNativeSyncSnapshot(db, user.id, new URL("http://localhost/api/v1/me/sync"), { environment: "qa" }))
+      .resolves.toMatchObject({
+        ok: true,
+        data: { freshness: { accountId: user.id, environment: "qa" } },
+      });
+  });
+
+  it("sorts recipe subgraphs, same-kind resources, optional shopping fields, and malformed cookbook tombstones", async () => {
+    const fixture = await createNativeSyncGraphFixture(db);
+    const list = await db.shoppingList.create({
+      data: {
+        authorId: fixture.user.id,
+        createdAt: new Date("2026-06-04T00:03:00.000Z"),
+        updatedAt: new Date("2026-06-04T00:03:00.000Z"),
+      },
+    });
+    const shoppingRef = await getOrCreateIngredientRef(db, `optional native sync item ${faker.string.alphanumeric(8)}`);
+    const optionalShoppingItem = await db.shoppingListItem.create({
+      data: {
+        shoppingListId: list.id,
+        ingredientRefId: shoppingRef.id,
+        quantity: null,
+        unitId: null,
+        checked: false,
+        checkedAt: null,
+        sortIndex: 0,
+        updatedAt: new Date("2026-06-04T00:03:00.000Z"),
+      },
+    });
+    const tombstones = await Promise.all([
+      db.nativeSyncTombstone.create({
+        data: {
+          userId: fixture.user.id,
+          resourceType: "cookbook",
+          resourceId: `cookbook_sync_tombstone_a_${faker.string.alphanumeric(8)}`,
+          title: null,
+          deletedAt: new Date("2026-06-04T00:04:00.000Z"),
+          updatedAt: new Date("2026-06-04T00:04:00.000Z"),
+          createdAt: new Date("2026-06-04T00:04:00.000Z"),
+        },
+      }),
+      db.nativeSyncTombstone.create({
+        data: {
+          userId: fixture.user.id,
+          resourceType: "cookbook",
+          resourceId: `cookbook_sync_tombstone_b_${faker.string.alphanumeric(8)}`,
+          title: "Deleted graph cookbook",
+          deletedAt: new Date("2026-06-04T00:04:30.000Z"),
+          updatedAt: new Date("2026-06-04T00:05:00.000Z"),
+          createdAt: new Date("2026-06-04T00:05:00.000Z"),
+        },
+      }),
+    ]);
+
+    const response = await loader(routeArgs(syncRequest("me/sync?limit=20", fixture.reader.token, "req_native_sync_graph"), "me/sync"));
+    const payload = await readJson(response);
+    expect(response.status).toBe(200);
+    expectSuccessEnvelope(payload, "req_native_sync_graph");
+    const firstRecipeEntry = payload.data.entries.find((entry: { resourceId: string }) => entry.resourceId === fixture.firstRecipe.id);
+    expect(firstRecipeEntry.payload.steps.map((step: { stepNum: number }) => step.stepNum)).toEqual([1, 2, 3]);
+    expect(firstRecipeEntry.payload.steps[0].ingredients.map((ingredient: { name: string }) => ingredient.name)).toEqual([
+      fixture.appleRef.name,
+      fixture.zucchiniRef.name,
+    ]);
+    expect(firstRecipeEntry.payload.steps[2].usingSteps.map((use: { outputStepNum: number }) => use.outputStepNum)).toEqual([1, 2]);
+    const recipeEntries = payload.data.entries.filter((entry: { kind: string }) => entry.kind === "recipe");
+    expect(recipeEntries.map((entry: { resourceId: string }) => entry.resourceId)).toEqual([
+      fixture.firstRecipe.id,
+      fixture.secondRecipe.id,
+    ]);
+    const optionalShoppingEntry = payload.data.entries.find((entry: { resourceId: string }) => entry.resourceId === optionalShoppingItem.id);
+    expect(optionalShoppingEntry).toMatchObject({
+      payload: {
+        id: optionalShoppingItem.id,
+        shoppingListId: list.id,
+        name: shoppingRef.name,
+        quantity: null,
+        unit: null,
+        checkedAt: null,
+      },
+    });
+    for (const tombstone of tombstones) {
+      const entry = payload.data.entries.find((candidate: { resourceId: string }) => candidate.resourceId === tombstone.resourceId);
+      expect(entry).toMatchObject({
+        action: "delete",
+        kind: "cookbook",
+        payload: null,
+        tombstone: {
+          resourceType: "cookbook",
+          resourceId: tombstone.resourceId,
+          title: tombstone.title,
+          deletedAt: tombstone.deletedAt.toISOString(),
+          updatedAt: tombstone.updatedAt.toISOString(),
+        },
+      });
+    }
+
+    const afterFirstRecipe = await loader(routeArgs(syncRequest(
+      `me/sync?cursor=${encodeURIComponent(nativeSyncCursor({
+        updatedAt: fixture.recipeUpdatedAt.toISOString(),
+        kind: "recipe",
+        resourceId: fixture.firstRecipe.id,
+      }))}`,
+      fixture.reader.token,
+      "req_native_sync_after_first_recipe",
+    ), "me/sync"));
+    const afterFirstRecipePayload = await readJson(afterFirstRecipe);
+    expect(afterFirstRecipe.status).toBe(200);
+    expect(afterFirstRecipePayload.data.entries[0]).toMatchObject({
+      kind: "recipe",
+      resourceId: fixture.secondRecipe.id,
+    });
+  });
+
   it("validates cursor and page limits before returning native sync data", async () => {
     const fixture = await createNativeSyncFixture(db);
     const invalidCursors = [
@@ -593,7 +1138,10 @@ describe("API v1 private native sync", () => {
       "2026-06-01",
       "2026-06-01T00:00:00",
       "2026-06-01T00:00:00Z",
+      "2026-02-30T00:00:00.000Z",
       "v1.%",
+      nativeSyncCursor(null),
+      nativeSyncCursor([]),
       nativeSyncCursor({}),
       nativeSyncCursor({ updatedAt: "not-a-date", kind: "recipe", resourceId: "recipe_1" }),
       nativeSyncCursor({ updatedAt: "2026-06-01T00:00:00.000Z", kind: 123, resourceId: "recipe_1" }),

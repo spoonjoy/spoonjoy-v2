@@ -1220,6 +1220,17 @@ describe("API v1 mutation and validation telemetry", () => {
       operation: "account.kitchen.bootstrap",
     });
 
+    const syncReader = await createApiCredential(db, user.id, "Telemetry sync reader", { scopes: ["kitchen:read"] });
+    expect((await loader(routeArgs(apiRequest("http://localhost/api/v1/me/sync", "req_account_operation_sync", {
+      Authorization: `Bearer ${syncReader.token}`,
+    }), "me/sync").args)).status).toBe(200);
+    expectApiV1OperationName({
+      routeTemplate: "/api/v1/me/sync",
+      requestId: "req_account_operation_sync",
+      operation: "account.sync",
+      forbidden: [user.email, syncReader.token],
+    });
+
     expect((await loader(routeArgs(apiRequest(
       "http://localhost/api/v1/me/notification-preferences",
       "req_account_operation_notifications_read",

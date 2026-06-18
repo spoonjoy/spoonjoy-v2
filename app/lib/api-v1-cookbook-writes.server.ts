@@ -206,6 +206,29 @@ export async function deleteNativeCookbook(
         payload: JSON.stringify({ title: cookbook.title, deletedAt: deletedAt.toISOString() }),
       },
     }),
+    db.nativeSyncTombstone.upsert({
+      where: {
+        userId_resourceType_resourceId: {
+          userId: authorId,
+          resourceType: "cookbook",
+          resourceId: cookbookId,
+        },
+      },
+      create: {
+        userId: authorId,
+        resourceType: "cookbook",
+        resourceId: cookbookId,
+        title: cookbook.title,
+        deletedAt,
+        updatedAt: deletedAt,
+      },
+      update: {
+        parentResourceId: null,
+        title: cookbook.title,
+        deletedAt,
+        updatedAt: deletedAt,
+      },
+    }),
     db.cookbook.delete({ where: { id: cookbookId } }),
   ]);
 
@@ -251,9 +274,14 @@ export async function addNativeRecipeToCookbook(
     return success({ cookbookId, recipeId, added: false });
   }
 
-  await db.recipeInCookbook.create({
-    data: { id: options.relationId, cookbookId, recipeId, addedById: authorId },
-  });
+  const changedAt = new Date();
+  await db.$transaction([
+    db.recipeInCookbook.create({
+      data: { id: options.relationId, cookbookId, recipeId, addedById: authorId, updatedAt: changedAt },
+    }),
+    db.cookbook.update({ where: { id: cookbookId }, data: { updatedAt: changedAt } }),
+    db.recipe.update({ where: { id: recipeId }, data: { updatedAt: changedAt } }),
+  ]);
 
   return success({ cookbookId, recipeId, added: true }, 201);
 }
@@ -276,6 +304,7 @@ export async function removeNativeRecipeFromCookbook(
     return success({ cookbookId, recipeId, removed: false });
   }
 
+  const changedAt = new Date();
   await db.$transaction([
     db.apiMutationTombstone.create({
       data: {
@@ -289,6 +318,8 @@ export async function removeNativeRecipeFromCookbook(
     db.recipeInCookbook.delete({
       where: { id: existing.id },
     }),
+    db.cookbook.update({ where: { id: cookbookId }, data: { updatedAt: changedAt } }),
+    db.recipe.update({ where: { id: recipeId }, data: { updatedAt: changedAt } }),
   ]);
 
   return success({ cookbookId, recipeId, removed: true });

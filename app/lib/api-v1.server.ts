@@ -841,6 +841,12 @@ function publicContentOrigin(args: ApiV1RouteArgs): string {
   return new URL(configured || "https://spoonjoy.app").origin;
 }
 
+function nativeSyncEnvironment(args: ApiV1RouteArgs): string {
+  const env = args.context.cloudflare?.env as Record<string, unknown> | null | undefined;
+  const raw = env?.SPOONJOY_ENV ?? env?.CLOUDFLARE_ENV ?? env?.ENVIRONMENT;
+  return typeof raw === "string" && raw.trim() ? raw.trim() : "local";
+}
+
 function canonicalUrl(origin: string, href: string): string {
   return new URL(href, origin).toString();
 }
@@ -4034,7 +4040,10 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
       const db = await getRequestDb(args.context);
       const response = apiV1NativeSyncResponse(
         requestId,
-        await loadNativeSyncSnapshot(db, principal.id, new URL(args.request.url)),
+        await loadNativeSyncSnapshot(db, principal.id, new URL(args.request.url), {
+          environment: nativeSyncEnvironment(args),
+          origin: publicContentOrigin(args),
+        }),
       );
       return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
     }

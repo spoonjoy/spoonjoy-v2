@@ -1,6 +1,12 @@
-import type { PrismaClient as PrismaClientType } from "@prisma/client";
+import type { PrismaClient as PrismaClientType, RecipeCover } from "@prisma/client";
 import { DEFAULT_NOTIFICATION_PREFERENCES } from "~/lib/account-settings.server";
 import type { ApiV1ErrorCode } from "~/lib/api-v1-contract.server";
+import {
+  getRecipeCoverDisplay,
+  getScopedActiveCover,
+  RECIPE_COVER_DISPLAY_SELECT,
+  type RecipeCoverVariant,
+} from "~/lib/recipe-cover.server";
 
 type Database = PrismaClientType;
 
@@ -55,9 +61,9 @@ const NATIVE_SYNC_KIND_ORDER: readonly NativeSyncKind[] = [
   "shoppingItem",
 ];
 
-const NATIVE_SYNC_KIND_RANK = new Map(
+const NATIVE_SYNC_KIND_RANK = Object.fromEntries(
   NATIVE_SYNC_KIND_ORDER.map((kind, index) => [kind, index]),
-);
+) as Record<NativeSyncKind, number>;
 
 function success<T>(data: T, status = 200): ApiV1NativeSyncResult<T> {
   return { ok: true, status, data };
@@ -93,7 +99,7 @@ function parseNativeSyncLimit(url: URL): ApiV1NativeSyncResult<number> {
 }
 
 function parseNativeSyncKind(value: unknown): NativeSyncKind | null {
-  return typeof value === "string" && NATIVE_SYNC_KIND_RANK.has(value as NativeSyncKind)
+  return typeof value === "string" && value in NATIVE_SYNC_KIND_RANK
     ? value as NativeSyncKind
     : null;
 }
@@ -141,7 +147,7 @@ function nativeSyncCursorFor(entry: NativeSyncEntry): string {
 function compareNativeSyncEntries(a: NativeSyncEntry, b: NativeSyncEntry): number {
   const updatedAtDelta = new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
   if (updatedAtDelta !== 0) return updatedAtDelta;
-  const kindDelta = (NATIVE_SYNC_KIND_RANK.get(a.kind) ?? 0) - (NATIVE_SYNC_KIND_RANK.get(b.kind) ?? 0);
+  const kindDelta = NATIVE_SYNC_KIND_RANK[a.kind] - NATIVE_SYNC_KIND_RANK[b.kind];
   if (kindDelta !== 0) return kindDelta;
   return a.resourceId.localeCompare(b.resourceId);
 }
@@ -152,8 +158,8 @@ function entryIsAfterCursor(entry: NativeSyncEntry, cursor: NativeSyncCursor | n
   const cursorUpdatedAt = cursor.updatedAt.getTime();
   if (updatedAt > cursorUpdatedAt) return true;
   if (updatedAt < cursorUpdatedAt || cursor.kind === null || cursor.resourceId === null) return false;
-  const entryRank = NATIVE_SYNC_KIND_RANK.get(entry.kind) ?? 0;
-  const cursorRank = NATIVE_SYNC_KIND_RANK.get(cursor.kind) ?? 0;
+  const entryRank = NATIVE_SYNC_KIND_RANK[entry.kind];
+  const cursorRank = NATIVE_SYNC_KIND_RANK[cursor.kind];
   if (entryRank > cursorRank) return true;
   return entryRank === cursorRank && entry.resourceId > cursor.resourceId;
 }
@@ -197,28 +203,106 @@ function preferencePayload(userId: string, updatedAt: Date, prefRow: {
   };
 }
 
-function parseCookbookTombstonePayload(payload: string | null): { title: string | null; deletedAt: string | null } {
-  if (!payload) return { title: null, deletedAt: null };
+function canonicalUrl(origin: string, href: string): string {
+  return new URL(href, origin).toString();
+}
+
+function publicAssetUrl(origin: string, value: string | null): string | null {
+  if (!value || value.startsWith("data:")) return null;
   try {
-    const parsed = JSON.parse(payload) as unknown;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return { title: null, deletedAt: null };
-    }
-    const title = (parsed as { title?: unknown }).title;
-    const deletedAt = (parsed as { deletedAt?: unknown }).deletedAt;
-    return {
-      title: typeof title === "string" ? title : null,
-      deletedAt: typeof deletedAt === "string" && strictIsoDate(deletedAt) ? deletedAt : null,
-    };
+    return new URL(value, origin).toString();
   } catch {
-    return { title: null, deletedAt: null };
+    return null;
   }
+}
+
+type SourceRecipeRow = {
+  id: string;
+  title: string;
+  deletedAt: Date | null;
+  updatedAt: Date;
+  chef: { id: string; username: string };
+} | null;
+
+function sourceHost(sourceUrl: string | null): string | null {
+  if (!sourceUrl) return null;
+  try {
+    return new URL(sourceUrl).hostname || null;
+  } catch {
+    return null;
+  }
+}
+
+function recipeAttribution(recipe: {
+  title: string;
+  chef: { username: string };
+  href: string;
+  sourceUrl: string | null;
+  sourceRecipe: SourceRecipeRow;
+}, origin: string) {
+  const sourceRecipeHref = recipe.sourceRecipe ? `/recipes/${recipe.sourceRecipe.id}` : null;
+  const sourceRecipeDeleted = Boolean(recipe.sourceRecipe?.deletedAt);
+  return {
+    creditText: `${recipe.title} by ${recipe.chef.username} on Spoonjoy`,
+    canonicalUrl: canonicalUrl(origin, recipe.href),
+    sourceUrl: recipe.sourceUrl,
+    sourceHost: sourceHost(recipe.sourceUrl),
+    sourceRecipe: recipe.sourceRecipe ? {
+      id: recipe.sourceRecipe.id,
+      title: sourceRecipeDeleted ? null : recipe.sourceRecipe.title,
+      chef: sourceRecipeDeleted ? null : {
+        id: recipe.sourceRecipe.chef.id,
+        username: recipe.sourceRecipe.chef.username,
+      },
+      href: sourceRecipeDeleted ? null : sourceRecipeHref,
+      canonicalUrl: sourceRecipeDeleted ? null : canonicalUrl(origin, sourceRecipeHref!),
+      deleted: sourceRecipeDeleted,
+    } : null,
+  };
+}
+
+type RecipeCoverFieldsInput = {
+  id: string;
+  title: string;
+  activeCoverId: string | null;
+  activeCoverVariant: string | null;
+  coverMode: string | null;
+  activeCover: RecipeCover | null;
+};
+
+function emptyRecipeCoverApiFields() {
+  return {
+    coverImageUrl: null,
+    coverProvenanceLabel: null,
+    coverSourceType: null,
+    coverVariant: null,
+  };
+}
+
+function recipeCoverApiFields(recipe: RecipeCoverFieldsInput, origin: string) {
+  const activeCover = getScopedActiveCover(recipe);
+  const coverDisplay = getRecipeCoverDisplay(recipe, activeCover ? [activeCover] : []);
+  if (!coverDisplay) return emptyRecipeCoverApiFields();
+
+  const coverImageUrl = publicAssetUrl(origin, coverDisplay.displayUrl);
+  if (!coverImageUrl) return emptyRecipeCoverApiFields();
+  return {
+    coverImageUrl,
+    coverProvenanceLabel: coverDisplay.provenanceLabel,
+    coverSourceType: coverDisplay.sourceType,
+    coverVariant: coverDisplay.activeVariant,
+  };
+}
+
+function latestDate(...dates: Array<Date | null | undefined>): Date {
+  const values = dates.filter((date): date is Date => Boolean(date));
+  return values.reduce((latest, date) => date.getTime() > latest.getTime() ? date : latest, values[0]!);
 }
 
 function recipeTombstone(recipe: {
   id: string;
   title: string;
-  deletedAt: Date | null;
+  deletedAt: Date;
   updatedAt: Date;
 }): NativeSyncTombstone {
   return {
@@ -226,7 +310,7 @@ function recipeTombstone(recipe: {
     resourceId: recipe.id,
     parentResourceId: null,
     title: recipe.title,
-    deletedAt: (recipe.deletedAt ?? recipe.updatedAt).toISOString(),
+    deletedAt: recipe.deletedAt.toISOString(),
     updatedAt: recipe.updatedAt.toISOString(),
   };
 }
@@ -234,7 +318,7 @@ function recipeTombstone(recipe: {
 function spoonTombstone(spoon: {
   id: string;
   recipeId: string;
-  deletedAt: Date | null;
+  deletedAt: Date;
   updatedAt: Date;
 }): NativeSyncTombstone {
   return {
@@ -242,7 +326,7 @@ function spoonTombstone(spoon: {
     resourceId: spoon.id,
     parentResourceId: spoon.recipeId,
     title: null,
-    deletedAt: (spoon.deletedAt ?? spoon.updatedAt).toISOString(),
+    deletedAt: spoon.deletedAt.toISOString(),
     updatedAt: spoon.updatedAt.toISOString(),
   };
 }
@@ -250,7 +334,7 @@ function spoonTombstone(spoon: {
 function shoppingItemTombstone(item: {
   id: string;
   shoppingListId: string;
-  deletedAt: Date | null;
+  deletedAt: Date;
   updatedAt: Date;
 }): NativeSyncTombstone {
   return {
@@ -258,12 +342,16 @@ function shoppingItemTombstone(item: {
     resourceId: item.id,
     parentResourceId: item.shoppingListId,
     title: null,
-    deletedAt: (item.deletedAt ?? item.updatedAt).toISOString(),
+    deletedAt: item.deletedAt.toISOString(),
     updatedAt: item.updatedAt.toISOString(),
   };
 }
 
-function recipePayload(recipe: Awaited<ReturnType<typeof loadNativeSyncRecipes>>[number]) {
+function recipeSummary(
+  recipe: Awaited<ReturnType<typeof loadNativeSyncRecipes>>[number] | Awaited<ReturnType<typeof loadNativeSyncCookbooks>>[number]["recipes"][number]["recipe"],
+  origin: string,
+) {
+  const href = `/recipes/${recipe.id}`;
   return {
     id: recipe.id,
     title: recipe.title,
@@ -273,10 +361,19 @@ function recipePayload(recipe: Awaited<ReturnType<typeof loadNativeSyncRecipes>>
       id: recipe.chef.id,
       username: recipe.chef.username,
     },
-    sourceUrl: recipe.sourceUrl,
-    deletedAt: null,
+    ...recipeCoverApiFields(recipe, origin),
+    href,
+    canonicalUrl: canonicalUrl(origin, href),
+    attribution: recipeAttribution({ ...recipe, href }, origin),
     createdAt: recipe.createdAt.toISOString(),
     updatedAt: recipe.updatedAt.toISOString(),
+  };
+}
+
+function recipePayload(recipe: Awaited<ReturnType<typeof loadNativeSyncRecipes>>[number], origin: string) {
+  return {
+    ...recipeSummary(recipe, origin),
+    deletedAt: null,
     steps: [...recipe.steps]
       .sort((a, b) => a.stepNum - b.stepNum)
       .map((step) => ({
@@ -308,32 +405,90 @@ function recipePayload(recipe: Awaited<ReturnType<typeof loadNativeSyncRecipes>>
     cookbooks: recipe.cookbooks.map((entry) => ({
       id: entry.cookbook.id,
       title: entry.cookbook.title,
+      href: `/cookbooks/${entry.cookbook.id}`,
+      canonicalUrl: canonicalUrl(origin, `/cookbooks/${entry.cookbook.id}`),
+    })),
+    recentSpoons: recipe.spoons.map((spoon) => ({
+      id: spoon.id,
+      chefId: spoon.chefId,
+      recipeId: spoon.recipeId,
+      cookedAt: spoon.cookedAt.toISOString(),
+      photoUrl: spoon.photoUrl,
+      note: spoon.note,
+      nextTime: spoon.nextTime,
+      deletedAt: null,
+      createdAt: spoon.createdAt.toISOString(),
+      updatedAt: spoon.updatedAt.toISOString(),
+      chef: {
+        id: spoon.chef.id,
+        username: spoon.chef.username,
+        photoUrl: spoon.chef.photoUrl,
+      },
     })),
   };
 }
 
-function cookbookPayload(cookbook: Awaited<ReturnType<typeof loadNativeSyncCookbooks>>[number]) {
+function activeCookbookRecipeEntries(cookbook: Awaited<ReturnType<typeof loadNativeSyncCookbooks>>[number]) {
+  return cookbook.recipes.filter((entry) => !entry.recipe.deletedAt);
+}
+
+function cookbookSummary(cookbook: Awaited<ReturnType<typeof loadNativeSyncCookbooks>>[number], origin: string) {
+  const activeEntries = activeCookbookRecipeEntries(cookbook);
+  const href = `/cookbooks/${cookbook.id}`;
   return {
     id: cookbook.id,
     title: cookbook.title,
-    author: {
+    chef: {
       id: cookbook.author.id,
       username: cookbook.author.username,
     },
-    deletedAt: null,
+    recipeCount: activeEntries.length,
+    coverImageUrls: activeEntries
+      .map((entry) => recipeCoverApiFields(entry.recipe, origin).coverImageUrl)
+      .filter((url): url is string => Boolean(url))
+      .slice(0, 4),
+    href,
+    canonicalUrl: canonicalUrl(origin, href),
+    attribution: {
+      creditText: `${cookbook.title} by ${cookbook.author.username} on Spoonjoy`,
+      canonicalUrl: canonicalUrl(origin, href),
+    },
     createdAt: cookbook.createdAt.toISOString(),
     updatedAt: cookbook.updatedAt.toISOString(),
-    recipes: cookbook.recipes
-      .filter((entry) => !entry.recipe.deletedAt)
-      .map((entry) => ({
-        id: entry.recipe.id,
-        title: entry.recipe.title,
-        description: entry.recipe.description,
-        servings: entry.recipe.servings,
-        createdAt: entry.recipe.createdAt.toISOString(),
-        updatedAt: entry.recipe.updatedAt.toISOString(),
-      })),
   };
+}
+
+function cookbookPayload(cookbook: Awaited<ReturnType<typeof loadNativeSyncCookbooks>>[number], origin: string) {
+  return {
+    ...cookbookSummary(cookbook, origin),
+    deletedAt: null,
+    recipes: activeCookbookRecipeEntries(cookbook).map((entry) => recipeSummary(entry.recipe, origin)),
+  };
+}
+
+function recipeRevisionAt(recipe: Awaited<ReturnType<typeof loadNativeSyncRecipes>>[number]): Date {
+  return latestDate(
+    recipe.updatedAt,
+    recipe.sourceRecipe?.updatedAt,
+    recipe.activeCover?.createdAt,
+    recipe.activeCover?.archivedAt,
+    ...recipe.steps.map((step) => step.updatedAt),
+    ...recipe.steps.flatMap((step) => step.ingredients.map((ingredient) => ingredient.updatedAt)),
+    ...recipe.steps.flatMap((step) => step.usingSteps.map((use) => use.updatedAt)),
+    ...recipe.cookbooks.map((entry) => entry.updatedAt),
+    ...recipe.spoons.map((spoon) => spoon.updatedAt),
+  );
+}
+
+function cookbookRevisionAt(cookbook: Awaited<ReturnType<typeof loadNativeSyncCookbooks>>[number]): Date {
+  return latestDate(
+    cookbook.updatedAt,
+    ...cookbook.recipes.map((entry) => entry.updatedAt),
+    ...cookbook.recipes.map((entry) => entry.recipe.updatedAt),
+    ...cookbook.recipes.map((entry) => entry.recipe.sourceRecipe?.updatedAt),
+    ...cookbook.recipes.map((entry) => entry.recipe.activeCover?.createdAt),
+    ...cookbook.recipes.map((entry) => entry.recipe.activeCover?.archivedAt),
+  );
 }
 
 function spoonPayload(spoon: Awaited<ReturnType<typeof loadNativeSyncSpoons>>[number]) {
@@ -377,10 +532,23 @@ async function loadNativeSyncRecipes(db: Database, userId: string) {
       description: true,
       servings: true,
       sourceUrl: true,
+      activeCoverId: true,
+      activeCoverVariant: true,
+      coverMode: true,
       deletedAt: true,
       createdAt: true,
       updatedAt: true,
       chef: { select: { id: true, username: true } },
+      sourceRecipe: {
+        select: {
+          id: true,
+          title: true,
+          deletedAt: true,
+          updatedAt: true,
+          chef: { select: { id: true, username: true } },
+        },
+      },
+      activeCover: { select: RECIPE_COVER_DISPLAY_SELECT },
       steps: {
         select: {
           id: true,
@@ -388,10 +556,12 @@ async function loadNativeSyncRecipes(db: Database, userId: string) {
           stepTitle: true,
           description: true,
           duration: true,
+          updatedAt: true,
           ingredients: {
             select: {
               id: true,
               quantity: true,
+              updatedAt: true,
               unit: { select: { name: true } },
               ingredientRef: { select: { name: true } },
             },
@@ -401,15 +571,36 @@ async function loadNativeSyncRecipes(db: Database, userId: string) {
               id: true,
               inputStepNum: true,
               outputStepNum: true,
+              updatedAt: true,
               outputOfStep: { select: { stepNum: true, stepTitle: true } },
             },
+            orderBy: { outputStepNum: "asc" },
           },
         },
       },
       cookbooks: {
         select: {
+          updatedAt: true,
           cookbook: { select: { id: true, title: true } },
         },
+        orderBy: { createdAt: "asc" },
+      },
+      spoons: {
+        where: { deletedAt: null },
+        select: {
+          id: true,
+          chefId: true,
+          recipeId: true,
+          cookedAt: true,
+          photoUrl: true,
+          note: true,
+          nextTime: true,
+          createdAt: true,
+          updatedAt: true,
+          chef: { select: { id: true, username: true, photoUrl: true } },
+        },
+        orderBy: [{ cookedAt: "desc" }, { id: "desc" }],
+        take: 10,
       },
     },
   });
@@ -432,12 +623,29 @@ async function loadNativeSyncCookbooks(db: Database, userId: string) {
               title: true,
               description: true,
               servings: true,
+              sourceUrl: true,
               deletedAt: true,
+              activeCoverId: true,
+              activeCoverVariant: true,
+              coverMode: true,
               createdAt: true,
               updatedAt: true,
+              sourceRecipe: {
+                select: {
+                  id: true,
+                  title: true,
+                  deletedAt: true,
+                  updatedAt: true,
+                  chef: { select: { id: true, username: true } },
+                },
+              },
+              activeCover: { select: RECIPE_COVER_DISPLAY_SELECT },
+              chef: { select: { id: true, username: true } },
             },
           },
+          updatedAt: true,
         },
+        orderBy: [{ createdAt: "asc" }, { recipeId: "asc" }],
       },
     },
   });
@@ -487,16 +695,18 @@ async function loadNativeSyncShoppingItems(db: Database, userId: string) {
 }
 
 async function loadNativeSyncCookbookTombstones(db: Database, userId: string) {
-  return db.apiMutationTombstone.findMany({
+  return db.nativeSyncTombstone.findMany({
     where: {
+      userId,
       resourceType: "cookbook",
-      idempotencyKey: { userId },
     },
     select: {
       resourceType: true,
       resourceId: true,
       parentResourceId: true,
-      payload: true,
+      title: true,
+      deletedAt: true,
+      updatedAt: true,
       createdAt: true,
     },
   });
@@ -506,7 +716,7 @@ export async function loadNativeSyncSnapshot(
   db: Database,
   userId: string,
   url: URL,
-  options: { environment?: string } = {},
+  options: { environment?: string; origin?: string } = {},
 ) {
   const cursorResult = parseNativeSyncCursor(url);
   if (!cursorResult.ok) return cursorResult;
@@ -556,21 +766,35 @@ export async function loadNativeSyncSnapshot(
     loadNativeSyncCookbookTombstones(db, userId),
   ]);
 
+  const origin = options.origin ?? "https://spoonjoy.app";
+
   for (const recipe of recipes) {
+    const revisionAt = recipeRevisionAt(recipe);
     if (recipe.deletedAt) {
-      entries.push(deleteEntry("recipe", recipe.id, recipe.updatedAt, recipeTombstone(recipe)));
+      entries.push(deleteEntry("recipe", recipe.id, revisionAt, recipeTombstone({
+        id: recipe.id,
+        title: recipe.title,
+        deletedAt: recipe.deletedAt,
+        updatedAt: recipe.updatedAt,
+      })));
       continue;
     }
-    entries.push(upsertEntry("recipe", recipe.id, recipe.updatedAt, recipePayload(recipe)));
+    entries.push(upsertEntry("recipe", recipe.id, revisionAt, recipePayload(recipe, origin)));
   }
 
   for (const cookbook of cookbooks) {
-    entries.push(upsertEntry("cookbook", cookbook.id, cookbook.updatedAt, cookbookPayload(cookbook)));
+    const revisionAt = cookbookRevisionAt(cookbook);
+    entries.push(upsertEntry("cookbook", cookbook.id, revisionAt, cookbookPayload(cookbook, origin)));
   }
 
   for (const spoon of spoons) {
     if (spoon.deletedAt) {
-      entries.push(deleteEntry("spoon", spoon.id, spoon.updatedAt, spoonTombstone(spoon)));
+      entries.push(deleteEntry("spoon", spoon.id, spoon.updatedAt, spoonTombstone({
+        id: spoon.id,
+        recipeId: spoon.recipeId,
+        deletedAt: spoon.deletedAt,
+        updatedAt: spoon.updatedAt,
+      })));
       continue;
     }
     entries.push(upsertEntry("spoon", spoon.id, spoon.updatedAt, spoonPayload(spoon)));
@@ -578,22 +802,25 @@ export async function loadNativeSyncSnapshot(
 
   for (const item of shoppingItems) {
     if (item.deletedAt) {
-      entries.push(deleteEntry("shoppingItem", item.id, item.updatedAt, shoppingItemTombstone(item)));
+      entries.push(deleteEntry("shoppingItem", item.id, item.updatedAt, shoppingItemTombstone({
+        id: item.id,
+        shoppingListId: item.shoppingListId,
+        deletedAt: item.deletedAt,
+        updatedAt: item.updatedAt,
+      })));
       continue;
     }
     entries.push(upsertEntry("shoppingItem", item.id, item.updatedAt, shoppingItemPayload(item)));
   }
 
   for (const tombstone of cookbookTombstones) {
-    const parsedPayload = parseCookbookTombstonePayload(tombstone.payload);
-    const deletedAt = parsedPayload.deletedAt ?? tombstone.createdAt.toISOString();
-    entries.push(deleteEntry("cookbook", tombstone.resourceId, tombstone.createdAt, {
+    entries.push(deleteEntry("cookbook", tombstone.resourceId, tombstone.updatedAt, {
       resourceType: tombstone.resourceType,
       resourceId: tombstone.resourceId,
       parentResourceId: tombstone.parentResourceId,
-      title: parsedPayload.title,
-      deletedAt,
-      updatedAt: tombstone.createdAt.toISOString(),
+      title: tombstone.title,
+      deletedAt: tombstone.deletedAt.toISOString(),
+      updatedAt: tombstone.updatedAt.toISOString(),
     }));
   }
 
@@ -615,7 +842,7 @@ export async function loadNativeSyncSnapshot(
     entries: pageEntries,
     nextCursor: pageEntries.length > 0
       ? nativeSyncCursorFor(pageEntries[pageEntries.length - 1]!)
-      : cursor?.raw ?? nativeSyncCursorFor(sortedEntries[sortedEntries.length - 1]!),
+      : cursor!.raw,
     hasMore: matchingEntries.length > pageEntries.length,
   });
 }
