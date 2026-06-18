@@ -136,6 +136,10 @@ import {
   recoverNativeRecipeIngredientsToShoppingList,
   type ApiV1ShoppingResult,
 } from "~/lib/api-v1-shopping.server";
+import {
+  loadNativeSyncSnapshot,
+  type ApiV1NativeSyncResult,
+} from "~/lib/api-v1-native-sync.server";
 import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
 import { notifyCookbookSaveOfMine, notifyForkOfMyRecipe } from "~/lib/notification-triggers.server";
 import { enforceRateLimit } from "~/lib/rate-limit.server";
@@ -282,6 +286,13 @@ function apiV1UsersSearchResponse<T>(
     result.status,
     principal ? authenticatedPublicCacheHeaders() : publicCacheHeaders(),
   );
+}
+
+function apiV1NativeSyncResponse<T>(requestId: string, result: ApiV1NativeSyncResult<T>): Response {
+  if (!result.ok) {
+    throw new ApiV1Error(result.code, result.message, result.details);
+  }
+  return apiV1PrivateSuccess(requestId, result.data, result.status);
 }
 
 export function apiV1ErrorResponse(requestId: string, error: ApiV1Error): Response {
@@ -503,6 +514,8 @@ function apiV1OperationFor(method: string, path: string): string | undefined {
       return "account.photo.remove";
     case "GET me-kitchen":
       return "account.kitchen.bootstrap";
+    case "GET me-sync":
+      return "account.sync";
     case "GET me-notification-preferences":
       return "account.notifications.read";
     case "PATCH me-notification-preferences":
@@ -4013,6 +4026,16 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
       const principal = await authorize(path) as ApiPrincipal;
       const db = await getRequestDb(args.context);
       const response = apiV1AccountResponse(requestId, await loadNativeAccountSnapshot(db, principal.id));
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "GET" && path === "me/sync") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const db = await getRequestDb(args.context);
+      const response = apiV1NativeSyncResponse(
+        requestId,
+        await loadNativeSyncSnapshot(db, principal.id, new URL(args.request.url)),
+      );
       return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
     }
 
