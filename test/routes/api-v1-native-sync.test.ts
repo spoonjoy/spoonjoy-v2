@@ -951,6 +951,61 @@ describe("API v1 private native sync", () => {
     });
   });
 
+  it("refreshes parent recipe previews when a recent spoon is deleted after the recipe cursor", async () => {
+    const fixture = await createNativeSyncFixture(db);
+    const recipeCursorAfterInitialPreview = nativeSyncCursor({
+      updatedAt: fixture.updatedAt.spoon.toISOString(),
+      kind: "recipe",
+      resourceId: fixture.recipe.id,
+    });
+
+    const deleted = await action(routeArgs(
+      deleteRequest(
+        `recipes/${fixture.recipe.id}/spoons/${fixture.spoon.id}`,
+        fixture.writeOnly.token,
+        "req_native_sync_delete_recent_spoon",
+        "native-sync-delete-recent-spoon",
+      ),
+      `recipes/${fixture.recipe.id}/spoons/${fixture.spoon.id}`,
+    ));
+    expect(deleted.status).toBe(200);
+
+    const afterDelete = await loader(routeArgs(syncRequest(
+      `me/sync?cursor=${encodeURIComponent(recipeCursorAfterInitialPreview)}&limit=20`,
+      fixture.reader.token,
+      "req_native_sync_after_recent_spoon_delete",
+    ), "me/sync"));
+    const afterDeletePayload = await readJson(afterDelete);
+    expect(afterDelete.status).toBe(200);
+    expectSuccessEnvelope(afterDeletePayload, "req_native_sync_after_recent_spoon_delete");
+
+    const recipeEntry = afterDeletePayload.data.entries.find((entry: { kind: string; resourceId: string }) => (
+      entry.kind === "recipe" && entry.resourceId === fixture.recipe.id
+    ));
+    const spoonEntry = afterDeletePayload.data.entries.find((entry: { kind: string; resourceId: string }) => (
+      entry.kind === "spoon" && entry.resourceId === fixture.spoon.id
+    ));
+    expect(recipeEntry).toMatchObject({
+      action: "upsert",
+      kind: "recipe",
+      resourceId: fixture.recipe.id,
+      payload: { recentSpoons: [] },
+      tombstone: null,
+    });
+    expect(new Date(recipeEntry.updatedAt).getTime()).toBeGreaterThan(fixture.updatedAt.spoon.getTime());
+    expect(spoonEntry).toMatchObject({
+      action: "delete",
+      kind: "spoon",
+      resourceId: fixture.spoon.id,
+      payload: null,
+      tombstone: {
+        resourceType: "spoon",
+        resourceId: fixture.spoon.id,
+        parentResourceId: fixture.recipe.id,
+      },
+    });
+  });
+
   it("handles default preferences, empty private domains, blank limits, ISO cursors, and helper not-found results", async () => {
     const { user, reader } = await createSyncUser(db, new Date("2026-06-05T00:00:00.000Z"));
 

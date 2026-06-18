@@ -408,23 +408,26 @@ function recipePayload(recipe: Awaited<ReturnType<typeof loadNativeSyncRecipes>>
       href: `/cookbooks/${entry.cookbook.id}`,
       canonicalUrl: canonicalUrl(origin, `/cookbooks/${entry.cookbook.id}`),
     })),
-    recentSpoons: recipe.spoons.map((spoon) => ({
-      id: spoon.id,
-      chefId: spoon.chefId,
-      recipeId: spoon.recipeId,
-      cookedAt: spoon.cookedAt.toISOString(),
-      photoUrl: spoon.photoUrl,
-      note: spoon.note,
-      nextTime: spoon.nextTime,
-      deletedAt: null,
-      createdAt: spoon.createdAt.toISOString(),
-      updatedAt: spoon.updatedAt.toISOString(),
-      chef: {
-        id: spoon.chef.id,
-        username: spoon.chef.username,
-        photoUrl: spoon.chef.photoUrl,
-      },
-    })),
+    recentSpoons: recipe.spoons
+      .filter((spoon) => !spoon.deletedAt)
+      .slice(0, 10)
+      .map((spoon) => ({
+        id: spoon.id,
+        chefId: spoon.chefId,
+        recipeId: spoon.recipeId,
+        cookedAt: spoon.cookedAt.toISOString(),
+        photoUrl: spoon.photoUrl,
+        note: spoon.note,
+        nextTime: spoon.nextTime,
+        deletedAt: null,
+        createdAt: spoon.createdAt.toISOString(),
+        updatedAt: spoon.updatedAt.toISOString(),
+        chef: {
+          id: spoon.chef.id,
+          username: spoon.chef.username,
+          photoUrl: spoon.chef.photoUrl,
+        },
+      })),
   };
 }
 
@@ -586,7 +589,6 @@ async function loadNativeSyncRecipes(db: Database, userId: string) {
         orderBy: { createdAt: "asc" },
       },
       spoons: {
-        where: { deletedAt: null },
         select: {
           id: true,
           chefId: true,
@@ -595,12 +597,12 @@ async function loadNativeSyncRecipes(db: Database, userId: string) {
           photoUrl: true,
           note: true,
           nextTime: true,
+          deletedAt: true,
           createdAt: true,
           updatedAt: true,
           chef: { select: { id: true, username: true, photoUrl: true } },
         },
         orderBy: [{ cookedAt: "desc" }, { id: "desc" }],
-        take: 10,
       },
     },
   });
