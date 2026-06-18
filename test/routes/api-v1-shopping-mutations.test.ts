@@ -3,6 +3,11 @@ import { faker } from "@faker-js/faker";
 import { Request as UndiciRequest } from "undici";
 import { action } from "~/routes/api.v1.$";
 import { createApiCredential } from "~/lib/api-auth.server";
+import {
+  hashIdempotencyRequest,
+  idempotencyClientKey,
+  reserveIdempotencyKey,
+} from "~/lib/api-idempotency.server";
 import { resolveApiV1ScopeRequirement } from "~/lib/api-v1.server";
 import { getLocalDb } from "~/lib/db.server";
 import { sessionStorage } from "~/lib/session.server";
@@ -143,6 +148,47 @@ function shoppingItemContractSummary(item: any) {
 
 function sortShoppingItemSummaries(items: any[]) {
   return items.map(shoppingItemContractSummary).sort((left, right) => left.name.localeCompare(right.name));
+}
+
+async function reserveShoppingMutation(
+  db: Awaited<ReturnType<typeof getLocalDb>>,
+  fixture: Awaited<ReturnType<typeof createShoppingMutationFixture>>,
+  path: string,
+  operation: string,
+  body: Record<string, unknown>,
+) {
+  return await reserveShoppingMutationForPrincipal(db, {
+    userId: fixture.user.id,
+    credentialId: fixture.credential.credential.id,
+  }, path, operation, body);
+}
+
+async function reserveShoppingMutationForPrincipal(
+  db: Awaited<ReturnType<typeof getLocalDb>>,
+  principal: { userId: string; credentialId: string },
+  path: string,
+  operation: string,
+  body: Record<string, unknown>,
+) {
+  const requestHash = await hashIdempotencyRequest({
+    method: "POST",
+    path: `/api/v1/${path}`,
+    body,
+  });
+  const reserved = await reserveIdempotencyKey(db, {
+    userId: principal.userId,
+    credentialId: principal.credentialId,
+    clientKey: idempotencyClientKey({
+      id: principal.userId,
+      source: "bearer",
+      credentialId: principal.credentialId,
+    }),
+    key: String(body.clientMutationId),
+    operation,
+    requestHash,
+  });
+  if (reserved.status !== "reserved") throw new Error(`expected ${operation} reservation`);
+  return reserved.record;
 }
 
 async function createShoppingMutationFixture(db: Awaited<ReturnType<typeof getLocalDb>>) {
@@ -826,6 +872,92 @@ describe("API v1 shopping-list mutations", () => {
     expect(addPublicPayload.data.items).toEqual([
       expect.objectContaining({ name: publicIngredientName, quantity: 5, unit: publicUnitName }),
     ]);
+
+    const activeMergeName = `active_merge_rice_${faker.string.alphanumeric(6)}`.toLowerCase();
+    const activeMergeUnitName = `scoop_active_${faker.string.alphanumeric(6)}`.toLowerCase();
+    const activeMergeUnit = await getOrCreateUnit(db, activeMergeUnitName);
+    const activeMergeIngredient = await getOrCreateIngredientRef(db, activeMergeName);
+    const activeMergeItem = await db.shoppingListItem.create({
+      data: {
+        shoppingListId: fixture.list.id,
+        ingredientRefId: activeMergeIngredient.id,
+        unitId: activeMergeUnit.id,
+        quantity: null,
+        checked: false,
+        checkedAt: null,
+        deletedAt: null,
+        sortIndex: 17,
+        categoryKey: null,
+        iconKey: null,
+      },
+    });
+    const activeMergeRecipe = await createRecipeWithIngredients(db, fixture.user.id, [
+      { name: activeMergeName, quantity: 3, unit: activeMergeUnitName },
+    ]);
+    const activeMerge = await action(routeArgs(
+      mutationRequest("POST", "shopping-list/add-from-recipe", fixture.credential.token, "req_bulk_add_active_merge", {
+        clientMutationId: "bulk-add-active-merge",
+        recipeId: activeMergeRecipe.id,
+      }),
+      "shopping-list/add-from-recipe",
+    ));
+    const activeMergePayload = await readJson(activeMerge);
+
+    expect(activeMerge.status).toBe(200);
+    expect(activeMergePayload.data).toMatchObject({
+      created: 0,
+      updated: 1,
+      items: [expect.objectContaining({
+        id: activeMergeItem.id,
+        quantity: 3,
+        sortIndex: 17,
+        checked: false,
+        checkedAt: null,
+        deletedAt: null,
+      })],
+    });
+  });
+
+  it("coalesces duplicate recipe ingredients into one exact final changed row", async () => {
+    const fixture = await createShoppingMutationFixture(db);
+    const ingredientName = `duplicate_rice_${faker.string.alphanumeric(6)}`.toLowerCase();
+    const unitName = `bag_duplicate_${faker.string.alphanumeric(6)}`.toLowerCase();
+    const recipe = await createRecipeWithIngredients(db, fixture.user.id, [
+      { name: ingredientName, quantity: 1, unit: unitName },
+      { name: ingredientName, quantity: 2, unit: unitName },
+    ]);
+
+    const add = await action(routeArgs(
+      mutationRequest("POST", "shopping-list/add-from-recipe", fixture.credential.token, "req_bulk_add_duplicate_recipe", {
+        clientMutationId: "bulk-add-duplicate-recipe",
+        recipeId: recipe.id,
+        scaleFactor: 2,
+      }),
+      "shopping-list/add-from-recipe",
+    ));
+    const payload = await readJson(add);
+
+    expect(add.status).toBe(200);
+    expectSuccessEnvelope(payload, "req_bulk_add_duplicate_recipe");
+    expectRecipeShoppingMutationData(payload.data, "bulk-add-duplicate-recipe");
+    expect(payload.data).toMatchObject({
+      created: 1,
+      updated: 0,
+      recipe: { id: recipe.id, title: recipe.title },
+    });
+    expect(payload.data.items).toEqual([
+      expect.objectContaining({
+        name: ingredientName,
+        unit: unitName,
+        quantity: 6,
+        checked: false,
+        checkedAt: null,
+        deletedAt: null,
+      }),
+    ]);
+    await expect(db.shoppingListItem.count({
+      where: { shoppingListId: fixture.list.id, ingredientRef: { name: ingredientName } },
+    })).resolves.toBe(1);
   });
 
   it("handles recipe-add empty ingredients and clear operations with checked, deleted, and empty-list rows", async () => {
@@ -1034,8 +1166,10 @@ describe("API v1 shopping-list mutations", () => {
       expectErrorEnvelope(await readJson(response), testCase.requestId, "validation_error", 400);
     }
 
+    const userWithoutList = await db.user.create({ data: createTestUser() });
+    const credentialWithoutList = await createApiCredential(db, userWithoutList.id, "Shopping writer no list", { scopes: ["shopping_list:write"] });
     const missingRecipe = await action(routeArgs(
-      mutationRequest("POST", "shopping-list/add-from-recipe", fixture.credential.token, "req_bulk_add_not_found", {
+      mutationRequest("POST", "shopping-list/add-from-recipe", credentialWithoutList.token, "req_bulk_add_not_found", {
         clientMutationId: "bulk-recipe-not-found",
         recipeId: "missing-recipe",
       }),
@@ -1044,8 +1178,12 @@ describe("API v1 shopping-list mutations", () => {
     expect(missingRecipe.status).toBe(404);
     expectEnvelopeHeaders(missingRecipe, "req_bulk_add_not_found");
     expectErrorEnvelope(await readJson(missingRecipe), "req_bulk_add_not_found", "not_found", 404);
+    await expect(db.shoppingList.count({ where: { authorId: userWithoutList.id } })).resolves.toBe(0);
+    await expect(db.shoppingListItem.count({
+      where: { shoppingList: { authorId: userWithoutList.id } },
+    })).resolves.toBe(0);
 
-    const deletedRecipe = await createRecipeWithIngredients(db, fixture.user.id, [
+    const deletedRecipe = await createRecipeWithIngredients(db, userWithoutList.id, [
       {
         name: `deleted_recipe_oats_${faker.string.alphanumeric(6)}`.toLowerCase(),
         quantity: 1,
@@ -1053,11 +1191,8 @@ describe("API v1 shopping-list mutations", () => {
       },
     ]);
     await db.recipe.update({ where: { id: deletedRecipe.id }, data: { deletedAt: new Date() } });
-    const itemCountBeforeDeletedRecipe = await db.shoppingListItem.count({
-      where: { shoppingListId: fixture.list.id },
-    });
     const deletedRecipeResponse = await action(routeArgs(
-      mutationRequest("POST", "shopping-list/add-from-recipe", fixture.credential.token, "req_bulk_add_deleted_recipe", {
+      mutationRequest("POST", "shopping-list/add-from-recipe", credentialWithoutList.token, "req_bulk_add_deleted_recipe", {
         clientMutationId: "bulk-deleted-recipe",
         recipeId: deletedRecipe.id,
       }),
@@ -1066,9 +1201,449 @@ describe("API v1 shopping-list mutations", () => {
     expect(deletedRecipeResponse.status).toBe(404);
     expectEnvelopeHeaders(deletedRecipeResponse, "req_bulk_add_deleted_recipe");
     expectErrorEnvelope(await readJson(deletedRecipeResponse), "req_bulk_add_deleted_recipe", "not_found", 404);
+    await expect(db.shoppingList.count({ where: { authorId: userWithoutList.id } })).resolves.toBe(0);
     await expect(db.shoppingListItem.count({
-      where: { shoppingListId: fixture.list.id },
-    })).resolves.toBe(itemCountBeforeDeletedRecipe);
+      where: { shoppingList: { authorId: userWithoutList.id } },
+    })).resolves.toBe(0);
+  });
+
+  it("recovers committed incomplete bulk mutations and refuses partial recipe-add recovery", async () => {
+    const fixture = await createShoppingMutationFixture(db);
+    const firstName = `recover_flour_${faker.string.alphanumeric(6)}`.toLowerCase();
+    const firstUnit = `cup_recover_${faker.string.alphanumeric(6)}`.toLowerCase();
+    const secondName = `recover_sugar_${faker.string.alphanumeric(6)}`.toLowerCase();
+    const secondUnit = `tbsp_recover_${faker.string.alphanumeric(6)}`.toLowerCase();
+    const recipe = await createRecipeWithIngredients(db, fixture.user.id, [
+      { name: firstName, quantity: 2, unit: firstUnit },
+      { name: secondName, quantity: 3, unit: secondUnit },
+    ]);
+    const addBody = {
+      clientMutationId: "bulk-recover-add-recipe",
+      recipeId: recipe.id,
+      scaleFactor: 2,
+    };
+    const addReservation = await reserveShoppingMutation(
+      db,
+      fixture,
+      "shopping-list/add-from-recipe",
+      "shopping-list.add-from-recipe",
+      addBody,
+    );
+    const firstUnitRow = await getOrCreateUnit(db, firstUnit);
+    const firstRef = await getOrCreateIngredientRef(db, firstName);
+    const secondUnitRow = await getOrCreateUnit(db, secondUnit);
+    const secondRef = await getOrCreateIngredientRef(db, secondName);
+    const recoveredAddItems = await Promise.all([
+      db.shoppingListItem.create({
+        data: {
+          shoppingListId: fixture.list.id,
+          ingredientRefId: firstRef.id,
+          unitId: firstUnitRow.id,
+          quantity: 4,
+          sortIndex: 0,
+        },
+      }),
+      db.shoppingListItem.create({
+        data: {
+          shoppingListId: fixture.list.id,
+          ingredientRefId: secondRef.id,
+          unitId: secondUnitRow.id,
+          quantity: 6,
+          sortIndex: 1,
+        },
+      }),
+    ]);
+    for (const item of recoveredAddItems) {
+      await db.apiMutationTombstone.create({
+        data: {
+          idempotencyKeyId: addReservation.id,
+          operation: "shopping-list.add-from-recipe",
+          resourceType: "shopping_list_item",
+          resourceId: item.id,
+          parentResourceId: recipe.id,
+          payload: JSON.stringify({ created: true }),
+        },
+      });
+    }
+
+    const recoveredAdd = await action(routeArgs(
+      mutationRequest("POST", "shopping-list/add-from-recipe", fixture.credential.token, "req_recover_bulk_add", addBody),
+      "shopping-list/add-from-recipe",
+    ));
+    const recoveredAddPayload = await readJson(recoveredAdd);
+    expect(recoveredAdd.status).toBe(200);
+    expectRecipeShoppingMutationData(recoveredAddPayload.data, "bulk-recover-add-recipe", true);
+    expect(recoveredAddPayload.data).toMatchObject({
+      created: 2,
+      updated: 0,
+      recipe: { id: recipe.id, title: recipe.title },
+    });
+    expect(sortShoppingItemSummaries(recoveredAddPayload.data.items)).toEqual([
+      {
+        id: recoveredAddItems[0]!.id,
+        name: firstName,
+        quantity: 4,
+        unit: firstUnit,
+        checked: false,
+        checkedAt: null,
+        deletedAt: null,
+        categoryKey: null,
+        iconKey: null,
+      },
+      {
+        id: recoveredAddItems[1]!.id,
+        name: secondName,
+        quantity: 6,
+        unit: secondUnit,
+        checked: false,
+        checkedAt: null,
+        deletedAt: null,
+        categoryKey: null,
+        iconKey: null,
+      },
+    ].sort((left, right) => left.name.localeCompare(right.name)));
+
+    const partialBody = {
+      clientMutationId: "bulk-partial-add-recipe",
+      recipeId: recipe.id,
+    };
+    const partialReservation = await reserveShoppingMutation(
+      db,
+      fixture,
+      "shopping-list/add-from-recipe",
+      "shopping-list.add-from-recipe",
+      partialBody,
+    );
+    await db.apiMutationTombstone.create({
+      data: {
+        idempotencyKeyId: partialReservation.id,
+        operation: "shopping-list.add-from-recipe",
+        resourceType: "shopping_list_item",
+        resourceId: recoveredAddItems[0]!.id,
+        parentResourceId: recipe.id,
+        payload: JSON.stringify({ created: false }),
+      },
+    });
+    const partialRecovery = await action(routeArgs(
+      mutationRequest("POST", "shopping-list/add-from-recipe", fixture.credential.token, "req_partial_bulk_add", partialBody),
+      "shopping-list/add-from-recipe",
+    ));
+    expect(partialRecovery.status).toBe(409);
+    expectErrorEnvelope(await readJson(partialRecovery), "req_partial_bulk_add", "idempotency_in_progress", 409);
+
+    const updateName = `recover_update_oats_${faker.string.alphanumeric(6)}`.toLowerCase();
+    const updateUnit = `cup_update_${faker.string.alphanumeric(6)}`.toLowerCase();
+    const updateRecipe = await createRecipeWithIngredients(db, fixture.user.id, [
+      { name: updateName, quantity: 2, unit: updateUnit },
+    ]);
+    const updateBody = {
+      clientMutationId: "bulk-recover-add-existing",
+      recipeId: updateRecipe.id,
+    };
+    const updateReservation = await reserveShoppingMutation(
+      db,
+      fixture,
+      "shopping-list/add-from-recipe",
+      "shopping-list.add-from-recipe",
+      updateBody,
+    );
+    const updateUnitRow = await getOrCreateUnit(db, updateUnit);
+    const updateRef = await getOrCreateIngredientRef(db, updateName);
+    const updatedItem = await db.shoppingListItem.create({
+      data: {
+        shoppingListId: fixture.list.id,
+        ingredientRefId: updateRef.id,
+        unitId: updateUnitRow.id,
+        quantity: 7,
+        sortIndex: 2,
+      },
+    });
+    await db.apiMutationTombstone.create({
+      data: {
+        idempotencyKeyId: updateReservation.id,
+        operation: "shopping-list.add-from-recipe",
+        resourceType: "shopping_list_item",
+        resourceId: updatedItem.id,
+        parentResourceId: updateRecipe.id,
+        payload: JSON.stringify({ created: false }),
+      },
+    });
+    const recoveredUpdatedAdd = await action(routeArgs(
+      mutationRequest("POST", "shopping-list/add-from-recipe", fixture.credential.token, "req_recover_bulk_add_update", updateBody),
+      "shopping-list/add-from-recipe",
+    ));
+    const recoveredUpdatedPayload = await readJson(recoveredUpdatedAdd);
+    expect(recoveredUpdatedAdd.status).toBe(200);
+    expect(recoveredUpdatedPayload.data).toMatchObject({
+      created: 0,
+      updated: 1,
+      items: [expect.objectContaining({ id: updatedItem.id, quantity: 7 })],
+    });
+
+    for (const [clientMutationId, requestId, tombstone] of [
+      ["bulk-recover-add-missing-item", "req_recover_add_missing_item", {
+        resourceId: "missing-shopping-item",
+        payload: JSON.stringify({ created: true }),
+      }],
+      ["bulk-recover-add-wrong-item", "req_recover_add_wrong_item", {
+        resourceId: recoveredAddItems[0]!.id,
+        payload: JSON.stringify({ created: true }),
+      }],
+      ["bulk-recover-add-bad-payload", "req_recover_add_bad_payload", {
+        resourceId: updatedItem.id,
+        payload: JSON.stringify({ nope: true }),
+      }],
+      ["bulk-recover-add-malformed-payload", "req_recover_add_malformed_payload", {
+        resourceId: updatedItem.id,
+        payload: "{",
+      }],
+      ["bulk-recover-add-null-payload", "req_recover_add_null_payload", {
+        resourceId: updatedItem.id,
+        payload: null,
+      }],
+    ] as const) {
+      const body = {
+        clientMutationId,
+        recipeId: updateRecipe.id,
+      };
+      const reservation = await reserveShoppingMutation(
+        db,
+        fixture,
+        "shopping-list/add-from-recipe",
+        "shopping-list.add-from-recipe",
+        body,
+      );
+      await db.apiMutationTombstone.create({
+        data: {
+          idempotencyKeyId: reservation.id,
+          operation: "shopping-list.add-from-recipe",
+          resourceType: "shopping_list_item",
+          resourceId: tombstone.resourceId,
+          parentResourceId: updateRecipe.id,
+          payload: tombstone.payload,
+        },
+      });
+      const response = await action(routeArgs(
+        mutationRequest("POST", "shopping-list/add-from-recipe", fixture.credential.token, requestId, body),
+        "shopping-list/add-from-recipe",
+      ));
+      expect(response.status).toBe(409);
+      expectErrorEnvelope(await readJson(response), requestId, "idempotency_in_progress", 409);
+    }
+
+    const noListUser = await db.user.create({ data: createTestUser() });
+    const noListCredential = await createApiCredential(db, noListUser.id, "Shopping recovery no list", { scopes: ["shopping_list:write"] });
+    const noListRecipe = await createRecipeWithIngredients(db, noListUser.id, [
+      { name: `recover_no_list_${faker.string.alphanumeric(6)}`.toLowerCase(), quantity: 1, unit: "each" },
+    ]);
+    const noListBody = {
+      clientMutationId: "bulk-recover-add-no-list",
+      recipeId: noListRecipe.id,
+    };
+    await reserveShoppingMutationForPrincipal(db, {
+      userId: noListUser.id,
+      credentialId: noListCredential.credential.id,
+    }, "shopping-list/add-from-recipe", "shopping-list.add-from-recipe", noListBody);
+    const noListRecovery = await action(routeArgs(
+      mutationRequest("POST", "shopping-list/add-from-recipe", noListCredential.token, "req_recover_add_no_list", noListBody),
+      "shopping-list/add-from-recipe",
+    ));
+    expect(noListRecovery.status).toBe(409);
+    expectErrorEnvelope(await readJson(noListRecovery), "req_recover_add_no_list", "idempotency_in_progress", 409);
+
+    const missingRecipeBody = {
+      clientMutationId: "bulk-recover-add-missing-recipe",
+      recipeId: "missing-recipe",
+    };
+    await reserveShoppingMutation(
+      db,
+      fixture,
+      "shopping-list/add-from-recipe",
+      "shopping-list.add-from-recipe",
+      missingRecipeBody,
+    );
+    const missingRecipeRecovery = await action(routeArgs(
+      mutationRequest("POST", "shopping-list/add-from-recipe", fixture.credential.token, "req_recover_add_missing_recipe", missingRecipeBody),
+      "shopping-list/add-from-recipe",
+    ));
+    expect(missingRecipeRecovery.status).toBe(409);
+    expectErrorEnvelope(await readJson(missingRecipeRecovery), "req_recover_add_missing_recipe", "idempotency_in_progress", 409);
+
+    const checked = await createExistingItem(db, fixture.user.id, `Recover Checked ${faker.string.alphanumeric(6)}`);
+    await db.shoppingListItem.update({
+      where: { id: checked.id },
+      data: { checked: true, checkedAt: new Date(), deletedAt: new Date() },
+    });
+    const clearCompletedBody = { clientMutationId: "bulk-recover-clear-completed" };
+    const clearCompletedReservation = await reserveShoppingMutation(
+      db,
+      fixture,
+      "shopping-list/clear-completed",
+      "shopping-list.clear-completed",
+      clearCompletedBody,
+    );
+    await db.apiMutationTombstone.create({
+      data: {
+        idempotencyKeyId: clearCompletedReservation.id,
+        operation: "shopping-list.clear-completed",
+        resourceType: "shopping_list_item",
+        resourceId: checked.id,
+        payload: JSON.stringify({ cleared: true }),
+      },
+    });
+
+    const recoveredClearCompleted = await action(routeArgs(
+      mutationRequest("POST", "shopping-list/clear-completed", fixture.credential.token, "req_recover_clear_completed", clearCompletedBody),
+      "shopping-list/clear-completed",
+    ));
+    const recoveredClearCompletedPayload = await readJson(recoveredClearCompleted);
+    expect(recoveredClearCompleted.status).toBe(200);
+    expectClearShoppingMutationData(recoveredClearCompletedPayload.data, "bulk-recover-clear-completed", true);
+    expect(recoveredClearCompletedPayload.data).toMatchObject({
+      cleared: 1,
+      items: [expect.objectContaining({ id: checked.id, deletedAt: expect.any(String) })],
+    });
+
+    const active = await createExistingItem(db, fixture.user.id, `Recover Active ${faker.string.alphanumeric(6)}`);
+    await db.shoppingListItem.update({
+      where: { id: active.id },
+      data: { deletedAt: new Date() },
+    });
+    const clearAllBody = { clientMutationId: "bulk-recover-clear-all" };
+    const clearAllReservation = await reserveShoppingMutation(
+      db,
+      fixture,
+      "shopping-list/clear-all",
+      "shopping-list.clear-all",
+      clearAllBody,
+    );
+    await db.apiMutationTombstone.create({
+      data: {
+        idempotencyKeyId: clearAllReservation.id,
+        operation: "shopping-list.clear-all",
+        resourceType: "shopping_list_item",
+        resourceId: active.id,
+        payload: JSON.stringify({ cleared: true }),
+      },
+    });
+    const recoveredClearAll = await action(routeArgs(
+      mutationRequest("POST", "shopping-list/clear-all", fixture.credential.token, "req_recover_clear_all", clearAllBody),
+      "shopping-list/clear-all",
+    ));
+    const recoveredClearAllPayload = await readJson(recoveredClearAll);
+    expect(recoveredClearAll.status).toBe(200);
+    expectClearShoppingMutationData(recoveredClearAllPayload.data, "bulk-recover-clear-all", true);
+    expect(recoveredClearAllPayload.data).toMatchObject({
+      cleared: 1,
+      items: [expect.objectContaining({ id: active.id, deletedAt: expect.any(String) })],
+    });
+
+    const emptyClearCompletedBody = { clientMutationId: "bulk-empty-clear-completed-recovery" };
+    await reserveShoppingMutation(
+      db,
+      fixture,
+      "shopping-list/clear-completed",
+      "shopping-list.clear-completed",
+      emptyClearCompletedBody,
+    );
+    const emptyClearCompleted = await action(routeArgs(
+      mutationRequest("POST", "shopping-list/clear-completed", fixture.credential.token, "req_empty_clear_completed_recovery", emptyClearCompletedBody),
+      "shopping-list/clear-completed",
+    ));
+    expect(emptyClearCompleted.status).toBe(200);
+    expectClearShoppingMutationData((await readJson(emptyClearCompleted)).data, "bulk-empty-clear-completed-recovery", true);
+
+    const checkedWithoutJournal = await createExistingItem(db, fixture.user.id, `Recover Active Checked ${faker.string.alphanumeric(6)}`);
+    await db.shoppingListItem.update({
+      where: { id: checkedWithoutJournal.id },
+      data: { checked: true, checkedAt: new Date() },
+    });
+    const activeClearCompletedBody = { clientMutationId: "bulk-active-clear-completed-recovery" };
+    await reserveShoppingMutation(
+      db,
+      fixture,
+      "shopping-list/clear-completed",
+      "shopping-list.clear-completed",
+      activeClearCompletedBody,
+    );
+    const activeClearCompleted = await action(routeArgs(
+      mutationRequest("POST", "shopping-list/clear-completed", fixture.credential.token, "req_active_clear_completed_recovery", activeClearCompletedBody),
+      "shopping-list/clear-completed",
+    ));
+    expect(activeClearCompleted.status).toBe(409);
+    expectErrorEnvelope(await readJson(activeClearCompleted), "req_active_clear_completed_recovery", "idempotency_in_progress", 409);
+    await db.shoppingListItem.update({ where: { id: checkedWithoutJournal.id }, data: { deletedAt: new Date() } });
+
+    const activeWithoutJournal = await createExistingItem(db, fixture.user.id, `Recover Active Unjournaled ${faker.string.alphanumeric(6)}`);
+    const activeClearAllBody = { clientMutationId: "bulk-active-clear-all-recovery" };
+    await reserveShoppingMutation(
+      db,
+      fixture,
+      "shopping-list/clear-all",
+      "shopping-list.clear-all",
+      activeClearAllBody,
+    );
+    const activeClearAll = await action(routeArgs(
+      mutationRequest("POST", "shopping-list/clear-all", fixture.credential.token, "req_active_clear_all_recovery", activeClearAllBody),
+      "shopping-list/clear-all",
+    ));
+    expect(activeClearAll.status).toBe(409);
+    expectErrorEnvelope(await readJson(activeClearAll), "req_active_clear_all_recovery", "idempotency_in_progress", 409);
+    await db.shoppingListItem.update({ where: { id: activeWithoutJournal.id }, data: { deletedAt: new Date() } });
+
+    const noListClearAllBody = { clientMutationId: "bulk-clear-all-no-list" };
+    await reserveShoppingMutationForPrincipal(db, {
+      userId: noListUser.id,
+      credentialId: noListCredential.credential.id,
+    }, "shopping-list/clear-all", "shopping-list.clear-all", noListClearAllBody);
+    const noListClearAll = await action(routeArgs(
+      mutationRequest("POST", "shopping-list/clear-all", noListCredential.token, "req_clear_all_no_list_recovery", noListClearAllBody),
+      "shopping-list/clear-all",
+    ));
+    expect(noListClearAll.status).toBe(409);
+    expectErrorEnvelope(await readJson(noListClearAll), "req_clear_all_no_list_recovery", "idempotency_in_progress", 409);
+
+    const noListClearSuccess = await action(routeArgs(
+      mutationRequest("POST", "shopping-list/clear-completed", noListCredential.token, "req_clear_completed_no_list_success", {
+        clientMutationId: "bulk-clear-completed-no-list-success",
+      }),
+      "shopping-list/clear-completed",
+    ));
+    expect(noListClearSuccess.status).toBe(200);
+    expectClearShoppingMutationData((await readJson(noListClearSuccess)).data, "bulk-clear-completed-no-list-success");
+    await expect(db.shoppingList.count({ where: { authorId: noListUser.id } })).resolves.toBe(1);
+
+    for (const [clientMutationId, requestId, operation, path, resourceId, payload, deleted] of [
+      ["bulk-clear-completed-bad-payload", "req_clear_completed_bad_payload", "shopping-list.clear-completed", "shopping-list/clear-completed", checked.id, JSON.stringify({ nope: true }), true],
+      ["bulk-clear-completed-malformed-payload", "req_clear_completed_malformed_payload", "shopping-list.clear-completed", "shopping-list/clear-completed", checked.id, "{", true],
+      ["bulk-clear-completed-null-payload", "req_clear_completed_null_payload", "shopping-list.clear-completed", "shopping-list/clear-completed", checked.id, null, true],
+      ["bulk-clear-all-missing-item", "req_clear_all_missing_item", "shopping-list.clear-all", "shopping-list/clear-all", "missing-shopping-item", JSON.stringify({ cleared: true }), true],
+      ["bulk-clear-all-not-deleted", "req_clear_all_not_deleted", "shopping-list.clear-all", "shopping-list/clear-all", activeWithoutJournal.id, JSON.stringify({ cleared: true }), false],
+    ] as const) {
+      if (!deleted) {
+        await db.shoppingListItem.update({ where: { id: activeWithoutJournal.id }, data: { deletedAt: null } });
+      }
+      const body = { clientMutationId };
+      const reservation = await reserveShoppingMutation(db, fixture, path, operation, body);
+      await db.apiMutationTombstone.create({
+        data: {
+          idempotencyKeyId: reservation.id,
+          operation,
+          resourceType: "shopping_list_item",
+          resourceId,
+          payload,
+        },
+      });
+      const response = await action(routeArgs(
+        mutationRequest("POST", path, fixture.credential.token, requestId, body),
+        path,
+      ));
+      expect(response.status).toBe(409);
+      expectErrorEnvelope(await readJson(response), requestId, "idempotency_in_progress", 409);
+      if (!deleted) {
+        await db.shoppingListItem.update({ where: { id: activeWithoutJournal.id }, data: { deletedAt: new Date() } });
+      }
+    }
   });
 
   it("enforces shopping_list:write before mutation body handling", async () => {

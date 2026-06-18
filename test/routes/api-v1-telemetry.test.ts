@@ -989,6 +989,75 @@ describe("API v1 mutation and validation telemetry", () => {
     });
   });
 
+  it("captures shopping-list recipe add and clear operations without body values", async () => {
+    const user = await db.user.create({ data: createTestUser() });
+    const credential = await createApiCredential(db, user.id, "Telemetry Shopping Parity Writer", {
+      scopes: ["shopping_list:write"],
+    });
+    const recipe = await db.recipe.create({
+      data: { title: `Telemetry Empty Recipe ${faker.string.alphanumeric(8)}`, chefId: user.id },
+    });
+    const auth = { Authorization: `Bearer ${credential.token}` };
+
+    for (const [path, requestId, operation, body] of [
+      ["shopping-list/add-from-recipe", "req_shopping_add_recipe_operation", "shopping-list.add-from-recipe", {
+        clientMutationId: "raw-shopping-add-recipe-id",
+        recipeId: recipe.id,
+      }],
+      ["shopping-list/clear-completed", "req_shopping_clear_completed_operation", "shopping-list.clear-completed", {
+        clientMutationId: "raw-shopping-clear-completed-id",
+      }],
+      ["shopping-list/clear-all", "req_shopping_clear_all_operation", "shopping-list.clear-all", {
+        clientMutationId: "raw-shopping-clear-all-id",
+      }],
+    ] as const) {
+      const request = apiJsonRequest("POST", path, requestId, auth, body);
+      const response = await action(routeArgs(request.request, path).args);
+
+      expect(response.status).toBe(200);
+      expectApiV1OperationEvent({
+        routeTemplate: `/api/v1/${path}`,
+        requestId,
+        operation,
+        status: 200,
+        authMode: "bearer",
+        requestBytes: request.bodyBytes,
+        idempotencyOutcome: "committed",
+        forbidden: [request.bodyText, body.clientMutationId, recipe.id, recipe.title, credential.token],
+      });
+    }
+  });
+
+  it("captures shopping-list parity operation names on authentication failures", async () => {
+    for (const [path, requestId, operation, body] of [
+      ["shopping-list/add-from-recipe", "req_shopping_add_recipe_auth_operation", "shopping-list.add-from-recipe", {
+        clientMutationId: "telemetry-shopping-add-auth",
+        recipeId: "recipe_secret",
+      }],
+      ["shopping-list/clear-completed", "req_shopping_clear_completed_auth_operation", "shopping-list.clear-completed", {
+        clientMutationId: "telemetry-shopping-clear-completed-auth",
+      }],
+      ["shopping-list/clear-all", "req_shopping_clear_all_auth_operation", "shopping-list.clear-all", {
+        clientMutationId: "telemetry-shopping-clear-all-auth",
+      }],
+    ] as const) {
+      const request = apiJsonRequest("POST", path, requestId, {}, body);
+      const response = await action(routeArgs(request.request, path).args);
+
+      expect(response.status).toBe(401);
+      expectApiV1ErrorEvent({
+        routeTemplate: `/api/v1/${path}`,
+        requestId,
+        status: 401,
+        errorCode: "authentication_required",
+        authMode: "anonymous",
+        operation,
+        privacyClass: "private",
+        forbidden: [request.bodyText, body.clientMutationId],
+      });
+    }
+  });
+
   it("captures token list, create, and revoke operations without credential names or secrets", async () => {
     const user = await db.user.create({ data: createTestUser() });
     const cookie = await sessionCookie(user.id);

@@ -131,6 +131,9 @@ import {
   addNativeRecipeIngredientsToShoppingList,
   clearAllNativeShoppingItems,
   clearCompletedNativeShoppingItems,
+  recoverNativeClearAllShoppingItems,
+  recoverNativeClearCompletedShoppingItems,
+  recoverNativeRecipeIngredientsToShoppingList,
   type ApiV1ShoppingResult,
 } from "~/lib/api-v1-shopping.server";
 import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
@@ -2052,8 +2055,11 @@ async function handleShoppingAddFromRecipe(args: ApiV1RouteArgs, requestId: stri
   const body = await parseApiV1JsonBody(args.request);
   const input = parseShoppingAddFromRecipeBody(body);
 
-  return await runIdempotentApiV1Mutation(args, requestId, principal, body, input.clientMutationId, "shopping-list.add-from-recipe", async (db) => {
-    const result = shoppingResultOrThrow(await addNativeRecipeIngredientsToShoppingList(db, principal.id, input));
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, input.clientMutationId, "shopping-list.add-from-recipe", async (db, reservation) => {
+    const result = shoppingResultOrThrow(await addNativeRecipeIngredientsToShoppingList(db, principal.id, input, {
+      idempotencyKeyId: reservation.id,
+      operation: "shopping-list.add-from-recipe",
+    }));
     return {
       status: result.status,
       data: {
@@ -2064,6 +2070,19 @@ async function handleShoppingAddFromRecipe(args: ApiV1RouteArgs, requestId: stri
         mutation: { clientMutationId: input.clientMutationId, replayed: false },
       },
     };
+  }, async (db, reservation) => {
+    const recovered = await recoverNativeRecipeIngredientsToShoppingList(db, principal.id, input, reservation);
+    if (!recovered) return null;
+    return {
+      status: recovered.status,
+      data: {
+        recipe: recovered.data.recipe,
+        created: recovered.data.created,
+        updated: recovered.data.updated,
+        items: recovered.data.items.map(shoppingItem),
+        mutation: recovered.data.mutation,
+      },
+    };
   });
 }
 
@@ -2071,14 +2090,28 @@ async function handleShoppingClearCompleted(args: ApiV1RouteArgs, requestId: str
   const body = await parseApiV1JsonBody(args.request);
   const input = parseShoppingClearBody(body);
 
-  return await runIdempotentApiV1Mutation(args, requestId, principal, body, input.clientMutationId, "shopping-list.clear-completed", async (db) => {
-    const result = shoppingResultOrThrow(await clearCompletedNativeShoppingItems(db, principal.id, input));
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, input.clientMutationId, "shopping-list.clear-completed", async (db, reservation) => {
+    const result = shoppingResultOrThrow(await clearCompletedNativeShoppingItems(db, principal.id, input, {
+      idempotencyKeyId: reservation.id,
+      operation: "shopping-list.clear-completed",
+    }));
     return {
       status: result.status,
       data: {
         cleared: result.data.cleared,
         items: result.data.items.map(shoppingItem),
         mutation: { clientMutationId: input.clientMutationId, replayed: false },
+      },
+    };
+  }, async (db, reservation) => {
+    const recovered = await recoverNativeClearCompletedShoppingItems(db, principal.id, input, reservation);
+    if (!recovered) return null;
+    return {
+      status: recovered.status,
+      data: {
+        cleared: recovered.data.cleared,
+        items: recovered.data.items.map(shoppingItem),
+        mutation: recovered.data.mutation,
       },
     };
   });
@@ -2088,14 +2121,28 @@ async function handleShoppingClearAll(args: ApiV1RouteArgs, requestId: string, p
   const body = await parseApiV1JsonBody(args.request);
   const input = parseShoppingClearBody(body);
 
-  return await runIdempotentApiV1Mutation(args, requestId, principal, body, input.clientMutationId, "shopping-list.clear-all", async (db) => {
-    const result = shoppingResultOrThrow(await clearAllNativeShoppingItems(db, principal.id, input));
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, input.clientMutationId, "shopping-list.clear-all", async (db, reservation) => {
+    const result = shoppingResultOrThrow(await clearAllNativeShoppingItems(db, principal.id, input, {
+      idempotencyKeyId: reservation.id,
+      operation: "shopping-list.clear-all",
+    }));
     return {
       status: result.status,
       data: {
         cleared: result.data.cleared,
         items: result.data.items.map(shoppingItem),
         mutation: { clientMutationId: input.clientMutationId, replayed: false },
+      },
+    };
+  }, async (db, reservation) => {
+    const recovered = await recoverNativeClearAllShoppingItems(db, principal.id, input, reservation);
+    if (!recovered) return null;
+    return {
+      status: recovered.status,
+      data: {
+        cleared: recovered.data.cleared,
+        items: recovered.data.items.map(shoppingItem),
+        mutation: recovered.data.mutation,
       },
     };
   });

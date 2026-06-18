@@ -410,6 +410,12 @@ describe("API v1 OpenAPI document", () => {
       .toBe("#/components/schemas/CreateShoppingItemRequest");
     expect(operation(document, "/api/v1/shopping-list/items/{itemId}", "PATCH").requestBody.content["application/json"].schema.$ref)
       .toBe("#/components/schemas/CheckShoppingItemRequest");
+    expect(operation(document, "/api/v1/shopping-list/add-from-recipe", "POST").requestBody.content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/AddRecipeToShoppingListRequest");
+    expect(operation(document, "/api/v1/shopping-list/clear-completed", "POST").requestBody.content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/ClearShoppingItemsRequest");
+    expect(operation(document, "/api/v1/shopping-list/clear-all", "POST").requestBody.content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/ClearShoppingItemsRequest");
     expect(operation(document, "/api/v1/shopping-list/items/{itemId}", "DELETE").requestBody).toBeUndefined();
     expect(operation(document, "/api/v1/shopping-list/items/{itemId}", "DELETE").parameters).toEqual(expect.arrayContaining([
       expect.objectContaining({ name: "itemId", in: "path", required: true }),
@@ -426,6 +432,19 @@ describe("API v1 OpenAPI document", () => {
       inProgressRetryAfterSeconds: 2,
       retryBodyRule: expect.stringContaining("canonicalizes object key order"),
     });
+    for (const path of [
+      "/api/v1/shopping-list/add-from-recipe",
+      "/api/v1/shopping-list/clear-completed",
+      "/api/v1/shopping-list/clear-all",
+    ]) {
+      expect(operation(document, path, "POST")["x-idempotency"]).toMatchObject({
+        key: "clientMutationId",
+        location: "jsonBody",
+        replayStatus: [200],
+        conflictStatus: 409,
+        inProgressRetryAfterSeconds: 2,
+      });
+    }
     expect(operation(document, "/api/v1/tokens", "POST")["x-personal-token-only"]).toBe(true);
 
     expect(operation(document, "/api/v1/shopping-list/items", "POST").responses).toMatchObject({
@@ -436,6 +455,34 @@ describe("API v1 OpenAPI document", () => {
         content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } },
       },
     });
+    expect(operation(document, "/api/v1/shopping-list/add-from-recipe", "POST").responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/AddRecipeToShoppingListEnvelope");
+    expect(operation(document, "/api/v1/shopping-list/clear-completed", "POST").responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/ClearShoppingItemsEnvelope");
+    expect(operation(document, "/api/v1/shopping-list/clear-all", "POST").responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/ClearShoppingItemsEnvelope");
+    const addRecipeExample = responseExample(document, "/api/v1/shopping-list/add-from-recipe", "POST", "200").data;
+    expect(addRecipeExample).toMatchObject({
+      created: expect.any(Number),
+      updated: expect.any(Number),
+      recipe: { id: "recipe_1", title: expect.any(String) },
+      mutation: { clientMutationId: expect.any(String), replayed: false },
+    });
+    expect(addRecipeExample.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: expect.any(String), name: expect.any(String) }),
+    ]));
+    expect(responseExample(document, "/api/v1/shopping-list/clear-all", "POST", "200").data).toMatchObject({
+      cleared: expect.any(Number),
+      items: [expect.objectContaining({ deletedAt: expect.any(String) })],
+      mutation: { clientMutationId: expect.any(String), replayed: false },
+    });
+    const shoppingParitySpec = JSON.stringify({
+      addFromRecipe: operation(document, "/api/v1/shopping-list/add-from-recipe", "POST"),
+      clearCompleted: operation(document, "/api/v1/shopping-list/clear-completed", "POST"),
+      clearAll: operation(document, "/api/v1/shopping-list/clear-all", "POST"),
+    });
+    expect(shoppingParitySpec).not.toContain("NativeMutationRequest");
+    expect(shoppingParitySpec).not.toContain("NativeContractEnvelope");
     expect(operation(document, "/api/v1/shopping-list/items/{itemId}", "PATCH").responses["404"].content["application/json"].schema.$ref)
       .toBe("#/components/schemas/ErrorEnvelope");
     expect(operation(document, "/api/v1/shopping-list/items/{itemId}", "DELETE").responses["404"].content["application/json"].schema.$ref)
