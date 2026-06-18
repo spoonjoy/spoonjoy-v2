@@ -1049,7 +1049,7 @@ const schemas = {
     blocked: { const: true },
     capability: { const: "ProviderSecret" },
     command: { type: "string" },
-    domain: { const: "recipe-covers" },
+    domain: { type: "string", enum: ["recipe-covers", "recipe-import"] },
     outputPath: { type: "string" },
     ownerAction: { type: "string" },
     reason: { type: "string" },
@@ -1105,6 +1105,56 @@ const schemas = {
     clientMutationId: shortTextSchema,
     activate: { type: "boolean" },
     generateEditorial: { type: "boolean", description: "Defaults to true." },
+  }),
+  RecipeImportUrlSource: objectSchema(["type", "url"], {
+    type: { const: "url" },
+    url: uriSchema,
+  }),
+  RecipeImportVideoUrlSource: objectSchema(["type", "url"], {
+    type: { const: "video-url" },
+    url: uriSchema,
+  }),
+  RecipeImportTextSource: objectSchema(["type", "text"], {
+    type: { const: "text" },
+    text: { type: "string", minLength: 1, description: "Plain-text recipe content captured from native paste, share, OCR, or dictated input." },
+    url: { type: ["string", "null"], format: "uri" },
+  }),
+  RecipeImportJsonLdSource: objectSchema(["type", "jsonLd"], {
+    type: { const: "json-ld" },
+    jsonLd: {
+      oneOf: [
+        { type: "object", additionalProperties: true },
+        { type: "array", items: { type: "object", additionalProperties: true } },
+      ],
+      description: "schema.org Recipe JSON-LD captured by a native extension or share flow.",
+    },
+    url: { type: ["string", "null"], format: "uri" },
+  }),
+  RecipeImportRequest: objectSchema(["clientMutationId", "source"], {
+    clientMutationId: shortTextSchema,
+    source: {
+      oneOf: [
+        ref("RecipeImportUrlSource"),
+        ref("RecipeImportTextSource"),
+        ref("RecipeImportJsonLdSource"),
+        ref("RecipeImportVideoUrlSource"),
+      ],
+    },
+  }),
+  RecipeImportInfo: objectSchema(["confidence", "coverPending", "existingRecipeId", "inputType", "source"], {
+    inputType: { type: "string", enum: ["url", "text", "json-ld", "video-url"] },
+    source: { type: ["string", "null"], enum: ["json-ld", "llm", "mixed", "video-oembed-llm", null] },
+    confidence: { type: ["string", "null"], enum: ["high", "medium", "low", null] },
+    existingRecipeId: nullableStringSchema,
+    coverPending: { type: "boolean" },
+  }),
+  RecipeImportMutationData: objectSchema(["blockers", "import", "mutation", "nextActions", "recipe", "warnings"], {
+    recipe: { oneOf: [ref("RecipeDetail"), { type: "null" }] },
+    import: ref("RecipeImportInfo"),
+    blockers: arrayOf(ref("ProviderSecretBlocker")),
+    warnings: arrayOf({ type: "string" }),
+    nextActions: arrayOf({ type: "string" }),
+    mutation: ref("MutationMetadata"),
   }),
   CreateRecipeSpoonRequest: objectSchema(["clientMutationId"], {
     clientMutationId: shortTextSchema,
@@ -1461,6 +1511,7 @@ const schemas = {
   UpdateRecipeEnvelope: successEnvelope(ref("UpdateRecipeData")),
   DeleteRecipeEnvelope: successEnvelope(ref("DeleteRecipeData")),
   ForkRecipeEnvelope: successEnvelope(ref("ForkRecipeData")),
+  RecipeImportEnvelope: successEnvelope(ref("RecipeImportMutationData")),
   CreateRecipeStepEnvelope: successEnvelope(ref("CreateRecipeStepData")),
   UpdateRecipeStepEnvelope: successEnvelope(ref("UpdateRecipeStepData")),
   DeleteRecipeStepEnvelope: successEnvelope(ref("DeleteRecipeStepData")),
@@ -1707,7 +1758,7 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
     GET: { operationId: "getApiV1Search", tags: ["Search"], summary: "Search recipes, cookbooks, chefs, and private shopping-list items", auth: "optional", scopes: [], success: { 200: "SearchEnvelope" }, errors: [...optionalReadErrors, "authentication_required"], errorScopes: ["shopping_list:read"], parameters: [queryParameters.query, queryParameters.q, queryParameters.scope, queryParameters.limit] },
   },
   "/api/v1/recipes/import": {
-    POST: { operationId: "postApiV1RecipesImport", tags: ["Recipes"], summary: "Import a recipe from a URL, text, or captured draft", auth: "bearer", scopes: ["kitchen:write"], success: nativeContractCreated, errors: bearerMutationErrors, requestBody: "NativeMutationRequest" },
+    POST: { operationId: "postApiV1RecipesImport", tags: ["Recipes"], summary: "Import a recipe from a URL, text, JSON-LD capture, or video URL", auth: "bearer", scopes: ["kitchen:write"], success: { 201: "RecipeImportEnvelope", 202: "RecipeImportEnvelope" }, errors: bearerMutationErrors, requestBody: "RecipeImportRequest" },
   },
 };
 
@@ -2192,6 +2243,15 @@ const exampleProviderSecretBlocker = {
   ownerAction: "Provide OPENAI_API_KEY, GEMINI_API_KEY, or GOOGLE_API_KEY for local recipe cover editorial generation.",
   reason: "Recipe cover editorial image generation requires an image provider secret.",
 };
+const exampleRecipeImportProviderSecretBlocker = {
+  blocked: true,
+  capability: "ProviderSecret",
+  command: "Set OPENAI_API_KEY and rerun the recipe import mutation.",
+  domain: "recipe-import",
+  outputPath: "/tmp/spoonjoy/web/provider-secret-blocker-recipe-import.json",
+  ownerAction: "Provide OPENAI_API_KEY for local recipe import extraction and ingredient parsing.",
+  reason: "Recipe import requires a provider secret for extraction or ingredient parsing.",
+};
 const exampleRecipeSpoon = {
   id: "spoon_1",
   chefId: "chef_1",
@@ -2389,6 +2449,42 @@ const responseExamples: Record<string, unknown> = {
     ok: true,
     requestId: "req_example",
     data: { fork: exampleRecipeFork, recipe: exampleForkedRecipeDetail, mutation: exampleMutation },
+  },
+  RecipeImportEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      recipe: exampleRecipeDetail,
+      import: {
+        inputType: "url",
+        source: "json-ld",
+        confidence: "high",
+        existingRecipeId: null,
+        coverPending: false,
+      },
+      blockers: [],
+      warnings: [],
+      nextActions: ["open_recipe"],
+      mutation: exampleMutation,
+    },
+  },
+  RecipeImportProviderBlockedEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      recipe: null,
+      import: {
+        inputType: "text",
+        source: null,
+        confidence: null,
+        existingRecipeId: null,
+        coverPending: false,
+      },
+      blockers: [exampleRecipeImportProviderSecretBlocker],
+      warnings: [],
+      nextActions: ["Set OPENAI_API_KEY and retry the import with a new clientMutationId."],
+      mutation: exampleMutation,
+    },
   },
   CreateRecipeStepEnvelope: {
     ok: true,
@@ -2710,6 +2806,13 @@ const requestExamples: Record<string, unknown> = {
     clientMutationId: "device-uuid-1",
     payload: {
       note: "Endpoint-family units replace this contract placeholder with an exact request schema before handler success ships.",
+    },
+  },
+  RecipeImportRequest: {
+    clientMutationId: "device-uuid-import-1",
+    source: {
+      type: "url",
+      url: "https://example.com/recipes/lemon-pasta",
     },
   },
   CreateRecipeRequest: {
@@ -3163,6 +3266,17 @@ function idempotencyPolicyFor(path: ResourcePath, method: HttpMethod) {
       conflictStatus: 409,
       inProgressRetryAfterSeconds: 2,
       retryBodyRule: "Persist and retry the same parsed JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts.",
+    };
+  }
+  if (path === "/api/v1/recipes/import" && method === "POST") {
+    return {
+      key: "clientMutationId",
+      location: "jsonBody",
+      retentionHours: 24,
+      replayStatus: [201, 202],
+      conflictStatus: 409,
+      inProgressRetryAfterSeconds: 2,
+      retryBodyRule: "Persist and retry the same parsed JSON body for this clientMutationId, including the source type and content. Provider-secret blocker responses replay just like completed recipe imports.",
     };
   }
   if (path === "/api/v1/cookbooks" && method === "POST") {

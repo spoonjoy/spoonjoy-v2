@@ -94,6 +94,23 @@ export interface ImportRecipeOptions {
   url: string;
   chefId: string;
   dryRun?: boolean;
+  recipeId?: string;
+}
+
+export interface ImportRecipeTextOptions {
+  text: string;
+  chefId: string;
+  sourceUrl?: string | null;
+  dryRun?: boolean;
+  recipeId?: string;
+}
+
+export interface ImportRecipeJsonLdOptions {
+  jsonLd: unknown;
+  chefId: string;
+  sourceUrl?: string | null;
+  dryRun?: boolean;
+  recipeId?: string;
 }
 
 export interface ImportRecipeDeps {
@@ -127,7 +144,7 @@ export interface ImportRecipeDraftView {
   ingredients: string[];
   steps: string[];
   imageUrl: string | null;
-  sourceUrl: string;
+  sourceUrl: string | null;
 }
 
 export interface ImportRecipeResult {
@@ -347,8 +364,9 @@ async function runVideoExtraction(
 async function findExistingRecipeId(
   db: PrismaClient,
   chefId: string,
-  sourceUrl: string,
+  sourceUrl: string | null,
 ): Promise<string | null> {
+  if (!sourceUrl) return null;
   const existing = await db.recipe.findFirst({
     where: { chefId, sourceUrl, deletedAt: null },
     select: { id: true },
@@ -396,6 +414,7 @@ async function persistRecipe(
   ingredientParser: NonNullable<ImportRecipeDeps["ingredientParser"]>,
   env: ImportRecipeDeps["env"],
   now: () => Date,
+  options: { recipeId?: string } = {},
 ): Promise<{ id: string; recipe: unknown; title: string }> {
   const title = await resolveTitleWithRetry(db, chefId, draft.title, now);
 
@@ -408,6 +427,7 @@ async function persistRecipe(
 
   const created = await db.recipe.create({
     data: {
+      id: options.recipeId,
       title,
       description: draft.description,
       servings: draft.servings,
@@ -532,12 +552,92 @@ async function activateImportedCoverIfStillAutomatic(
   });
 }
 
+function ingredientParserFor(deps: ImportRecipeDeps): NonNullable<ImportRecipeDeps["ingredientParser"]> {
+  return deps.ingredientParser ??
+    ((text, env) => parseIngredients(text, env ?? undefined));
+}
+
+async function consumeImportQuota(
+  deps: ImportRecipeDeps,
+  chefId: string,
+  dryRun: boolean,
+) {
+  if (dryRun) return;
+  const ok = await tryConsumeImageGenQuota(deps.db, chefId, "import", {
+    now: deps.now,
+  });
+  if (!ok) {
+    throw new ImportRecipeError(
+      "rate-limited",
+      429,
+      "Daily import quota exhausted",
+    );
+  }
+}
+
+async function finishImportRecipe(
+  input: {
+    chefId: string;
+    dryRun: boolean;
+    extraction: ExtractionOutput;
+    existingRecipeId: string | null;
+    recipeId?: string;
+  },
+  deps: ImportRecipeDeps,
+): Promise<ImportRecipeResult> {
+  if (input.dryRun) {
+    return {
+      recipeId: null,
+      recipe: input.extraction.draft,
+      confidence: input.extraction.confidence,
+      source: input.extraction.source,
+      existingRecipeId: input.existingRecipeId,
+      coverPending: false,
+    };
+  }
+
+  const now = deps.now ?? (() => new Date());
+  const persisted = await persistRecipe(
+    deps.db,
+    input.chefId,
+    input.extraction.draft,
+    ingredientParserFor(deps),
+    deps.env,
+    now,
+    { recipeId: input.recipeId },
+  );
+
+  const coverPending = await scheduleCover({
+    db: deps.db,
+    bucket: deps.bucket,
+    waitUntil: deps.waitUntil,
+    fetchImpl: deps.fetchImpl ?? fetch,
+    imageGenRunner: deps.imageGenRunner,
+    env: deps.env ?? {},
+    logger: deps.logger ?? console,
+    now,
+    recipeId: persisted.id,
+    chefId: input.chefId,
+    title: persisted.title,
+    description: input.extraction.draft.description,
+    coverSourceUrl: input.extraction.draft.imageUrl,
+  });
+
+  return {
+    recipeId: persisted.id,
+    recipe: persisted.recipe,
+    confidence: input.extraction.confidence,
+    source: input.extraction.source,
+    existingRecipeId: input.existingRecipeId,
+    coverPending,
+  };
+}
+
 export async function importRecipeFromUrl(
   options: ImportRecipeOptions,
   deps: ImportRecipeDeps,
 ): Promise<ImportRecipeResult> {
   const { url, chefId, dryRun = false } = options;
-  const now = deps.now;
 
   // 0. Parse URL up front so malformed URLs fail BEFORE quota consume.
   let parsedUrl: URL;
@@ -549,18 +649,7 @@ export async function importRecipeFromUrl(
   const sourceKind = detectImportSource(parsedUrl);
 
   // 1. Quota (skip on dry-run).
-  if (!dryRun) {
-    const ok = await tryConsumeImageGenQuota(deps.db, chefId, "import", {
-      now,
-    });
-    if (!ok) {
-      throw new ImportRecipeError(
-        "rate-limited",
-        429,
-        "Daily import quota exhausted",
-      );
-    }
-  }
+  await consumeImportQuota(deps, chefId, dryRun);
 
   // 2. Fetch + extract — web vs. video pipeline by hostname.
   let extraction: ExtractionOutput;
@@ -587,56 +676,87 @@ export async function importRecipeFromUrl(
   // 4. Existing-URL hint.
   const existingRecipeId = await findExistingRecipeId(deps.db, chefId, url);
 
-  // 5. Dry-run shortcut.
-  if (dryRun) {
-    return {
-      recipeId: null,
-      recipe: extraction.draft,
-      confidence: extraction.confidence,
-      source: extraction.source,
-      existingRecipeId,
-      coverPending: false,
-    };
-  }
-
-  // 6. Persist.
-  const ingredientParser: NonNullable<ImportRecipeDeps["ingredientParser"]> =
-    deps.ingredientParser ??
-    ((text, env) => parseIngredients(text, env ?? undefined));
-  const persisted = await persistRecipe(
-    deps.db,
+  return finishImportRecipe({
     chefId,
-    extraction.draft,
-    ingredientParser,
-    deps.env,
-    now ?? (() => new Date()),
-  );
-
-  // 7. Cover scheduling.
-  const coverPending = await scheduleCover({
-    db: deps.db,
-    bucket: deps.bucket,
-    waitUntil: deps.waitUntil,
-    fetchImpl: deps.fetchImpl ?? fetch,
-    imageGenRunner: deps.imageGenRunner,
-    env: deps.env ?? {},
-    logger: deps.logger ?? console,
-    now: now ?? (() => new Date()),
-    recipeId: persisted.id,
-    chefId,
-    title: persisted.title,
-    description: extraction.draft.description,
-    coverSourceUrl: extraction.draft.imageUrl,
-  });
-
-  return {
-    recipeId: persisted.id,
-    recipe: persisted.recipe,
-    confidence: extraction.confidence,
-    source: extraction.source,
+    dryRun,
+    extraction,
     existingRecipeId,
-    coverPending,
+    recipeId: options.recipeId,
+  }, deps);
+}
+
+function htmlForJsonLd(jsonLd: unknown): string {
+  return `<script type="application/ld+json">${JSON.stringify(jsonLd)}</script>`;
+}
+
+export async function importRecipeFromText(
+  options: ImportRecipeTextOptions,
+  deps: ImportRecipeDeps,
+): Promise<ImportRecipeResult> {
+  const text = options.text.trim();
+  if (!text) {
+    throw new ImportRecipeError(
+      "no-content",
+      422,
+      "Text import must include recipe content",
+    );
+  }
+  const dryRun = options.dryRun ?? false;
+  await consumeImportQuota(deps, options.chefId, dryRun);
+  const llm = await runLlm(text, deps);
+  if (!llm.title || !llm.title.trim()) {
+    throw new ImportRecipeError(
+      "no-content",
+      422,
+      "Could not extract a recipe from the text",
+    );
+  }
+  const sourceUrl = options.sourceUrl ?? null;
+  const extraction: ExtractionOutput = {
+    draft: {
+      title: llm.title,
+      description: llm.description,
+      servings: llm.servings,
+      ingredients: llm.ingredients,
+      steps: llm.steps,
+      imageUrl: null,
+      sourceUrl,
+    },
+    source: "llm",
+    confidence: "low",
   };
+
+  return finishImportRecipe({
+    chefId: options.chefId,
+    dryRun,
+    extraction,
+    existingRecipeId: await findExistingRecipeId(deps.db, options.chefId, sourceUrl),
+    recipeId: options.recipeId,
+  }, deps);
+}
+
+export async function importRecipeFromJsonLd(
+  options: ImportRecipeJsonLdOptions,
+  deps: ImportRecipeDeps,
+): Promise<ImportRecipeResult> {
+  const sourceUrl = options.sourceUrl ?? null;
+  const dryRun = options.dryRun ?? false;
+  await consumeImportQuota(deps, options.chefId, dryRun);
+  const extraction = await runExtraction(
+    sourceUrl ?? "native://capture/json-ld",
+    htmlForJsonLd(options.jsonLd),
+    null,
+    deps,
+  );
+  extraction.draft.sourceUrl = sourceUrl;
+
+  return finishImportRecipe({
+    chefId: options.chefId,
+    dryRun,
+    extraction,
+    existingRecipeId: await findExistingRecipeId(deps.db, options.chefId, sourceUrl),
+    recipeId: options.recipeId,
+  }, deps);
 }
 
 interface ScheduleCoverArgs {

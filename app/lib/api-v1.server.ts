@@ -79,6 +79,15 @@ import {
   type NativeRecipeStepIngredientCreateInput,
 } from "~/lib/api-v1-recipe-steps.server";
 import {
+  hasRecipeImportProviderSecret,
+  parseNativeRecipeImportBody,
+  providerBlockedRecipeImportData,
+  runNativeRecipeImport,
+  type ApiV1RecipeImportResult,
+  type NativeRecipeImportData,
+  type NativeRecipeImportInput,
+} from "~/lib/api-v1-recipe-import.server";
+import {
   activateNativeRecipeCover,
   archiveNativeRecipeCover,
   createNativeRecipeCoverFromSpoon,
@@ -432,6 +441,8 @@ function apiV1OperationFor(method: string, path: string): string | undefined {
       return "recipes.get";
     case "POST recipe-create":
       return "recipes.create";
+    case "POST recipe-import":
+      return "recipes.import";
     case "PATCH recipe-write":
       return "recipes.update";
     case "DELETE recipe-write":
@@ -2185,6 +2196,15 @@ function recipeStepResultOrThrow<T>(
   return result;
 }
 
+function recipeImportResultOrThrow<T>(
+  result: ApiV1RecipeImportResult<T>,
+): { status: number; data: T } {
+  if (!result.ok) {
+    throw new ApiV1Error(result.code, result.message, result.details);
+  }
+  return result;
+}
+
 function recipeCoverResultOrThrow<T>(
   result: ApiV1RecipeCoverResult<T>,
 ): { status: number; data: T } {
@@ -2761,6 +2781,173 @@ async function handleRecipeFork(args: ApiV1RouteArgs, requestId: string, princip
     principalId: principal.id,
     sourceRecipeId,
     titleOverride: parsed.data.titleOverride,
+  }));
+}
+
+function recipeImportMutationData(input: {
+  clientMutationId: string;
+  importResult: {
+    inputType: NativeRecipeImportData["import"]["inputType"];
+    source: NativeRecipeImportData["import"]["source"];
+    confidence: NativeRecipeImportData["import"]["confidence"];
+    existingRecipeId: string | null;
+    coverPending: boolean;
+  };
+  recipe: unknown | null;
+}): NativeRecipeImportData {
+  return {
+    recipe: input.recipe,
+    import: {
+      inputType: input.importResult.inputType,
+      source: input.importResult.source,
+      confidence: input.importResult.confidence,
+      existingRecipeId: input.importResult.existingRecipeId,
+      coverPending: input.importResult.coverPending,
+    },
+    blockers: [],
+    warnings: [],
+    nextActions: input.recipe ? ["open_recipe"] : [],
+    mutation: { clientMutationId: input.clientMutationId, replayed: false },
+  };
+}
+
+function recipeImportTombstonePayload(input: NativeRecipeImportData["import"]) {
+  return JSON.stringify(input);
+}
+
+function parseRecipeImportTombstonePayload(tombstone: { payload: string | null }): NativeRecipeImportData["import"] | null {
+  if (!tombstone.payload) return null;
+  try {
+    const parsed = JSON.parse(tombstone.payload) as unknown;
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      !Array.isArray(parsed) &&
+      typeof (parsed as { inputType?: unknown }).inputType === "string" &&
+      (
+        (parsed as { source?: unknown }).source === null ||
+        typeof (parsed as { source?: unknown }).source === "string"
+      ) &&
+      (
+        (parsed as { confidence?: unknown }).confidence === null ||
+        typeof (parsed as { confidence?: unknown }).confidence === "string"
+      ) &&
+      (
+        (parsed as { existingRecipeId?: unknown }).existingRecipeId === null ||
+        typeof (parsed as { existingRecipeId?: unknown }).existingRecipeId === "string"
+      ) &&
+      typeof (parsed as { coverPending?: unknown }).coverPending === "boolean"
+    ) {
+      return parsed as NativeRecipeImportData["import"];
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+async function recoverNativeRecipeImport(
+  db: ApiV1WriteDb,
+  reservation: ApiIdempotencyKey,
+  input: {
+    clientMutationId: string;
+    env: Record<string, unknown> | null | undefined;
+    origin: string;
+    principalId: string;
+    request: NativeRecipeImportInput;
+  },
+): Promise<ApiV1IdempotentMutationResult | null> {
+  if (!hasRecipeImportProviderSecret(input.env)) {
+    return {
+      status: 202,
+      data: await providerBlockedRecipeImportData(input.request, input.env),
+    };
+  }
+  const recipe = await loadRecipeById(db, reservation.id);
+  if (!recipe || recipe.chef.id !== input.principalId) return null;
+  const tombstone = await findMutationTombstone(db, reservation, {
+    operation: "recipes.import",
+    resourceType: "recipeImport",
+    resourceId: recipe.id,
+  });
+  const importResult = tombstone ? parseRecipeImportTombstonePayload(tombstone) : null;
+  if (!importResult) return null;
+  return {
+    status: 201,
+    data: recipeImportMutationData({
+      clientMutationId: input.clientMutationId,
+      importResult,
+      recipe: recipeDetail(recipe, input.origin),
+    }),
+  };
+}
+
+async function handleRecipeImport(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
+  const body = await parseApiV1JsonBody(args.request);
+  const parsed = parseNativeRecipeImportBody(body);
+  if (!parsed.ok) {
+    throw new ApiV1Error(parsed.code, parsed.message, parsed.details);
+  }
+  const origin = publicContentOrigin(args);
+  const env = args.context.cloudflare?.env ?? null;
+
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, parsed.data.clientMutationId, "recipes.import", async (db, reservation) => {
+    if (!hasRecipeImportProviderSecret(env)) {
+      return {
+        status: 202,
+        data: await providerBlockedRecipeImportData(parsed.data, env),
+      };
+    }
+    const imported = recipeImportResultOrThrow(await runNativeRecipeImport(parsed.data, {
+      db,
+      chefId: principal.id,
+      env,
+      waitUntil: apiV1WaitUntilFor(args),
+      recipeId: reservation.id,
+    }));
+    const recipeId = imported.data.importResult.recipeId;
+    if (!recipeId) {
+      throw new ApiV1Error("internal_error", "Recipe import did not create a recipe");
+    }
+    const recipe = await serializedRecipeOrThrow(db, recipeId, origin);
+    const data = recipeImportMutationData({
+      clientMutationId: parsed.data.clientMutationId,
+      importResult: {
+        inputType: imported.data.inputType,
+        source: imported.data.importResult.source,
+        confidence: imported.data.importResult.confidence,
+        existingRecipeId: imported.data.importResult.existingRecipeId,
+        coverPending: imported.data.importResult.coverPending,
+      },
+      recipe,
+    });
+    await db.apiMutationTombstone.upsert({
+      where: {
+        idempotencyKeyId_resourceType_resourceId: {
+          idempotencyKeyId: reservation.id,
+          resourceType: "recipeImport",
+          resourceId: recipeId,
+        },
+      },
+      create: {
+        idempotencyKeyId: reservation.id,
+        operation: "recipes.import",
+        resourceType: "recipeImport",
+        resourceId: recipeId,
+        payload: recipeImportTombstonePayload(data.import),
+      },
+      update: {
+        operation: "recipes.import",
+        payload: recipeImportTombstonePayload(data.import),
+      },
+    });
+    return { status: imported.status, data };
+  }, (db, reservation) => recoverNativeRecipeImport(db, reservation, {
+    clientMutationId: parsed.data.clientMutationId,
+    env: env as Record<string, unknown> | null | undefined,
+    origin,
+    principalId: principal.id,
+    request: parsed.data,
   }));
 }
 
@@ -3787,6 +3974,15 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
     if (args.request.method === "POST" && path === "recipes") {
       const principal = await authorize(path) as ApiPrincipal;
       const response = await handleRecipeCreate(args, requestId, principal);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (path === "recipes/import") {
+      if (args.request.method !== "POST") {
+        throw new ApiV1Error("method_not_allowed", "Method not allowed", { allow: "POST" });
+      }
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeImport(args, requestId, principal);
       return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
     }
 

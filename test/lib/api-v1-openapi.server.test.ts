@@ -561,6 +561,54 @@ describe("API v1 OpenAPI document", () => {
     expect(cookbookWriteSpec).not.toContain("Endpoint-family units replace this contract placeholder");
   });
 
+  it("declares exact request and response schemas for native recipe import", () => {
+    const document = buildApiV1OpenApiDocument();
+    const importOperation = operation(document, "/api/v1/recipes/import", "POST");
+
+    expect(importOperation.requestBody.content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/RecipeImportRequest");
+    expect(importOperation.responses["201"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/RecipeImportEnvelope");
+    expect(importOperation.responses["202"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/RecipeImportEnvelope");
+    expect(importOperation["x-idempotency"]).toMatchObject({
+      key: "clientMutationId",
+      location: "jsonBody",
+      replayStatus: [201, 202],
+      conflictStatus: 409,
+    });
+
+    expect(document.components.schemas.RecipeImportRequest.properties.source.oneOf)
+      .toEqual([
+        { $ref: "#/components/schemas/RecipeImportUrlSource" },
+        { $ref: "#/components/schemas/RecipeImportTextSource" },
+        { $ref: "#/components/schemas/RecipeImportJsonLdSource" },
+        { $ref: "#/components/schemas/RecipeImportVideoUrlSource" },
+      ]);
+    expect(document.components.schemas.RecipeImportMutationData.properties.blockers.items.$ref)
+      .toBe("#/components/schemas/ProviderSecretBlocker");
+    expect(document.components.schemas.ProviderSecretBlocker.properties.domain.enum)
+      .toEqual(["recipe-covers", "recipe-import"]);
+
+    const example = responseExample(document, "/api/v1/recipes/import", "POST", "201").data;
+    expect(example).toMatchObject({
+      recipe: { id: "recipe_1", href: "/recipes/recipe_1" },
+      import: {
+        inputType: "url",
+        source: "json-ld",
+        confidence: "high",
+        existingRecipeId: null,
+        coverPending: false,
+      },
+      blockers: [],
+      mutation: { clientMutationId: "device-uuid-1", replayed: false },
+    });
+    const importSpec = JSON.stringify(importOperation);
+    expect(importSpec).not.toContain("NativeMutationRequest");
+    expect(importSpec).not.toContain("NativeContractEnvelope");
+    expect(importSpec).not.toContain("Endpoint-family units replace this contract placeholder");
+  });
+
   it("declares exact request and response schemas for recipe step mutations", () => {
     const document = buildApiV1OpenApiDocument();
 
