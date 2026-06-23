@@ -32,12 +32,17 @@ brew install mcp-publisher
 ### 2. Generate a signing keypair
 
 ```bash
+# NOTE: macOS's default `openssl` is LibreSSL and CANNOT generate ed25519 keys.
+# Use Homebrew's OpenSSL 3 instead: "$(brew --prefix openssl@3)/bin/openssl"
 openssl genpkey -algorithm ed25519 -out mcp-registry-key.pem
-# Derive the PUBLIC key for the DNS record:
-openssl pkey -in mcp-registry-key.pem -pubout -outform DER | tail -c 32 | xxd -p -c 64
+# Derive the PUBLIC key for the DNS record — BASE64, not hex (mcp-publisher expects base64):
+openssl pkey -in mcp-registry-key.pem -pubout -outform DER | tail -c 32 | base64
 ```
 
-The last command prints the 64-hex-char Ed25519 public key used below.
+The last command prints the base64-encoded 32-byte Ed25519 public key used
+below (e.g. `QnfL…ZPs=`) — NOT hex. `mcp-publisher login dns` also prints the
+exact `Expected proof record:` line; the `p=` value in DNS must match it byte
+for byte, or login fails with `invalid Ed25519 public key size`.
 
 ### 3. Add the DNS TXT record (apex of spoonjoy.app)
 
@@ -45,7 +50,7 @@ Add a TXT record at the **apex** of `spoonjoy.app` (host `@`, **not** a
 subdomain/selector):
 
 ```
-spoonjoy.app.  IN  TXT  "v=MCPv1; k=ed25519; p=<PUBLIC_KEY_HEX_FROM_STEP_2>"
+spoonjoy.app.  IN  TXT  "v=MCPv1; k=ed25519; p=<PUBLIC_KEY_BASE64_FROM_STEP_2>"
 ```
 
 Wait for it to propagate (`dig +short TXT spoonjoy.app` should show it). Remove
