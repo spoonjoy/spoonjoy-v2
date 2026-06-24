@@ -46,9 +46,14 @@ Search recipes, Search shopping list, Get recipe, List cookbooks, Get cookbook,
 Get shopping list, List cooks for recipe, List cooks by chef.
 
 Writes (non-destructive): Start/Poll delegated connection, Create API token,
-Create recipe, Update recipe, Import recipe from URL (open-world), Fork recipe,
+Create recipe, Update recipe, Fork recipe,
 Add recipe to shopping list, Create cookbook, Add recipe to cookbook,
 Add shopping-list item, Check shopping-list item, Log a cook, Update a cook.
+
+The connector has no outbound web access: it never server-fetches arbitrary
+URLs. To save a recipe from the web, the assistant reads the page itself and
+calls `Create recipe`. (The REST API still offers a server-side URL import that
+the Spoonjoy web app uses, but it is not exposed as an MCP tool.)
 
 Destructive: Revoke API token, Delete recipe, Remove recipe from cookbook,
 Remove shopping-list item, Delete a cook.
@@ -79,7 +84,7 @@ Submit at **https://clau.de/mcp-directory-submission**. Form answers:
 | Capabilities | Tools (read + write) |
 | Tools | (tool list above — all carry titles + read/destructive hints) |
 | Data handling | See https://spoonjoy.app/privacy |
-| Third-party connections | Cloudflare (hosting/DB/storage); analytics + error monitoring; OpenAI (only for URL import / image generation); OAuth providers (Apple/GitHub/Google) on user opt-in |
+| Third-party connections | Cloudflare (hosting/DB/storage); analytics + error monitoring; OpenAI (only for recipe-cover image generation); OAuth providers (Apple/GitHub/Google) on user opt-in |
 | Support / docs | ari@spoonjoy.app · https://spoonjoy.app/privacy · https://spoonjoy.app/terms |
 | Logo | (export needed — see below) |
 | Test credentials | (demo account — see below) |

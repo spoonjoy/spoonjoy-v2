@@ -112,7 +112,6 @@ describe("spoonjoy MCP tools", () => {
       "delete_recipe",
       "upload_recipe_image",
       "upload_spoon_photo",
-      "import_recipe_from_url",
       "fork_recipe",
       "add_recipe_to_shopping_list",
       "list_cookbooks",
@@ -130,6 +129,17 @@ describe("spoonjoy MCP tools", () => {
       "list_spoons_for_recipe",
       "list_spoons_by_chef",
     ]);
+  });
+
+  it("excludes import_recipe_from_url from the MCP surface and rejects calling it", async () => {
+    // `import_recipe_from_url` server-fetches arbitrary URLs (open-world) and is
+    // intentionally REST-only — it must not be advertised over MCP nor callable
+    // by name. The agent-driven import path (read the page, call create_recipe)
+    // replaces it for MCP clients.
+    expect(listSpoonjoyMcpTools().map((tool) => tool.name)).not.toContain("import_recipe_from_url");
+
+    await expect(callSpoonjoyMcpTool("import_recipe_from_url", { url: "https://example.com/recipe" }, context))
+      .rejects.toThrow("Unknown Spoonjoy operation: import_recipe_from_url");
   });
 
   it("annotates every tool with a title and behavioral hints (directory requirement)", () => {
@@ -152,7 +162,7 @@ describe("spoonjoy MCP tools", () => {
     }
   });
 
-  it("classifies reads, writes, deletes, and the open-world import correctly", () => {
+  it("classifies reads, writes, and deletes correctly", () => {
     const byName = new Map(listSpoonjoyMcpTools().map((tool) => [tool.name, tool.annotations]));
 
     expect(byName.get("get_recipe")).toMatchObject({ readOnlyHint: true });
@@ -169,7 +179,9 @@ describe("spoonjoy MCP tools", () => {
     expect(byName.get("delete_recipe")).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true });
     expect(byName.get("upload_recipe_image")).toMatchObject({ readOnlyHint: false, destructiveHint: false });
     expect(byName.get("upload_spoon_photo")).toMatchObject({ readOnlyHint: false, destructiveHint: false });
-    expect(byName.get("import_recipe_from_url")).toMatchObject({ readOnlyHint: false, openWorldHint: true });
+    // The open-world `import_recipe_from_url` op is deliberately not on the MCP
+    // surface (REST-only), so it never appears here to be classified.
+    expect(byName.has("import_recipe_from_url")).toBe(false);
     expect(byName.get("add_recipe_to_cookbook")).toMatchObject({ idempotentHint: true });
   });
 
