@@ -2793,7 +2793,7 @@ function recipeImportMutationData(input: {
     existingRecipeId: string | null;
     coverPending: boolean;
   };
-  recipe: unknown | null;
+  recipe: unknown;
 }): NativeRecipeImportData {
   return {
     recipe: input.recipe,
@@ -2806,7 +2806,7 @@ function recipeImportMutationData(input: {
     },
     blockers: [],
     warnings: [],
-    nextActions: input.recipe ? ["open_recipe"] : [],
+    nextActions: ["open_recipe"],
     mutation: { clientMutationId: input.clientMutationId, replayed: false },
   };
 }
@@ -2846,6 +2846,23 @@ function parseRecipeImportTombstonePayload(tombstone: { payload: string | null }
   return null;
 }
 
+function recipeImportRecoveryFallback(input: NativeRecipeImportInput): NativeRecipeImportData["import"] {
+  const source: NativeRecipeImportData["import"]["source"] = input.source.type === "text"
+    ? "llm"
+    : input.source.type === "json-ld"
+      ? "json-ld"
+      : input.source.type === "video-url"
+        ? "video-oembed-llm"
+        : null;
+  return {
+    inputType: input.source.type,
+    source,
+    confidence: null,
+    existingRecipeId: null,
+    coverPending: false,
+  };
+}
+
 async function recoverNativeRecipeImport(
   db: ApiV1WriteDb,
   reservation: ApiIdempotencyKey,
@@ -2857,29 +2874,33 @@ async function recoverNativeRecipeImport(
     request: NativeRecipeImportInput;
   },
 ): Promise<ApiV1IdempotentMutationResult | null> {
+  const recipe = await loadRecipeById(db, reservation.id);
+  if (recipe) {
+    if (recipe.chef.id !== input.principalId) return null;
+    const tombstone = await findMutationTombstone(db, reservation, {
+      operation: "recipes.import",
+      resourceType: "recipeImport",
+      resourceId: recipe.id,
+    });
+    const importResult = tombstone
+      ? parseRecipeImportTombstonePayload(tombstone) ?? recipeImportRecoveryFallback(input.request)
+      : recipeImportRecoveryFallback(input.request);
+    return {
+      status: 201,
+      data: recipeImportMutationData({
+        clientMutationId: input.clientMutationId,
+        importResult,
+        recipe: recipeDetail(recipe, input.origin),
+      }),
+    };
+  }
   if (!hasRecipeImportProviderSecret(input.env)) {
     return {
       status: 202,
       data: await providerBlockedRecipeImportData(input.request, input.env),
     };
   }
-  const recipe = await loadRecipeById(db, reservation.id);
-  if (!recipe || recipe.chef.id !== input.principalId) return null;
-  const tombstone = await findMutationTombstone(db, reservation, {
-    operation: "recipes.import",
-    resourceType: "recipeImport",
-    resourceId: recipe.id,
-  });
-  const importResult = tombstone ? parseRecipeImportTombstonePayload(tombstone) : null;
-  if (!importResult) return null;
-  return {
-    status: 201,
-    data: recipeImportMutationData({
-      clientMutationId: input.clientMutationId,
-      importResult,
-      recipe: recipeDetail(recipe, input.origin),
-    }),
-  };
+  return null;
 }
 
 async function handleRecipeImport(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
@@ -2905,10 +2926,7 @@ async function handleRecipeImport(args: ApiV1RouteArgs, requestId: string, princ
       waitUntil: apiV1WaitUntilFor(args),
       recipeId: reservation.id,
     }));
-    const recipeId = imported.data.importResult.recipeId;
-    if (!recipeId) {
-      throw new ApiV1Error("internal_error", "Recipe import did not create a recipe");
-    }
+    const recipeId = reservation.id;
     const recipe = await serializedRecipeOrThrow(db, recipeId, origin);
     const data = recipeImportMutationData({
       clientMutationId: parsed.data.clientMutationId,

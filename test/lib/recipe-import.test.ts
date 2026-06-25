@@ -9,6 +9,8 @@ import { cleanupDatabase } from "../helpers/cleanup";
 const GENERATED_IMAGE_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
 import {
   ImportRecipeError,
+  importRecipeFromJsonLd,
+  importRecipeFromText,
   importRecipeFromUrl,
   type ImportRecipeDeps,
 } from "~/lib/recipe-import.server";
@@ -593,6 +595,77 @@ describe("importRecipeFromUrl — extraction paths", () => {
   });
 
   describe("LLM runner edge cases", () => {
+    it("rejects blank native text imports before provider extraction", async () => {
+      const chef = await makeChef();
+
+      await expect(
+        importRecipeFromText(
+          { text: "   ", chefId: chef.id },
+          baseDeps(),
+        ),
+      ).rejects.toMatchObject({
+        code: "no-content",
+        status: 422,
+        message: "Text import must include recipe content",
+      });
+    });
+
+    it("rejects native text imports when the provider cannot extract a title", async () => {
+      const chef = await makeChef();
+      const llmRunner = makeLlmRunner({
+        title: "   ",
+        ingredients: ["1 cup broth"],
+        steps: ["Warm broth."],
+      });
+
+      await expect(
+        importRecipeFromText(
+          { text: "Ingredients and steps without a usable title", chefId: chef.id },
+          baseDeps({ llmRunner }),
+        ),
+      ).rejects.toMatchObject({
+        code: "no-content",
+        status: 422,
+        message: "Could not extract a recipe from the text",
+      });
+    });
+
+    it("imports native JSON-LD captures without a public source URL", async () => {
+      const chef = await makeChef();
+      const llmRunner = makeLlmRunner({
+        title: "Native JSON-LD Soup",
+        ingredients: ["1 cup broth"],
+        steps: ["Warm broth."],
+      });
+
+      const result = await importRecipeFromJsonLd(
+        {
+          chefId: chef.id,
+          dryRun: true,
+          jsonLd: {
+            "@context": "https://schema.org",
+            "@type": "Recipe",
+            name: "Native JSON-LD Soup",
+            recipeIngredient: ["1 cup broth"],
+            recipeInstructions: [{ "@type": "HowToStep", text: "Warm broth." }],
+          },
+        },
+        baseDeps({ llmRunner }),
+      );
+
+      expect(result).toMatchObject({
+        recipeId: null,
+        source: "json-ld",
+        confidence: "high",
+        existingRecipeId: null,
+        recipe: {
+          title: "Native JSON-LD Soup",
+          sourceUrl: null,
+        },
+      });
+      expect(llmRunner.extract).not.toHaveBeenCalled();
+    });
+
     it("throws llm-failed when LLM runner is required but not provided", async () => {
       const fixture = await loadFixture("no-jsonld-rich-html.html");
       const chef = await makeChef();

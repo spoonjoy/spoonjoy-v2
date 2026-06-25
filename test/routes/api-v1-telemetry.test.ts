@@ -571,6 +571,13 @@ describe("API v1 mutation and validation telemetry", () => {
       ["POST", `recipes/${fixture.recipe.id}/fork`, "/api/v1/recipes/{id}/fork", "req_recipe_fork_auth_operation", "recipes.fork", {
         clientMutationId: "telemetry-fork",
       }],
+      ["POST", "recipes/import", "/api/v1/recipes/import", "req_recipe_import_auth_operation", "recipes.import", {
+        clientMutationId: "telemetry-import",
+        source: {
+          type: "text",
+          text: "Telemetry import should not leak this text.",
+        },
+      }],
     ] as const) {
       const request = apiJsonRequest(method, path, requestId, {}, body);
       const response = await action(routeArgs(request.request, path).args);

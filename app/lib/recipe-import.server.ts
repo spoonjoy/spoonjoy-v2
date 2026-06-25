@@ -414,7 +414,7 @@ async function persistRecipe(
   ingredientParser: NonNullable<ImportRecipeDeps["ingredientParser"]>,
   env: ImportRecipeDeps["env"],
   now: () => Date,
-  options: { recipeId?: string } = {},
+  options: { recipeId?: string },
 ): Promise<{ id: string; recipe: unknown; title: string }> {
   const title = await resolveTitleWithRetry(db, chefId, draft.title, now);
 

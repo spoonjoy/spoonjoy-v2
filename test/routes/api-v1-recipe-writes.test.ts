@@ -809,7 +809,7 @@ describe("API v1 recipe write mutations", () => {
 
     const deleteRecipe = await createRecipeGraph(db, fixture.chef.id, { title: "Recover Route Delete Source" });
     const deleteBody = { clientMutationId: "recover-route-delete" };
-    await reserveMutation(db, {
+    const deleteReservation = await reserveMutation(db, {
       body: deleteBody,
       credentialId: fixture.writer.credential.id,
       method: "DELETE",
@@ -817,7 +817,10 @@ describe("API v1 recipe write mutations", () => {
       path: `recipes/${deleteRecipe.id}`,
       userId: fixture.chef.id,
     });
-    await db.recipe.update({ where: { id: deleteRecipe.id }, data: { deletedAt: new Date() } });
+    await db.recipe.update({
+      where: { id: deleteRecipe.id },
+      data: { deletedAt: new Date(deleteReservation.createdAt.getTime() + 1000) },
+    });
     const recoveredDelete = await action(routeArgs(
       mutationRequest("DELETE", `recipes/${deleteRecipe.id}`, fixture.writer.token, "req_recover_route_delete", deleteBody),
       `recipes/${deleteRecipe.id}`,

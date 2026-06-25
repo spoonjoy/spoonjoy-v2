@@ -6,6 +6,11 @@ import { faker } from "@faker-js/faker";
 import { Request as UndiciRequest } from "undici";
 import { action } from "~/routes/api.v1.$";
 import { createApiCredential } from "~/lib/api-auth.server";
+import {
+  hashIdempotencyRequest,
+  idempotencyClientKey,
+  reserveIdempotencyKey,
+} from "~/lib/api-idempotency.server";
 import { resolveApiV1ScopeRequirement } from "~/lib/api-v1.server";
 import { getLocalDb } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
@@ -311,6 +316,31 @@ async function createImportFixture(db: LocalDb) {
   return { chef, writer, reader };
 }
 
+async function reserveImportMutation(
+  db: LocalDb,
+  input: {
+    body: { clientMutationId: string; source: Record<string, unknown> };
+    chefId: string;
+    credentialId: string;
+  },
+) {
+  const requestHash = await hashIdempotencyRequest({
+    method: "POST",
+    path: "/api/v1/recipes/import",
+    body: input.body,
+  });
+  const reservation = await reserveIdempotencyKey(db, {
+    userId: input.chefId,
+    credentialId: input.credentialId,
+    clientKey: idempotencyClientKey({ id: input.chefId, source: "bearer", credentialId: input.credentialId }),
+    key: input.body.clientMutationId,
+    operation: "recipes.import",
+    requestHash,
+  });
+  if (reservation.status !== "reserved") throw new Error(`expected recipe import idempotency reservation, got ${reservation.status}`);
+  return reservation.record;
+}
+
 describe("API v1 recipe import", () => {
   let db: LocalDb;
   let artifactRoot: string;
@@ -336,6 +366,21 @@ describe("API v1 recipe import", () => {
       auth: "bearer",
       scopes: ["kitchen:write"],
     });
+  });
+
+  it("rejects unsupported import methods before treating import as a recipe id", async () => {
+    const response = await action(routeArgs(
+      new UndiciRequest("http://localhost/api/v1/recipes/import", {
+        method: "GET",
+        headers: { "X-Request-Id": "req_import_method" },
+      }) as unknown as Request,
+      "recipes/import",
+      { OPENAI_API_KEY: "sk-test", ARTIFACT_ROOT: artifactRoot },
+    ));
+
+    expect(response.status).toBe(405);
+    expect(response.headers.get("Allow")).toBe("POST");
+    expectErrorEnvelope(await readJson(response), "req_import_method", "method_not_allowed", 405);
   });
 
   it("imports a recipe URL through the native mutation envelope and captures the provider fetch", async () => {
@@ -550,6 +595,26 @@ describe("API v1 recipe import", () => {
     await expect(db.apiIdempotencyKey.count()).resolves.toBe(0);
   });
 
+  it("maps import helper failures through the API error envelope without creating recipes", async () => {
+    makeFetchHarness();
+    const { writer } = await createImportFixture(db);
+
+    const response = await action(routeArgs(
+      importRequest(writer.token, "req_import_blocked_host", {
+        clientMutationId: "native-import-blocked-host-1",
+        source: { type: "url", url: "http://127.0.0.1/private-recipe" },
+      }),
+      "recipes/import",
+      { OPENAI_API_KEY: "sk-test", ARTIFACT_ROOT: artifactRoot },
+    ));
+
+    const payload = await readJson(response);
+    expect(response.status).toBe(400);
+    expectErrorEnvelope(payload, "req_import_blocked_host", "validation_error", 400);
+    expect(payload.error.details).toEqual({ importCode: "fetch-blocked" });
+    await expect(db.recipe.count()).resolves.toBe(0);
+  });
+
   it("replays an identical import request without creating a second recipe", async () => {
     makeFetchHarness();
     const { writer } = await createImportFixture(db);
@@ -577,6 +642,325 @@ describe("API v1 recipe import", () => {
     expectImportMutationData(secondPayload.data, body.clientMutationId, true, "url", "json-ld");
     expect(secondPayload.data.recipe.id).toBe(firstPayload.data.recipe.id);
     await expect(db.recipe.count()).resolves.toBe(1);
+  });
+
+  it("recovers an import when the recipe committed before the import tombstone was written", async () => {
+    makeFetchHarness();
+    const { chef, writer } = await createImportFixture(db);
+    const body = {
+      clientMutationId: "native-import-tombstone-recovery-1",
+      source: { type: "url", url: "https://recipes.example/lemon-pasta" },
+    };
+    const requestHash = await hashIdempotencyRequest({
+      method: "POST",
+      path: "/api/v1/recipes/import",
+      body,
+    });
+    const reservation = await reserveIdempotencyKey(db, {
+      userId: chef.id,
+      credentialId: writer.credential.id,
+      clientKey: idempotencyClientKey({ id: chef.id, source: "bearer", credentialId: writer.credential.id }),
+      key: body.clientMutationId,
+      operation: "recipes.import",
+      requestHash,
+    });
+    if (reservation.status !== "reserved") throw new Error("expected recipe import idempotency reservation");
+    await db.recipe.create({
+      data: {
+        id: reservation.record.id,
+        chefId: chef.id,
+        title: "Codex Lemon Pasta",
+        description: "Bright pasta for route tests.",
+        servings: "3 servings",
+        sourceUrl: body.source.url,
+      },
+    });
+
+    const first = await action(routeArgs(
+      importRequest(writer.token, "req_import_tombstone_recovery_first", body),
+      "recipes/import",
+      { OPENAI_API_KEY: "sk-test", ARTIFACT_ROOT: artifactRoot },
+    ));
+    const second = await action(routeArgs(
+      importRequest(writer.token, "req_import_tombstone_recovery_second", body),
+      "recipes/import",
+      { OPENAI_API_KEY: "sk-test", ARTIFACT_ROOT: artifactRoot },
+    ));
+
+    const firstPayload = await readJson(first);
+    const secondPayload = await readJson(second);
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+    expectImportMutationData(firstPayload.data, body.clientMutationId, true, "url", null);
+    expectImportMutationData(secondPayload.data, body.clientMutationId, true, "url", null);
+    expect(secondPayload.data.recipe.id).toBe(firstPayload.data.recipe.id);
+    await expect(db.recipe.count()).resolves.toBe(1);
+    await expect(db.apiIdempotencyKey.count({
+      where: { key: body.clientMutationId, responseStatus: 201 },
+    })).resolves.toBe(1);
+  });
+
+  it("recovers a provider-secret blocker for an in-flight import before any recipe commits", async () => {
+    makeFetchHarness();
+    const { chef, writer } = await createImportFixture(db);
+    const body = {
+      clientMutationId: "native-import-provider-recovery-1",
+      source: {
+        type: "text",
+        text: "Provider-bound native capture that was reserved before the worker stopped.",
+      },
+    };
+    await reserveImportMutation(db, {
+      body,
+      chefId: chef.id,
+      credentialId: writer.credential.id,
+    });
+
+    const response = await action(routeArgs(
+      importRequest(writer.token, "req_import_provider_recovery", body),
+      "recipes/import",
+      { OPENAI_API_KEY: "", ARTIFACT_ROOT: artifactRoot },
+    ));
+
+    const payload = await readJson(response);
+    expect(response.status).toBe(202);
+    expectSuccessEnvelope(payload, "req_import_provider_recovery");
+    expectImportMutationData(payload.data, body.clientMutationId, true, "text", null, { blocked: true });
+    expect(payload.data.blockers).toHaveLength(1);
+    expectProviderBlockerShape(
+      payload.data.blockers[0],
+      path.join(artifactRoot, "web", "provider-secret-blocker-recipe-import.json"),
+    );
+    await expect(db.recipe.count()).resolves.toBe(0);
+    await expect(db.apiIdempotencyKey.count({
+      where: { key: body.clientMutationId, responseStatus: 202 },
+    })).resolves.toBe(1);
+  });
+
+  it("does not recover in-flight imports whose reservation-derived recipe belongs to another chef", async () => {
+    const { chef, writer } = await createImportFixture(db);
+    const otherChef = await db.user.create({ data: createTestUser() });
+    const body = {
+      clientMutationId: "native-import-foreign-recovery-1",
+      source: { type: "url", url: "https://recipes.example/lemon-pasta" },
+    };
+    const reservation = await reserveImportMutation(db, {
+      body,
+      chefId: chef.id,
+      credentialId: writer.credential.id,
+    });
+    await db.recipe.create({
+      data: {
+        ...createTestRecipe(otherChef.id),
+        id: reservation.id,
+        title: "Foreign Reserved Import",
+        sourceUrl: "https://recipes.example/lemon-pasta",
+      },
+    });
+
+    const response = await action(routeArgs(
+      importRequest(writer.token, "req_import_foreign_recovery", body),
+      "recipes/import",
+      { OPENAI_API_KEY: "sk-test", ARTIFACT_ROOT: artifactRoot },
+    ));
+
+    expect(response.status).toBe(409);
+    expectErrorEnvelope(await readJson(response), "req_import_foreign_recovery", "idempotency_in_progress", 409);
+    await expect(db.apiIdempotencyKey.count({
+      where: { key: body.clientMutationId, responseStatus: null },
+    })).resolves.toBe(1);
+  });
+
+  it("keeps an in-flight import unresolved when no recipe committed and the provider is available", async () => {
+    makeFetchHarness();
+    const { chef, writer } = await createImportFixture(db);
+    const body = {
+      clientMutationId: "native-import-empty-recovery-1",
+      source: {
+        type: "text",
+        text: "Provider is available, but no committed recipe exists to recover.",
+      },
+    };
+    await reserveImportMutation(db, {
+      body,
+      chefId: chef.id,
+      credentialId: writer.credential.id,
+    });
+
+    const response = await action(routeArgs(
+      importRequest(writer.token, "req_import_empty_recovery", body),
+      "recipes/import",
+      { OPENAI_API_KEY: "sk-test", ARTIFACT_ROOT: artifactRoot },
+    ));
+
+    expect(response.status).toBe(409);
+    expectErrorEnvelope(await readJson(response), "req_import_empty_recovery", "idempotency_in_progress", 409);
+    await expect(db.recipe.count()).resolves.toBe(0);
+    await expect(db.apiIdempotencyKey.count({
+      where: { key: body.clientMutationId, responseStatus: null },
+    })).resolves.toBe(1);
+  });
+
+  it("recovers import metadata from valid tombstones and honest fallbacks for malformed or missing journals", async () => {
+    makeFetchHarness();
+    const { chef, writer } = await createImportFixture(db);
+
+    async function seedCommittedImport(
+      body: { clientMutationId: string; source: Record<string, unknown> },
+      options: {
+        payload?: string | null;
+        title: string;
+      },
+    ) {
+      const reservation = await reserveImportMutation(db, {
+        body,
+        chefId: chef.id,
+        credentialId: writer.credential.id,
+      });
+      await db.recipe.create({
+        data: {
+          ...createTestRecipe(chef.id),
+          id: reservation.id,
+          title: options.title,
+          description: "Recovered import recipe",
+          sourceUrl: typeof body.source.url === "string" ? body.source.url : null,
+        },
+      });
+      if (options.payload !== undefined) {
+        await db.apiMutationTombstone.create({
+          data: {
+            idempotencyKeyId: reservation.id,
+            operation: "recipes.import",
+            resourceType: "recipeImport",
+            resourceId: reservation.id,
+            payload: options.payload,
+          },
+        });
+      }
+      return reservation;
+    }
+
+    const urlBody = {
+      clientMutationId: "native-import-valid-tombstone-1",
+      source: { type: "url", url: "https://recipes.example/lemon-pasta" },
+    };
+    await seedCommittedImport(urlBody, {
+      title: "Recovered Tombstone URL",
+      payload: JSON.stringify({
+        inputType: "url",
+        source: "mixed",
+        confidence: "medium",
+        existingRecipeId: "recipe_existing_import",
+        coverPending: true,
+      }),
+    });
+    const validTombstone = await action(routeArgs(
+      importRequest(writer.token, "req_import_valid_tombstone", urlBody),
+      "recipes/import",
+      { OPENAI_API_KEY: "sk-test", ARTIFACT_ROOT: artifactRoot },
+    ));
+    const validPayload = await readJson(validTombstone);
+    expect(validTombstone.status).toBe(201);
+    expectImportMutationData(validPayload.data, urlBody.clientMutationId, true, "url", "mixed");
+    expect(validPayload.data.import).toMatchObject({
+      confidence: "medium",
+      existingRecipeId: "recipe_existing_import",
+      coverPending: true,
+    });
+
+    const textBody = {
+      clientMutationId: "native-import-text-fallback-1",
+      source: { type: "text", text: "Native text import that already committed." },
+    };
+    await seedCommittedImport(textBody, {
+      title: "Recovered Text Import",
+    });
+    const textFallback = await action(routeArgs(
+      importRequest(writer.token, "req_import_text_fallback", textBody),
+      "recipes/import",
+    ));
+    const textPayload = await readJson(textFallback);
+    expect(textFallback.status).toBe(201);
+    expectImportMutationData(textPayload.data, textBody.clientMutationId, true, "text", "llm");
+
+    const jsonLdBody = {
+      clientMutationId: "native-import-jsonld-fallback-1",
+      source: { type: "json-ld", jsonLd: jsonLdImportDocument("Recovered JSON-LD Import") },
+    };
+    await seedCommittedImport(jsonLdBody, {
+      title: "Recovered JSON-LD Import",
+      payload: "{not valid json",
+    });
+    const jsonLdFallback = await action(routeArgs(
+      importRequest(writer.token, "req_import_jsonld_fallback", jsonLdBody),
+      "recipes/import",
+      { OPENAI_API_KEY: "sk-test", ARTIFACT_ROOT: artifactRoot },
+    ));
+    const jsonLdPayload = await readJson(jsonLdFallback);
+    expect(jsonLdFallback.status).toBe(201);
+    expectImportMutationData(jsonLdPayload.data, jsonLdBody.clientMutationId, true, "json-ld", "json-ld");
+
+    const malformedShapeBody = {
+      clientMutationId: "native-import-malformed-shape-fallback-1",
+      source: { type: "text", text: "Committed text import with a wrong-shaped tombstone." },
+    };
+    await seedCommittedImport(malformedShapeBody, {
+      title: "Recovered Malformed Shape Import",
+      payload: "{}",
+    });
+    const malformedShapeFallback = await action(routeArgs(
+      importRequest(writer.token, "req_import_malformed_shape_fallback", malformedShapeBody),
+      "recipes/import",
+      { OPENAI_API_KEY: "sk-test", ARTIFACT_ROOT: artifactRoot },
+    ));
+    const malformedShapePayload = await readJson(malformedShapeFallback);
+    expect(malformedShapeFallback.status).toBe(201);
+    expectImportMutationData(
+      malformedShapePayload.data,
+      malformedShapeBody.clientMutationId,
+      true,
+      "text",
+      "llm",
+    );
+
+    const nullPayloadBody = {
+      clientMutationId: "native-import-null-tombstone-fallback-1",
+      source: { type: "url", url: "https://recipes.example/lemon-pasta" },
+    };
+    await seedCommittedImport(nullPayloadBody, {
+      title: "Recovered Null Tombstone Import",
+      payload: null,
+    });
+    const nullPayloadFallback = await action(routeArgs(
+      importRequest(writer.token, "req_import_null_tombstone_fallback", nullPayloadBody),
+      "recipes/import",
+      { OPENAI_API_KEY: "sk-test", ARTIFACT_ROOT: artifactRoot },
+    ));
+    const nullPayload = await readJson(nullPayloadFallback);
+    expect(nullPayloadFallback.status).toBe(201);
+    expectImportMutationData(
+      nullPayload.data,
+      nullPayloadBody.clientMutationId,
+      true,
+      "url",
+      null,
+    );
+
+    const videoBody = {
+      clientMutationId: "native-import-video-fallback-1",
+      source: { type: "video-url", url: "https://www.youtube.com/watch?v=codex" },
+    };
+    await seedCommittedImport(videoBody, {
+      title: "Recovered Video Import",
+    });
+    const videoFallback = await action(routeArgs(
+      importRequest(writer.token, "req_import_video_fallback", videoBody),
+      "recipes/import",
+      { OPENAI_API_KEY: "sk-test", ARTIFACT_ROOT: artifactRoot },
+    ));
+    const videoPayload = await readJson(videoFallback);
+    expect(videoFallback.status).toBe(201);
+    expectImportMutationData(videoPayload.data, videoBody.clientMutationId, true, "video-url", "video-oembed-llm");
   });
 
   it("rejects a reused clientMutationId with different import content", async () => {
