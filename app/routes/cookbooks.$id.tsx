@@ -69,6 +69,7 @@ export function meta({ data }: Route.MetaArgs) {
     { name: "twitter:title", content: data.cookbook.title },
     { name: "twitter:description", content: description },
     { name: "twitter:image", content: data.ogImageUrl },
+    { tagName: "link", rel: "canonical", href: data.canonicalUrl },
   ];
 }
 
