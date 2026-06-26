@@ -60,6 +60,10 @@ export function meta({ data }: Route.MetaArgs) {
     { name: "twitter:title", content: data.recipe.title },
     { name: "twitter:description", content: description },
     { name: "twitter:image", content: data.ogImageUrl },
+    { tagName: "link", rel: "canonical", href: data.canonicalUrl },
+    ...(data.recipeJsonLd
+      ? [{ "script:ld+json": data.recipeJsonLd }]
+      : []),
   ];
 }
 

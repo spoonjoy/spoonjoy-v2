@@ -276,16 +276,53 @@ describe("Users $identifier Route", () => {
 
   describe("meta", () => {
     it("uses the loaded profile username", () => {
-      expect(meta({ data: { profile: { username: "chef-rowan" } } } as any)).toEqual([
+      expect(
+        meta({
+          data: {
+            profile: { username: "chef-rowan" },
+            canonicalUrl: "https://spoonjoy.app/users/chef-rowan",
+            ogImageUrl: "https://spoonjoy.app/avatars/chef-rowan.png",
+          },
+        } as any),
+      ).toEqual([
         { title: "chef-rowan - Spoonjoy" },
-        { name: "description", content: "Open chef-rowan's Spoonjoy kitchen." },
+        {
+          name: "description",
+          content:
+            "chef-rowan's Spoonjoy kitchen — recipes, cookbooks, and the dishes they cook.",
+        },
+        { property: "og:site_name", content: "Spoonjoy" },
+        { property: "og:type", content: "profile" },
+        { property: "og:title", content: "chef-rowan on Spoonjoy" },
+        {
+          property: "og:description",
+          content:
+            "chef-rowan's Spoonjoy kitchen — recipes, cookbooks, and the dishes they cook.",
+        },
+        { property: "og:url", content: "https://spoonjoy.app/users/chef-rowan" },
+        {
+          property: "og:image",
+          content: "https://spoonjoy.app/avatars/chef-rowan.png",
+        },
+        { name: "twitter:card", content: "summary_large_image" },
+        { name: "twitter:title", content: "chef-rowan on Spoonjoy" },
+        {
+          name: "twitter:description",
+          content:
+            "chef-rowan's Spoonjoy kitchen — recipes, cookbooks, and the dishes they cook.",
+        },
+        {
+          tagName: "link",
+          rel: "canonical",
+          href: "https://spoonjoy.app/users/chef-rowan",
+        },
       ]);
     });
 
     it("falls back when loader data is unavailable", () => {
       expect(meta({ data: undefined } as any)).toEqual([
         { title: "Chef - Spoonjoy" },
-        { name: "description", content: "Open Chef's Spoonjoy kitchen." },
+        { name: "description", content: "Open this Spoonjoy kitchen." },
       ]);
     });
   });

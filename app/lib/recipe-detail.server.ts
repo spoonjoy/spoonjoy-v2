@@ -28,6 +28,7 @@ import { notifySpoonOnMyRecipe } from "~/lib/notification-triggers.server";
 import { fanoutFellowChefOriginCook } from "~/lib/notification-fanout.server";
 import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
 import { absoluteUrlFromRequest, recipeOgPath } from "~/lib/og-image.server";
+import { buildRecipeJsonLd } from "~/lib/recipe-structured-data.server";
 import type { PostHogServerEnv } from "~/lib/analytics-server";
 import type { ImageGenEnv } from "~/lib/image-gen.server";
 import {
@@ -223,6 +224,10 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
   const coverProvenanceLabel = coverDisplay?.provenanceLabel ?? null;
   const canonicalUrl = absoluteUrlFromRequest(request.url, `/recipes/${id}`);
   const ogImageUrl = absoluteUrlFromRequest(request.url, recipeOgPath(id));
+  const recipeJsonLd = buildRecipeJsonLd(recipe, {
+    canonicalUrl,
+    imageUrl: coverImageUrl ?? ogImageUrl,
+  });
 
   const userCookbooks = userId
     ? await database.cookbook.findMany({
@@ -326,6 +331,7 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
     coverProvenanceLabel,
     canonicalUrl,
     ogImageUrl,
+    recipeJsonLd,
     isOwner,
     cookbooks,
     savedInCookbookIds,

@@ -255,7 +255,26 @@ describe("Recipes $id Route", () => {
         { name: "twitter:title", content: "Charred Tomato Toast" },
         { name: "twitter:description", content: "A fast lunch with real crunch." },
         { name: "twitter:image", content: "https://spoonjoy.app/og/recipes/recipe-1.png" },
+        { tagName: "link", rel: "canonical", href: "https://spoonjoy.app/recipes/recipe-1" },
       ]);
+    });
+
+    it("emits Recipe JSON-LD when the loader provides it", () => {
+      const result = meta({
+        data: {
+          recipe: {
+            title: "Charred Tomato Toast",
+            description: "x",
+            chef: { username: "ari" },
+          },
+          canonicalUrl: "https://spoonjoy.app/recipes/recipe-1",
+          ogImageUrl: "https://spoonjoy.app/og/recipes/recipe-1.png",
+          recipeJsonLd: { "@type": "Recipe", name: "Charred Tomato Toast" },
+        },
+      } as any);
+      expect(result).toContainEqual({
+        "script:ld+json": { "@type": "Recipe", name: "Charred Tomato Toast" },
+      });
     });
 
     it("falls back to chef attribution and placeholder metadata", () => {

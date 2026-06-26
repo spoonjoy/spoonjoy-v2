@@ -966,6 +966,7 @@ describe("Cookbooks $id Route", () => {
         { name: "twitter:title", content: "Weeknight Book" },
         { name: "twitter:description", content: "Weeknight Book, a Spoonjoy cookbook by ari with 1 recipe." },
         { name: "twitter:image", content: "https://spoonjoy.app/og/cookbooks/cb-1.png" },
+        { tagName: "link", rel: "canonical", href: "https://spoonjoy.app/cookbooks/cb-1" },
       ]);
     });
 

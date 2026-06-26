@@ -11,6 +11,7 @@ import { Link } from "~/components/ui/link";
 import { RecipeGrid } from "~/components/pantry/RecipeGrid";
 import { CookbookCard } from "~/components/pantry/CookbookCard";
 import { getRecipeCoverDisplay } from "~/lib/recipe-cover.server";
+import { absoluteUrlFromRequest } from "~/lib/og-image.server";
 import { listSpoonsByChef } from "~/lib/recipe-spoon.server";
 import { SpoonsStrip } from "~/components/recipe/SpoonsStrip";
 import {
@@ -42,10 +43,27 @@ function joinedLabel(createdAt: Date) {
 }
 
 export function meta({ data }: Route.MetaArgs) {
-  const username = data?.profile.username ?? "Chef";
+  if (!data) {
+    return [
+      { title: "Chef - Spoonjoy" },
+      { name: "description", content: "Open this Spoonjoy kitchen." },
+    ];
+  }
+  const username = data.profile.username;
+  const description = `${username}'s Spoonjoy kitchen — recipes, cookbooks, and the dishes they cook.`;
   return [
     { title: `${username} - Spoonjoy` },
-    { name: "description", content: `Open ${username}'s Spoonjoy kitchen.` },
+    { name: "description", content: description },
+    { property: "og:site_name", content: "Spoonjoy" },
+    { property: "og:type", content: "profile" },
+    { property: "og:title", content: `${username} on Spoonjoy` },
+    { property: "og:description", content: description },
+    { property: "og:url", content: data.canonicalUrl },
+    { property: "og:image", content: data.ogImageUrl },
+    { name: "twitter:card", content: "summary_large_image" },
+    { name: "twitter:title", content: `${username} on Spoonjoy` },
+    { name: "twitter:description", content: description },
+    { tagName: "link", rel: "canonical", href: data.canonicalUrl },
   ];
 }
 
@@ -182,6 +200,15 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
     };
   });
 
+  const canonicalUrl = absoluteUrlFromRequest(
+    request.url,
+    `/users/${profileUser.username}`,
+  );
+  const ogImageUrl = absoluteUrlFromRequest(
+    request.url,
+    resolveChefAvatarUrl(profileUser.photoUrl),
+  );
+
   return {
     profile: {
       id: profileUser.id,
@@ -189,6 +216,8 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
       photoUrl: profileUser.photoUrl,
       joinedLabel: joinedLabel(profileUser.createdAt),
     },
+    canonicalUrl,
+    ogImageUrl,
     isOwner: currentUserId === profileUser.id,
     recipes: recipesWithCover,
     cookbooks: cookbooksWithCover,
