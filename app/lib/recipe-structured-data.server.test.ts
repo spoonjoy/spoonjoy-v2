@@ -39,6 +39,12 @@ describe("formatIngredientLine", () => {
       }),
     ).toBe("2 eggs");
   });
+
+  it("handles a missing unit and ref", () => {
+    expect(
+      formatIngredientLine({ quantity: 1, unit: null, ingredientRef: null }),
+    ).toBe("1");
+  });
 });
 
 describe("minutesToIsoDuration", () => {
@@ -104,5 +110,13 @@ describe("buildRecipeJsonLd", () => {
     expect(jsonLd).not.toHaveProperty("totalTime");
     expect(jsonLd).not.toHaveProperty("recipeIngredient");
     expect(jsonLd).not.toHaveProperty("image");
+  });
+
+  it("accepts a pre-serialized string createdAt", () => {
+    const jsonLd = buildRecipeJsonLd(
+      { ...baseRecipe, createdAt: "2026-03-03T00:00:00.000Z" },
+      { canonicalUrl: "https://spoonjoy.app/recipes/z", imageUrl: null },
+    ) as Record<string, unknown>;
+    expect(jsonLd.datePublished).toBe("2026-03-03T00:00:00.000Z");
   });
 });
