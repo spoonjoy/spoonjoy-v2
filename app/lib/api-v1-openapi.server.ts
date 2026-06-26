@@ -1265,6 +1265,7 @@ const schemas = {
     description: { type: "string", minLength: 1, maxLength: 5000 },
     duration: { type: ["integer", "null"], minimum: 1 },
     ingredients: arrayOf(ref("RecipeIngredientInput")),
+    outputStepNums: arrayOf({ type: "integer", minimum: 1, description: "Step numbers whose outputs this newly-created step uses. Values must reference previous steps in this create payload." }),
   }),
   CreateRecipeRequest: objectSchema(["clientMutationId", "title"], {
     clientMutationId: shortTextSchema,
@@ -2826,6 +2827,14 @@ const requestExamples: Record<string, unknown> = {
         description: "Boil pasta.",
         duration: null,
         ingredients: [{ quantity: 1, unit: "lb", name: "pasta" }],
+        outputStepNums: [],
+      },
+      {
+        stepTitle: "Sauce",
+        description: "Toss pasta with sauce.",
+        duration: 3,
+        ingredients: [{ quantity: 2, unit: "cloves", name: "garlic" }],
+        outputStepNums: [1],
       },
     ],
   },

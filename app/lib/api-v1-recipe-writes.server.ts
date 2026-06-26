@@ -16,6 +16,7 @@ import {
   validateQuantity,
   validateServings,
   validateStepDescription,
+  validateStepReference,
   validateStepTitle,
   validateTitle,
   validateUnitName,
@@ -136,6 +137,33 @@ function parseDuration(value: unknown, field: string): ApiV1RecipeWriteResult<nu
   return success(duration);
 }
 
+function positiveInteger(value: unknown, field: string): ApiV1RecipeWriteResult<number> {
+  const parsed = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    return fieldFailure(field, `${field} must be a positive integer`);
+  }
+  return success(parsed);
+}
+
+function parseOutputStepNums(value: unknown, stepIndex: number): ApiV1RecipeWriteResult<number[]> {
+  const field = `steps.${stepIndex}.outputStepNums`;
+  if (value === undefined || value === null) return success([]);
+  if (!Array.isArray(value)) {
+    return fieldFailure(field, `${field} must be an array`);
+  }
+
+  const inputStepNum = stepIndex + 1;
+  const outputStepNums: number[] = [];
+  for (const [index, item] of value.entries()) {
+    const parsed = positiveInteger(item, `${field}.${index}`);
+    if (!parsed.ok) return parsed;
+    const validation = validateStepReference(parsed.data, inputStepNum);
+    if (!validation.valid) return fieldFailure(`${field}.${index}`, validation.error);
+    outputStepNums.push(parsed.data);
+  }
+  return success([...new Set(outputStepNums)]);
+}
+
 function parseQuantity(value: unknown, field: string): ApiV1RecipeWriteResult<number> {
   const quantity = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
   const validation = validateQuantity(quantity);
@@ -187,7 +215,7 @@ function parseStep(value: unknown, stepIndex: number): ApiV1RecipeWriteResult<Re
   if (!isRecord(value)) {
     return fieldFailure(fieldPrefix, "Step must be an object");
   }
-  const unknown = assertKnownFields<RecipeStepDraft>(value, ["stepTitle", "description", "duration", "ingredients"]);
+  const unknown = assertKnownFields<RecipeStepDraft>(value, ["stepTitle", "description", "duration", "ingredients", "outputStepNums"]);
   if (unknown) return unknown;
 
   const stepTitle = optionalText(value.stepTitle, `${fieldPrefix}.stepTitle`, validateStepTitle);
@@ -202,11 +230,15 @@ function parseStep(value: unknown, stepIndex: number): ApiV1RecipeWriteResult<Re
   const ingredients = parseIngredients(value.ingredients, stepIndex);
   if (!ingredients.ok) return ingredients;
 
+  const outputStepNums = parseOutputStepNums(value.outputStepNums, stepIndex);
+  if (!outputStepNums.ok) return outputStepNums;
+
   return success({
     stepTitle: stepTitle.data,
     description: description.data,
     duration: duration.data,
     ingredients: ingredients.data,
+    outputStepNums: outputStepNums.data,
   });
 }
 
@@ -319,6 +351,16 @@ export async function createNativeRecipe(
   input: NativeRecipeCreateInput,
   options: { recipeId?: string } = {},
 ): Promise<ApiV1RecipeWriteResult<{ recipeId: string }>> {
+  for (const [stepIndex, step] of input.steps.entries()) {
+    const inputStepNum = stepIndex + 1;
+    for (const [outputIndex, outputStepNum] of (step.outputStepNums ?? []).entries()) {
+      const validation = validateStepReference(outputStepNum, inputStepNum);
+      if (!validation.valid) {
+        return fieldFailure(`steps.${stepIndex}.outputStepNums.${outputIndex}`, validation.error);
+      }
+    }
+  }
+
   const uniqueTitle = await validateActiveRecipeTitleUnique(db, {
     chefId,
     title: input.title,

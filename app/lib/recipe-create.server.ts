@@ -4,6 +4,7 @@ import {
   validateIngredientName,
   validateQuantity,
   validateStepDescription,
+  validateStepReference,
   validateStepTitle,
   validateUnitName,
 } from "~/lib/validation";
@@ -16,6 +17,7 @@ export interface RecipeStepDraft {
   description: string;
   duration: number | null;
   ingredients: ParsedIngredient[];
+  outputStepNums?: number[];
 }
 
 export type RecipeStepsValidationResult =
@@ -43,6 +45,10 @@ function label(stepIndex: number, message: string, ingredientIndex?: number): st
   const stepLabel = `Step ${stepIndex + 1}`;
   if (ingredientIndex === undefined) return `${stepLabel}: ${message}`;
   return `${stepLabel}, ingredient ${ingredientIndex + 1}: ${message}`;
+}
+
+function outputLabel(stepIndex: number, outputIndex: number, message: string): string {
+  return `Step ${stepIndex + 1}, output step reference ${outputIndex + 1}: ${message}`;
 }
 
 function normalizeText(value: string): string {
@@ -85,6 +91,38 @@ function parseDuration(value: unknown, stepIndex: number): ValueValidationResult
   }
 
   return { valid: true, value: duration };
+}
+
+function parsePositiveInteger(value: unknown, stepIndex: number, outputIndex: number): ValueValidationResult<number> {
+  const parsed = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    return { valid: false, error: outputLabel(stepIndex, outputIndex, "Invalid step number") };
+  }
+  return { valid: true, value: parsed };
+}
+
+function parseOutputStepNums(value: unknown, stepIndex: number): ValueValidationResult<number[]> {
+  if (value == null) {
+    return { valid: true, value: [] };
+  }
+
+  if (!Array.isArray(value)) {
+    return { valid: false, error: label(stepIndex, "Output step references must be an array") };
+  }
+
+  const inputStepNum = stepIndex + 1;
+  const outputStepNums: number[] = [];
+  for (const [outputIndex, item] of value.entries()) {
+    const parsed = parsePositiveInteger(item, stepIndex, outputIndex);
+    if (!parsed.valid) return parsed;
+    const validation = validateStepReference(parsed.value, inputStepNum);
+    if (!validation.valid) {
+      return { valid: false, error: outputLabel(stepIndex, outputIndex, validation.error) };
+    }
+    outputStepNums.push(parsed.value);
+  }
+
+  return { valid: true, value: [...new Set(outputStepNums)] };
 }
 
 function parseQuantity(value: unknown): number {
@@ -169,6 +207,9 @@ function validateStep(value: unknown, stepIndex: number): ValueValidationResult<
   const ingredientsResult = validateIngredients(value.ingredients, stepIndex);
   if (!ingredientsResult.valid) return ingredientsResult;
 
+  const outputStepNumsResult = parseOutputStepNums(value.outputStepNums, stepIndex);
+  if (!outputStepNumsResult.valid) return outputStepNumsResult;
+
   return {
     valid: true,
     value: {
@@ -176,6 +217,7 @@ function validateStep(value: unknown, stepIndex: number): ValueValidationResult<
       description: normalizeText(description),
       duration: durationResult.value,
       ingredients: ingredientsResult.value,
+      outputStepNums: outputStepNumsResult.value,
     },
   };
 }
@@ -272,6 +314,17 @@ export async function createRecipeDraft(
           unitId: unit.id,
           ingredientRefId: ingredientRef.id,
         },
+      });
+    }
+
+    const uniqueOutputStepNums = [...new Set(step.outputStepNums ?? [])];
+    if (uniqueOutputStepNums.length > 0) {
+      await db.stepOutputUse.createMany({
+        data: uniqueOutputStepNums.map((outputStepNum) => ({
+          recipeId: recipe.id,
+          inputStepNum: stepNum,
+          outputStepNum,
+        })),
       });
     }
   }

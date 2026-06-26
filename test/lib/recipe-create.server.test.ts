@@ -64,6 +64,7 @@ describe("recipe create helpers", () => {
           description: "Serve",
           duration: 3,
           ingredients: [{ quantity: 1, unit: "plate", ingredientName: "cake" }],
+          outputStepNums: [1, "1"],
         },
       ]));
 
@@ -75,36 +76,42 @@ describe("recipe create helpers", () => {
             description: "Mix batter",
             duration: 12,
             ingredients: [{ quantity: 2.5, unit: "Cup", ingredientName: "Flour" }],
+            outputStepNums: [],
           },
           {
             stepTitle: null,
             description: "Bake",
             duration: null,
             ingredients: [],
+            outputStepNums: [],
           },
           {
             stepTitle: null,
             description: "Rest",
             duration: null,
             ingredients: [],
+            outputStepNums: [],
           },
           {
             stepTitle: null,
             description: "Whisk",
             duration: null,
             ingredients: [],
+            outputStepNums: [],
           },
           {
             stepTitle: null,
             description: "Cool",
             duration: null,
             ingredients: [],
+            outputStepNums: [],
           },
           {
             stepTitle: null,
             description: "Serve",
             duration: 3,
             ingredients: [{ quantity: 1, unit: "plate", ingredientName: "cake" }],
+            outputStepNums: [1],
           },
         ],
       });
@@ -137,6 +144,29 @@ describe("recipe create helpers", () => {
       expectInvalidSteps([{ description: "Mix", duration: 0 }], "Step 1: Duration must be a positive whole number");
       expectInvalidSteps([{ description: "Mix", duration: 1.5 }], "Step 1: Duration must be a positive whole number");
       expectInvalidSteps([{ description: "Mix", duration: {} }], "Step 1: Duration must be a positive whole number");
+    });
+
+    it("rejects invalid output step references", () => {
+      expectInvalidSteps(
+        [{ description: "Mix", outputStepNums: {} }],
+        "Step 1: Output step references must be an array"
+      );
+      expectInvalidSteps(
+        [{ description: "Mix", outputStepNums: [0] }],
+        "Step 1, output step reference 1: Invalid step number"
+      );
+      expectInvalidSteps(
+        [{ description: "Mix", outputStepNums: [{}] }],
+        "Step 1, output step reference 1: Invalid step number"
+      );
+      expectInvalidSteps(
+        [{ description: "Mix", outputStepNums: [1] }],
+        "Step 1, output step reference 1: Cannot reference the current step"
+      );
+      expectInvalidSteps(
+        [{ description: "Mix" }, { description: "Serve", outputStepNums: [3] }],
+        "Step 2, output step reference 1: Can only reference previous steps"
+      );
     });
 
     it("rejects invalid ingredient containers", () => {
@@ -206,6 +236,7 @@ describe("recipe create helpers", () => {
             stepTitle: null,
             description: "Cook until golden",
             duration: null,
+            outputStepNums: [1, 1],
             ingredients: [{ quantity: 1, unit: "Tbsp", ingredientName: "Butter" }],
           },
         ],
@@ -220,6 +251,9 @@ describe("recipe create helpers", () => {
               ingredients: {
                 include: { unit: true, ingredientRef: true },
                 orderBy: { ingredientRef: { name: "asc" } },
+              },
+              usingSteps: {
+                orderBy: { outputStepNum: "asc" },
               },
             },
           },
@@ -249,6 +283,10 @@ describe("recipe create helpers", () => {
         description: "Cook until golden",
         duration: null,
       });
+      expect(persisted.steps[1].usingSteps.map((use) => ({
+        inputStepNum: use.inputStepNum,
+        outputStepNum: use.outputStepNum,
+      }))).toEqual([{ inputStepNum: 2, outputStepNum: 1 }]);
       expect(persisted.steps[0].ingredients.map((ingredient) => ({
         quantity: ingredient.quantity,
         unit: ingredient.unit.name,

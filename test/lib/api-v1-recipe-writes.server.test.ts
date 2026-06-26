@@ -36,6 +36,7 @@ function validStep() {
     description: " Mix everything. ",
     duration: "5",
     ingredients: [{ quantity: "2", unit: " cups ", name: " flour " }],
+    outputStepNums: [],
   };
 }
 
@@ -78,14 +79,20 @@ describe("API v1 recipe write body parsers", () => {
         description: "Mix everything.",
         duration: 5,
         ingredients: [{ quantity: 2, unit: "cups", ingredientName: "flour" }],
+        outputStepNums: [],
       }],
     });
     const noIngredientStep = expectOk(parseNativeRecipeCreateBody({
       clientMutationId: "create-no-ingredients",
       title: "Toast",
-      steps: [{ description: "Toast bread.", duration: null }],
+      steps: [
+        { description: "Toast bread.", duration: null },
+        { description: "Serve toast.", outputStepNums: [1, "1"] },
+      ],
     }));
     expect(noIngredientStep.data.steps[0].ingredients).toEqual([]);
+    expect(noIngredientStep.data.steps[0].outputStepNums).toEqual([]);
+    expect(noIngredientStep.data.steps[1].outputStepNums).toEqual([1]);
 
     const patch = expectOk(parseNativeRecipePatchBody({
       clientMutationId: " patch-1 ",
@@ -122,6 +129,11 @@ describe("API v1 recipe write body parsers", () => {
       { clientMutationId: "bad-step-description-value", title: "Soup", steps: [{ ...validStep(), description: " " }] },
       { clientMutationId: "bad-duration", title: "Soup", steps: [{ ...validStep(), duration: 0 }] },
       { clientMutationId: "bad-duration-type", title: "Soup", steps: [{ ...validStep(), duration: {} }] },
+      { clientMutationId: "bad-output-container", title: "Soup", steps: [{ ...validStep(), outputStepNums: {} }] },
+      { clientMutationId: "bad-output-value", title: "Soup", steps: [{ ...validStep(), outputStepNums: [0] }] },
+      { clientMutationId: "bad-output-type", title: "Soup", steps: [{ ...validStep(), outputStepNums: [{}] }] },
+      { clientMutationId: "bad-output-current", title: "Soup", steps: [{ ...validStep(), outputStepNums: [1] }] },
+      { clientMutationId: "bad-output-future", title: "Soup", steps: [validStep(), { ...validStep(), outputStepNums: [3] }] },
       { clientMutationId: "bad-ingredients", title: "Soup", steps: [{ ...validStep(), ingredients: "nope" }] },
       { clientMutationId: "bad-ingredient-object", title: "Soup", steps: [{ ...validStep(), ingredients: [null] }] },
       { clientMutationId: "bad-ingredient-extra", title: "Soup", steps: [{ ...validStep(), ingredients: [{ ...validStep().ingredients[0], extra: true }] }] },
@@ -184,10 +196,26 @@ describe("API v1 recipe write helpers", () => {
       title: "Helper Dinner",
       description: null,
       servings: null,
-      steps: [{ stepTitle: null, description: "Cook.", duration: null, ingredients: [] }],
+      steps: [
+        { stepTitle: "Cook", description: "Cook.", duration: null, ingredients: [] },
+        { stepTitle: "Serve", description: "Use the cooked base.", duration: null, ingredients: [], outputStepNums: [1] },
+      ],
     }, { recipeId: "recipe_helper_fixed" }));
     expect(create.status).toBe(201);
     expect(create.data.recipeId).toBe("recipe_helper_fixed");
+    const createdUses = await db.stepOutputUse.findMany({
+      where: { recipeId: "recipe_helper_fixed" },
+      select: { inputStepNum: true, outputStepNum: true },
+    });
+    expect(createdUses).toEqual([{ inputStepNum: 2, outputStepNum: 1 }]);
+
+    expectValidationFailure(await createNativeRecipe(db, chef.id, {
+      clientMutationId: "create-helper-invalid-output",
+      title: "Invalid Output Dinner",
+      description: null,
+      servings: null,
+      steps: [{ stepTitle: "Cook", description: "Cook.", duration: null, ingredients: [], outputStepNums: [1] }],
+    }));
 
     const generated = expectOk(await createNativeRecipe(db, chef.id, {
       clientMutationId: "create-helper-generated",
