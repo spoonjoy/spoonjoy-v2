@@ -20,6 +20,11 @@
  */
 
 import { Buffer } from "node:buffer";
+import {
+  captureEvent,
+  captureException,
+  type PostHogServerConfig,
+} from "~/lib/analytics-server";
 
 export interface RateLimiterBinding {
   limit(input: { key: string }): Promise<{ success: boolean }>;
@@ -34,6 +39,13 @@ export interface RateLimitContext {
   tokenLimiter?: RateLimiterBinding;
   /** Limiter for anonymous IP-based requests. */
   ipLimiter?: RateLimiterBinding;
+  /**
+   * Optional telemetry config. When a present limiter's `.limit()` throws,
+   * the module fails open (allows the request, scope `"skip"`) and — if this
+   * is set and enabled — emits `spoonjoy.ratelimit.backend_error` so the
+   * otherwise-silent unprotected window is observable.
+   */
+  postHogConfig?: PostHogServerConfig;
 }
 
 export type RateLimitScope = "token" | "ip" | "skip";
@@ -68,6 +80,45 @@ export async function hashTokenForRateLimitKey(token: string): Promise<string> {
   return Buffer.from(digest).toString("hex");
 }
 
+/** Sentinel returned by {@link safeLimit} when the binding's `.limit()` threw. */
+const LIMITER_ERRORED = Symbol("limiter_errored");
+
+/**
+ * Call a limiter binding, failing OPEN if it throws. Rate limiting is
+ * hardening, not a security boundary — a backend error must never 500 the
+ * request. The throw is captured (when `postHogConfig` is set) so the
+ * unprotected window does not go silent, then {@link LIMITER_ERRORED} signals
+ * the caller to skip the guard.
+ */
+async function safeLimit(
+  limiter: RateLimiterBinding,
+  key: string,
+  scope: Exclude<RateLimitScope, "skip">,
+  ctx: RateLimitContext,
+): Promise<{ success: boolean } | typeof LIMITER_ERRORED> {
+  try {
+    return await limiter.limit({ key });
+  } catch (error) {
+    const config = ctx.postHogConfig;
+    if (config?.enabled) {
+      // Fire-and-forget; capture helpers swallow their own failures. No
+      // waitUntil is plumbed here, so await defensively — capture must not
+      // throw and must not change the fail-open outcome.
+      await captureException(config, {
+        error,
+        distinctId: "ratelimit",
+        extras: { scope, phase: "limit" },
+      });
+      await captureEvent(config, {
+        event: "spoonjoy.ratelimit.backend_error",
+        distinctId: "ratelimit",
+        properties: { scope },
+      });
+    }
+    return LIMITER_ERRORED;
+  }
+}
+
 /**
  * Pick the right limiter + key for this request and call it.
  *
@@ -76,6 +127,9 @@ export async function hashTokenForRateLimitKey(token: string): Promise<string> {
  *   applies the token path. This keeps invalid-token rotation from bypassing
  *   rate limits before auth can reject the token.
  * - Otherwise returns `{ allowed: true, scope: "skip" }`.
+ *
+ * Fails OPEN on a limiter backend error: returns `{ allowed: true, scope:
+ * "skip" }` and emits `spoonjoy.ratelimit.backend_error` (see {@link safeLimit}).
  */
 export async function enforceRateLimit(
   ctx: RateLimitContext,
@@ -84,8 +138,11 @@ export async function enforceRateLimit(
 
   if (ctx.ip && ctx.ipLimiter) {
     const key = `ip:${ctx.ip}`;
-    const { success } = await ctx.ipLimiter.limit({ key });
-    if (!success) {
+    const ipResult = await safeLimit(ctx.ipLimiter, key, "ip", ctx);
+    if (ipResult === LIMITER_ERRORED) {
+      return { allowed: true, retryAfterSeconds: 0, scope: "skip" };
+    }
+    if (!ipResult.success) {
       return {
         allowed: false,
         retryAfterSeconds: DEFAULT_RETRY_AFTER_SECONDS,
@@ -103,10 +160,13 @@ export async function enforceRateLimit(
 
   if (token && ctx.tokenLimiter) {
     const key = `token:${await hashTokenForRateLimitKey(token)}`;
-    const { success } = await ctx.tokenLimiter.limit({ key });
+    const tokenResult = await safeLimit(ctx.tokenLimiter, key, "token", ctx);
+    if (tokenResult === LIMITER_ERRORED) {
+      return { allowed: true, retryAfterSeconds: 0, scope: "skip" };
+    }
     return {
-      allowed: success,
-      retryAfterSeconds: success ? 0 : DEFAULT_RETRY_AFTER_SECONDS,
+      allowed: tokenResult.success,
+      retryAfterSeconds: tokenResult.success ? 0 : DEFAULT_RETRY_AFTER_SECONDS,
       scope: "token",
     };
   }
@@ -120,15 +180,18 @@ export async function enforceRateLimit(
  * `AUTH_IP_RATE_LIMITER` binding (tighter than the general API limiter).
  *
  * Fails OPEN like {@link enforceRateLimit}: with no binding (local dev, tests)
- * the attempt is allowed and reported as scope `"skip"`.
+ * the attempt is allowed and reported as scope `"skip"`. An optional
+ * `postHogConfig` lets callers surface limiter backend errors.
  */
 export async function enforceAuthRateLimit(
   request: Request,
   ipLimiter: RateLimiterBinding | undefined,
+  postHogConfig?: PostHogServerConfig,
 ): Promise<RateLimitResult> {
   return enforceRateLimit({
     ip: request.headers.get("CF-Connecting-IP"),
     ipLimiter,
+    postHogConfig,
   });
 }
 
