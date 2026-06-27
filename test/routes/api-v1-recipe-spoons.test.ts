@@ -455,6 +455,36 @@ describe("API v1 recipe spoons", () => {
       error: { code: "idempotency_conflict", status: 409 },
     });
 
+    const conflictWithExternalPhoto = await action(routeArgs(jsonRequest(`http://localhost/api/v1/recipes/${fixture.recipe.id}/spoons`, "POST", fixture.ownerKitchenWrite.token, "req_spoon_create_conflict_external_photo", {
+      ...body,
+      photoUrl: "https://evil.example/conflict.jpg",
+    }), `recipes/${fixture.recipe.id}/spoons`, backgroundContext({ PHOTOS: bucket })));
+    expect(conflictWithExternalPhoto.status).toBe(409);
+    await expect(conflictWithExternalPhoto.json()).resolves.toMatchObject({
+      ok: false,
+      requestId: "req_spoon_create_conflict_external_photo",
+      error: { code: "idempotency_conflict", status: 409 },
+    });
+
+    const conflictThrowingBucket = {
+      get: vi.fn(async () => {
+        throw new Error("R2 conflict should not be reached");
+      }),
+      put: vi.fn(),
+      delete: vi.fn(),
+    } as unknown as R2Bucket;
+    const conflictWithThrowingStorage = await action(routeArgs(jsonRequest(`http://localhost/api/v1/recipes/${fixture.recipe.id}/spoons`, "POST", fixture.ownerKitchenWrite.token, "req_spoon_create_conflict_storage_photo", {
+      ...body,
+      photoUrl: `/photos/spoons/${fixture.owner.id}/${fixture.recipe.id}/conflict-storage.jpg`,
+    }), `recipes/${fixture.recipe.id}/spoons`, backgroundContext({ PHOTOS: conflictThrowingBucket })));
+    expect(conflictWithThrowingStorage.status).toBe(409);
+    await expect(conflictWithThrowingStorage.json()).resolves.toMatchObject({
+      ok: false,
+      requestId: "req_spoon_create_conflict_storage_photo",
+      error: { code: "idempotency_conflict", status: 409 },
+    });
+    expect(conflictThrowingBucket.get).not.toHaveBeenCalled();
+
     const invalidCookedAt = await action(routeArgs(jsonRequest(`http://localhost/api/v1/recipes/${fixture.recipe.id}/spoons`, "POST", fixture.ownerKitchenWrite.token, "req_spoon_create_invalid_date", {
       clientMutationId: "spoon-create-invalid-date",
       note: "Bad date",
@@ -925,6 +955,17 @@ describe("API v1 recipe spoons", () => {
       ok: true,
       requestId: "req_spoon_update_replay",
       data: { mutation: { clientMutationId: "spoon-update", replayed: true } },
+    });
+
+    const conflictWithExternalPhoto = await action(routeArgs(jsonRequest(url, "PATCH", fixture.ownerKitchenWrite.token, "req_spoon_update_conflict_external_photo", {
+      ...body,
+      photoUrl: "https://evil.example/conflict-update.jpg",
+    }), splat, backgroundContext({ PHOTOS: bucket })));
+    expect(conflictWithExternalPhoto.status).toBe(409);
+    await expect(conflictWithExternalPhoto.json()).resolves.toMatchObject({
+      ok: false,
+      requestId: "req_spoon_update_conflict_external_photo",
+      error: { code: "idempotency_conflict", status: 409 },
     });
 
     const outsider = await action(routeArgs(jsonRequest(url, "PATCH", fixture.outsiderKitchenWrite.token, "req_spoon_update_outsider", {

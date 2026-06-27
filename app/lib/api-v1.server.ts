@@ -1093,47 +1093,12 @@ async function validateApiV1SpoonPhotoUrl(args: ApiV1RouteArgs, principal: ApiPr
   }
 }
 
-async function hasMatchingIdempotencyAttempt(input: {
+async function validateApiV1SpoonPhotoUrlForWrite(input: {
   args: ApiV1RouteArgs;
   principal: ApiPrincipal;
-  body: Record<string, unknown>;
-  clientMutationId: string;
-  operation: string;
-}) {
-  const db = await getRequestDb(input.args.context);
-  const path = normalizeApiV1Path(input.args.params["*"]);
-  const requestHash = await hashIdempotencyRequest({
-    method: input.args.request.method,
-    path: `/api/v1/${path}`,
-    body: input.body,
-  });
-  const existing = await db.apiIdempotencyKey.findUnique({
-    where: {
-      userId_clientKey_key: {
-        userId: input.principal.id,
-        clientKey: idempotencyClientKey(input.principal),
-        key: input.clientMutationId,
-      },
-    },
-  });
-  return Boolean(
-    existing &&
-    existing.expiresAt > new Date() &&
-    existing.operation === input.operation &&
-    existing.requestHash === requestHash,
-  );
-}
-
-async function validateApiV1SpoonPhotoUrlForNewAttempt(input: {
-  args: ApiV1RouteArgs;
-  principal: ApiPrincipal;
-  body: Record<string, unknown>;
-  clientMutationId: string;
-  operation: string;
   photoUrl: string | null;
 }) {
   if (!input.photoUrl) return;
-  if (await hasMatchingIdempotencyAttempt(input)) return;
   await validateApiV1SpoonPhotoUrl(input.args, input.principal, input.photoUrl);
 }
 
@@ -1516,15 +1481,6 @@ async function handleRecipeSpoonCreate(args: ApiV1RouteArgs, requestId: string, 
   const cookedAt = optionalIsoDate(body.cookedAt, "cookedAt");
   const photoUrl = optionalNullableString(body.photoUrl, "photoUrl", 2048);
   const useAsRecipeCover = optionalBoolean(body.useAsRecipeCover, "useAsRecipeCover");
-  await validateApiV1SpoonPhotoUrlForNewAttempt({
-    args,
-    principal,
-    body,
-    clientMutationId,
-    operation: "recipes.spoons.create",
-    photoUrl,
-  });
-
   return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "recipes.spoons.create", async (db, reservation) => {
     await loadActiveRecipeForSpoons(db, recipeId);
     let created: Awaited<ReturnType<typeof createSpoon>>;
@@ -1554,6 +1510,11 @@ async function handleRecipeSpoonCreate(args: ApiV1RouteArgs, requestId: string, 
       }),
     };
   }, {
+    beforeWrite: async () => validateApiV1SpoonPhotoUrlForWrite({
+      args,
+      principal,
+      photoUrl,
+    }),
     deleteReservationOnWriteError: false,
     hasRecoverableWrite: async (db, record) => Boolean(await db.recipeSpoon.findFirst({
       where: {
@@ -1583,15 +1544,6 @@ async function handleRecipeSpoonUpdate(args: ApiV1RouteArgs, requestId: string, 
   if (hasOwnField(body, "nextTime")) patch.nextTime = optionalNullableString(body.nextTime, "nextTime");
   if (hasOwnField(body, "cookedAt")) patch.cookedAt = optionalIsoDate(body.cookedAt, "cookedAt");
   if (hasOwnField(body, "photoUrl")) patch.photoUrl = optionalNullableString(body.photoUrl, "photoUrl", 2048);
-  await validateApiV1SpoonPhotoUrlForNewAttempt({
-    args,
-    principal,
-    body,
-    clientMutationId,
-    operation: "recipes.spoons.update",
-    photoUrl: typeof patch.photoUrl === "string" ? patch.photoUrl : null,
-  });
-
   return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "recipes.spoons.update", async (db) => {
     const origin = publicContentOrigin(args);
     await loadSpoonInRecipe(db, recipeId, spoonId);
@@ -1608,6 +1560,12 @@ async function handleRecipeSpoonUpdate(args: ApiV1RouteArgs, requestId: string, 
         mutation: { clientMutationId, replayed: false },
       },
     };
+  }, {
+    beforeWrite: async () => validateApiV1SpoonPhotoUrlForWrite({
+      args,
+      principal,
+      photoUrl: typeof patch.photoUrl === "string" ? patch.photoUrl : null,
+    }),
   });
 }
 
@@ -2367,6 +2325,10 @@ async function runIdempotentShoppingMutation(
   operation: string,
   write: (db: ApiV1WriteDb, reservation: ApiIdempotencyKey) => Promise<{ status: number; data: Record<string, unknown> }>,
   options: {
+    beforeWrite?: (
+      db: ApiV1WriteDb,
+      record: ApiIdempotencyKey,
+    ) => Promise<void>;
     deleteReservationOnWriteError?: boolean;
     hasRecoverableWrite?: (
       db: ApiV1WriteDb,
@@ -2432,6 +2394,7 @@ async function runIdempotentShoppingMutation(
 
   let result: Awaited<ReturnType<typeof write>>;
   try {
+    await options.beforeWrite?.(db, reservation.record);
     result = await write(db, reservation.record);
   } catch (error) {
     const keepReservationForRecovery = await shouldKeepIdempotencyReservationForRecovery({
