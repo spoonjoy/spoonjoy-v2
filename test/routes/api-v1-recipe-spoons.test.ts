@@ -4,7 +4,11 @@ import { Request as UndiciRequest } from "undici";
 import { action, loader } from "~/routes/api.v1.$";
 import { createApiCredential } from "~/lib/api-auth.server";
 import { hashIdempotencyRequest, idempotencyClientKey, IDEMPOTENCY_TTL_MS } from "~/lib/api-idempotency.server";
-import { mapSpoonDomainErrorForApiV1 } from "~/lib/api-v1.server";
+import {
+  deleteIdempotencyReservationAfterWriteError,
+  mapSpoonDomainErrorForApiV1,
+  shouldKeepIdempotencyReservationForRecovery,
+} from "~/lib/api-v1.server";
 import { getLocalDb } from "~/lib/db.server";
 import { SpoonAuthError, SpoonNotFoundError, SpoonValidationError } from "~/lib/recipe-spoon.server";
 import { cleanupDatabase } from "../helpers/cleanup";
@@ -109,6 +113,56 @@ describe("API v1 recipe spoon domain error mapping", () => {
 
     const unknown = new Error("database exploded");
     expect(() => mapSpoonDomainErrorForApiV1(unknown)).toThrow(unknown);
+  });
+});
+
+describe("API v1 idempotency write-error recovery helpers", () => {
+  it("keeps or deletes idempotency reservations only when recovery is possible", async () => {
+    const skippedProbe = vi.fn(async () => true);
+    await expect(shouldKeepIdempotencyReservationForRecovery({
+      deleteReservationOnWriteError: true,
+      hasRecoverableWrite: skippedProbe,
+    })).resolves.toBe(false);
+    expect(skippedProbe).not.toHaveBeenCalled();
+
+    await expect(shouldKeepIdempotencyReservationForRecovery({
+      deleteReservationOnWriteError: false,
+    })).resolves.toBe(false);
+    await expect(shouldKeepIdempotencyReservationForRecovery({
+      deleteReservationOnWriteError: false,
+      hasRecoverableWrite: async () => true,
+    })).resolves.toBe(true);
+    await expect(shouldKeepIdempotencyReservationForRecovery({
+      deleteReservationOnWriteError: false,
+      hasRecoverableWrite: async () => false,
+    })).resolves.toBe(false);
+    await expect(shouldKeepIdempotencyReservationForRecovery({
+      deleteReservationOnWriteError: false,
+      hasRecoverableWrite: async () => {
+        throw new Error("probe failed");
+      },
+    })).resolves.toBe(false);
+
+    const keptDelete = vi.fn(async () => undefined);
+    await deleteIdempotencyReservationAfterWriteError({
+      keepReservationForRecovery: true,
+      deleteReservation: keptDelete,
+    });
+    expect(keptDelete).not.toHaveBeenCalled();
+
+    const deletedReservation = vi.fn(async () => ({ id: "idem_1" }));
+    await deleteIdempotencyReservationAfterWriteError({
+      keepReservationForRecovery: false,
+      deleteReservation: deletedReservation,
+    });
+    expect(deletedReservation).toHaveBeenCalledOnce();
+
+    await expect(deleteIdempotencyReservationAfterWriteError({
+      keepReservationForRecovery: false,
+      deleteReservation: async () => {
+        throw new Error("cleanup failed");
+      },
+    })).resolves.toBeUndefined();
   });
 });
 
@@ -256,6 +310,27 @@ describe("API v1 recipe spoons", () => {
       error: { code: "invalid_cursor", status: 400 },
     });
 
+    const invalidDateCursor = `v1.${Buffer.from(JSON.stringify({ cookedAt: "not-a-date", id: tieLow.id }), "utf8").toString("base64url")}`;
+    const invalidDateShape = await loader(routeArgs(new UndiciRequest(`http://localhost/api/v1/recipes/${fixture.recipe.id}/spoons?cursor=${invalidDateCursor}`, {
+      headers: { "X-Request-Id": "req_spoons_invalid_date_cursor" },
+    }) as unknown as Request, `recipes/${fixture.recipe.id}/spoons`));
+    expect(invalidDateShape.status).toBe(400);
+    await expect(invalidDateShape.json()).resolves.toMatchObject({
+      ok: false,
+      requestId: "req_spoons_invalid_date_cursor",
+      error: { code: "invalid_cursor", status: 400 },
+    });
+
+    const malformedEncodedCursor = await loader(routeArgs(new UndiciRequest(`http://localhost/api/v1/recipes/${fixture.recipe.id}/spoons?cursor=v1.%`, {
+      headers: { "X-Request-Id": "req_spoons_malformed_encoded_cursor" },
+    }) as unknown as Request, `recipes/${fixture.recipe.id}/spoons`));
+    expect(malformedEncodedCursor.status).toBe(400);
+    await expect(malformedEncodedCursor.json()).resolves.toMatchObject({
+      ok: false,
+      requestId: "req_spoons_malformed_encoded_cursor",
+      error: { code: "invalid_cursor", status: 400 },
+    });
+
     const wrongMethod = await action(routeArgs(new UndiciRequest(`http://localhost/api/v1/recipes/${fixture.recipe.id}/spoons`, {
       method: "PUT",
       headers: { "X-Request-Id": "req_spoons_wrong_method" },
@@ -386,6 +461,43 @@ describe("API v1 recipe spoons", () => {
       cookedAt: "not-a-date",
     }), `recipes/${fixture.recipe.id}/spoons`));
     expect(invalidCookedAt.status).toBe(400);
+
+    const nonStringCookedAt = await action(routeArgs(jsonRequest(`http://localhost/api/v1/recipes/${fixture.recipe.id}/spoons`, "POST", fixture.ownerKitchenWrite.token, "req_spoon_create_numeric_date", {
+      clientMutationId: "spoon-create-numeric-date",
+      note: "Bad date type",
+      cookedAt: 17,
+    }), `recipes/${fixture.recipe.id}/spoons`));
+    expect(nonStringCookedAt.status).toBe(400);
+    await expect(nonStringCookedAt.json()).resolves.toMatchObject({
+      ok: false,
+      requestId: "req_spoon_create_numeric_date",
+      error: {
+        code: "validation_error",
+        message: "cookedAt must be an ISO datetime string",
+      },
+    });
+
+    const noteOnly = await action(routeArgs(jsonRequest(`http://localhost/api/v1/recipes/${fixture.recipe.id}/spoons`, "POST", fixture.ownerKitchenWrite.token, "req_spoon_create_note_only", {
+      clientMutationId: "spoon-create-note-only",
+      note: "Notebook cook",
+      useAsRecipeCover: true,
+    }), `recipes/${fixture.recipe.id}/spoons`));
+    expect(noteOnly.status).toBe(201);
+    await expect(noteOnly.json()).resolves.toMatchObject({
+      ok: true,
+      requestId: "req_spoon_create_note_only",
+      data: {
+        spoon: expect.objectContaining({
+          note: "Notebook cook",
+          photoUrl: null,
+        }),
+        activeCover: expect.objectContaining({ id: payload.data.createdCover.id }),
+        previousActiveCover: null,
+        createdCover: null,
+        generationStatus: null,
+        mutation: { clientMutationId: "spoon-create-note-only", replayed: false },
+      },
+    });
   });
 
   it("auto-seeds an origin-cook spoon photo cover when auto mode has no real cover", async () => {
@@ -416,6 +528,27 @@ describe("API v1 recipe spoons", () => {
       activeCoverId: payload.data.createdCover.id,
       activeCoverVariant: null,
       coverMode: "auto",
+    });
+
+    const declinedPhotoKey = `spoons/${fixture.owner.id}/${fixture.recipe.id}/declined-cover.jpg`;
+    const declinedBucket = bucketWithKeys([declinedPhotoKey]);
+    const declined = await action(routeArgs(jsonRequest(`http://localhost/api/v1/recipes/${fixture.recipe.id}/spoons`, "POST", fixture.ownerKitchenWrite.token, "req_spoon_create_declined_cover", {
+      clientMutationId: "spoon-create-declined-cover",
+      photoUrl: `/photos/${declinedPhotoKey}`,
+      useAsRecipeCover: false,
+    }), `recipes/${fixture.recipe.id}/spoons`, backgroundContext({ PHOTOS: declinedBucket })));
+    expect(declined.status).toBe(201);
+    await expect(declined.json()).resolves.toMatchObject({
+      ok: true,
+      requestId: "req_spoon_create_declined_cover",
+      data: {
+        isOriginCook: false,
+        activeCover: expect.objectContaining({ id: payload.data.createdCover.id }),
+        previousActiveCover: null,
+        createdCover: null,
+        generationStatus: null,
+        mutation: { clientMutationId: "spoon-create-declined-cover", replayed: false },
+      },
     });
   });
 
@@ -460,6 +593,43 @@ describe("API v1 recipe spoons", () => {
           recipeId: fixture.recipe.id,
           photoUrl: `https://spoonjoy.app/photos/${validCreateKey}`,
         },
+      },
+    });
+
+    const missingStorageBinding = await action(routeArgs(jsonRequest(createUrl, "POST", fixture.ownerKitchenWrite.token, "req_spoon_photo_missing_storage_binding", {
+      clientMutationId: "spoon-photo-missing-storage-binding",
+      photoUrl: `/photos/${validCreateKey}`,
+    }), createSplat, backgroundContext({ PHOTOS: undefined } as unknown as Env)));
+    expect(missingStorageBinding.status).toBe(500);
+    await expect(missingStorageBinding.json()).resolves.toMatchObject({
+      ok: false,
+      requestId: "req_spoon_photo_missing_storage_binding",
+      error: {
+        code: "internal_error",
+        status: 500,
+        message: "Stored spoon photo assignment requires the PHOTOS bucket.",
+      },
+    });
+
+    const throwingBucket = {
+      get: vi.fn(async () => {
+        throw new Error("R2 is unavailable");
+      }),
+      put: vi.fn(),
+      delete: vi.fn(),
+    } as unknown as R2Bucket;
+    const storageFailure = await action(routeArgs(jsonRequest(createUrl, "POST", fixture.ownerKitchenWrite.token, "req_spoon_photo_storage_error", {
+      clientMutationId: "spoon-photo-storage-error",
+      photoUrl: `/photos/${validCreateKey}`,
+    }), createSplat, backgroundContext({ PHOTOS: throwingBucket })));
+    expect(storageFailure.status).toBe(500);
+    await expect(storageFailure.json()).resolves.toMatchObject({
+      ok: false,
+      requestId: "req_spoon_photo_storage_error",
+      error: {
+        code: "internal_error",
+        status: 500,
+        message: "Internal error",
       },
     });
 
@@ -585,6 +755,52 @@ describe("API v1 recipe spoons", () => {
     await expect(db.recipeCover.count({
       where: { recipeId: fixture.recipe.id, sourceSpoonId: idempotency.id },
     })).resolves.toBe(1);
+
+    const outsiderBody = {
+      clientMutationId: "spoon-create-outsider-completion-failure",
+      note: "Outsider retry-safe spoon",
+    };
+    const outsiderPath = `/api/v1/recipes/${fixture.recipe.id}/spoons`;
+    const outsiderRequestHash = await hashIdempotencyRequest({
+      method: "POST",
+      path: outsiderPath,
+      body: outsiderBody,
+    });
+    const outsiderIdempotency = await db.apiIdempotencyKey.create({
+      data: {
+        userId: fixture.outsider.id,
+        credentialId: fixture.outsiderKitchenWrite.credential.id,
+        clientKey: idempotencyClientKey({
+          id: fixture.outsider.id,
+          source: "bearer",
+          credentialId: fixture.outsiderKitchenWrite.credential.id,
+        }),
+        key: outsiderBody.clientMutationId,
+        operation: "recipes.spoons.create",
+        requestHash: outsiderRequestHash,
+        expiresAt: new Date(Date.now() + IDEMPOTENCY_TTL_MS),
+      },
+    });
+    await db.recipeSpoon.create({
+      data: {
+        id: outsiderIdempotency.id,
+        chefId: fixture.outsider.id,
+        recipeId: fixture.recipe.id,
+        note: outsiderBody.note,
+      },
+    });
+
+    const outsiderRetry = await action(routeArgs(jsonRequest(`http://localhost${outsiderPath}`, "POST", fixture.outsiderKitchenWrite.token, "req_spoon_create_outsider_completion_retry", outsiderBody), `recipes/${fixture.recipe.id}/spoons`));
+    expect(outsiderRetry.status).toBe(201);
+    await expect(outsiderRetry.json()).resolves.toMatchObject({
+      ok: true,
+      requestId: "req_spoon_create_outsider_completion_retry",
+      data: {
+        isOriginCook: false,
+        createdCover: null,
+        mutation: { clientMutationId: "spoon-create-outsider-completion-failure", replayed: true },
+      },
+    });
   });
 
   it("cleans create-spoon idempotency reservations when validation fails before writing a spoon", async () => {
@@ -622,6 +838,43 @@ describe("API v1 recipe spoons", () => {
     await expect(db.recipeSpoon.count({
       where: { chefId: fixture.owner.id, recipeId: fixture.recipe.id },
     })).resolves.toBe(0);
+
+    const inFlightBody = {
+      clientMutationId: "spoon-create-in-flight-missing-row",
+      note: "Still writing",
+    };
+    const inFlightPath = `/api/v1/recipes/${fixture.recipe.id}/spoons`;
+    const inFlightRequestHash = await hashIdempotencyRequest({
+      method: "POST",
+      path: inFlightPath,
+      body: inFlightBody,
+    });
+    await db.apiIdempotencyKey.create({
+      data: {
+        userId: fixture.owner.id,
+        credentialId: fixture.ownerKitchenWrite.credential.id,
+        clientKey: idempotencyClientKey({
+          id: fixture.owner.id,
+          source: "bearer",
+          credentialId: fixture.ownerKitchenWrite.credential.id,
+        }),
+        key: inFlightBody.clientMutationId,
+        operation: "recipes.spoons.create",
+        requestHash: inFlightRequestHash,
+        expiresAt: new Date(Date.now() + IDEMPOTENCY_TTL_MS),
+      },
+    });
+
+    const stillInFlight = await action(routeArgs(jsonRequest(`http://localhost${inFlightPath}`, "POST", fixture.ownerKitchenWrite.token, "req_spoon_create_in_flight_missing_row", inFlightBody), splat));
+    expect(stillInFlight.status).toBe(409);
+    await expect(stillInFlight.json()).resolves.toMatchObject({
+      ok: false,
+      requestId: "req_spoon_create_in_flight_missing_row",
+      error: {
+        code: "idempotency_in_progress",
+        status: 409,
+      },
+    });
   });
 
   it("updates spoons idempotently with owner-only recipe-path validation", async () => {

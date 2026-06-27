@@ -2334,6 +2334,30 @@ function idempotentMutationBody(
   return { ok: true, requestId, data };
 }
 
+export async function shouldKeepIdempotencyReservationForRecovery(input: {
+  deleteReservationOnWriteError?: boolean;
+  hasRecoverableWrite?: () => Promise<boolean>;
+}): Promise<boolean> {
+  if (input.deleteReservationOnWriteError !== false || !input.hasRecoverableWrite) return false;
+  try {
+    return await input.hasRecoverableWrite();
+  } catch {
+    return false;
+  }
+}
+
+export async function deleteIdempotencyReservationAfterWriteError(input: {
+  keepReservationForRecovery: boolean;
+  deleteReservation: () => Promise<unknown>;
+}): Promise<void> {
+  if (input.keepReservationForRecovery) return;
+  try {
+    await input.deleteReservation();
+  } catch {
+    // The original write error is more useful than a best-effort cleanup miss.
+  }
+}
+
 async function runIdempotentShoppingMutation(
   args: ApiV1RouteArgs,
   requestId: string,
@@ -2410,13 +2434,16 @@ async function runIdempotentShoppingMutation(
   try {
     result = await write(db, reservation.record);
   } catch (error) {
-    let keepReservationForRecovery = false;
-    if (options.deleteReservationOnWriteError === false) {
-      keepReservationForRecovery = await options.hasRecoverableWrite?.(db, reservation.record).catch(() => false) ?? false;
-    }
-    if (!keepReservationForRecovery) {
-      await db.apiIdempotencyKey.delete({ where: { id: reservation.record.id } }).catch(() => undefined);
-    }
+    const keepReservationForRecovery = await shouldKeepIdempotencyReservationForRecovery({
+      deleteReservationOnWriteError: options.deleteReservationOnWriteError,
+      hasRecoverableWrite: options.hasRecoverableWrite
+        ? () => options.hasRecoverableWrite!(db, reservation.record)
+        : undefined,
+    });
+    await deleteIdempotencyReservationAfterWriteError({
+      keepReservationForRecovery,
+      deleteReservation: () => db.apiIdempotencyKey.delete({ where: { id: reservation.record.id } }),
+    });
     throw error;
   }
 
