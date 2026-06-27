@@ -20,6 +20,12 @@ const OPERATION_SCOPES = {
   "GET /api/v1/openapi.connector.json": [],
   "GET /api/v1/recipes": ["recipes:read"],
   "GET /api/v1/recipes/{id}": ["recipes:read"],
+  "GET /api/v1/recipes/{id}/covers": ["kitchen:write"],
+  "PATCH /api/v1/recipes/{id}/covers": ["kitchen:write"],
+  "PATCH /api/v1/recipes/{id}/covers/{coverId}": ["kitchen:write"],
+  "DELETE /api/v1/recipes/{id}/covers/{coverId}": ["kitchen:write"],
+  "POST /api/v1/recipes/{id}/covers/regenerate": ["kitchen:write"],
+  "POST /api/v1/recipes/{id}/covers/from-spoon/{spoonId}": ["kitchen:write"],
   "GET /api/v1/cookbooks": ["cookbooks:read"],
   "GET /api/v1/cookbooks/{id}": ["cookbooks:read"],
   "GET /api/v1/shopping-list": ["shopping_list:read"],
@@ -107,7 +113,7 @@ describe("API v1 OpenAPI document", () => {
     expect(document["x-oauth-scope-map"]).toEqual({
       "cookbooks:read": ["cookbooks:read"],
       "kitchen:read": ["cookbooks:read", "public:read", "recipes:read", "shopping_list:read"],
-      "kitchen:write": ["shopping_list:write"],
+      "kitchen:write": ["kitchen:write", "shopping_list:write"],
       "public:read": ["recipes:read", "cookbooks:read"],
       "recipes:read": ["recipes:read"],
       "shopping_list:read": ["shopping_list:read"],
@@ -536,6 +542,41 @@ describe("API v1 OpenAPI document", () => {
     expect(components.schemas.ClearShoppingListRequest.required).toEqual(["clientMutationId"]);
     expect(components.schemas.AddRecipeIngredientsToShoppingListData.required).toEqual(["recipe", "created", "updated", "items", "mutation"]);
     expect(components.schemas.ClearShoppingItemsData.required).toEqual(["removed", "items", "mutation"]);
+    expect(components.schemas.RecipeCover.required).toEqual([
+      "id",
+      "recipeId",
+      "status",
+      "sourceType",
+      "imageUrl",
+      "stylizedImageUrl",
+      "displayUrl",
+      "activeVariant",
+      "provenanceLabel",
+      "archivedAt",
+      "generationStatus",
+      "sourceImageUrl",
+      "createdAt",
+    ]);
+    expect(components.schemas.RecipeCoverListData.required).toEqual(["covers", "activeCover", "spoonImages", "pagination"]);
+    expect(components.schemas.RecipeCoverMutationData.required).toEqual(["activeCover", "previousActiveCover", "mutation"]);
+    expect(components.schemas.SetRecipeNoCoverRequest).toMatchObject({
+      additionalProperties: false,
+      required: ["clientMutationId", "confirmNoCover"],
+      properties: {
+        clientMutationId: { type: "string", minLength: 1, maxLength: 160 },
+        confirmNoCover: { const: true },
+      },
+    });
+    expect(components.schemas.ArchiveRecipeCoverRequest).toMatchObject({
+      additionalProperties: false,
+      required: ["clientMutationId"],
+      properties: {
+        clientMutationId: { type: "string", minLength: 1, maxLength: 160 },
+        replacementCoverId: { type: ["string", "null"] },
+        deleteSafeObjects: { type: "boolean", default: false },
+      },
+    });
+    expect(components.schemas.ArchiveRecipeCoverRequest.properties.coverId).toBeUndefined();
   });
 
   it("publishes an OpenAPI 3.0 REST-only connector profile for no-code importers", () => {
@@ -557,6 +598,7 @@ describe("API v1 OpenAPI document", () => {
       "/api/v1/shopping-list/sync",
     ].sort());
     expect(connector.paths["/mcp"]).toBeUndefined();
+    expect(connector.paths["/api/v1/recipes/{id}/covers"]).toBeUndefined();
     expect(connector.paths["/oauth/authorize"]).toBeUndefined();
     expect(connector.components.securitySchemes.cookieAuth).toBeUndefined();
     expect(JSON.stringify(connector.paths)).not.toContain("cookieAuth");
@@ -609,6 +651,18 @@ describe("API v1 OpenAPI document", () => {
     expect(sdk.paths["/api/tools/start_agent_connection"]).toBeDefined();
     expect(sdk.paths["/api/tools/poll_agent_connection"]).toBeDefined();
     expect(sdk.paths["/api/v1/openapi.json"]).toBeUndefined();
+    expect(sdk.paths["/api/v1/recipes/{id}/covers"].get).toMatchObject({
+      operationId: "getApiV1RecipeCovers",
+      "x-scopes": ["kitchen:write"],
+    });
+    expect(sdk.paths["/api/v1/recipes/{id}/covers"].patch["x-idempotency"]).toMatchObject({
+      key: "clientMutationId",
+      location: "jsonBody",
+    });
+    expect(sdk.paths["/api/v1/recipes/{id}/covers/from-spoon/{spoonId}"].post).toMatchObject({
+      operationId: "postApiV1RecipeCoverFromSpoon",
+      "x-scopes": ["kitchen:write"],
+    });
     expect(sdk.components.securitySchemes.cookieAuth).toBeUndefined();
     expect(JSON.stringify(sdk.paths)).not.toContain("cookieAuth");
     expect(sdk["x-sdk-profile"].omitted).toContain("same-origin cookieAuth");

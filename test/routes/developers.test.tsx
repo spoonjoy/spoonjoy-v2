@@ -204,7 +204,9 @@ describe("/developers route", () => {
     expect(screen.getByText(/Delegated and device-style authorization/i)).toBeInTheDocument();
     expect(screen.getByText(/API v1 REST response shape/i)).toBeInTheDocument();
     expect(screen.getByText(/Protocol exceptions/i)).toBeInTheDocument();
-    expect(screen.getByText(/Idempotent shopping-list mutations/i)).toBeInTheDocument();
+    expect(screen.getByText(/Idempotent owner mutations/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Manage owner recipe covers" })).toBeInTheDocument();
+    expect(screen.getAllByText(/recipe-cover management/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/cursor sync/i)).toBeInTheDocument();
     expect(screen.getAllByText(/tombstones/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/rate limited by IP and credential/i)).toBeInTheDocument();

@@ -102,6 +102,14 @@ describe("/developers/playground", () => {
     expect(data.manifest.operations.map((operation) => operation.id)).toContain("POST /api/v1/tokens");
     expect(data.manifest.operations.map((operation) => operation.id)).toContain("PATCH /api/v1/shopping-list/items/{itemId}");
     expect(data.manifest.operations.map((operation) => operation.id)).toEqual(expect.arrayContaining([
+      "GET /api/v1/recipes/{id}/covers",
+      "PATCH /api/v1/recipes/{id}/covers",
+      "PATCH /api/v1/recipes/{id}/covers/{coverId}",
+      "DELETE /api/v1/recipes/{id}/covers/{coverId}",
+      "POST /api/v1/recipes/{id}/covers/regenerate",
+      "POST /api/v1/recipes/{id}/covers/from-spoon/{spoonId}",
+    ]));
+    expect(data.manifest.operations.map((operation) => operation.id)).toEqual(expect.arrayContaining([
       "POST /oauth/register",
       "GET /oauth/authorize",
       "POST /oauth/token",
@@ -117,6 +125,10 @@ describe("/developers/playground", () => {
       "recipes:read",
       "shopping_list:read",
     ]);
+    expect(data.manifest.oauthScopeMap["kitchen:write"]).toEqual([
+      "kitchen:write",
+      "shopping_list:write",
+    ]);
     expect(data.manifest.oauthScopeMap["shopping_list:write"]).toEqual(["shopping_list:write"]);
     expect(data.manifest.currentCapabilities.notYetAvailable).toContain("webhooks, REST Hooks, SSE, and event subscriptions");
     expect(data.canonicalUrl).toBe("https://spoonjoy.app/api/playground");
@@ -130,9 +142,10 @@ describe("/developers/playground", () => {
     expect(data.manifest.operations.find((operation) => operation.id === "POST /oauth/token")?.risk).toBe("secret");
     expect(data.manifest.operations.find((operation) => operation.id === "POST /api/tools/poll_agent_connection")?.risk).toBe("secret");
     expect(data.manifest.operations.find((operation) => operation.id === "GET /api/v1/recipes")?.profiles).toEqual(["full", "connector", "sdk"]);
+    expect(data.manifest.operations.find((operation) => operation.id === "GET /api/v1/recipes/{id}/covers")?.profiles).toEqual(["full", "sdk"]);
     expect(data.manifest.operations.find((operation) => operation.id === "POST /oauth/token")?.profiles).toEqual(["full", "sdk"]);
     expect(data.manifest.operations.find((operation) => operation.id === "POST /mcp")?.profiles).toEqual(["full"]);
-    expect(data.manifest.operations.length).toBe(27);
+    expect(data.manifest.operations.length).toBe(33);
   });
 
   it("uses the configured public origin for playground OG URLs", async () => {
@@ -149,6 +162,7 @@ describe("/developers/playground", () => {
     expect(playgroundOperationGroups().map((group) => group.tag)).toEqual([
       "Discovery",
       "Recipes",
+      "Recipe Covers",
       "Cookbooks",
       "Shopping List",
       "Tokens",
