@@ -41,6 +41,13 @@ import type { PostHogServerConfig, PostHogServerEnv } from "~/lib/analytics-serv
 import { tryConsumeImageGenQuota } from "~/lib/image-gen-ledger.server";
 import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
 import { createCover } from "~/lib/recipe-cover.server";
+import { captureImageGenerationException } from "~/lib/image-gen-telemetry.server";
+import {
+  captureException,
+  resolvePostHogServerConfig,
+  type PostHogServerConfig,
+  type PostHogServerEnv,
+} from "~/lib/analytics-server";
 import {
   generatePlaceholderImage,
   type ImageGenRunner,
@@ -497,6 +504,8 @@ async function uploadImportCover(
   coverSourceUrl: string,
   logger: Pick<Console, "error">,
   now: () => Date,
+  postHogConfig: PostHogServerConfig,
+  analyticsFetchImpl?: typeof fetch,
 ): Promise<void> {
   try {
     const { bytes, contentType, extension } = await fetchSafeImageBytes(coverSourceUrl, { fetchImpl });
@@ -515,9 +524,49 @@ async function uploadImportCover(
       generationStatus: "none",
     }).then((cover) => activateImportedCoverIfStillAutomatic(db, recipeId, cover.id));
   } catch (err) {
+    // The cover silently never appears. Keep the log, but also capture so the
+    // failure is observable. This path downloads an existing image (not image
+    // generation), so it uses the generic exception capture rather than the
+    // image-generation telemetry helper.
     logger.error("recipe-import cover upload failed", err);
+    await captureImportCoverException(
+      postHogConfig,
+      err,
+      { recipeId, chefId, coverSourceType: "import", phase: "uploadImportCover" },
+      analyticsFetchImpl,
+    );
   }
 }
+
+/** Capture a silent import-cover (image download) failure. Never throws. */
+async function captureImportCoverException(
+  config: PostHogServerConfig,
+  error: unknown,
+  extras: {
+    recipeId: string;
+    chefId: string;
+    coverSourceType: string;
+    phase: string;
+  },
+  fetchImpl?: typeof fetch,
+): Promise<void> {
+  await captureException(
+    config,
+    {
+      error,
+      distinctId: extras.chefId,
+      extras: {
+        feature: "recipe_import_cover",
+        recipeId: extras.recipeId,
+        sourceType: extras.coverSourceType,
+        phase: extras.phase,
+      },
+    },
+    fetchImpl,
+  );
+}
+
+const OPENAI_IMPORT_PLACEHOLDER_MODEL = "gpt-image-1";
 
 async function uploadPlaceholderCover(
   db: PrismaClient,
@@ -531,6 +580,8 @@ async function uploadPlaceholderCover(
     bucket: R2Bucket;
     fetchImpl: typeof fetch;
     logger: Pick<Console, "error">;
+    postHogConfig: PostHogServerConfig;
+    analyticsFetchImpl?: typeof fetch;
   },
 ): Promise<void> {
   try {
@@ -549,7 +600,23 @@ async function uploadPlaceholderCover(
       generationStatus: "succeeded",
     }).then((cover) => activateImportedCoverIfStillAutomatic(db, recipeId, cover.id));
   } catch (err) {
+    // The AI placeholder cover silently never appears. Keep the log and also
+    // capture via the image-generation telemetry helper (mirrors
+    // ai-placeholder-cover.server.ts). No cover row exists yet on this path,
+    // so coverId is reported as "none".
     deps.logger.error("recipe-import placeholder cover failed", err);
+    await captureImageGenerationException({
+      postHogConfig: deps.postHogConfig,
+      fetchImpl: deps.analyticsFetchImpl,
+      userId: chefId,
+      recipeId,
+      coverId: "none",
+      operation: "placeholder_generate",
+      sourceType: "ai-placeholder",
+      quotaKind: "placeholder",
+      model: OPENAI_IMPORT_PLACEHOLDER_MODEL,
+      error: err,
+    });
   }
 }
 
@@ -686,7 +753,7 @@ interface ScheduleCoverArgs {
   waitUntil: ((p: Promise<unknown>) => void) | undefined;
   fetchImpl: typeof fetch;
   imageGenRunner: ImageGenRunner | undefined;
-  env: { OPENAI_API_KEY?: string };
+  env: { OPENAI_API_KEY?: string } & PostHogServerEnv;
   logger: Pick<Console, "error">;
   now: () => Date;
   recipeId: string;
@@ -699,6 +766,7 @@ interface ScheduleCoverArgs {
 async function scheduleCover(args: ScheduleCoverArgs): Promise<boolean> {
   const { bucket } = args;
   if (!bucket) return false;
+  const postHogConfig = resolvePostHogServerConfig(args.env);
   let task: Promise<void> | null = null;
   if (args.coverSourceUrl) {
     task = uploadImportCover(
@@ -710,6 +778,8 @@ async function scheduleCover(args: ScheduleCoverArgs): Promise<boolean> {
       args.coverSourceUrl,
       args.logger,
       args.now,
+      postHogConfig,
+      args.fetchImpl,
     );
   } else if (args.imageGenRunner) {
     task = uploadPlaceholderCover(args.db, args.recipeId, args.chefId, args.title, args.description, {
@@ -718,6 +788,8 @@ async function scheduleCover(args: ScheduleCoverArgs): Promise<boolean> {
       bucket,
       fetchImpl: args.fetchImpl,
       logger: args.logger,
+      postHogConfig,
+      analyticsFetchImpl: args.fetchImpl,
     });
   }
   if (!task) return false;

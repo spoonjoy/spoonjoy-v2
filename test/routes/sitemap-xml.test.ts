@@ -67,6 +67,27 @@ describe("sitemap.xml route", () => {
     expect(xml).toContain(`<loc>https://spoonjoy.app/users/${username}</loc>`);
   });
 
+  it("uses the configured base URL for <loc> entries behind an edge proxy", async () => {
+    // request.url is the internal worker host; SPOONJOY_BASE_URL must win so
+    // the sitemap never leaks the *.workers.dev origin to crawlers.
+    const recipe = await db.recipe.create({
+      data: { title: "Proxy Toast", servings: "2", chefId: userId },
+    });
+    await db.recipeStep.create({
+      data: { recipeId: recipe.id, stepNum: 1, description: "Toast it." },
+    });
+
+    const response = await loader({
+      request: new Request("https://internal.example.com/sitemap.xml"),
+      context: { cloudflare: { env: { SPOONJOY_BASE_URL: "https://spoonjoy.app" } } },
+    } as any);
+    const xml = await response.text();
+
+    expect(xml).toContain("<loc>https://spoonjoy.app/</loc>");
+    expect(xml).toContain(`<loc>https://spoonjoy.app/recipes/${recipe.id}</loc>`);
+    expect(xml).not.toContain("internal.example.com");
+  });
+
   it("omits thin recipes (no steps) and empty cookbooks", async () => {
     const thin = await db.recipe.create({
       data: { title: "Thin Recipe", chefId: userId },

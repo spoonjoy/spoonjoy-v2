@@ -1,5 +1,6 @@
 import type { Route } from "./+types/sitemap.xml";
 import { getRequestDb } from "~/lib/route-platform.server";
+import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 import { buildSitemapXml, type SitemapEntry } from "~/lib/sitemap.server";
 
 // Public, indexable static pages.
@@ -10,7 +11,7 @@ const STATIC_PATHS = ["/", "/privacy", "/terms", "/developers", "/api/docs"];
 const MAX_PER_TYPE = 5000;
 
 export async function loader({ request, context }: Route.LoaderArgs) {
-  const origin = new URL(request.url).origin;
+  const origin = resolveIssuerOrigin(request.url, context.cloudflare?.env?.SPOONJOY_BASE_URL);
   const database = await getRequestDb(context);
 
   const [recipes, cookbooks, chefs] = await Promise.all([
