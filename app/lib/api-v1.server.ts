@@ -1,4 +1,4 @@
-import type { ApiCredential, Prisma, RecipeCover } from "@prisma/client";
+import type { ApiCredential, ApiIdempotencyKey, Prisma, RecipeCover, RecipeSpoon } from "@prisma/client";
 import type { AppLoadContext } from "react-router";
 import {
   ApiAuthError,
@@ -48,6 +48,18 @@ import {
   setActiveRecipeCover,
   type RecipeCoverVariant,
 } from "~/lib/recipe-cover.server";
+import {
+  createSpoon,
+  deleteSpoon,
+  SpoonAuthError,
+  SpoonNotFoundError,
+  SpoonValidationError,
+  updateSpoon,
+  type UpdateSpoonPatch,
+} from "~/lib/recipe-spoon.server";
+import { activateSpoonCoverForDecision } from "~/lib/spoon-cover-activation.server";
+import { decideSpoonCoverCreation } from "~/lib/spoon-cover-decision.server";
+import { validateSpoonPhotoAssignment } from "~/lib/recipe-image-assignment.server";
 import { resolveIngredientAffordance } from "~/lib/ingredient-affordances";
 import { deferBackgroundTask } from "~/lib/background-task.server";
 import { scheduleSpoonCoverStylization } from "~/lib/spoon-cover-stylization.server";
@@ -293,6 +305,14 @@ function apiV1OperationFor(method: string, path: string): string | undefined {
       return "recipes.list";
     case "GET recipe":
       return "recipes.get";
+    case "GET recipe-spoons":
+      return "recipes.spoons.list";
+    case "POST recipe-spoons-create":
+      return "recipes.spoons.create";
+    case "PATCH recipe-spoon":
+      return "recipes.spoons.update";
+    case "DELETE recipe-spoon":
+      return "recipes.spoons.delete";
     case "GET recipe-covers":
       return "recipes.covers.list";
     case "PATCH recipe-covers":
@@ -345,6 +365,7 @@ function defaultIdempotencyOutcome(operation: string | undefined, errorCode: Api
     operation !== "shopping-list.add-from-recipe" &&
     operation !== "shopping-list.clear-completed" &&
     operation !== "shopping-list.clear-all" &&
+    !operation.startsWith("recipes.spoons.") &&
     !operation.startsWith("recipes.covers.")
   ) {
     return undefined;
@@ -450,8 +471,10 @@ function isKnownApiV1Path(path: string): boolean {
 }
 
 function allowedApiV1Methods(path: string): string | null {
-  const resource = API_V1_RESOURCES.find((candidate) => pathTemplateMatches(candidate.path, path));
-  return resource ? resource.methods.join(", ") : null;
+  const methods = API_V1_RESOURCES
+    .filter((candidate) => pathTemplateMatches(candidate.path, path))
+    .flatMap((resource) => [...resource.methods]);
+  return methods.length > 0 ? Array.from(new Set(methods)).join(", ") : null;
 }
 
 export async function parseApiV1JsonBody(request: Request): Promise<Record<string, unknown>> {
@@ -617,6 +640,49 @@ function listCursorWhere(cursor: ListCursor | null) {
   };
 }
 
+type SpoonListCursor = { cookedAt: Date; id: string; raw: string };
+
+function spoonListCursorFor(row: Pick<RecipeSpoon, "cookedAt" | "id">): string {
+  return `v1.${base64UrlEncodeText(JSON.stringify({ cookedAt: row.cookedAt.toISOString(), id: row.id }))}`;
+}
+
+function parseSpoonListCursor(url: URL): SpoonListCursor | null {
+  const raw = url.searchParams.get("cursor");
+  if (raw === null || raw.trim() === "") return null;
+  const trimmed = raw.trim();
+  if (!trimmed.startsWith("v1.")) {
+    throw new ApiV1Error("invalid_cursor", "cursor must be a Spoonjoy spoon list cursor");
+  }
+  try {
+    const parsed = JSON.parse(base64UrlDecodeText(trimmed.slice(3))) as unknown;
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      !Array.isArray(parsed) &&
+      typeof (parsed as { cookedAt?: unknown }).cookedAt === "string" &&
+      typeof (parsed as { id?: unknown }).id === "string"
+    ) {
+      const cookedAt = new Date((parsed as { cookedAt: string }).cookedAt);
+      if (!Number.isNaN(cookedAt.getTime()) && cookedAt.toISOString() === (parsed as { cookedAt: string }).cookedAt) {
+        return { cookedAt, id: (parsed as { id: string }).id, raw: trimmed };
+      }
+    }
+  } catch {
+    throw new ApiV1Error("invalid_cursor", "cursor must be a Spoonjoy spoon list cursor");
+  }
+  throw new ApiV1Error("invalid_cursor", "cursor must be a Spoonjoy spoon list cursor");
+}
+
+function spoonListCursorWhere(cursor: SpoonListCursor | null): Prisma.RecipeSpoonWhereInput {
+  if (!cursor) return {};
+  return {
+    OR: [
+      { cookedAt: { lt: cursor.cookedAt } },
+      { cookedAt: cursor.cookedAt, id: { lt: cursor.id } },
+    ],
+  };
+}
+
 function publicOrigin(args: ApiV1RouteArgs): string {
   const configured = args.context.cloudflare?.env?.SPOONJOY_BASE_URL;
   return new URL(configured || args.request.url).origin;
@@ -654,6 +720,31 @@ function publicAssetUrl(origin: string, value: string | null): string | null {
   } catch {
     return null;
   }
+}
+
+const API_V1_SPOON_CHEF_SELECT = { id: true, username: true, photoUrl: true } as const;
+
+type ApiV1SpoonWithChef = Prisma.RecipeSpoonGetPayload<{
+  include: { chef: { select: typeof API_V1_SPOON_CHEF_SELECT } };
+}>;
+
+function spoonPayload(spoon: ApiV1SpoonWithChef, origin: string) {
+  return {
+    id: spoon.id,
+    chefId: spoon.chefId,
+    recipeId: spoon.recipeId,
+    cookedAt: spoon.cookedAt.toISOString(),
+    photoUrl: publicAssetUrl(origin, spoon.photoUrl),
+    note: spoon.note,
+    nextTime: spoon.nextTime,
+    deletedAt: spoon.deletedAt?.toISOString() ?? null,
+    createdAt: spoon.createdAt.toISOString(),
+    updatedAt: spoon.updatedAt.toISOString(),
+    chef: {
+      ...spoon.chef,
+      photoUrl: publicAssetUrl(origin, spoon.chef.photoUrl),
+    },
+  };
 }
 
 type SourceRecipeRow = {
@@ -809,6 +900,18 @@ type RecipeCoverOwnerRow = {
   coverMode: string;
 };
 
+type RecipeForApiV1SpoonCoverRow = RecipeCoverOwnerRow & {
+  activeCover: {
+    id: string;
+    recipeId: string;
+    imageUrl: string | null;
+    stylizedImageUrl: string | null;
+    sourceType: string;
+    status: string;
+    archivedAt: Date | null;
+  } | null;
+};
+
 function preferredCoverVariant(cover: Pick<RecipeCover, "imageUrl" | "stylizedImageUrl">): RecipeCoverVariant | null {
   if (cover.stylizedImageUrl) return "stylized";
   if (cover.imageUrl) return "image";
@@ -871,6 +974,59 @@ async function loadOwnedCoverRecipe(db: ApiV1Db, principal: ApiPrincipal, recipe
   return recipe;
 }
 
+async function loadActiveRecipeForSpoons(db: ApiV1Db, recipeId: string): Promise<RecipeForApiV1SpoonCoverRow> {
+  const recipe = await db.recipe.findFirst({
+    where: { id: recipeId, deletedAt: null },
+    select: {
+      id: true,
+      title: true,
+      chefId: true,
+      activeCoverId: true,
+      activeCoverVariant: true,
+      coverMode: true,
+      activeCover: {
+        select: {
+          id: true,
+          recipeId: true,
+          imageUrl: true,
+          stylizedImageUrl: true,
+          sourceType: true,
+          status: true,
+          archivedAt: true,
+        },
+      },
+    },
+  });
+  if (!recipe) {
+    throw new ApiV1Error("not_found", "Recipe not found", { resource: "recipe", recipeId });
+  }
+  return recipe;
+}
+
+async function loadSpoonInRecipe(db: ApiV1Db, recipeId: string, spoonId: string): Promise<ApiV1SpoonWithChef> {
+  const spoon = await db.recipeSpoon.findFirst({
+    where: { id: spoonId, recipeId, deletedAt: null },
+    include: { chef: { select: API_V1_SPOON_CHEF_SELECT } },
+  });
+  if (!spoon) {
+    throw new ApiV1Error("not_found", "Spoon not found", { resource: "recipe_spoon", spoonId, recipeId });
+  }
+  return spoon;
+}
+
+export function mapSpoonDomainErrorForApiV1(error: unknown, spoonId?: string): ApiV1Error {
+  if (error instanceof SpoonValidationError) {
+    return new ApiV1Error("validation_error", error.message);
+  }
+  if (error instanceof SpoonAuthError) {
+    return new ApiV1Error("insufficient_scope", error.message);
+  }
+  if (error instanceof SpoonNotFoundError) {
+    return new ApiV1Error("not_found", "Spoon not found", { resource: "recipe_spoon", spoonId });
+  }
+  throw error;
+}
+
 function parseCoverOffset(url: URL): number {
   const raw = url.searchParams.get("offset");
   if (raw === null || raw.trim() === "") return 0;
@@ -914,6 +1070,36 @@ function coverCloudflare(args: ApiV1RouteArgs) {
     env: (cf?.env ?? null) as (ImageGenEnv & PostHogServerEnv) | null,
     waitUntil: apiV1WaitUntilFor(args),
   };
+}
+
+async function validateApiV1SpoonPhotoUrl(args: ApiV1RouteArgs, principal: ApiPrincipal, photoUrl: string) {
+  const cf = apiV1CloudflareFor(args);
+  try {
+    await validateSpoonPhotoAssignment({
+      photoUrl,
+      ownerId: principal.id,
+      bucket: cf?.env?.PHOTOS,
+      allowLocalImageFallback: false,
+      allowExternal: false,
+    });
+  } catch (error) {
+    if (error instanceof ApiAuthError) {
+      if (error.status === 400) {
+        throw new ApiV1Error("validation_error", error.message);
+      }
+      throw new ApiV1Error("internal_error", error.message);
+    }
+    throw error;
+  }
+}
+
+async function validateApiV1SpoonPhotoUrlForWrite(input: {
+  args: ApiV1RouteArgs;
+  principal: ApiPrincipal;
+  photoUrl: string | null;
+}) {
+  if (!input.photoUrl) return;
+  await validateApiV1SpoonPhotoUrl(input.args, input.principal, input.photoUrl);
 }
 
 async function runOrQueueCoverStylization(
@@ -1074,6 +1260,347 @@ async function handleRecipeDetail(args: ApiV1RouteArgs, requestId: string, princ
   }
 
   return apiV1Success(requestId, { recipe: recipeDetail(recipe, origin) }, 200, principal ? authenticatedPublicCacheHeaders() : publicCacheHeaders());
+}
+
+async function handleRecipeSpoonList(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal | null, recipeId: string) {
+  const db = await getRequestDb(args.context);
+  const origin = publicContentOrigin(args);
+  const url = new URL(args.request.url);
+  const limit = parseListLimit(url);
+  const cursor = parseSpoonListCursor(url);
+  await loadActiveRecipeForSpoons(db, recipeId);
+  const spoons = await db.recipeSpoon.findMany({
+    where: {
+      recipeId,
+      deletedAt: null,
+      AND: [spoonListCursorWhere(cursor)],
+    },
+    orderBy: [{ cookedAt: "desc" }, { id: "desc" }],
+    take: limit + 1,
+    include: { chef: { select: API_V1_SPOON_CHEF_SELECT } },
+  });
+  const page = spoons.slice(0, limit);
+  const hasMore = spoons.length > limit;
+  const nextCursor = hasMore && page.length > 0 ? spoonListCursorFor(page[page.length - 1]!) : null;
+
+  return apiV1Success(requestId, {
+    limit,
+    cursor: cursor?.raw ?? null,
+    nextCursor,
+    hasMore,
+    spoons: page.map((spoon) => spoonPayload(spoon, origin)),
+  }, 200, principal ? authenticatedPublicCacheHeaders() : publicCacheHeaders());
+}
+
+async function maybeCreateSpoonCover(
+  args: ApiV1RouteArgs,
+  input: {
+    db: ApiV1Db;
+    origin: string;
+    principal: ApiPrincipal;
+    recipe: RecipeForApiV1SpoonCoverRow;
+    spoon: RecipeSpoon;
+    isOriginCook: boolean;
+    useAsRecipeCover: boolean;
+  },
+) {
+  if (!input.spoon.photoUrl) {
+    return {
+      activeCover: await activeFullCoverPayload(input.db, input.recipe, input.origin),
+      previousActiveCover: null,
+      createdCover: null,
+      generationStatus: null,
+    };
+  }
+  const decision = decideSpoonCoverCreation({
+    recipe: input.recipe,
+    userId: input.principal.id,
+    isOriginCook: input.isOriginCook,
+    hasPhoto: true,
+    useAsRecipeCover: input.useAsRecipeCover,
+  });
+  if (!decision.shouldCreateCover) {
+    return {
+      activeCover: await activeFullCoverPayload(input.db, input.recipe, input.origin),
+      previousActiveCover: null,
+      createdCover: null,
+      generationStatus: null,
+    };
+  }
+
+  const previousActiveCover = await activeFullCoverPayload(input.db, input.recipe, input.origin);
+  const cover = await createCover(input.db, {
+    recipeId: input.recipe.id,
+    imageUrl: input.spoon.photoUrl,
+    sourceType: "spoon",
+    sourceSpoonId: input.spoon.id,
+    status: "processing",
+    createdById: input.principal.id,
+    sourceImageUrl: input.spoon.photoUrl,
+    generationStatus: "processing",
+  });
+  await activateSpoonCoverForDecision(input.db, {
+    recipeId: input.recipe.id,
+    coverId: cover.id,
+    decision,
+    previousActiveCoverId: input.recipe.activeCoverId,
+  });
+  await runOrQueueCoverStylization(args, {
+    db: input.db,
+    userId: input.principal.id,
+    recipeId: input.recipe.id,
+    coverId: cover.id,
+    rawPhotoUrl: input.spoon.photoUrl,
+    recipeTitle: input.recipe.title,
+    sourceType: "spoon",
+    activateWhenReady: false,
+    suppressAutoActivation: false,
+  });
+
+  const nextRecipe = await loadActiveRecipeForSpoons(input.db, input.recipe.id);
+  const createdCover = await input.db.recipeCover.findFirstOrThrow({ where: { id: cover.id, recipeId: input.recipe.id } });
+  return {
+    activeCover: await activeFullCoverPayload(input.db, nextRecipe, input.origin),
+    previousActiveCover,
+    createdCover: fullCoverPayload(createdCover, nextRecipe, input.origin),
+    generationStatus: createdCover.generationStatus,
+  };
+}
+
+async function isRecoveredOriginCook(db: ApiV1Db, recipe: RecipeForApiV1SpoonCoverRow, spoon: RecipeSpoon, principal: ApiPrincipal) {
+  if (recipe.chefId !== principal.id || spoon.chefId !== principal.id || spoon.recipeId !== recipe.id) return false;
+  const earlierSpoon = await db.recipeSpoon.findFirst({
+    where: {
+      id: { not: spoon.id },
+      chefId: principal.id,
+      recipeId: recipe.id,
+      deletedAt: null,
+      createdAt: { lte: spoon.createdAt },
+    },
+    select: { id: true },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+  });
+  return !earlierSpoon;
+}
+
+async function existingSpoonCoverPayload(db: ApiV1Db, recipe: RecipeForApiV1SpoonCoverRow, spoon: RecipeSpoon, origin: string) {
+  const existingCover = await db.recipeCover.findFirst({
+    where: {
+      recipeId: recipe.id,
+      sourceSpoonId: spoon.id,
+    },
+    orderBy: { createdAt: "desc" },
+  });
+  if (!existingCover) return null;
+  const nextRecipe = await loadActiveRecipeForSpoons(db, recipe.id);
+  return {
+    activeCover: await activeFullCoverPayload(db, nextRecipe, origin),
+    previousActiveCover: null,
+    createdCover: fullCoverPayload(existingCover, nextRecipe, origin),
+    generationStatus: existingCover.generationStatus,
+  };
+}
+
+async function recipeSpoonCreateData(
+  args: ApiV1RouteArgs,
+  input: {
+    db: ApiV1Db;
+    principal: ApiPrincipal;
+    recipeId: string;
+    spoonId: string;
+    clientMutationId: string;
+    isOriginCook: boolean;
+    useAsRecipeCover: boolean;
+  },
+) {
+  const origin = publicContentOrigin(args);
+  const recipe = await loadActiveRecipeForSpoons(input.db, input.recipeId);
+  const spoon = await input.db.recipeSpoon.findFirstOrThrow({
+    where: { id: input.spoonId, recipeId: input.recipeId },
+    include: { chef: { select: API_V1_SPOON_CHEF_SELECT } },
+  });
+  const existingCoverData = await existingSpoonCoverPayload(input.db, recipe, spoon, origin);
+  const coverData = existingCoverData ?? await maybeCreateSpoonCover(args, {
+    db: input.db,
+    origin,
+    principal: input.principal,
+    recipe,
+    spoon,
+    isOriginCook: input.isOriginCook,
+    useAsRecipeCover: input.useAsRecipeCover,
+  });
+  return {
+    spoon: spoonPayload(spoon, origin),
+    isOriginCook: input.isOriginCook,
+    ...coverData,
+    mutation: { clientMutationId: input.clientMutationId, replayed: false },
+  };
+}
+
+async function recoverRecipeSpoonCreate(
+  args: ApiV1RouteArgs,
+  input: {
+    db: ApiV1Db;
+    principal: ApiPrincipal;
+    recipeId: string;
+    clientMutationId: string;
+    useAsRecipeCover: boolean;
+    record: ApiIdempotencyKey;
+  },
+) {
+  const spoon = await input.db.recipeSpoon.findFirst({
+    where: {
+      id: input.record.id,
+      chefId: input.principal.id,
+      recipeId: input.recipeId,
+      deletedAt: null,
+    },
+  });
+  if (!spoon) return null;
+  const recipe = await loadActiveRecipeForSpoons(input.db, input.recipeId);
+  return {
+    status: 201,
+    data: await recipeSpoonCreateData(args, {
+      db: input.db,
+      principal: input.principal,
+      recipeId: input.recipeId,
+      spoonId: spoon.id,
+      clientMutationId: input.clientMutationId,
+      isOriginCook: await isRecoveredOriginCook(input.db, recipe, spoon, input.principal),
+      useAsRecipeCover: input.useAsRecipeCover,
+    }),
+  };
+}
+
+async function handleRecipeSpoonCreate(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string) {
+  const body = await parseApiV1JsonBody(args.request);
+  assertKnownFields(body, ["clientMutationId", "note", "nextTime", "cookedAt", "photoUrl", "useAsRecipeCover"]);
+  const clientMutationId = nonblankString(body.clientMutationId, "clientMutationId");
+  const note = optionalNullableString(body.note, "note");
+  const nextTime = optionalNullableString(body.nextTime, "nextTime");
+  const cookedAt = optionalIsoDate(body.cookedAt, "cookedAt");
+  const photoUrl = optionalNullableString(body.photoUrl, "photoUrl", 2048);
+  const useAsRecipeCover = optionalBoolean(body.useAsRecipeCover, "useAsRecipeCover");
+  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "recipes.spoons.create", async (db, reservation) => {
+    await loadActiveRecipeForSpoons(db, recipeId);
+    let created: Awaited<ReturnType<typeof createSpoon>>;
+    try {
+      created = await createSpoon(db, {
+        id: reservation.id,
+        chefId: principal.id,
+        recipeId,
+        note,
+        nextTime,
+        cookedAt,
+        photoUrl,
+      });
+    } catch (error) {
+      throw mapSpoonDomainErrorForApiV1(error);
+    }
+    return {
+      status: 201,
+      data: await recipeSpoonCreateData(args, {
+        db,
+        principal,
+        recipeId,
+        spoonId: created.spoon.id,
+        clientMutationId,
+        isOriginCook: created.isOriginCook,
+        useAsRecipeCover,
+      }),
+    };
+  }, {
+    beforeWrite: async () => validateApiV1SpoonPhotoUrlForWrite({
+      args,
+      principal,
+      photoUrl,
+    }),
+    deleteReservationOnWriteError: false,
+    hasRecoverableWrite: async (db, record) => Boolean(await db.recipeSpoon.findFirst({
+      where: {
+        id: record.id,
+        chefId: principal.id,
+        recipeId,
+      },
+      select: { id: true },
+    })),
+    recoverInFlight: async (db, record) => recoverRecipeSpoonCreate(args, {
+      db,
+      principal,
+      recipeId,
+      clientMutationId,
+      useAsRecipeCover,
+      record,
+    }),
+  });
+}
+
+async function handleRecipeSpoonUpdate(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string, spoonId: string) {
+  const body = await parseApiV1JsonBody(args.request);
+  assertKnownFields(body, ["clientMutationId", "note", "nextTime", "cookedAt", "photoUrl"]);
+  const clientMutationId = nonblankString(body.clientMutationId, "clientMutationId");
+  const patch: UpdateSpoonPatch = {};
+  if (hasOwnField(body, "note")) patch.note = optionalNullableString(body.note, "note");
+  if (hasOwnField(body, "nextTime")) patch.nextTime = optionalNullableString(body.nextTime, "nextTime");
+  if (hasOwnField(body, "cookedAt")) patch.cookedAt = optionalIsoDate(body.cookedAt, "cookedAt");
+  if (hasOwnField(body, "photoUrl")) patch.photoUrl = optionalNullableString(body.photoUrl, "photoUrl", 2048);
+  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "recipes.spoons.update", async (db) => {
+    const origin = publicContentOrigin(args);
+    await loadSpoonInRecipe(db, recipeId, spoonId);
+    try {
+      await updateSpoon(db, spoonId, principal.id, patch);
+    } catch (error) {
+      throw mapSpoonDomainErrorForApiV1(error, spoonId);
+    }
+    const spoon = await loadSpoonInRecipe(db, recipeId, spoonId);
+    return {
+      status: 200,
+      data: {
+        spoon: spoonPayload(spoon, origin),
+        mutation: { clientMutationId, replayed: false },
+      },
+    };
+  }, {
+    beforeWrite: async () => validateApiV1SpoonPhotoUrlForWrite({
+      args,
+      principal,
+      photoUrl: typeof patch.photoUrl === "string" ? patch.photoUrl : null,
+    }),
+  });
+}
+
+async function handleRecipeSpoonDelete(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string, spoonId: string) {
+  const body = await parseApiV1JsonBody(args.request);
+  assertKnownFields(body, ["clientMutationId"]);
+  const url = new URL(args.request.url);
+  const clientMutationId = nonblankString(
+    body.clientMutationId ?? args.request.headers.get("X-Client-Mutation-Id") ?? url.searchParams.get("clientMutationId"),
+    "clientMutationId",
+  );
+  const idempotencyBody = { clientMutationId };
+
+  return await runIdempotentShoppingMutation(args, requestId, principal, idempotencyBody, clientMutationId, "recipes.spoons.delete", async (db) => {
+    const origin = publicContentOrigin(args);
+    await loadSpoonInRecipe(db, recipeId, spoonId);
+    let deleted: RecipeSpoon;
+    try {
+      deleted = await deleteSpoon(db, spoonId, principal.id);
+    } catch (error) {
+      throw mapSpoonDomainErrorForApiV1(error, spoonId);
+    }
+    const spoon = await db.recipeSpoon.findFirstOrThrow({
+      where: { id: deleted.id, recipeId },
+      include: { chef: { select: API_V1_SPOON_CHEF_SELECT } },
+    });
+    return {
+      status: 200,
+      data: {
+        removed: true,
+        spoon: spoonPayload(spoon, origin),
+        mutation: { clientMutationId, replayed: false },
+      },
+    };
+  });
 }
 
 async function handleRecipeCoverList(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string) {
@@ -1734,6 +2261,18 @@ function optionalNullableString(value: unknown, field: string, maxLength = MAX_S
   return trimmed === "" ? null : trimmed;
 }
 
+function optionalIsoDate(value: unknown, field: string): Date | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  if (typeof value !== "string") {
+    throw new ApiV1Error("validation_error", `${field} must be an ISO datetime string`);
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString() !== value) {
+    throw new ApiV1Error("validation_error", `${field} must be an ISO datetime string`);
+  }
+  return parsed;
+}
+
 function requiredBoolean(value: unknown, field: string): boolean {
   if (typeof value !== "boolean") {
     throw new ApiV1Error("validation_error", `${field} must be a boolean`);
@@ -1753,6 +2292,30 @@ function idempotentMutationBody(
   return { ok: true, requestId, data };
 }
 
+export async function shouldKeepIdempotencyReservationForRecovery(input: {
+  deleteReservationOnWriteError?: boolean;
+  hasRecoverableWrite?: () => Promise<boolean>;
+}): Promise<boolean> {
+  if (input.deleteReservationOnWriteError !== false || !input.hasRecoverableWrite) return false;
+  try {
+    return await input.hasRecoverableWrite();
+  } catch {
+    return false;
+  }
+}
+
+export async function deleteIdempotencyReservationAfterWriteError(input: {
+  keepReservationForRecovery: boolean;
+  deleteReservation: () => Promise<unknown>;
+}): Promise<void> {
+  if (input.keepReservationForRecovery) return;
+  try {
+    await input.deleteReservation();
+  } catch {
+    // The original write error is more useful than a best-effort cleanup miss.
+  }
+}
+
 async function runIdempotentShoppingMutation(
   args: ApiV1RouteArgs,
   requestId: string,
@@ -1760,7 +2323,22 @@ async function runIdempotentShoppingMutation(
   body: Record<string, unknown>,
   clientMutationId: string,
   operation: string,
-  write: (db: ApiV1WriteDb) => Promise<{ status: number; data: Record<string, unknown> }>,
+  write: (db: ApiV1WriteDb, reservation: ApiIdempotencyKey) => Promise<{ status: number; data: Record<string, unknown> }>,
+  options: {
+    beforeWrite?: (
+      db: ApiV1WriteDb,
+      record: ApiIdempotencyKey,
+    ) => Promise<void>;
+    deleteReservationOnWriteError?: boolean;
+    hasRecoverableWrite?: (
+      db: ApiV1WriteDb,
+      record: ApiIdempotencyKey,
+    ) => Promise<boolean>;
+    recoverInFlight?: (
+      db: ApiV1WriteDb,
+      record: ApiIdempotencyKey,
+    ) => Promise<{ status: number; data: Record<string, unknown> } | null>;
+  } = {},
 ) {
   const db = await getRequestDb(args.context);
   const path = normalizeApiV1Path(args.params["*"]);
@@ -1787,6 +2365,22 @@ async function runIdempotentShoppingMutation(
   }
 
   if (reservation.status === "in_flight") {
+    const recovered = await options.recoverInFlight?.(db, reservation.record);
+    if (recovered) {
+      const storedBody = idempotentMutationBody(requestId, recovered.data);
+      await completeIdempotencyKey(db, reservation.record.id, {
+        status: recovered.status,
+        body: storedBody,
+      });
+      const replay = replayIdempotencyResponse({
+        responseStatus: recovered.status,
+        responseBody: JSON.stringify(storedBody),
+      }, requestId);
+      return withApiV1Telemetry(Response.json(replay.body, {
+        status: replay.status,
+        headers: apiV1PrivateHeaders(requestId),
+      }), { idempotencyOutcome: "replayed", operation });
+    }
     throw new ApiV1Error(
       "idempotency_in_progress",
       "clientMutationId is already in progress; retry after the Retry-After header",
@@ -1800,10 +2394,19 @@ async function runIdempotentShoppingMutation(
 
   let result: Awaited<ReturnType<typeof write>>;
   try {
-    result = await write(db);
+    await options.beforeWrite?.(db, reservation.record);
+    result = await write(db, reservation.record);
   } catch (error) {
-    /* istanbul ignore next -- @preserve defensive cleanup for a write failure after reservation; integration tests cover the response path before reservation succeeds. */
-    await db.apiIdempotencyKey.delete({ where: { id: reservation.record.id } }).catch(() => undefined);
+    const keepReservationForRecovery = await shouldKeepIdempotencyReservationForRecovery({
+      deleteReservationOnWriteError: options.deleteReservationOnWriteError,
+      hasRecoverableWrite: options.hasRecoverableWrite
+        ? () => options.hasRecoverableWrite!(db, reservation.record)
+        : undefined,
+    });
+    await deleteIdempotencyReservationAfterWriteError({
+      keepReservationForRecovery,
+      deleteReservation: () => db.apiIdempotencyKey.delete({ where: { id: reservation.record.id } }),
+    });
     throw error;
   }
 
@@ -2137,6 +2740,10 @@ function assertKnownFields(body: Record<string, unknown>, allowed: readonly stri
   }
 }
 
+function hasOwnField(body: Record<string, unknown>, field: string): boolean {
+  return Object.prototype.hasOwnProperty.call(body, field);
+}
+
 function nonblankString(value: unknown, field: string, maxLength = MAX_SHORT_TEXT_LENGTH) {
   if (typeof value !== "string" || value.trim() === "") {
     throw new ApiV1Error("validation_error", `${field} must be a nonblank string`);
@@ -2320,6 +2927,30 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
     if (args.request.method === "GET" && segments[0] === "recipes" && segments.length === 2) {
       const principal = await authorize(path);
       const response = await handleRecipeDetail(args, requestId, principal, segments[1]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "GET" && segments[0] === "recipes" && segments[2] === "spoons" && segments.length === 3) {
+      const principal = await authorize(path);
+      const response = await handleRecipeSpoonList(args, requestId, principal, segments[1]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "POST" && segments[0] === "recipes" && segments[2] === "spoons" && segments.length === 3) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeSpoonCreate(args, requestId, principal, segments[1]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "PATCH" && segments[0] === "recipes" && segments[2] === "spoons" && segments.length === 4) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeSpoonUpdate(args, requestId, principal, segments[1], segments[3]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "DELETE" && segments[0] === "recipes" && segments[2] === "spoons" && segments.length === 4) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeSpoonDelete(args, requestId, principal, segments[1], segments[3]);
       return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
     }
 

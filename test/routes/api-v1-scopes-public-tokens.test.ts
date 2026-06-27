@@ -51,6 +51,10 @@ describe("API v1 public/token scope matrix", () => {
     expect(resolveApiV1ScopeRequirement("GET", "openapi.sdk.json")).toEqual({ auth: "optional", scopes: [] });
     expect(resolveApiV1ScopeRequirement("GET", "recipes")).toEqual({ auth: "optional", scopes: ["recipes:read"] });
     expect(resolveApiV1ScopeRequirement("GET", "recipes/recipe_1")).toEqual({ auth: "optional", scopes: ["recipes:read"] });
+    expect(resolveApiV1ScopeRequirement("GET", "recipes/recipe_1/spoons")).toEqual({ auth: "optional", scopes: ["recipes:read"] });
+    expect(resolveApiV1ScopeRequirement("POST", "recipes/recipe_1/spoons")).toEqual({ auth: "bearer", scopes: ["kitchen:write"] });
+    expect(resolveApiV1ScopeRequirement("PATCH", "recipes/recipe_1/spoons/spoon_1")).toEqual({ auth: "bearer", scopes: ["kitchen:write"] });
+    expect(resolveApiV1ScopeRequirement("DELETE", "recipes/recipe_1/spoons/spoon_1")).toEqual({ auth: "bearer", scopes: ["kitchen:write"] });
     expect(resolveApiV1ScopeRequirement("GET", "cookbooks")).toEqual({ auth: "optional", scopes: ["cookbooks:read"] });
     expect(resolveApiV1ScopeRequirement("GET", "cookbooks/cookbook_1")).toEqual({ auth: "optional", scopes: ["cookbooks:read"] });
     expect(resolveApiV1ScopeRequirement("GET", "tokens")).toEqual({ auth: "bearer", scopes: ["tokens:read"] });

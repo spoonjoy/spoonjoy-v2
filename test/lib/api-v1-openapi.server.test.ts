@@ -20,6 +20,10 @@ const OPERATION_SCOPES = {
   "GET /api/v1/openapi.connector.json": [],
   "GET /api/v1/recipes": ["recipes:read"],
   "GET /api/v1/recipes/{id}": ["recipes:read"],
+  "GET /api/v1/recipes/{id}/spoons": ["recipes:read"],
+  "POST /api/v1/recipes/{id}/spoons": ["kitchen:write"],
+  "PATCH /api/v1/recipes/{id}/spoons/{spoonId}": ["kitchen:write"],
+  "DELETE /api/v1/recipes/{id}/spoons/{spoonId}": ["kitchen:write"],
   "GET /api/v1/recipes/{id}/covers": ["kitchen:write"],
   "PATCH /api/v1/recipes/{id}/covers": ["kitchen:write"],
   "PATCH /api/v1/recipes/{id}/covers/{coverId}": ["kitchen:write"],
@@ -200,6 +204,39 @@ describe("API v1 OpenAPI document", () => {
       expect.objectContaining({ name: "id", in: "path", required: true, schema: { type: "string", minLength: 1 } }),
       expect.objectContaining({ name: "X-Request-Id", in: "header", required: false }),
     ]));
+    expect(operation(document, "/api/v1/recipes/{id}/spoons", "GET")).toMatchObject({
+      operationId: "getApiV1RecipeSpoons",
+      tags: ["Recipe Spoons"],
+      "x-auth": "optional",
+      "x-scopes": ["recipes:read"],
+    });
+    expect(operation(document, "/api/v1/recipes/{id}/spoons", "GET").parameters).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "id", in: "path", required: true, schema: { type: "string", minLength: 1 } }),
+      expect.objectContaining({ name: "cursor", in: "query", required: false, schema: { type: "string" } }),
+      expect.objectContaining({ name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 50, default: 20 } }),
+    ]));
+    expect(operation(document, "/api/v1/recipes/{id}/spoons", "POST")).toMatchObject({
+      operationId: "postApiV1RecipeSpoons",
+      tags: ["Recipe Spoons"],
+      "x-auth": "bearer",
+      "x-scopes": ["kitchen:write"],
+      "x-idempotency": expect.objectContaining({
+        key: "clientMutationId",
+        location: "jsonBody",
+        replayStatus: [201],
+      }),
+    });
+    expect(operation(document, "/api/v1/recipes/{id}/spoons/{spoonId}", "PATCH")).toMatchObject({
+      operationId: "patchApiV1RecipeSpoon",
+      "x-idempotency": expect.objectContaining({ replayStatus: [200] }),
+    });
+    expect(operation(document, "/api/v1/recipes/{id}/spoons/{spoonId}", "DELETE")).toMatchObject({
+      operationId: "deleteApiV1RecipeSpoon",
+      "x-idempotency": expect.objectContaining({
+        location: "jsonBody, query, or X-Client-Mutation-Id",
+        replayStatus: [200],
+      }),
+    });
     expect(operation(document, "/api/v1/shopping-list/sync", "GET").parameters).toEqual(expect.arrayContaining([
       expect.objectContaining({ name: "cursor", in: "query", required: false, schema: { type: "string" } }),
       expect.objectContaining({
@@ -258,6 +295,32 @@ describe("API v1 OpenAPI document", () => {
       coverProvenanceLabel: "Chef photo",
       coverSourceType: "chef-upload",
       coverVariant: "image",
+    });
+    expect(responseExample(document, "/api/v1/recipes/{id}/spoons", "GET", "200").data).toMatchObject({
+      limit: 20,
+      cursor: null,
+      nextCursor: expect.stringMatching(/^v1\./),
+      hasMore: false,
+      spoons: [expect.objectContaining({
+        id: "spoon_1",
+        recipeId: "recipe_1",
+        photoUrl: "https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg",
+      })],
+    });
+    const createSpoonData = responseExample(document, "/api/v1/recipes/{id}/spoons", "POST", "201").data;
+    expect(createSpoonData).toMatchObject({
+      spoon: expect.objectContaining({ id: "spoon_1" }),
+      isOriginCook: true,
+      mutation: { clientMutationId: "device-uuid-spoon-create", replayed: false },
+    });
+    expect(createSpoonData).not.toHaveProperty("removed");
+    expect(responseExample(document, "/api/v1/recipes/{id}/spoons/{spoonId}", "PATCH", "200").data).toMatchObject({
+      spoon: expect.objectContaining({ id: "spoon_1" }),
+      mutation: { clientMutationId: "device-uuid-spoon-update", replayed: false },
+    });
+    expect(responseExample(document, "/api/v1/recipes/{id}/spoons/{spoonId}", "DELETE", "200").data).toMatchObject({
+      removed: true,
+      mutation: { clientMutationId: "device-uuid-spoon-delete", replayed: false },
     });
     expect(responseExample(document, "/api/v1/cookbooks/{id}", "GET", "200").data.cookbook.recipes[0]).toMatchObject({
       coverProvenanceLabel: "Chef photo",

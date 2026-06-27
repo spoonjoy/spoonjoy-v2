@@ -269,6 +269,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
   "currentCapabilities": {
     "available": [
       "public recipe and cookbook reads",
+      "public recipe spoon history plus authenticated recipe spoon create, update, and delete",
       "Owner-scoped recipe cover candidate management",
       "owner-scoped shopping-list read, sync, item writes, recipe adds, and clear actions",
       "session-created and bearer-created API tokens",
@@ -385,7 +386,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"app\": \"spoonjoy\",\n    \"version\": \"v1\",\n    \"status\": \"ok\",\n    \"docsUrl\": \"https://spoonjoy.app/api\",\n    \"openapiUrl\": \"/api/v1/openapi.json\",\n    \"sdkOpenapiUrl\": \"/api/v1/openapi.sdk.json\",\n    \"connectorOpenapiUrl\": \"/api/v1/openapi.connector.json\",\n    \"resources\": [\n      {\n        \"name\": \"root\",\n        \"path\": \"/api/v1\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"health\",\n        \"path\": \"/api/v1/health\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"openapi\",\n        \"path\": \"/api/v1/openapi.json\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"openapi-sdk\",\n        \"path\": \"/api/v1/openapi.sdk.json\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"openapi-connector\",\n        \"path\": \"/api/v1/openapi.connector.json\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"recipes\",\n        \"path\": \"/api/v1/recipes\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": [\n          \"recipes:read\"\n        ]\n      },\n      {\n        \"name\": \"recipe\",\n        \"path\": \"/api/v1/recipes/{id}\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": [\n          \"recipes:read\"\n        ]\n      },\n      {\n        \"name\": \"recipe-covers\",\n        \"path\": \"/api/v1/recipes/{id}/covers\",\n        \"methods\": [\n          \"GET\",\n          \"PATCH\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-cover\",\n        \"path\": \"/api/v1/recipes/{id}/covers/{coverId}\",\n        \"methods\": [\n          \"PATCH\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-cover-regenerate\",\n        \"path\": \"/api/v1/recipes/{id}/covers/regenerate\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-cover-from-spoon\",\n        \"path\": \"/api/v1/recipes/{id}/covers/from-spoon/{spoonId}\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"cookbooks\",\n        \"path\": \"/api/v1/cookbooks\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": [\n          \"cookbooks:read\"\n        ]\n      },\n      {\n        \"name\": \"cookbook\",\n        \"path\": \"/api/v1/cookbooks/{id}\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": [\n          \"cookbooks:read\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list\",\n        \"path\": \"/api/v1/shopping-list\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:read\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-sync\",\n        \"path\": \"/api/v1/shopping-list/sync\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:read\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-items\",\n        \"path\": \"/api/v1/shopping-list/items\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:write\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-item\",\n        \"path\": \"/api/v1/shopping-list/items/{itemId}\",\n        \"methods\": [\n          \"PATCH\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:write\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-add-from-recipe\",\n        \"path\": \"/api/v1/shopping-list/add-from-recipe\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:write\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-clear-completed\",\n        \"path\": \"/api/v1/shopping-list/clear-completed\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:write\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-clear-all\",\n        \"path\": \"/api/v1/shopping-list/clear-all\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:write\"\n        ]\n      },\n      {\n        \"name\": \"tokens\",\n        \"path\": \"/api/v1/tokens\",\n        \"methods\": [\n          \"GET\",\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"tokens:read\",\n          \"tokens:write\"\n        ]\n      },\n      {\n        \"name\": \"token\",\n        \"path\": \"/api/v1/tokens/{credentialId}\",\n        \"methods\": [\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"tokens:write\"\n        ]\n      }\n    ],\n    \"auth\": {\n      \"modes\": [\n        \"anonymous\",\n        \"session\",\n        \"bearer\",\n        \"oauth_pkce\",\n        \"delegated_agent\",\n        \"mcp\"\n      ],\n      \"tokenUrl\": \"/api/v1/tokens\",\n      \"revokeUrl\": \"/api/v1/tokens/{credentialId}\",\n      \"public\": {\n        \"anonymous\": true,\n        \"note\": \"Public recipe and cookbook reads can be called without credentials.\"\n      },\n      \"session\": {\n        \"tokenUrl\": \"/api/v1/tokens\",\n        \"note\": \"Same-origin Spoonjoy browser sessions can create personal bearer credentials.\"\n      },\n      \"bearer\": {\n        \"header\": \"Authorization: Bearer sj_...\",\n        \"tokenUrl\": \"/api/v1/tokens\",\n        \"revokeUrl\": \"/api/v1/tokens/{credentialId}\"\n      },\n      \"oauth\": {\n        \"register\": \"/oauth/register\",\n        \"authorize\": \"/oauth/authorize\",\n        \"token\": \"/oauth/token\",\n        \"revoke\": \"/oauth/revoke\"\n      },\n      \"mcp\": {\n        \"endpoint\": \"/mcp\",\n        \"startAgentConnection\": \"/api/tools/start_agent_connection\",\n        \"pollAgentConnection\": \"/api/tools/poll_agent_connection\"\n      }\n    }\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"app\": \"spoonjoy\",\n    \"version\": \"v1\",\n    \"status\": \"ok\",\n    \"docsUrl\": \"https://spoonjoy.app/api\",\n    \"openapiUrl\": \"/api/v1/openapi.json\",\n    \"sdkOpenapiUrl\": \"/api/v1/openapi.sdk.json\",\n    \"connectorOpenapiUrl\": \"/api/v1/openapi.connector.json\",\n    \"resources\": [\n      {\n        \"name\": \"root\",\n        \"path\": \"/api/v1\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"health\",\n        \"path\": \"/api/v1/health\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"openapi\",\n        \"path\": \"/api/v1/openapi.json\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"openapi-sdk\",\n        \"path\": \"/api/v1/openapi.sdk.json\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"openapi-connector\",\n        \"path\": \"/api/v1/openapi.connector.json\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"recipes\",\n        \"path\": \"/api/v1/recipes\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": [\n          \"recipes:read\"\n        ]\n      },\n      {\n        \"name\": \"recipe\",\n        \"path\": \"/api/v1/recipes/{id}\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": [\n          \"recipes:read\"\n        ]\n      },\n      {\n        \"name\": \"recipe-spoons\",\n        \"path\": \"/api/v1/recipes/{id}/spoons\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": [\n          \"recipes:read\"\n        ]\n      },\n      {\n        \"name\": \"recipe-spoons-create\",\n        \"path\": \"/api/v1/recipes/{id}/spoons\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-spoon\",\n        \"path\": \"/api/v1/recipes/{id}/spoons/{spoonId}\",\n        \"methods\": [\n          \"PATCH\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-covers\",\n        \"path\": \"/api/v1/recipes/{id}/covers\",\n        \"methods\": [\n          \"GET\",\n          \"PATCH\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-cover\",\n        \"path\": \"/api/v1/recipes/{id}/covers/{coverId}\",\n        \"methods\": [\n          \"PATCH\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-cover-regenerate\",\n        \"path\": \"/api/v1/recipes/{id}/covers/regenerate\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-cover-from-spoon\",\n        \"path\": \"/api/v1/recipes/{id}/covers/from-spoon/{spoonId}\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"cookbooks\",\n        \"path\": \"/api/v1/cookbooks\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": [\n          \"cookbooks:read\"\n        ]\n      },\n      {\n        \"name\": \"cookbook\",\n        \"path\": \"/api/v1/cookbooks/{id}\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": [\n          \"cookbooks:read\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list\",\n        \"path\": \"/api/v1/shopping-list\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:read\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-sync\",\n        \"path\": \"/api/v1/shopping-list/sync\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:read\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-items\",\n        \"path\": \"/api/v1/shopping-list/items\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:write\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-item\",\n        \"path\": \"/api/v1/shopping-list/items/{itemId}\",\n        \"methods\": [\n          \"PATCH\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:write\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-add-from-recipe\",\n        \"path\": \"/api/v1/shopping-list/add-from-recipe\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:write\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-clear-completed\",\n        \"path\": \"/api/v1/shopping-list/clear-completed\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:write\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-clear-all\",\n        \"path\": \"/api/v1/shopping-list/clear-all\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:write\"\n        ]\n      },\n      {\n        \"name\": \"tokens\",\n        \"path\": \"/api/v1/tokens\",\n        \"methods\": [\n          \"GET\",\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"tokens:read\",\n          \"tokens:write\"\n        ]\n      },\n      {\n        \"name\": \"token\",\n        \"path\": \"/api/v1/tokens/{credentialId}\",\n        \"methods\": [\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"tokens:write\"\n        ]\n      }\n    ],\n    \"auth\": {\n      \"modes\": [\n        \"anonymous\",\n        \"session\",\n        \"bearer\",\n        \"oauth_pkce\",\n        \"delegated_agent\",\n        \"mcp\"\n      ],\n      \"tokenUrl\": \"/api/v1/tokens\",\n      \"revokeUrl\": \"/api/v1/tokens/{credentialId}\",\n      \"public\": {\n        \"anonymous\": true,\n        \"note\": \"Public recipe and cookbook reads can be called without credentials.\"\n      },\n      \"session\": {\n        \"tokenUrl\": \"/api/v1/tokens\",\n        \"note\": \"Same-origin Spoonjoy browser sessions can create personal bearer credentials.\"\n      },\n      \"bearer\": {\n        \"header\": \"Authorization: Bearer sj_...\",\n        \"tokenUrl\": \"/api/v1/tokens\",\n        \"revokeUrl\": \"/api/v1/tokens/{credentialId}\"\n      },\n      \"oauth\": {\n        \"register\": \"/oauth/register\",\n        \"authorize\": \"/oauth/authorize\",\n        \"token\": \"/oauth/token\",\n        \"revoke\": \"/oauth/revoke\"\n      },\n      \"mcp\": {\n        \"endpoint\": \"/mcp\",\n        \"startAgentConnection\": \"/api/tools/start_agent_connection\",\n        \"pollAgentConnection\": \"/api/tools/poll_agent_connection\"\n      }\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -1329,6 +1330,827 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       ]
     },
     {
+      "id": "GET /api/v1/recipes/{id}/spoons",
+      "operationId": "getApiV1RecipeSpoons",
+      "label": "List recent public cook events for one recipe",
+      "method": "GET",
+      "path": "/api/v1/recipes/{id}/spoons",
+      "profiles": [
+        "full",
+        "sdk"
+      ],
+      "tag": "Recipe Spoons",
+      "auth": "optional",
+      "scopes": [
+        "recipes:read"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [
+        [
+          "kitchen:read"
+        ],
+        [
+          "public:read"
+        ]
+      ],
+      "credentialModes": [
+        "anonymous",
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": {
+        "cursor": "opaque",
+        "limit": {
+          "min": 1,
+          "max": 50,
+          "default": 20
+        },
+        "order": "cookedAt/id cursor walk",
+        "caveat": "Recipe spoon list cursors page recent non-deleted cook events for one recipe and are not a deletion tombstone feed."
+      },
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "read",
+      "risk": "safe",
+      "guide": "Anonymous is enough for public reads. If you send Session or Bearer credentials, Spoonjoy validates them and checks the listed scopes.",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "label": "Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "recipe_1",
+          "description": "Spoonjoy resource id from a previous list response.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "cursor",
+          "in": "query",
+          "label": "Cursor",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "v1.cursor_from_nextCursor",
+          "description": "Opaque pagination cursor returned as nextCursor. Catalog cursors are v1.* values; shopping-list sync also accepts an ISO timestamp only as bootstrap compatibility.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "limit",
+          "in": "query",
+          "label": "Limit",
+          "required": false,
+          "defaultValue": "20",
+          "placeholder": "20",
+          "description": "Page size from 1 to 50. Defaults to 20.",
+          "schema": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": null,
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: validation_error, invalid_cursor"
+        },
+        {
+          "status": "401",
+          "description": "Errors: invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"limit\": 20,\n    \"cursor\": null,\n    \"nextCursor\": \"v1.eyJjb29rZWRBdCI6IjIwMjYtMDYtMDFUMDA6MDA6MDAuMDAwWiIsImlkIjoic3Bvb25fMSJ9\",\n    \"hasMore\": false,\n    \"spoons\": [\n      {\n        \"id\": \"spoon_1\",\n        \"recipeId\": \"recipe_1\",\n        \"chefId\": \"chef_1\",\n        \"photoUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n        \"cookedAt\": \"2026-06-01T00:00:00.000Z\",\n        \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n        \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n        \"chef\": {\n          \"id\": \"chef_1\",\n          \"username\": \"ari\"\n        },\n        \"note\": \"Added more lemon.\",\n        \"nextTime\": \"Try a wider pan.\",\n        \"deletedAt\": null\n      }\n    ]\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_cursor",
+          "label": "Invalid Cursor",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_cursor\",\n    \"message\": \"cursor must be a valid Spoonjoy cursor\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: recipes:read\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        },
+        {
+          "status": "429",
+          "name": "rate_limited",
+          "label": "Rate Limited",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"rate_limited\",\n    \"message\": \"Too many requests\",\n    \"status\": 429\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "POST /api/v1/recipes/{id}/spoons",
+      "operationId": "postApiV1RecipeSpoons",
+      "label": "Create a recipe spoon cook event",
+      "method": "POST",
+      "path": "/api/v1/recipes/{id}/spoons",
+      "profiles": [
+        "full",
+        "sdk"
+      ],
+      "tag": "Recipe Spoons",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx",
+          "idempotency_in_progress"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": true,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "insufficient_scope",
+          "idempotency_conflict"
+        ]
+      },
+      "cursorPolicy": {
+        "cursor": "opaque",
+        "limit": {
+          "min": 1,
+          "max": 50,
+          "default": 20
+        },
+        "order": "cookedAt/id cursor walk",
+        "caveat": "Recipe spoon list cursors page recent non-deleted cook events for one recipe and are not a deletion tombstone feed."
+      },
+      "idempotency": {
+        "key": "clientMutationId",
+        "location": "jsonBody",
+        "retentionHours": 24,
+        "replayStatus": [
+          201
+        ],
+        "conflictStatus": 409,
+        "inProgressRetryAfterSeconds": 2,
+        "retryBodyRule": "Persist and retry the same mutation body and path for this clientMutationId. Spoon deletes may put the idempotency key in the JSON body, query string, or X-Client-Mutation-Id header."
+      },
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "write",
+      "risk": "mutating",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "label": "Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "recipe_1",
+          "description": "Spoonjoy resource id from a previous list response.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "contentType": "application/json",
+        "example": "{\n  \"clientMutationId\": \"device-uuid-spoon-create\",\n  \"note\": \"Added more lemon.\",\n  \"nextTime\": \"Try a wider pan.\",\n  \"cookedAt\": \"2026-06-01T00:00:00.000Z\",\n  \"photoUrl\": \"/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n  \"useAsRecipeCover\": true\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"device-uuid-spoon-create\",\n  \"note\": \"Added more lemon.\",\n  \"nextTime\": \"Try a wider pan.\",\n  \"cookedAt\": \"2026-06-01T00:00:00.000Z\",\n  \"photoUrl\": \"/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n  \"useAsRecipeCover\": true\n}"
+          }
+        ]
+      },
+      "responseStatuses": [
+        "201",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "201",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "201",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"spoon\": {\n      \"id\": \"spoon_1\",\n      \"recipeId\": \"recipe_1\",\n      \"chefId\": \"chef_1\",\n      \"photoUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"cookedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"note\": \"Added more lemon.\",\n      \"nextTime\": \"Try a wider pan.\",\n      \"deletedAt\": null\n    },\n    \"isOriginCook\": true,\n    \"activeCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"spoon\",\n      \"imageUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"stylizedImageUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"displayUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": \"spoon_1\",\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"previousActiveCover\": null,\n    \"createdCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"spoon\",\n      \"imageUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"stylizedImageUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"displayUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": \"spoon_1\",\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"generationStatus\": \"processing\",\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-spoon-create\",\n      \"replayed\": false\n    }\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "PATCH /api/v1/recipes/{id}/spoons/{spoonId}",
+      "operationId": "patchApiV1RecipeSpoon",
+      "label": "Update one owned recipe spoon cook event",
+      "method": "PATCH",
+      "path": "/api/v1/recipes/{id}/spoons/{spoonId}",
+      "profiles": [
+        "full",
+        "sdk"
+      ],
+      "tag": "Recipe Spoons",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx",
+          "idempotency_in_progress"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": true,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "insufficient_scope",
+          "idempotency_conflict"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": {
+        "key": "clientMutationId",
+        "location": "jsonBody",
+        "retentionHours": 24,
+        "replayStatus": [
+          200
+        ],
+        "conflictStatus": 409,
+        "inProgressRetryAfterSeconds": 2,
+        "retryBodyRule": "Persist and retry the same mutation body and path for this clientMutationId. Spoon deletes may put the idempotency key in the JSON body, query string, or X-Client-Mutation-Id header."
+      },
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "write",
+      "risk": "mutating",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "label": "Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "recipe_1",
+          "description": "Spoonjoy resource id from a previous list response.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "spoonId",
+          "in": "path",
+          "label": "Spoon Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "spoonId",
+          "description": "Recipe spoon id from a cover-management spoon image candidate.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "contentType": "application/json",
+        "example": "{\n  \"clientMutationId\": \"device-uuid-spoon-update\",\n  \"note\": \"After dinner notes.\",\n  \"nextTime\": \"Less salt.\",\n  \"cookedAt\": \"2026-06-01T00:00:00.000Z\",\n  \"photoUrl\": \"/photos/spoons/chef_1/uploads/cover-raw.jpg\"\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"device-uuid-spoon-update\",\n  \"note\": \"After dinner notes.\",\n  \"nextTime\": \"Less salt.\",\n  \"cookedAt\": \"2026-06-01T00:00:00.000Z\",\n  \"photoUrl\": \"/photos/spoons/chef_1/uploads/cover-raw.jpg\"\n}"
+          }
+        ]
+      },
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"spoon\": {\n      \"id\": \"spoon_1\",\n      \"recipeId\": \"recipe_1\",\n      \"chefId\": \"chef_1\",\n      \"photoUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"cookedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"note\": \"After dinner notes.\",\n      \"nextTime\": \"Less salt.\",\n      \"deletedAt\": null\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-spoon-update\",\n      \"replayed\": false\n    }\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "DELETE /api/v1/recipes/{id}/spoons/{spoonId}",
+      "operationId": "deleteApiV1RecipeSpoon",
+      "label": "Soft-delete one owned recipe spoon cook event",
+      "method": "DELETE",
+      "path": "/api/v1/recipes/{id}/spoons/{spoonId}",
+      "profiles": [
+        "full",
+        "sdk"
+      ],
+      "tag": "Recipe Spoons",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx",
+          "idempotency_in_progress"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": true,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "insufficient_scope",
+          "idempotency_conflict"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": {
+        "key": "clientMutationId",
+        "location": "jsonBody, query, or X-Client-Mutation-Id",
+        "retentionHours": 24,
+        "replayStatus": [
+          200
+        ],
+        "conflictStatus": 409,
+        "inProgressRetryAfterSeconds": 2,
+        "retryBodyRule": "Persist and retry the same mutation body and path for this clientMutationId. Spoon deletes may put the idempotency key in the JSON body, query string, or X-Client-Mutation-Id header."
+      },
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "destructive",
+      "risk": "destructive",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "label": "Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "recipe_1",
+          "description": "Spoonjoy resource id from a previous list response.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "spoonId",
+          "in": "path",
+          "label": "Spoon Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "spoonId",
+          "description": "Recipe spoon id from a cover-management spoon image candidate.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "contentType": "application/json",
+        "example": "{\n  \"clientMutationId\": \"device-uuid-spoon-delete\"\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"device-uuid-spoon-delete\"\n}"
+          }
+        ]
+      },
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"removed\": true,\n    \"spoon\": {\n      \"id\": \"spoon_1\",\n      \"recipeId\": \"recipe_1\",\n      \"chefId\": \"chef_1\",\n      \"photoUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"cookedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"note\": \"Added more lemon.\",\n      \"nextTime\": \"Try a wider pan.\",\n      \"deletedAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-spoon-delete\",\n      \"replayed\": false\n    }\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
       "id": "GET /api/v1/recipes/{id}/covers",
       "operationId": "getApiV1RecipeCovers",
       "label": "List owner recipe cover candidates and spoon photo sources",
@@ -1487,7 +2309,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"covers\": [\n      {\n        \"id\": \"cover_1\",\n        \"recipeId\": \"recipe_1\",\n        \"status\": \"ready\",\n        \"sourceType\": \"spoon\",\n        \"imageUrl\": \"https://spoonjoy.app/photos/spoons/cover-raw.jpg\",\n        \"stylizedImageUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n        \"displayUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n        \"activeVariant\": \"stylized\",\n        \"provenanceLabel\": \"Editorialized chef photo\",\n        \"sourceSpoonId\": \"spoon_1\",\n        \"createdById\": \"chef_1\",\n        \"archivedAt\": null,\n        \"generationStatus\": \"succeeded\",\n        \"failureReason\": null,\n        \"sourceImageUrl\": \"https://spoonjoy.app/photos/spoons/cover-raw.jpg\",\n        \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n      }\n    ],\n    \"activeCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"spoon\",\n      \"imageUrl\": \"https://spoonjoy.app/photos/spoons/cover-raw.jpg\",\n      \"stylizedImageUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"displayUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": \"spoon_1\",\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"https://spoonjoy.app/photos/spoons/cover-raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"spoonImages\": [\n      {\n        \"id\": \"spoon_1\",\n        \"recipeId\": \"recipe_1\",\n        \"chefId\": \"chef_1\",\n        \"photoUrl\": \"https://spoonjoy.app/photos/spoons/cover-raw.jpg\",\n        \"cookedAt\": \"2026-06-01T00:00:00.000Z\",\n        \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n        \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n        \"chef\": {\n          \"id\": \"chef_1\",\n          \"username\": \"ari\"\n        }\n      }\n    ],\n    \"pagination\": {\n      \"limit\": 20,\n      \"offset\": 0,\n      \"nextOffset\": null,\n      \"hasMore\": false\n    }\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"covers\": [\n      {\n        \"id\": \"cover_1\",\n        \"recipeId\": \"recipe_1\",\n        \"status\": \"ready\",\n        \"sourceType\": \"spoon\",\n        \"imageUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n        \"stylizedImageUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n        \"displayUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n        \"activeVariant\": \"stylized\",\n        \"provenanceLabel\": \"Editorialized chef photo\",\n        \"sourceSpoonId\": \"spoon_1\",\n        \"createdById\": \"chef_1\",\n        \"archivedAt\": null,\n        \"generationStatus\": \"succeeded\",\n        \"failureReason\": null,\n        \"sourceImageUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n        \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n      }\n    ],\n    \"activeCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"spoon\",\n      \"imageUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"stylizedImageUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"displayUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": \"spoon_1\",\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"spoonImages\": [\n      {\n        \"id\": \"spoon_1\",\n        \"recipeId\": \"recipe_1\",\n        \"chefId\": \"chef_1\",\n        \"photoUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n        \"cookedAt\": \"2026-06-01T00:00:00.000Z\",\n        \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n        \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n        \"chef\": {\n          \"id\": \"chef_1\",\n          \"username\": \"ari\"\n        }\n      }\n    ],\n    \"pagination\": {\n      \"limit\": 20,\n      \"offset\": 0,\n      \"nextOffset\": null,\n      \"hasMore\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -1680,7 +2502,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"activeCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"spoon\",\n      \"imageUrl\": \"https://spoonjoy.app/photos/spoons/cover-raw.jpg\",\n      \"stylizedImageUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"displayUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": \"spoon_1\",\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"https://spoonjoy.app/photos/spoons/cover-raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"previousActiveCover\": null,\n    \"createdCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"spoon\",\n      \"imageUrl\": \"https://spoonjoy.app/photos/spoons/cover-raw.jpg\",\n      \"stylizedImageUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"displayUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": \"spoon_1\",\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"https://spoonjoy.app/photos/spoons/cover-raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"archivedCover\": null,\n    \"generationStatus\": \"processing\",\n    \"warnings\": [],\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"activeCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"spoon\",\n      \"imageUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"stylizedImageUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"displayUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": \"spoon_1\",\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"previousActiveCover\": null,\n    \"createdCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"spoon\",\n      \"imageUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"stylizedImageUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"displayUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": \"spoon_1\",\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"archivedCover\": null,\n    \"generationStatus\": \"processing\",\n    \"warnings\": [],\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -1885,7 +2707,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"activeCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"spoon\",\n      \"imageUrl\": \"https://spoonjoy.app/photos/spoons/cover-raw.jpg\",\n      \"stylizedImageUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"displayUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": \"spoon_1\",\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"https://spoonjoy.app/photos/spoons/cover-raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"previousActiveCover\": null,\n    \"createdCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"spoon\",\n      \"imageUrl\": \"https://spoonjoy.app/photos/spoons/cover-raw.jpg\",\n      \"stylizedImageUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"displayUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": \"spoon_1\",\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"https://spoonjoy.app/photos/spoons/cover-raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"archivedCover\": null,\n    \"generationStatus\": \"processing\",\n    \"warnings\": [],\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"activeCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"spoon\",\n      \"imageUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"stylizedImageUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"displayUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": \"spoon_1\",\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"previousActiveCover\": null,\n    \"createdCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"spoon\",\n      \"imageUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"stylizedImageUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"displayUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": \"spoon_1\",\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"archivedCover\": null,\n    \"generationStatus\": \"processing\",\n    \"warnings\": [],\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -2090,7 +2912,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"activeCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"spoon\",\n      \"imageUrl\": \"https://spoonjoy.app/photos/spoons/cover-raw.jpg\",\n      \"stylizedImageUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"displayUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": \"spoon_1\",\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"https://spoonjoy.app/photos/spoons/cover-raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"previousActiveCover\": null,\n    \"createdCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"spoon\",\n      \"imageUrl\": \"https://spoonjoy.app/photos/spoons/cover-raw.jpg\",\n      \"stylizedImageUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"displayUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": \"spoon_1\",\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"https://spoonjoy.app/photos/spoons/cover-raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"archivedCover\": null,\n    \"generationStatus\": \"processing\",\n    \"warnings\": [],\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"activeCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"spoon\",\n      \"imageUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"stylizedImageUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"displayUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": \"spoon_1\",\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"previousActiveCover\": null,\n    \"createdCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"spoon\",\n      \"imageUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"stylizedImageUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"displayUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": \"spoon_1\",\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"archivedCover\": null,\n    \"generationStatus\": \"processing\",\n    \"warnings\": [],\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -2283,7 +3105,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"activeCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"spoon\",\n      \"imageUrl\": \"https://spoonjoy.app/photos/spoons/cover-raw.jpg\",\n      \"stylizedImageUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"displayUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": \"spoon_1\",\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"https://spoonjoy.app/photos/spoons/cover-raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"previousActiveCover\": null,\n    \"createdCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"spoon\",\n      \"imageUrl\": \"https://spoonjoy.app/photos/spoons/cover-raw.jpg\",\n      \"stylizedImageUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"displayUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": \"spoon_1\",\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"https://spoonjoy.app/photos/spoons/cover-raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"archivedCover\": null,\n    \"generationStatus\": \"processing\",\n    \"warnings\": [],\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"activeCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"spoon\",\n      \"imageUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"stylizedImageUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"displayUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": \"spoon_1\",\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"previousActiveCover\": null,\n    \"createdCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"spoon\",\n      \"imageUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"stylizedImageUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"displayUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": \"spoon_1\",\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"archivedCover\": null,\n    \"generationStatus\": \"processing\",\n    \"warnings\": [],\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -2488,7 +3310,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "201",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"activeCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"spoon\",\n      \"imageUrl\": \"https://spoonjoy.app/photos/spoons/cover-raw.jpg\",\n      \"stylizedImageUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"displayUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": \"spoon_1\",\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"https://spoonjoy.app/photos/spoons/cover-raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"previousActiveCover\": null,\n    \"createdCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"spoon\",\n      \"imageUrl\": \"https://spoonjoy.app/photos/spoons/cover-raw.jpg\",\n      \"stylizedImageUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"displayUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": \"spoon_1\",\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"https://spoonjoy.app/photos/spoons/cover-raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"archivedCover\": null,\n    \"generationStatus\": \"processing\",\n    \"warnings\": [],\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"activeCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"spoon\",\n      \"imageUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"stylizedImageUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"displayUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": \"spoon_1\",\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"previousActiveCover\": null,\n    \"createdCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"spoon\",\n      \"imageUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"stylizedImageUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"displayUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorialized chef photo\",\n      \"sourceSpoonId\": \"spoon_1\",\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"archivedCover\": null,\n    \"generationStatus\": \"processing\",\n    \"warnings\": [],\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
