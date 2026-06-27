@@ -172,6 +172,7 @@ function operationKind(path: string, method: string) {
   if (path === "/oauth/authorize") return "redirect";
   if ((path === "/api/v1/tokens" || path === "/oauth/token" || path === "/api/tools/poll_agent_connection") && method === "post") return "token";
   if (method === "get") return "read";
+  if (path === "/api/v1/shopping-list/clear-completed" || path === "/api/v1/shopping-list/clear-all") return "destructive";
   if (method === "delete") return "destructive";
   return "write";
 }
@@ -179,6 +180,7 @@ function operationKind(path: string, method: string) {
 function operationRisk(path: string, method: string) {
   if ((path === "/api/v1/tokens" || path === "/oauth/token" || path === "/api/tools/start_agent_connection" || path === "/api/tools/poll_agent_connection") && method === "post") return "secret";
   if (path === "/oauth/authorize") return "mutating";
+  if (path === "/api/v1/shopping-list/clear-completed" || path === "/api/v1/shopping-list/clear-all") return "destructive";
   if (method === "delete") return "destructive";
   if (method === "post" || method === "patch") return "mutating";
   return "safe";
@@ -215,7 +217,7 @@ function operationGuide(path: string, method: string, operation: OpenApiOperatio
   if (path === "/api/v1/shopping-list" && method === "get") {
     return "Returns the unpaginated active shopping list. Tiny devices should prefer /api/v1/shopping-list/sync?limit=N and persist nextCursor after applying each page.";
   }
-  if (path.includes("/shopping-list/items") && method !== "get") {
+  if (path.startsWith("/api/v1/shopping-list/") && method !== "get") {
     return "Mutates the signed-in chef's shopping list. Reuse the same clientMutationId when retrying the same request after a timeout.";
   }
   if (operation["x-auth"] === "bearer") {

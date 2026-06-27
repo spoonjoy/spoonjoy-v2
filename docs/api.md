@@ -19,7 +19,7 @@ Spoonjoy's public developer surface starts at `/api`, with compatibility aliases
 Available now:
 
 - Public recipe and cookbook reads
-- Owner-scoped shopping-list read, sync, add, check, and remove
+- Owner-scoped shopping-list read, sync, add, recipe-add, check, clear, and remove
 - Session-created and bearer-created API tokens
 - OAuth/PKCE delegated access
 - Delegated agent/device approval links
@@ -34,7 +34,7 @@ Not in API v1 yet:
 - Full account export APIs
 - Canonical unit registry or density-based ingredient conversion
 - webhooks, REST Hooks, SSE, and event subscriptions
-- Bulk shopping-list import or batch mutation endpoints
+- Arbitrary bulk shopping-list import or batch mutation endpoints
 - Corporate tenant, admin, employee, or org-export APIs
 
 If something is not in API v1 yet, treat it as future API surface rather than a hidden endpoint. New external clients should use `/api/v1`, `/api`, `/api/playground`, and the OpenAPI document; legacy app-only `/api/*` routes are not the external contract and reject OAuth access tokens that are audience-bound to `/mcp`.
@@ -428,6 +428,9 @@ API v1 is rate limited by IP and credential before authentication work. Anonymou
 | `POST` | `/api/v1/shopping-list/items` | Authenticated chef | `shopping_list:write` |
 | `PATCH` | `/api/v1/shopping-list/items/{itemId}` | Authenticated chef | `shopping_list:write` |
 | `DELETE` | `/api/v1/shopping-list/items/{itemId}` | Authenticated chef | `shopping_list:write` |
+| `POST` | `/api/v1/shopping-list/add-from-recipe` | Authenticated chef | `shopping_list:write` |
+| `POST` | `/api/v1/shopping-list/clear-completed` | Authenticated chef | `shopping_list:write` |
+| `POST` | `/api/v1/shopping-list/clear-all` | Authenticated chef | `shopping_list:write` |
 | `GET` | `/api/v1/tokens` | Authenticated chef | `tokens:read` |
 | `POST` | `/api/v1/tokens` | Authenticated chef | `tokens:write` |
 | `DELETE` | `/api/v1/tokens/{credentialId}` | Authenticated chef | `tokens:write` |
@@ -440,7 +443,7 @@ Store the returned `nextCursor` for a page only after applying every item in tha
 
 Idempotent shopping-list mutations use `clientMutationId`. The idempotency key is scoped to the chef, retained for 24 hours, and bound to method, path, and a canonicalized parsed JSON body. Persist the same request values for each mutation id before sending it; whitespace and object key order are ignored, while changed method, path, or body values return a conflict. A write retried after an OAuth access-token refresh still replays instead of duplicating because both credentials resolve to the same chef. Reusing the same mutation id with the same completed request body returns the recorded response with `mutation.replayed: true`; a concurrent retry can return `409 idempotency_in_progress` with `Retry-After: 2` and `error.details.retryAfterSeconds`. Wait at least that long, then retry the same request. Reusing a mutation id with a different method, path, or body returns `409 idempotency_conflict`.
 
-Mutation responses return the changed item and mutation metadata, not the entire shopping list. Fetch `/api/v1/shopping-list` or `/api/v1/shopping-list/sync` when you need the current list view.
+Mutation responses return the changed item or changed items plus mutation metadata, not the entire shopping list. Fetch `/api/v1/shopping-list` or `/api/v1/shopping-list/sync` when you need the current list view.
 
 Retry network timeouts, `429`, and `5xx` responses with the same mutation id. Refresh or reconnect on `401`. Do not retry validation, scope, or idempotency-conflict errors unchanged.
 
@@ -455,6 +458,21 @@ curl -fsS -X POST 'https://spoonjoy.app/api/v1/shopping-list/items' \
   -H 'Authorization: Bearer sj_...' \
   -H 'Content-Type: application/json' \
   -d '{"clientMutationId":"device-uuid-1","name":"Eggs","quantity":12,"unit":"Each"}'
+
+curl -fsS -X POST 'https://spoonjoy.app/api/v1/shopping-list/add-from-recipe' \
+  -H 'Authorization: Bearer sj_...' \
+  -H 'Content-Type: application/json' \
+  -d '{"clientMutationId":"recipe-add:recipe_1:1","recipeId":"recipe_1","scaleFactor":1}'
+
+curl -fsS -X POST 'https://spoonjoy.app/api/v1/shopping-list/clear-completed' \
+  -H 'Authorization: Bearer sj_...' \
+  -H 'Content-Type: application/json' \
+  -d '{"clientMutationId":"clear-completed:2026-06-01"}'
+
+curl -fsS -X POST 'https://spoonjoy.app/api/v1/shopping-list/clear-all' \
+  -H 'Authorization: Bearer sj_...' \
+  -H 'Content-Type: application/json' \
+  -d '{"clientMutationId":"clear-all:2026-06-01"}'
 ```
 
 ## External Client Guide
@@ -619,7 +637,7 @@ await fetch("https://spoonjoy.app/api/v1/shopping-list/items", {
 });
 ```
 
-There is no batch import endpoint in v1. Post one ingredient per scraped row. Spoonjoy normalizes names and units to the existing ingredient/unit references, restores matching deleted items, and adds quantity to an existing matching item instead of creating a duplicate. Preserve unknown quantity/unit strings in your own UI when Spoonjoy cannot represent them as positive numeric `quantity` plus display `unit`.
+There is no arbitrary batch import endpoint in v1. Post one ingredient per scraped row, or use `/api/v1/shopping-list/add-from-recipe` when the source is an existing Spoonjoy recipe. Spoonjoy normalizes names and units to the existing ingredient/unit references, restores matching deleted items, and adds quantity to an existing matching item instead of creating a duplicate. Preserve unknown quantity/unit strings in your own UI when Spoonjoy cannot represent them as positive numeric `quantity` plus display `unit`.
 
 ### Cron shopping-list export/import
 

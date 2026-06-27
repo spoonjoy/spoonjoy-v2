@@ -27,6 +27,9 @@ const OPERATION_SCOPES = {
   "POST /api/v1/shopping-list/items": ["shopping_list:write"],
   "PATCH /api/v1/shopping-list/items/{itemId}": ["shopping_list:write"],
   "DELETE /api/v1/shopping-list/items/{itemId}": ["shopping_list:write"],
+  "POST /api/v1/shopping-list/add-from-recipe": ["shopping_list:write"],
+  "POST /api/v1/shopping-list/clear-completed": ["shopping_list:write"],
+  "POST /api/v1/shopping-list/clear-all": ["shopping_list:write"],
   "GET /api/v1/tokens": ["tokens:read"],
   "POST /api/v1/tokens": ["tokens:write"],
   "DELETE /api/v1/tokens/{credentialId}": ["tokens:write"],
@@ -261,6 +264,16 @@ describe("API v1 OpenAPI document", () => {
       updated: false,
       mutation: { clientMutationId: "device-uuid-1", replayed: false },
     });
+    expect(responseExample(document, "/api/v1/shopping-list/add-from-recipe", "POST", "200").data).toMatchObject({
+      recipe: { id: "recipe_1", title: "Pasta" },
+      created: 1,
+      updated: 0,
+      mutation: { clientMutationId: "device-uuid-4", replayed: false },
+    });
+    expect(responseExample(document, "/api/v1/shopping-list/clear-all", "POST", "200").data).toMatchObject({
+      removed: 1,
+      mutation: { clientMutationId: "device-uuid-5", replayed: false },
+    });
     expect(errorExample(document, "/api/v1/health", "GET", "401", "invalid_token").error.code).toBe("invalid_token");
     expect(errorExample(document, "/api/v1/shopping-list", "GET", "401", "authentication_required").error.code).toBe("authentication_required");
     expect(errorExample(document, "/api/v1/shopping-list/items", "POST", "409", "idempotency_conflict").error.code).toBe("idempotency_conflict");
@@ -279,6 +292,14 @@ describe("API v1 OpenAPI document", () => {
         categoryKey: null,
         iconKey: null,
       });
+    expect(operation(document, "/api/v1/shopping-list/add-from-recipe", "POST").requestBody.content["application/json"].examples.example.value)
+      .toEqual({ clientMutationId: "device-uuid-4", recipeId: "recipe_1", scaleFactor: 1 });
+    expect(operation(document, "/api/v1/shopping-list/clear-completed", "POST").requestBody.content["application/json"].examples.example.value)
+      .toEqual({ clientMutationId: "device-uuid-clear-completed" });
+    expect(operation(document, "/api/v1/shopping-list/clear-all", "POST").requestBody.content["application/json"].examples.example.value)
+      .toEqual({ clientMutationId: "device-uuid-clear-all" });
+    expect(operation(document, "/api/v1/shopping-list/clear-completed", "POST").requestBody.content["application/json"].examples.example.value)
+      .not.toEqual(operation(document, "/api/v1/shopping-list/clear-all", "POST").requestBody.content["application/json"].examples.example.value);
 
     const authorizeParams = operation(document, "/oauth/authorize", "GET").parameters;
     expect(authorizeParams).toEqual(expect.arrayContaining([
@@ -362,6 +383,10 @@ describe("API v1 OpenAPI document", () => {
       .toBe("#/components/schemas/CreateShoppingItemRequest");
     expect(operation(document, "/api/v1/shopping-list/items/{itemId}", "PATCH").requestBody.content["application/json"].schema.$ref)
       .toBe("#/components/schemas/CheckShoppingItemRequest");
+    expect(operation(document, "/api/v1/shopping-list/add-from-recipe", "POST").requestBody.content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/AddRecipeIngredientsToShoppingListRequest");
+    expect(operation(document, "/api/v1/shopping-list/clear-all", "POST").requestBody.content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/ClearShoppingListRequest");
     expect(operation(document, "/api/v1/shopping-list/items/{itemId}", "DELETE").requestBody).toBeUndefined();
     expect(operation(document, "/api/v1/shopping-list/items/{itemId}", "DELETE").parameters).toEqual(expect.arrayContaining([
       expect.objectContaining({ name: "itemId", in: "path", required: true }),
@@ -378,6 +403,17 @@ describe("API v1 OpenAPI document", () => {
       inProgressRetryAfterSeconds: 2,
       retryBodyRule: expect.stringContaining("canonicalizes object key order"),
     });
+    expect(operation(document, "/api/v1/shopping-list/add-from-recipe", "POST")["x-idempotency"]).toMatchObject({
+      key: "clientMutationId",
+      retentionHours: 24,
+      replayStatus: [200],
+      retryBodyRule: expect.stringContaining("canonicalizes object key order"),
+    });
+    expect(operation(document, "/api/v1/shopping-list/clear-completed", "POST")["x-idempotency"]).toMatchObject({
+      key: "clientMutationId",
+      retentionHours: 24,
+      replayStatus: [200],
+    });
     expect(operation(document, "/api/v1/tokens", "POST")["x-personal-token-only"]).toBe(true);
 
     expect(operation(document, "/api/v1/shopping-list/items", "POST").responses).toMatchObject({
@@ -391,6 +427,8 @@ describe("API v1 OpenAPI document", () => {
     expect(operation(document, "/api/v1/shopping-list/items/{itemId}", "PATCH").responses["404"].content["application/json"].schema.$ref)
       .toBe("#/components/schemas/ErrorEnvelope");
     expect(operation(document, "/api/v1/shopping-list/items/{itemId}", "DELETE").responses["404"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/ErrorEnvelope");
+    expect(operation(document, "/api/v1/shopping-list/add-from-recipe", "POST").responses["404"].content["application/json"].schema.$ref)
       .toBe("#/components/schemas/ErrorEnvelope");
   });
 
@@ -486,6 +524,18 @@ describe("API v1 OpenAPI document", () => {
     expect(components.schemas.CreateShoppingItemData.required).toEqual(["created", "updated", "item", "mutation"]);
     expect(components.schemas.UpdateShoppingItemData.required).toEqual(["item", "mutation"]);
     expect(components.schemas.DeleteShoppingItemData.required).toEqual(["removed", "item", "mutation"]);
+    expect(components.schemas.AddRecipeIngredientsToShoppingListRequest).toMatchObject({
+      additionalProperties: false,
+      required: ["clientMutationId", "recipeId"],
+      properties: {
+        clientMutationId: { type: "string", minLength: 1, maxLength: 160 },
+        recipeId: { type: "string", minLength: 1 },
+        scaleFactor: { type: "number", exclusiveMinimum: 0, default: 1 },
+      },
+    });
+    expect(components.schemas.ClearShoppingListRequest.required).toEqual(["clientMutationId"]);
+    expect(components.schemas.AddRecipeIngredientsToShoppingListData.required).toEqual(["recipe", "created", "updated", "items", "mutation"]);
+    expect(components.schemas.ClearShoppingItemsData.required).toEqual(["removed", "items", "mutation"]);
   });
 
   it("publishes an OpenAPI 3.0 REST-only connector profile for no-code importers", () => {
@@ -499,6 +549,9 @@ describe("API v1 OpenAPI document", () => {
       "/api/v1/recipes",
       "/api/v1/recipes/{id}",
       "/api/v1/shopping-list",
+      "/api/v1/shopping-list/add-from-recipe",
+      "/api/v1/shopping-list/clear-all",
+      "/api/v1/shopping-list/clear-completed",
       "/api/v1/shopping-list/items",
       "/api/v1/shopping-list/items/{itemId}",
       "/api/v1/shopping-list/sync",
@@ -531,6 +584,14 @@ describe("API v1 OpenAPI document", () => {
       nullable: true,
     });
     expect(connector.paths["/api/v1/shopping-list/items/{itemId}"].delete.requestBody).toBeUndefined();
+    expect(connector.paths["/api/v1/shopping-list/add-from-recipe"].post).toMatchObject({
+      "x-connector-role": "action",
+      "x-display-name": "Add recipe ingredients to shopping list",
+    });
+    expect(connector.paths["/api/v1/shopping-list/clear-all"].post).toMatchObject({
+      "x-connector-role": "action",
+      "x-display-name": "Clear all shopping-list items",
+    });
     expect(JSON.stringify(connector)).not.toContain('"$ref":"#/components/schemas/SourceRecipeAttribution","nullable":true');
   });
 

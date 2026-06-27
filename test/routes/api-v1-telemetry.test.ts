@@ -751,6 +751,51 @@ describe("API v1 mutation and validation telemetry", () => {
       forbidden: ["raw-invalid-json-id", "Raw Bad JSON", malformed.bodyText],
     });
 
+    const bulkValidationCases = [
+      {
+        path: "shopping-list/add-from-recipe",
+        routeTemplate: "/api/v1/shopping-list/add-from-recipe",
+        requestId: "req_validation_add_recipe",
+        operation: "shopping-list.add-from-recipe",
+        body: { clientMutationId: "raw-add-recipe-id", recipeId: "" },
+        forbidden: ["raw-add-recipe-id"],
+      },
+      {
+        path: "shopping-list/clear-completed",
+        routeTemplate: "/api/v1/shopping-list/clear-completed",
+        requestId: "req_validation_clear_completed",
+        operation: "shopping-list.clear-completed",
+        body: { clientMutationId: "raw-clear-completed-id", unexpected: true },
+        forbidden: ["raw-clear-completed-id"],
+      },
+      {
+        path: "shopping-list/clear-all",
+        routeTemplate: "/api/v1/shopping-list/clear-all",
+        requestId: "req_validation_clear_all",
+        operation: "shopping-list.clear-all",
+        body: { clientMutationId: "raw-clear-all-id", unexpected: true },
+        forbidden: ["raw-clear-all-id"],
+      },
+    ] as const;
+
+    for (const testCase of bulkValidationCases) {
+      const invalid = apiJsonRequest("POST", testCase.path, testCase.requestId, auth, testCase.body);
+      const invalidResponse = await action(routeArgs(invalid.request, testCase.path).args);
+
+      expect(invalidResponse.status).toBe(400);
+      expectApiV1OperationEvent({
+        routeTemplate: testCase.routeTemplate,
+        requestId: testCase.requestId,
+        operation: testCase.operation,
+        status: 400,
+        authMode: "bearer",
+        requestBytes: invalid.bodyBytes,
+        errorCode: "validation_error",
+        idempotencyOutcome: "not_attempted",
+        forbidden: [...testCase.forbidden, invalid.bodyText],
+      });
+    }
+
     const missingId = `missing-${faker.string.alphanumeric(8)}`;
     const missingBody = { clientMutationId: "raw-missing-mutation-id", checked: true };
     const missing = apiJsonRequest(
