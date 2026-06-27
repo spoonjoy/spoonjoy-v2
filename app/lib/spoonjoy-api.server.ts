@@ -47,7 +47,10 @@ import {
 } from "~/lib/recipe-spoon.server";
 import { scheduleSpoonCoverStylization } from "~/lib/spoon-cover-stylization.server";
 import type { ImageGenRunner } from "~/lib/image-gen.server";
-import type { PostHogServerEnv } from "~/lib/analytics-server";
+import {
+  resolvePostHogServerConfig,
+  type PostHogServerEnv,
+} from "~/lib/analytics-server";
 import * as recipeImport from "~/lib/recipe-import.server";
 import {
   forkRecipe,
@@ -2757,11 +2760,16 @@ const addRecipeToCookbookTool: SpoonjoyApiOperation = {
     // recipe. Only on first add (idempotent re-adds set `added=false`).
     if (result.added) {
       try {
-        const vapid = getVapidConfig((context.env ?? {}) as VapidEnv);
+        const env = context.env ?? {};
+        const vapid = getVapidConfig(env as VapidEnv);
         const notifyTask = notifyCookbookSaveOfMine(
           context.db,
           { recipeId, actorId: result.ownerId },
-          { vapid, waitUntil: context.waitUntil },
+          {
+            vapid,
+            waitUntil: context.waitUntil,
+            postHogConfig: resolvePostHogServerConfig(env),
+          },
         );
         await runOrSchedule(context, notifyTask);
       } catch {
@@ -3035,11 +3043,16 @@ const createSpoonTool: SpoonjoyApiOperation = {
 
     // Notify the recipe owner when someone else cooks their recipe.
     try {
-      const vapid = getVapidConfig((context.env ?? {}) as VapidEnv);
+      const env = context.env ?? {};
+      const vapid = getVapidConfig(env as VapidEnv);
       const notifyTask = notifySpoonOnMyRecipe(
         context.db,
         { recipeId, spoonerId: principal.id },
-        { vapid, waitUntil: context.waitUntil },
+        {
+          vapid,
+          waitUntil: context.waitUntil,
+          postHogConfig: resolvePostHogServerConfig(env),
+        },
       );
       await runOrSchedule(context, notifyTask);
     } catch {
@@ -3077,7 +3090,8 @@ const createSpoonTool: SpoonjoyApiOperation = {
     // engaged with — runs only when the spoon was an origin cook.
     if (result.isOriginCook) {
       try {
-        const vapid = getVapidConfig((context.env ?? {}) as VapidEnv);
+        const env = context.env ?? {};
+        const vapid = getVapidConfig(env as VapidEnv);
         const recipeMeta = await context.db.recipe.findUniqueOrThrow({
           where: { id: recipeId },
           select: { id: true, title: true },
@@ -3090,7 +3104,11 @@ const createSpoonTool: SpoonjoyApiOperation = {
             recipeTitle: recipeMeta.title,
             spoonerUsername: principal.username,
           },
-          { vapid, waitUntil: context.waitUntil },
+          {
+            vapid,
+            waitUntil: context.waitUntil,
+            postHogConfig: resolvePostHogServerConfig(env),
+          },
         );
         await runOrSchedule(context, fanoutTask);
       } catch {
@@ -3420,7 +3438,8 @@ const forkRecipeTool: SpoonjoyApiOperation = {
 
       // Fire-and-forget: notify the source chef when someone else forked.
       try {
-        const vapid = getVapidConfig((context.env ?? {}) as VapidEnv);
+        const env = context.env ?? {};
+        const vapid = getVapidConfig(env as VapidEnv);
         const notifyTask = notifyForkOfMyRecipe(
           context.db,
           {
@@ -3430,7 +3449,11 @@ const forkRecipeTool: SpoonjoyApiOperation = {
             sourceChefId: result.attribution.sourceChef.id,
             appliedTitle: result.appliedTitle,
           },
-          { vapid, waitUntil: context.waitUntil },
+          {
+            vapid,
+            waitUntil: context.waitUntil,
+            postHogConfig: resolvePostHogServerConfig(env),
+          },
         );
         await runOrSchedule(context, notifyTask);
       } catch {
