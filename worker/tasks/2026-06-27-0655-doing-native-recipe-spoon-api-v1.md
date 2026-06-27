@@ -61,11 +61,11 @@ Add first-class API v1 REST endpoints for recipe spoons so the native Apple app 
 **What**: Add failing route/openapi/docs tests covering anonymous/authenticated spoon listing, cursor validation, create/update/delete auth/idempotency/ownership, cover activation, contract resources, and playground generation.
 **Acceptance**: New tests fail because `/api/v1/recipes/{id}/spoons` and `/api/v1/recipes/{id}/spoons/{spoonId}` are not implemented or documented yet.
 
-### ⬜ Unit 1b: API V1 Spoon Endpoints — Implementation
+### ✅ Unit 1b: API V1 Spoon Endpoints — Implementation
 **What**: Implement the spoon route handlers, payload formatter, spoon cursor parser, date/body validators, error mapping, contract/scope entries, telemetry/idempotency operation metadata, and OpenAPI schema/path metadata.
 **Acceptance**: Unit 1a tests pass; implementation reuses `createSpoon`, `updateSpoon`, `deleteSpoon`, `decideSpoonCoverCreation`, `activateSpoonCoverForDecision`, `createCover`, and cover stylization queueing.
 
-### ⬜ Unit 1c: API V1 Spoon Endpoints — Coverage & Docs
+### ❌ Unit 1c: API V1 Spoon Endpoints — Coverage & Docs
 **What**: Update `docs/api.md`, regenerate `app/lib/generated/api-v1-playground.ts`, run targeted tests, run typecheck/build, and run coverage gates for the touched API surface.
 **Acceptance**: Coverage is 100% on new code, all selected and full required tests pass with no warnings, and generated files are in sync.
 
@@ -83,3 +83,5 @@ Add first-class API v1 REST endpoints for recipe spoons so the native Apple app 
 - 2026-06-27 14:04 Doing-doc review converged; execution started
 - 2026-06-27 14:04 Unit 0 complete: verified worktree, branch, source files, route patterns, spoon services, cover decision helpers, OpenAPI/docs/playground generation, and test conventions
 - 2026-06-27 07:12 Unit 1a complete: added route, scope, OpenAPI, and docs-marker coverage for API v1 recipe spoon endpoints. Red check: `pnpm exec vitest run test/routes/api-v1-recipe-spoons.test.ts` fails 5/5 because the new spoon routes still return 404.
+- 2026-06-27 07:36 Unit 1b complete: implemented GET/POST/PATCH/DELETE API v1 recipe spoon endpoints with optional public read auth, `kitchen:write` mutations, cursor pagination, idempotency, path recipe validation, spoon domain service reuse, spoon-photo cover activation, telemetry operation names, contract/scope/OpenAPI metadata, docs, and generated playground updates.
+- 2026-06-27 07:36 Unit 1c blocked only on broad-suite verification: focused API/docs/developer/telemetry tests pass 87/87; `pnpm run typecheck` passes; `pnpm run build` passes. `pnpm run test:coverage` was attempted twice and failed in unrelated existing suites plus Istanbul `coverage/.tmp/*.json` ENOENT after failures. Individual failed files passed when isolated under coverage, and a broad non-coverage run also showed unrelated order/shared-db failures in existing recipe route tests before being stopped.

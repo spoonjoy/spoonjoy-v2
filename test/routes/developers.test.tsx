@@ -205,6 +205,7 @@ describe("/developers route", () => {
     expect(screen.getByText(/API v1 REST response shape/i)).toBeInTheDocument();
     expect(screen.getByText(/Protocol exceptions/i)).toBeInTheDocument();
     expect(screen.getByText(/Idempotent owner mutations/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Recipe spoon endpoints" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Manage owner recipe covers" })).toBeInTheDocument();
     expect(screen.getAllByText(/recipe-cover management/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/cursor sync/i)).toBeInTheDocument();
@@ -216,7 +217,7 @@ describe("/developers route", () => {
     expect(screen.getByRole("link", { name: /Connector Spec/i })).toHaveAttribute("href", "/api/v1/openapi.connector.json");
 
     for (const resource of API_V1_RESOURCES) {
-      expect(screen.getByText(resource.path)).toBeInTheDocument();
+      expect(screen.getAllByText(resource.path).length).toBeGreaterThan(0);
     }
 
     for (const scope of data.scopes) {

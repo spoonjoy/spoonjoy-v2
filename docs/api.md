@@ -19,6 +19,7 @@ Spoonjoy's public developer surface starts at `/api`, with compatibility aliases
 Available now:
 
 - Public recipe and cookbook reads
+- Public recipe spoon history plus authenticated recipe spoon create, update, and delete
 - Owner-scoped recipe cover candidate management for the authenticated chef's recipes
 - Owner-scoped shopping-list read, sync, add, recipe-add, check, clear, and remove
 - Session-created and bearer-created API tokens
@@ -46,7 +47,7 @@ Generated SDKs should use `/api/v1/openapi.sdk.json`; it keeps REST v1 resources
 
 | Surface | Build with it | Current boundary |
 | --- | --- | --- |
-| REST API v1 | Public catalog clients, shopping-list sync, native recipe-cover management, bearer-token scripts, generated SDKs | No general recipe create/edit/import/export or private library endpoints yet. |
+| REST API v1 | Public catalog clients, shopping-list sync, native recipe spoon and recipe-cover management, bearer-token scripts, generated SDKs | No general recipe create/edit/import/export or private library endpoints yet. |
 | No-code connector profile | Zapier/Make/n8n-style searches, actions, and polling triggers | No webhooks, REST Hooks, SSE, event subscriptions, or DELETE request bodies. |
 | OAuth/PKCE | Third-party mobile, SaaS, extension, and connector account linking | Public clients only; no client secret, password grant, token-management scopes, or custom schemes. |
 | Delegated approval | CLIs, appliances, voice clients, and agents without a callback URL | Custom Spoonjoy approval flow, not OAuth Device Authorization Grant. |
@@ -423,6 +424,10 @@ API v1 is rate limited by IP and credential before authentication work. Anonymou
 | `GET` | `/api/v1/openapi.connector.json` | Optional | none |
 | `GET` | `/api/v1/recipes` | Optional | `recipes:read` when authenticated |
 | `GET` | `/api/v1/recipes/{id}` | Optional | `recipes:read` when authenticated |
+| `GET` | `/api/v1/recipes/{id}/spoons` | Optional | `recipes:read` when authenticated |
+| `POST` | `/api/v1/recipes/{id}/spoons` | Authenticated chef | `kitchen:write` |
+| `PATCH` | `/api/v1/recipes/{id}/spoons/{spoonId}` | Authenticated chef | `kitchen:write` |
+| `DELETE` | `/api/v1/recipes/{id}/spoons/{spoonId}` | Authenticated chef | `kitchen:write` |
 | `GET` | `/api/v1/recipes/{id}/covers` | Authenticated chef | `kitchen:write` |
 | `PATCH` | `/api/v1/recipes/{id}/covers` | Authenticated chef | `kitchen:write` |
 | `PATCH` | `/api/v1/recipes/{id}/covers/{coverId}` | Authenticated chef | `kitchen:write` |
@@ -461,6 +466,10 @@ Public catalog cursors page by `createdAt` plus `id` for deterministic catalog w
 
 Recipe ingredient quantities, units, servings, temperatures, and timers are original author data in API v1. Units are free-form display strings, not a canonical conversion model. API v1 does not expose a `/api/v1/units` registry, density tables, structured yields, locale-aware unit names, or volume-to-mass conversion rules; clients that convert measurements must treat unsupported ingredients or units as non-convertible and preserve the original text.
 
+Recipe spoon endpoints expose first-class cook-event history for native clients. `GET /api/v1/recipes/{id}/spoons` is a public, auth-optional recipe read: anonymous callers can read recent non-deleted spoons, and authenticated callers must have `recipes:read` or `public:read`. Responses page by opaque `cursor` plus `limit`, ordered by `cookedAt` descending and `id` descending, and include native-friendly spoon fields: `id`, `chefId`, `recipeId`, `cookedAt`, `photoUrl`, `note`, `nextTime`, `deletedAt`, `createdAt`, `updatedAt`, and `chef`.
+
+Recipe spoon mutations require `kitchen:write` and are idempotent with `clientMutationId`. `POST /api/v1/recipes/{id}/spoons` creates a cook event from `note`, `nextTime`, `cookedAt`, `photoUrl`, and `useAsRecipeCover`; it reuses Spoonjoy's web spoon creation rules and can create or activate a recipe cover from a spoon photo when the existing cover-decision logic allows it. `PATCH /api/v1/recipes/{id}/spoons/{spoonId}` updates owned spoon fields through the same owner-only domain service as the web product. `DELETE /api/v1/recipes/{id}/spoons/{spoonId}` soft-deletes an owned spoon and accepts the mutation id in the JSON body, query string, or `X-Client-Mutation-Id` header. Path recipe ids are validated so a spoon cannot be mutated through a different recipe URL.
+
 Recipe cover management endpoints are owner-scoped native app surface, not public catalog writes. They require the authenticated chef to own the recipe and to have `kitchen:write`. `GET /api/v1/recipes/{id}/covers` returns cover candidates, the current `activeCover`, spoon photo sources in `spoonImages`, and offset pagination. Pass `includeArchived=true` only for management UIs that need archived candidates.
 
 Recipe-cover mutations are idempotent with `clientMutationId` and return `activeCover`, `previousActiveCover`, optional `createdCover` or `archivedCover`, optional `generationStatus`, warnings, and replay metadata. `PATCH /api/v1/recipes/{id}/covers` sets an explicit no-cover state and requires `confirmNoCover: true`. `PATCH /api/v1/recipes/{id}/covers/{coverId}` activates an existing candidate variant. `DELETE /api/v1/recipes/{id}/covers/{coverId}` archives a candidate and can either promote a replacement variant or confirm that the recipe should have no active cover. `POST /api/v1/recipes/{id}/covers/regenerate` schedules a new editorial image for an existing candidate. `POST /api/v1/recipes/{id}/covers/from-spoon/{spoonId}` creates a candidate from one of the recipe's spoon photos and can request editorial generation.
@@ -487,6 +496,21 @@ curl -fsS -X POST 'https://spoonjoy.app/api/v1/shopping-list/clear-all' \
   -H 'Authorization: Bearer sj_...' \
   -H 'Content-Type: application/json' \
   -d '{"clientMutationId":"clear-all:2026-06-01"}'
+
+curl -fsS 'https://spoonjoy.app/api/v1/recipes/recipe_1/spoons?limit=20'
+
+curl -fsS -X POST 'https://spoonjoy.app/api/v1/recipes/recipe_1/spoons' \
+  -H 'Authorization: Bearer sj_...' \
+  -H 'Content-Type: application/json' \
+  -d '{"clientMutationId":"spoon-create:recipe_1:2026-06-01","photoUrl":"/photos/spoons/raw.jpg","note":"Added more lemon","useAsRecipeCover":true}'
+
+curl -fsS -X PATCH 'https://spoonjoy.app/api/v1/recipes/recipe_1/spoons/spoon_1' \
+  -H 'Authorization: Bearer sj_...' \
+  -H 'Content-Type: application/json' \
+  -d '{"clientMutationId":"spoon-update:spoon_1:1","nextTime":"Less salt"}'
+
+curl -fsS -X DELETE 'https://spoonjoy.app/api/v1/recipes/recipe_1/spoons/spoon_1?clientMutationId=spoon-delete%3Aspoon_1%3A1' \
+  -H 'Authorization: Bearer sj_...'
 
 curl -fsS 'https://spoonjoy.app/api/v1/recipes/recipe_1/covers' \
   -H 'Authorization: Bearer sj_...'

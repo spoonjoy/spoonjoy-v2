@@ -3,7 +3,9 @@ import { faker } from "@faker-js/faker";
 import { Request as UndiciRequest } from "undici";
 import { action, loader } from "~/routes/api.v1.$";
 import { createApiCredential } from "~/lib/api-auth.server";
+import { mapSpoonDomainErrorForApiV1 } from "~/lib/api-v1.server";
 import { getLocalDb } from "~/lib/db.server";
+import { SpoonAuthError, SpoonNotFoundError, SpoonValidationError } from "~/lib/recipe-spoon.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestRecipe, createTestUser } from "../utils";
 
@@ -76,6 +78,29 @@ async function createSpoonFixture(db: Awaited<ReturnType<typeof getLocalDb>>) {
     outsiderKitchenWrite,
   };
 }
+
+describe("API v1 recipe spoon domain error mapping", () => {
+  it("maps spoon service errors to API v1 errors and rethrows unknown failures", () => {
+    expect(mapSpoonDomainErrorForApiV1(new SpoonValidationError("Bad spoon"))).toMatchObject({
+      code: "validation_error",
+      status: 400,
+      message: "Bad spoon",
+    });
+    expect(mapSpoonDomainErrorForApiV1(new SpoonAuthError("No spoon"), "spoon_1")).toMatchObject({
+      code: "insufficient_scope",
+      status: 403,
+      message: "No spoon",
+    });
+    expect(mapSpoonDomainErrorForApiV1(new SpoonNotFoundError("gone"), "spoon_2")).toMatchObject({
+      code: "not_found",
+      status: 404,
+      details: { resource: "recipe_spoon", spoonId: "spoon_2" },
+    });
+
+    const unknown = new Error("database exploded");
+    expect(() => mapSpoonDomainErrorForApiV1(unknown)).toThrow(unknown);
+  });
+});
 
 describe("API v1 recipe spoons", () => {
   let db: Awaited<ReturnType<typeof getLocalDb>>;
@@ -209,6 +234,24 @@ describe("API v1 recipe spoons", () => {
       requestId: "req_spoons_invalid_cursor",
       error: { code: "invalid_cursor", status: 400 },
     });
+
+    const wrongShapeCursor = `v1.${Buffer.from(JSON.stringify({ createdAt: "2026-01-02T00:00:00.000Z", id: tieLow.id }), "utf8").toString("base64url")}`;
+    const wrongShape = await loader(routeArgs(new UndiciRequest(`http://localhost/api/v1/recipes/${fixture.recipe.id}/spoons?cursor=${wrongShapeCursor}`, {
+      headers: { "X-Request-Id": "req_spoons_wrong_shape_cursor" },
+    }) as unknown as Request, `recipes/${fixture.recipe.id}/spoons`));
+    expect(wrongShape.status).toBe(400);
+    await expect(wrongShape.json()).resolves.toMatchObject({
+      ok: false,
+      requestId: "req_spoons_wrong_shape_cursor",
+      error: { code: "invalid_cursor", status: 400 },
+    });
+
+    const wrongMethod = await action(routeArgs(new UndiciRequest(`http://localhost/api/v1/recipes/${fixture.recipe.id}/spoons`, {
+      method: "PUT",
+      headers: { "X-Request-Id": "req_spoons_wrong_method" },
+    }) as unknown as Request, `recipes/${fixture.recipe.id}/spoons`));
+    expect(wrongMethod.status).toBe(405);
+    expect(wrongMethod.headers.get("Allow")).toBe("GET, POST");
 
     const missingRecipe = await loader(routeArgs(new UndiciRequest("http://localhost/api/v1/recipes/missing_recipe/spoons", {
       headers: { "X-Request-Id": "req_spoons_missing_recipe" },

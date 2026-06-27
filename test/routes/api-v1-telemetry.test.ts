@@ -698,6 +698,99 @@ describe("API v1 mutation and validation telemetry", () => {
     });
   });
 
+  it("captures recipe spoon operations without recipe ids, spoon ids, mutation ids, or body values", async () => {
+    const user = await db.user.create({ data: createTestUser() });
+    const credential = await createApiCredential(db, user.id, "Telemetry Spoon Writer", {
+      scopes: ["kitchen:write"],
+    });
+    const readCredential = await createApiCredential(db, user.id, "Telemetry Spoon Reader", {
+      scopes: ["recipes:read"],
+    });
+    const auth = { Authorization: `Bearer ${credential.token}` };
+    const recipe = await db.recipe.create({
+      data: {
+        ...createTestRecipe(user.id),
+        title: `Telemetry Spoon Recipe ${faker.string.alphanumeric(8)}`,
+      },
+    });
+    const spoon = await db.recipeSpoon.create({
+      data: {
+        chefId: user.id,
+        recipeId: recipe.id,
+        note: "Telemetry spoon private note",
+      },
+    });
+    const basePath = `recipes/${recipe.id}/spoons`;
+
+    const listRequest = apiRequest(`http://localhost/api/v1/${basePath}`, "req_spoon_operation_list", {
+      Authorization: `Bearer ${readCredential.token}`,
+      "User-Agent": "PostmanRuntime/7.39.0",
+    });
+    const listResponse = await loader(routeArgs(listRequest, basePath).args);
+    expect(listResponse.status).toBe(200);
+    expectApiV1OperationEvent({
+      routeTemplate: "/api/v1/recipes/{id}/spoons",
+      requestId: "req_spoon_operation_list",
+      operation: "recipes.spoons.list",
+      status: 200,
+      authMode: "bearer",
+      requestBytes: 0,
+      forbidden: [recipe.id, spoon.id, readCredential.token, readCredential.credential.tokenPrefix],
+    });
+
+    const create = apiJsonRequest("POST", basePath, "req_spoon_operation_create_invalid", auth, {
+      clientMutationId: "raw-spoon-create-id",
+      note: "Private create note",
+      cookedAt: "not-a-date",
+    });
+    const createResponse = await action(routeArgs(create.request, basePath).args);
+    expect(createResponse.status).toBe(400);
+    expectApiV1OperationEvent({
+      routeTemplate: "/api/v1/recipes/{id}/spoons",
+      requestId: "req_spoon_operation_create_invalid",
+      operation: "recipes.spoons.create",
+      status: 400,
+      authMode: "bearer",
+      requestBytes: create.bodyBytes,
+      errorCode: "validation_error",
+      idempotencyOutcome: "not_attempted",
+      forbidden: ["raw-spoon-create-id", "Private create note", create.bodyText, recipe.id],
+    });
+
+    const update = apiJsonRequest("PATCH", `${basePath}/${spoon.id}`, "req_spoon_operation_update_invalid", auth, {
+      clientMutationId: "raw-spoon-update-id",
+      cookedAt: "also-not-a-date",
+    });
+    const updateResponse = await action(routeArgs(update.request, `${basePath}/${spoon.id}`).args);
+    expect(updateResponse.status).toBe(400);
+    expectApiV1OperationEvent({
+      routeTemplate: "/api/v1/recipes/{id}/spoons/{spoonId}",
+      requestId: "req_spoon_operation_update_invalid",
+      operation: "recipes.spoons.update",
+      status: 400,
+      authMode: "bearer",
+      requestBytes: update.bodyBytes,
+      errorCode: "validation_error",
+      idempotencyOutcome: "not_attempted",
+      forbidden: ["raw-spoon-update-id", "also-not-a-date", update.bodyText, recipe.id, spoon.id],
+    });
+
+    const remove = apiJsonRequest("DELETE", `${basePath}/${spoon.id}`, "req_spoon_operation_delete_invalid", auth, {});
+    const removeResponse = await action(routeArgs(remove.request, `${basePath}/${spoon.id}`).args);
+    expect(removeResponse.status).toBe(400);
+    expectApiV1OperationEvent({
+      routeTemplate: "/api/v1/recipes/{id}/spoons/{spoonId}",
+      requestId: "req_spoon_operation_delete_invalid",
+      operation: "recipes.spoons.delete",
+      status: 400,
+      authMode: "bearer",
+      requestBytes: remove.bodyBytes,
+      errorCode: "validation_error",
+      idempotencyOutcome: "not_attempted",
+      forbidden: [remove.bodyText, recipe.id, spoon.id],
+    });
+  });
+
   it("captures token list, create, and revoke operations without credential names or secrets", async () => {
     const user = await db.user.create({ data: createTestUser() });
     const cookie = await sessionCookie(user.id);
