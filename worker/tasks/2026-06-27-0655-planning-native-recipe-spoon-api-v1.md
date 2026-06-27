@@ -55,6 +55,10 @@ Add first-class API v1 REST endpoints for recipe spoons so the native Apple app 
 - Keep spoon read public/auth-optional with `recipes:read` and `public:read` alternatives via the existing API v1 scope semantics.
 - Return public absolute spoon `photoUrl` values via the existing `publicAssetUrl` helper; data URLs remain hidden as `null`.
 - Use the existing idempotency table/helper for spoon mutations, extending its operation metadata beyond shopping-list and cover mutations.
+- Add spoon resources to `API_V1_RESOURCES` and `API_V1_SCOPE_REQUIREMENTS` before dispatcher wiring so authorization, discovery, OpenAPI, route matching, and method-allowed behavior all share one source of truth.
+- Add `recipes.spoons.*` operation names to `apiV1OperationFor()` and `defaultIdempotencyOutcome()` so telemetry and idempotency outcomes are not silently omitted.
+- Implement a spoon-specific opaque cursor over `cookedAt` and `id`; do not reuse recipe/cookbook `createdAt` cursors or the existing offset-only `listSpoonsForRecipe()` API.
+- Keep `useAsRecipeCover` out of `CreateSpoonInput`; parse it in the REST handler, call `createSpoon`, then pass the created spoon/result into `decideSpoonCoverCreation()` and `activateSpoonCoverForDecision()` when the spoon has a photo.
 
 ## Context / References
 - `app/lib/api-v1.server.ts` centralizes API v1 routing, auth, idempotency, response envelopes, telemetry, and recipe cover handlers.
@@ -68,7 +72,11 @@ Add first-class API v1 REST endpoints for recipe spoons so the native Apple app 
 - `docs/api.md` documents API v1 resources, scopes, sync/mutation semantics, and examples.
 
 ## Notes
-Implementation should prefer small local helpers in `api-v1.server.ts` for spoon cursor parsing, date parsing, spoon payload formatting, and spoon error normalization. Generated playground should be refreshed by `pnpm run api:playground:generate`.
+Implementation should prefer small local helpers in `api-v1.server.ts` for spoon cursor parsing, date parsing, spoon payload formatting, spoon recipe/path validation, and spoon error normalization. Generated playground should be refreshed by `pnpm run api:playground:generate`.
+
+Reviewer gate notes:
+- Round 1 findings addressed here: make contract/scope updates, telemetry/idempotency operation metadata, spoon-specific cursor parsing, and post-`createSpoon` cover decision flow explicit implementation requirements.
 
 ## Progress Log
 - 2026-06-27 13:55 Created
+- 2026-06-27 13:57 Addressed reviewer findings on contract, telemetry, idempotency, cursor, and cover-decision prerequisites
