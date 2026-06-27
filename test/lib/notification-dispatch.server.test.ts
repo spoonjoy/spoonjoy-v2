@@ -1,9 +1,10 @@
-import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
 import { getLocalDb } from "~/lib/db.server";
 import {
   enqueueNotification,
   type NotificationDispatchDeps,
 } from "~/lib/notification-dispatch.server";
+import type { PostHogServerConfig } from "~/lib/analytics-server";
 import { createTestUser } from "../utils";
 
 const VAPID = {
@@ -11,6 +12,26 @@ const VAPID = {
   privateKey: "test-priv",
   subject: "mailto:test@example.com",
 };
+
+const POSTHOG_ENABLED: PostHogServerConfig = {
+  enabled: true,
+  key: "ph_test",
+  host: "https://posthog.example",
+};
+
+/** A fetch spy that stands in for the PostHog ingestion endpoint. */
+function postHogFetchSpy() {
+  return vi.fn(async () => new Response("{}", { status: 200 })) as unknown as typeof fetch;
+}
+
+/** Decode the JSON bodies the capture helpers POSTed to PostHog. */
+function postHogBodies(
+  fetchImpl: typeof fetch,
+): Array<{ event: string; distinct_id: string; properties: Record<string, unknown> }> {
+  return (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls.map(([, init]) =>
+    JSON.parse((init as RequestInit).body as string),
+  );
+}
 
 const VALID_KEYS = {
   p256dh:
@@ -627,5 +648,400 @@ describe("enqueueNotification", () => {
       d,
     );
     expect(fellow.queuedSends).toBe(1);
+  });
+});
+
+describe("enqueueNotification — telemetry capture", () => {
+  let origFetch: typeof globalThis.fetch;
+  let phFetch: ReturnType<typeof postHogFetchSpy>;
+
+  beforeEach(() => {
+    origFetch = globalThis.fetch;
+    phFetch = postHogFetchSpy();
+    globalThis.fetch = phFetch;
+  });
+  afterEach(() => {
+    globalThis.fetch = origFetch;
+  });
+
+  it("captures a push 'failed' result with httpStatus 0 as failureMode=no_response (VAPID/network)", async () => {
+    const db = await getLocalDb();
+    const actor = await createUser();
+    const recipient = await createUser();
+    await createSubscription(recipient.id, "fail0");
+
+    const tasks: Promise<unknown>[] = [];
+    await enqueueNotification(
+      db,
+      { actorId: actor.id, recipientId: recipient.id, kind: "spoon_on_my_recipe", payload: {} },
+      {
+        vapid: VAPID,
+        postHogConfig: POSTHOG_ENABLED,
+        waitUntil: (p) => tasks.push(p),
+        sendPush: vi.fn(async (sub: { endpoint: string }) => ({
+          status: "failed" as const,
+          httpStatus: 0,
+          providerEndpoint: sub.endpoint,
+          error: "vapid sign failed",
+        })),
+      },
+    );
+    await Promise.all(tasks);
+
+    const bodies = postHogBodies(phFetch);
+    const sendFailed = bodies.find((b) => b.event === "spoonjoy.push.send_failed");
+    expect(sendFailed).toBeDefined();
+    expect(sendFailed!.distinct_id).toBe(recipient.id);
+    expect(sendFailed!.properties.httpStatus).toBe(0);
+    expect(sendFailed!.properties.failureMode).toBe("no_response");
+    expect(sendFailed!.properties.pushError).toBe("vapid sign failed");
+    expect(sendFailed!.properties.kind).toBe("spoon_on_my_recipe");
+  });
+
+  it("captures a push 'failed' result with a real status as failureMode=http_error (no error string omitted)", async () => {
+    const db = await getLocalDb();
+    const actor = await createUser();
+    const recipient = await createUser();
+    await createSubscription(recipient.id, "fail500");
+
+    const tasks: Promise<unknown>[] = [];
+    await enqueueNotification(
+      db,
+      { actorId: actor.id, recipientId: recipient.id, kind: "fork_of_my_recipe", payload: {} },
+      {
+        vapid: VAPID,
+        postHogConfig: POSTHOG_ENABLED,
+        waitUntil: (p) => tasks.push(p),
+        sendPush: vi.fn(async (sub: { endpoint: string }) => ({
+          status: "failed" as const,
+          httpStatus: 503,
+          providerEndpoint: sub.endpoint,
+        })),
+      },
+    );
+    await Promise.all(tasks);
+
+    const sendFailed = postHogBodies(phFetch).find(
+      (b) => b.event === "spoonjoy.push.send_failed",
+    );
+    expect(sendFailed).toBeDefined();
+    expect(sendFailed!.properties.httpStatus).toBe(503);
+    expect(sendFailed!.properties.failureMode).toBe("http_error");
+    expect(sendFailed!.properties.pushError).toBeUndefined();
+  });
+
+  it("does NOT capture a push 'failed' result when postHogConfig is absent (no-op)", async () => {
+    const db = await getLocalDb();
+    const actor = await createUser();
+    const recipient = await createUser();
+    await createSubscription(recipient.id, "fail-noconfig");
+
+    const tasks: Promise<unknown>[] = [];
+    await enqueueNotification(
+      db,
+      { actorId: actor.id, recipientId: recipient.id, kind: "spoon_on_my_recipe", payload: {} },
+      {
+        vapid: VAPID,
+        // no postHogConfig — scheduleCapture short-circuits.
+        waitUntil: (p) => tasks.push(p),
+        sendPush: vi.fn(async (sub: { endpoint: string }) => ({
+          status: "failed" as const,
+          httpStatus: 500,
+          providerEndpoint: sub.endpoint,
+        })),
+      },
+    );
+    await Promise.all(tasks);
+    expect(phFetch).not.toHaveBeenCalled();
+  });
+
+  it("captures a non-P2025 prune failure (dead endpoints accumulate) — L4", async () => {
+    const db = await getLocalDb();
+    const actor = await createUser();
+    const recipient = await createUser();
+    await createSubscription(recipient.id, "prune-boom");
+
+    const origDelete = db.pushSubscription.delete;
+    db.pushSubscription.delete = vi.fn(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-throw-literal
+      throw { code: "P2999", message: "delete failed" };
+    }) as unknown as typeof db.pushSubscription.delete;
+
+    const tasks: Promise<unknown>[] = [];
+    try {
+      await enqueueNotification(
+        db,
+        { actorId: actor.id, recipientId: recipient.id, kind: "spoon_on_my_recipe", payload: {} },
+        {
+          vapid: VAPID,
+          postHogConfig: POSTHOG_ENABLED,
+          waitUntil: (p) => tasks.push(p),
+          sendPush: vi.fn(async (sub: { endpoint: string }) => ({
+            status: "expired" as const,
+            httpStatus: 410,
+            providerEndpoint: sub.endpoint,
+          })),
+        },
+      );
+      await Promise.all(tasks);
+    } finally {
+      db.pushSubscription.delete = origDelete;
+    }
+
+    const pruneCapture = postHogBodies(phFetch).find(
+      (b) => b.event === "$exception" && b.properties.phase === "prune",
+    );
+    expect(pruneCapture).toBeDefined();
+    expect(pruneCapture!.properties.kind).toBe("spoon_on_my_recipe");
+  });
+
+  it("swallows a P2025 prune failure WITHOUT capturing (concurrent delete is expected)", async () => {
+    const db = await getLocalDb();
+    const actor = await createUser();
+    const recipient = await createUser();
+    await createSubscription(recipient.id, "prune-p2025");
+
+    const origDelete = db.pushSubscription.delete;
+    db.pushSubscription.delete = vi.fn(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-throw-literal
+      throw { code: "P2025", message: "record not found" };
+    }) as unknown as typeof db.pushSubscription.delete;
+
+    const tasks: Promise<unknown>[] = [];
+    try {
+      await enqueueNotification(
+        db,
+        { actorId: actor.id, recipientId: recipient.id, kind: "spoon_on_my_recipe", payload: {} },
+        {
+          vapid: VAPID,
+          postHogConfig: POSTHOG_ENABLED,
+          waitUntil: (p) => tasks.push(p),
+          sendPush: vi.fn(async (sub: { endpoint: string }) => ({
+            status: "expired" as const,
+            httpStatus: 410,
+            providerEndpoint: sub.endpoint,
+          })),
+        },
+      );
+      await expect(Promise.all(tasks)).resolves.toBeDefined();
+    } finally {
+      db.pushSubscription.delete = origDelete;
+    }
+
+    const pruneCapture = postHogBodies(phFetch).find(
+      (b) => b.event === "$exception" && b.properties.phase === "prune",
+    );
+    expect(pruneCapture).toBeUndefined();
+  });
+
+  it("captures the swallowed send-task throw (H8) — sendPush throwing is isolated but observed", async () => {
+    const db = await getLocalDb();
+    const actor = await createUser();
+    const recipient = await createUser();
+    await createSubscription(recipient.id, "throwing");
+
+    const tasks: Promise<unknown>[] = [];
+    await enqueueNotification(
+      db,
+      { actorId: actor.id, recipientId: recipient.id, kind: "cookbook_save_of_mine", payload: {} },
+      {
+        vapid: VAPID,
+        postHogConfig: POSTHOG_ENABLED,
+        waitUntil: (p) => tasks.push(p),
+        sendPush: vi.fn(async () => {
+          throw new Error("send boom");
+        }),
+      },
+    );
+    await expect(Promise.all(tasks)).resolves.toBeDefined();
+
+    const sendTaskCapture = postHogBodies(phFetch).find(
+      (b) => b.event === "$exception" && b.properties.phase === "sendTask",
+    );
+    expect(sendTaskCapture).toBeDefined();
+    expect(sendTaskCapture!.distinct_id).toBe(recipient.id);
+    expect(sendTaskCapture!.properties.kind).toBe("cookbook_save_of_mine");
+  });
+
+  it("captures when the markDelivered UPDATE itself throws (L5) and does not suppress retry", async () => {
+    const db = await getLocalDb();
+    const actor = await createUser();
+    const recipient = await createUser();
+    await createSubscription(recipient.id, "mark-fail");
+
+    const origUpdate = db.notificationEvent.update;
+    db.notificationEvent.update = vi.fn(async () => {
+      throw new Error("update boom");
+    }) as unknown as typeof db.notificationEvent.update;
+
+    const tasks: Promise<unknown>[] = [];
+    try {
+      await enqueueNotification(
+        db,
+        { actorId: actor.id, recipientId: recipient.id, kind: "spoon_on_my_recipe", payload: {} },
+        {
+          vapid: VAPID,
+          postHogConfig: POSTHOG_ENABLED,
+          waitUntil: (p) => tasks.push(p),
+          sendPush: vi.fn(async (sub: { endpoint: string }) => ({
+            status: "delivered" as const,
+            httpStatus: 201,
+            providerEndpoint: sub.endpoint,
+          })),
+        },
+      );
+      await expect(Promise.all(tasks)).resolves.toBeDefined();
+    } finally {
+      db.notificationEvent.update = origUpdate;
+    }
+
+    const captured = postHogBodies(phFetch).find(
+      (b) => b.event === "$exception" && b.properties.phase === "sendTask",
+    );
+    expect(captured).toBeDefined();
+  });
+
+  it("captures a real D1 failure on the durable log (M4) then rethrows for caller isolation", async () => {
+    const db = await getLocalDb();
+    const actor = await createUser();
+    const recipient = await createUser();
+
+    const origCreate = db.notificationEvent.create;
+    db.notificationEvent.create = vi.fn(async () => {
+      throw new Error("D1 down");
+    }) as unknown as typeof db.notificationEvent.create;
+
+    const tasks: Promise<unknown>[] = [];
+    try {
+      await expect(
+        enqueueNotification(
+          db,
+          { actorId: actor.id, recipientId: recipient.id, kind: "spoon_on_my_recipe", payload: {} },
+          {
+            vapid: VAPID,
+            postHogConfig: POSTHOG_ENABLED,
+            waitUntil: (p) => tasks.push(p),
+          },
+        ),
+      ).rejects.toThrow("D1 down");
+      await Promise.all(tasks);
+    } finally {
+      db.notificationEvent.create = origCreate;
+    }
+
+    const durableCapture = postHogBodies(phFetch).find(
+      (b) => b.event === "$exception" && b.properties.phase === "durableWrite",
+    );
+    expect(durableCapture).toBeDefined();
+    expect(durableCapture!.distinct_id).toBe(recipient.id);
+    expect(durableCapture!.properties.kind).toBe("spoon_on_my_recipe");
+  });
+
+  it("captures a non-object prune throw (prismaErrorCode returns undefined ≠ P2025)", async () => {
+    const db = await getLocalDb();
+    const actor = await createUser();
+    const recipient = await createUser();
+    await createSubscription(recipient.id, "prune-string");
+
+    const origDelete = db.pushSubscription.delete;
+    db.pushSubscription.delete = vi.fn(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-throw-literal
+      throw "plain string delete failure";
+    }) as unknown as typeof db.pushSubscription.delete;
+
+    const tasks: Promise<unknown>[] = [];
+    try {
+      await enqueueNotification(
+        db,
+        { actorId: actor.id, recipientId: recipient.id, kind: "spoon_on_my_recipe", payload: {} },
+        {
+          vapid: VAPID,
+          postHogConfig: POSTHOG_ENABLED,
+          waitUntil: (p) => tasks.push(p),
+          sendPush: vi.fn(async (sub: { endpoint: string }) => ({
+            status: "expired" as const,
+            httpStatus: 410,
+            providerEndpoint: sub.endpoint,
+          })),
+        },
+      );
+      await expect(Promise.all(tasks)).resolves.toBeDefined();
+    } finally {
+      db.pushSubscription.delete = origDelete;
+    }
+
+    const pruneCapture = postHogBodies(phFetch).find(
+      (b) => b.event === "$exception" && b.properties.phase === "prune",
+    );
+    expect(pruneCapture).toBeDefined();
+  });
+
+  it("converges two inline delivered sends to a single UPDATE (markDelivered early-return)", async () => {
+    const db = await getLocalDb();
+    const actor = await createUser();
+    const recipient = await createUser();
+    await createSubscription(recipient.id, "conv-a");
+    await createSubscription(recipient.id, "conv-b");
+
+    const origUpdate = db.notificationEvent.update;
+    const updateSpy = vi.fn((args: unknown) =>
+      (origUpdate as (a: unknown) => unknown).call(db.notificationEvent, args),
+    );
+    db.notificationEvent.update = updateSpy as unknown as typeof db.notificationEvent.update;
+    try {
+      const result = await enqueueNotification(
+        db,
+        { actorId: actor.id, recipientId: recipient.id, kind: "spoon_on_my_recipe", payload: {} },
+        {
+          vapid: VAPID,
+          postHogConfig: POSTHOG_ENABLED,
+          // No waitUntil: sends run inline + sequentially, so the first send's
+          // UPDATE resolves (setting the flag) before the second send checks it.
+          sendPush: vi.fn(async (sub: { endpoint: string }) => ({
+            status: "delivered" as const,
+            httpStatus: 201,
+            providerEndpoint: sub.endpoint,
+          })),
+        },
+      );
+      expect(result.queuedSends).toBe(2);
+      // Exactly one UPDATE despite two delivered sends.
+      expect(updateSpy).toHaveBeenCalledTimes(1);
+      const event = await db.notificationEvent.findUniqueOrThrow({
+        where: { id: result.eventId! },
+      });
+      expect(event.pushDeliveredAt).not.toBeNull();
+    } finally {
+      db.notificationEvent.update = origUpdate;
+    }
+  });
+
+  it("awaits capture inline (no waitUntil) so it still fires without a scheduler", async () => {
+    const db = await getLocalDb();
+    const actor = await createUser();
+    const recipient = await createUser();
+    await createSubscription(recipient.id, "inline-cap");
+
+    await enqueueNotification(
+      db,
+      { actorId: actor.id, recipientId: recipient.id, kind: "spoon_on_my_recipe", payload: {} },
+      {
+        vapid: VAPID,
+        postHogConfig: POSTHOG_ENABLED,
+        // no waitUntil — sends run inline, capture is voided inline.
+        sendPush: vi.fn(async (sub: { endpoint: string }) => ({
+          status: "failed" as const,
+          httpStatus: 429,
+          providerEndpoint: sub.endpoint,
+        })),
+      },
+    );
+    // Allow the voided capture microtask to settle.
+    await new Promise((r) => setTimeout(r, 0));
+
+    const sendFailed = postHogBodies(phFetch).find(
+      (b) => b.event === "spoonjoy.push.send_failed",
+    );
+    expect(sendFailed).toBeDefined();
   });
 });

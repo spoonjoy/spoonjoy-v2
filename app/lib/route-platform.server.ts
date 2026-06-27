@@ -20,6 +20,10 @@ export function getIngredientParserEnv(context: AppLoadContext): IngredientParse
       env?.INGREDIENT_PARSE_TIMEOUT_MS ?? process.env.INGREDIENT_PARSE_TIMEOUT_MS,
     INGREDIENT_PARSE_MAX_RETRIES:
       env?.INGREDIENT_PARSE_MAX_RETRIES ?? process.env.INGREDIENT_PARSE_MAX_RETRIES,
+    // PostHog keys ride along so parseIngredients can capture LLM-call failures.
+    POSTHOG_KEY: env?.POSTHOG_KEY ?? process.env.POSTHOG_KEY,
+    POSTHOG_HOST: env?.POSTHOG_HOST ?? process.env.POSTHOG_HOST,
+    POSTHOG_DISABLED: env?.POSTHOG_DISABLED ?? process.env.POSTHOG_DISABLED,
   };
 }
 

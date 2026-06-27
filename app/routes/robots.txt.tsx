@@ -1,4 +1,5 @@
 import type { Route } from "./+types/robots.txt";
+import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 
 // Private or non-content paths kept out of the index.
 const DISALLOWED = [
@@ -14,8 +15,8 @@ const DISALLOWED = [
   "/developers/playground",
 ];
 
-export async function loader({ request }: Route.LoaderArgs) {
-  const origin = new URL(request.url).origin;
+export async function loader({ request, context }: Route.LoaderArgs) {
+  const origin = resolveIssuerOrigin(request.url, context.cloudflare?.env?.SPOONJOY_BASE_URL);
   const body = [
     "User-agent: *",
     "Allow: /",

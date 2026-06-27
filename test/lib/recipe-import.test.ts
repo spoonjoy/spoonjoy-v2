@@ -590,6 +590,80 @@ describe("importRecipeFromUrl — extraction paths", () => {
         ),
       ).rejects.toMatchObject({ code: "llm-failed", status: 502 });
     });
+
+    it("captures an LLM-call failure to PostHog with the preserved OpenAI code", async () => {
+      const fixture = await loadFixture("no-jsonld-rich-html.html");
+      const chef = await makeChefForError();
+      const { RecipeLlmError } = await import("~/lib/recipe-import-llm.server");
+      const analyticsFetch = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+      const quotaCause = Object.assign(new Error("quota"), {
+        status: 429,
+        code: "insufficient_quota",
+        type: "insufficient_quota",
+      });
+      const llmRunner: RecipeLlmRunner = {
+        provider: "openai",
+        model: "gpt-4o-mini",
+        extract: vi.fn(async () => {
+          throw new RecipeLlmError("OpenAI rate limit exceeded", quotaCause);
+        }),
+      };
+
+      await expect(
+        importRecipeFromUrl(
+          { url: "https://example.com/r", chefId: chef.id },
+          baseDeps({
+            fetchImpl: makeFetchImpl(fixture),
+            llmRunner,
+            postHogConfig: { enabled: true, key: "ph_test", host: "https://posthog.example" },
+            analyticsFetchImpl: analyticsFetch as unknown as typeof fetch,
+          }),
+        ),
+      ).rejects.toMatchObject({ code: "llm-failed", status: 502 });
+
+      expect(analyticsFetch).toHaveBeenCalledTimes(1);
+      const body = JSON.parse(analyticsFetch.mock.calls[0][1].body as string);
+      expect(body.event).toBe("spoonjoy.llm_call.failed");
+      expect(body.distinct_id).toBe(chef.id);
+      expect(body.properties).toMatchObject({
+        operation: "recipe_import",
+        provider: "openai",
+        model: "gpt-4o-mini",
+        errorCode: "insufficient_quota",
+        errorStatus: 429,
+      });
+    });
+
+    it("uses analyticsDistinctId override and runner model fallback for LLM-failure telemetry", async () => {
+      const fixture = await loadFixture("no-jsonld-rich-html.html");
+      const chef = await makeChefForError();
+      const { RecipeLlmError } = await import("~/lib/recipe-import-llm.server");
+      const analyticsFetch = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+      // Runner exposes neither provider nor model → telemetry falls back.
+      const llmRunner: RecipeLlmRunner = {
+        extract: vi.fn(async () => {
+          throw new RecipeLlmError("boom");
+        }),
+      };
+
+      await expect(
+        importRecipeFromUrl(
+          { url: "https://example.com/r", chefId: chef.id },
+          baseDeps({
+            fetchImpl: makeFetchImpl(fixture),
+            llmRunner,
+            analyticsDistinctId: "service-account",
+            postHogConfig: { enabled: true, key: "ph_test", host: "https://posthog.example" },
+            analyticsFetchImpl: analyticsFetch as unknown as typeof fetch,
+          }),
+        ),
+      ).rejects.toMatchObject({ code: "llm-failed", status: 502 });
+
+      const body = JSON.parse(analyticsFetch.mock.calls[0][1].body as string);
+      expect(body.distinct_id).toBe("service-account");
+      expect(body.properties.provider).toBe("openai");
+      expect(body.properties.model).toBe("unknown");
+    });
   });
 
   describe("LLM runner edge cases", () => {
@@ -1611,6 +1685,120 @@ describe("importRecipeFromUrl — extraction paths", () => {
         where: { recipeId: result.recipeId! },
       });
       expect(covers).toHaveLength(0);
+    });
+
+    it("captures (PostHog) when the AI placeholder generation fails — M1", async () => {
+      const fixture = await loadFixture("no-jsonld-thin-html.html");
+      const chef = await makeChef();
+      const bucket = mockBucket();
+      const waitUntil = vi.fn();
+      const logger = { error: vi.fn() };
+      const imageGenRunner = {
+        textToImage: vi.fn(async () => {
+          throw new Error("openai placeholder down");
+        }),
+        imageToImage: vi.fn(async () => ({ url: "" })),
+      };
+      const llmRunner = makeLlmRunner({
+        title: "Some Recipe",
+        ingredients: ["1 cup flour"],
+        steps: ["Mix."],
+      });
+      // Single fetchImpl serves the page (call 1) and the PostHog ingestion POST
+      // (the capture uses this same fetch as its analytics transport).
+      const posthogBodies: Array<Record<string, unknown>> = [];
+      let call = 0;
+      const fetchImpl = vi.fn(async (input: unknown, init?: RequestInit) => {
+        const url = typeof input === "string" ? input : String(input);
+        if (url.includes("/i/v0/e/")) {
+          posthogBodies.push(JSON.parse(init!.body as string));
+          return { ok: true, status: 200 } as unknown as Response;
+        }
+        call++;
+        return streamingResponse(fixture, { url: "https://example.com/r" });
+      }) as unknown as typeof fetch;
+
+      await importRecipeFromUrl(
+        { url: "https://example.com/r", chefId: chef.id },
+        baseDeps({
+          fetchImpl,
+          bucket,
+          waitUntil,
+          imageGenRunner,
+          llmRunner,
+          logger,
+          env: {
+            OPENAI_API_KEY: "test-key",
+            POSTHOG_KEY: "ph_test",
+            POSTHOG_HOST: "https://posthog.example",
+          },
+        }),
+      );
+      await waitUntil.mock.calls[0][0];
+      expect(call).toBe(1);
+      expect(logger.error).toHaveBeenCalled();
+      const exception = posthogBodies.find((b) => b.event === "$exception");
+      expect(exception).toBeDefined();
+      expect((exception as { distinct_id: string }).distinct_id).toBe(chef.id);
+      const props = (exception as { properties: Record<string, unknown> }).properties;
+      expect(props.operation).toBe("placeholder_generate");
+      expect(props.sourceType).toBe("ai-placeholder");
+      expect(props.coverId).toBe("none");
+    });
+
+    it("captures (PostHog) when the import cover image download fails — M1", async () => {
+      const fixture = await loadFixture("nyt-style-jsonld.html");
+      const chef = await makeChef();
+      const bucket = mockBucket();
+      const waitUntil = vi.fn();
+      const logger = { error: vi.fn() };
+      const posthogBodies: Array<Record<string, unknown>> = [];
+      let pageCalls = 0;
+      const fetchImpl = vi.fn(async (input: unknown, init?: RequestInit) => {
+        const url = typeof input === "string" ? input : String(input);
+        if (url.includes("/i/v0/e/")) {
+          posthogBodies.push(JSON.parse(init!.body as string));
+          return { ok: true, status: 200 } as unknown as Response;
+        }
+        pageCalls++;
+        if (pageCalls === 1) {
+          return streamingResponse(fixture, { url: "https://example.com/r" });
+        }
+        // Image fetch fails (non-2xx) → uploadImportCover catch path.
+        return {
+          ok: false,
+          status: 500,
+          headers: new Headers([["content-type", "image/jpeg"]]),
+          arrayBuffer: async () => new ArrayBuffer(0),
+        } as unknown as Response;
+      }) as unknown as typeof fetch;
+
+      const result = await importRecipeFromUrl(
+        { url: "https://example.com/r", chefId: chef.id },
+        baseDeps({
+          fetchImpl,
+          bucket,
+          waitUntil,
+          logger,
+          env: {
+            OPENAI_API_KEY: "test-key",
+            POSTHOG_KEY: "ph_test",
+            POSTHOG_HOST: "https://posthog.example",
+          },
+        }),
+      );
+      await waitUntil.mock.calls[0][0];
+      expect(logger.error).toHaveBeenCalled();
+      const covers = await db.recipeCover.findMany({
+        where: { recipeId: result.recipeId! },
+      });
+      expect(covers).toHaveLength(0);
+      const exception = posthogBodies.find((b) => b.event === "$exception");
+      expect(exception).toBeDefined();
+      const props = (exception as { properties: Record<string, unknown> }).properties;
+      expect(props.feature).toBe("recipe_import_cover");
+      expect(props.sourceType).toBe("import");
+      expect(props.phase).toBe("uploadImportCover");
     });
 
     it("og:image absent + imageGenRunner absent → no cover scheduled, coverPending=false", async () => {

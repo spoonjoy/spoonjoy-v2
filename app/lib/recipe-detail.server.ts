@@ -28,6 +28,7 @@ import { notifySpoonOnMyRecipe } from "~/lib/notification-triggers.server";
 import { fanoutFellowChefOriginCook } from "~/lib/notification-fanout.server";
 import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
 import { absoluteUrlFromRequest, recipeOgPath } from "~/lib/og-image.server";
+import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 import { buildRecipeJsonLd } from "~/lib/recipe-structured-data.server";
 import type { PostHogServerEnv } from "~/lib/analytics-server";
 import type { ImageGenEnv } from "~/lib/image-gen.server";
@@ -222,8 +223,9 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
   const activeRealCover = hasActiveRealRecipeCover(recipe);
   const coverImageUrl = coverDisplay?.displayUrl ?? null;
   const coverProvenanceLabel = coverDisplay?.provenanceLabel ?? null;
-  const canonicalUrl = absoluteUrlFromRequest(request.url, `/recipes/${id}`);
-  const ogImageUrl = absoluteUrlFromRequest(request.url, recipeOgPath(id));
+  const publicOrigin = resolveIssuerOrigin(request.url, context.cloudflare?.env?.SPOONJOY_BASE_URL);
+  const canonicalUrl = absoluteUrlFromRequest(publicOrigin, `/recipes/${id}`);
+  const ogImageUrl = absoluteUrlFromRequest(publicOrigin, recipeOgPath(id));
   const recipeJsonLd = buildRecipeJsonLd(recipe, {
     canonicalUrl,
     imageUrl: coverImageUrl ?? ogImageUrl,
