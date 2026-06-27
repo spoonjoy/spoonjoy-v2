@@ -52,8 +52,8 @@ export function absoluteKitchenUrl(path: string) {
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "Spoonjoy - Recipe Kitchens & Cookbooks" },
-    { name: "description", content: "Collect family recipes, shape them into cookbooks, and share a personal kitchen." },
+    { title: "Spoonjoy — The Recipe App" },
+    { name: "description", content: "The recipe app for the meals you actually cook. Collect recipes, shape them into cookbooks, and keep a personal kitchen." },
   ];
 }
 
@@ -221,7 +221,7 @@ export default function Index() {
           <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(34,32,28,0.82),rgba(34,32,28,0.34)_58%,rgba(34,32,28,0.10)),linear-gradient(0deg,rgba(34,32,28,0.56),transparent_42%)]" />
           <div className="relative z-10 flex min-h-[92svh] flex-col justify-end px-5 pb-[calc(9rem+env(safe-area-inset-bottom))] pt-20 sm:px-8 sm:pb-24 lg:px-12 lg:pb-28">
             <p className="font-sj-ui text-xs font-bold uppercase tracking-[0.2em] text-[var(--sj-on-photo-muted)]">
-              Family recipe OS
+              The Recipe App
             </p>
             <Heading level={1} className="mt-5 max-w-4xl text-4xl/10 text-[var(--sj-on-photo)] sm:text-6xl/14 lg:text-7xl/16 xl:text-8xl/20">
               Your food should look as good as it tastes.

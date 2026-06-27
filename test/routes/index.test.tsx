@@ -318,8 +318,8 @@ describe("Kitchen Index Route", () => {
       const result = meta({} as any);
 
       expect(result).toEqual([
-        { title: "Spoonjoy - Recipe Kitchens & Cookbooks" },
-        { name: "description", content: "Collect family recipes, shape them into cookbooks, and share a personal kitchen." },
+        { title: "Spoonjoy — The Recipe App" },
+        { name: "description", content: "The recipe app for the meals you actually cook. Collect recipes, shape them into cookbooks, and keep a personal kitchen." },
       ]);
     });
   });
@@ -364,7 +364,7 @@ describe("Kitchen Index Route", () => {
       render(<Stub initialEntries={["/"]} />);
 
       expect(await screen.findByRole("heading", { name: /your food should look as good as it tastes/i })).toBeInTheDocument();
-      expect(screen.getByText("Family recipe OS")).toBeInTheDocument();
+      expect(screen.getByText("The Recipe App")).toBeInTheDocument();
       expect(screen.getByText(/photo-first kitchen/i)).toBeInTheDocument();
       expect(screen.getByText("Collect")).toBeInTheDocument();
       expect(screen.getByText("Cook")).toBeInTheDocument();
