@@ -540,6 +540,44 @@ const schemas = {
     activate: { type: "boolean", default: false },
     generateEditorial: { type: "boolean", default: true },
   }),
+  RecipeImportCapture: objectSchema(["source"], {
+    source: { type: "string", enum: ["camera", "photo-library"] },
+    assetIdentifier: nullableStringSchema,
+  }),
+  RecipeImportSource: {
+    oneOf: [
+      objectSchema(["type", "url"], {
+        type: { const: "url" },
+        url: uriSchema,
+      }),
+      objectSchema(["type", "url"], {
+        type: { const: "video-url" },
+        url: uriSchema,
+      }),
+      objectSchema(["type", "text"], {
+        type: { const: "text" },
+        text: { type: "string", minLength: 1, maxLength: 12288 },
+        url: { ...nullableStringSchema, maxLength: 2048 },
+        capture: { oneOf: [ref("RecipeImportCapture"), { type: "null" }] },
+      }),
+      objectSchema(["type", "jsonLd"], {
+        type: { const: "json-ld" },
+        jsonLd: { oneOf: [{ type: "object", additionalProperties: true }, { type: "array" }, { type: "string" }] },
+        url: { ...nullableStringSchema, maxLength: 2048 },
+      }),
+    ],
+  },
+  RecipeImportRequest: objectSchema(["clientMutationId", "source"], {
+    clientMutationId: shortTextSchema,
+    source: ref("RecipeImportSource"),
+    dryRun: { type: "boolean", default: false },
+  }),
+  RecipeImportBlocker: objectSchema(["capability", "provider", "resource"], {
+    capability: { const: "ProviderSecret" },
+    provider: { const: "openai" },
+    resource: { const: "recipe-import" },
+    retryAfterSeconds: { type: "integer", minimum: 1 },
+  }),
   CreateTokenRequest: objectSchema(["name"], {
     name: shortTextSchema,
     scopes: {
@@ -631,6 +669,16 @@ const schemas = {
     warnings: arrayOf({ type: "string" }),
     mutation: ref("MutationMetadata"),
   }),
+  RecipeImportData: objectSchema(["recipe", "importCode", "blockers", "mutation"], {
+    recipe: { oneOf: [ref("RecipeDetail"), { type: "null" }] },
+    importCode: nullableStringSchema,
+    blockers: arrayOf(ref("RecipeImportBlocker")),
+    confidence: { type: ["string", "null"], enum: ["high", "medium", "low", null] },
+    source: { type: ["string", "null"], enum: ["json-ld", "llm", "mixed", "video-oembed-llm", null] },
+    existingRecipeId: nullableStringSchema,
+    coverPending: { type: "boolean" },
+    mutation: ref("MutationMetadata"),
+  }),
   CookbookListData: objectSchema(["query", "limit", "cursor", "nextCursor", "hasMore", "cookbooks"], {
     query: nullableStringSchema,
     limit: { type: "integer" },
@@ -702,6 +750,7 @@ const schemas = {
   DeleteRecipeSpoonEnvelope: successEnvelope(ref("RecipeSpoonMutationData")),
   RecipeCoverListEnvelope: successEnvelope(ref("RecipeCoverListData")),
   RecipeCoverMutationEnvelope: successEnvelope(ref("RecipeCoverMutationData")),
+  RecipeImportEnvelope: successEnvelope(ref("RecipeImportData")),
   CookbookListEnvelope: successEnvelope(ref("CookbookListData")),
   CookbookDetailEnvelope: successEnvelope(ref("CookbookDetailData")),
   TokenListEnvelope: successEnvelope(ref("TokenListData")),
@@ -765,6 +814,9 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
   },
   "/api/v1/recipes": {
     GET: { operationId: "getApiV1Recipes", tags: ["Recipes"], summary: "Search public recipes", auth: "optional", scopes: ["recipes:read"], success: { 200: "RecipeListEnvelope" }, errors: ["validation_error", "invalid_cursor", "invalid_token", "insufficient_scope", "method_not_allowed", "rate_limited", "internal_error"], parameters: [queryParameters.query, queryParameters.q, queryParameters.cursor, queryParameters.limit] },
+  },
+  "/api/v1/recipes/import": {
+    POST: { operationId: "postApiV1RecipeImport", tags: ["Recipes"], summary: "Import a recipe from URL, video, text, or JSON-LD", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "RecipeImportEnvelope", 201: "RecipeImportEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "upstream_error", "upstream_timeout", "internal_error"], requestBody: "RecipeImportRequest" },
   },
   "/api/v1/recipes/{id}": {
     GET: { operationId: "getApiV1Recipe", tags: ["Recipes"], summary: "Read one public recipe", auth: "optional", scopes: ["recipes:read"], success: { 200: "RecipeDetailEnvelope" }, errors: ["validation_error", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id] },
@@ -1087,6 +1139,20 @@ const responseExamples: Record<string, unknown> = {
       mutation: exampleMutation,
     },
   },
+  RecipeImportEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      recipe: exampleRecipeDetail,
+      importCode: null,
+      blockers: [],
+      confidence: "low",
+      source: "llm",
+      existingRecipeId: null,
+      coverPending: false,
+      mutation: { clientMutationId: "device-uuid-import", replayed: false },
+    },
+  },
   CookbookListEnvelope: {
     ok: true,
     requestId: "req_example",
@@ -1180,6 +1246,15 @@ const requestExamples: Record<string, unknown> = {
   RegenerateRecipeCoverRequest: { clientMutationId: "device-uuid-cover-regenerate", coverId: "cover_1", activateWhenReady: true },
   ArchiveRecipeCoverRequest: { clientMutationId: "device-uuid-cover-archive", confirmNoCover: true, deleteSafeObjects: false },
   CreateRecipeCoverFromSpoonRequest: { clientMutationId: "device-uuid-cover-spoon", activate: true, generateEditorial: true },
+  RecipeImportRequest: {
+    clientMutationId: "device-uuid-import",
+    source: {
+      type: "text",
+      text: "Grandma sauce\n2 tomatoes\nSimmer until glossy.",
+      url: "https://capture.example/grandma-sauce",
+      capture: { source: "photo-library", assetIdentifier: "local-asset-1" },
+    },
+  },
   CreateShoppingItemRequest: {
     clientMutationId: "device-uuid-1",
     name: "Eggs",
@@ -1217,6 +1292,8 @@ const errorMessages: Record<ApiV1ErrorCode, string> = {
   idempotency_conflict: "Idempotency key was already used for a different request",
   idempotency_in_progress: "Idempotency key is already in progress; retry shortly",
   rate_limited: "Too many requests",
+  upstream_error: "Upstream import provider failed",
+  upstream_timeout: "Upstream import provider timed out",
   internal_error: "Internal error",
 };
 
@@ -1384,6 +1461,10 @@ function isIdempotentRecipeSpoonMutation(path: ResourcePath, method: HttpMethod)
   return path === "/api/v1/recipes/{id}/spoons" || path === "/api/v1/recipes/{id}/spoons/{spoonId}";
 }
 
+function isIdempotentRecipeImportMutation(path: ResourcePath, method: HttpMethod) {
+  return path === "/api/v1/recipes/import" && method === "POST";
+}
+
 function retryPolicyFor(path: ResourcePath, method: HttpMethod) {
   if (path === "/api/v1/tokens" && method === "POST") {
     return {
@@ -1394,7 +1475,12 @@ function retryPolicyFor(path: ResourcePath, method: HttpMethod) {
     };
   }
   const isMutation = method === "POST" || method === "PATCH" || method === "DELETE";
-  if (isIdempotentShoppingListMutation(path, method) || isIdempotentCoverMutation(path, method) || isIdempotentRecipeSpoonMutation(path, method)) {
+  if (
+    isIdempotentShoppingListMutation(path, method) ||
+    isIdempotentCoverMutation(path, method) ||
+    isIdempotentRecipeSpoonMutation(path, method) ||
+    isIdempotentRecipeImportMutation(path, method)
+  ) {
     return {
       retryOn: ["network_timeout", "429", "5xx", "idempotency_in_progress"],
       retryAfterHeader: "Retry-After",
@@ -1446,6 +1532,17 @@ function cursorPolicyFor(path: ResourcePath) {
 }
 
 function idempotencyPolicyFor(path: ResourcePath, method: HttpMethod) {
+  if (isIdempotentRecipeImportMutation(path, method)) {
+    return {
+      key: "clientMutationId",
+      location: "jsonBody",
+      retentionHours: 24,
+      replayStatus: [200, 201],
+      conflictStatus: 409,
+      inProgressRetryAfterSeconds: 2,
+      retryBodyRule: "Persist and retry the same parsed JSON body/source for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and source values still define conflicts.",
+    };
+  }
   if (isIdempotentRecipeSpoonMutation(path, method)) {
     return {
       key: "clientMutationId",
@@ -2179,7 +2276,7 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
         eyebrow: "Extension background",
         audience: "Use for extensions that turn scraped ingredient rows into shopping-list mutations without exposing tokens to content scripts.",
         notes: [
-          "API v1 does not create or import full recipes yet; keep recipe clipping UI separate from Spoonjoy's current shopping-list sync API.",
+          "Use /api/v1/recipes/import with kitchen:write for full recipe clipping, or keep shopping_list:read shopping_list:write when the extension only syncs ingredient rows.",
           "Run OAuth/PKCE in the extension background or service worker, store state and code_verifier until callback, and keep bearer tokens out of content scripts.",
           "Register the HTTPS callback produced by chrome.identity.getRedirectURL/launchWebAuthFlow exactly; custom extension schemes are rejected.",
           "Use shopping_list:read shopping_list:write for ingredient sync, then post one row at a time with deterministic clientMutationId values.",
@@ -2257,6 +2354,7 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
     "x-current-capabilities": {
       available: [
         "public recipe and cookbook reads",
+        "authenticated recipe import from URL, video URL, text, or JSON-LD",
         "public recipe spoon history plus authenticated recipe spoon create, update, and delete",
         "Owner-scoped recipe cover candidate management",
         "owner-scoped shopping-list read, sync, item writes, recipe adds, and clear actions",
@@ -2267,7 +2365,7 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
         "cursor-paginated public recipe and cookbook lists",
       ],
       notYetAvailable: [
-        "General recipe create, edit, delete, import, or export endpoints beyond owner cover management",
+        "General recipe create, edit, delete, or export endpoints beyond recipe import and owner cover management",
         "Private recipe-library endpoints",
         "Inventory or pantry stock APIs",
         "Meal plan or \"today's recipes\" APIs",
@@ -2284,6 +2382,7 @@ type MutableOpenApiDocument = Record<string, any>;
 
 const CONNECTOR_PATHS = new Set([
   "/api/v1/recipes",
+  "/api/v1/recipes/import",
   "/api/v1/recipes/{id}",
   "/api/v1/cookbooks",
   "/api/v1/cookbooks/{id}",
@@ -2306,6 +2405,7 @@ const SDK_PATHS = new Set([
   "/api/v1",
   "/api/v1/health",
   "/api/v1/recipes",
+  "/api/v1/recipes/import",
   "/api/v1/recipes/{id}",
   "/api/v1/recipes/{id}/spoons",
   "/api/v1/recipes/{id}/spoons/{spoonId}",

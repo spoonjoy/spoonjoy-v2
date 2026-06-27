@@ -63,6 +63,13 @@ import { validateSpoonPhotoAssignment } from "~/lib/recipe-image-assignment.serv
 import { resolveIngredientAffordance } from "~/lib/ingredient-affordances";
 import { deferBackgroundTask } from "~/lib/background-task.server";
 import { scheduleSpoonCoverStylization } from "~/lib/spoon-cover-stylization.server";
+import {
+  ImportRecipeError,
+  importRecipeFromSource,
+  type ImportRecipeDeps,
+  type NativeRecipeImportCapture,
+  type NativeRecipeImportSource,
+} from "~/lib/recipe-import.server";
 import type { ImageGenEnv } from "~/lib/image-gen.server";
 import type { PostHogServerEnv } from "~/lib/analytics-server";
 
@@ -70,6 +77,7 @@ const DEFAULT_LIST_LIMIT = 20;
 const MAX_LIST_LIMIT = 50;
 const MAX_JSON_BODY_BYTES = 16 * 1024;
 const MAX_SHORT_TEXT_LENGTH = 160;
+const MAX_IMPORT_TEXT_LENGTH = 12 * 1024;
 
 export interface ApiV1ScopeRequirement {
   auth: "optional" | "bearer";
@@ -303,6 +311,8 @@ function apiV1OperationFor(method: string, path: string): string | undefined {
       return "openapi.connector.read";
     case "GET recipes":
       return "recipes.list";
+    case "POST recipe-import":
+      return "recipes.import";
     case "GET recipe":
       return "recipes.get";
     case "GET recipe-spoons":
@@ -365,6 +375,7 @@ function defaultIdempotencyOutcome(operation: string | undefined, errorCode: Api
     operation !== "shopping-list.add-from-recipe" &&
     operation !== "shopping-list.clear-completed" &&
     operation !== "shopping-list.clear-all" &&
+    operation !== "recipes.import" &&
     !operation.startsWith("recipes.spoons.") &&
     !operation.startsWith("recipes.covers.")
   ) {
@@ -1260,6 +1271,239 @@ async function handleRecipeDetail(args: ApiV1RouteArgs, requestId: string, princ
   }
 
   return apiV1Success(requestId, { recipe: recipeDetail(recipe, origin) }, 200, principal ? authenticatedPublicCacheHeaders() : publicCacheHeaders());
+}
+
+function objectBody(value: unknown, field: string): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new ApiV1Error("validation_error", `${field} must be an object`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function importText(value: unknown, field: string): string {
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new ApiV1Error("validation_error", `${field} must be a nonblank string`);
+  }
+  if (value.length > MAX_IMPORT_TEXT_LENGTH) {
+    throw new ApiV1Error("validation_error", `${field} must be at most ${MAX_IMPORT_TEXT_LENGTH} characters`);
+  }
+  return value;
+}
+
+function optionalImportSourceUrl(value: unknown): string | null {
+  return optionalNullableString(value, "source.url", 2048);
+}
+
+function parseRecipeImportCapture(value: unknown): NativeRecipeImportCapture | null {
+  if (value === undefined || value === null) return null;
+  const capture = objectBody(value, "source.capture");
+  assertKnownFields(capture, ["source", "assetIdentifier"]);
+  const source = nonblankString(capture.source, "source.capture.source", 64);
+  if (source !== "camera" && source !== "photo-library") {
+    throw new ApiV1Error("validation_error", "source.capture.source must be camera or photo-library");
+  }
+  return {
+    source,
+    assetIdentifier: optionalNullableString(capture.assetIdentifier, "source.capture.assetIdentifier", 512),
+  };
+}
+
+function parseRecipeImportSource(value: unknown): NativeRecipeImportSource {
+  const source = objectBody(value, "source");
+  assertKnownFields(source, ["type", "url", "text", "jsonLd", "capture"]);
+  const type = nonblankString(source.type, "source.type", 32);
+  switch (type) {
+    case "url":
+      return { type, url: nonblankString(source.url, "source.url", 2048) };
+    case "video-url":
+      return { type, url: nonblankString(source.url, "source.url", 2048) };
+    case "text":
+      return {
+        type,
+        text: importText(source.text, "source.text"),
+        sourceUrl: optionalImportSourceUrl(source.url),
+        capture: parseRecipeImportCapture(source.capture),
+      };
+    case "json-ld":
+      if (!hasOwnField(source, "jsonLd") || source.jsonLd === null || source.jsonLd === undefined) {
+        throw new ApiV1Error("validation_error", "source.jsonLd is required");
+      }
+      return {
+        type,
+        jsonLd: source.jsonLd,
+        sourceUrl: optionalImportSourceUrl(source.url),
+      };
+    default:
+      throw new ApiV1Error("validation_error", "source.type must be url, video-url, text, or json-ld");
+  }
+}
+
+function recipeImportProvidersConfigured(args: ApiV1RouteArgs): boolean {
+  return Boolean(apiV1CloudflareFor(args)?.env?.OPENAI_API_KEY?.trim());
+}
+
+function providerSecretImportData(clientMutationId: string) {
+  return {
+    recipe: null,
+    importCode: "provider_secret_required",
+    blockers: [{
+      capability: "ProviderSecret",
+      provider: "openai",
+      resource: "recipe-import",
+    }],
+    mutation: { clientMutationId, replayed: false },
+  };
+}
+
+function mapRecipeImportErrorForApiV1(error: ImportRecipeError): ApiV1Error {
+  if (error.code === "rate-limited") {
+    return new ApiV1Error("rate_limited", error.message, {
+      importCode: error.code,
+      upstreamStatus: error.status,
+    });
+  }
+  if (error.status === 504) {
+    return new ApiV1Error("upstream_timeout", error.message, {
+      importCode: error.code,
+      upstreamStatus: error.status,
+    });
+  }
+  if (error.status >= 500) {
+    return new ApiV1Error("upstream_error", error.message, {
+      importCode: error.code,
+      upstreamStatus: error.status,
+    });
+  }
+  return new ApiV1Error("validation_error", error.message, {
+    importCode: error.code,
+    upstreamStatus: error.status,
+  });
+}
+
+async function recipeImportMutationData(
+  args: ApiV1RouteArgs,
+  input: {
+    db: ApiV1Db;
+    recipeId: string | null;
+    clientMutationId: string;
+    confidence: string | null;
+    source: string | null;
+    existingRecipeId: string | null;
+    coverPending: boolean;
+  },
+) {
+  const origin = publicContentOrigin(args);
+  const recipe = input.recipeId ? await loadRecipeById(input.db, input.recipeId) : null;
+  return {
+    recipe: recipe ? recipeDetail(recipe, origin) : null,
+    importCode: null,
+    blockers: [],
+    confidence: input.confidence,
+    source: input.source,
+    existingRecipeId: input.existingRecipeId,
+    coverPending: input.coverPending,
+    mutation: { clientMutationId: input.clientMutationId, replayed: false },
+  };
+}
+
+async function recoverRecipeImport(
+  args: ApiV1RouteArgs,
+  input: {
+    db: ApiV1Db;
+    principal: ApiPrincipal;
+    clientMutationId: string;
+    record: ApiIdempotencyKey;
+  },
+) {
+  const recipe = await input.db.recipe.findFirst({
+    where: {
+      id: input.record.id,
+      chefId: input.principal.id,
+      deletedAt: null,
+    },
+    select: { id: true },
+  });
+  if (!recipe) return null;
+  return {
+    status: 201,
+    data: await recipeImportMutationData(args, {
+      db: input.db,
+      recipeId: recipe.id,
+      clientMutationId: input.clientMutationId,
+      confidence: null,
+      source: null,
+      existingRecipeId: null,
+      coverPending: false,
+    }),
+  };
+}
+
+async function handleRecipeImport(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
+  const body = await parseApiV1JsonBody(args.request);
+  assertKnownFields(body, ["clientMutationId", "source", "dryRun"]);
+  const clientMutationId = nonblankString(body.clientMutationId, "clientMutationId");
+  const source = parseRecipeImportSource(body.source);
+  const dryRun = optionalBoolean(body.dryRun, "dryRun");
+
+  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "recipes.import", async (db, reservation) => {
+    if (!recipeImportProvidersConfigured(args)) {
+      return {
+        status: 200,
+        data: providerSecretImportData(clientMutationId),
+      };
+    }
+
+    try {
+      const cloudflare = apiV1CloudflareFor(args)!;
+      const rawEnv = cloudflare.env!;
+      const env = rawEnv as NonNullable<ImportRecipeDeps["env"]>;
+      const deps: ImportRecipeDeps = {
+        db,
+        env,
+        bucket: (rawEnv as { PHOTOS?: R2Bucket }).PHOTOS,
+        waitUntil: apiV1WaitUntilFor(args),
+        imageGenRunner: (args.context as { imageGenRunner?: ImportRecipeDeps["imageGenRunner"] }).imageGenRunner,
+        logger: console,
+      };
+      const importOptions = dryRun
+        ? { chefId: principal.id, source, dryRun }
+        : { chefId: principal.id, source, recipeId: reservation.id };
+      const result = await importRecipeFromSource(importOptions, deps);
+      return {
+        status: result.recipeId ? 201 : 200,
+        data: await recipeImportMutationData(args, {
+          db,
+          recipeId: result.recipeId,
+          clientMutationId,
+          confidence: result.confidence,
+          source: result.source,
+          existingRecipeId: result.existingRecipeId,
+          coverPending: result.coverPending,
+        }),
+      };
+    } catch (error) {
+      if (error instanceof ImportRecipeError) {
+        throw mapRecipeImportErrorForApiV1(error);
+      }
+      throw error;
+    }
+  }, {
+    deleteReservationOnWriteError: false,
+    hasRecoverableWrite: async (db, record) => Boolean(await db.recipe.findFirst({
+      where: {
+        id: record.id,
+        chefId: principal.id,
+        deletedAt: null,
+      },
+      select: { id: true },
+    })),
+    recoverInFlight: async (db, record) => recoverRecipeImport(args, {
+      db,
+      principal,
+      clientMutationId,
+      record,
+    }),
+  });
 }
 
 async function handleRecipeSpoonList(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal | null, recipeId: string) {
@@ -2924,6 +3168,16 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
     }
 
     const segments = path.split("/").filter(Boolean);
+    if (path === "recipes/import" && args.request.method !== "POST") {
+      throw new ApiV1Error("method_not_allowed", "Method not allowed", { allow: "POST" });
+    }
+
+    if (args.request.method === "POST" && path === "recipes/import") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeImport(args, requestId, principal);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
     if (args.request.method === "GET" && segments[0] === "recipes" && segments.length === 2) {
       const principal = await authorize(path);
       const response = await handleRecipeDetail(args, requestId, principal, segments[1]);

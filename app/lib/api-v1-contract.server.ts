@@ -5,6 +5,7 @@ export const API_V1_RESOURCES = [
   { name: "openapi-sdk", path: "/api/v1/openapi.sdk.json", methods: ["GET"], auth: "optional", scopes: [] },
   { name: "openapi-connector", path: "/api/v1/openapi.connector.json", methods: ["GET"], auth: "optional", scopes: [] },
   { name: "recipes", path: "/api/v1/recipes", methods: ["GET"], auth: "optional", scopes: ["recipes:read"] },
+  { name: "recipe-import", path: "/api/v1/recipes/import", methods: ["POST"], auth: "bearer", scopes: ["kitchen:write"] },
   { name: "recipe", path: "/api/v1/recipes/{id}", methods: ["GET"], auth: "optional", scopes: ["recipes:read"] },
   { name: "recipe-spoons", path: "/api/v1/recipes/{id}/spoons", methods: ["GET"], auth: "optional", scopes: ["recipes:read"] },
   { name: "recipe-spoons-create", path: "/api/v1/recipes/{id}/spoons", methods: ["POST"], auth: "bearer", scopes: ["kitchen:write"] },
@@ -33,6 +34,7 @@ export const API_V1_SCOPE_REQUIREMENTS = [
   { path: "/api/v1/openapi.sdk.json", method: "GET", auth: "optional", scopes: [] },
   { path: "/api/v1/openapi.connector.json", method: "GET", auth: "optional", scopes: [] },
   { path: "/api/v1/recipes", method: "GET", auth: "optional", scopes: ["recipes:read"] },
+  { path: "/api/v1/recipes/import", method: "POST", auth: "bearer", scopes: ["kitchen:write"] },
   { path: "/api/v1/recipes/{id}", method: "GET", auth: "optional", scopes: ["recipes:read"] },
   { path: "/api/v1/recipes/{id}/spoons", method: "GET", auth: "optional", scopes: ["recipes:read"] },
   { path: "/api/v1/recipes/{id}/spoons", method: "POST", auth: "bearer", scopes: ["kitchen:write"] },
@@ -72,6 +74,8 @@ export const API_V1_ERROR_STATUS = {
   idempotency_conflict: 409,
   idempotency_in_progress: 409,
   rate_limited: 429,
+  upstream_error: 502,
+  upstream_timeout: 504,
   internal_error: 500,
 } as const;
 

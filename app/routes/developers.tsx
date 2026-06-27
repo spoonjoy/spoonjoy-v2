@@ -248,7 +248,7 @@ const authImplementationSteps = [
 const guideSteps = [
   "Read public recipes and cookbooks anonymously before adding auth.",
   "Use Session for logged-in playground calls; use bearer or OAuth only when a client runs outside that session.",
-  "Use a stable mutation id for shopping-list writes, then retry with the same value when a network call is interrupted.",
+  "Use a stable mutation id for recipe import and shopping-list writes, then retry with the same value when a network call is interrupted.",
   "Use the sync cursor to fetch shopping-list changes, including removed items.",
 ] as const;
 
@@ -277,7 +277,7 @@ const syncSafetyRows = [
   ["Cursor", "Use the returned nextCursor as the next request cursor after applying every item in the page durably. Treat it as opaque; ISO timestamps are accepted only as a bootstrap convenience."],
   ["Tombstones", "Sync includes deleted rows with deletedAt so offline clients can remove local items."],
   ["Pagination", "Use limit from 1 to 50 for small payloads. hasMore: true means continue with the returned nextCursor; webhooks, REST Hooks, SSE, and event subscriptions are not available yet."],
-  ["Idempotent owner mutations", "clientMutationId is scoped to the chef, retained for 24 hours, and bound to method, path, and body hash for shopping-list writes, recipe spoon writes, and recipe-cover writes. Persist and retry the exact serialized body for that mutation id."],
+  ["Idempotent owner mutations", "clientMutationId is scoped to the chef, retained for 24 hours, and bound to method, path, and body hash for recipe import, shopping-list writes, recipe spoon writes, and recipe-cover writes. Persist and retry the exact serialized body for that mutation id."],
   ["Replay", "Retry the same request with the same clientMutationId after a timeout; Spoonjoy returns the recorded response with mutation.replayed: true."],
   ["Conflict", "Reusing the same clientMutationId for a different method, path, or body returns 409 idempotency_conflict."],
   ["Retries", "Retry network timeouts, 429, and 5xx responses with the same mutation id. Refresh or reconnect on 401. Do not retry validation, scope, or idempotency conflicts unchanged."],
@@ -293,8 +293,8 @@ const scenarioQuickstarts = [
   {
     title: "Browser extension OAuth",
     mode: "Extension",
-    body: "API v1 does not create or import full recipes yet; the supported extension story today is shopping-list ingredient sync. Run OAuth/PKCE in the extension background, persist client_id plus state and code_verifier until callback, verify state, and make bearer API calls from the background instead of a content script. Register the HTTPS callback from chrome.identity.getRedirectURL/launchWebAuthFlow exactly; custom extension schemes are rejected.",
-    sample: "const item = { sourceRowId: \"row-42\", name: \"Eggs\", quantity: 12, unit: \"Each\" }\nclientMutationId = `extension:${sha256(recipeUrl)}:${item.sourceRowId}:${bodyHash}`\nPOST /api/v1/shopping-list/items\nAuthorization: Bearer sj_...\n{ \"clientMutationId\": \"extension:...\", \"name\": \"Eggs\", \"quantity\": 12, \"unit\": \"Each\" }",
+    body: "Use /api/v1/recipes/import with kitchen:write for full recipe clipping, or keep shopping_list:read shopping_list:write when the extension only syncs ingredient rows. Run OAuth/PKCE in the extension background, persist client_id plus state and code_verifier until callback, verify state, and make bearer API calls from the background instead of a content script. Register the HTTPS callback from chrome.identity.getRedirectURL/launchWebAuthFlow exactly; custom extension schemes are rejected.",
+    sample: "POST /api/v1/recipes/import\nAuthorization: Bearer sj_...\n{ \"clientMutationId\": \"extension:recipe-import:...\", \"source\": { \"type\": \"url\", \"url\": \"https://example.com/recipe\" } }\n\nconst item = { sourceRowId: \"row-42\", name: \"Eggs\", quantity: 12, unit: \"Each\" }\nclientMutationId = `extension:${sha256(recipeUrl)}:${item.sourceRowId}:${bodyHash}`\nPOST /api/v1/shopping-list/items\nAuthorization: Bearer sj_...\n{ \"clientMutationId\": \"extension:...\", \"name\": \"Eggs\", \"quantity\": 12, \"unit\": \"Each\" }",
   },
   {
     title: "Cron shopping-list export/import",
@@ -500,7 +500,7 @@ export default function Developers() {
               {currentCapabilities.notYetAvailable.map((item) => <li key={item}>- {item}</li>)}
             </ul>
             <Text className="mt-3">
-              Corporate tenant/admin APIs, inventory, meal plans, full exports, canonical unit conversion, webhooks, REST Hooks, batch mutations, and general recipe create/edit/import/export endpoints are future API surface, not hidden current endpoints.
+              Corporate tenant/admin APIs, inventory, meal plans, full exports, canonical unit conversion, webhooks, REST Hooks, batch mutations, and general recipe create/edit/delete/export endpoints are future API surface, not hidden current endpoints.
             </Text>
             <Text className="mt-3">
               Delegated approval helper endpoints under /api/tools/* are part of the current public connection flow. Other legacy app-only /api/* routes are not the external contract.
@@ -779,7 +779,7 @@ export default function Developers() {
           lists include cursor, nextCursor, hasMore, cover images, canonicalUrl, and attribution fields. Owner export and deleted recipe tombstones are not in API v1 yet.
         </Text>
         <Text className="mb-5">
-          Shopping-list cursor sync is the current incremental owner-data path. Store nextCursor after applying each batch and retry mutations with stable clientMutationId values.
+          Recipe import is an authenticated native app and automation surface at /api/v1/recipes/import. Shopping-list cursor sync is the current incremental owner-data path. Store nextCursor after applying each batch and retry mutations with stable clientMutationId values.
         </Text>
         <Text className="mb-5">
           Recipe ingredient quantities, units, servings, temperatures, and timers are original author data in API v1. Units are free-form display strings,
@@ -813,6 +813,7 @@ export default function Developers() {
         <div className="grid gap-4 md:grid-cols-3">
           {[
             ["Public catalog", "GET /api/v1/recipes and GET /api/v1/cookbooks need no token.", BookOpen],
+            ["Recipe import", "POST /api/v1/recipes/import uses kitchen:write plus a stable clientMutationId.", Braces],
             ["Private list", "Use shopping-list read and write scopes for pantry-style clients.", RefreshCw],
             ["Machine errors", "Every v1 error returns ok false, requestId, code, message, and status.", Braces],
           ].map(([title, body, Icon]) => (

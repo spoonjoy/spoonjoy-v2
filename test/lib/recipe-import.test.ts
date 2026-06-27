@@ -9,6 +9,7 @@ import { cleanupDatabase } from "../helpers/cleanup";
 const GENERATED_IMAGE_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
 import {
   ImportRecipeError,
+  importRecipeFromSource,
   importRecipeFromUrl,
   type ImportRecipeDeps,
 } from "~/lib/recipe-import.server";
@@ -2095,6 +2096,274 @@ describe("importRecipeFromUrl — extraction paths", () => {
           baseDeps({ fetchImpl: makeFetchImpl(fixture), now }),
         ),
       ).rejects.toMatchObject({ code: "title-conflict", status: 409 });
+    });
+  });
+});
+
+describe("importRecipeFromSource — native capture inputs", () => {
+  beforeEach(async () => {
+    await cleanupDatabase();
+  });
+  afterEach(async () => {
+    await cleanupDatabase();
+  });
+
+  it("imports native text through the LLM extractor and persists nullable sourceUrl", async () => {
+    const chef = await makeChef();
+    const llmRunner = makeLlmRunner({
+      title: "Native Card Stew",
+      description: "Captured from a handwritten card",
+      servings: "6",
+      ingredients: ["2 carrots", "1 onion"],
+      steps: ["Chop vegetables.", "Simmer until tender."],
+    });
+    const result = await importRecipeFromSource({
+      chefId: chef.id,
+      source: {
+        type: "text",
+        text: "Native Card Stew\n2 carrots\n1 onion\nChop and simmer",
+        sourceUrl: null,
+        capture: { source: "camera", assetIdentifier: "camera-asset-1" },
+      },
+    }, baseDeps({ llmRunner }));
+
+    expect(llmRunner.extract).toHaveBeenCalledWith("Native Card Stew\n2 carrots\n1 onion\nChop and simmer");
+    expect(result.recipeId).toEqual(expect.any(String));
+    expect(result.source).toBe("llm");
+    expect(result.confidence).toBe("low");
+    await expect(db.recipe.findUnique({ where: { id: result.recipeId! } })).resolves.toMatchObject({
+      title: "Native Card Stew",
+      sourceUrl: null,
+      chefId: chef.id,
+    });
+    await expect(db.recipeStep.count({ where: { recipeId: result.recipeId! } })).resolves.toBe(2);
+    await expect(db.ingredient.count({ where: { recipeId: result.recipeId! } })).resolves.toBe(2);
+  });
+
+  it("persists native text imports with a caller supplied recovery recipe id", async () => {
+    const chef = await makeChef();
+    const llmRunner = makeLlmRunner({
+      title: "Recovered Native Card",
+      ingredients: ["1 cup stock"],
+      steps: ["Warm gently."],
+    });
+    const recipeId = `recipe_recovered_${faker.string.alphanumeric(8).toLowerCase()}`;
+    const result = await importRecipeFromSource({
+      chefId: chef.id,
+      recipeId,
+      source: {
+        type: "text",
+        text: "Recovered Native Card\n1 cup stock\nWarm gently.",
+      },
+    }, baseDeps({ llmRunner }));
+
+    expect(result.recipeId).toBe(recipeId);
+    await expect(db.recipe.findUnique({ where: { id: recipeId } })).resolves.toMatchObject({
+      id: recipeId,
+      title: "Recovered Native Card",
+      chefId: chef.id,
+    });
+  });
+
+  it("rolls back caller supplied recovery recipe ids when child rows fail", async () => {
+    const chef = await makeChef();
+    const llmRunner = makeLlmRunner({
+      title: "Partial Native Card",
+      ingredients: ["1 cup stock"],
+      steps: [],
+    });
+    const recipeId = `recipe_partial_${faker.string.alphanumeric(8).toLowerCase()}`;
+
+    await expect(importRecipeFromSource({
+      chefId: chef.id,
+      recipeId,
+      source: {
+        type: "text",
+        text: "Partial Native Card\n1 cup stock",
+      },
+    }, baseDeps({ llmRunner }))).rejects.toBeTruthy();
+    await expect(db.recipe.findUnique({ where: { id: recipeId } })).resolves.toBeNull();
+  });
+
+  it("delegates native URL and video-url sources through the URL importer", async () => {
+    const fixture = await loadFixture("nyt-style-jsonld.html");
+    const chef = await makeChef();
+    const fetchImpl = makeFetchImpl(fixture);
+
+    const urlResult = await importRecipeFromSource({
+      chefId: chef.id,
+      dryRun: true,
+      source: { type: "url", url: "https://example.com/native-url" },
+    }, baseDeps({ fetchImpl }));
+    const videoUrlResult = await importRecipeFromSource({
+      chefId: chef.id,
+      dryRun: true,
+      source: { type: "video-url", url: "https://example.com/native-video" },
+    }, baseDeps({ fetchImpl }));
+
+    expect(urlResult).toMatchObject({
+      recipeId: null,
+      confidence: "high",
+      source: "json-ld",
+    });
+    expect(videoUrlResult).toMatchObject({
+      recipeId: null,
+      confidence: "high",
+      source: "json-ld",
+    });
+    expect(fetchImpl).toHaveBeenCalledWith("https://example.com/native-url", expect.any(Object));
+    expect(fetchImpl).toHaveBeenCalledWith("https://example.com/native-video", expect.any(Object));
+  });
+
+  it("imports native JSON-LD objects without invoking the LLM when the structured recipe is complete", async () => {
+    const chef = await makeChef();
+    const llmRunner = makeLlmRunner({
+      title: "Should Not Be Used",
+      ingredients: ["1 placeholder"],
+      steps: ["Placeholder."],
+    });
+    const result = await importRecipeFromSource({
+      chefId: chef.id,
+      source: {
+        type: "json-ld",
+        jsonLd: {
+          "@context": "https://schema.org",
+          "@type": "Recipe",
+          name: "Native JSON-LD Soup",
+          recipeYield: "3 bowls",
+          recipeIngredient: ["1 cup broth", "2 carrots"],
+          recipeInstructions: [
+            { "@type": "HowToStep", text: "Warm broth." },
+            { "@type": "HowToStep", text: "Add carrots." },
+          ],
+        },
+        sourceUrl: "https://capture.example/jsonld-soup",
+      },
+    }, baseDeps({ llmRunner }));
+
+    expect(llmRunner.extract).not.toHaveBeenCalled();
+    expect(result.source).toBe("json-ld");
+    await expect(db.recipe.findUnique({ where: { id: result.recipeId! } })).resolves.toMatchObject({
+      title: "Native JSON-LD Soup",
+      servings: "3 bowls",
+      sourceUrl: "https://capture.example/jsonld-soup",
+    });
+    await expect(db.recipeStep.count({ where: { recipeId: result.recipeId! } })).resolves.toBe(2);
+    await expect(db.ingredient.count({ where: { recipeId: result.recipeId! } })).resolves.toBe(2);
+  });
+
+  it("imports native JSON-LD objects with a null sourceUrl when none is supplied", async () => {
+    const chef = await makeChef();
+    const result = await importRecipeFromSource({
+      chefId: chef.id,
+      source: {
+        type: "json-ld",
+        jsonLd: {
+          "@context": "https://schema.org",
+          "@type": "Recipe",
+          name: "Native Unsourced JSON-LD",
+          recipeIngredient: ["1 cup broth"],
+          recipeInstructions: [{ "@type": "HowToStep", text: "Warm the broth." }],
+        },
+      },
+    }, baseDeps());
+
+    expect(result.source).toBe("json-ld");
+    await expect(db.recipe.findUnique({ where: { id: result.recipeId! } })).resolves.toMatchObject({
+      title: "Native Unsourced JSON-LD",
+      sourceUrl: null,
+    });
+  });
+
+  it("validates native source payloads before consuming import quota", async () => {
+    const chef = await makeChef();
+
+    await expect(importRecipeFromSource({
+      chefId: chef.id,
+      source: { type: "text", text: "   " },
+    }, baseDeps())).rejects.toMatchObject({
+      code: "no-content",
+      status: 422,
+    });
+    await expect(db.imageGenLedger.count({ where: { userId: chef.id, kind: "import" } })).resolves.toBe(0);
+  });
+
+  it("maps native text RecipeLlmError failures to llm-failed", async () => {
+    const chef = await makeChef();
+    const { RecipeLlmError } = await import("~/lib/recipe-import-llm.server");
+    const llmRunner: RecipeLlmRunner = {
+      extract: vi.fn(async () => {
+        throw new RecipeLlmError("native OCR extraction failed");
+      }),
+    };
+
+    await expect(importRecipeFromSource({
+      chefId: chef.id,
+      source: {
+        type: "text",
+        text: "Smudged recipe card\n1 cup flour\nBake somehow",
+      },
+    }, baseDeps({ llmRunner }))).rejects.toMatchObject({
+      code: "llm-failed",
+      status: 502,
+      message: "native OCR extraction failed",
+    });
+  });
+
+  it("throws llm-failed when native text import has no configured LLM runner", async () => {
+    const chef = await makeChef();
+
+    await expect(importRecipeFromSource({
+      chefId: chef.id,
+      source: {
+        type: "text",
+        text: "Captured recipe\n1 cup flour\nBake.",
+      },
+    }, baseDeps({
+      env: null,
+      llmRunner: undefined,
+    }))).rejects.toMatchObject({
+      code: "llm-failed",
+      status: 502,
+      message: "LLM runner is not configured",
+    });
+  });
+
+  it("rethrows unexpected native text extractor errors", async () => {
+    const chef = await makeChef();
+    const llmRunner: RecipeLlmRunner = {
+      extract: vi.fn(async () => {
+        throw new TypeError("native text parser exploded");
+      }),
+    };
+
+    await expect(importRecipeFromSource({
+      chefId: chef.id,
+      source: {
+        type: "text",
+        text: "Captured recipe\n1 cup flour\nBake.",
+      },
+    }, baseDeps({ llmRunner }))).rejects.toBeInstanceOf(TypeError);
+  });
+
+  it("rejects native text when the LLM extracts no title", async () => {
+    const chef = await makeChef();
+    const llmRunner = makeLlmRunner({
+      title: "   ",
+      ingredients: ["1 cup flour"],
+      steps: ["Bake."],
+    });
+
+    await expect(importRecipeFromSource({
+      chefId: chef.id,
+      source: {
+        type: "text",
+        text: "Untitled clipping\n1 cup flour\nBake.",
+      },
+    }, baseDeps({ llmRunner }))).rejects.toMatchObject({
+      code: "no-content",
+      status: 422,
+      message: "Could not extract a recipe from the captured text",
     });
   });
 });

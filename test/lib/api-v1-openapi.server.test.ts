@@ -19,6 +19,7 @@ const OPERATION_SCOPES = {
   "GET /api/v1/openapi.sdk.json": [],
   "GET /api/v1/openapi.connector.json": [],
   "GET /api/v1/recipes": ["recipes:read"],
+  "POST /api/v1/recipes/import": ["kitchen:write"],
   "GET /api/v1/recipes/{id}": ["recipes:read"],
   "GET /api/v1/recipes/{id}/spoons": ["recipes:read"],
   "POST /api/v1/recipes/{id}/spoons": ["kitchen:write"],
@@ -204,6 +205,24 @@ describe("API v1 OpenAPI document", () => {
       expect.objectContaining({ name: "id", in: "path", required: true, schema: { type: "string", minLength: 1 } }),
       expect.objectContaining({ name: "X-Request-Id", in: "header", required: false }),
     ]));
+    expect(operation(document, "/api/v1/recipes/import", "POST")).toMatchObject({
+      operationId: "postApiV1RecipeImport",
+      tags: ["Recipes"],
+      "x-auth": "bearer",
+      "x-scopes": ["kitchen:write"],
+      "x-idempotency": expect.objectContaining({
+        key: "clientMutationId",
+        location: "jsonBody",
+        replayStatus: [200, 201],
+      }),
+      requestBody: {
+        content: {
+          "application/json": {
+            schema: { $ref: "#/components/schemas/RecipeImportRequest" },
+          },
+        },
+      },
+    });
     expect(operation(document, "/api/v1/recipes/{id}/spoons", "GET")).toMatchObject({
       operationId: "getApiV1RecipeSpoons",
       tags: ["Recipe Spoons"],
@@ -651,6 +670,7 @@ describe("API v1 OpenAPI document", () => {
       "/api/v1/cookbooks",
       "/api/v1/cookbooks/{id}",
       "/api/v1/recipes",
+      "/api/v1/recipes/import",
       "/api/v1/recipes/{id}",
       "/api/v1/shopping-list",
       "/api/v1/shopping-list/add-from-recipe",
