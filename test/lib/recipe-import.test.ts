@@ -14,6 +14,13 @@ import {
 } from "~/lib/recipe-import.server";
 import type { RecipeLlmRunner } from "~/lib/recipe-import-llm.server";
 import type { ParsedIngredient } from "~/lib/ingredient-parse.server";
+import type { PostHogServerConfig } from "~/lib/analytics-server";
+
+const ENABLED_POSTHOG: PostHogServerConfig = {
+  enabled: true,
+  key: "phc_test",
+  host: "https://ph.example.com",
+};
 
 const FIXTURES_DIR = path.resolve(
   process.cwd(),
@@ -317,6 +324,128 @@ describe("importRecipeFromUrl — extraction paths", () => {
       );
       expect(result.source).toBe("llm");
       expect(result.confidence).toBe("low");
+    });
+
+    it("all-malformed JSON-LD emits spoonjoy.recipe_import.jsonld_malformed before the LLM spend (L8)", async () => {
+      const fixture = await loadFixture("malformed-jsonld.html");
+      const chef = await makeChef();
+      const llmRunner = makeLlmRunner({
+        title: "Mystery Stew",
+        ingredients: ["2 carrots"],
+        steps: ["Chop.", "Simmer."],
+      });
+      const events: Array<Record<string, unknown>> = [];
+      const analyticsFetchImpl = vi.fn(async (_url: unknown, init?: { body?: unknown }) => {
+        events.push(JSON.parse(String(init?.body)));
+        return new Response("ok");
+      }) as unknown as typeof fetch;
+
+      await importRecipeFromUrl(
+        { url: "https://recipes.example.com/broken", chefId: chef.id },
+        baseDeps({
+          fetchImpl: makeFetchImpl(fixture, "https://recipes.example.com/broken"),
+          llmRunner,
+          postHogConfig: ENABLED_POSTHOG,
+          analyticsFetchImpl,
+        }),
+      );
+
+      const malformed = events.find(
+        (e) => e.event === "spoonjoy.recipe_import.jsonld_malformed",
+      );
+      expect(malformed).toBeDefined();
+      expect(malformed?.distinct_id).toBe(chef.id);
+      expect(malformed?.properties).toMatchObject({
+        feature: "recipe_import",
+        malformedBlocks: 1,
+        sourceHost: "recipes.example.com",
+      });
+    });
+
+    it("resolves the capture config from env when no postHogConfig is provided (L8)", async () => {
+      const fixture = await loadFixture("malformed-jsonld.html");
+      const chef = await makeChef();
+      const llmRunner = makeLlmRunner({
+        title: "Mystery Stew",
+        ingredients: ["2 carrots"],
+        steps: ["Chop."],
+      });
+      const events: Array<Record<string, unknown>> = [];
+      const analyticsFetchImpl = vi.fn(async (_url: unknown, init?: { body?: unknown }) => {
+        events.push(JSON.parse(String(init?.body)));
+        return new Response("ok");
+      }) as unknown as typeof fetch;
+
+      await importRecipeFromUrl(
+        { url: "https://example.com/r", chefId: chef.id },
+        baseDeps({
+          fetchImpl: makeFetchImpl(fixture),
+          llmRunner,
+          // No postHogConfig → resolves from env's POSTHOG_KEY.
+          env: { OPENAI_API_KEY: "test-key", POSTHOG_KEY: "phc_env" },
+          analyticsFetchImpl,
+        }),
+      );
+
+      expect(
+        events.some((e) => e.event === "spoonjoy.recipe_import.jsonld_malformed"),
+      ).toBe(true);
+    });
+
+    it("is a no-op capture when env is null and no postHogConfig is provided (L8)", async () => {
+      const fixture = await loadFixture("malformed-jsonld.html");
+      const chef = await makeChef();
+      const llmRunner = makeLlmRunner({
+        title: "Mystery Stew",
+        ingredients: ["2 carrots"],
+        steps: ["Chop."],
+      });
+      const analyticsFetchImpl = vi.fn(
+        async () => new Response("ok"),
+      ) as unknown as typeof fetch;
+
+      const result = await importRecipeFromUrl(
+        { url: "https://example.com/r", chefId: chef.id },
+        baseDeps({
+          fetchImpl: makeFetchImpl(fixture),
+          llmRunner,
+          env: null,
+          analyticsFetchImpl,
+        }),
+      );
+
+      // Import still succeeds; capture resolves to disabled (no key), no post.
+      expect(result.source).toBe("llm");
+      expect(analyticsFetchImpl).not.toHaveBeenCalled();
+    });
+
+    it("does NOT emit the malformed-JSON-LD event when no ld+json blocks are present (L8)", async () => {
+      const fixture = await loadFixture("no-jsonld-rich-html.html");
+      const chef = await makeChef();
+      const llmRunner = makeLlmRunner({
+        title: "Plain Cake",
+        ingredients: ["flour"],
+        steps: ["Bake."],
+      });
+      const events: Array<Record<string, unknown>> = [];
+      const analyticsFetchImpl = vi.fn(async (_url: unknown, init?: { body?: unknown }) => {
+        events.push(JSON.parse(String(init?.body)));
+        return new Response("ok");
+      }) as unknown as typeof fetch;
+
+      await importRecipeFromUrl(
+        { url: "https://example.com/r", chefId: chef.id },
+        baseDeps({
+          fetchImpl: makeFetchImpl(fixture),
+          llmRunner,
+          postHogConfig: ENABLED_POSTHOG,
+          analyticsFetchImpl,
+        }),
+      );
+
+      expect(
+        events.some((e) => e.event === "spoonjoy.recipe_import.jsonld_malformed"),
+      ).toBe(false);
     });
   });
 

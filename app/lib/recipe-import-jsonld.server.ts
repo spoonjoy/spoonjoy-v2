@@ -19,6 +19,13 @@ export interface JsonLdRecipeDraft {
 export interface JsonLdExtractResult {
   draft: JsonLdRecipeDraft | null;
   multipleRecipes: boolean;
+  /**
+   * Count of `application/ld+json` script blocks whose body failed to parse as
+   * JSON. Non-zero with `draft: null` means usable structured data may have
+   * existed but was malformed, and the import is about to fall through to the
+   * costly LLM path — the caller surfaces this as a low-severity signal.
+   */
+  malformedBlocks: number;
 }
 
 type JsonValue =
@@ -147,6 +154,7 @@ function normalizeRecipe(node: Record<string, JsonValue>): JsonLdRecipeDraft | n
 
 export function extractRecipeJsonLd(html: string): JsonLdExtractResult {
   const candidates: Record<string, JsonValue>[] = [];
+  let malformedBlocks = 0;
   let match: RegExpExecArray | null;
   SCRIPT_REGEX.lastIndex = 0;
   while ((match = SCRIPT_REGEX.exec(html)) !== null) {
@@ -156,12 +164,16 @@ export function extractRecipeJsonLd(html: string): JsonLdExtractResult {
     try {
       parsed = JSON.parse(raw) as JsonValue;
     } catch {
+      // A present-but-unparseable ld+json block. Count it so the orchestrator
+      // can tell "no structured data" apart from "structured data, but broken"
+      // before it spends an LLM call.
+      malformedBlocks += 1;
       continue;
     }
     collectRecipes(parsed, candidates);
   }
   if (candidates.length === 0) {
-    return { draft: null, multipleRecipes: false };
+    return { draft: null, multipleRecipes: false, malformedBlocks };
   }
   for (const candidate of candidates) {
     const draft = normalizeRecipe(candidate);
@@ -169,8 +181,9 @@ export function extractRecipeJsonLd(html: string): JsonLdExtractResult {
       return {
         draft,
         multipleRecipes: candidates.length > 1,
+        malformedBlocks,
       };
     }
   }
-  return { draft: null, multipleRecipes: candidates.length > 1 };
+  return { draft: null, multipleRecipes: candidates.length > 1, malformedBlocks };
 }

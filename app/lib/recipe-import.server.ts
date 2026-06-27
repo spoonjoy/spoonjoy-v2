@@ -42,6 +42,7 @@ import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.s
 import { createCover } from "~/lib/recipe-cover.server";
 import { captureImageGenerationException } from "~/lib/image-gen-telemetry.server";
 import {
+  captureEvent,
   captureException,
   resolvePostHogServerConfig,
   type PostHogServerConfig,
@@ -79,8 +80,13 @@ export type ImportRecipeCode =
 export class ImportRecipeError extends Error {
   readonly code: ImportRecipeCode;
   readonly status: number;
-  constructor(code: ImportRecipeCode, status: number, message: string) {
-    super(message);
+  constructor(
+    code: ImportRecipeCode,
+    status: number,
+    message: string,
+    options?: { cause?: unknown },
+  ) {
+    super(message, options?.cause !== undefined ? { cause: options.cause } : undefined);
     this.name = "ImportRecipeError";
     this.code = code;
     this.status = status;
@@ -192,7 +198,10 @@ function mapSafeFetchError(err: SafeFetchError): ImportRecipeError {
 }
 
 function mapOEmbedError(err: OEmbedError): ImportRecipeError {
-  return new ImportRecipeError(err.code, err.status, err.message);
+  // Preserve the original OEmbedError (carrying upstreamStatus / network cause)
+  // as `cause` so the discarded oEmbed failure detail survives onto the error
+  // captured at the API boundary.
+  return new ImportRecipeError(err.code, err.status, err.message, { cause: err });
 }
 
 function getLlmRunner(deps: ImportRecipeDeps): RecipeLlmRunner | null {
@@ -227,6 +236,37 @@ async function captureRecipeLlmFailure(
     errorStatus: error.status,
     errorMessage: error.message,
   });
+}
+
+/**
+ * Emit a low-severity event when a page carried `application/ld+json` blocks
+ * that ALL failed to parse, so no usable Recipe draft came back and the import
+ * is about to fall through to the costly LLM path. Never throws — telemetry
+ * must not affect the import.
+ */
+async function captureMalformedJsonLd(
+  deps: ImportRecipeDeps,
+  chefId: string,
+  malformedBlocks: number,
+  sourceUrl: string,
+): Promise<void> {
+  const config =
+    deps.postHogConfig ?? resolvePostHogServerConfig(deps.env ?? {});
+  // `sourceUrl` is the import URL, already validated by `new URL(url)` at the
+  // top of `importRecipeFromUrl`, so parsing it again here cannot throw.
+  await captureEvent(
+    config,
+    {
+      event: "spoonjoy.recipe_import.jsonld_malformed",
+      distinctId: deps.analyticsDistinctId ?? chefId,
+      properties: {
+        feature: "recipe_import",
+        malformedBlocks,
+        sourceHost: new URL(sourceUrl).hostname.toLowerCase(),
+      },
+    },
+    deps.analyticsFetchImpl,
+  );
 }
 
 interface ExtractionOutput {
@@ -277,7 +317,11 @@ async function runExtraction(
       confidence: "medium",
     };
   }
-  // No usable JSON-LD → full LLM
+  // No usable JSON-LD → full LLM. If structured data was present but every
+  // block was malformed, surface that low-severity signal before the LLM spend.
+  if (jsonLd.malformedBlocks > 0) {
+    await captureMalformedJsonLd(deps, chefId, jsonLd.malformedBlocks, url);
+  }
   const llm = await runLlm(html, chefId, deps);
   if (!llm.title || !llm.title.trim()) {
     throw new ImportRecipeError(

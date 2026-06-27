@@ -1,8 +1,64 @@
 import type { AgentConnectionRequest, PrismaClient as PrismaClientType } from "@prisma/client";
 import { ApiAuthError, createApiCredential, hashApiToken } from "~/lib/api-auth.server";
 import { normalizeScope, OAuthError } from "~/lib/oauth-server.server";
+import {
+  captureEvent,
+  type PostHogServerConfig,
+} from "~/lib/analytics-server";
 
 type Database = PrismaClientType;
+
+/**
+ * Details of a lost device-code claim race: a poll minted a fresh credential,
+ * then found the request had already been claimed concurrently, so the new
+ * credential is being revoked immediately. Otherwise invisible — surfaced via
+ * the optional {@link PollAgentConnectionDeps.capture} hook.
+ */
+export interface AgentConnectionClaimRace {
+  requestId: string;
+  userId: string;
+  credentialId: string;
+}
+
+export interface PollAgentConnectionDeps {
+  /**
+   * Optional sink for the silent claim-race revoke. Wired by callers that have
+   * a request context; defaults to a no-op so the core flow stays pure and
+   * testable. Implementations must not throw.
+   */
+  capture?: (race: AgentConnectionClaimRace) => void;
+}
+
+/**
+ * Build a {@link PollAgentConnectionDeps.capture} sink that emits
+ * `spoonjoy.agent_connection.claim_race` to PostHog. Fire-and-forget; the
+ * underlying {@link captureEvent} swallows its own errors. Wrap the returned
+ * promise in `ctx.waitUntil` at the call site when one is available.
+ */
+export function postHogClaimRaceCapture(
+  config: PostHogServerConfig,
+  schedule: (task: Promise<unknown>) => void,
+  fetchImpl?: typeof fetch,
+): (race: AgentConnectionClaimRace) => void {
+  return (race) => {
+    schedule(
+      captureEvent(
+        config,
+        {
+          event: "spoonjoy.agent_connection.claim_race",
+          distinctId: race.userId,
+          properties: {
+            feature: "agent_connection",
+            requestId: race.requestId,
+            credentialId: race.credentialId,
+            outcome: "revoked_duplicate_credential",
+          },
+        },
+        fetchImpl,
+      ),
+    );
+  };
+}
 
 const DEFAULT_AGENT_NAME = "Ouroboros agent";
 const DEFAULT_BASE_URL = "https://spoonjoy.app";
@@ -230,6 +286,7 @@ export async function pollAgentConnection(
     tokenName?: string;
     now?: Date;
   },
+  deps: PollAgentConnectionDeps = {},
 ): Promise<PolledAgentConnection> {
   const now = input.now ?? new Date();
   const deviceCode = input.deviceCode.trim();
@@ -278,6 +335,14 @@ export async function pollAgentConnection(
       await db.apiCredential.update({
         where: { id: created.credential.id },
         data: { revokedAt: now },
+      });
+      // A concurrent poll claimed the request first; the credential we just
+      // minted is now orphaned and revoked. Surface this otherwise-silent race
+      // so a misbehaving client (or a real bug) hammering poll is observable.
+      deps.capture?.({
+        requestId: current.id,
+        userId: current.approvedById,
+        credentialId: created.credential.id,
       });
       return {
         status: "claimed",
