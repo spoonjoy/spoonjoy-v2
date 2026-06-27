@@ -13,12 +13,13 @@ import {
 } from "~/lib/validation";
 import { createRecipeDraft, parseRecipeStepsJson } from "~/lib/recipe-create.server";
 import {
-  deleteStoredImage,
+  deleteStoredImageWithCapture,
   hasUploadedImageFile,
   RECIPE_IMAGE_TYPES,
   storeImage,
   validateImageFileForStorage,
 } from "~/lib/image-storage.server";
+import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
 import { FOOD_IMAGE_ACCEPT, RECIPE_IMAGE_SIZE_MESSAGE, RECIPE_IMAGE_TYPE_MESSAGE } from "~/lib/recipe-image";
 import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
 import { createCover, setActiveRecipeCover } from "~/lib/recipe-cover.server";
@@ -220,8 +221,39 @@ export async function action({ request, context }: Route.ActionArgs) {
 
     return redirect(`/recipes/${recipe.id}`);
   } catch (error) {
+    // The recipe create failed after the image landed in R2. Record the real
+    // failure first (it was previously discarded behind a generic 500), then
+    // best-effort roll back the orphaned upload — capturing if that delete also
+    // throws so the orphan never becomes a silent leak.
+    const postHogConfig = cloudflareEnv
+      ? resolvePostHogServerConfig(cloudflareEnv)
+      : ({ enabled: false, reason: "missing-key" } as const);
+    const waitUntil = context.cloudflare?.ctx?.waitUntil
+      ? context.cloudflare.ctx.waitUntil.bind(context.cloudflare.ctx)
+      : undefined;
+    if (postHogConfig.enabled) {
+      const capture = captureException(postHogConfig, {
+        error,
+        distinctId: userId,
+        route: new URL(request.url).pathname,
+        method: request.method,
+      });
+      if (waitUntil) {
+        waitUntil(capture);
+      } else {
+        void capture;
+      }
+    }
     if (uploadedImageUrl) {
-      await deleteStoredImage({ bucket: photosBucket, imageUrl: uploadedImageUrl });
+      await deleteStoredImageWithCapture({
+        bucket: photosBucket,
+        imageUrl: uploadedImageUrl,
+        event: "spoonjoy.storage.orphan_cleanup_failed",
+        postHogConfig,
+        waitUntil,
+        distinctId: userId,
+        extras: { surface: "recipe_create" },
+      });
     }
 
     return data(

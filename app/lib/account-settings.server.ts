@@ -6,11 +6,12 @@ import { unlinkOAuthAccount } from "~/lib/oauth-user.server";
 import { hashPassword, verifyPassword } from "~/lib/auth.server";
 import { listUserPasskeys, removeUserPasskey, renameUserPasskey } from "~/lib/webauthn-route.server";
 import {
-  deleteStoredImage,
+  deleteStoredImageWithCapture,
   hasUploadedImageFile,
   storeImage,
   validateImageFile,
 } from "~/lib/image-storage.server";
+import { resolvePostHogServerConfig } from "~/lib/analytics-server";
 import { PROFILE_IMAGE_TYPES } from "~/lib/recipe-image";
 
 export interface NotificationPreferenceFlags {
@@ -441,9 +442,23 @@ export async function handleAccountSettingsAction({
       select: { photoUrl: true },
     });
 
-    await deleteStoredImage({
-      bucket: getCloudflareEnv(context)?.PHOTOS,
+    // R2 delete is best-effort: a throw here was previously uninstrumented and
+    // would escape the action. Capture it (and the orphaned-avatar event) and
+    // swallow so removing the avatar still succeeds in the DB.
+    const env = getCloudflareEnv(context);
+    const postHogConfig = env
+      ? resolvePostHogServerConfig(env)
+      : ({ enabled: false, reason: "missing-key" } as const);
+    const waitUntil = context.cloudflare?.ctx?.waitUntil
+      ? context.cloudflare.ctx.waitUntil.bind(context.cloudflare.ctx)
+      : undefined;
+    await deleteStoredImageWithCapture({
+      bucket: env?.PHOTOS,
       imageUrl: user?.photoUrl,
+      event: "spoonjoy.storage.avatar_delete_failed",
+      postHogConfig,
+      waitUntil,
+      distinctId: userId,
     });
 
     await database.user.update({

@@ -5,7 +5,7 @@ import { action, loader } from "~/routes/api.v1.$";
 import * as apiAuth from "~/lib/api-auth.server";
 import { createApiCredential } from "~/lib/api-auth.server";
 import { hashIdempotencyRequest, idempotencyClientKey, IDEMPOTENCY_TTL_MS } from "~/lib/api-idempotency.server";
-import { captureEvent } from "~/lib/analytics-server";
+import { captureEvent, captureException } from "~/lib/analytics-server";
 import { getLocalDb } from "~/lib/db.server";
 import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
@@ -14,6 +14,7 @@ import { createCookbookTitle, createTestRecipe, createTestUser } from "../utils"
 vi.mock("~/lib/analytics-server", async (importOriginal) => ({
   ...(await importOriginal<typeof import("~/lib/analytics-server")>()),
   captureEvent: vi.fn(async () => undefined),
+  captureException: vi.fn(async () => undefined),
 }));
 
 function routeArgs(request: Request, splat: string, env: Record<string, unknown> = {}) {
@@ -946,6 +947,7 @@ describe("API v1 rate-limit and error telemetry", () => {
     });
 
     const missingPath = "missing-secret-path";
+    vi.mocked(captureException).mockClear();
     const unknownPath = await loader(routeArgs(apiRequest(
       `http://localhost/api/v1/${missingPath}`,
       "req_error_unknown_path",
@@ -960,11 +962,15 @@ describe("API v1 rate-limit and error telemetry", () => {
       privacyClass: "public",
       forbidden: [missingPath],
     });
+    // Expected ApiV1Errors (e.g. 404 not_found) are not exceptions — no capture.
+    expect(captureException).not.toHaveBeenCalled();
   });
 
   it("captures internal errors without stack traces or exception messages in lifecycle telemetry", async () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    vi.spyOn(apiAuth, "authenticateApiRequest").mockRejectedValueOnce(new Error("auth storage unavailable"));
+    vi.mocked(captureException).mockClear();
+    const thrownError = new Error("auth storage unavailable");
+    vi.spyOn(apiAuth, "authenticateApiRequest").mockRejectedValueOnce(thrownError);
     const token = "sj_storage_failure_secret";
     const response = await loader(routeArgs(apiRequest("http://localhost/api/v1/health", "req_error_internal", {
       Authorization: `Bearer ${token}`,
@@ -986,6 +992,16 @@ describe("API v1 rate-limit and error telemetry", () => {
       method: "GET",
       path: "/api/v1/health",
     }));
+    // The lifecycle event omits the stack; captureException is what preserves it.
+    expect(captureException).toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: true }),
+      expect.objectContaining({
+        error: thrownError,
+        distinctId: "server",
+        route: "/api/v1/health",
+        method: "GET",
+      }),
+    );
 
     vi.mocked(captureEvent).mockClear();
     vi.spyOn(apiAuth, "authenticateApiRequest").mockRejectedValueOnce("auth string unavailable" as never);
@@ -1007,6 +1023,28 @@ describe("API v1 rate-limit and error telemetry", () => {
       requestId: "req_error_internal_string",
       error: "auth string unavailable",
     }));
+  });
+
+  it("does not capture internal errors when PostHog is unconfigured", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.mocked(captureException).mockClear();
+    vi.spyOn(apiAuth, "authenticateApiRequest").mockRejectedValueOnce(new Error("auth storage unavailable"));
+
+    const waitUntil = vi.fn((promise: Promise<unknown>) => promise);
+    const response = await loader({
+      request: apiRequest("http://localhost/api/v1/health", "req_error_internal_no_ph", {
+        Authorization: "Bearer sj_no_posthog_secret",
+      }),
+      params: { "*": "health" },
+      // env present (so waitUntil is wired) but no POSTHOG_KEY → capture is skipped.
+      context: { cloudflare: { env: {}, ctx: { waitUntil } } },
+    } as never);
+
+    expect(response.status).toBe(500);
+    expect(errorSpy).toHaveBeenCalledWith("[api-v1] internal_error", expect.objectContaining({
+      requestId: "req_error_internal_no_ph",
+    }));
+    expect(captureException).not.toHaveBeenCalled();
   });
 });
 

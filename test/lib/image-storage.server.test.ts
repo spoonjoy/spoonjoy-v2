@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import {
   deleteStoredImage,
+  deleteStoredImageWithCapture,
   getImageExtension,
   getStoredImageKey,
   hasUploadedImageFile,
@@ -8,6 +9,14 @@ import {
   storeImage,
   validateImageFile,
 } from "~/lib/image-storage.server";
+import type { PostHogServerConfig } from "~/lib/analytics-server";
+
+const enabledPostHog: PostHogServerConfig = {
+  enabled: true,
+  key: "ph_test",
+  host: "https://ph.example",
+};
+const disabledPostHog: PostHogServerConfig = { enabled: false, reason: "missing-key" };
 
 describe("image storage helpers", () => {
   const messages = {
@@ -616,6 +625,110 @@ describe("image storage helpers", () => {
         imageUrl: "https://example.com/photo.jpg",
       })).resolves.toBe(false);
       expect(bucket.delete).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("deleteStoredImageWithCapture", () => {
+    function fetchStub() {
+      const calls: Array<Record<string, unknown>> = [];
+      const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+        calls.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return new Response(null, { status: 200 });
+      });
+      return { calls, fetchMock };
+    }
+
+    it("returns the delete result and captures nothing on success", async () => {
+      const { calls, fetchMock } = fetchStub();
+      const bucket = { delete: vi.fn().mockResolvedValue(undefined) };
+      const waitUntil = vi.fn((promise: Promise<unknown>) => promise);
+
+      const result = await deleteStoredImageWithCapture({
+        bucket: bucket as unknown as R2Bucket,
+        imageUrl: "/photos/recipes/user-1/recipe-1/photo.jpg",
+        event: "spoonjoy.storage.orphan_cleanup_failed",
+        postHogConfig: enabledPostHog,
+        waitUntil,
+        distinctId: "user-1",
+      });
+
+      expect(result).toBe(true);
+      expect(bucket.delete).toHaveBeenCalledWith("recipes/user-1/recipe-1/photo.jpg");
+      expect(waitUntil).not.toHaveBeenCalled();
+      expect(calls).toHaveLength(0);
+      fetchMock.mockRestore();
+    });
+
+    it("swallows a delete failure, capturing the exception and a storage event via waitUntil", async () => {
+      const { calls, fetchMock } = fetchStub();
+      const bucket = { delete: vi.fn().mockRejectedValue(new Error("R2 delete exploded")) };
+      const scheduled: Promise<unknown>[] = [];
+      const waitUntil = vi.fn((promise: Promise<unknown>) => {
+        scheduled.push(promise);
+      });
+
+      const result = await deleteStoredImageWithCapture({
+        bucket: bucket as unknown as R2Bucket,
+        imageUrl: "/photos/recipes/user-1/recipe-1/photo.jpg",
+        event: "spoonjoy.storage.orphan_cleanup_failed",
+        postHogConfig: enabledPostHog,
+        waitUntil,
+        distinctId: "user-1",
+        extras: { surface: "recipe_create" },
+      });
+
+      expect(result).toBe(false);
+      expect(waitUntil).toHaveBeenCalledTimes(2);
+      await Promise.all(scheduled);
+
+      const exceptionCall = calls.find((c) => c.event === "$exception");
+      const eventCall = calls.find((c) => c.event === "spoonjoy.storage.orphan_cleanup_failed");
+      expect(exceptionCall?.distinct_id).toBe("user-1");
+      expect((exceptionCall?.properties as Record<string, unknown>).$exception_message).toBe("R2 delete exploded");
+      expect((exceptionCall?.properties as Record<string, unknown>).surface).toBe("recipe_create");
+      expect(eventCall?.distinct_id).toBe("user-1");
+      expect((eventCall?.properties as Record<string, unknown>).surface).toBe("recipe_create");
+      fetchMock.mockRestore();
+    });
+
+    it("fires capture without waitUntil when none is provided", async () => {
+      const { calls, fetchMock } = fetchStub();
+      const bucket = { delete: vi.fn().mockRejectedValue(new Error("R2 down")) };
+
+      const result = await deleteStoredImageWithCapture({
+        bucket: bucket as unknown as R2Bucket,
+        imageUrl: "/photos/recipes/user-1/recipe-1/photo.jpg",
+        event: "spoonjoy.storage.avatar_delete_failed",
+        postHogConfig: enabledPostHog,
+      });
+
+      expect(result).toBe(false);
+      // Capture promises run fire-and-forget; flush microtasks then assert.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(calls.some((c) => c.event === "$exception")).toBe(true);
+      expect(calls.some((c) => c.event === "spoonjoy.storage.avatar_delete_failed")).toBe(true);
+      // Defaults to the "server" distinct id when none is supplied.
+      expect(calls.find((c) => c.event === "$exception")?.distinct_id).toBe("server");
+      fetchMock.mockRestore();
+    });
+
+    it("swallows a delete failure without capturing when PostHog is disabled", async () => {
+      const { calls, fetchMock } = fetchStub();
+      const bucket = { delete: vi.fn().mockRejectedValue(new Error("R2 down")) };
+      const waitUntil = vi.fn();
+
+      const result = await deleteStoredImageWithCapture({
+        bucket: bucket as unknown as R2Bucket,
+        imageUrl: "/photos/recipes/user-1/recipe-1/photo.jpg",
+        event: "spoonjoy.storage.orphan_cleanup_failed",
+        postHogConfig: disabledPostHog,
+        waitUntil,
+      });
+
+      expect(result).toBe(false);
+      expect(waitUntil).not.toHaveBeenCalled();
+      expect(calls).toHaveLength(0);
+      fetchMock.mockRestore();
     });
   });
 });
