@@ -459,6 +459,8 @@ describe("/api/v1 shell", () => {
       idempotency_conflict: 409,
       idempotency_in_progress: 409,
       rate_limited: 429,
+      upstream_error: 502,
+      upstream_timeout: 504,
       internal_error: 500,
     });
   });

@@ -109,6 +109,7 @@ export interface ImportRecipeOptions {
   url: string;
   chefId: string;
   dryRun?: boolean;
+  recipeId?: string;
 }
 
 export type NativeRecipeImportCapture =
@@ -130,6 +131,7 @@ export interface ImportRecipeFromSourceOptions {
   chefId: string;
   source: NativeRecipeImportSource;
   dryRun?: boolean;
+  recipeId?: string;
 }
 
 export interface ImportRecipeDeps {
@@ -591,6 +593,7 @@ async function persistRecipe(
   ingredientParser: NonNullable<ImportRecipeDeps["ingredientParser"]>,
   env: ImportRecipeDeps["env"],
   now: () => Date,
+  recipeId?: string,
 ): Promise<{ id: string; recipe: unknown; title: string }> {
   const title = await resolveTitleWithRetry(db, chefId, draft.title, now);
 
@@ -603,6 +606,7 @@ async function persistRecipe(
 
   const created = await db.recipe.create({
     data: {
+      ...(recipeId ? { id: recipeId } : {}),
       title,
       description: draft.description,
       servings: draft.servings,
@@ -791,10 +795,11 @@ async function completeImportFromExtraction(input: {
   chefId: string;
   sourceUrl: string | null;
   dryRun: boolean;
+  recipeId?: string;
   extraction: ExtractionOutput;
   deps: ImportRecipeDeps;
 }): Promise<ImportRecipeResult> {
-  const { chefId, sourceUrl, dryRun, extraction, deps } = input;
+  const { chefId, sourceUrl, dryRun, recipeId, extraction, deps } = input;
   const existingRecipeId = await findExistingRecipeId(deps.db, chefId, sourceUrl);
 
   if (dryRun) {
@@ -818,6 +823,7 @@ async function completeImportFromExtraction(input: {
     ingredientParser,
     deps.env,
     deps.now ?? (() => new Date()),
+    recipeId,
   );
 
   const coverPending = await scheduleCover({
@@ -850,7 +856,7 @@ export async function importRecipeFromUrl(
   options: ImportRecipeOptions,
   deps: ImportRecipeDeps,
 ): Promise<ImportRecipeResult> {
-  const { url, chefId, dryRun = false } = options;
+  const { url, chefId, dryRun = false, recipeId } = options;
 
   // 0. Parse URL up front so malformed URLs fail BEFORE quota consume.
   let parsedUrl: URL;
@@ -891,6 +897,7 @@ export async function importRecipeFromUrl(
     chefId,
     sourceUrl: url,
     dryRun,
+    recipeId,
     extraction,
     deps,
   });
@@ -900,11 +907,11 @@ export async function importRecipeFromSource(
   options: ImportRecipeFromSourceOptions,
   deps: ImportRecipeDeps,
 ): Promise<ImportRecipeResult> {
-  const { chefId, dryRun = false } = options;
+  const { chefId, dryRun = false, recipeId } = options;
   switch (options.source.type) {
     case "url":
     case "video-url":
-      return importRecipeFromUrl({ url: options.source.url, chefId, dryRun }, deps);
+      return importRecipeFromUrl({ url: options.source.url, chefId, dryRun, recipeId }, deps);
     case "text": {
       const text = ensureNonblankText(options.source.text, "source.text");
       await consumeImportQuota(deps, chefId, dryRun);
@@ -914,6 +921,7 @@ export async function importRecipeFromSource(
         chefId,
         sourceUrl,
         dryRun,
+        recipeId,
         extraction,
         deps,
       });
@@ -932,6 +940,7 @@ export async function importRecipeFromSource(
         chefId,
         sourceUrl,
         dryRun,
+        recipeId,
         extraction,
         deps,
       });

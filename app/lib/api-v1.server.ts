@@ -1362,10 +1362,88 @@ function mapRecipeImportErrorForApiV1(error: ImportRecipeError): ApiV1Error {
       upstreamStatus: error.status,
     });
   }
+  if (error.status === 504) {
+    return new ApiV1Error("upstream_timeout", error.message, {
+      importCode: error.code,
+      upstreamStatus: error.status,
+    });
+  }
+  if (error.status >= 500) {
+    return new ApiV1Error("upstream_error", error.message, {
+      importCode: error.code,
+      upstreamStatus: error.status,
+    });
+  }
   return new ApiV1Error("validation_error", error.message, {
     importCode: error.code,
     upstreamStatus: error.status,
   });
+}
+
+async function recipeImportMutationData(
+  args: ApiV1RouteArgs,
+  input: {
+    db: ApiV1Db;
+    recipeId: string | null;
+    clientMutationId: string;
+    confidence: string | null;
+    source: string | null;
+    existingRecipeId: string | null;
+    coverPending: boolean;
+  },
+) {
+  const origin = publicContentOrigin(args);
+  const recipe = input.recipeId ? await loadRecipeById(input.db, input.recipeId) : null;
+  return {
+    recipe: recipe ? recipeDetail(recipe, origin) : null,
+    importCode: null,
+    blockers: [],
+    confidence: input.confidence,
+    source: input.source,
+    existingRecipeId: input.existingRecipeId,
+    coverPending: input.coverPending,
+    mutation: { clientMutationId: input.clientMutationId, replayed: false },
+  };
+}
+
+async function recoverRecipeImport(
+  args: ApiV1RouteArgs,
+  input: {
+    db: ApiV1Db;
+    principal: ApiPrincipal;
+    clientMutationId: string;
+    record: ApiIdempotencyKey;
+  },
+) {
+  const recipe = await input.db.recipe.findFirst({
+    where: {
+      id: input.record.id,
+      chefId: input.principal.id,
+      deletedAt: null,
+    },
+    select: { id: true },
+  });
+  if (!recipe) {
+    if (!recipeImportProvidersConfigured(args)) {
+      return {
+        status: 200,
+        data: providerSecretImportData(input.clientMutationId),
+      };
+    }
+    return null;
+  }
+  return {
+    status: 201,
+    data: await recipeImportMutationData(args, {
+      db: input.db,
+      recipeId: recipe.id,
+      clientMutationId: input.clientMutationId,
+      confidence: null,
+      source: null,
+      existingRecipeId: null,
+      coverPending: false,
+    }),
+  };
 }
 
 async function handleRecipeImport(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
@@ -1375,7 +1453,7 @@ async function handleRecipeImport(args: ApiV1RouteArgs, requestId: string, princ
   const source = parseRecipeImportSource(body.source);
   const dryRun = optionalBoolean(body.dryRun, "dryRun");
 
-  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "recipes.import", async (db) => {
+  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "recipes.import", async (db, reservation) => {
     if (!recipeImportProvidersConfigured(args)) {
       return {
         status: 200,
@@ -1397,22 +1475,19 @@ async function handleRecipeImport(args: ApiV1RouteArgs, requestId: string, princ
       };
       const importOptions = dryRun
         ? { chefId: principal.id, source, dryRun }
-        : { chefId: principal.id, source };
+        : { chefId: principal.id, source, recipeId: reservation.id };
       const result = await importRecipeFromSource(importOptions, deps);
-      const origin = publicContentOrigin(args);
-      const recipe = result.recipeId ? await loadRecipeById(db, result.recipeId) : null;
       return {
         status: result.recipeId ? 201 : 200,
-        data: {
-          recipe: recipe ? recipeDetail(recipe, origin) : null,
-          importCode: null,
-          blockers: [],
+        data: await recipeImportMutationData(args, {
+          db,
+          recipeId: result.recipeId,
+          clientMutationId,
           confidence: result.confidence,
           source: result.source,
           existingRecipeId: result.existingRecipeId,
           coverPending: result.coverPending,
-          mutation: { clientMutationId, replayed: false },
-        },
+        }),
       };
     } catch (error) {
       if (error instanceof ImportRecipeError) {
@@ -1420,6 +1495,22 @@ async function handleRecipeImport(args: ApiV1RouteArgs, requestId: string, princ
       }
       throw error;
     }
+  }, {
+    deleteReservationOnWriteError: false,
+    hasRecoverableWrite: async (db, record) => Boolean(await db.recipe.findFirst({
+      where: {
+        id: record.id,
+        chefId: principal.id,
+        deletedAt: null,
+      },
+      select: { id: true },
+    })),
+    recoverInFlight: async (db, record) => recoverRecipeImport(args, {
+      db,
+      principal,
+      clientMutationId,
+      record,
+    }),
   });
 }
 

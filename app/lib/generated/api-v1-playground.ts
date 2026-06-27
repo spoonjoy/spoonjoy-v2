@@ -1247,7 +1247,9 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "405",
         "409",
         "429",
-        "500"
+        "500",
+        "502",
+        "504"
       ],
       "responseSummaries": [
         {
@@ -1285,6 +1287,14 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "502",
+          "description": "Errors: upstream_error"
+        },
+        {
+          "status": "504",
+          "description": "Errors: upstream_timeout"
         }
       ],
       "responseExamples": [

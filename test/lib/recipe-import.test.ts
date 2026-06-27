@@ -2140,6 +2140,31 @@ describe("importRecipeFromSource — native capture inputs", () => {
     await expect(db.ingredient.count({ where: { recipeId: result.recipeId! } })).resolves.toBe(2);
   });
 
+  it("persists native text imports with a caller supplied recovery recipe id", async () => {
+    const chef = await makeChef();
+    const llmRunner = makeLlmRunner({
+      title: "Recovered Native Card",
+      ingredients: ["1 cup stock"],
+      steps: ["Warm gently."],
+    });
+    const recipeId = `recipe_recovered_${faker.string.alphanumeric(8).toLowerCase()}`;
+    const result = await importRecipeFromSource({
+      chefId: chef.id,
+      recipeId,
+      source: {
+        type: "text",
+        text: "Recovered Native Card\n1 cup stock\nWarm gently.",
+      },
+    }, baseDeps({ llmRunner }));
+
+    expect(result.recipeId).toBe(recipeId);
+    await expect(db.recipe.findUnique({ where: { id: recipeId } })).resolves.toMatchObject({
+      id: recipeId,
+      title: "Recovered Native Card",
+      chefId: chef.id,
+    });
+  });
+
   it("delegates native URL and video-url sources through the URL importer", async () => {
     const fixture = await loadFixture("nyt-style-jsonld.html");
     const chef = await makeChef();

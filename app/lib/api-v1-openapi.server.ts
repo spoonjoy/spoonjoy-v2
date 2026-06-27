@@ -816,7 +816,7 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
     GET: { operationId: "getApiV1Recipes", tags: ["Recipes"], summary: "Search public recipes", auth: "optional", scopes: ["recipes:read"], success: { 200: "RecipeListEnvelope" }, errors: ["validation_error", "invalid_cursor", "invalid_token", "insufficient_scope", "method_not_allowed", "rate_limited", "internal_error"], parameters: [queryParameters.query, queryParameters.q, queryParameters.cursor, queryParameters.limit] },
   },
   "/api/v1/recipes/import": {
-    POST: { operationId: "postApiV1RecipeImport", tags: ["Recipes"], summary: "Import a recipe from URL, video, text, or JSON-LD", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "RecipeImportEnvelope", 201: "RecipeImportEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "RecipeImportRequest" },
+    POST: { operationId: "postApiV1RecipeImport", tags: ["Recipes"], summary: "Import a recipe from URL, video, text, or JSON-LD", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "RecipeImportEnvelope", 201: "RecipeImportEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "upstream_error", "upstream_timeout", "internal_error"], requestBody: "RecipeImportRequest" },
   },
   "/api/v1/recipes/{id}": {
     GET: { operationId: "getApiV1Recipe", tags: ["Recipes"], summary: "Read one public recipe", auth: "optional", scopes: ["recipes:read"], success: { 200: "RecipeDetailEnvelope" }, errors: ["validation_error", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id] },
@@ -1292,6 +1292,8 @@ const errorMessages: Record<ApiV1ErrorCode, string> = {
   idempotency_conflict: "Idempotency key was already used for a different request",
   idempotency_in_progress: "Idempotency key is already in progress; retry shortly",
   rate_limited: "Too many requests",
+  upstream_error: "Upstream import provider failed",
+  upstream_timeout: "Upstream import provider timed out",
   internal_error: "Internal error",
 };
 

@@ -137,6 +137,7 @@ describe("API v1 recipe import", () => {
     expectEnvelopeHeaders(response, "req_native_text_import");
     expect(importSpy).toHaveBeenCalledWith({
       chefId: fixture.user.id,
+      recipeId: expect.any(String),
       source: {
         type: "text",
         text: "Grandma sauce\n2 tomatoes",
@@ -176,6 +177,81 @@ describe("API v1 recipe import", () => {
         importCode: null,
         blockers: [],
         mutation: { clientMutationId: "cm_native_text_import", replayed: false },
+      },
+    });
+  });
+
+  it("recovers in-flight imported recipes without duplicating provider work", async () => {
+    const fixture = await createImportFixture(db);
+    const importSpy = vi.spyOn(recipeImport, "importRecipeFromSource").mockRejectedValue(new Error("should not import"));
+    const body = {
+      clientMutationId: "cm_native_import_recover",
+      source: { type: "text", text: "Recovered soup\n1 cup stock" },
+    };
+    const idempotencyId = "idem_native_import_recover";
+    await db.apiIdempotencyKey.create({
+      data: {
+        id: idempotencyId,
+        userId: fixture.user.id,
+        credentialId: fixture.writer.credential.id,
+        clientKey: idempotencyClientKey({
+          id: fixture.user.id,
+          source: "bearer",
+          credentialId: fixture.writer.credential.id,
+        }),
+        key: body.clientMutationId,
+        operation: "recipes.import",
+        requestHash: await hashIdempotencyRequest({
+          method: "POST",
+          path: "/api/v1/recipes/import",
+          body,
+        }),
+        expiresAt: new Date(Date.now() + IDEMPOTENCY_TTL_MS),
+      },
+    });
+    await db.recipe.create({
+      data: {
+        ...createTestRecipe(fixture.user.id),
+        id: idempotencyId,
+        title: `Recovered Native Import ${faker.string.alphanumeric(8)}`,
+        sourceUrl: "https://capture.example/recovered-import",
+      },
+    });
+
+    const response = await action(mutationRequest(fixture.writer.token, "req_native_import_recover", body));
+    const payload = await readJson(response);
+    const completed = await db.apiIdempotencyKey.findUniqueOrThrow({ where: { id: idempotencyId } });
+
+    expect(response.status).toBe(201);
+    expectEnvelopeHeaders(response, "req_native_import_recover");
+    expect(importSpy).not.toHaveBeenCalled();
+    expect(payload).toMatchObject({
+      ok: true,
+      requestId: "req_native_import_recover",
+      data: {
+        recipe: {
+          id: idempotencyId,
+          canonicalUrl: `https://spoonjoy.app/recipes/${idempotencyId}`,
+          attribution: {
+            sourceUrl: "https://capture.example/recovered-import",
+            sourceHost: "capture.example",
+          },
+        },
+        importCode: null,
+        blockers: [],
+        confidence: null,
+        source: null,
+        existingRecipeId: null,
+        coverPending: false,
+        mutation: { clientMutationId: "cm_native_import_recover", replayed: true },
+      },
+    });
+    expect(completed.responseStatus).toBe(201);
+    expect(JSON.parse(completed.responseBody!)).toMatchObject({
+      ok: true,
+      data: {
+        recipe: { id: idempotencyId },
+        mutation: { clientMutationId: "cm_native_import_recover", replayed: false },
       },
     });
   });
@@ -333,25 +409,155 @@ describe("API v1 recipe import", () => {
     });
   });
 
-  it("maps expected import failures to API errors without collapsing them to internal_error", async () => {
+  it("recovers in-flight ProviderSecret blockers without retrying import work", async () => {
+    const fixture = await createImportFixture(db);
+    const importSpy = vi.spyOn(recipeImport, "importRecipeFromSource").mockRejectedValue(new Error("should not import"));
+    const body = {
+      clientMutationId: "cm_native_provider_blocker_recover",
+      source: { type: "text", text: "No provider key soup" },
+    };
+    await db.apiIdempotencyKey.create({
+      data: {
+        id: "idem_native_provider_blocker_recover",
+        userId: fixture.user.id,
+        credentialId: fixture.writer.credential.id,
+        clientKey: idempotencyClientKey({
+          id: fixture.user.id,
+          source: "bearer",
+          credentialId: fixture.writer.credential.id,
+        }),
+        key: body.clientMutationId,
+        operation: "recipes.import",
+        requestHash: await hashIdempotencyRequest({
+          method: "POST",
+          path: "/api/v1/recipes/import",
+          body,
+        }),
+        expiresAt: new Date(Date.now() + IDEMPOTENCY_TTL_MS),
+      },
+    });
+
+    const response = await action(mutationRequest(
+      fixture.writer.token,
+      "req_native_provider_blocker_recover",
+      body,
+      {},
+    ));
+    const payload = await readJson(response);
+
+    expect(response.status).toBe(200);
+    expect(importSpy).not.toHaveBeenCalled();
+    expect(payload).toMatchObject({
+      ok: true,
+      requestId: "req_native_provider_blocker_recover",
+      data: {
+        recipe: null,
+        importCode: "provider_secret_required",
+        blockers: [{
+          capability: "ProviderSecret",
+          provider: "openai",
+          resource: "recipe-import",
+        }],
+        mutation: { clientMutationId: "cm_native_provider_blocker_recover", replayed: true },
+      },
+    });
+  });
+
+  it("keeps genuinely in-flight imports retryable when no recoverable recipe exists", async () => {
+    const fixture = await createImportFixture(db);
+    const importSpy = vi.spyOn(recipeImport, "importRecipeFromSource").mockRejectedValue(new Error("should not import"));
+    const body = {
+      clientMutationId: "cm_native_import_still_in_flight",
+      source: { type: "text", text: "Still processing soup" },
+    };
+    await db.apiIdempotencyKey.create({
+      data: {
+        id: "idem_native_import_still_in_flight",
+        userId: fixture.user.id,
+        credentialId: fixture.writer.credential.id,
+        clientKey: idempotencyClientKey({
+          id: fixture.user.id,
+          source: "bearer",
+          credentialId: fixture.writer.credential.id,
+        }),
+        key: body.clientMutationId,
+        operation: "recipes.import",
+        requestHash: await hashIdempotencyRequest({
+          method: "POST",
+          path: "/api/v1/recipes/import",
+          body,
+        }),
+        expiresAt: new Date(Date.now() + IDEMPOTENCY_TTL_MS),
+      },
+    });
+
+    const response = await action(mutationRequest(fixture.writer.token, "req_native_import_still_in_flight", body));
+    const payload = await readJson(response);
+
+    expect(response.status).toBe(409);
+    expect(importSpy).not.toHaveBeenCalled();
+    expect(payload).toMatchObject({
+      ok: false,
+      requestId: "req_native_import_still_in_flight",
+      error: {
+        code: "idempotency_in_progress",
+        status: 409,
+        details: { retryAfterSeconds: 2 },
+      },
+    });
+  });
+
+  it("maps retryable import failures to upstream API errors without collapsing them to validation_error", async () => {
     const fixture = await createImportFixture(db);
     vi.spyOn(recipeImport, "importRecipeFromSource")
-      .mockRejectedValueOnce(new ImportRecipeError("video-unavailable", 502, "Video is private"));
+      .mockRejectedValueOnce(new ImportRecipeError("video-unavailable", 502, "Video is private"))
+      .mockRejectedValueOnce(new ImportRecipeError("fetch-timeout", 504, "Recipe host timed out"))
+      .mockRejectedValueOnce(new ImportRecipeError("not-html", 415, "Recipe URL did not return HTML"));
 
     const response = await action(mutationRequest(fixture.writer.token, "req_native_import_video_private", {
       clientMutationId: "cm_native_video_private",
       source: { type: "video-url", url: "https://www.youtube.com/watch?v=private" },
     }));
     const payload = await readJson(response);
+    const timeoutResponse = await action(mutationRequest(fixture.writer.token, "req_native_import_timeout", {
+      clientMutationId: "cm_native_import_timeout",
+      source: { type: "url", url: "https://example.com/slow-recipe" },
+    }));
+    const timeoutPayload = await readJson(timeoutResponse);
+    const validationResponse = await action(mutationRequest(fixture.writer.token, "req_native_import_not_html", {
+      clientMutationId: "cm_native_import_not_html",
+      source: { type: "url", url: "https://example.com/plain-text" },
+    }));
+    const validationPayload = await readJson(validationResponse);
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(502);
     expect(payload).toMatchObject({
       ok: false,
       requestId: "req_native_import_video_private",
       error: {
+        code: "upstream_error",
+        status: 502,
+        details: { importCode: "video-unavailable", upstreamStatus: 502 },
+      },
+    });
+    expect(timeoutResponse.status).toBe(504);
+    expect(timeoutPayload).toMatchObject({
+      ok: false,
+      requestId: "req_native_import_timeout",
+      error: {
+        code: "upstream_timeout",
+        status: 504,
+        details: { importCode: "fetch-timeout", upstreamStatus: 504 },
+      },
+    });
+    expect(validationResponse.status).toBe(400);
+    expect(validationPayload).toMatchObject({
+      ok: false,
+      requestId: "req_native_import_not_html",
+      error: {
         code: "validation_error",
         status: 400,
-        details: { importCode: "video-unavailable", upstreamStatus: 502 },
+        details: { importCode: "not-html", upstreamStatus: 415 },
       },
     });
   });
