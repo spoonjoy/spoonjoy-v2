@@ -304,14 +304,16 @@ describe("API v1 OpenAPI document", () => {
       spoons: [expect.objectContaining({
         id: "spoon_1",
         recipeId: "recipe_1",
-        photoUrl: "https://spoonjoy.app/photos/spoons/cover-raw.jpg",
+        photoUrl: "https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg",
       })],
     });
-    expect(responseExample(document, "/api/v1/recipes/{id}/spoons", "POST", "201").data).toMatchObject({
+    const createSpoonData = responseExample(document, "/api/v1/recipes/{id}/spoons", "POST", "201").data;
+    expect(createSpoonData).toMatchObject({
       spoon: expect.objectContaining({ id: "spoon_1" }),
       isOriginCook: true,
       mutation: { clientMutationId: "device-uuid-spoon-create", replayed: false },
     });
+    expect(createSpoonData).not.toHaveProperty("removed");
     expect(responseExample(document, "/api/v1/recipes/{id}/spoons/{spoonId}", "PATCH", "200").data).toMatchObject({
       spoon: expect.objectContaining({ id: "spoon_1" }),
       mutation: { clientMutationId: "device-uuid-spoon-update", replayed: false },

@@ -13,6 +13,7 @@ export interface SpoonPhotoAssignmentInput {
   ownerId: string;
   bucket?: R2Bucket;
   allowLocalImageFallback?: boolean;
+  allowExternal?: boolean;
 }
 
 function cleanUploadedImageUrlError(fieldName: string): ApiAuthError {
@@ -81,6 +82,7 @@ export async function validateSpoonPhotoAssignment({
   ownerId,
   bucket,
   allowLocalImageFallback,
+  allowExternal = true,
 }: SpoonPhotoAssignmentInput): Promise<{ stylizable: boolean }> {
   if (photoUrl.startsWith("data:")) {
     if (bucket || !allowLocalImageFallback) {
@@ -92,6 +94,9 @@ export async function validateSpoonPhotoAssignment({
 
   const key = storedPhotoKey(photoUrl, "Spoon photoUrl");
   if (!key) {
+    if (!allowExternal) {
+      throw new ApiAuthError("Spoon photoUrl must be a Spoonjoy uploaded spoon image URL.", 400);
+    }
     return { stylizable: false };
   }
   if (!belongsToOwnerSpoonUpload(key, ownerId)) {

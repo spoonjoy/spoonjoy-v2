@@ -1,8 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { faker } from "@faker-js/faker";
 import { Request as UndiciRequest } from "undici";
 import { action, loader } from "~/routes/api.v1.$";
 import { createApiCredential } from "~/lib/api-auth.server";
+import { hashIdempotencyRequest, idempotencyClientKey, IDEMPOTENCY_TTL_MS } from "~/lib/api-idempotency.server";
 import { mapSpoonDomainErrorForApiV1 } from "~/lib/api-v1.server";
 import { getLocalDb } from "~/lib/db.server";
 import { SpoonAuthError, SpoonNotFoundError, SpoonValidationError } from "~/lib/recipe-spoon.server";
@@ -13,10 +14,10 @@ function routeArgs(request: Request, splat: string, context = { cloudflare: { en
   return { request, params: { "*": splat }, context } as any;
 }
 
-function backgroundContext() {
+function backgroundContext(env: Env | null = null) {
   return {
     cloudflare: {
-      env: null,
+      env,
       ctx: {
         waitUntil: (promise: Promise<unknown>) => {
           void promise.catch(() => undefined);
@@ -24,6 +25,15 @@ function backgroundContext() {
       },
     },
   };
+}
+
+function bucketWithKeys(keys: string[]): R2Bucket {
+  const stored = new Set(keys);
+  return {
+    get: vi.fn(async (key: string) => stored.has(key) ? ({ body: null }) : null),
+    put: vi.fn(),
+    delete: vi.fn(),
+  } as unknown as R2Bucket;
 }
 
 async function readJson(response: Response) {
@@ -292,15 +302,17 @@ describe("API v1 recipe spoons", () => {
     }), `recipes/${fixture.recipe.id}/spoons`));
     expect(wrongScope.status).toBe(403);
 
+    const manualPhotoKey = `spoons/${fixture.owner.id}/${fixture.recipe.id}/manual-cover.jpg`;
+    const bucket = bucketWithKeys([manualPhotoKey]);
     const body = {
       clientMutationId: "spoon-create-manual-cover",
       note: "  Dinner notes  ",
       nextTime: "Add herbs",
       cookedAt: "2026-02-01T12:30:00.000Z",
-      photoUrl: `/photos/spoons/${fixture.owner.id}/${fixture.recipe.id}/manual-cover.jpg`,
+      photoUrl: `/photos/${manualPhotoKey}`,
       useAsRecipeCover: true,
     };
-    const response = await action(routeArgs(jsonRequest(`http://localhost/api/v1/recipes/${fixture.recipe.id}/spoons`, "POST", fixture.ownerKitchenWrite.token, "req_spoon_create", body), `recipes/${fixture.recipe.id}/spoons`, backgroundContext()));
+    const response = await action(routeArgs(jsonRequest(`http://localhost/api/v1/recipes/${fixture.recipe.id}/spoons`, "POST", fixture.ownerKitchenWrite.token, "req_spoon_create", body), `recipes/${fixture.recipe.id}/spoons`, backgroundContext({ PHOTOS: bucket })));
     const payload = await readJson(response);
     const recipe = await db.recipe.findUniqueOrThrow({ where: { id: fixture.recipe.id } });
 
@@ -313,7 +325,7 @@ describe("API v1 recipe spoons", () => {
           chefId: fixture.owner.id,
           recipeId: fixture.recipe.id,
           cookedAt: "2026-02-01T12:30:00.000Z",
-          photoUrl: `https://spoonjoy.app/photos/spoons/${fixture.owner.id}/${fixture.recipe.id}/manual-cover.jpg`,
+          photoUrl: `https://spoonjoy.app/photos/${manualPhotoKey}`,
           note: "Dinner notes",
           nextTime: "Add herbs",
           deletedAt: null,
@@ -322,7 +334,7 @@ describe("API v1 recipe spoons", () => {
         isOriginCook: true,
         createdCover: expect.objectContaining({
           sourceType: "spoon",
-          sourceImageUrl: `https://spoonjoy.app/photos/spoons/${fixture.owner.id}/${fixture.recipe.id}/manual-cover.jpg`,
+          sourceImageUrl: `https://spoonjoy.app/photos/${manualPhotoKey}`,
           activeVariant: "image",
         }),
         activeCover: expect.objectContaining({ activeVariant: "image" }),
@@ -335,7 +347,7 @@ describe("API v1 recipe spoons", () => {
       coverMode: "manual",
     });
 
-    const replay = await action(routeArgs(jsonRequest(`http://localhost/api/v1/recipes/${fixture.recipe.id}/spoons`, "POST", fixture.ownerKitchenWrite.token, "req_spoon_create_replay", body), `recipes/${fixture.recipe.id}/spoons`, backgroundContext()));
+    const replay = await action(routeArgs(jsonRequest(`http://localhost/api/v1/recipes/${fixture.recipe.id}/spoons`, "POST", fixture.ownerKitchenWrite.token, "req_spoon_create_replay", body), `recipes/${fixture.recipe.id}/spoons`, backgroundContext({ PHOTOS: bucket })));
     expect(replay.status).toBe(201);
     await expect(replay.json()).resolves.toMatchObject({
       ok: true,
@@ -346,10 +358,21 @@ describe("API v1 recipe spoons", () => {
       },
     });
 
+    const replayAfterObjectGone = await action(routeArgs(jsonRequest(`http://localhost/api/v1/recipes/${fixture.recipe.id}/spoons`, "POST", fixture.ownerKitchenWrite.token, "req_spoon_create_replay_missing_object", body), `recipes/${fixture.recipe.id}/spoons`, backgroundContext({ PHOTOS: bucketWithKeys([]) })));
+    expect(replayAfterObjectGone.status).toBe(201);
+    await expect(replayAfterObjectGone.json()).resolves.toMatchObject({
+      ok: true,
+      requestId: "req_spoon_create_replay_missing_object",
+      data: {
+        spoon: { id: payload.data.spoon.id },
+        mutation: { clientMutationId: "spoon-create-manual-cover", replayed: true },
+      },
+    });
+
     const conflict = await action(routeArgs(jsonRequest(`http://localhost/api/v1/recipes/${fixture.recipe.id}/spoons`, "POST", fixture.ownerKitchenWrite.token, "req_spoon_create_conflict", {
       ...body,
       note: "Different body",
-    }), `recipes/${fixture.recipe.id}/spoons`, backgroundContext()));
+    }), `recipes/${fixture.recipe.id}/spoons`, backgroundContext({ PHOTOS: bucket })));
     expect(conflict.status).toBe(409);
     await expect(conflict.json()).resolves.toMatchObject({
       ok: false,
@@ -367,12 +390,14 @@ describe("API v1 recipe spoons", () => {
 
   it("auto-seeds an origin-cook spoon photo cover when auto mode has no real cover", async () => {
     const fixture = await createSpoonFixture(db);
+    const autoPhotoKey = `spoons/${fixture.owner.id}/${fixture.recipe.id}/auto-cover.jpg`;
+    const bucket = bucketWithKeys([autoPhotoKey]);
     const body = {
       clientMutationId: "spoon-create-auto-cover",
-      photoUrl: `/photos/spoons/${fixture.owner.id}/${fixture.recipe.id}/auto-cover.jpg`,
+      photoUrl: `/photos/${autoPhotoKey}`,
     };
 
-    const response = await action(routeArgs(jsonRequest(`http://localhost/api/v1/recipes/${fixture.recipe.id}/spoons`, "POST", fixture.ownerKitchenWrite.token, "req_spoon_create_auto_cover", body), `recipes/${fixture.recipe.id}/spoons`, backgroundContext()));
+    const response = await action(routeArgs(jsonRequest(`http://localhost/api/v1/recipes/${fixture.recipe.id}/spoons`, "POST", fixture.ownerKitchenWrite.token, "req_spoon_create_auto_cover", body), `recipes/${fixture.recipe.id}/spoons`, backgroundContext({ PHOTOS: bucket })));
     const payload = await readJson(response);
     const recipe = await db.recipe.findUniqueOrThrow({ where: { id: fixture.recipe.id } });
 
@@ -394,8 +419,178 @@ describe("API v1 recipe spoons", () => {
     });
   });
 
+  it("validates REST spoon photoUrl ownership and storage on create and update", async () => {
+    const fixture = await createSpoonFixture(db);
+    const validCreateKey = `spoons/${fixture.owner.id}/${fixture.recipe.id}/valid-create.jpg`;
+    const validUpdateKey = `spoons/${fixture.owner.id}/${fixture.recipe.id}/valid-update.jpg`;
+    const foreignKey = `spoons/${fixture.outsider.id}/${fixture.recipe.id}/foreign.jpg`;
+    const profileKey = `profiles/${fixture.owner.id}/avatar.jpg`;
+    const bucket = bucketWithKeys([validCreateKey, validUpdateKey, foreignKey, profileKey]);
+    const createUrl = `http://localhost/api/v1/recipes/${fixture.recipe.id}/spoons`;
+    const createSplat = `recipes/${fixture.recipe.id}/spoons`;
+
+    for (const [requestId, clientMutationId, photoUrl] of [
+      ["req_spoon_photo_external", "spoon-photo-external", "https://evil.example/spoon.jpg"],
+      ["req_spoon_photo_foreign", "spoon-photo-foreign", `/photos/${foreignKey}`],
+      ["req_spoon_photo_missing", "spoon-photo-missing", `/photos/spoons/${fixture.owner.id}/${fixture.recipe.id}/missing.jpg`],
+      ["req_spoon_photo_profile", "spoon-photo-profile", `/photos/${profileKey}`],
+    ] as const) {
+      const response = await action(routeArgs(jsonRequest(createUrl, "POST", fixture.ownerKitchenWrite.token, requestId, {
+        clientMutationId,
+        photoUrl,
+      }), createSplat, backgroundContext({ PHOTOS: bucket })));
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toMatchObject({
+        ok: false,
+        requestId,
+        error: { code: "validation_error", status: 400 },
+      });
+    }
+    await expect(db.recipeSpoon.count({ where: { chefId: fixture.owner.id, recipeId: fixture.recipe.id } })).resolves.toBe(0);
+
+    const created = await action(routeArgs(jsonRequest(createUrl, "POST", fixture.ownerKitchenWrite.token, "req_spoon_photo_valid_create", {
+      clientMutationId: "spoon-photo-valid-create",
+      photoUrl: `/photos/${validCreateKey}`,
+    }), createSplat, backgroundContext({ PHOTOS: bucket })));
+    expect(created.status).toBe(201);
+    await expect(created.json()).resolves.toMatchObject({
+      data: {
+        spoon: {
+          chefId: fixture.owner.id,
+          recipeId: fixture.recipe.id,
+          photoUrl: `https://spoonjoy.app/photos/${validCreateKey}`,
+        },
+      },
+    });
+
+    const spoon = await db.recipeSpoon.create({
+      data: { chefId: fixture.owner.id, recipeId: fixture.recipe.id, note: "Update me" },
+    });
+    const updateUrl = `http://localhost/api/v1/recipes/${fixture.recipe.id}/spoons/${spoon.id}`;
+    const updateSplat = `recipes/${fixture.recipe.id}/spoons/${spoon.id}`;
+    const externalUpdate = await action(routeArgs(jsonRequest(updateUrl, "PATCH", fixture.ownerKitchenWrite.token, "req_spoon_photo_update_external", {
+      clientMutationId: "spoon-photo-update-external",
+      photoUrl: "https://evil.example/update.jpg",
+    }), updateSplat, backgroundContext({ PHOTOS: bucket })));
+    expect(externalUpdate.status).toBe(400);
+    await expect(db.recipeSpoon.findUniqueOrThrow({ where: { id: spoon.id } }))
+      .resolves.toMatchObject({ photoUrl: null });
+
+    const validUpdate = await action(routeArgs(jsonRequest(updateUrl, "PATCH", fixture.ownerKitchenWrite.token, "req_spoon_photo_valid_update", {
+      clientMutationId: "spoon-photo-valid-update",
+      photoUrl: `/photos/${validUpdateKey}`,
+    }), updateSplat, backgroundContext({ PHOTOS: bucket })));
+    expect(validUpdate.status).toBe(200);
+    await expect(validUpdate.json()).resolves.toMatchObject({
+      data: {
+        spoon: {
+          id: spoon.id,
+          photoUrl: `https://spoonjoy.app/photos/${validUpdateKey}`,
+        },
+      },
+    });
+    expect(bucket.get).toHaveBeenCalledWith(validCreateKey);
+    expect(bucket.get).toHaveBeenCalledWith(`spoons/${fixture.owner.id}/${fixture.recipe.id}/missing.jpg`);
+    expect(bucket.get).toHaveBeenCalledWith(validUpdateKey);
+  });
+
+  it("recovers create-spoon retries after idempotency completion fails without duplicating spoons", async () => {
+    const fixture = await createSpoonFixture(db);
+    const photoKey = `spoons/${fixture.owner.id}/${fixture.recipe.id}/retry-safe.jpg`;
+    const bucket = bucketWithKeys([photoKey]);
+    const body = {
+      clientMutationId: "spoon-create-completion-failure",
+      note: "Retry-safe spoon",
+      photoUrl: `/photos/${photoKey}`,
+      useAsRecipeCover: true,
+    };
+    const path = `/api/v1/recipes/${fixture.recipe.id}/spoons`;
+    const requestHash = await hashIdempotencyRequest({
+      method: "POST",
+      path,
+      body,
+    });
+    const idempotency = await db.apiIdempotencyKey.create({
+      data: {
+        userId: fixture.owner.id,
+        credentialId: fixture.ownerKitchenWrite.credential.id,
+        clientKey: idempotencyClientKey({
+          id: fixture.owner.id,
+          source: "bearer",
+          credentialId: fixture.ownerKitchenWrite.credential.id,
+        }),
+        key: body.clientMutationId,
+        operation: "recipes.spoons.create",
+        requestHash,
+        expiresAt: new Date(Date.now() + IDEMPOTENCY_TTL_MS),
+      },
+    });
+    await db.recipeSpoon.create({
+      data: {
+        id: idempotency.id,
+        chefId: fixture.owner.id,
+        recipeId: fixture.recipe.id,
+        note: body.note,
+        photoUrl: body.photoUrl,
+      },
+    });
+    const cover = await db.recipeCover.create({
+      data: {
+        recipeId: fixture.recipe.id,
+        imageUrl: body.photoUrl,
+        sourceType: "spoon",
+        sourceSpoonId: idempotency.id,
+        status: "processing",
+        createdById: fixture.owner.id,
+        sourceImageUrl: body.photoUrl,
+        generationStatus: "processing",
+      },
+    });
+    await db.recipe.update({
+      where: { id: fixture.recipe.id },
+      data: {
+        activeCoverId: cover.id,
+        activeCoverVariant: "image",
+        coverMode: "manual",
+      },
+    });
+    await expect(db.recipeSpoon.count({
+      where: { chefId: fixture.owner.id, recipeId: fixture.recipe.id, note: "Retry-safe spoon" },
+    })).resolves.toBe(1);
+
+    const retry = await action(routeArgs(jsonRequest(`http://localhost${path}`, "POST", fixture.ownerKitchenWrite.token, "req_spoon_create_completion_retry", body), `recipes/${fixture.recipe.id}/spoons`, backgroundContext({ PHOTOS: bucket })));
+    const retryPayload = await readJson(retry);
+
+    expect(retry.status).toBe(201);
+    expect(retryPayload).toMatchObject({
+      ok: true,
+      requestId: "req_spoon_create_completion_retry",
+      data: {
+        spoon: expect.objectContaining({
+          chefId: fixture.owner.id,
+          recipeId: fixture.recipe.id,
+          note: "Retry-safe spoon",
+          photoUrl: `https://spoonjoy.app/photos/${photoKey}`,
+        }),
+        createdCover: { id: cover.id },
+        mutation: { clientMutationId: "spoon-create-completion-failure", replayed: true },
+      },
+    });
+    await expect(db.recipeSpoon.count({
+      where: { chefId: fixture.owner.id, recipeId: fixture.recipe.id, note: "Retry-safe spoon" },
+    })).resolves.toBe(1);
+    await expect(db.apiIdempotencyKey.findFirstOrThrow({
+      where: { userId: fixture.owner.id, key: "spoon-create-completion-failure" },
+    })).resolves.toMatchObject({ responseStatus: 201 });
+    await expect(db.recipeCover.count({
+      where: { recipeId: fixture.recipe.id, sourceSpoonId: idempotency.id },
+    })).resolves.toBe(1);
+  });
+
   it("updates spoons idempotently with owner-only recipe-path validation", async () => {
     const fixture = await createSpoonFixture(db);
+    const updatePhotoKey = `spoons/${fixture.owner.id}/${fixture.recipe.id}/after.jpg`;
+    const bucket = bucketWithKeys([updatePhotoKey]);
     const spoon = await db.recipeSpoon.create({
       data: {
         chefId: fixture.owner.id,
@@ -411,10 +606,10 @@ describe("API v1 recipe spoons", () => {
       note: "After",
       nextTime: "Less salt",
       cookedAt: "2026-03-01T00:00:00.000Z",
-      photoUrl: `/photos/spoons/${fixture.owner.id}/${fixture.recipe.id}/after.jpg`,
+      photoUrl: `/photos/${updatePhotoKey}`,
     };
 
-    const response = await action(routeArgs(jsonRequest(url, "PATCH", fixture.ownerKitchenWrite.token, "req_spoon_update", body), splat));
+    const response = await action(routeArgs(jsonRequest(url, "PATCH", fixture.ownerKitchenWrite.token, "req_spoon_update", body), splat, backgroundContext({ PHOTOS: bucket })));
     const payload = await readJson(response);
 
     expect(response.status).toBe(200);
@@ -427,14 +622,14 @@ describe("API v1 recipe spoons", () => {
           note: "After",
           nextTime: "Less salt",
           cookedAt: "2026-03-01T00:00:00.000Z",
-          photoUrl: `https://spoonjoy.app/photos/spoons/${fixture.owner.id}/${fixture.recipe.id}/after.jpg`,
+          photoUrl: `https://spoonjoy.app/photos/${updatePhotoKey}`,
           chef: expect.objectContaining({ id: fixture.owner.id }),
         }),
         mutation: { clientMutationId: "spoon-update", replayed: false },
       },
     });
 
-    const replay = await action(routeArgs(jsonRequest(url, "PATCH", fixture.ownerKitchenWrite.token, "req_spoon_update_replay", body), splat));
+    const replay = await action(routeArgs(jsonRequest(url, "PATCH", fixture.ownerKitchenWrite.token, "req_spoon_update_replay", body), splat, backgroundContext({ PHOTOS: bucket })));
     expect(replay.status).toBe(200);
     await expect(replay.json()).resolves.toMatchObject({
       ok: true,

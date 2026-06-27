@@ -1,4 +1,4 @@
-import type { ApiCredential, Prisma, RecipeCover, RecipeSpoon } from "@prisma/client";
+import type { ApiCredential, ApiIdempotencyKey, Prisma, RecipeCover, RecipeSpoon } from "@prisma/client";
 import type { AppLoadContext } from "react-router";
 import {
   ApiAuthError,
@@ -59,6 +59,7 @@ import {
 } from "~/lib/recipe-spoon.server";
 import { activateSpoonCoverForDecision } from "~/lib/spoon-cover-activation.server";
 import { decideSpoonCoverCreation } from "~/lib/spoon-cover-decision.server";
+import { validateSpoonPhotoAssignment } from "~/lib/recipe-image-assignment.server";
 import { resolveIngredientAffordance } from "~/lib/ingredient-affordances";
 import { deferBackgroundTask } from "~/lib/background-task.server";
 import { scheduleSpoonCoverStylization } from "~/lib/spoon-cover-stylization.server";
@@ -1071,6 +1072,71 @@ function coverCloudflare(args: ApiV1RouteArgs) {
   };
 }
 
+async function validateApiV1SpoonPhotoUrl(args: ApiV1RouteArgs, principal: ApiPrincipal, photoUrl: string) {
+  const cf = apiV1CloudflareFor(args);
+  try {
+    await validateSpoonPhotoAssignment({
+      photoUrl,
+      ownerId: principal.id,
+      bucket: cf?.env?.PHOTOS,
+      allowLocalImageFallback: false,
+      allowExternal: false,
+    });
+  } catch (error) {
+    if (error instanceof ApiAuthError) {
+      if (error.status === 400) {
+        throw new ApiV1Error("validation_error", error.message);
+      }
+      throw new ApiV1Error("internal_error", error.message);
+    }
+    throw error;
+  }
+}
+
+async function hasMatchingIdempotencyAttempt(input: {
+  args: ApiV1RouteArgs;
+  principal: ApiPrincipal;
+  body: Record<string, unknown>;
+  clientMutationId: string;
+  operation: string;
+}) {
+  const db = await getRequestDb(input.args.context);
+  const path = normalizeApiV1Path(input.args.params["*"]);
+  const requestHash = await hashIdempotencyRequest({
+    method: input.args.request.method,
+    path: `/api/v1/${path}`,
+    body: input.body,
+  });
+  const existing = await db.apiIdempotencyKey.findUnique({
+    where: {
+      userId_clientKey_key: {
+        userId: input.principal.id,
+        clientKey: idempotencyClientKey(input.principal),
+        key: input.clientMutationId,
+      },
+    },
+  });
+  return Boolean(
+    existing &&
+    existing.expiresAt > new Date() &&
+    existing.operation === input.operation &&
+    existing.requestHash === requestHash,
+  );
+}
+
+async function validateApiV1SpoonPhotoUrlForNewAttempt(input: {
+  args: ApiV1RouteArgs;
+  principal: ApiPrincipal;
+  body: Record<string, unknown>;
+  clientMutationId: string;
+  operation: string;
+  photoUrl: string | null;
+}) {
+  if (!input.photoUrl) return;
+  if (await hasMatchingIdempotencyAttempt(input)) return;
+  await validateApiV1SpoonPhotoUrl(input.args, input.principal, input.photoUrl);
+}
+
 async function runOrQueueCoverStylization(
   args: ApiV1RouteArgs,
   input: {
@@ -1336,6 +1402,111 @@ async function maybeCreateSpoonCover(
   };
 }
 
+async function isRecoveredOriginCook(db: ApiV1Db, recipe: RecipeForApiV1SpoonCoverRow, spoon: RecipeSpoon, principal: ApiPrincipal) {
+  if (recipe.chefId !== principal.id || spoon.chefId !== principal.id || spoon.recipeId !== recipe.id) return false;
+  const earlierSpoon = await db.recipeSpoon.findFirst({
+    where: {
+      id: { not: spoon.id },
+      chefId: principal.id,
+      recipeId: recipe.id,
+      deletedAt: null,
+      createdAt: { lte: spoon.createdAt },
+    },
+    select: { id: true },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+  });
+  return !earlierSpoon;
+}
+
+async function existingSpoonCoverPayload(db: ApiV1Db, recipe: RecipeForApiV1SpoonCoverRow, spoon: RecipeSpoon, origin: string) {
+  const existingCover = await db.recipeCover.findFirst({
+    where: {
+      recipeId: recipe.id,
+      sourceSpoonId: spoon.id,
+    },
+    orderBy: { createdAt: "desc" },
+  });
+  if (!existingCover) return null;
+  const nextRecipe = await loadActiveRecipeForSpoons(db, recipe.id);
+  return {
+    activeCover: await activeFullCoverPayload(db, nextRecipe, origin),
+    previousActiveCover: null,
+    createdCover: fullCoverPayload(existingCover, nextRecipe, origin),
+    generationStatus: existingCover.generationStatus,
+  };
+}
+
+async function recipeSpoonCreateData(
+  args: ApiV1RouteArgs,
+  input: {
+    db: ApiV1Db;
+    principal: ApiPrincipal;
+    recipeId: string;
+    spoonId: string;
+    clientMutationId: string;
+    isOriginCook: boolean;
+    useAsRecipeCover: boolean;
+  },
+) {
+  const origin = publicContentOrigin(args);
+  const recipe = await loadActiveRecipeForSpoons(input.db, input.recipeId);
+  const spoon = await input.db.recipeSpoon.findFirstOrThrow({
+    where: { id: input.spoonId, recipeId: input.recipeId },
+    include: { chef: { select: API_V1_SPOON_CHEF_SELECT } },
+  });
+  const existingCoverData = await existingSpoonCoverPayload(input.db, recipe, spoon, origin);
+  const coverData = existingCoverData ?? await maybeCreateSpoonCover(args, {
+    db: input.db,
+    origin,
+    principal: input.principal,
+    recipe,
+    spoon,
+    isOriginCook: input.isOriginCook,
+    useAsRecipeCover: input.useAsRecipeCover,
+  });
+  return {
+    spoon: spoonPayload(spoon, origin),
+    isOriginCook: input.isOriginCook,
+    ...coverData,
+    mutation: { clientMutationId: input.clientMutationId, replayed: false },
+  };
+}
+
+async function recoverRecipeSpoonCreate(
+  args: ApiV1RouteArgs,
+  input: {
+    db: ApiV1Db;
+    principal: ApiPrincipal;
+    recipeId: string;
+    clientMutationId: string;
+    useAsRecipeCover: boolean;
+    record: ApiIdempotencyKey;
+  },
+) {
+  const spoon = await input.db.recipeSpoon.findFirst({
+    where: {
+      id: input.record.id,
+      chefId: input.principal.id,
+      recipeId: input.recipeId,
+      deletedAt: null,
+    },
+  });
+  if (!spoon) return null;
+  const recipe = await loadActiveRecipeForSpoons(input.db, input.recipeId);
+  return {
+    status: 201,
+    data: await recipeSpoonCreateData(args, {
+      db: input.db,
+      principal: input.principal,
+      recipeId: input.recipeId,
+      spoonId: spoon.id,
+      clientMutationId: input.clientMutationId,
+      isOriginCook: await isRecoveredOriginCook(input.db, recipe, spoon, input.principal),
+      useAsRecipeCover: input.useAsRecipeCover,
+    }),
+  };
+}
+
 async function handleRecipeSpoonCreate(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string) {
   const body = await parseApiV1JsonBody(args.request);
   assertKnownFields(body, ["clientMutationId", "note", "nextTime", "cookedAt", "photoUrl", "useAsRecipeCover"]);
@@ -1345,13 +1516,21 @@ async function handleRecipeSpoonCreate(args: ApiV1RouteArgs, requestId: string, 
   const cookedAt = optionalIsoDate(body.cookedAt, "cookedAt");
   const photoUrl = optionalNullableString(body.photoUrl, "photoUrl", 2048);
   const useAsRecipeCover = optionalBoolean(body.useAsRecipeCover, "useAsRecipeCover");
+  await validateApiV1SpoonPhotoUrlForNewAttempt({
+    args,
+    principal,
+    body,
+    clientMutationId,
+    operation: "recipes.spoons.create",
+    photoUrl,
+  });
 
-  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "recipes.spoons.create", async (db) => {
-    const origin = publicContentOrigin(args);
-    const recipe = await loadActiveRecipeForSpoons(db, recipeId);
+  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "recipes.spoons.create", async (db, reservation) => {
+    await loadActiveRecipeForSpoons(db, recipeId);
     let created: Awaited<ReturnType<typeof createSpoon>>;
     try {
       created = await createSpoon(db, {
+        id: reservation.id,
         chefId: principal.id,
         recipeId,
         note,
@@ -1362,28 +1541,28 @@ async function handleRecipeSpoonCreate(args: ApiV1RouteArgs, requestId: string, 
     } catch (error) {
       throw mapSpoonDomainErrorForApiV1(error);
     }
-    const spoon = await db.recipeSpoon.findFirstOrThrow({
-      where: { id: created.spoon.id, recipeId },
-      include: { chef: { select: API_V1_SPOON_CHEF_SELECT } },
-    });
-    const coverData = await maybeCreateSpoonCover(args, {
-      db,
-      origin,
-      principal,
-      recipe,
-      spoon,
-      isOriginCook: created.isOriginCook,
-      useAsRecipeCover,
-    });
     return {
       status: 201,
-      data: {
-        spoon: spoonPayload(spoon, origin),
+      data: await recipeSpoonCreateData(args, {
+        db,
+        principal,
+        recipeId,
+        spoonId: created.spoon.id,
+        clientMutationId,
         isOriginCook: created.isOriginCook,
-        ...coverData,
-        mutation: { clientMutationId, replayed: false },
-      },
+        useAsRecipeCover,
+      }),
     };
+  }, {
+    deleteReservationOnWriteError: false,
+    recoverInFlight: async (db, record) => recoverRecipeSpoonCreate(args, {
+      db,
+      principal,
+      recipeId,
+      clientMutationId,
+      useAsRecipeCover,
+      record,
+    }),
   });
 }
 
@@ -1396,6 +1575,14 @@ async function handleRecipeSpoonUpdate(args: ApiV1RouteArgs, requestId: string, 
   if (hasOwnField(body, "nextTime")) patch.nextTime = optionalNullableString(body.nextTime, "nextTime");
   if (hasOwnField(body, "cookedAt")) patch.cookedAt = optionalIsoDate(body.cookedAt, "cookedAt");
   if (hasOwnField(body, "photoUrl")) patch.photoUrl = optionalNullableString(body.photoUrl, "photoUrl", 2048);
+  await validateApiV1SpoonPhotoUrlForNewAttempt({
+    args,
+    principal,
+    body,
+    clientMutationId,
+    operation: "recipes.spoons.update",
+    photoUrl: typeof patch.photoUrl === "string" ? patch.photoUrl : null,
+  });
 
   return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "recipes.spoons.update", async (db) => {
     const origin = publicContentOrigin(args);
@@ -2146,7 +2333,14 @@ async function runIdempotentShoppingMutation(
   body: Record<string, unknown>,
   clientMutationId: string,
   operation: string,
-  write: (db: ApiV1WriteDb) => Promise<{ status: number; data: Record<string, unknown> }>,
+  write: (db: ApiV1WriteDb, reservation: ApiIdempotencyKey) => Promise<{ status: number; data: Record<string, unknown> }>,
+  options: {
+    deleteReservationOnWriteError?: boolean;
+    recoverInFlight?: (
+      db: ApiV1WriteDb,
+      record: ApiIdempotencyKey,
+    ) => Promise<{ status: number; data: Record<string, unknown> } | null>;
+  } = {},
 ) {
   const db = await getRequestDb(args.context);
   const path = normalizeApiV1Path(args.params["*"]);
@@ -2173,6 +2367,22 @@ async function runIdempotentShoppingMutation(
   }
 
   if (reservation.status === "in_flight") {
+    const recovered = await options.recoverInFlight?.(db, reservation.record);
+    if (recovered) {
+      const storedBody = idempotentMutationBody(requestId, recovered.data);
+      await completeIdempotencyKey(db, reservation.record.id, {
+        status: recovered.status,
+        body: storedBody,
+      });
+      const replay = replayIdempotencyResponse({
+        responseStatus: recovered.status,
+        responseBody: JSON.stringify(storedBody),
+      }, requestId);
+      return withApiV1Telemetry(Response.json(replay.body, {
+        status: replay.status,
+        headers: apiV1PrivateHeaders(requestId),
+      }), { idempotencyOutcome: "replayed", operation });
+    }
     throw new ApiV1Error(
       "idempotency_in_progress",
       "clientMutationId is already in progress; retry after the Retry-After header",
@@ -2186,10 +2396,12 @@ async function runIdempotentShoppingMutation(
 
   let result: Awaited<ReturnType<typeof write>>;
   try {
-    result = await write(db);
+    result = await write(db, reservation.record);
   } catch (error) {
     /* istanbul ignore next -- @preserve defensive cleanup for a write failure after reservation; integration tests cover the response path before reservation succeeds. */
-    await db.apiIdempotencyKey.delete({ where: { id: reservation.record.id } }).catch(() => undefined);
+    if (options.deleteReservationOnWriteError !== false) {
+      await db.apiIdempotencyKey.delete({ where: { id: reservation.record.id } }).catch(() => undefined);
+    }
     throw error;
   }
 
