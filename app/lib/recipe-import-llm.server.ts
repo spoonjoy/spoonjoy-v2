@@ -7,6 +7,7 @@
 
 import { z } from "zod";
 import { createOpenAIClient } from "~/lib/openai-client.server";
+import { extractOpenAIErrorFields } from "~/lib/openai-error.server";
 
 export const DEFAULT_RECIPE_LLM_MODEL = "gpt-4o-mini";
 export const DEFAULT_RECIPE_LLM_TIMEOUT_MS = 30_000;
@@ -37,7 +38,13 @@ export interface OpenAIRecipeLlmClient {
   };
 }
 
+export const RECIPE_LLM_PROVIDER = "openai";
+
 export interface RecipeLlmRunner {
+  /** LLM provider backing this runner (always `openai` today). */
+  readonly provider?: string;
+  /** Resolved model id (e.g. `gpt-4o-mini`). */
+  readonly model?: string;
   extract(text: string): Promise<{
     title: string;
     description: string | null;
@@ -49,10 +56,20 @@ export interface RecipeLlmRunner {
 
 export class RecipeLlmError extends Error {
   readonly cause?: unknown;
+  /** Original OpenAI error code (e.g. `insufficient_quota`), when known. */
+  readonly code: string | null;
+  /** Original OpenAI error type, when known. */
+  readonly type: string | null;
+  /** Original OpenAI HTTP status, when known. */
+  readonly status: number | null;
   constructor(message: string, cause?: unknown) {
     super(message);
     this.name = "RecipeLlmError";
     if (cause !== undefined) this.cause = cause;
+    const fields = extractOpenAIErrorFields(cause);
+    this.code = fields.code;
+    this.type = fields.type;
+    this.status = fields.status;
   }
 }
 
@@ -177,6 +194,8 @@ export function createOpenAIRecipeLlmRunner(
   const factory = opts.clientFactory ?? defaultClientFactory;
   const client = factory({ apiKey, timeout });
   return {
+    provider: RECIPE_LLM_PROVIDER,
+    model,
     async extract(text) {
       let response;
       try {

@@ -7,6 +7,9 @@
 
 import { z } from 'zod'
 import { createOpenAIClient } from '~/lib/openai-client.server'
+import { extractOpenAIErrorFields } from '~/lib/openai-error.server'
+import { captureLlmCallFailure } from '~/lib/llm-telemetry.server'
+import type { PostHogServerConfig, PostHogServerEnv } from '~/lib/analytics-server'
 
 export const DEFAULT_INGREDIENT_PARSE_PROVIDER = 'openai'
 export const DEFAULT_INGREDIENT_PARSE_MODEL = 'gpt-4o-mini'
@@ -15,12 +18,24 @@ export const DEFAULT_INGREDIENT_PARSE_MAX_RETRIES = 1
 
 export type IngredientParseProvider = typeof DEFAULT_INGREDIENT_PARSE_PROVIDER
 
-export interface IngredientParserEnv {
+export interface IngredientParserEnv extends PostHogServerEnv {
   OPENAI_API_KEY?: string
   INGREDIENT_PARSE_PROVIDER?: string
   INGREDIENT_PARSE_MODEL?: string
   INGREDIENT_PARSE_TIMEOUT_MS?: string
   INGREDIENT_PARSE_MAX_RETRIES?: string
+}
+
+/**
+ * Optional telemetry context for {@link parseIngredients}. When supplied (and
+ * PostHog is configured), LLM-call failures are captured to PostHog with the
+ * preserved OpenAI error code/type/status. Callers without analytics wiring can
+ * omit it entirely — capture then no-ops.
+ */
+export interface IngredientParseTelemetry {
+  postHogConfig?: PostHogServerConfig
+  fetchImpl?: typeof fetch
+  distinctId?: string
 }
 
 export interface IngredientParserConfig {
@@ -55,14 +70,27 @@ export type ParsedIngredientsResponse = z.infer<typeof ParsedIngredientsResponse
 
 /**
  * Error thrown when ingredient parsing fails.
+ *
+ * When the failure originates from OpenAI, the original machine-readable error
+ * `code`/`type` and HTTP `status` are preserved (rather than collapsed into the
+ * mapped, user-facing message) so out-of-credit (`insufficient_quota`) failures
+ * can be told apart from `rate_limit_exceeded` or `model_not_found`.
  */
 export class IngredientParseError extends Error {
+  readonly code: string | null
+  readonly type: string | null
+  readonly status: number | null
+
   constructor(
     message: string,
     public readonly cause?: unknown
   ) {
     super(message)
     this.name = 'IngredientParseError'
+    const fields = extractOpenAIErrorFields(cause)
+    this.code = fields.code
+    this.type = fields.type
+    this.status = fields.status
   }
 }
 
@@ -233,6 +261,8 @@ function mapOpenAIError(error: unknown): IngredientParseError {
  *
  * @param text - The ingredient text to parse (e.g., "2 cups flour" or multiple lines)
  * @param configInput - The OpenAI API key string or ingredient parser env/config values
+ * @param telemetry - Optional analytics context; when supplied, LLM-call
+ *   failures are captured to PostHog with the preserved OpenAI error code.
  * @returns Array of parsed ingredients
  * @throws IngredientParseError if parsing fails
  *
@@ -247,7 +277,8 @@ function mapOpenAIError(error: unknown): IngredientParseError {
  */
 export async function parseIngredients(
   text: string,
-  configInput?: IngredientParserConfigInput
+  configInput?: IngredientParserConfigInput,
+  telemetry?: IngredientParseTelemetry
 ): Promise<ParsedIngredient[]> {
   const config = resolveIngredientParserConfig(configInput)
 
@@ -306,10 +337,37 @@ export async function parseIngredients(
 
     return result.data.ingredients
   } catch (error) {
-    if (error instanceof IngredientParseError) {
-      throw error
-    }
+    const mapped =
+      error instanceof IngredientParseError ? error : mapOpenAIError(error)
 
-    throw mapOpenAIError(error)
+    await reportIngredientParseFailure(getConfigSource(configInput), config, mapped, telemetry)
+
+    throw mapped
   }
+}
+
+/**
+ * Capture an ingredient-parse failure to PostHog with the preserved OpenAI
+ * error code/type/status. Never throws — telemetry must not mask the original
+ * parse failure (which is re-thrown by the caller).
+ */
+async function reportIngredientParseFailure(
+  env: IngredientParserEnv,
+  config: IngredientParserConfig,
+  error: IngredientParseError,
+  telemetry: IngredientParseTelemetry | undefined
+): Promise<void> {
+  await captureLlmCallFailure({
+    env,
+    postHogConfig: telemetry?.postHogConfig,
+    fetchImpl: telemetry?.fetchImpl,
+    distinctId: telemetry?.distinctId,
+    operation: 'ingredient_parse',
+    provider: config.provider,
+    model: config.model,
+    errorCode: error.code,
+    errorType: error.type,
+    errorStatus: error.status,
+    errorMessage: error.message,
+  })
 }

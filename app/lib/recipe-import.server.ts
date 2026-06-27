@@ -27,6 +27,7 @@ import {
 import {
   createOpenAIRecipeLlmRunner,
   htmlToPlainText,
+  RECIPE_LLM_PROVIDER,
   RecipeLlmError,
   type RecipeLlmEnv,
   type RecipeLlmRunner,
@@ -35,6 +36,7 @@ import {
   parseIngredients,
   type ParsedIngredient,
 } from "~/lib/ingredient-parse.server";
+import { captureLlmCallFailure } from "~/lib/llm-telemetry.server";
 import { tryConsumeImageGenQuota } from "~/lib/image-gen-ledger.server";
 import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
 import { createCover } from "~/lib/recipe-cover.server";
@@ -118,6 +120,12 @@ export interface ImportRecipeDeps {
   ) => Promise<ParsedIngredient[]>;
   logger?: Pick<Console, "error">;
   now?: () => Date;
+  /** PostHog distinct id for LLM-failure telemetry. Defaults to the chef id. */
+  analyticsDistinctId?: string;
+  /** Pre-resolved PostHog config; falls back to resolving from `env`. */
+  postHogConfig?: PostHogServerConfig;
+  /** fetch used for analytics posts; separate so app fetch can be mocked apart. */
+  analyticsFetchImpl?: typeof fetch;
 }
 
 export type ImportRecipeConfidence = "high" | "medium" | "low";
@@ -195,6 +203,32 @@ function getLlmRunner(deps: ImportRecipeDeps): RecipeLlmRunner | null {
   return createLlmRunner(env);
 }
 
+/**
+ * Capture a recipe-import LLM-call failure to PostHog with the preserved OpenAI
+ * error code/type/status. Never throws — telemetry must not mask the mapped
+ * `ImportRecipeError` the caller re-throws.
+ */
+async function captureRecipeLlmFailure(
+  deps: ImportRecipeDeps,
+  chefId: string,
+  runner: RecipeLlmRunner,
+  error: RecipeLlmError,
+): Promise<void> {
+  await captureLlmCallFailure({
+    env: deps.env,
+    postHogConfig: deps.postHogConfig,
+    fetchImpl: deps.analyticsFetchImpl,
+    distinctId: deps.analyticsDistinctId ?? chefId,
+    operation: "recipe_import",
+    provider: runner.provider ?? RECIPE_LLM_PROVIDER,
+    model: runner.model ?? "unknown",
+    errorCode: error.code,
+    errorType: error.type,
+    errorStatus: error.status,
+    errorMessage: error.message,
+  });
+}
+
 interface ExtractionOutput {
   draft: ImportRecipeDraftView;
   source: ImportRecipeSource;
@@ -205,6 +239,7 @@ async function runExtraction(
   url: string,
   html: string,
   ogImageUrl: string | null,
+  chefId: string,
   deps: ImportRecipeDeps,
 ): Promise<ExtractionOutput> {
   const jsonLd = extractRecipeJsonLd(html);
@@ -226,7 +261,7 @@ async function runExtraction(
       };
     }
     // Partial JSON-LD → gap-fill via LLM
-    const llm = await runLlm(html, deps);
+    const llm = await runLlm(html, chefId, deps);
     return {
       draft: {
         title: draft.title,
@@ -243,7 +278,7 @@ async function runExtraction(
     };
   }
   // No usable JSON-LD → full LLM
-  const llm = await runLlm(html, deps);
+  const llm = await runLlm(html, chefId, deps);
   if (!llm.title || !llm.title.trim()) {
     throw new ImportRecipeError(
       "no-content",
@@ -268,6 +303,7 @@ async function runExtraction(
 
 async function runLlm(
   html: string,
+  chefId: string,
   deps: ImportRecipeDeps,
 ): Promise<{
   title: string;
@@ -289,6 +325,7 @@ async function runLlm(
     return await llmRunner.extract(text);
   } catch (err) {
     if (err instanceof RecipeLlmError) {
+      await captureRecipeLlmFailure(deps, chefId, llmRunner, err);
       throw new ImportRecipeError("llm-failed", 502, err.message);
     }
     throw err;
@@ -298,6 +335,7 @@ async function runLlm(
 async function runVideoExtraction(
   parsedUrl: URL,
   sourceKind: "youtube" | "tiktok",
+  chefId: string,
   deps: ImportRecipeDeps,
 ): Promise<ExtractionOutput> {
   const llmRunner = getLlmRunner(deps);
@@ -325,6 +363,7 @@ async function runVideoExtraction(
     });
   } catch (err) {
     if (err instanceof RecipeLlmError) {
+      await captureRecipeLlmFailure(deps, chefId, llmRunner, err);
       throw new ImportRecipeError("llm-failed", 502, err.message);
     }
     throw err;
@@ -645,10 +684,11 @@ export async function importRecipeFromUrl(
       url,
       fetched.html,
       fetched.ogImageUrl,
+      chefId,
       deps,
     );
   } else {
-    extraction = await runVideoExtraction(parsedUrl, sourceKind, deps);
+    extraction = await runVideoExtraction(parsedUrl, sourceKind, chefId, deps);
   }
 
   // 4. Existing-URL hint.
