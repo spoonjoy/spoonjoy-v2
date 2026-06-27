@@ -478,6 +478,31 @@ describe("API v1 mutation and validation telemetry", () => {
     await cleanupDatabase();
   });
 
+  it("captures recipe import operation metadata from the generic route mapper", async () => {
+    const importBody = {
+      clientMutationId: "raw-import-mutation-id",
+      source: { type: "url", url: "https://example.com/private-recipe" },
+    };
+    const request = apiJsonRequest("POST", "recipes/import", "req_import_operation_no_auth", {}, importBody);
+
+    const response = await action(routeArgs(request.request, "recipes/import").args);
+
+    expect(response.status).toBe(401);
+    expectApiV1ErrorEvent({
+      routeTemplate: "/api/v1/recipes/import",
+      requestId: "req_import_operation_no_auth",
+      operation: "recipes.import",
+      status: 401,
+      errorCode: "authentication_required",
+      authMode: "anonymous",
+      forbidden: [
+        "raw-import-mutation-id",
+        "https://example.com/private-recipe",
+        request.bodyText,
+      ],
+    });
+  });
+
   it("captures shopping-list item create, check, and delete operations without body values", async () => {
     const user = await db.user.create({ data: createTestUser() });
     const credential = await createApiCredential(db, user.id, "Telemetry Shopping Writer", {

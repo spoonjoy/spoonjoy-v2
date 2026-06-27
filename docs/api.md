@@ -19,6 +19,7 @@ Spoonjoy's public developer surface starts at `/api`, with compatibility aliases
 Available now:
 
 - Public recipe and cookbook reads
+- Authenticated recipe import from URL, video URL, text, or JSON-LD
 - Public recipe spoon history plus authenticated recipe spoon create, update, and delete
 - Owner-scoped recipe cover candidate management for the authenticated chef's recipes
 - Owner-scoped shopping-list read, sync, add, recipe-add, check, clear, and remove
@@ -29,7 +30,7 @@ Available now:
 
 Not in API v1 yet:
 
-- General recipe create, edit, delete, import, or export endpoints beyond owner cover management
+- General recipe create, edit, delete, or export endpoints beyond recipe import and owner cover management
 - Private recipe-library endpoints
 - Inventory or pantry stock APIs
 - Meal plan or "today's recipes" APIs
@@ -47,7 +48,7 @@ Generated SDKs should use `/api/v1/openapi.sdk.json`; it keeps REST v1 resources
 
 | Surface | Build with it | Current boundary |
 | --- | --- | --- |
-| REST API v1 | Public catalog clients, shopping-list sync, native recipe spoon and recipe-cover management, bearer-token scripts, generated SDKs | No general recipe create/edit/import/export or private library endpoints yet. |
+| REST API v1 | Public catalog clients, shopping-list sync, native recipe import, native recipe spoon and recipe-cover management, bearer-token scripts, generated SDKs | No general recipe create/edit/delete/export or private library endpoints yet. |
 | No-code connector profile | Zapier/Make/n8n-style searches, actions, and polling triggers | No webhooks, REST Hooks, SSE, event subscriptions, or DELETE request bodies. |
 | OAuth/PKCE | Third-party mobile, SaaS, extension, and connector account linking | Public clients only; no client secret, password grant, token-management scopes, or custom schemes. |
 | Delegated approval | CLIs, appliances, voice clients, and agents without a callback URL | Custom Spoonjoy approval flow, not OAuth Device Authorization Grant. |
@@ -399,7 +400,7 @@ Fine-grained REST scopes are attached to bearer tokens and OAuth-issued API cred
 
 | Scope | Purpose |
 | --- | --- |
-| `kitchen:write` | Manage owner recipe covers and write the authenticated owner's shopping list when granted through OAuth kitchen consent. |
+| `kitchen:write` | Import recipes, manage owner recipe spoons and covers, and write the authenticated owner's shopping list when granted through OAuth kitchen consent. |
 | `public:read` | Read public recipe and cookbook data with a bearer or OAuth credential. Anonymous reads do not need it. |
 | `recipes:read` | Read public recipes and recipe detail. |
 | `cookbooks:read` | Read public cookbook lists and cookbook detail. |
@@ -423,6 +424,7 @@ API v1 is rate limited by IP and credential before authentication work. Anonymou
 | `GET` | `/api/v1/openapi.sdk.json` | Optional | none |
 | `GET` | `/api/v1/openapi.connector.json` | Optional | none |
 | `GET` | `/api/v1/recipes` | Optional | `recipes:read` when authenticated |
+| `POST` | `/api/v1/recipes/import` | Authenticated chef | `kitchen:write` |
 | `GET` | `/api/v1/recipes/{id}` | Optional | `recipes:read` when authenticated |
 | `GET` | `/api/v1/recipes/{id}/spoons` | Optional | `recipes:read` when authenticated |
 | `POST` | `/api/v1/recipes/{id}/spoons` | Authenticated chef | `kitchen:write` |
@@ -454,7 +456,7 @@ API v1 is rate limited by IP and credential before authentication work. Anonymou
 
 Store the returned `nextCursor` for a page only after applying every item in that response durably. Use `limit` from 1 to 50 for small payloads; `hasMore: true` means continue immediately with that checkpoint to drain the backlog. It is okay for crash-prone clients to checkpoint after each fully applied page, as long as local apply is idempotent and no cursor is persisted before all rows in that page are durable. Poll conservatively because webhooks, REST Hooks, SSE, and event subscriptions are not in v1 yet.
 
-Idempotent owner mutations use `clientMutationId`. This applies to shopping-list writes, recipe spoon writes, and recipe-cover writes. The idempotency key is scoped to the chef, retained for 24 hours, and bound to method, path, and a canonicalized parsed JSON body. Persist the same request values for each mutation id before sending it; whitespace and object key order are ignored, while changed method, path, or body values return a conflict. A write retried after an OAuth access-token refresh still replays instead of duplicating because both credentials resolve to the same chef. Reusing the same mutation id with the same completed request body returns the recorded response with `mutation.replayed: true`; a concurrent retry can return `409 idempotency_in_progress` with `Retry-After: 2` and `error.details.retryAfterSeconds`. Wait at least that long, then retry the same request. Reusing a mutation id with a different method, path, or body returns `409 idempotency_conflict`.
+Idempotent owner mutations use `clientMutationId`. This applies to recipe import, shopping-list writes, recipe spoon writes, and recipe-cover writes. The idempotency key is scoped to the chef, retained for 24 hours, and bound to method, path, and a canonicalized parsed JSON body. Persist the same request values for each mutation id before sending it; whitespace and object key order are ignored, while changed method, path, or body values return a conflict. A write retried after an OAuth access-token refresh still replays instead of duplicating because both credentials resolve to the same chef. Reusing the same mutation id with the same completed request body returns the recorded response with `mutation.replayed: true`; a concurrent retry can return `409 idempotency_in_progress` with `Retry-After: 2` and `error.details.retryAfterSeconds`. Wait at least that long, then retry the same request. Reusing a mutation id with a different method, path, or body returns `409 idempotency_conflict`.
 
 Mutation responses return the changed item or changed items plus mutation metadata, not the entire shopping list. Fetch `/api/v1/shopping-list` or `/api/v1/shopping-list/sync` when you need the current list view.
 
@@ -463,6 +465,10 @@ Retry network timeouts, `429`, and `5xx` responses with the same mutation id. Re
 Recipe and cookbook list endpoints are public catalog search endpoints today. They accept `limit`, `cursor`, and `query`/`q`; when both query aliases are supplied, `query` wins. Responses include `cursor`, `nextCursor`, and `hasMore`, plus `coverImageUrl` on recipe summaries and `coverImageUrls` on cookbook summaries. They do not yet provide full owner export or deleted recipe/cookbook tombstones. Use shopping-list sync for incremental owner data until export APIs exist.
 
 Public catalog cursors page by `createdAt` plus `id` for deterministic catalog walks. They are not repeatable snapshot guarantees, not `updatedAt` incremental feeds, and do not include deletion tombstones. New public records can appear during a long crawl. Restart a full crawl when you need to catch public recipe/cookbook edits or removals. Anonymous public recipe/cookbook responses expose `Cache-Control: public, max-age=60, stale-while-revalidate=300`; authenticated public reads are validated and returned with private/no-store cache headers. API v1 does not provide `ETag`, `Last-Modified`, or conditional request support yet.
+
+Recipe import is an authenticated native app and automation surface. `POST /api/v1/recipes/import` requires `kitchen:write`, accepts a `clientMutationId`, and can import from a recipe URL, video URL, plain recipe text, or JSON-LD object. Native capture metadata is optional and currently records where a text import came from, such as camera OCR or photo-library OCR. Import responses include the created or existing recipe detail, `importCode`, `confidence`, normalized `source`, `coverPending`, optional `existingRecipeId`, and idempotency metadata. When the import provider is not configured, the endpoint returns `ok: true` with `data.recipe: null`, `importCode: "provider_secret_required"`, and a `blockers` entry so native clients can show a durable setup blocker instead of retrying in the background.
+
+Recipe import is idempotent with `clientMutationId`. Persist and retry the exact same parsed JSON body for network timeouts, `429`, `5xx`, and `idempotency_in_progress`. The import source is part of the conflict contract; changing source text, URL, JSON-LD, capture metadata, or `dryRun` while reusing the same mutation id returns `409 idempotency_conflict`.
 
 Recipe ingredient quantities, units, servings, temperatures, and timers are original author data in API v1. Units are free-form display strings, not a canonical conversion model. API v1 does not expose a `/api/v1/units` registry, density tables, structured yields, locale-aware unit names, or volume-to-mass conversion rules; clients that convert measurements must treat unsupported ingredients or units as non-convertible and preserve the original text.
 
@@ -498,6 +504,11 @@ curl -fsS -X POST 'https://spoonjoy.app/api/v1/shopping-list/clear-all' \
   -d '{"clientMutationId":"clear-all:2026-06-01"}'
 
 curl -fsS 'https://spoonjoy.app/api/v1/recipes/recipe_1/spoons?limit=20'
+
+curl -fsS -X POST 'https://spoonjoy.app/api/v1/recipes/import' \
+  -H 'Authorization: Bearer sj_...' \
+  -H 'Content-Type: application/json' \
+  -d '{"clientMutationId":"import:camera:2026-06-01T12:00:00Z","source":{"type":"text","text":"Grandma pasta\nServes 4\nIngredients:\n1 lb spaghetti\nInstructions:\nBoil pasta and toss with sauce.","capture":{"source":"camera","assetIdentifier":"local-capture-1"}}}'
 
 curl -fsS -X POST 'https://spoonjoy.app/api/v1/recipes/recipe_1/spoons' \
   -H 'Authorization: Bearer sj_...' \
@@ -682,7 +693,7 @@ func syncShoppingList(accessToken: String, cursor: String?) async throws -> Stri
 
 ### Browser extension OAuth
 
-Browser extensions should use OAuth/PKCE from the background script or service worker, store `client_id`, `state`, and `code_verifier` in extension storage until callback, verify `state` before exchanging the code, and request only the scopes needed for the feature. API v1 does not create or import full recipes yet; the supported extension story today is shopping-list ingredient sync. A "save ingredients" extension normally needs `shopping_list:read shopping_list:write`; a public recipe overlay can stay anonymous. Chrome-style `chrome.identity.getRedirectURL()` / `launchWebAuthFlow` callbacks are HTTPS URLs and can be registered exactly; custom extension schemes are not accepted.
+Browser extensions should use OAuth/PKCE from the background script or service worker, store `client_id`, `state`, and `code_verifier` in extension storage until callback, verify `state` before exchanging the code, and request only the scopes needed for the feature. A full recipe clipper can request `kitchen:write` and call `/api/v1/recipes/import`; a "save ingredients" extension normally only needs `shopping_list:read shopping_list:write`; a public recipe overlay can stay anonymous. Chrome-style `chrome.identity.getRedirectURL()` / `launchWebAuthFlow` callbacks are HTTPS URLs and can be registered exactly; custom extension schemes are not accepted.
 
 Use single-flight refresh in the background worker, atomically replace the stored refresh token after every refresh, then retry queued mutations with the same `clientMutationId`. On disconnect, call `/oauth/revoke` with the stored refresh token and clear extension storage.
 

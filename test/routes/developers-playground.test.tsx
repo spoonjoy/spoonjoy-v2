@@ -142,12 +142,13 @@ describe("/developers/playground", () => {
     expect(data.manifest.operations.find((operation) => operation.id === "POST /oauth/token")?.risk).toBe("secret");
     expect(data.manifest.operations.find((operation) => operation.id === "POST /api/tools/poll_agent_connection")?.risk).toBe("secret");
     expect(data.manifest.operations.find((operation) => operation.id === "GET /api/v1/recipes")?.profiles).toEqual(["full", "connector", "sdk"]);
+    expect(data.manifest.operations.find((operation) => operation.id === "POST /api/v1/recipes/import")?.profiles).toEqual(["full", "connector", "sdk"]);
     expect(data.manifest.operations.find((operation) => operation.id === "GET /api/v1/recipes/{id}/spoons")?.profiles).toEqual(["full", "sdk"]);
     expect(data.manifest.operations.find((operation) => operation.id === "POST /api/v1/recipes/{id}/spoons")?.profiles).toEqual(["full", "sdk"]);
     expect(data.manifest.operations.find((operation) => operation.id === "GET /api/v1/recipes/{id}/covers")?.profiles).toEqual(["full", "sdk"]);
     expect(data.manifest.operations.find((operation) => operation.id === "POST /oauth/token")?.profiles).toEqual(["full", "sdk"]);
     expect(data.manifest.operations.find((operation) => operation.id === "POST /mcp")?.profiles).toEqual(["full"]);
-    expect(data.manifest.operations.length).toBe(37);
+    expect(data.manifest.operations.length).toBe(38);
   });
 
   it("uses the configured public origin for playground OG URLs", async () => {

@@ -53,7 +53,9 @@ const GUIDE_MARKERS = [
   "full login surface",
   "not in API v1 yet",
   "Owner-scoped recipe cover candidate management",
-  "General recipe create, edit, delete, import, or export endpoints beyond owner cover management",
+  "recipe import",
+  "/api/v1/recipes/import",
+  "General recipe create, edit, delete, or export endpoints beyond recipe import and owner cover management",
   "Recipe cover management endpoints",
   "Recipe spoon endpoints",
   "/api/v1/recipes/{id}/spoons",
@@ -133,6 +135,7 @@ describe("external client guide", () => {
     }
 
     expect(apiDocs).toContain("curl 'https://spoonjoy.app/api/v1/recipes");
+    expect(apiDocs).toContain("curl -fsS -X POST 'https://spoonjoy.app/api/v1/recipes/import'");
     expect(apiDocs).toContain("curl 'https://spoonjoy.app/api/v1/cookbooks");
     expect(apiDocs).toContain("POST /api/v1/tokens");
     expect(apiDocs).toContain('fetch("/api/v1/shopping-list"');
@@ -142,6 +145,7 @@ describe("external client guide", () => {
     expect(apiDocs).toContain("curl -fsS 'https://spoonjoy.app/api/v1/shopping-list/sync");
     expect(apiDocs).toContain("curl -fsS -X POST 'https://spoonjoy.app/api/v1/shopping-list/items'");
     expect(apiDocs).toContain(scopesFor("POST", "/api/v1/tokens")[0]);
+    expect(apiDocs).toContain(scopesFor("POST", "/api/v1/recipes/import")[0]);
     expect(apiDocs).toContain(scopesFor("GET", "/api/v1/shopping-list/sync")[0]);
     expect(apiDocs).toContain(scopesFor("POST", "/api/v1/shopping-list/items")[0]);
     expect(apiDocs).not.toContain("sj_owner_token");
@@ -166,6 +170,7 @@ describe("external client guide", () => {
     }
 
     expect(renderedText).toContain("GET /api/v1/recipes");
+    expect(renderedText).toContain("POST /api/v1/recipes/import");
     expect(renderedText).toContain("GET /api/v1/cookbooks");
     expect(renderedText).toContain("POST /api/v1/tokens");
     expect(renderedText).toContain("Generated operation: POST /api/v1/tokens");
@@ -175,6 +180,7 @@ describe("external client guide", () => {
     expect(renderedText).toContain("GET /api/v1/shopping-list/sync");
     expect(renderedText).toContain("POST /api/v1/shopping-list/items");
     expect(renderedText).toContain(scopesFor("POST", "/api/v1/tokens")[0]);
+    expect(renderedText).toContain(scopesFor("POST", "/api/v1/recipes/import")[0]);
     expect(renderedText).toContain(scopesFor("GET", "/api/v1/shopping-list/sync")[0]);
     expect(renderedText).toContain(scopesFor("POST", "/api/v1/shopping-list/items")[0]);
     expect(renderedText).not.toContain("sj_owner_token");
