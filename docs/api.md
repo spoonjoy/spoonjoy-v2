@@ -454,7 +454,7 @@ API v1 is rate limited by IP and credential before authentication work. Anonymou
 
 Store the returned `nextCursor` for a page only after applying every item in that response durably. Use `limit` from 1 to 50 for small payloads; `hasMore: true` means continue immediately with that checkpoint to drain the backlog. It is okay for crash-prone clients to checkpoint after each fully applied page, as long as local apply is idempotent and no cursor is persisted before all rows in that page are durable. Poll conservatively because webhooks, REST Hooks, SSE, and event subscriptions are not in v1 yet.
 
-Idempotent owner mutations use `clientMutationId`. This applies to shopping-list writes and recipe-cover writes. The idempotency key is scoped to the chef, retained for 24 hours, and bound to method, path, and a canonicalized parsed JSON body. Persist the same request values for each mutation id before sending it; whitespace and object key order are ignored, while changed method, path, or body values return a conflict. A write retried after an OAuth access-token refresh still replays instead of duplicating because both credentials resolve to the same chef. Reusing the same mutation id with the same completed request body returns the recorded response with `mutation.replayed: true`; a concurrent retry can return `409 idempotency_in_progress` with `Retry-After: 2` and `error.details.retryAfterSeconds`. Wait at least that long, then retry the same request. Reusing a mutation id with a different method, path, or body returns `409 idempotency_conflict`.
+Idempotent owner mutations use `clientMutationId`. This applies to shopping-list writes, recipe spoon writes, and recipe-cover writes. The idempotency key is scoped to the chef, retained for 24 hours, and bound to method, path, and a canonicalized parsed JSON body. Persist the same request values for each mutation id before sending it; whitespace and object key order are ignored, while changed method, path, or body values return a conflict. A write retried after an OAuth access-token refresh still replays instead of duplicating because both credentials resolve to the same chef. Reusing the same mutation id with the same completed request body returns the recorded response with `mutation.replayed: true`; a concurrent retry can return `409 idempotency_in_progress` with `Retry-After: 2` and `error.details.retryAfterSeconds`. Wait at least that long, then retry the same request. Reusing a mutation id with a different method, path, or body returns `409 idempotency_conflict`.
 
 Mutation responses return the changed item or changed items plus mutation metadata, not the entire shopping list. Fetch `/api/v1/shopping-list` or `/api/v1/shopping-list/sync` when you need the current list view.
 
@@ -502,7 +502,7 @@ curl -fsS 'https://spoonjoy.app/api/v1/recipes/recipe_1/spoons?limit=20'
 curl -fsS -X POST 'https://spoonjoy.app/api/v1/recipes/recipe_1/spoons' \
   -H 'Authorization: Bearer sj_...' \
   -H 'Content-Type: application/json' \
-  -d '{"clientMutationId":"spoon-create:recipe_1:2026-06-01","photoUrl":"/photos/spoons/raw.jpg","note":"Added more lemon","useAsRecipeCover":true}'
+  -d '{"clientMutationId":"spoon-create:recipe_1:2026-06-01","photoUrl":"/photos/spoons/chef_1/uploads/cover-raw.jpg","note":"Added more lemon","useAsRecipeCover":true}'
 
 curl -fsS -X PATCH 'https://spoonjoy.app/api/v1/recipes/recipe_1/spoons/spoon_1' \
   -H 'Authorization: Bearer sj_...' \
