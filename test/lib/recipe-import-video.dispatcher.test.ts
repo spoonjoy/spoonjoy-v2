@@ -429,6 +429,48 @@ describe("importRecipeFromUrl — I2 video dispatcher", () => {
       ).rejects.toMatchObject({ code: "llm-failed", status: 502 });
     });
 
+    it("captures a video LLM-call failure to PostHog with the preserved code", async () => {
+      const fixture = loadVideoFixture("youtube-pasta.json");
+      const chef = await makeChef();
+      const { fetchImpl } = videoFetchSequence(jsonStreamingResponse(fixture));
+      const analyticsFetch = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+      const quotaCause = Object.assign(new Error("quota"), {
+        status: 429,
+        code: "insufficient_quota",
+        type: "insufficient_quota",
+      });
+      const llmRunner: RecipeLlmRunner = {
+        provider: "openai",
+        model: "gpt-4o-mini",
+        extract: vi.fn(async () => {
+          throw new RecipeLlmError("OpenAI rate limit exceeded", quotaCause);
+        }),
+      };
+
+      await expect(
+        importRecipeFromUrl(
+          { url: "https://www.youtube.com/watch?v=abc", chefId: chef.id },
+          baseDeps({
+            fetchImpl,
+            llmRunner,
+            postHogConfig: { enabled: true, key: "ph_test", host: "https://posthog.example" },
+            analyticsFetchImpl: analyticsFetch as unknown as typeof fetch,
+          }),
+        ),
+      ).rejects.toMatchObject({ code: "llm-failed", status: 502 });
+
+      expect(analyticsFetch).toHaveBeenCalledTimes(1);
+      const body = JSON.parse(analyticsFetch.mock.calls[0][1].body as string);
+      expect(body.event).toBe("spoonjoy.llm_call.failed");
+      expect(body.distinct_id).toBe(chef.id);
+      expect(body.properties).toMatchObject({
+        operation: "recipe_import",
+        provider: "openai",
+        model: "gpt-4o-mini",
+        errorCode: "insufficient_quota",
+      });
+    });
+
     it("video path with missing llmRunner → llm-failed 502", async () => {
       const fixture = loadVideoFixture("youtube-pasta.json");
       const chef = await makeChef();
