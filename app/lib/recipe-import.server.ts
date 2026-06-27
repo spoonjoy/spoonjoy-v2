@@ -37,7 +37,6 @@ import {
   type ParsedIngredient,
 } from "~/lib/ingredient-parse.server";
 import { captureLlmCallFailure } from "~/lib/llm-telemetry.server";
-import type { PostHogServerConfig, PostHogServerEnv } from "~/lib/analytics-server";
 import { tryConsumeImageGenQuota } from "~/lib/image-gen-ledger.server";
 import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
 import { createCover } from "~/lib/recipe-cover.server";
