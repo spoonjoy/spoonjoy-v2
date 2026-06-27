@@ -7,7 +7,7 @@ import { RecipeImageUpload } from '../../../app/components/recipe/RecipeImageUpl
 function createMockFile(
   name = 'test-image.jpg',
   type = 'image/jpeg',
-  size = 1024 * 1024 // 1MB
+  size = 1024
 ): File {
   const content = new Array(size).fill('a').join('')
   return new File([content], name, { type })

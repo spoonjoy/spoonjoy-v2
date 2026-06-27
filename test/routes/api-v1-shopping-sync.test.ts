@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { faker } from "@faker-js/faker";
 import { Request as UndiciRequest } from "undici";
-import { loader } from "~/routes/api.v1.$";
+import { action, loader } from "~/routes/api.v1.$";
 import { createApiCredential } from "~/lib/api-auth.server";
 import { resolveApiV1ScopeRequirement } from "~/lib/api-v1.server";
 import { getLocalDb } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
-import { createTestUser, getOrCreateIngredientRef, getOrCreateUnit } from "../utils";
+import { createTestRecipe, createTestUser, getOrCreateIngredientRef, getOrCreateUnit } from "../utils";
 
 function routeArgs(request: Request, splat: string) {
   return { request, params: { "*": splat }, context: { cloudflare: { env: null } } } as any;
@@ -37,6 +37,15 @@ function expectSuccessEnvelope(payload: any, requestId: string) {
   expectExactKeys(payload, ["ok", "requestId", "data"]);
   expect(payload.ok).toBe(true);
   expect(payload.requestId).toBe(requestId);
+}
+
+function expectErrorEnvelope(payload: any, requestId: string, code: string, status: number) {
+  expectExactKeys(payload, ["ok", "requestId", "error"]);
+  expect(payload).toMatchObject({
+    ok: false,
+    requestId,
+    error: { code, status },
+  });
 }
 
 function expectShoppingListShape(list: any) {
@@ -115,6 +124,38 @@ async function createShoppingFixture(db: Awaited<ReturnType<typeof getLocalDb>>)
   return { user, credential, legacyCredential, writeOnlyCredential, list, unit, activeRef, deletedRef, checkedAt, active, tombstone };
 }
 
+async function createRecipeWithIngredients(
+  db: Awaited<ReturnType<typeof getLocalDb>>,
+  chefId: string,
+  ingredients: Array<{ name: string; quantity: number; unit: string }>,
+) {
+  const recipe = await db.recipe.create({ data: createTestRecipe(chefId) });
+  await db.recipeStep.create({
+    data: {
+      recipeId: recipe.id,
+      stepNum: 1,
+      stepTitle: "Gather",
+      description: "Gather ingredients.",
+    },
+  });
+
+  for (const ingredient of ingredients) {
+    const unit = await getOrCreateUnit(db, ingredient.unit);
+    const ingredientRef = await getOrCreateIngredientRef(db, ingredient.name);
+    await db.ingredient.create({
+      data: {
+        recipeId: recipe.id,
+        stepNum: 1,
+        quantity: ingredient.quantity,
+        unitId: unit.id,
+        ingredientRefId: ingredientRef.id,
+      },
+    });
+  }
+
+  return recipe;
+}
+
 describe("API v1 shopping-list read and sync", () => {
   let db: Awaited<ReturnType<typeof getLocalDb>>;
 
@@ -135,6 +176,18 @@ describe("API v1 shopping-list read and sync", () => {
     expect(resolveApiV1ScopeRequirement("GET", "shopping-list/sync")).toEqual({
       auth: "bearer",
       scopes: ["shopping_list:read"],
+    });
+    expect(resolveApiV1ScopeRequirement("POST", "shopping-list/add-from-recipe")).toEqual({
+      auth: "bearer",
+      scopes: ["shopping_list:write"],
+    });
+    expect(resolveApiV1ScopeRequirement("POST", "shopping-list/clear-completed")).toEqual({
+      auth: "bearer",
+      scopes: ["shopping_list:write"],
+    });
+    expect(resolveApiV1ScopeRequirement("POST", "shopping-list/clear-all")).toEqual({
+      auth: "bearer",
+      scopes: ["shopping_list:write"],
     });
   });
 
@@ -430,5 +483,312 @@ describe("API v1 shopping-list read and sync", () => {
         error: { code: "validation_error", status: 400 },
       });
     }
+  });
+
+  it("adds recipe ingredients through API v1 with duplicate merge and idempotent replay", async () => {
+    const fixture = await createShoppingFixture(db);
+    const recipe = await createRecipeWithIngredients(db, fixture.user.id, [
+      { name: "api duplicate sugar", quantity: 1, unit: "cup" },
+      { name: "api duplicate sugar", quantity: 0.5, unit: "cup" },
+    ]);
+
+    const request = () => new UndiciRequest("http://localhost/api/v1/shopping-list/add-from-recipe", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${fixture.writeOnlyCredential.token}`,
+        "Content-Type": "application/json",
+        "X-Request-Id": "req_shopping_add_recipe",
+      },
+      body: JSON.stringify({
+        clientMutationId: "cm_api_add_recipe",
+        recipeId: recipe.id,
+        scaleFactor: 2,
+      }),
+    }) as unknown as Request;
+
+    const response = await action(routeArgs(request(), "shopping-list/add-from-recipe"));
+    const payload = await readJson(response);
+    const replay = await action(routeArgs(request(), "shopping-list/add-from-recipe"));
+    const replayPayload = await readJson(replay);
+
+    expect(response.status).toBe(200);
+    expectEnvelopeHeaders(response, "req_shopping_add_recipe");
+    expectSuccessEnvelope(payload, "req_shopping_add_recipe");
+    expectExactKeys(payload.data, ["recipe", "created", "updated", "items", "mutation"]);
+    expect(payload.data).toMatchObject({
+      created: 1,
+      updated: 0,
+      recipe: { id: recipe.id, title: recipe.title },
+      items: [
+        {
+          name: "api duplicate sugar",
+          quantity: 3,
+          unit: "cup",
+          checked: false,
+          deletedAt: null,
+        },
+      ],
+      mutation: { clientMutationId: "cm_api_add_recipe", replayed: false },
+    });
+    expectShoppingItemShape(payload.data.items[0]);
+    expect(replay.status).toBe(200);
+    expect(replayPayload.data.mutation.replayed).toBe(true);
+    expect(replayPayload.data.items).toHaveLength(1);
+    expect(await db.shoppingListItem.count({
+      where: { shoppingListId: fixture.list.id, ingredientRef: { name: "api duplicate sugar" }, deletedAt: null },
+    })).toBe(1);
+  });
+
+  it("returns missing recipes as not_found when adding ingredients from a recipe", async () => {
+    const fixture = await createShoppingFixture(db);
+    const request = () => new UndiciRequest("http://localhost/api/v1/shopping-list/add-from-recipe", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${fixture.writeOnlyCredential.token}`,
+        "Content-Type": "application/json",
+        "X-Request-Id": "req_shopping_add_missing_recipe",
+      },
+      body: JSON.stringify({
+        clientMutationId: "cm_api_add_missing_recipe",
+        recipeId: "missing-recipe",
+      }),
+    }) as unknown as Request;
+
+    const response = await action(routeArgs(request(), "shopping-list/add-from-recipe"));
+    const retry = await action(routeArgs(request(), "shopping-list/add-from-recipe"));
+
+    expect(response.status).toBe(404);
+    expectEnvelopeHeaders(response, "req_shopping_add_missing_recipe");
+    expectErrorEnvelope(await readJson(response), "req_shopping_add_missing_recipe", "not_found", 404);
+    expect(retry.status).toBe(404);
+    expectErrorEnvelope(await readJson(retry), "req_shopping_add_missing_recipe", "not_found", 404);
+    expect(await db.apiIdempotencyKey.count({
+      where: { userId: fixture.user.id, key: "cm_api_add_missing_recipe" },
+    })).toBe(0);
+  });
+
+  it("updates existing shopping rows when adding ingredients from a recipe", async () => {
+    const fixture = await createShoppingFixture(db);
+    const pantryUnit = await getOrCreateUnit(db, `pantry unit ${faker.string.alphanumeric(6)}`);
+    const pantryRef = await getOrCreateIngredientRef(db, `pantry item ${faker.string.alphanumeric(6)}`);
+    const pantryItem = await db.shoppingListItem.create({
+      data: {
+        shoppingListId: fixture.list.id,
+        ingredientRefId: pantryRef.id,
+        unitId: pantryUnit.id,
+        quantity: 4,
+        checked: false,
+        sortIndex: 8,
+        categoryKey: null,
+        iconKey: null,
+      },
+    });
+    const nullableUnit = await getOrCreateUnit(db, `nullable unit ${faker.string.alphanumeric(6)}`);
+    const nullableRef = await getOrCreateIngredientRef(db, `nullable item ${faker.string.alphanumeric(6)}`);
+    const nullableQuantityItem = await db.shoppingListItem.create({
+      data: {
+        shoppingListId: fixture.list.id,
+        ingredientRefId: nullableRef.id,
+        unitId: nullableUnit.id,
+        quantity: null,
+        checked: false,
+        sortIndex: 10,
+        categoryKey: null,
+        iconKey: null,
+      },
+    });
+    await db.shoppingListItem.create({
+      data: {
+        shoppingListId: fixture.list.id,
+        ingredientRefId: nullableRef.id,
+        unitId: null,
+        quantity: 99,
+        checked: false,
+        sortIndex: 11,
+      },
+    });
+    const recipe = await createRecipeWithIngredients(db, fixture.user.id, [
+      { name: fixture.activeRef.name, quantity: 2, unit: fixture.unit.name },
+      { name: pantryRef.name, quantity: 3, unit: pantryUnit.name },
+      { name: nullableRef.name, quantity: 5, unit: nullableUnit.name },
+    ]);
+
+    const response = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/shopping-list/add-from-recipe", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${fixture.writeOnlyCredential.token}`,
+        "Content-Type": "application/json",
+        "X-Request-Id": "req_shopping_add_recipe_existing",
+      },
+      body: JSON.stringify({
+        clientMutationId: "cm_api_add_recipe_existing",
+        recipeId: recipe.id,
+      }),
+    }) as unknown as Request, "shopping-list/add-from-recipe"));
+    const payload = await readJson(response);
+
+    expect(response.status).toBe(200);
+    expectSuccessEnvelope(payload, "req_shopping_add_recipe_existing");
+    expect(payload.data).toMatchObject({
+      created: 0,
+      updated: 3,
+      mutation: { clientMutationId: "cm_api_add_recipe_existing", replayed: false },
+    });
+    expect(payload.data.items).toEqual(expect.arrayContaining([
+      expect.objectContaining(
+        {
+          id: fixture.active.id,
+          quantity: 4,
+          checked: false,
+          checkedAt: null,
+          deletedAt: null,
+          categoryKey: "dairy",
+          iconKey: "milk",
+        },
+      ),
+      expect.objectContaining(
+        {
+          id: pantryItem.id,
+          quantity: 7,
+          checked: false,
+          checkedAt: null,
+          deletedAt: null,
+          categoryKey: "other",
+          iconKey: "package",
+          sortIndex: 8,
+        },
+      ),
+      expect.objectContaining(
+        {
+          id: nullableQuantityItem.id,
+          quantity: 5,
+          checked: false,
+          checkedAt: null,
+          deletedAt: null,
+          categoryKey: "other",
+          iconKey: "package",
+          sortIndex: 10,
+        },
+      ),
+    ]));
+    const revivedActive = await db.shoppingListItem.findUniqueOrThrow({ where: { id: fixture.active.id } });
+    const updatedPantry = await db.shoppingListItem.findUniqueOrThrow({ where: { id: pantryItem.id } });
+    const updatedNullable = await db.shoppingListItem.findUniqueOrThrow({ where: { id: nullableQuantityItem.id } });
+    expect(revivedActive.sortIndex).toBeGreaterThan(pantryItem.sortIndex);
+    expect(updatedPantry.sortIndex).toBe(pantryItem.sortIndex);
+    expect(updatedNullable.sortIndex).toBe(nullableQuantityItem.sortIndex);
+  });
+
+  it("returns an empty mutation result for recipes with no ingredients", async () => {
+    const fixture = await createShoppingFixture(db);
+    const recipe = await createRecipeWithIngredients(db, fixture.user.id, []);
+
+    const response = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/shopping-list/add-from-recipe", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${fixture.writeOnlyCredential.token}`,
+        "Content-Type": "application/json",
+        "X-Request-Id": "req_shopping_add_empty_recipe",
+      },
+      body: JSON.stringify({
+        clientMutationId: "cm_api_add_empty_recipe",
+        recipeId: recipe.id,
+      }),
+    }) as unknown as Request, "shopping-list/add-from-recipe"));
+    const payload = await readJson(response);
+
+    expect(response.status).toBe(200);
+    expectSuccessEnvelope(payload, "req_shopping_add_empty_recipe");
+    expect(payload.data).toMatchObject({
+      created: 0,
+      updated: 0,
+      items: [],
+      mutation: { clientMutationId: "cm_api_add_empty_recipe", replayed: false },
+    });
+  });
+
+  it("clears completed and all shopping-list items through API v1", async () => {
+    const fixture = await createShoppingFixture(db);
+    const uncheckedRef = await getOrCreateIngredientRef(db, `unchecked item ${faker.string.alphanumeric(6)}`);
+    const unchecked = await db.shoppingListItem.create({
+      data: {
+        shoppingListId: fixture.list.id,
+        ingredientRefId: uncheckedRef.id,
+        quantity: 1,
+        checked: false,
+        sortIndex: 3,
+      },
+    });
+
+    const clearCompleted = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/shopping-list/clear-completed", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${fixture.writeOnlyCredential.token}`,
+        "Content-Type": "application/json",
+        "X-Request-Id": "req_shopping_clear_completed",
+      },
+      body: JSON.stringify({ clientMutationId: "cm_api_clear_completed" }),
+    }) as unknown as Request, "shopping-list/clear-completed"));
+    const clearCompletedPayload = await readJson(clearCompleted);
+
+    expect(clearCompleted.status).toBe(200);
+    expectEnvelopeHeaders(clearCompleted, "req_shopping_clear_completed");
+    expectSuccessEnvelope(clearCompletedPayload, "req_shopping_clear_completed");
+    expectExactKeys(clearCompletedPayload.data, ["removed", "items", "mutation"]);
+    expect(clearCompletedPayload.data).toMatchObject({
+      removed: 1,
+      items: [{ id: fixture.active.id, deletedAt: expect.any(String) }],
+      mutation: { clientMutationId: "cm_api_clear_completed", replayed: false },
+    });
+    expectShoppingItemShape(clearCompletedPayload.data.items[0]);
+    expect(await db.shoppingListItem.findUnique({ where: { id: unchecked.id } })).toMatchObject({ deletedAt: null });
+
+    const clearAll = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/shopping-list/clear-all", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${fixture.writeOnlyCredential.token}`,
+        "Content-Type": "application/json",
+        "X-Request-Id": "req_shopping_clear_all",
+      },
+      body: JSON.stringify({ clientMutationId: "cm_api_clear_all" }),
+    }) as unknown as Request, "shopping-list/clear-all"));
+    const clearAllPayload = await readJson(clearAll);
+
+    expect(clearAll.status).toBe(200);
+    expectEnvelopeHeaders(clearAll, "req_shopping_clear_all");
+    expectSuccessEnvelope(clearAllPayload, "req_shopping_clear_all");
+    expect(clearAllPayload.data).toMatchObject({
+      removed: 1,
+      items: [{ id: unchecked.id, deletedAt: expect.any(String) }],
+      mutation: { clientMutationId: "cm_api_clear_all", replayed: false },
+    });
+    expectShoppingItemShape(clearAllPayload.data.items[0]);
+  });
+
+  it("returns an empty mutation result when clearing a list with no completed items", async () => {
+    const fixture = await createShoppingFixture(db);
+    await db.shoppingListItem.update({
+      where: { id: fixture.active.id },
+      data: { checked: false, checkedAt: null },
+    });
+
+    const response = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/shopping-list/clear-completed", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${fixture.writeOnlyCredential.token}`,
+        "Content-Type": "application/json",
+        "X-Request-Id": "req_shopping_clear_completed_empty",
+      },
+      body: JSON.stringify({ clientMutationId: "cm_api_clear_completed_empty" }),
+    }) as unknown as Request, "shopping-list/clear-completed"));
+    const payload = await readJson(response);
+
+    expect(response.status).toBe(200);
+    expectSuccessEnvelope(payload, "req_shopping_clear_completed_empty");
+    expect(payload.data).toEqual({
+      removed: 0,
+      items: [],
+      mutation: { clientMutationId: "cm_api_clear_completed_empty", replayed: false },
+    });
   });
 });

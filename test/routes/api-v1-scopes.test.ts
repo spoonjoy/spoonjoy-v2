@@ -6,7 +6,7 @@ import { createApiCredential } from "~/lib/api-auth.server";
 import { resolveApiV1ScopeRequirement } from "~/lib/api-v1.server";
 import { getLocalDb } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
-import { createTestRecipe, createTestUser, getOrCreateIngredientRef } from "../utils";
+import { createTestRecipe, createTestUser, getOrCreateIngredientRef, getOrCreateUnit } from "../utils";
 
 function routeArgs(request: Request, splat: string) {
   return { request, params: { "*": splat }, context: { cloudflare: { env: null } } } as any;
@@ -32,6 +32,25 @@ async function createFixtures(db: Awaited<ReturnType<typeof getLocalDb>>) {
   const chef = await db.user.create({ data: createTestUser() });
   const recipe = await db.recipe.create({
     data: { ...createTestRecipe(chef.id), title: `Matrix Recipe ${faker.string.alphanumeric(8)}` },
+  });
+  await db.recipeStep.create({
+    data: {
+      recipeId: recipe.id,
+      stepNum: 1,
+      stepTitle: "Gather",
+      description: "Gather matrix ingredients.",
+    },
+  });
+  const recipeUnit = await getOrCreateUnit(db, `matrix unit ${faker.string.alphanumeric(8)}`.toLowerCase());
+  const recipeIngredientRef = await getOrCreateIngredientRef(db, `matrix recipe item ${faker.string.alphanumeric(8)}`.toLowerCase());
+  await db.ingredient.create({
+    data: {
+      recipeId: recipe.id,
+      stepNum: 1,
+      quantity: 2,
+      unitId: recipeUnit.id,
+      ingredientRefId: recipeIngredientRef.id,
+    },
   });
   const cookbook = await db.cookbook.create({
     data: { title: `Matrix Cookbook ${faker.string.alphanumeric(8)}`, authorId: chef.id },
@@ -61,6 +80,7 @@ async function createFixtures(db: Awaited<ReturnType<typeof getLocalDb>>) {
     recipe,
     cookbook,
     user,
+    list,
     item,
     noScopes,
     publicOnly,
@@ -101,6 +121,9 @@ describe("API v1 complete scope matrix", () => {
     expect(resolveApiV1ScopeRequirement("POST", "shopping-list/items")).toEqual({ auth: "bearer", scopes: ["shopping_list:write"] });
     expect(resolveApiV1ScopeRequirement("PATCH", "shopping-list/items/item_1")).toEqual({ auth: "bearer", scopes: ["shopping_list:write"] });
     expect(resolveApiV1ScopeRequirement("DELETE", "shopping-list/items/item_1")).toEqual({ auth: "bearer", scopes: ["shopping_list:write"] });
+    expect(resolveApiV1ScopeRequirement("POST", "shopping-list/add-from-recipe")).toEqual({ auth: "bearer", scopes: ["shopping_list:write"] });
+    expect(resolveApiV1ScopeRequirement("POST", "shopping-list/clear-completed")).toEqual({ auth: "bearer", scopes: ["shopping_list:write"] });
+    expect(resolveApiV1ScopeRequirement("POST", "shopping-list/clear-all")).toEqual({ auth: "bearer", scopes: ["shopping_list:write"] });
     expect(resolveApiV1ScopeRequirement("GET", "tokens")).toEqual({ auth: "bearer", scopes: ["tokens:read"] });
     expect(resolveApiV1ScopeRequirement("POST", "tokens")).toEqual({ auth: "bearer", scopes: ["tokens:write"] });
     expect(resolveApiV1ScopeRequirement("DELETE", "tokens/token_1")).toEqual({ auth: "bearer", scopes: ["tokens:write"] });
@@ -176,55 +199,102 @@ describe("API v1 complete scope matrix", () => {
 
     const writeCases = [
       {
+        name: "shopping-add",
         method: "POST" as const,
         url: "http://localhost/api/v1/shopping-list/items",
         splat: "shopping-list/items",
         body: { clientMutationId: "matrix-add", name: `Matrix Add ${faker.string.alphanumeric(6)}` },
+        successStatus: 201,
       },
       {
+        name: "shopping-check",
         method: "PATCH" as const,
         url: `http://localhost/api/v1/shopping-list/items/${fixture.item.id}`,
         splat: `shopping-list/items/${fixture.item.id}`,
         body: { clientMutationId: "matrix-check", checked: true },
+        successStatus: 200,
       },
       {
+        name: "shopping-delete",
         method: "DELETE" as const,
         url: `http://localhost/api/v1/shopping-list/items/${fixture.item.id}`,
         splat: `shopping-list/items/${fixture.item.id}`,
         body: { clientMutationId: "matrix-delete" },
+        successStatus: 200,
+      },
+      {
+        name: "shopping-add-from-recipe",
+        method: "POST" as const,
+        url: "http://localhost/api/v1/shopping-list/add-from-recipe",
+        splat: "shopping-list/add-from-recipe",
+        body: { clientMutationId: "matrix-add-recipe", recipeId: fixture.recipe.id, scaleFactor: 1 },
+        successStatus: 200,
+      },
+      {
+        name: "shopping-clear-completed",
+        method: "POST" as const,
+        url: "http://localhost/api/v1/shopping-list/clear-completed",
+        splat: "shopping-list/clear-completed",
+        body: { clientMutationId: "matrix-clear-completed" },
+        successStatus: 200,
+      },
+      {
+        name: "shopping-clear-all",
+        method: "POST" as const,
+        url: "http://localhost/api/v1/shopping-list/clear-all",
+        splat: "shopping-list/clear-all",
+        body: { clientMutationId: "matrix-clear-all" },
+        successStatus: 200,
       },
     ];
 
     for (const testCase of writeCases) {
       const missing = await action(routeArgs(new UndiciRequest(testCase.url, {
         method: testCase.method,
-        headers: { "Content-Type": "application/json", "X-Request-Id": `req_matrix_${testCase.method}_missing` },
+        headers: { "Content-Type": "application/json", "X-Request-Id": `req_matrix_${testCase.name}_missing` },
         body: JSON.stringify(testCase.body),
       }) as unknown as Request, testCase.splat));
       expect(missing.status).toBe(401);
 
       const readerOnly = await action(routeArgs(new UndiciRequest(testCase.url, {
         method: testCase.method,
-        headers: bearer(fixture.shoppingRead.token, `req_matrix_${testCase.method}_reader_only`, { "Content-Type": "application/json" }),
+        headers: bearer(fixture.shoppingRead.token, `req_matrix_${testCase.name}_reader_only`, { "Content-Type": "application/json" }),
         body: JSON.stringify({ ...testCase.body, extra: "auth before validation" }),
       }) as unknown as Request, testCase.splat));
       expect(readerOnly.status).toBe(403);
-      expectError(await readJson(readerOnly), `req_matrix_${testCase.method}_reader_only`, "insufficient_scope", 403);
+      expectError(await readJson(readerOnly), `req_matrix_${testCase.name}_reader_only`, "insufficient_scope", 403);
     }
 
-    const allowedAdd = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/shopping-list/items", {
-      method: "POST",
-      headers: bearer(fixture.shoppingWrite.token, "req_matrix_write_add", { "Content-Type": "application/json" }),
-      body: JSON.stringify({ clientMutationId: "matrix-write-add", name: `Matrix Write ${faker.string.alphanumeric(6)}` }),
-    }) as unknown as Request, "shopping-list/items"));
-    expect(allowedAdd.status).toBe(201);
+    for (const [label, token] of [["write", fixture.shoppingWrite.token], ["legacy", fixture.legacyWrite.token]] as const) {
+      for (const testCase of writeCases) {
+        let url = testCase.url;
+        let splat = testCase.splat;
+        if (testCase.name === "shopping-check" || testCase.name === "shopping-delete") {
+          const itemRef = await getOrCreateIngredientRef(db, `matrix ${label} ${testCase.name} ${faker.string.alphanumeric(8)}`.toLowerCase());
+          const item = await db.shoppingListItem.create({
+            data: {
+              shoppingListId: fixture.list.id,
+              ingredientRefId: itemRef.id,
+              quantity: 1,
+              sortIndex: 10,
+            },
+          });
+          url = `http://localhost/api/v1/shopping-list/items/${item.id}`;
+          splat = `shopping-list/items/${item.id}`;
+        }
 
-    const legacyAdd = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/shopping-list/items", {
-      method: "POST",
-      headers: bearer(fixture.legacyWrite.token, "req_matrix_legacy_write_add", { "Content-Type": "application/json" }),
-      body: JSON.stringify({ clientMutationId: "matrix-legacy-write-add", name: `Matrix Legacy ${faker.string.alphanumeric(6)}` }),
-    }) as unknown as Request, "shopping-list/items"));
-    expect(legacyAdd.status).toBe(201);
+        const response = await action(routeArgs(new UndiciRequest(url, {
+          method: testCase.method,
+          headers: bearer(token, `req_matrix_${label}_${testCase.name}`, { "Content-Type": "application/json" }),
+          body: JSON.stringify({
+            ...testCase.body,
+            ...(typeof testCase.body.name === "string" ? { name: `${testCase.body.name} ${label}` } : {}),
+            clientMutationId: `${testCase.body.clientMutationId}-${label}`,
+          }),
+        }) as unknown as Request, splat));
+        expect(response.status).toBe(testCase.successStatus);
+      }
+    }
   });
 
   it("enforces authenticated token read/write scopes without kitchen-scope escalation", async () => {

@@ -1,4 +1,4 @@
-import type { ApiCredential, RecipeCover } from "@prisma/client";
+import type { ApiCredential, Prisma, RecipeCover } from "@prisma/client";
 import type { AppLoadContext } from "react-router";
 import {
   ApiAuthError,
@@ -44,6 +44,7 @@ import {
   RECIPE_COVER_DISPLAY_SELECT,
   type RecipeCoverVariant,
 } from "~/lib/recipe-cover.server";
+import { resolveIngredientAffordance } from "~/lib/ingredient-affordances";
 
 const DEFAULT_LIST_LIMIT = 20;
 const MAX_LIST_LIMIT = 50;
@@ -298,6 +299,12 @@ function apiV1OperationFor(method: string, path: string): string | undefined {
       return "shopping-list.items.check";
     case "DELETE shopping-list-item":
       return "shopping-list.items.delete";
+    case "POST shopping-list-add-from-recipe":
+      return "shopping-list.add-from-recipe";
+    case "POST shopping-list-clear-completed":
+      return "shopping-list.clear-completed";
+    case "POST shopping-list-clear-all":
+      return "shopping-list.clear-all";
     case "GET tokens":
       return "tokens.list";
     case "POST tokens":
@@ -313,7 +320,14 @@ function apiV1OperationFor(method: string, path: string): string | undefined {
 function defaultIdempotencyOutcome(operation: string | undefined, errorCode: ApiV1ErrorCode | undefined) {
   if (!operation) return undefined;
   if (operation.startsWith("tokens.")) return "none";
-  if (!operation.startsWith("shopping-list.items.")) return undefined;
+  if (
+    !operation.startsWith("shopping-list.items.") &&
+    operation !== "shopping-list.add-from-recipe" &&
+    operation !== "shopping-list.clear-completed" &&
+    operation !== "shopping-list.clear-all"
+  ) {
+    return undefined;
+  }
   if (errorCode === "idempotency_conflict") return "conflict";
   if (errorCode === "idempotency_in_progress") return "in_progress";
   if (errorCode === "invalid_json" || errorCode === "validation_error") return "not_attempted";
@@ -1460,6 +1474,167 @@ async function handleShoppingItemDelete(args: ApiV1RouteArgs, requestId: string,
   });
 }
 
+async function handleShoppingAddFromRecipe(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
+  const body = await parseApiV1JsonBody(args.request);
+  assertKnownFields(body, ["clientMutationId", "recipeId", "scaleFactor"]);
+  const clientMutationId = nonblankString(body.clientMutationId, "clientMutationId");
+  const recipeId = nonblankString(body.recipeId, "recipeId");
+  const scaleFactor = optionalPositiveNumber(body.scaleFactor, "scaleFactor") ?? 1;
+
+  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "shopping-list.add-from-recipe", async (db) => {
+    const list = await loadShoppingListForUser(db, principal.id);
+    const recipe = await db.recipe.findFirst({
+      where: { id: recipeId, deletedAt: null },
+      include: {
+        steps: {
+          orderBy: { stepNum: "asc" },
+          include: {
+            ingredients: {
+              orderBy: { id: "asc" },
+              include: { unit: true, ingredientRef: true },
+            },
+          },
+        },
+      },
+    });
+    if (!recipe) {
+      throw new ApiV1Error("not_found", "Recipe not found", { resource: "recipe", recipeId });
+    }
+
+    const requestedRows = new Map<string, {
+      unitId: string;
+      ingredientRefId: string;
+      ingredientName: string;
+      quantity: number;
+    }>();
+    for (const step of recipe.steps) {
+      for (const ingredient of step.ingredients) {
+        const key = `${ingredient.unitId}:${ingredient.ingredientRefId}`;
+        const requested = requestedRows.get(key);
+        const scaledQuantity = ingredient.quantity * scaleFactor;
+        if (requested) {
+          requested.quantity += scaledQuantity;
+        } else {
+          requestedRows.set(key, {
+            unitId: ingredient.unitId,
+            ingredientRefId: ingredient.ingredientRefId,
+            ingredientName: ingredient.ingredientRef.name,
+            quantity: scaledQuantity,
+          });
+        }
+      }
+    }
+
+    const ingredientRefIds = Array.from(new Set(Array.from(requestedRows.values()).map((row) => row.ingredientRefId)));
+    const existingRows = ingredientRefIds.length > 0
+      ? await db.shoppingListItem.findMany({
+          where: {
+            shoppingListId: list.id,
+            ingredientRefId: { in: ingredientRefIds },
+          },
+          include: { unit: true, ingredientRef: true },
+        })
+      : [];
+    const existingByKey = new Map(existingRows.map((row) => [`${row.unitId ?? ""}:${row.ingredientRefId}`, row]));
+    let nextSortIndexValue = await nextShoppingSortIndex(db, list.id);
+    let created = 0;
+    let updated = 0;
+    const operations: Prisma.PrismaPromise<ShoppingItemRow>[] = [];
+    for (const requested of requestedRows.values()) {
+      const existing = existingByKey.get(`${requested.unitId}:${requested.ingredientRefId}`);
+      const affordance = resolveIngredientAffordance(requested.ingredientName, null, null);
+      if (existing) {
+        const sortIndex = existing.deletedAt || existing.checkedAt || existing.checked
+          ? nextSortIndexValue++
+          : existing.sortIndex;
+        operations.push(db.shoppingListItem.update({
+          where: { id: existing.id },
+          data: {
+            quantity: (existing.quantity ?? 0) + requested.quantity,
+            checked: false,
+            checkedAt: null,
+            deletedAt: null,
+            sortIndex,
+            categoryKey: existing.categoryKey ?? affordance.categoryKey,
+            iconKey: existing.iconKey ?? affordance.iconKey,
+          },
+          include: { unit: true, ingredientRef: true },
+        }));
+        updated += 1;
+      } else {
+        operations.push(db.shoppingListItem.create({
+          data: {
+            shoppingListId: list.id,
+            quantity: requested.quantity,
+            unitId: requested.unitId,
+            ingredientRefId: requested.ingredientRefId,
+            sortIndex: nextSortIndexValue++,
+            categoryKey: affordance.categoryKey,
+            iconKey: affordance.iconKey,
+          },
+          include: { unit: true, ingredientRef: true },
+        }));
+        created += 1;
+      }
+    }
+    const changedItems = operations.length > 0 ? await db.$transaction(operations) : [];
+
+    return {
+      status: 200,
+      data: {
+        recipe: { id: recipe.id, title: recipe.title },
+        created,
+        updated,
+        items: changedItems.map(shoppingItem),
+        mutation: { clientMutationId, replayed: false },
+      },
+    };
+  });
+}
+
+async function handleShoppingClear(
+  args: ApiV1RouteArgs,
+  requestId: string,
+  principal: ApiPrincipal,
+  mode: "completed" | "all",
+) {
+  const body = await parseApiV1JsonBody(args.request);
+  assertKnownFields(body, ["clientMutationId"]);
+  const clientMutationId = nonblankString(body.clientMutationId, "clientMutationId");
+  const operation = mode === "completed" ? "shopping-list.clear-completed" : "shopping-list.clear-all";
+
+  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, operation, async (db) => {
+    const list = await loadShoppingListForUser(db, principal.id);
+    const items = await db.shoppingListItem.findMany({
+      where: {
+        shoppingListId: list.id,
+        deletedAt: null,
+        ...(mode === "completed" ? { OR: [{ checkedAt: { not: null } }, { checked: true }] } : {}),
+      },
+      include: { unit: true, ingredientRef: true },
+      orderBy: [{ sortIndex: "asc" }, { updatedAt: "asc" }, { id: "asc" }],
+    });
+
+    const deletedAt = new Date();
+    const removedItems = items.length > 0
+      ? await db.$transaction(items.map((item) => db.shoppingListItem.update({
+        where: { id: item.id },
+        data: { deletedAt },
+        include: { unit: true, ingredientRef: true },
+      })))
+      : [];
+
+    return {
+      status: 200,
+      data: {
+        removed: removedItems.length,
+        items: removedItems.map(shoppingItem),
+        mutation: { clientMutationId, replayed: false },
+      },
+    };
+  });
+}
+
 function credentialMetadata(credential: ApiCredential) {
   return {
     id: credential.id,
@@ -1707,6 +1882,24 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
     if (args.request.method === "DELETE" && segments[0] === "shopping-list" && segments[1] === "items" && segments.length === 3) {
       const principal = await authorize(path) as ApiPrincipal;
       const response = await handleShoppingItemDelete(args, requestId, principal, segments[2]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "POST" && path === "shopping-list/add-from-recipe") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleShoppingAddFromRecipe(args, requestId, principal);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "POST" && path === "shopping-list/clear-completed") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleShoppingClear(args, requestId, principal, "completed");
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "POST" && path === "shopping-list/clear-all") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleShoppingClear(args, requestId, principal, "all");
       return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
     }
 
