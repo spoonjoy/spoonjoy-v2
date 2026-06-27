@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   enforceAuthRateLimit,
   enforceRateLimit,
@@ -7,9 +7,34 @@ import {
   rateLimitedResponse,
   type RateLimiterBinding,
 } from "~/lib/rate-limit.server";
+import type { PostHogServerConfig } from "~/lib/analytics-server";
 
 function mockLimiter(success: boolean): RateLimiterBinding & { limit: ReturnType<typeof vi.fn> } {
   return { limit: vi.fn().mockResolvedValue({ success }) };
+}
+
+function throwingLimiter(error: unknown = new Error("limiter backend down")): RateLimiterBinding & {
+  limit: ReturnType<typeof vi.fn>;
+} {
+  return { limit: vi.fn().mockRejectedValue(error) };
+}
+
+const POSTHOG_ENABLED: PostHogServerConfig = {
+  enabled: true,
+  key: "ph_test",
+  host: "https://posthog.example",
+};
+
+function postHogFetchSpy() {
+  return vi.fn(async () => new Response("{}", { status: 200 })) as unknown as typeof fetch;
+}
+
+function postHogBodies(
+  fetchImpl: typeof fetch,
+): Array<{ event: string; distinct_id: string; properties: Record<string, unknown> }> {
+  return (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls.map(([, init]) =>
+    JSON.parse((init as RequestInit).body as string),
+  );
 }
 
 describe("parseBearerToken", () => {
@@ -245,5 +270,117 @@ describe("enforceAuthRateLimit", () => {
   it("fails open (skip) when no limiter binding is configured", async () => {
     const result = await enforceAuthRateLimit(requestWithIp("203.0.113.4"), undefined);
     expect(result).toEqual({ allowed: true, retryAfterSeconds: 0, scope: "skip" });
+  });
+
+  it("forwards postHogConfig so an auth limiter backend error is captured", async () => {
+    const origFetch = globalThis.fetch;
+    const phFetch = postHogFetchSpy();
+    globalThis.fetch = phFetch;
+    try {
+      const result = await enforceAuthRateLimit(
+        requestWithIp("203.0.113.4"),
+        throwingLimiter(),
+        POSTHOG_ENABLED,
+      );
+      expect(result).toEqual({ allowed: true, retryAfterSeconds: 0, scope: "skip" });
+      const backendError = postHogBodies(phFetch).find(
+        (b) => b.event === "spoonjoy.ratelimit.backend_error",
+      );
+      expect(backendError).toBeDefined();
+      expect(backendError!.properties.scope).toBe("ip");
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+  });
+});
+
+describe("enforceRateLimit — fail-open + backend-error capture (L6)", () => {
+  let origFetch: typeof globalThis.fetch;
+  let phFetch: ReturnType<typeof postHogFetchSpy>;
+
+  beforeEach(() => {
+    origFetch = globalThis.fetch;
+    phFetch = postHogFetchSpy();
+    globalThis.fetch = phFetch;
+  });
+  afterEach(() => {
+    globalThis.fetch = origFetch;
+  });
+
+  it("fails OPEN (allowed, scope=skip) when the IP limiter throws", async () => {
+    const ipLimiter = throwingLimiter();
+    const result = await enforceRateLimit({
+      ip: "1.2.3.4",
+      ipLimiter,
+      postHogConfig: POSTHOG_ENABLED,
+    });
+    expect(result).toEqual({ allowed: true, retryAfterSeconds: 0, scope: "skip" });
+    expect(ipLimiter.limit).toHaveBeenCalledTimes(1);
+  });
+
+  it("emits spoonjoy.ratelimit.backend_error + an exception when the IP limiter throws", async () => {
+    await enforceRateLimit({
+      ip: "1.2.3.4",
+      ipLimiter: throwingLimiter(),
+      postHogConfig: POSTHOG_ENABLED,
+    });
+    const bodies = postHogBodies(phFetch);
+    const backendError = bodies.find((b) => b.event === "spoonjoy.ratelimit.backend_error");
+    const exception = bodies.find((b) => b.event === "$exception");
+    expect(backendError).toBeDefined();
+    expect(backendError!.properties.scope).toBe("ip");
+    expect(exception).toBeDefined();
+    expect(exception!.properties.scope).toBe("ip");
+    expect(exception!.properties.phase).toBe("limit");
+  });
+
+  it("fails OPEN when the TOKEN limiter throws (after the IP guard passes)", async () => {
+    const ipLimiter = mockLimiter(true);
+    const tokenLimiter = throwingLimiter();
+    const result = await enforceRateLimit({
+      authorization: "Bearer sj_test",
+      ip: "1.2.3.4",
+      ipLimiter,
+      tokenLimiter,
+      postHogConfig: POSTHOG_ENABLED,
+    });
+    expect(result).toEqual({ allowed: true, retryAfterSeconds: 0, scope: "skip" });
+    expect(ipLimiter.limit).toHaveBeenCalledTimes(1);
+    expect(tokenLimiter.limit).toHaveBeenCalledTimes(1);
+    const backendError = postHogBodies(phFetch).find(
+      (b) => b.event === "spoonjoy.ratelimit.backend_error",
+    );
+    expect(backendError!.properties.scope).toBe("token");
+  });
+
+  it("fails OPEN when a token-only limiter throws (no IP path)", async () => {
+    const tokenLimiter = throwingLimiter();
+    const result = await enforceRateLimit({
+      authorization: "Bearer sj_only",
+      tokenLimiter,
+      postHogConfig: POSTHOG_ENABLED,
+    });
+    expect(result).toEqual({ allowed: true, retryAfterSeconds: 0, scope: "skip" });
+    expect(tokenLimiter.limit).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails open silently (no capture) when the limiter throws and no postHogConfig is set", async () => {
+    const result = await enforceRateLimit({
+      ip: "1.2.3.4",
+      ipLimiter: throwingLimiter(),
+      // no postHogConfig.
+    });
+    expect(result).toEqual({ allowed: true, retryAfterSeconds: 0, scope: "skip" });
+    expect(phFetch).not.toHaveBeenCalled();
+  });
+
+  it("does not capture when the limiter throws but postHogConfig is disabled", async () => {
+    const result = await enforceRateLimit({
+      ip: "1.2.3.4",
+      ipLimiter: throwingLimiter(),
+      postHogConfig: { enabled: false, reason: "missing-key" },
+    });
+    expect(result).toEqual({ allowed: true, retryAfterSeconds: 0, scope: "skip" });
+    expect(phFetch).not.toHaveBeenCalled();
   });
 });
