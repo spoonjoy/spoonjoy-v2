@@ -27,6 +27,7 @@ import {
 import {
   createOpenAIRecipeLlmRunner,
   htmlToPlainText,
+  RECIPE_LLM_PROVIDER,
   RecipeLlmError,
   type RecipeLlmEnv,
   type RecipeLlmRunner,
@@ -35,9 +36,17 @@ import {
   parseIngredients,
   type ParsedIngredient,
 } from "~/lib/ingredient-parse.server";
+import { captureLlmCallFailure } from "~/lib/llm-telemetry.server";
 import { tryConsumeImageGenQuota } from "~/lib/image-gen-ledger.server";
 import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
 import { createCover } from "~/lib/recipe-cover.server";
+import { captureImageGenerationException } from "~/lib/image-gen-telemetry.server";
+import {
+  captureException,
+  resolvePostHogServerConfig,
+  type PostHogServerConfig,
+  type PostHogServerEnv,
+} from "~/lib/analytics-server";
 import {
   generatePlaceholderImage,
   type ImageGenRunner,
@@ -98,7 +107,7 @@ export interface ImportRecipeOptions {
 
 export interface ImportRecipeDeps {
   db: PrismaClient;
-  env?: RecipeLlmEnv | null;
+  env?: (RecipeLlmEnv & PostHogServerEnv) | null;
   bucket?: R2Bucket;
   waitUntil?: (promise: Promise<unknown>) => void;
   fetchImpl?: typeof fetch;
@@ -111,6 +120,12 @@ export interface ImportRecipeDeps {
   ) => Promise<ParsedIngredient[]>;
   logger?: Pick<Console, "error">;
   now?: () => Date;
+  /** PostHog distinct id for LLM-failure telemetry. Defaults to the chef id. */
+  analyticsDistinctId?: string;
+  /** Pre-resolved PostHog config; falls back to resolving from `env`. */
+  postHogConfig?: PostHogServerConfig;
+  /** fetch used for analytics posts; separate so app fetch can be mocked apart. */
+  analyticsFetchImpl?: typeof fetch;
 }
 
 export type ImportRecipeConfidence = "high" | "medium" | "low";
@@ -188,6 +203,32 @@ function getLlmRunner(deps: ImportRecipeDeps): RecipeLlmRunner | null {
   return createLlmRunner(env);
 }
 
+/**
+ * Capture a recipe-import LLM-call failure to PostHog with the preserved OpenAI
+ * error code/type/status. Never throws — telemetry must not mask the mapped
+ * `ImportRecipeError` the caller re-throws.
+ */
+async function captureRecipeLlmFailure(
+  deps: ImportRecipeDeps,
+  chefId: string,
+  runner: RecipeLlmRunner,
+  error: RecipeLlmError,
+): Promise<void> {
+  await captureLlmCallFailure({
+    env: deps.env,
+    postHogConfig: deps.postHogConfig,
+    fetchImpl: deps.analyticsFetchImpl,
+    distinctId: deps.analyticsDistinctId ?? chefId,
+    operation: "recipe_import",
+    provider: runner.provider ?? RECIPE_LLM_PROVIDER,
+    model: runner.model ?? "unknown",
+    errorCode: error.code,
+    errorType: error.type,
+    errorStatus: error.status,
+    errorMessage: error.message,
+  });
+}
+
 interface ExtractionOutput {
   draft: ImportRecipeDraftView;
   source: ImportRecipeSource;
@@ -198,6 +239,7 @@ async function runExtraction(
   url: string,
   html: string,
   ogImageUrl: string | null,
+  chefId: string,
   deps: ImportRecipeDeps,
 ): Promise<ExtractionOutput> {
   const jsonLd = extractRecipeJsonLd(html);
@@ -219,7 +261,7 @@ async function runExtraction(
       };
     }
     // Partial JSON-LD → gap-fill via LLM
-    const llm = await runLlm(html, deps);
+    const llm = await runLlm(html, chefId, deps);
     return {
       draft: {
         title: draft.title,
@@ -236,7 +278,7 @@ async function runExtraction(
     };
   }
   // No usable JSON-LD → full LLM
-  const llm = await runLlm(html, deps);
+  const llm = await runLlm(html, chefId, deps);
   if (!llm.title || !llm.title.trim()) {
     throw new ImportRecipeError(
       "no-content",
@@ -261,6 +303,7 @@ async function runExtraction(
 
 async function runLlm(
   html: string,
+  chefId: string,
   deps: ImportRecipeDeps,
 ): Promise<{
   title: string;
@@ -282,6 +325,7 @@ async function runLlm(
     return await llmRunner.extract(text);
   } catch (err) {
     if (err instanceof RecipeLlmError) {
+      await captureRecipeLlmFailure(deps, chefId, llmRunner, err);
       throw new ImportRecipeError("llm-failed", 502, err.message);
     }
     throw err;
@@ -291,6 +335,7 @@ async function runLlm(
 async function runVideoExtraction(
   parsedUrl: URL,
   sourceKind: "youtube" | "tiktok",
+  chefId: string,
   deps: ImportRecipeDeps,
 ): Promise<ExtractionOutput> {
   const llmRunner = getLlmRunner(deps);
@@ -318,6 +363,7 @@ async function runVideoExtraction(
     });
   } catch (err) {
     if (err instanceof RecipeLlmError) {
+      await captureRecipeLlmFailure(deps, chefId, llmRunner, err);
       throw new ImportRecipeError("llm-failed", 502, err.message);
     }
     throw err;
@@ -457,6 +503,8 @@ async function uploadImportCover(
   coverSourceUrl: string,
   logger: Pick<Console, "error">,
   now: () => Date,
+  postHogConfig: PostHogServerConfig,
+  analyticsFetchImpl?: typeof fetch,
 ): Promise<void> {
   try {
     const { bytes, contentType, extension } = await fetchSafeImageBytes(coverSourceUrl, { fetchImpl });
@@ -475,9 +523,49 @@ async function uploadImportCover(
       generationStatus: "none",
     }).then((cover) => activateImportedCoverIfStillAutomatic(db, recipeId, cover.id));
   } catch (err) {
+    // The cover silently never appears. Keep the log, but also capture so the
+    // failure is observable. This path downloads an existing image (not image
+    // generation), so it uses the generic exception capture rather than the
+    // image-generation telemetry helper.
     logger.error("recipe-import cover upload failed", err);
+    await captureImportCoverException(
+      postHogConfig,
+      err,
+      { recipeId, chefId, coverSourceType: "import", phase: "uploadImportCover" },
+      analyticsFetchImpl,
+    );
   }
 }
+
+/** Capture a silent import-cover (image download) failure. Never throws. */
+async function captureImportCoverException(
+  config: PostHogServerConfig,
+  error: unknown,
+  extras: {
+    recipeId: string;
+    chefId: string;
+    coverSourceType: string;
+    phase: string;
+  },
+  fetchImpl?: typeof fetch,
+): Promise<void> {
+  await captureException(
+    config,
+    {
+      error,
+      distinctId: extras.chefId,
+      extras: {
+        feature: "recipe_import_cover",
+        recipeId: extras.recipeId,
+        sourceType: extras.coverSourceType,
+        phase: extras.phase,
+      },
+    },
+    fetchImpl,
+  );
+}
+
+const OPENAI_IMPORT_PLACEHOLDER_MODEL = "gpt-image-1";
 
 async function uploadPlaceholderCover(
   db: PrismaClient,
@@ -491,6 +579,8 @@ async function uploadPlaceholderCover(
     bucket: R2Bucket;
     fetchImpl: typeof fetch;
     logger: Pick<Console, "error">;
+    postHogConfig: PostHogServerConfig;
+    analyticsFetchImpl?: typeof fetch;
   },
 ): Promise<void> {
   try {
@@ -509,7 +599,23 @@ async function uploadPlaceholderCover(
       generationStatus: "succeeded",
     }).then((cover) => activateImportedCoverIfStillAutomatic(db, recipeId, cover.id));
   } catch (err) {
+    // The AI placeholder cover silently never appears. Keep the log and also
+    // capture via the image-generation telemetry helper (mirrors
+    // ai-placeholder-cover.server.ts). No cover row exists yet on this path,
+    // so coverId is reported as "none".
     deps.logger.error("recipe-import placeholder cover failed", err);
+    await captureImageGenerationException({
+      postHogConfig: deps.postHogConfig,
+      fetchImpl: deps.analyticsFetchImpl,
+      userId: chefId,
+      recipeId,
+      coverId: "none",
+      operation: "placeholder_generate",
+      sourceType: "ai-placeholder",
+      quotaKind: "placeholder",
+      model: OPENAI_IMPORT_PLACEHOLDER_MODEL,
+      error: err,
+    });
   }
 }
 
@@ -578,10 +684,11 @@ export async function importRecipeFromUrl(
       url,
       fetched.html,
       fetched.ogImageUrl,
+      chefId,
       deps,
     );
   } else {
-    extraction = await runVideoExtraction(parsedUrl, sourceKind, deps);
+    extraction = await runVideoExtraction(parsedUrl, sourceKind, chefId, deps);
   }
 
   // 4. Existing-URL hint.
@@ -645,7 +752,7 @@ interface ScheduleCoverArgs {
   waitUntil: ((p: Promise<unknown>) => void) | undefined;
   fetchImpl: typeof fetch;
   imageGenRunner: ImageGenRunner | undefined;
-  env: { OPENAI_API_KEY?: string };
+  env: { OPENAI_API_KEY?: string } & PostHogServerEnv;
   logger: Pick<Console, "error">;
   now: () => Date;
   recipeId: string;
@@ -658,6 +765,7 @@ interface ScheduleCoverArgs {
 async function scheduleCover(args: ScheduleCoverArgs): Promise<boolean> {
   const { bucket } = args;
   if (!bucket) return false;
+  const postHogConfig = resolvePostHogServerConfig(args.env);
   let task: Promise<void> | null = null;
   if (args.coverSourceUrl) {
     task = uploadImportCover(
@@ -669,6 +777,8 @@ async function scheduleCover(args: ScheduleCoverArgs): Promise<boolean> {
       args.coverSourceUrl,
       args.logger,
       args.now,
+      postHogConfig,
+      args.fetchImpl,
     );
   } else if (args.imageGenRunner) {
     task = uploadPlaceholderCover(args.db, args.recipeId, args.chefId, args.title, args.description, {
@@ -677,6 +787,8 @@ async function scheduleCover(args: ScheduleCoverArgs): Promise<boolean> {
       bucket,
       fetchImpl: args.fetchImpl,
       logger: args.logger,
+      postHogConfig,
+      analyticsFetchImpl: args.fetchImpl,
     });
   }
   if (!task) return false;

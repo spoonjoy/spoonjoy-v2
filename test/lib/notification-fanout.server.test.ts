@@ -4,6 +4,7 @@ import {
   fanoutFellowChefOriginCook,
   type FanoutFellowChefOriginCookDeps,
 } from "~/lib/notification-fanout.server";
+import type { PostHogServerConfig } from "~/lib/analytics-server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestUser } from "../utils";
 
@@ -12,6 +13,24 @@ const VAPID = {
   privateKey: "priv",
   subject: "mailto:test@example.com",
 };
+
+const POSTHOG_ENABLED: PostHogServerConfig = {
+  enabled: true,
+  key: "ph_test",
+  host: "https://posthog.example",
+};
+
+function postHogFetchSpy() {
+  return vi.fn(async () => new Response("{}", { status: 200 })) as unknown as typeof fetch;
+}
+
+function postHogBodies(
+  fetchImpl: typeof fetch,
+): Array<{ event: string; distinct_id: string; properties: Record<string, unknown> }> {
+  return (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls.map(([, init]) =>
+    JSON.parse((init as RequestInit).body as string),
+  );
+}
 
 function makeDeps(
   overrides?: Partial<FanoutFellowChefOriginCookDeps>,
@@ -225,5 +244,118 @@ describe("fanoutFellowChefOriginCook", () => {
     expect(call[1]).toBe(spooner.id);
     expect(call[2]).toEqual({ limit: 100 });
     expect(result.recipientsNotified).toBe(3);
+  });
+});
+
+describe("fanoutFellowChefOriginCook — telemetry capture (M3)", () => {
+  let origFetch: typeof globalThis.fetch;
+  let phFetch: ReturnType<typeof postHogFetchSpy>;
+
+  beforeEach(async () => {
+    await cleanupDatabase();
+    origFetch = globalThis.fetch;
+    phFetch = postHogFetchSpy();
+    globalThis.fetch = phFetch;
+  });
+  afterEach(async () => {
+    globalThis.fetch = origFetch;
+    await cleanupDatabase();
+  });
+
+  it("captures the swallowed fan-out failure via waitUntil when postHogConfig is set", async () => {
+    const spooner = await createUser();
+    const db = await getLocalDb();
+    const recipe = await db.recipe.create({ data: { title: "Boom", chefId: spooner.id } });
+    const listMock = vi.fn(async () => {
+      throw new Error("listFellowChefs D1 boom");
+    });
+    const tasks: Promise<unknown>[] = [];
+
+    const result = await fanoutFellowChefOriginCook(
+      db,
+      {
+        spoonerId: spooner.id,
+        recipeId: recipe.id,
+        recipeTitle: "Boom",
+        spoonerUsername: "spooner",
+      },
+      {
+        vapid: VAPID,
+        postHogConfig: POSTHOG_ENABLED,
+        waitUntil: (p) => tasks.push(p),
+        listFellowChefs: listMock,
+      },
+    );
+    expect(result.recipientsNotified).toBe(0);
+    await Promise.all(tasks);
+
+    const capture = postHogBodies(phFetch).find(
+      (b) => b.event === "$exception" && b.properties.phase === "fanout",
+    );
+    expect(capture).toBeDefined();
+    expect(capture!.distinct_id).toBe(spooner.id);
+    expect(capture!.properties.recipeId).toBe(recipe.id);
+    expect(capture!.properties.kind).toBe("fellow_chef_origin_cook");
+  });
+
+  it("captures inline (no waitUntil) when the fan-out fails", async () => {
+    const spooner = await createUser();
+    const db = await getLocalDb();
+    const recipe = await db.recipe.create({ data: { title: "Boom2", chefId: spooner.id } });
+    const listMock = vi.fn(async () => {
+      throw new Error("boom2");
+    });
+
+    const result = await fanoutFellowChefOriginCook(
+      db,
+      {
+        spoonerId: spooner.id,
+        recipeId: recipe.id,
+        recipeTitle: "Boom2",
+        spoonerUsername: "spooner",
+      },
+      {
+        vapid: VAPID,
+        postHogConfig: POSTHOG_ENABLED,
+        // no waitUntil — capture is voided inline.
+        listFellowChefs: listMock,
+      },
+    );
+    expect(result.recipientsNotified).toBe(0);
+    await new Promise((r) => setTimeout(r, 0));
+
+    const capture = postHogBodies(phFetch).find(
+      (b) => b.event === "$exception" && b.properties.phase === "fanout",
+    );
+    expect(capture).toBeDefined();
+  });
+
+  it("does NOT capture when postHogConfig is absent (no-op, errors still isolated)", async () => {
+    const spooner = await createUser();
+    const db = await getLocalDb();
+    const recipe = await db.recipe.create({ data: { title: "Boom3", chefId: spooner.id } });
+    const listMock = vi.fn(async () => {
+      throw new Error("boom3");
+    });
+
+    const result = await fanoutFellowChefOriginCook(
+      db,
+      {
+        spoonerId: spooner.id,
+        recipeId: recipe.id,
+        recipeTitle: "Boom3",
+        spoonerUsername: "spooner",
+      },
+      {
+        vapid: VAPID,
+        // no postHogConfig.
+        waitUntil: vi.fn((p: Promise<unknown>) => {
+          void p;
+        }),
+        listFellowChefs: listMock,
+      },
+    );
+    expect(result.recipientsNotified).toBe(0);
+    expect(phFetch).not.toHaveBeenCalled();
   });
 });

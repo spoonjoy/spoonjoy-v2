@@ -12,6 +12,7 @@ import { RecipeGrid } from "~/components/pantry/RecipeGrid";
 import { CookbookCard } from "~/components/pantry/CookbookCard";
 import { getRecipeCoverDisplay } from "~/lib/recipe-cover.server";
 import { absoluteUrlFromRequest } from "~/lib/og-image.server";
+import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 import { listSpoonsByChef } from "~/lib/recipe-spoon.server";
 import { SpoonsStrip } from "~/components/recipe/SpoonsStrip";
 import {
@@ -200,12 +201,13 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
     };
   });
 
+  const publicOrigin = resolveIssuerOrigin(request.url, context.cloudflare?.env?.SPOONJOY_BASE_URL);
   const canonicalUrl = absoluteUrlFromRequest(
-    request.url,
+    publicOrigin,
     `/users/${profileUser.username}`,
   );
   const ogImageUrl = absoluteUrlFromRequest(
-    request.url,
+    publicOrigin,
     resolveChefAvatarUrl(profileUser.photoUrl),
   );
 

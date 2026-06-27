@@ -12,6 +12,15 @@ import {
   generateState as arcticGenerateState,
 } from "arctic";
 import type { AppleOAuthConfig } from "./env.server";
+import type { AuthVerifyCapture } from "./auth-telemetry.server";
+
+/**
+ * Optional capture callback threaded in by the callback-route orchestration.
+ * Lets a provider outage (JWKS/crypto/Apple 5xx) be captured with the ORIGINAL
+ * error before it is flattened to a generic `invalid_code`, without coupling
+ * this helper to the PostHog config.
+ */
+export type AuthVerifyCaptureFn = (input: AuthVerifyCapture) => void;
 
 /**
  * Data received from Apple's OAuth callback (POST request body).
@@ -177,7 +186,8 @@ interface AppleUserParameter {
 export async function verifyAppleCallback(
   config: AppleOAuthConfig,
   redirectUri: string,
-  callbackData: AppleCallbackData
+  callbackData: AppleCallbackData,
+  capture?: AuthVerifyCaptureFn
 ): Promise<AppleCallbackResult> {
   // Validate state
   if (!callbackData.state) {
@@ -202,8 +212,11 @@ export async function verifyAppleCallback(
   if (callbackData.user) {
     try {
       userParam = JSON.parse(callbackData.user) as AppleUserParameter;
-    } catch {
-      // Invalid JSON in user parameter - continue without name info
+    } catch (error) {
+      // Invalid JSON in user parameter — drops the first-sign-in name
+      // unrecoverably (Apple only sends `user` once). Capture before nulling so
+      // a systematic encoding bug is visible; then continue without name info.
+      capture?.({ error, phase: "verify" });
       userParam = null;
     }
   }
@@ -256,6 +269,8 @@ export async function verifyAppleCallback(
     };
   } catch (error) {
     if (error instanceof InvalidApplePrivateKeyError) {
+      // Misconfigured signing key — every Apple login fails until it is fixed.
+      capture?.({ error, phase: "config" });
       return {
         success: false,
         error: "oauth_unconfigured",
@@ -268,6 +283,7 @@ export async function verifyAppleCallback(
       error instanceof OAuth2RequestError ||
       (error instanceof Error && error.name === "OAuth2RequestError")
     ) {
+      capture?.({ error, phase: "token_exchange" });
       return {
         success: false,
         error: "oauth_error",
@@ -282,6 +298,7 @@ export async function verifyAppleCallback(
         error.message.includes("network") ||
         error.name === "TypeError")
     ) {
+      capture?.({ error, phase: "token_exchange" });
       return {
         success: false,
         error: "network_error",
@@ -289,7 +306,10 @@ export async function verifyAppleCallback(
       };
     }
 
-    // For invalid authorization code errors, return invalid_code
+    // Anything else (JWKS fetch, ID-token decode, Apple 5xx) is flattened to a
+    // generic `invalid_code` for the user. Capture the ORIGINAL error here so a
+    // provider/crypto outage is distinguishable from a genuinely bad code.
+    capture?.({ error, phase: "token_exchange" });
     return {
       success: false,
       error: "invalid_code",

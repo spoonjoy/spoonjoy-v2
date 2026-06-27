@@ -1105,6 +1105,129 @@ describe('Ingredient Parsing', () => {
       })
     })
 
+    describe('preserved OpenAI error fields', () => {
+      it('preserves the original code/type/status for an out-of-credit failure', async () => {
+        const quotaError = Object.assign(new Error('You exceeded your quota'), {
+          status: 429,
+          code: 'insufficient_quota',
+          type: 'insufficient_quota',
+        })
+        mockCreate.mockRejectedValueOnce(quotaError)
+
+        try {
+          await parseIngredients('2 cups flour', TEST_API_KEY)
+          expect.fail('Should have thrown')
+        } catch (error) {
+          const parseError = error as IngredientParseError
+          // The mapped, user-facing message is the generic rate-limit string...
+          expect(parseError.message).toBe('OpenAI rate limit exceeded')
+          // ...but the original code/type/status survive so insufficient_quota
+          // stays distinguishable from rate_limit_exceeded.
+          expect(parseError.code).toBe('insufficient_quota')
+          expect(parseError.type).toBe('insufficient_quota')
+          expect(parseError.status).toBe(429)
+        }
+      })
+
+      it('preserves a nested error.code (raw JSON body shape)', async () => {
+        mockCreate.mockRejectedValueOnce({
+          status: 404,
+          error: { code: 'model_not_found', type: 'invalid_request_error' },
+        })
+
+        try {
+          await parseIngredients('2 cups flour', TEST_API_KEY)
+          expect.fail('Should have thrown')
+        } catch (error) {
+          const parseError = error as IngredientParseError
+          expect(parseError.code).toBe('model_not_found')
+          expect(parseError.type).toBe('invalid_request_error')
+          expect(parseError.status).toBe(404)
+        }
+      })
+
+      it('leaves code/type/status null when the failure is not OpenAI-shaped', async () => {
+        const error = new IngredientParseError('OpenAI API key is required')
+        expect(error.code).toBeNull()
+        expect(error.type).toBeNull()
+        expect(error.status).toBeNull()
+      })
+    })
+
+    describe('failure telemetry capture', () => {
+      const POSTHOG_CONFIG = {
+        enabled: true as const,
+        key: 'ph_test',
+        host: 'https://posthog.example',
+      }
+
+      it('captures an LLM-call failure with the preserved code when PostHog is configured', async () => {
+        const analyticsFetch = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }))
+        const quotaError = Object.assign(new Error('quota'), {
+          status: 429,
+          code: 'insufficient_quota',
+          type: 'insufficient_quota',
+        })
+        mockCreate.mockRejectedValueOnce(quotaError)
+
+        await expect(
+          parseIngredients(
+            '2 cups flour',
+            { OPENAI_API_KEY: TEST_API_KEY, INGREDIENT_PARSE_MODEL: 'gpt-4o-mini' },
+            {
+              postHogConfig: POSTHOG_CONFIG,
+              fetchImpl: analyticsFetch as unknown as typeof fetch,
+              distinctId: 'chef_7',
+            }
+          )
+        ).rejects.toThrow(IngredientParseError)
+
+        expect(analyticsFetch).toHaveBeenCalledTimes(1)
+        const body = JSON.parse(analyticsFetch.mock.calls[0][1].body as string)
+        expect(body.event).toBe('spoonjoy.llm_call.failed')
+        expect(body.distinct_id).toBe('chef_7')
+        expect(body.properties).toMatchObject({
+          operation: 'ingredient_parse',
+          provider: 'openai',
+          model: 'gpt-4o-mini',
+          errorCode: 'insufficient_quota',
+          errorStatus: 429,
+        })
+      })
+
+      it('captures non-OpenAI parse failures (refusal) as LLM-call failures', async () => {
+        const analyticsFetch = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }))
+        mockCreate.mockResolvedValueOnce({
+          choices: [{ message: { refusal: 'no', content: null } }],
+        })
+
+        await expect(
+          parseIngredients('2 cups flour', TEST_API_KEY, {
+            postHogConfig: POSTHOG_CONFIG,
+            fetchImpl: analyticsFetch as unknown as typeof fetch,
+          })
+        ).rejects.toThrow(IngredientParseError)
+
+        expect(analyticsFetch).toHaveBeenCalledTimes(1)
+        const body = JSON.parse(analyticsFetch.mock.calls[0][1].body as string)
+        expect(body.properties.operation).toBe('ingredient_parse')
+        expect(body.distinct_id).toBe('anon')
+      })
+
+      it('does not call analytics when PostHog is unconfigured', async () => {
+        const analyticsFetch = vi.fn()
+        mockCreate.mockRejectedValueOnce(new Error('network down'))
+
+        await expect(
+          parseIngredients('2 cups flour', TEST_API_KEY, {
+            fetchImpl: analyticsFetch as unknown as typeof fetch,
+          })
+        ).rejects.toThrow(IngredientParseError)
+
+        expect(analyticsFetch).not.toHaveBeenCalled()
+      })
+    })
+
     describe('API call verification', () => {
       it('calls OpenAI API with correct model', async () => {
         mockCreate.mockResolvedValueOnce({

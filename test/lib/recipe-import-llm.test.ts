@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import {
+  RECIPE_LLM_PROVIDER,
   RecipeLlmError,
   htmlToPlainText,
   createOpenAIRecipeLlmRunner,
@@ -321,6 +322,39 @@ describe("createOpenAIRecipeLlmRunner", () => {
     const runner = createOpenAIRecipeLlmRunner({ OPENAI_API_KEY: "sk-test" }, {});
     expect(runner.extract).toBeInstanceOf(Function);
   });
+
+  it("exposes the provider and resolved model for telemetry", () => {
+    const runner = createOpenAIRecipeLlmRunner(
+      { OPENAI_API_KEY: "k", RECIPE_LLM_MODEL: "gpt-4o" },
+      { clientFactory: () => makeClient(async () => ok("{}")) },
+    );
+    expect(runner.provider).toBe(RECIPE_LLM_PROVIDER);
+    expect(runner.model).toBe("gpt-4o");
+  });
+
+  it("preserves the original OpenAI code/type/status on the mapped error", async () => {
+    const err = Object.assign(new Error("quota"), {
+      status: 429,
+      code: "insufficient_quota",
+      type: "insufficient_quota",
+    });
+    const create = vi.fn(async () => {
+      throw err;
+    });
+    const runner = createOpenAIRecipeLlmRunner(env, {
+      clientFactory: () => makeClient(create),
+    });
+    try {
+      await runner.extract("t");
+      expect.fail("Should have thrown");
+    } catch (caught) {
+      const error = caught as RecipeLlmError;
+      expect(error.message).toBe("OpenAI rate limit exceeded");
+      expect(error.code).toBe("insufficient_quota");
+      expect(error.type).toBe("insufficient_quota");
+      expect(error.status).toBe(429);
+    }
+  });
 });
 
 describe("RecipeLlmError", () => {
@@ -328,5 +362,22 @@ describe("RecipeLlmError", () => {
     const e = new RecipeLlmError("x");
     expect(e).toBeInstanceOf(Error);
     expect(e.message).toBe("x");
+  });
+
+  it("leaves code/type/status null when no OpenAI cause is given", () => {
+    const e = new RecipeLlmError("x");
+    expect(e.code).toBeNull();
+    expect(e.type).toBeNull();
+    expect(e.status).toBeNull();
+  });
+
+  it("extracts code/type/status from an OpenAI-shaped cause", () => {
+    const e = new RecipeLlmError(
+      "mapped",
+      Object.assign(new Error("raw"), { status: 404, code: "model_not_found", type: "invalid_request_error" }),
+    );
+    expect(e.code).toBe("model_not_found");
+    expect(e.type).toBe("invalid_request_error");
+    expect(e.status).toBe(404);
   });
 });

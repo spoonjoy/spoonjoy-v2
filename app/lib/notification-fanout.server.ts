@@ -20,6 +20,7 @@ import {
   enqueueNotification,
   type NotificationDispatchDeps,
 } from "~/lib/notification-dispatch.server";
+import { captureException } from "~/lib/analytics-server";
 import {
   listFellowChefs as realListFellowChefs,
   type FellowChefListResult,
@@ -75,8 +76,26 @@ export async function fanoutFellowChefOriginCook(
     }
 
     return { recipientsNotified: recipients.length };
-  } catch {
-    // Notifications must never break the originating action.
+  } catch (error) {
+    // Notifications must never break the originating action — but a fan-out
+    // failure (e.g. listFellowChefs D1 error) silently returns 0 recipients,
+    // so capture it first. Fire-and-forget via waitUntil when present.
+    if (deps.postHogConfig) {
+      const captureTask = captureException(deps.postHogConfig, {
+        error,
+        distinctId: input.spoonerId,
+        extras: {
+          recipeId: input.recipeId,
+          kind: "fellow_chef_origin_cook",
+          phase: "fanout",
+        },
+      });
+      if (deps.waitUntil) {
+        deps.waitUntil(captureTask);
+      } else {
+        void captureTask;
+      }
+    }
     return { recipientsNotified: 0 };
   }
 }
