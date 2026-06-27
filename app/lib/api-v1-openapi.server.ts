@@ -390,6 +390,40 @@ const schemas = {
     steps: { ...arrayOf(ref("RecipeStep")), description: "Recipe steps returned in ascending stepNum order." },
     cookbooks: arrayOf(ref("CookbookLink")),
   }),
+  RecipeCover: objectSchema(["id", "recipeId", "status", "sourceType", "imageUrl", "stylizedImageUrl", "displayUrl", "activeVariant", "provenanceLabel", "archivedAt", "generationStatus", "sourceImageUrl", "createdAt"], {
+    id: idSchema,
+    recipeId: idSchema,
+    status: { type: "string", enum: ["processing", "ready", "failed", "archived"] },
+    sourceType: { type: "string", enum: ["ai-placeholder", "chef-upload", "import", "spoon"] },
+    imageUrl: { type: ["string", "null"], format: "uri" },
+    stylizedImageUrl: { type: ["string", "null"], format: "uri" },
+    displayUrl: { type: ["string", "null"], format: "uri" },
+    activeVariant: coverVariantSchema,
+    provenanceLabel: nullableStringSchema,
+    sourceSpoonId: nullableStringSchema,
+    createdById: nullableStringSchema,
+    archivedAt: nullableDateTimeSchema,
+    generationStatus: { type: "string", enum: ["none", "processing", "succeeded", "failed"] },
+    failureReason: nullableStringSchema,
+    sourceImageUrl: { type: ["string", "null"], format: "uri" },
+    createdAt: dateTimeSchema,
+  }),
+  RecipeCoverSpoonImage: objectSchema(["id", "recipeId", "chefId", "photoUrl", "cookedAt", "createdAt", "updatedAt", "chef"], {
+    id: idSchema,
+    recipeId: idSchema,
+    chefId: idSchema,
+    photoUrl: { type: ["string", "null"], format: "uri" },
+    cookedAt: dateTimeSchema,
+    createdAt: dateTimeSchema,
+    updatedAt: dateTimeSchema,
+    chef: ref("ChefSummary"),
+  }),
+  RecipeCoverPagination: objectSchema(["limit", "offset", "nextOffset", "hasMore"], {
+    limit: { type: "integer" },
+    offset: { type: "integer" },
+    nextOffset: { type: ["integer", "null"] },
+    hasMore: { type: "boolean" },
+  }),
   CookbookSummary: objectSchema(["id", "title", "chef", "recipeCount", "coverImageUrls", "href", "canonicalUrl", "attribution", "createdAt", "updatedAt"], {
     id: idSchema,
     title: { type: "string" },
@@ -448,6 +482,31 @@ const schemas = {
   MutationMetadata: objectSchema(["clientMutationId", "replayed"], {
     clientMutationId: shortTextSchema,
     replayed: { type: "boolean" },
+  }),
+  SetRecipeCoverRequest: objectSchema(["clientMutationId", "variant"], {
+    clientMutationId: shortTextSchema,
+    variant: { type: "string", enum: ["image", "stylized"] },
+  }),
+  SetRecipeNoCoverRequest: objectSchema(["clientMutationId", "confirmNoCover"], {
+    clientMutationId: shortTextSchema,
+    confirmNoCover: { const: true },
+  }),
+  RegenerateRecipeCoverRequest: objectSchema(["clientMutationId", "coverId"], {
+    clientMutationId: shortTextSchema,
+    coverId: idSchema,
+    activateWhenReady: { type: "boolean", default: false },
+  }),
+  ArchiveRecipeCoverRequest: objectSchema(["clientMutationId"], {
+    clientMutationId: shortTextSchema,
+    replacementCoverId: nullableStringSchema,
+    replacementVariant: coverVariantSchema,
+    confirmNoCover: { type: "boolean", default: false },
+    deleteSafeObjects: { type: "boolean", default: false },
+  }),
+  CreateRecipeCoverFromSpoonRequest: objectSchema(["clientMutationId"], {
+    clientMutationId: shortTextSchema,
+    activate: { type: "boolean", default: false },
+    generateEditorial: { type: "boolean", default: true },
   }),
   CreateTokenRequest: objectSchema(["name"], {
     name: shortTextSchema,
@@ -508,6 +567,21 @@ const schemas = {
     recipes: arrayOf(ref("RecipeSummary")),
   }),
   RecipeDetailData: objectSchema(["recipe"], { recipe: ref("RecipeDetail") }),
+  RecipeCoverListData: objectSchema(["covers", "activeCover", "spoonImages", "pagination"], {
+    covers: arrayOf(ref("RecipeCover")),
+    activeCover: { oneOf: [ref("RecipeCover"), { type: "null" }] },
+    spoonImages: arrayOf(ref("RecipeCoverSpoonImage")),
+    pagination: ref("RecipeCoverPagination"),
+  }),
+  RecipeCoverMutationData: objectSchema(["activeCover", "previousActiveCover", "mutation"], {
+    activeCover: { oneOf: [ref("RecipeCover"), { type: "null" }] },
+    previousActiveCover: { oneOf: [ref("RecipeCover"), { type: "null" }] },
+    createdCover: { oneOf: [ref("RecipeCover"), { type: "null" }] },
+    archivedCover: { oneOf: [ref("RecipeCover"), { type: "null" }] },
+    generationStatus: nullableStringSchema,
+    warnings: arrayOf({ type: "string" }),
+    mutation: ref("MutationMetadata"),
+  }),
   CookbookListData: objectSchema(["query", "limit", "cursor", "nextCursor", "hasMore", "cookbooks"], {
     query: nullableStringSchema,
     limit: { type: "integer" },
@@ -573,6 +647,8 @@ const schemas = {
   HealthEnvelope: successEnvelope(ref("HealthData")),
   RecipeListEnvelope: successEnvelope(ref("RecipeListData")),
   RecipeDetailEnvelope: successEnvelope(ref("RecipeDetailData")),
+  RecipeCoverListEnvelope: successEnvelope(ref("RecipeCoverListData")),
+  RecipeCoverMutationEnvelope: successEnvelope(ref("RecipeCoverMutationData")),
   CookbookListEnvelope: successEnvelope(ref("CookbookListData")),
   CookbookDetailEnvelope: successEnvelope(ref("CookbookDetailData")),
   TokenListEnvelope: successEnvelope(ref("TokenListData")),
@@ -589,6 +665,8 @@ const schemas = {
 
 const pathParameters = {
   id: { name: "id", in: "path", required: true, description: "Spoonjoy resource id from a previous list response.", schema: idSchema },
+  coverId: { name: "coverId", in: "path", required: true, description: "Recipe cover candidate id from GET /api/v1/recipes/{id}/covers.", schema: idSchema },
+  spoonId: { name: "spoonId", in: "path", required: true, description: "Recipe spoon id from a cover-management spoon image candidate.", schema: idSchema },
   itemId: { name: "itemId", in: "path", required: true, description: "Shopping-list item id from GET /api/v1/shopping-list or /sync.", schema: idSchema },
   credentialId: { name: "credentialId", in: "path", required: true, description: "Bearer credential id from GET /api/v1/tokens.", schema: idSchema },
   requestIdHeader: {
@@ -612,6 +690,8 @@ const queryParameters = {
   q: { name: "q", in: "query", required: false, description: "Search-text alias for clients that conventionally use q. Ignored when query is also present.", schema: { type: "string" } },
   cursor: { name: "cursor", in: "query", required: false, description: "Opaque pagination cursor returned as nextCursor. Catalog cursors are v1.* values; shopping-list sync also accepts an ISO timestamp only as bootstrap compatibility.", schema: { type: "string" }, examples: { catalog: { value: "v1.cursor_from_nextCursor" }, sync: { value: "v1.cursor_or_iso_bootstrap" } } },
   limit: { name: "limit", in: "query", required: false, description: "Page size from 1 to 50. Defaults to 20.", schema: { type: "integer", minimum: 1, maximum: 50, default: 20 } },
+  offset: { name: "offset", in: "query", required: false, description: "Zero-based offset for owner cover-history pagination.", schema: { type: "integer", minimum: 0, default: 0 } },
+  includeArchived: { name: "includeArchived", in: "query", required: false, description: "Include archived cover rows in owner cover history.", schema: { type: "boolean", default: false } },
 };
 
 const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationConfig>>> = {
@@ -635,6 +715,20 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
   },
   "/api/v1/recipes/{id}": {
     GET: { operationId: "getApiV1Recipe", tags: ["Recipes"], summary: "Read one public recipe", auth: "optional", scopes: ["recipes:read"], success: { 200: "RecipeDetailEnvelope" }, errors: ["validation_error", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id] },
+  },
+  "/api/v1/recipes/{id}/covers": {
+    GET: { operationId: "getApiV1RecipeCovers", tags: ["Recipe Covers"], summary: "List owner recipe cover candidates and spoon photo sources", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "RecipeCoverListEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id, queryParameters.includeArchived, queryParameters.limit, queryParameters.offset] },
+    PATCH: { operationId: "patchApiV1RecipeCovers", tags: ["Recipe Covers"], summary: "Set an explicit no-cover state", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "RecipeCoverMutationEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id], requestBody: "SetRecipeNoCoverRequest" },
+  },
+  "/api/v1/recipes/{id}/covers/{coverId}": {
+    PATCH: { operationId: "patchApiV1RecipeCover", tags: ["Recipe Covers"], summary: "Set an existing cover variant active", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "RecipeCoverMutationEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id, pathParameters.coverId], requestBody: "SetRecipeCoverRequest" },
+    DELETE: { operationId: "deleteApiV1RecipeCover", tags: ["Recipe Covers"], summary: "Archive a recipe cover candidate", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "RecipeCoverMutationEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id, pathParameters.coverId], requestBody: "ArchiveRecipeCoverRequest" },
+  },
+  "/api/v1/recipes/{id}/covers/regenerate": {
+    POST: { operationId: "postApiV1RecipeCoverRegenerate", tags: ["Recipe Covers"], summary: "Regenerate the editorial image for a cover", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "RecipeCoverMutationEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id], requestBody: "RegenerateRecipeCoverRequest" },
+  },
+  "/api/v1/recipes/{id}/covers/from-spoon/{spoonId}": {
+    POST: { operationId: "postApiV1RecipeCoverFromSpoon", tags: ["Recipe Covers"], summary: "Create a cover candidate from an existing spoon photo", auth: "bearer", scopes: ["kitchen:write"], success: { 201: "RecipeCoverMutationEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id, pathParameters.spoonId], requestBody: "CreateRecipeCoverFromSpoonRequest" },
   },
   "/api/v1/cookbooks": {
     GET: { operationId: "getApiV1Cookbooks", tags: ["Cookbooks"], summary: "Search public cookbooks", auth: "optional", scopes: ["cookbooks:read"], success: { 200: "CookbookListEnvelope" }, errors: ["validation_error", "invalid_cursor", "invalid_token", "insufficient_scope", "method_not_allowed", "rate_limited", "internal_error"], parameters: [queryParameters.query, queryParameters.q, queryParameters.cursor, queryParameters.limit] },
@@ -717,6 +811,34 @@ const exampleRecipeDetail = {
   ...exampleRecipeSummary,
   steps: [exampleRecipeStep],
   cookbooks: [exampleCookbookLink],
+};
+const exampleRecipeCover = {
+  id: "cover_1",
+  recipeId: "recipe_1",
+  status: "ready",
+  sourceType: "spoon",
+  imageUrl: "https://spoonjoy.app/photos/spoons/cover-raw.jpg",
+  stylizedImageUrl: "https://spoonjoy.app/photos/covers/cover-editorial.jpg",
+  displayUrl: "https://spoonjoy.app/photos/covers/cover-editorial.jpg",
+  activeVariant: "stylized",
+  provenanceLabel: "Editorialized chef photo",
+  sourceSpoonId: "spoon_1",
+  createdById: "chef_1",
+  archivedAt: null,
+  generationStatus: "succeeded",
+  failureReason: null,
+  sourceImageUrl: "https://spoonjoy.app/photos/spoons/cover-raw.jpg",
+  createdAt: exampleTimestamp,
+};
+const exampleRecipeCoverSpoonImage = {
+  id: "spoon_1",
+  recipeId: "recipe_1",
+  chefId: "chef_1",
+  photoUrl: "https://spoonjoy.app/photos/spoons/cover-raw.jpg",
+  cookedAt: exampleTimestamp,
+  createdAt: exampleTimestamp,
+  updatedAt: exampleTimestamp,
+  chef: exampleChef,
 };
 const exampleCookbookSummary = {
   id: "cookbook_1",
@@ -834,6 +956,29 @@ const responseExamples: Record<string, unknown> = {
     },
   },
   RecipeDetailEnvelope: { ok: true, requestId: "req_example", data: { recipe: exampleRecipeDetail } },
+  RecipeCoverListEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      covers: [exampleRecipeCover],
+      activeCover: exampleRecipeCover,
+      spoonImages: [exampleRecipeCoverSpoonImage],
+      pagination: { limit: 20, offset: 0, nextOffset: null, hasMore: false },
+    },
+  },
+  RecipeCoverMutationEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      activeCover: exampleRecipeCover,
+      previousActiveCover: null,
+      createdCover: exampleRecipeCover,
+      archivedCover: null,
+      generationStatus: "processing",
+      warnings: [],
+      mutation: exampleMutation,
+    },
+  },
   CookbookListEnvelope: {
     ok: true,
     requestId: "req_example",
@@ -906,6 +1051,11 @@ const responseExamples: Record<string, unknown> = {
 
 const requestExamples: Record<string, unknown> = {
   CreateTokenRequest: { name: "Tiny client", scopes: ["recipes:read", "shopping_list:read", "shopping_list:write"] },
+  SetRecipeCoverRequest: { clientMutationId: "device-uuid-cover-active", variant: "stylized" },
+  SetRecipeNoCoverRequest: { clientMutationId: "device-uuid-cover-none", confirmNoCover: true },
+  RegenerateRecipeCoverRequest: { clientMutationId: "device-uuid-cover-regenerate", coverId: "cover_1", activateWhenReady: true },
+  ArchiveRecipeCoverRequest: { clientMutationId: "device-uuid-cover-archive", confirmNoCover: true, deleteSafeObjects: false },
+  CreateRecipeCoverFromSpoonRequest: { clientMutationId: "device-uuid-cover-spoon", activate: true, generateEditorial: true },
   CreateShoppingItemRequest: {
     clientMutationId: "device-uuid-1",
     name: "Eggs",
@@ -1100,6 +1250,11 @@ function isIdempotentShoppingListMutation(path: ResourcePath, method: HttpMethod
   );
 }
 
+function isIdempotentCoverMutation(path: ResourcePath, method: HttpMethod) {
+  if (method !== "POST" && method !== "PATCH" && method !== "DELETE") return false;
+  return path.startsWith("/api/v1/recipes/{id}/covers");
+}
+
 function retryPolicyFor(path: ResourcePath, method: HttpMethod) {
   if (path === "/api/v1/tokens" && method === "POST") {
     return {
@@ -1110,7 +1265,7 @@ function retryPolicyFor(path: ResourcePath, method: HttpMethod) {
     };
   }
   const isMutation = method === "POST" || method === "PATCH" || method === "DELETE";
-  if (isIdempotentShoppingListMutation(path, method)) {
+  if (isIdempotentShoppingListMutation(path, method) || isIdempotentCoverMutation(path, method)) {
     return {
       retryOn: ["network_timeout", "429", "5xx", "idempotency_in_progress"],
       retryAfterHeader: "Retry-After",
@@ -1154,6 +1309,17 @@ function cursorPolicyFor(path: ResourcePath) {
 }
 
 function idempotencyPolicyFor(path: ResourcePath, method: HttpMethod) {
+  if (isIdempotentCoverMutation(path, method)) {
+    return {
+      key: "clientMutationId",
+      location: method === "DELETE" ? "jsonBody, query, or X-Client-Mutation-Id" : "jsonBody",
+      retentionHours: 24,
+      replayStatus: method === "POST" && path === "/api/v1/recipes/{id}/covers/from-spoon/{spoonId}" ? [201] : [200],
+      conflictStatus: 409,
+      inProgressRetryAfterSeconds: 2,
+      retryBodyRule: "Persist and retry the same mutation body and path for this clientMutationId. Delete requests may put the idempotency key in the JSON body, query string, or X-Client-Mutation-Id header.",
+    };
+  }
   if (path === "/api/v1/shopping-list/items" && method === "POST") {
     return {
       key: "clientMutationId",
@@ -1605,7 +1771,7 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
               scopes: {
                 "cookbooks:read": "Least-privilege delegated access to public cookbook reads.",
                 "kitchen:read": "Delegated read access to public recipes, public cookbooks, and the chef's shopping list.",
-                "kitchen:write": "Delegated write access for MCP kitchen tools and shopping-list mutations. Does not include token management.",
+                "kitchen:write": "Delegated write access for MCP kitchen tools, recipe-cover management, and shopping-list mutations. Does not include token management.",
                 "public:read": "Least-privilege delegated access to public Spoonjoy data.",
                 "recipes:read": "Least-privilege delegated access to public recipe reads.",
                 "shopping_list:read": "Least-privilege delegated access to the chef's shopping list.",
@@ -1620,7 +1786,7 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
     },
     "x-oauth-scope-map": {
       "kitchen:read": ["cookbooks:read", "public:read", "recipes:read", "shopping_list:read"],
-      "kitchen:write": ["shopping_list:write"],
+      "kitchen:write": ["kitchen:write", "shopping_list:write"],
       "shopping_list:read": ["shopping_list:read"],
       "shopping_list:write": ["shopping_list:write"],
       "recipes:read": ["recipes:read"],
@@ -1864,7 +2030,7 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
         eyebrow: "Extension background",
         audience: "Use for extensions that turn scraped ingredient rows into shopping-list mutations without exposing tokens to content scripts.",
         notes: [
-          "API v1 does not create or import recipes yet; keep recipe clipping UI separate from Spoonjoy's current shopping-list sync API.",
+          "API v1 does not create or import full recipes yet; keep recipe clipping UI separate from Spoonjoy's current shopping-list sync API.",
           "Run OAuth/PKCE in the extension background or service worker, store state and code_verifier until callback, and keep bearer tokens out of content scripts.",
           "Register the HTTPS callback produced by chrome.identity.getRedirectURL/launchWebAuthFlow exactly; custom extension schemes are rejected.",
           "Use shopping_list:read shopping_list:write for ingredient sync, then post one row at a time with deterministic clientMutationId values.",
@@ -1942,6 +2108,7 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
     "x-current-capabilities": {
       available: [
         "public recipe and cookbook reads",
+        "Owner-scoped recipe cover candidate management",
         "owner-scoped shopping-list read, sync, item writes, recipe adds, and clear actions",
         "session-created and bearer-created API tokens",
         "OAuth/PKCE delegated access",
@@ -1950,7 +2117,7 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
         "cursor-paginated public recipe and cookbook lists",
       ],
       notYetAvailable: [
-        "Recipe write, import, or export endpoints",
+        "General recipe create, edit, delete, import, or export endpoints beyond owner cover management",
         "Private recipe-library endpoints",
         "Inventory or pantry stock APIs",
         "Meal plan or \"today's recipes\" APIs",
@@ -1990,6 +2157,10 @@ const SDK_PATHS = new Set([
   "/api/v1/health",
   "/api/v1/recipes",
   "/api/v1/recipes/{id}",
+  "/api/v1/recipes/{id}/covers",
+  "/api/v1/recipes/{id}/covers/{coverId}",
+  "/api/v1/recipes/{id}/covers/regenerate",
+  "/api/v1/recipes/{id}/covers/from-spoon/{spoonId}",
   "/api/v1/cookbooks",
   "/api/v1/cookbooks/{id}",
   "/api/v1/shopping-list",

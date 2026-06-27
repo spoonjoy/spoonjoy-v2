@@ -80,7 +80,7 @@ const authModels = [
 
 const clientProfiles = [
   { title: "Tiny-device clients", href: "#scenario-quickstarts", body: "Use sync cursors, small payloads, and idempotent retries when a device is offline or battery constrained." },
-  { title: "Mobile apps", href: "#oauth-and-delegated-flows", body: "Read public recipes without auth, then request shopping-list scopes only after a chef connects their account." },
+  { title: "Mobile apps", href: "#oauth-and-delegated-flows", body: "Read public recipes without auth, then request shopping-list scopes or kitchen:write for recipe-cover management after a chef connects their account." },
   { title: "CLI/script clients", href: "#terminal-quickstart", body: "Use bearer credentials, curl, and OpenAPI JSON only when the script cannot share a Spoonjoy session." },
   { title: "Browser clients", href: "#auth-implementation", body: "Use same-origin Session only inside spoonjoy.app. Extensions and third-party browser apps use OAuth/PKCE." },
   { title: "Agent clients", href: "#oauth-and-delegated-flows", body: "Use MCP or delegated connection endpoints when a chef needs to approve an assistant-style runtime." },
@@ -158,6 +158,19 @@ const externalGuideSteps = [
     scope: "Requires shopping_list:write",
     body: "Use POST /api/v1/shopping-list/items with clientMutationId so retries can replay the same write without duplicating items.",
     sample: "curl -fsS -X POST 'https://spoonjoy.app/api/v1/shopping-list/items' \\\n  -H 'Authorization: Bearer sj_client_token' \\\n  -H 'Content-Type: application/json' \\\n  -d '{\"clientMutationId\":\"device-uuid-1\",\"name\":\"Eggs\",\"quantity\":12,\"unit\":\"Each\"}'",
+  },
+  {
+    title: "Manage owner recipe covers",
+    scope: "Requires kitchen:write",
+    body: "Recipe cover management endpoints let native clients list cover candidates and spoon photo sources, activate a cover variant, set an explicit no-cover state, archive a candidate with replacement or confirmed no-cover, regenerate editorial imagery, and create a cover from a spoon photo. These operations are owner-scoped to the authenticated chef's recipes.",
+    sample: [
+      "GET /api/v1/recipes/{id}/covers",
+      "PATCH /api/v1/recipes/{id}/covers",
+      "PATCH /api/v1/recipes/{id}/covers/{coverId}",
+      "DELETE /api/v1/recipes/{id}/covers/{coverId}",
+      "POST /api/v1/recipes/{id}/covers/regenerate",
+      "POST /api/v1/recipes/{id}/covers/from-spoon/{spoonId}",
+    ].join("\n"),
   },
 ] as const;
 
@@ -253,7 +266,7 @@ const syncSafetyRows = [
   ["Cursor", "Use the returned nextCursor as the next request cursor after applying every item in the page durably. Treat it as opaque; ISO timestamps are accepted only as a bootstrap convenience."],
   ["Tombstones", "Sync includes deleted rows with deletedAt so offline clients can remove local items."],
   ["Pagination", "Use limit from 1 to 50 for small payloads. hasMore: true means continue with the returned nextCursor; webhooks, REST Hooks, SSE, and event subscriptions are not available yet."],
-  ["Idempotent shopping-list mutations", "clientMutationId is scoped to the chef, retained for 24 hours, and bound to method, path, and body hash. Persist and retry the exact serialized body for that mutation id."],
+  ["Idempotent owner mutations", "clientMutationId is scoped to the chef, retained for 24 hours, and bound to method, path, and body hash for shopping-list writes and recipe-cover writes. Persist and retry the exact serialized body for that mutation id."],
   ["Replay", "Retry the same request with the same clientMutationId after a timeout; Spoonjoy returns the recorded response with mutation.replayed: true."],
   ["Conflict", "Reusing the same clientMutationId for a different method, path, or body returns 409 idempotency_conflict."],
   ["Retries", "Retry network timeouts, 429, and 5xx responses with the same mutation id. Refresh or reconnect on 401. Do not retry validation, scope, or idempotency conflicts unchanged."],
@@ -269,7 +282,7 @@ const scenarioQuickstarts = [
   {
     title: "Browser extension OAuth",
     mode: "Extension",
-    body: "API v1 does not create or import recipes yet; the supported extension story today is shopping-list ingredient sync. Run OAuth/PKCE in the extension background, persist client_id plus state and code_verifier until callback, verify state, and make bearer API calls from the background instead of a content script. Register the HTTPS callback from chrome.identity.getRedirectURL/launchWebAuthFlow exactly; custom extension schemes are rejected.",
+    body: "API v1 does not create or import full recipes yet; the supported extension story today is shopping-list ingredient sync. Run OAuth/PKCE in the extension background, persist client_id plus state and code_verifier until callback, verify state, and make bearer API calls from the background instead of a content script. Register the HTTPS callback from chrome.identity.getRedirectURL/launchWebAuthFlow exactly; custom extension schemes are rejected.",
     sample: "const item = { sourceRowId: \"row-42\", name: \"Eggs\", quantity: 12, unit: \"Each\" }\nclientMutationId = `extension:${sha256(recipeUrl)}:${item.sourceRowId}:${bodyHash}`\nPOST /api/v1/shopping-list/items\nAuthorization: Bearer sj_...\n{ \"clientMutationId\": \"extension:...\", \"name\": \"Eggs\", \"quantity\": 12, \"unit\": \"Each\" }",
   },
   {
@@ -415,7 +428,7 @@ export default function Developers() {
       )}>
         <Text className="text-lg/8">
           Build clients on Spoonjoy's public-by-default Chef graph, then add scoped auth only when a workflow needs private
-          shopping-list state, token management, or delegated access.
+          shopping-list state, recipe-cover management, token management, or delegated access.
         </Text>
       </CookbookHeader>
 
@@ -476,7 +489,7 @@ export default function Developers() {
               {currentCapabilities.notYetAvailable.map((item) => <li key={item}>- {item}</li>)}
             </ul>
             <Text className="mt-3">
-              Corporate tenant/admin APIs, inventory, meal plans, full exports, canonical unit conversion, webhooks, REST Hooks, batch mutations, and recipe write/import/export endpoints are future API surface, not hidden current endpoints.
+              Corporate tenant/admin APIs, inventory, meal plans, full exports, canonical unit conversion, webhooks, REST Hooks, batch mutations, and general recipe create/edit/import/export endpoints are future API surface, not hidden current endpoints.
             </Text>
             <Text className="mt-3">
               Delegated approval helper endpoints under /api/tools/* are part of the current public connection flow. Other legacy app-only /api/* routes are not the external contract.

@@ -562,6 +562,142 @@ describe("API v1 mutation and validation telemetry", () => {
     });
   });
 
+  it("captures recipe cover operations without cover ids, mutation ids, or body values", async () => {
+    const user = await db.user.create({ data: createTestUser() });
+    const credential = await createApiCredential(db, user.id, "Telemetry Kitchen Writer", {
+      scopes: ["kitchen:write"],
+    });
+    const auth = { Authorization: `Bearer ${credential.token}` };
+    const recipe = await db.recipe.create({
+      data: {
+        ...createTestRecipe(user.id),
+        title: `Telemetry Cover Recipe ${faker.string.alphanumeric(8)}`,
+      },
+    });
+    const activeCover = await db.recipeCover.create({
+      data: {
+        recipeId: recipe.id,
+        imageUrl: "/photos/covers/telemetry-active.jpg",
+        stylizedImageUrl: "/photos/covers/telemetry-active-stylized.jpg",
+        sourceType: "chef-upload",
+        sourceImageUrl: "/photos/uploads/telemetry-active-source.jpg",
+        status: "ready",
+        generationStatus: "succeeded",
+        createdById: user.id,
+      },
+    });
+    await db.recipe.update({
+      where: { id: recipe.id },
+      data: { activeCoverId: activeCover.id, activeCoverVariant: "stylized", coverMode: "manual" },
+    });
+    const basePath = `recipes/${recipe.id}/covers`;
+
+    const listRequest = apiRequest(`http://localhost/api/v1/${basePath}?limit=1&offset=0`, "req_cover_operation_list", {
+      ...auth,
+      "User-Agent": "PostmanRuntime/7.39.0",
+    });
+    const listResponse = await loader(routeArgs(listRequest, basePath).args);
+    expect(listResponse.status).toBe(200);
+    expectApiV1OperationEvent({
+      routeTemplate: "/api/v1/recipes/{id}/covers",
+      requestId: "req_cover_operation_list",
+      operation: "recipes.covers.list",
+      status: 200,
+      authMode: "bearer",
+      requestBytes: 0,
+      forbidden: [recipe.id, activeCover.id, credential.token, credential.credential.tokenPrefix],
+    });
+
+    const setNoCover = apiJsonRequest("PATCH", basePath, "req_cover_operation_set_none", auth, {
+      clientMutationId: "raw-cover-set-none-id",
+      confirmNoCover: false,
+    });
+    const setNoCoverResponse = await action(routeArgs(setNoCover.request, basePath).args);
+    expect(setNoCoverResponse.status).toBe(400);
+    expectApiV1OperationEvent({
+      routeTemplate: "/api/v1/recipes/{id}/covers",
+      requestId: "req_cover_operation_set_none",
+      operation: "recipes.covers.set-no-cover",
+      status: 400,
+      authMode: "bearer",
+      requestBytes: setNoCover.bodyBytes,
+      errorCode: "validation_error",
+      idempotencyOutcome: "not_attempted",
+      forbidden: ["raw-cover-set-none-id", setNoCover.bodyText, recipe.id],
+    });
+
+    const activate = apiJsonRequest("PATCH", `${basePath}/${activeCover.id}`, "req_cover_operation_activate", auth, {
+      clientMutationId: "raw-cover-activate-id",
+      variant: "thumbnail",
+    });
+    const activateResponse = await action(routeArgs(activate.request, `${basePath}/${activeCover.id}`).args);
+    expect(activateResponse.status).toBe(400);
+    expectApiV1OperationEvent({
+      routeTemplate: "/api/v1/recipes/{id}/covers/{coverId}",
+      requestId: "req_cover_operation_activate",
+      operation: "recipes.covers.activate",
+      status: 400,
+      authMode: "bearer",
+      requestBytes: activate.bodyBytes,
+      errorCode: "validation_error",
+      idempotencyOutcome: "not_attempted",
+      forbidden: ["raw-cover-activate-id", "thumbnail", activate.bodyText, recipe.id, activeCover.id],
+    });
+
+    const archive = apiJsonRequest("DELETE", `${basePath}/${activeCover.id}`, "req_cover_operation_archive", auth, {
+      clientMutationId: "raw-cover-archive-id",
+      replacementVariant: "thumbnail",
+    });
+    const archiveResponse = await action(routeArgs(archive.request, `${basePath}/${activeCover.id}`).args);
+    expect(archiveResponse.status).toBe(400);
+    expectApiV1OperationEvent({
+      routeTemplate: "/api/v1/recipes/{id}/covers/{coverId}",
+      requestId: "req_cover_operation_archive",
+      operation: "recipes.covers.archive",
+      status: 400,
+      authMode: "bearer",
+      requestBytes: archive.bodyBytes,
+      errorCode: "validation_error",
+      idempotencyOutcome: "not_attempted",
+      forbidden: ["raw-cover-archive-id", "thumbnail", archive.bodyText, recipe.id, activeCover.id],
+    });
+
+    const regenerate = apiJsonRequest("POST", `${basePath}/regenerate`, "req_cover_operation_regenerate", auth, {
+      clientMutationId: "raw-cover-regenerate-id",
+      coverId: "missing_cover_for_telemetry",
+    });
+    const regenerateResponse = await action(routeArgs(regenerate.request, `${basePath}/regenerate`).args);
+    expect(regenerateResponse.status).toBe(404);
+    expectApiV1OperationEvent({
+      routeTemplate: "/api/v1/recipes/{id}/covers/regenerate",
+      requestId: "req_cover_operation_regenerate",
+      operation: "recipes.covers.regenerate",
+      status: 404,
+      authMode: "bearer",
+      requestBytes: regenerate.bodyBytes,
+      errorCode: "not_found",
+      idempotencyOutcome: "aborted",
+      forbidden: ["raw-cover-regenerate-id", "missing_cover_for_telemetry", regenerate.bodyText, recipe.id],
+    });
+
+    const fromSpoon = apiJsonRequest("POST", `${basePath}/from-spoon/missing_spoon_for_telemetry`, "req_cover_operation_from_spoon", auth, {
+      clientMutationId: "raw-cover-from-spoon-id",
+    });
+    const fromSpoonResponse = await action(routeArgs(fromSpoon.request, `${basePath}/from-spoon/missing_spoon_for_telemetry`).args);
+    expect(fromSpoonResponse.status).toBe(404);
+    expectApiV1OperationEvent({
+      routeTemplate: "/api/v1/recipes/{id}/covers/from-spoon/{spoonId}",
+      requestId: "req_cover_operation_from_spoon",
+      operation: "recipes.covers.from-spoon",
+      status: 404,
+      authMode: "bearer",
+      requestBytes: fromSpoon.bodyBytes,
+      errorCode: "not_found",
+      idempotencyOutcome: "aborted",
+      forbidden: ["raw-cover-from-spoon-id", "missing_spoon_for_telemetry", fromSpoon.bodyText, recipe.id],
+    });
+  });
+
   it("captures token list, create, and revoke operations without credential names or secrets", async () => {
     const user = await db.user.create({ data: createTestUser() });
     const cookie = await sessionCookie(user.id);
