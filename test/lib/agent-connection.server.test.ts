@@ -5,11 +5,24 @@ import {
   denyAgentConnectionRequest,
   getAgentConnectionRequest,
   pollAgentConnection,
+  postHogClaimRaceCapture,
   startAgentConnection,
 } from "~/lib/agent-connection.server";
 import { authenticateApiToken, hashApiToken } from "~/lib/api-auth.server";
+import type { PostHogServerConfig } from "~/lib/analytics-server";
 import { getLocalDb } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
+
+const ENABLED_POSTHOG: PostHogServerConfig = {
+  enabled: true,
+  key: "phc_test",
+  host: "https://ph.example.com",
+};
+
+const DISABLED_POSTHOG: PostHogServerConfig = {
+  enabled: false,
+  reason: "missing-key",
+};
 
 function uniqueEmail(prefix = "agent-connect") {
   return `${prefix}-${faker.string.alphanumeric(8).toLowerCase()}@example.com`;
@@ -207,6 +220,59 @@ describe("agent connection requests", () => {
     expect(credentials[0].revokedAt).toEqual(now);
   });
 
+  it("emits the claim-race capture hook with the orphaned credential id (L9)", async () => {
+    const user = await db.user.create({
+      data: { email: uniqueEmail("race-cap"), username: faker.internet.username() },
+    });
+    const started = await startAgentConnection(db, { now });
+    await db.agentConnectionRequest.update({
+      where: { id: started.request.id },
+      data: {
+        status: "approved",
+        approvedById: user.id,
+        approvedAt: now,
+        claimedAt: now,
+      },
+    });
+
+    const races: Array<{ requestId: string; userId: string; credentialId: string }> = [];
+    const result = await pollAgentConnection(
+      db,
+      { deviceCode: started.deviceCode, now },
+      { capture: (race) => races.push(race) },
+    );
+
+    expect(result).toMatchObject({ status: "claimed" });
+    expect(races).toHaveLength(1);
+    expect(races[0]).toMatchObject({
+      requestId: started.request.id,
+      userId: user.id,
+    });
+    const credentials = await db.apiCredential.findMany({ where: { userId: user.id } });
+    expect(credentials).toHaveLength(1);
+    // The reported credential is the orphaned, now-revoked one.
+    expect(races[0].credentialId).toBe(credentials[0].id);
+    expect(credentials[0].revokedAt).toEqual(now);
+  });
+
+  it("does not call the capture hook on a clean (un-raced) claim (L9)", async () => {
+    const user = await db.user.create({
+      data: { email: uniqueEmail("clean"), username: faker.internet.username() },
+    });
+    const started = await startAgentConnection(db, { now });
+    await approveAgentConnectionRequest(db, started.request.id, user.id, now);
+
+    const capture = vi.fn();
+    const result = await pollAgentConnection(
+      db,
+      { deviceCode: started.deviceCode, now },
+      { capture },
+    );
+
+    expect(result).toMatchObject({ status: "approved", token: expect.stringMatching(/^sj_/) });
+    expect(capture).not.toHaveBeenCalled();
+  });
+
   it("does not approve unusable or already-finished requests", async () => {
     const user = await db.user.create({
       data: { email: uniqueEmail("done"), username: faker.internet.username() },
@@ -233,5 +299,58 @@ describe("agent connection requests", () => {
     });
     await expect(pollAgentConnection(db, { deviceCode: unknown.deviceCode, now }))
       .resolves.toMatchObject({ status: "expired" });
+  });
+});
+
+describe("postHogClaimRaceCapture (L9)", () => {
+  const race = {
+    requestId: "req_1",
+    userId: "user_1",
+    credentialId: "cred_1",
+  };
+
+  it("emits spoonjoy.agent_connection.claim_race with safe properties", async () => {
+    const bodies: unknown[] = [];
+    const scheduled: Array<Promise<unknown>> = [];
+    const fetchImpl = vi.fn(async (_url: unknown, init?: { body?: unknown }) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      return new Response("ok");
+    }) as unknown as typeof fetch;
+
+    const capture = postHogClaimRaceCapture(
+      ENABLED_POSTHOG,
+      (task) => scheduled.push(task),
+      fetchImpl,
+    );
+    capture(race);
+
+    expect(scheduled).toHaveLength(1);
+    await Promise.all(scheduled);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(bodies[0]).toMatchObject({
+      event: "spoonjoy.agent_connection.claim_race",
+      distinct_id: "user_1",
+      properties: {
+        feature: "agent_connection",
+        requestId: "req_1",
+        credentialId: "cred_1",
+        outcome: "revoked_duplicate_credential",
+      },
+    });
+  });
+
+  it("schedules a no-op (no fetch) when PostHog is disabled", async () => {
+    const scheduled: Array<Promise<unknown>> = [];
+    const fetchImpl = vi.fn(async () => new Response("ok")) as unknown as typeof fetch;
+
+    const capture = postHogClaimRaceCapture(
+      DISABLED_POSTHOG,
+      (task) => scheduled.push(task),
+      fetchImpl,
+    );
+    capture(race);
+
+    await Promise.all(scheduled);
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 });

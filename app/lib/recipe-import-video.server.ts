@@ -29,11 +29,27 @@ export type OEmbedErrorCode = "oembed-failed" | "video-unavailable";
 export class OEmbedError extends Error {
   readonly code: OEmbedErrorCode;
   readonly status: number;
-  constructor(code: OEmbedErrorCode, status: number, message: string) {
-    super(message);
+  /**
+   * The upstream oEmbed HTTP status, when the failure originated from a
+   * response (not a network/timeout/parse throw). Preserved because the
+   * orchestrator otherwise discards it before mapping to a generic 502 — it is
+   * the single most useful field for telling a 4xx (gone/private) apart from a
+   * provider 5xx in telemetry.
+   */
+  readonly upstreamStatus?: number;
+  constructor(
+    code: OEmbedErrorCode,
+    status: number,
+    message: string,
+    options?: { upstreamStatus?: number; cause?: unknown },
+  ) {
+    super(message, options?.cause !== undefined ? { cause: options.cause } : undefined);
     this.name = "OEmbedError";
     this.code = code;
     this.status = status;
+    if (options?.upstreamStatus !== undefined) {
+      this.upstreamStatus = options.upstreamStatus;
+    }
   }
 }
 
@@ -164,10 +180,16 @@ export async function fetchOEmbedMetadata(
     response = await fetchImpl(endpoint, { signal: controller.signal });
   } catch (err) {
     clearTimeout(timer);
+    // Preserve the original network/abort error as `cause` so the discarded
+    // failure detail survives the mapping to a generic 502.
     if (err && (err as { name?: string }).name === "AbortError") {
-      throw new OEmbedError("oembed-failed", 502, "oEmbed request timed out");
+      throw new OEmbedError("oembed-failed", 502, "oEmbed request timed out", {
+        cause: err,
+      });
     }
-    throw new OEmbedError("oembed-failed", 502, "oEmbed network error");
+    throw new OEmbedError("oembed-failed", 502, "oEmbed network error", {
+      cause: err,
+    });
   }
   clearTimeout(timer);
 
@@ -176,6 +198,7 @@ export async function fetchOEmbedMetadata(
       "video-unavailable",
       502,
       "video metadata unavailable; try a different URL",
+      { upstreamStatus: response.status },
     );
   }
   if (!response.ok) {
@@ -183,6 +206,7 @@ export async function fetchOEmbedMetadata(
       "oembed-failed",
       502,
       `oEmbed status ${response.status}`,
+      { upstreamStatus: response.status },
     );
   }
 

@@ -336,16 +336,21 @@ describe("fetchOEmbedMetadata — happy paths", () => {
 
 describe("fetchOEmbedMetadata — error paths", () => {
   it("rejects with code=oembed-failed when fetch throws network error", async () => {
-    const fetchImpl = mockFetch(new TypeError("network down"));
-    await expect(
-      fetchOEmbedMetadata("https://www.youtube.com/watch?v=abc", "youtube", {
-        fetchImpl,
-      }),
-    ).rejects.toMatchObject({
+    const networkError = new TypeError("network down");
+    const fetchImpl = mockFetch(networkError);
+    const error = await fetchOEmbedMetadata(
+      "https://www.youtube.com/watch?v=abc",
+      "youtube",
+      { fetchImpl },
+    ).catch((e) => e as OEmbedError);
+    expect(error).toMatchObject({
       name: "OEmbedError",
       code: "oembed-failed",
       status: 502,
     });
+    // L7: the original network error is preserved as `cause` rather than discarded.
+    expect((error as OEmbedError).cause).toBe(networkError);
+    expect((error as OEmbedError).upstreamStatus).toBeUndefined();
   });
 
   it("rejects with code=oembed-failed status=502 when response is 500", async () => {
@@ -355,11 +360,17 @@ describe("fetchOEmbedMetadata — error paths", () => {
         contentType: "text/plain",
       }),
     );
-    await expect(
-      fetchOEmbedMetadata("https://www.youtube.com/watch?v=abc", "youtube", {
-        fetchImpl,
-      }),
-    ).rejects.toMatchObject({ code: "oembed-failed", status: 502 });
+    const error = await fetchOEmbedMetadata(
+      "https://www.youtube.com/watch?v=abc",
+      "youtube",
+      { fetchImpl },
+    ).catch((e) => e as OEmbedError);
+    // L7: the discarded upstream 5xx status is preserved on the error.
+    expect(error).toMatchObject({
+      code: "oembed-failed",
+      status: 502,
+      upstreamStatus: 500,
+    });
   });
 
   it("rejects with code=video-unavailable status=502 when response is 404", async () => {
@@ -369,13 +380,16 @@ describe("fetchOEmbedMetadata — error paths", () => {
         contentType: "text/plain",
       }),
     );
-    await expect(
-      fetchOEmbedMetadata("https://www.youtube.com/watch?v=missing", "youtube", {
-        fetchImpl,
-      }),
-    ).rejects.toMatchObject({
+    const error = await fetchOEmbedMetadata(
+      "https://www.youtube.com/watch?v=missing",
+      "youtube",
+      { fetchImpl },
+    ).catch((e) => e as OEmbedError);
+    // L7: a 4xx (gone/private) is distinguishable from a 5xx via upstreamStatus.
+    expect(error).toMatchObject({
       code: "video-unavailable",
       status: 502,
+      upstreamStatus: 404,
       message: "video metadata unavailable; try a different URL",
     });
   });
@@ -391,7 +405,11 @@ describe("fetchOEmbedMetadata — error paths", () => {
       fetchOEmbedMetadata("https://www.tiktok.com/@x/video/1", "tiktok", {
         fetchImpl,
       }),
-    ).rejects.toMatchObject({ code: "video-unavailable", status: 502 });
+    ).rejects.toMatchObject({
+      code: "video-unavailable",
+      status: 502,
+      upstreamStatus: 403,
+    });
   });
 
   it("rejects with code=oembed-failed when content-type is text/html", async () => {
@@ -506,13 +524,17 @@ describe("fetchOEmbedMetadata — timeout", () => {
       "youtube",
       { fetchImpl },
     );
-    const assertion = expect(promise).rejects.toMatchObject({
+    const captured = promise.catch((e) => e as OEmbedError);
+    await vi.advanceTimersByTimeAsync(16_000);
+    const error = await captured;
+    expect(error).toMatchObject({
       name: "OEmbedError",
       code: "oembed-failed",
       status: 502,
     });
-    await vi.advanceTimersByTimeAsync(16_000);
-    await assertion;
+    // L7: the abort error is preserved as `cause`.
+    expect((error as OEmbedError).cause).toBeInstanceOf(Error);
+    expect(((error as OEmbedError).cause as Error).name).toBe("AbortError");
   });
 });
 
@@ -685,5 +707,26 @@ describe("OEmbedError", () => {
     expect(err.status).toBe(502);
     expect(err.message).toBe("private");
     expect(err).toBeInstanceOf(Error);
+  });
+
+  it("omits upstreamStatus and cause when no options are given (L7)", () => {
+    const err = new OEmbedError("oembed-failed", 502, "boom");
+    expect(err.upstreamStatus).toBeUndefined();
+    expect(err.cause).toBeUndefined();
+  });
+
+  it("preserves upstreamStatus when supplied (L7)", () => {
+    const err = new OEmbedError("video-unavailable", 502, "gone", {
+      upstreamStatus: 410,
+    });
+    expect(err.upstreamStatus).toBe(410);
+    expect(err.cause).toBeUndefined();
+  });
+
+  it("preserves the network cause when supplied (L7)", () => {
+    const cause = new TypeError("socket hang up");
+    const err = new OEmbedError("oembed-failed", 502, "net", { cause });
+    expect(err.cause).toBe(cause);
+    expect(err.upstreamStatus).toBeUndefined();
   });
 });

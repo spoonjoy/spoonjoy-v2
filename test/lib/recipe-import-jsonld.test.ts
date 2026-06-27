@@ -8,7 +8,11 @@ function ldScript(payload: unknown): string {
 describe("extractRecipeJsonLd — no JSON-LD", () => {
   it("returns null draft when no script tags", () => {
     const result = extractRecipeJsonLd("<html><head></head></html>");
-    expect(result).toEqual({ draft: null, multipleRecipes: false });
+    expect(result).toEqual({
+      draft: null,
+      multipleRecipes: false,
+      malformedBlocks: 0,
+    });
   });
 
   it("returns null draft when script tag has wrong type", () => {
@@ -30,6 +34,70 @@ describe("extractRecipeJsonLd — no JSON-LD", () => {
     const html = ldScript({ "@type": "Article", headline: "x" });
     const result = extractRecipeJsonLd(html);
     expect(result.draft).toBeNull();
+  });
+});
+
+describe("extractRecipeJsonLd — malformedBlocks (L8)", () => {
+  it("counts zero malformed blocks when there is no ld+json", () => {
+    const result = extractRecipeJsonLd("<html><head></head></html>");
+    expect(result.malformedBlocks).toBe(0);
+  });
+
+  it("counts a single malformed ld+json block", () => {
+    const html =
+      '<html><head><script type="application/ld+json">{ broken }</script></head></html>';
+    const result = extractRecipeJsonLd(html);
+    expect(result.draft).toBeNull();
+    expect(result.malformedBlocks).toBe(1);
+  });
+
+  it("counts every malformed ld+json block across the document", () => {
+    const html =
+      '<html><head>' +
+      '<script type="application/ld+json">{ broken }</script>' +
+      '<script type="application/ld+json">also broken}</script>' +
+      "</head></html>";
+    const result = extractRecipeJsonLd(html);
+    expect(result.draft).toBeNull();
+    expect(result.malformedBlocks).toBe(2);
+  });
+
+  it("does not count empty (whitespace-only) ld+json blocks as malformed", () => {
+    const html =
+      '<html><head><script type="application/ld+json">   </script></head></html>';
+    const result = extractRecipeJsonLd(html);
+    expect(result.draft).toBeNull();
+    expect(result.malformedBlocks).toBe(0);
+  });
+
+  it("reports malformedBlocks even when a valid Recipe block is also present", () => {
+    const html =
+      '<html><head>' +
+      '<script type="application/ld+json">{ broken }</script>' +
+      `<script type="application/ld+json">${JSON.stringify({
+        "@type": "Recipe",
+        name: "Soup",
+        recipeIngredient: ["water"],
+        recipeInstructions: "Boil",
+      })}</script>` +
+      "</head></html>";
+    const result = extractRecipeJsonLd(html);
+    expect(result.draft?.title).toBe("Soup");
+    expect(result.malformedBlocks).toBe(1);
+  });
+
+  it("reports malformedBlocks when valid blocks exist but none is a Recipe", () => {
+    const html =
+      '<html><head>' +
+      '<script type="application/ld+json">{ broken }</script>' +
+      `<script type="application/ld+json">${JSON.stringify({
+        "@type": "Article",
+        headline: "x",
+      })}</script>` +
+      "</head></html>";
+    const result = extractRecipeJsonLd(html);
+    expect(result.draft).toBeNull();
+    expect(result.malformedBlocks).toBe(1);
   });
 });
 
