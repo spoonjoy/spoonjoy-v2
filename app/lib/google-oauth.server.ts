@@ -10,6 +10,15 @@ import {
   generateCodeVerifier as arcticGenerateCodeVerifier,
 } from "arctic";
 import type { GoogleOAuthConfig } from "./env.server";
+import type { AuthVerifyCapture } from "./auth-telemetry.server";
+
+/**
+ * Optional capture callback threaded in by the callback-route orchestration.
+ * Lets a provider outage (token exchange, JWKS, userinfo non-2xx, network) be
+ * captured with the ORIGINAL error before it is flattened to a generic error
+ * code, without coupling this helper to the PostHog config.
+ */
+export type AuthVerifyCaptureFn = (input: AuthVerifyCapture) => void;
 
 /**
  * Data received from Google's OAuth callback (GET request query params).
@@ -122,7 +131,8 @@ interface GoogleUserinfoResponse {
 export async function verifyGoogleCallback(
   config: GoogleOAuthConfig,
   redirectUri: string,
-  callbackData: GoogleCallbackData
+  callbackData: GoogleCallbackData,
+  capture?: AuthVerifyCaptureFn
 ): Promise<GoogleCallbackResult> {
   // Validate state
   if (!callbackData.state) {
@@ -179,6 +189,13 @@ export async function verifyGoogleCallback(
       );
 
       if (!response.ok) {
+        // A non-2xx userinfo response (token revoked, Google 5xx) is otherwise
+        // invisible — preserve the upstream status for incident triage.
+        capture?.({
+          error: new Error(`Google userinfo responded ${response.status}`),
+          phase: "userinfo",
+          httpStatus: response.status,
+        });
         return {
           success: false,
           error: "userinfo_error",
@@ -195,6 +212,7 @@ export async function verifyGoogleCallback(
           error.message.includes("network") ||
           error.name === "TypeError")
       ) {
+        capture?.({ error, phase: "userinfo" });
         return {
           success: false,
           error: "network_error",
@@ -222,6 +240,7 @@ export async function verifyGoogleCallback(
   } catch (error) {
     // Handle OAuth2RequestError from Arctic (check name for mock compatibility)
     if (error instanceof Error && error.name === "OAuth2RequestError") {
+      capture?.({ error, phase: "token_exchange" });
       return {
         success: false,
         error: "oauth_error",
@@ -236,6 +255,7 @@ export async function verifyGoogleCallback(
         error.message.includes("network") ||
         error.name === "TypeError")
     ) {
+      capture?.({ error, phase: "token_exchange" });
       return {
         success: false,
         error: "network_error",
@@ -243,7 +263,10 @@ export async function verifyGoogleCallback(
       };
     }
 
-    // For invalid authorization code errors, return invalid_code
+    // Anything else (JWKS, unexpected token-exchange failures) is flattened to a
+    // generic `invalid_code`. Capture the ORIGINAL error so a Google outage is
+    // distinguishable from a genuinely bad authorization code.
+    capture?.({ error, phase: "token_exchange" });
     return {
       success: false,
       error: "invalid_code",

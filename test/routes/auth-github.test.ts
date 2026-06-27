@@ -181,7 +181,8 @@ describe("GitHub OAuth routes", () => {
     expect(mocks.verifyGitHubCallback).toHaveBeenCalledWith(
       { clientId: "github-client", clientSecret: "github-secret" },
       "https://spoonjoy.app/auth/github/callback",
-      { code: "", state: "state" }
+      { code: "", state: "state" },
+      expect.any(Function)
     );
   });
 

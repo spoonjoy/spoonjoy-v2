@@ -9,6 +9,13 @@ import { verifyGitHubCallback } from "~/lib/github-oauth.server";
 import { handleGoogleOAuthCallback } from "~/lib/google-oauth-callback.server";
 import { verifyGoogleCallback } from "~/lib/google-oauth.server";
 import {
+  type AuthFailurePhase,
+  type AuthProvider,
+  type AuthTelemetry,
+  type AuthVerifyCapture,
+  authTelemetryFromContext,
+} from "~/lib/auth-telemetry.server";
+import {
   buildAppleReturnUrl,
   buildOAuthCallbackUrl,
   destroyOAuthStartSession,
@@ -17,6 +24,48 @@ import {
   readOAuthStartSession,
   redirectWithOAuthError,
 } from "~/lib/oauth-route.server";
+
+const SOCIAL_CALLBACK_EVENT = "spoonjoy.oauth.social_callback";
+
+/**
+ * Emit a `spoonjoy.oauth.social_callback` error event for an OAuth callback
+ * exit, then return the user-facing error redirect. Every dark
+ * `redirectWithOAuthError` exit (provider error, CSRF/invalid_state, missing
+ * config, verify failure, link/session failure) routes through here so the
+ * outcome is observable. `error_code` is the machine code already surfaced to
+ * the client; `phase` distinguishes a provider/infra failure from user error.
+ */
+function redirectWithCapturedOAuthError(
+  telemetry: AuthTelemetry,
+  request: Request,
+  provider: AuthProvider,
+  failureRedirect: string,
+  errorCode: string | undefined,
+  phase: AuthFailurePhase,
+  env?: Parameters<typeof redirectWithOAuthError>[4],
+) {
+  telemetry.captureEvent(SOCIAL_CALLBACK_EVENT, "server", {
+    provider,
+    outcome: "error",
+    error_code: errorCode ?? "oauth_error",
+    phase,
+  });
+  return redirectWithOAuthError(request, provider, failureRedirect, errorCode, env);
+}
+
+/**
+ * Adapt the telemetry sink into the provider-agnostic `capture` callback the
+ * verify helpers accept, tagging every capture with the provider so a single
+ * outage is attributable.
+ */
+function verifyCaptureFor(
+  telemetry: AuthTelemetry,
+  provider: AuthProvider,
+): (input: AuthVerifyCapture) => void {
+  return ({ error, phase, httpStatus }) => {
+    telemetry.captureException(error, { provider, phase, httpStatus });
+  };
+}
 
 async function readFormPostParams(request: Request): Promise<URLSearchParams> {
   const contentType = request.headers.get("content-type")?.toLowerCase() ?? "";
@@ -49,48 +98,63 @@ async function readFormPostParams(request: Request): Promise<URLSearchParams> {
 
 export async function handleAppleCallback(request: Request, context: AppLoadContext) {
   const env = context.cloudflare?.env;
+  const telemetry = authTelemetryFromContext(context);
   const formData = await readFormPostParams(request);
   const stored = await readOAuthStartSession(request, "apple", env);
   const failureRedirect = stored?.failureRedirect ?? "/login";
   const providerError = formData.get("error") ?? undefined;
 
   if (providerError) {
-    return redirectWithOAuthError(request, "apple", failureRedirect, providerError, env);
+    return redirectWithCapturedOAuthError(telemetry, request, "apple", failureRedirect, providerError, "provider_error", env);
   }
 
   const callbackState = formData.get("state");
   if (!stored) {
-    return redirectWithOAuthError(request, "apple", failureRedirect, "invalid_state", env);
+    return redirectWithCapturedOAuthError(telemetry, request, "apple", failureRedirect, "invalid_state", "invalid_state", env);
   }
 
   if (!callbackState || !isValidOAuthState(stored.state, callbackState)) {
-    return redirectWithOAuthError(request, "apple", failureRedirect, "invalid_state", env);
+    return redirectWithCapturedOAuthError(telemetry, request, "apple", failureRedirect, "invalid_state", "invalid_state", env);
   }
 
   let config;
   try {
     config = getAppleOAuthConfig(getOAuthEnv(context));
-  } catch {
-    return redirectWithOAuthError(request, "apple", failureRedirect, "oauth_unconfigured", env);
+  } catch (error) {
+    telemetry.captureException(error, { provider: "apple", phase: "config" });
+    return redirectWithCapturedOAuthError(telemetry, request, "apple", failureRedirect, "oauth_unconfigured", "config", env);
   }
 
   const redirectUri =
     stored.redirectUri ?? buildAppleReturnUrl(request, stored.linking ? "linkAppleAccount" : "loginWithApple");
-  const verifyResult = await verifyAppleCallback(config, redirectUri, {
-    code: formData.get("code") ?? "",
-    state: callbackState,
-    user: formData.get("user") ?? undefined,
-  });
+  let verifyResult;
+  try {
+    verifyResult = await verifyAppleCallback(
+      config,
+      redirectUri,
+      {
+        code: formData.get("code") ?? "",
+        state: callbackState,
+        user: formData.get("user") ?? undefined,
+      },
+      verifyCaptureFor(telemetry, "apple"),
+    );
+  } catch (error) {
+    // verifyAppleCallback flattens its own failures, so this only fires for a
+    // truly unexpected throw — capture it before flattening to a generic error.
+    telemetry.captureException(error, { provider: "apple", phase: "verify" });
+    return redirectWithCapturedOAuthError(telemetry, request, "apple", failureRedirect, "oauth_error", "verify", env);
+  }
 
   if (!verifyResult.success || !verifyResult.appleUser) {
-    return redirectWithOAuthError(request, "apple", failureRedirect, verifyResult.error, env);
+    return redirectWithCapturedOAuthError(telemetry, request, "apple", failureRedirect, verifyResult.error, "verify", env);
   }
 
   const currentUserId = stored.linking
     ? (await getUserId(request, env)) ?? stored.linkingUserId ?? null
     : null;
   if (stored.linking && !currentUserId) {
-    return redirectWithOAuthError(request, "apple", failureRedirect, "login_required", env);
+    return redirectWithCapturedOAuthError(telemetry, request, "apple", failureRedirect, "login_required", "link_account", env);
   }
 
   const database = await getRequestDb(context);
@@ -102,7 +166,7 @@ export async function handleAppleCallback(request: Request, context: AppLoadCont
   });
 
   if (!callbackResult.success || !callbackResult.userId) {
-    return redirectWithOAuthError(request, "apple", failureRedirect, callbackResult.error, env);
+    return redirectWithCapturedOAuthError(telemetry, request, "apple", failureRedirect, callbackResult.error, "link_account", env);
   }
 
   const response = await createUserSession(callbackResult.userId, callbackResult.redirectTo, env);
@@ -112,6 +176,7 @@ export async function handleAppleCallback(request: Request, context: AppLoadCont
 
 export async function handleGitHubCallback(request: Request, context: AppLoadContext) {
   const env = context.cloudflare?.env;
+  const telemetry = authTelemetryFromContext(context);
   const url = new URL(request.url);
   const stored = await readOAuthStartSession(request, "github", env);
   const failureRedirect = stored?.failureRedirect ?? "/login";
@@ -119,39 +184,53 @@ export async function handleGitHubCallback(request: Request, context: AppLoadCon
   const callbackState = url.searchParams.get("state");
 
   if (providerError) {
-    return redirectWithOAuthError(request, "github", failureRedirect, providerError, env);
+    return redirectWithCapturedOAuthError(telemetry, request, "github", failureRedirect, providerError, "provider_error", env);
   }
 
   if (!stored) {
-    return redirectWithOAuthError(request, "github", failureRedirect, "invalid_state", env);
+    return redirectWithCapturedOAuthError(telemetry, request, "github", failureRedirect, "invalid_state", "invalid_state", env);
   }
 
   if (!callbackState || !isValidOAuthState(stored.state, callbackState)) {
-    return redirectWithOAuthError(request, "github", failureRedirect, "invalid_state", env);
+    return redirectWithCapturedOAuthError(telemetry, request, "github", failureRedirect, "invalid_state", "invalid_state", env);
   }
 
   let config;
   try {
     config = getGitHubOAuthConfig(getOAuthEnv(context));
-  } catch {
-    return redirectWithOAuthError(request, "github", failureRedirect, "oauth_unconfigured", env);
+  } catch (error) {
+    telemetry.captureException(error, { provider: "github", phase: "config" });
+    return redirectWithCapturedOAuthError(telemetry, request, "github", failureRedirect, "oauth_unconfigured", "config", env);
   }
 
   const redirectUri = stored.redirectUri ?? buildOAuthCallbackUrl(request, "github");
-  const verifyResult = await verifyGitHubCallback(config, redirectUri, {
-    code: url.searchParams.get("code") ?? "",
-    state: callbackState,
-  });
+  let verifyResult;
+  try {
+    verifyResult = await verifyGitHubCallback(
+      config,
+      redirectUri,
+      {
+        code: url.searchParams.get("code") ?? "",
+        state: callbackState,
+      },
+      verifyCaptureFor(telemetry, "github"),
+    );
+  } catch (error) {
+    // verifyGitHubCallback rethrows unexpected (non-OAuth, non-network) errors —
+    // capture the original before flattening it to a generic OAuth error.
+    telemetry.captureException(error, { provider: "github", phase: "verify" });
+    return redirectWithCapturedOAuthError(telemetry, request, "github", failureRedirect, "oauth_error", "verify", env);
+  }
 
   if (!verifyResult.success || !verifyResult.githubUser) {
-    return redirectWithOAuthError(request, "github", failureRedirect, verifyResult.error, env);
+    return redirectWithCapturedOAuthError(telemetry, request, "github", failureRedirect, verifyResult.error, "verify", env);
   }
 
   const currentUserId = stored.linking
     ? (await getUserId(request, env)) ?? stored.linkingUserId ?? null
     : null;
   if (stored.linking && !currentUserId) {
-    return redirectWithOAuthError(request, "github", failureRedirect, "login_required", env);
+    return redirectWithCapturedOAuthError(telemetry, request, "github", failureRedirect, "login_required", "link_account", env);
   }
 
   const database = await getRequestDb(context);
@@ -163,7 +242,7 @@ export async function handleGitHubCallback(request: Request, context: AppLoadCon
   });
 
   if (!callbackResult.success || !callbackResult.userId) {
-    return redirectWithOAuthError(request, "github", failureRedirect, callbackResult.error, env);
+    return redirectWithCapturedOAuthError(telemetry, request, "github", failureRedirect, callbackResult.error, "link_account", env);
   }
 
   const response = await createUserSession(callbackResult.userId, callbackResult.redirectTo, env);
@@ -173,6 +252,7 @@ export async function handleGitHubCallback(request: Request, context: AppLoadCon
 
 export async function handleGoogleCallback(request: Request, context: AppLoadContext) {
   const env = context.cloudflare?.env;
+  const telemetry = authTelemetryFromContext(context);
   const url = new URL(request.url);
   const stored = await readOAuthStartSession(request, "google", env);
   const failureRedirect = stored?.failureRedirect ?? "/login";
@@ -180,44 +260,58 @@ export async function handleGoogleCallback(request: Request, context: AppLoadCon
   const callbackState = url.searchParams.get("state");
 
   if (providerError) {
-    return redirectWithOAuthError(request, "google", failureRedirect, providerError, env);
+    return redirectWithCapturedOAuthError(telemetry, request, "google", failureRedirect, providerError, "provider_error", env);
   }
 
   if (!stored) {
-    return redirectWithOAuthError(request, "google", failureRedirect, "invalid_state", env);
+    return redirectWithCapturedOAuthError(telemetry, request, "google", failureRedirect, "invalid_state", "invalid_state", env);
   }
 
   if (!callbackState || !isValidOAuthState(stored.state, callbackState)) {
-    return redirectWithOAuthError(request, "google", failureRedirect, "invalid_state", env);
+    return redirectWithCapturedOAuthError(telemetry, request, "google", failureRedirect, "invalid_state", "invalid_state", env);
   }
 
   if (!stored.codeVerifier) {
-    return redirectWithOAuthError(request, "google", failureRedirect, "invalid_code_verifier", env);
+    return redirectWithCapturedOAuthError(telemetry, request, "google", failureRedirect, "invalid_code_verifier", "invalid_code_verifier", env);
   }
 
   let config;
   try {
     config = getGoogleOAuthConfig(getOAuthEnv(context));
-  } catch {
-    return redirectWithOAuthError(request, "google", failureRedirect, "oauth_unconfigured", env);
+  } catch (error) {
+    telemetry.captureException(error, { provider: "google", phase: "config" });
+    return redirectWithCapturedOAuthError(telemetry, request, "google", failureRedirect, "oauth_unconfigured", "config", env);
   }
 
   const redirectUri = stored.redirectUri ?? buildOAuthCallbackUrl(request, "google");
-  const verifyResult = await verifyGoogleCallback(config, redirectUri, {
-    code: url.searchParams.get("code") ?? "",
-    state: callbackState,
-    codeVerifier: stored.codeVerifier,
-  });
+  let verifyResult;
+  try {
+    verifyResult = await verifyGoogleCallback(
+      config,
+      redirectUri,
+      {
+        code: url.searchParams.get("code") ?? "",
+        state: callbackState,
+        codeVerifier: stored.codeVerifier,
+      },
+      verifyCaptureFor(telemetry, "google"),
+    );
+  } catch (error) {
+    // verifyGoogleCallback flattens its own failures, so this only fires for a
+    // truly unexpected throw — capture it before flattening to a generic error.
+    telemetry.captureException(error, { provider: "google", phase: "verify" });
+    return redirectWithCapturedOAuthError(telemetry, request, "google", failureRedirect, "oauth_error", "verify", env);
+  }
 
   if (!verifyResult.success || !verifyResult.googleUser) {
-    return redirectWithOAuthError(request, "google", failureRedirect, verifyResult.error, env);
+    return redirectWithCapturedOAuthError(telemetry, request, "google", failureRedirect, verifyResult.error, "verify", env);
   }
 
   const currentUserId = stored.linking
     ? (await getUserId(request, env)) ?? stored.linkingUserId ?? null
     : null;
   if (stored.linking && !currentUserId) {
-    return redirectWithOAuthError(request, "google", failureRedirect, "login_required", env);
+    return redirectWithCapturedOAuthError(telemetry, request, "google", failureRedirect, "login_required", "link_account", env);
   }
 
   const database = await getRequestDb(context);
@@ -229,7 +323,7 @@ export async function handleGoogleCallback(request: Request, context: AppLoadCon
   });
 
   if (!callbackResult.success || !callbackResult.userId) {
-    return redirectWithOAuthError(request, "google", failureRedirect, callbackResult.error, env);
+    return redirectWithCapturedOAuthError(telemetry, request, "google", failureRedirect, callbackResult.error, "link_account", env);
   }
 
   const response = await createUserSession(callbackResult.userId, callbackResult.redirectTo, env);

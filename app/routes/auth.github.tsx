@@ -2,6 +2,7 @@ import type { Route } from "./+types/auth.github";
 import { redirect } from "react-router";
 import { getGitHubOAuthConfig } from "~/lib/env.server";
 import { createGitHubAuthorizationURL } from "~/lib/github-oauth.server";
+import { authTelemetryFromContext } from "~/lib/auth-telemetry.server";
 import {
   appendOAuthError,
   assertCanStartOAuthLinking,
@@ -23,7 +24,8 @@ async function initiateGitHubOAuth({ request, context }: Route.LoaderArgs | Rout
   let config;
   try {
     config = getGitHubOAuthConfig(getOAuthEnv(context));
-  } catch {
+  } catch (error) {
+    authTelemetryFromContext(context).captureException(error, { provider: "github", phase: "initiate" });
     return redirect(appendOAuthError(sessionData.failureRedirect, "oauth_unconfigured"));
   }
 
