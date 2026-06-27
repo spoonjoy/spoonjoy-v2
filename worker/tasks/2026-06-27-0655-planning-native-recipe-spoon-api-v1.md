@@ -1,6 +1,6 @@
 # Planning: Native Recipe Spoon API V1
 
-**Status**: drafting
+**Status**: approved
 **Created**: 2026-06-27 13:55
 
 ## Goal
@@ -80,3 +80,4 @@ Reviewer gate notes:
 ## Progress Log
 - 2026-06-27 13:55 Created
 - 2026-06-27 13:57 Addressed reviewer findings on contract, telemetry, idempotency, cursor, and cover-decision prerequisites
+- 2026-06-27 14:01 Planning approved after reviewer correction pass converged
