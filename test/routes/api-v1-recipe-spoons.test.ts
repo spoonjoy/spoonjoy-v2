@@ -587,6 +587,43 @@ describe("API v1 recipe spoons", () => {
     })).resolves.toBe(1);
   });
 
+  it("cleans create-spoon idempotency reservations when validation fails before writing a spoon", async () => {
+    const fixture = await createSpoonFixture(db);
+    const url = `http://localhost/api/v1/recipes/${fixture.recipe.id}/spoons`;
+    const splat = `recipes/${fixture.recipe.id}/spoons`;
+    const body = {
+      clientMutationId: "spoon-create-empty-body",
+      note: "   ",
+      nextTime: null,
+      photoUrl: null,
+    };
+
+    const first = await action(routeArgs(jsonRequest(url, "POST", fixture.ownerKitchenWrite.token, "req_spoon_empty_first", body), splat));
+    expect(first.status).toBe(400);
+    await expect(first.json()).resolves.toMatchObject({
+      ok: false,
+      requestId: "req_spoon_empty_first",
+      error: {
+        code: "validation_error",
+        message: "Spoon must include at least one of: photo, note, nextTime",
+      },
+    });
+    await expect(db.apiIdempotencyKey.findFirst({
+      where: { userId: fixture.owner.id, key: "spoon-create-empty-body" },
+    })).resolves.toBeNull();
+
+    const retry = await action(routeArgs(jsonRequest(url, "POST", fixture.ownerKitchenWrite.token, "req_spoon_empty_retry", body), splat));
+    expect(retry.status).toBe(400);
+    await expect(retry.json()).resolves.toMatchObject({
+      ok: false,
+      requestId: "req_spoon_empty_retry",
+      error: { code: "validation_error" },
+    });
+    await expect(db.recipeSpoon.count({
+      where: { chefId: fixture.owner.id, recipeId: fixture.recipe.id },
+    })).resolves.toBe(0);
+  });
+
   it("updates spoons idempotently with owner-only recipe-path validation", async () => {
     const fixture = await createSpoonFixture(db);
     const updatePhotoKey = `spoons/${fixture.owner.id}/${fixture.recipe.id}/after.jpg`;

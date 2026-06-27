@@ -1555,6 +1555,14 @@ async function handleRecipeSpoonCreate(args: ApiV1RouteArgs, requestId: string, 
     };
   }, {
     deleteReservationOnWriteError: false,
+    hasRecoverableWrite: async (db, record) => Boolean(await db.recipeSpoon.findFirst({
+      where: {
+        id: record.id,
+        chefId: principal.id,
+        recipeId,
+      },
+      select: { id: true },
+    })),
     recoverInFlight: async (db, record) => recoverRecipeSpoonCreate(args, {
       db,
       principal,
@@ -2336,6 +2344,10 @@ async function runIdempotentShoppingMutation(
   write: (db: ApiV1WriteDb, reservation: ApiIdempotencyKey) => Promise<{ status: number; data: Record<string, unknown> }>,
   options: {
     deleteReservationOnWriteError?: boolean;
+    hasRecoverableWrite?: (
+      db: ApiV1WriteDb,
+      record: ApiIdempotencyKey,
+    ) => Promise<boolean>;
     recoverInFlight?: (
       db: ApiV1WriteDb,
       record: ApiIdempotencyKey,
@@ -2398,8 +2410,11 @@ async function runIdempotentShoppingMutation(
   try {
     result = await write(db, reservation.record);
   } catch (error) {
-    /* istanbul ignore next -- @preserve defensive cleanup for a write failure after reservation; integration tests cover the response path before reservation succeeds. */
-    if (options.deleteReservationOnWriteError !== false) {
+    let keepReservationForRecovery = false;
+    if (options.deleteReservationOnWriteError === false) {
+      keepReservationForRecovery = await options.hasRecoverableWrite?.(db, reservation.record).catch(() => false) ?? false;
+    }
+    if (!keepReservationForRecovery) {
       await db.apiIdempotencyKey.delete({ where: { id: reservation.record.id } }).catch(() => undefined);
     }
     throw error;
