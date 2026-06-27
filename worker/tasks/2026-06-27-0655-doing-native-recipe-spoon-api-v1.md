@@ -57,7 +57,7 @@ Add first-class API v1 REST endpoints for recipe spoons so the native Apple app 
 **Output**: Confirmed implementation targets and branch/worktree state.
 **Acceptance**: Worktree is on `worker/native-recipe-spoon-api-v1`; referenced files exist; no unresolved planning questions remain.
 
-### ⬜ Unit 1a: API V1 Spoon Endpoints — Tests
+### ✅ Unit 1a: API V1 Spoon Endpoints — Tests
 **What**: Add failing route/openapi/docs tests covering anonymous/authenticated spoon listing, cursor validation, create/update/delete auth/idempotency/ownership, cover activation, contract resources, and playground generation.
 **Acceptance**: New tests fail because `/api/v1/recipes/{id}/spoons` and `/api/v1/recipes/{id}/spoons/{spoonId}` are not implemented or documented yet.
 
@@ -82,3 +82,4 @@ Add first-class API v1 REST endpoints for recipe spoons so the native Apple app 
 - 2026-06-27 14:02 Created from planning doc
 - 2026-06-27 14:04 Doing-doc review converged; execution started
 - 2026-06-27 14:04 Unit 0 complete: verified worktree, branch, source files, route patterns, spoon services, cover decision helpers, OpenAPI/docs/playground generation, and test conventions
+- 2026-06-27 07:12 Unit 1a complete: added route, scope, OpenAPI, and docs-marker coverage for API v1 recipe spoon endpoints. Red check: `pnpm exec vitest run test/routes/api-v1-recipe-spoons.test.ts` fails 5/5 because the new spoon routes still return 404.
