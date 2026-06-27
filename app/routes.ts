@@ -65,6 +65,7 @@ export default [
   route("api/v1/*", "routes/api.v1.$.ts"),
   route("api/*", "routes/api.$.ts"),
   route("mcp", "routes/mcp.ts"),
+  route("csp-report", "routes/csp-report.ts"),
   route("health", "routes/health.ts"),
   route("oauth/register", "routes/oauth.register.ts"),
   route("oauth/authorize", "routes/oauth.authorize.tsx"),
