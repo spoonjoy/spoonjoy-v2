@@ -1423,15 +1423,7 @@ async function recoverRecipeImport(
     },
     select: { id: true },
   });
-  if (!recipe) {
-    if (!recipeImportProvidersConfigured(args)) {
-      return {
-        status: 200,
-        data: providerSecretImportData(input.clientMutationId),
-      };
-    }
-    return null;
-  }
+  if (!recipe) return null;
   return {
     status: 201,
     data: await recipeImportMutationData(args, {

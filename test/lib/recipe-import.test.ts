@@ -2165,6 +2165,26 @@ describe("importRecipeFromSource — native capture inputs", () => {
     });
   });
 
+  it("rolls back caller supplied recovery recipe ids when child rows fail", async () => {
+    const chef = await makeChef();
+    const llmRunner = makeLlmRunner({
+      title: "Partial Native Card",
+      ingredients: ["1 cup stock"],
+      steps: [],
+    });
+    const recipeId = `recipe_partial_${faker.string.alphanumeric(8).toLowerCase()}`;
+
+    await expect(importRecipeFromSource({
+      chefId: chef.id,
+      recipeId,
+      source: {
+        type: "text",
+        text: "Partial Native Card\n1 cup stock",
+      },
+    }, baseDeps({ llmRunner }))).rejects.toBeTruthy();
+    await expect(db.recipe.findUnique({ where: { id: recipeId } })).resolves.toBeNull();
+  });
+
   it("delegates native URL and video-url sources through the URL importer", async () => {
     const fixture = await loadFixture("nyt-style-jsonld.html");
     const chef = await makeChef();

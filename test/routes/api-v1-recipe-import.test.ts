@@ -409,16 +409,16 @@ describe("API v1 recipe import", () => {
     });
   });
 
-  it("recovers in-flight ProviderSecret blockers without retrying import work", async () => {
+  it("does not synthesize ProviderSecret blockers for unrelated in-flight imports", async () => {
     const fixture = await createImportFixture(db);
     const importSpy = vi.spyOn(recipeImport, "importRecipeFromSource").mockRejectedValue(new Error("should not import"));
     const body = {
-      clientMutationId: "cm_native_provider_blocker_recover",
+      clientMutationId: "cm_native_provider_blocker_in_flight",
       source: { type: "text", text: "No provider key soup" },
     };
     await db.apiIdempotencyKey.create({
       data: {
-        id: "idem_native_provider_blocker_recover",
+        id: "idem_native_provider_blocker_in_flight",
         userId: fixture.user.id,
         credentialId: fixture.writer.credential.id,
         clientKey: idempotencyClientKey({
@@ -439,26 +439,21 @@ describe("API v1 recipe import", () => {
 
     const response = await action(mutationRequest(
       fixture.writer.token,
-      "req_native_provider_blocker_recover",
+      "req_native_provider_blocker_in_flight",
       body,
       {},
     ));
     const payload = await readJson(response);
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(409);
     expect(importSpy).not.toHaveBeenCalled();
     expect(payload).toMatchObject({
-      ok: true,
-      requestId: "req_native_provider_blocker_recover",
-      data: {
-        recipe: null,
-        importCode: "provider_secret_required",
-        blockers: [{
-          capability: "ProviderSecret",
-          provider: "openai",
-          resource: "recipe-import",
-        }],
-        mutation: { clientMutationId: "cm_native_provider_blocker_recover", replayed: true },
+      ok: false,
+      requestId: "req_native_provider_blocker_in_flight",
+      error: {
+        code: "idempotency_in_progress",
+        status: 409,
+        details: { retryAfterSeconds: 2 },
       },
     });
   });

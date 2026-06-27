@@ -604,41 +604,40 @@ async function persistRecipe(
     for (const p of parsed) allIngredients.push(p);
   }
 
-  const created = await db.recipe.create({
-    data: {
-      ...(recipeId ? { id: recipeId } : {}),
-      title,
-      description: draft.description,
-      servings: draft.servings,
-      sourceUrl: draft.sourceUrl,
-      chefId,
-    },
-  });
-
-  for (let i = 0; i < draft.steps.length; i++) {
-    await db.recipeStep.create({
-      data: {
-        recipeId: created.id,
-        stepNum: i + 1,
-        description: draft.steps[i],
-      },
-    });
-  }
-
-  // Attach all ingredients to step 1.
+  const id = recipeId ?? `recipe_import_${crypto.randomUUID()}`;
+  const ingredientRows = [];
   for (const ingredient of allIngredients) {
     const unit = await getOrCreateUnit(db, ingredient.unit);
     const ref = await getOrCreateIngredientRef(db, ingredient.ingredientName);
-    await db.ingredient.create({
-      data: {
-        recipeId: created.id,
-        stepNum: 1,
-        quantity: ingredient.quantity,
-        unitId: unit.id,
-        ingredientRefId: ref.id,
-      },
+    ingredientRows.push({
+      recipeId: id,
+      stepNum: 1,
+      quantity: ingredient.quantity,
+      unitId: unit.id,
+      ingredientRefId: ref.id,
     });
   }
+
+  const [created] = await db.$transaction([
+    db.recipe.create({
+      data: {
+        id,
+        title,
+        description: draft.description,
+        servings: draft.servings,
+        sourceUrl: draft.sourceUrl,
+        chefId,
+      },
+    }),
+    ...draft.steps.map((step, index) => db.recipeStep.create({
+      data: {
+        recipeId: id,
+        stepNum: index + 1,
+        description: step,
+      },
+    })),
+    ...ingredientRows.map((ingredient) => db.ingredient.create({ data: ingredient })),
+  ]);
 
   const full = await db.recipe.findUniqueOrThrow({
     where: { id: created.id },
