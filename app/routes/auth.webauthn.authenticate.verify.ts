@@ -3,6 +3,7 @@ import type { AuthenticationResponseJSON } from "@simplewebauthn/server";
 import { createUserSessionCookie, sanitizeSessionRedirect } from "~/lib/session.server";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { configFromRequest, finishAuthentication, WebAuthnError } from "~/lib/webauthn-route.server";
+import { authTelemetryFromContext } from "~/lib/auth-telemetry.server";
 import { enforceAuthRateLimit, rateLimitedResponse } from "~/lib/rate-limit.server";
 
 export async function action({ request, context }: Route.ActionArgs) {
@@ -27,7 +28,13 @@ export async function action({ request, context }: Route.ActionArgs) {
 
   try {
     const db = await getRequestDb(context);
-    const result = await finishAuthentication(db, email, configFromRequest(request), body.response);
+    const result = await finishAuthentication(
+      db,
+      email,
+      configFromRequest(request),
+      body.response,
+      authTelemetryFromContext(context),
+    );
 
     // Mint the session cookie and attach it to the JSON response (the client
     // navigates itself after a verified passkey login). Built with `new

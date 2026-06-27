@@ -1,6 +1,7 @@
 import type { Route } from "./+types/auth.webauthn.authenticate.options";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { configFromRequest, startAuthentication } from "~/lib/webauthn-route.server";
+import { authTelemetryFromContext } from "~/lib/auth-telemetry.server";
 import { enforceAuthRateLimit, rateLimitedResponse } from "~/lib/rate-limit.server";
 
 export async function action({ request, context }: Route.ActionArgs) {
@@ -23,7 +24,12 @@ export async function action({ request, context }: Route.ActionArgs) {
 
   try {
     const db = await getRequestDb(context);
-    const options = await startAuthentication(db, email, configFromRequest(request));
+    const options = await startAuthentication(
+      db,
+      email,
+      configFromRequest(request),
+      authTelemetryFromContext(context),
+    );
     return Response.json(options);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not start authentication";

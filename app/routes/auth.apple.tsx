@@ -2,6 +2,7 @@ import type { Route } from "./+types/auth.apple";
 import { redirect } from "react-router";
 import { getAppleOAuthConfig } from "~/lib/env.server";
 import { createAppleAuthorizationURL } from "~/lib/apple-oauth.server";
+import { authTelemetryFromContext } from "~/lib/auth-telemetry.server";
 import {
   appendOAuthError,
   assertCanStartOAuthLinking,
@@ -20,10 +21,13 @@ async function initiateAppleOAuth({ request, context }: Route.LoaderArgs | Route
   const linkingRedirect = await assertCanStartOAuthLinking(request, sessionData, env);
   if (linkingRedirect) return linkingRedirect;
 
+  const telemetry = authTelemetryFromContext(context);
+
   let config;
   try {
     config = getAppleOAuthConfig(getOAuthEnv(context));
-  } catch {
+  } catch (error) {
+    telemetry.captureException(error, { provider: "apple", phase: "initiate" });
     return redirect(appendOAuthError(sessionData.failureRedirect, "oauth_unconfigured"));
   }
 
@@ -37,7 +41,8 @@ async function initiateAppleOAuth({ request, context }: Route.LoaderArgs | Route
   let authorizationUrl;
   try {
     authorizationUrl = createAppleAuthorizationURL(config, redirectUri, state);
-  } catch {
+  } catch (error) {
+    telemetry.captureException(error, { provider: "apple", phase: "initiate" });
     return redirect(appendOAuthError(sessionData.failureRedirect, "oauth_unconfigured"));
   }
 
