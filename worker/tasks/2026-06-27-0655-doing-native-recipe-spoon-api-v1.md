@@ -1,6 +1,6 @@
 # Doing: Native Recipe Spoon API V1
 
-**Status**: READY_FOR_EXECUTION
+**Status**: in-progress
 **Execution Mode**: direct
 **Created**: 2026-06-27 14:02
 **Planning**: ./2026-06-27-0655-planning-native-recipe-spoon-api-v1.md
@@ -52,7 +52,7 @@ Add first-class API v1 REST endpoints for recipe spoons so the native Apple app 
 
 **CRITICAL: Every unit header MUST start with status emoji (⬜ for new units).**
 
-### ⬜ Unit 0: Setup/Research
+### ✅ Unit 0: Setup/Research
 **What**: Verify worktree, source files, route patterns, spoon services, cover decision helpers, API v1 OpenAPI/docs/playground generation, and test conventions.
 **Output**: Confirmed implementation targets and branch/worktree state.
 **Acceptance**: Worktree is on `worker/native-recipe-spoon-api-v1`; referenced files exist; no unresolved planning questions remain.
@@ -80,3 +80,5 @@ Add first-class API v1 REST endpoints for recipe spoons so the native Apple app 
 
 ## Progress Log
 - 2026-06-27 14:02 Created from planning doc
+- 2026-06-27 14:04 Doing-doc review converged; execution started
+- 2026-06-27 14:04 Unit 0 complete: verified worktree, branch, source files, route patterns, spoon services, cover decision helpers, OpenAPI/docs/playground generation, and test conventions
