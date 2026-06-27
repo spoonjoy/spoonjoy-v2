@@ -102,8 +102,6 @@ describe("spoonjoy MCP tools", () => {
       "list_recipe_covers",
       "list_recipe_spoon_images",
       "create_recipe_cover_from_upload",
-      "create_recipe_cover_from_spoon",
-      "regenerate_recipe_cover",
       "get_cover_generation_status",
       "set_active_recipe_cover",
       "archive_recipe_cover",
@@ -142,6 +140,22 @@ describe("spoonjoy MCP tools", () => {
       .rejects.toThrow("Unknown Spoonjoy operation: import_recipe_from_url");
   });
 
+  it("excludes the AI cover-generation tools from the MCP surface and rejects calling them", async () => {
+    // `regenerate_recipe_cover` and `create_recipe_cover_from_spoon` produce
+    // AI-generated editorial images — an unsupported category for the Anthropic
+    // Connectors Directory — so they are REST-only, not advertised over MCP, and
+    // not callable by name. The plain upload tool stays available.
+    const names = listSpoonjoyMcpTools().map((tool) => tool.name);
+    expect(names).not.toContain("regenerate_recipe_cover");
+    expect(names).not.toContain("create_recipe_cover_from_spoon");
+    expect(names).toContain("create_recipe_cover_from_upload");
+
+    await expect(callSpoonjoyMcpTool("regenerate_recipe_cover", { recipeId: "r", coverId: "c" }, context))
+      .rejects.toThrow("Unknown Spoonjoy operation: regenerate_recipe_cover");
+    await expect(callSpoonjoyMcpTool("create_recipe_cover_from_spoon", { recipeId: "r", spoonId: "s" }, context))
+      .rejects.toThrow("Unknown Spoonjoy operation: create_recipe_cover_from_spoon");
+  });
+
   it("annotates every tool with a title and behavioral hints (directory requirement)", () => {
     // Connector directories reject tools missing a title or read/destructive
     // hints. Asserting every tool here also enforces annotation completeness:
@@ -169,8 +183,6 @@ describe("spoonjoy MCP tools", () => {
     expect(byName.get("list_recipe_covers")).toMatchObject({ readOnlyHint: true });
     expect(byName.get("list_recipe_spoon_images")).toMatchObject({ readOnlyHint: true });
     expect(byName.get("create_recipe_cover_from_upload")).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true });
-    expect(byName.get("create_recipe_cover_from_spoon")).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true });
-    expect(byName.get("regenerate_recipe_cover")).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true });
     expect(byName.get("get_cover_generation_status")).toMatchObject({ readOnlyHint: true });
     expect(byName.get("set_active_recipe_cover")).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true });
     expect(byName.get("archive_recipe_cover")).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true });
@@ -252,39 +264,6 @@ describe("spoonjoy MCP tools", () => {
           imageUrl: { type: "string" },
           activate: { type: "boolean" },
           generateEditorial: { type: "boolean" },
-          idempotencyKey: { type: "string" },
-          dryRun: { type: "boolean" },
-        },
-        additionalProperties: false,
-      },
-    });
-    expect(byName.get("create_recipe_cover_from_spoon")).toMatchObject({
-      requiredScopes: ["kitchen:write"],
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-      inputSchema: {
-        type: "object",
-        required: ["recipeId", "spoonId"],
-        properties: {
-          recipeId: { type: "string" },
-          spoonId: { type: "string" },
-          activate: { type: "boolean" },
-          generateEditorial: { type: "boolean" },
-          idempotencyKey: { type: "string" },
-          dryRun: { type: "boolean" },
-        },
-        additionalProperties: false,
-      },
-    });
-    expect(byName.get("regenerate_recipe_cover")).toMatchObject({
-      requiredScopes: ["kitchen:write"],
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-      inputSchema: {
-        type: "object",
-        required: ["recipeId", "coverId"],
-        properties: {
-          recipeId: { type: "string" },
-          coverId: { type: "string" },
-          activateWhenReady: { type: "boolean" },
           idempotencyKey: { type: "string" },
           dryRun: { type: "boolean" },
         },

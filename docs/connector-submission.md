@@ -55,6 +55,13 @@ URLs. To save a recipe from the web, the assistant reads the page itself and
 calls `Create recipe`. (The REST API still offers a server-side URL import that
 the Spoonjoy web app uses, but it is not exposed as an MCP tool.)
 
+The connector also exposes no AI image generation. The recipe-cover tools that
+produce AI "editorial" images (`regenerate_recipe_cover`,
+`create_recipe_cover_from_spoon`) are kept REST-only and excluded from the MCP
+surface, so the connector does not fall under the "AI-generated images"
+unsupported category. Plain cover uploads (`create_recipe_cover_from_upload`)
+and cover management remain available.
+
 Destructive: Revoke API token, Delete recipe, Remove recipe from cookbook,
 Remove shopping-list item, Delete a cook.
 

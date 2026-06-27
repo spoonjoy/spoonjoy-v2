@@ -13,13 +13,21 @@ export type SpoonjoyMcpContext = SpoonjoyApiContext;
 export type SpoonjoyMcpToolInfo = SpoonjoyMcpToolDescriptor;
 
 // Operations that exist in the REST/API layer but are deliberately NOT exposed
-// over the MCP connector. `import_recipe_from_url` server-fetches arbitrary URLs
-// (annotated `openWorldHint: true`) — it is the connector's only outbound web
-// access. The agent-driven flow (assistant reads the page, calls `create_recipe`)
-// is the supported import path for MCP clients, so this tool stays in REST (the
-// web app uses it) but is filtered out of the MCP surface. Excluding it here means
-// the MCP connector no longer has any web access.
-const MCP_EXCLUDED_TOOLS = new Set(["import_recipe_from_url"]);
+// over the MCP connector.
+// - `import_recipe_from_url` server-fetches arbitrary URLs (annotated
+//   `openWorldHint: true`) — the connector's only outbound web access. The
+//   agent-driven flow (assistant reads the page, calls `create_recipe`) replaces
+//   it for MCP clients, so it stays REST-only and the MCP surface has no web access.
+// - `regenerate_recipe_cover` and `create_recipe_cover_from_spoon` produce
+//   AI-generated "editorial" cover images. The Anthropic Connectors Directory lists
+//   AI-generated images as an unsupported category, so these stay REST-only (the web
+//   app still uses them) and are kept off the MCP surface. The plain upload tool
+//   `create_recipe_cover_from_upload` (a user image, no AI) remains available.
+const MCP_EXCLUDED_TOOLS = new Set([
+  "import_recipe_from_url",
+  "regenerate_recipe_cover",
+  "create_recipe_cover_from_spoon",
+]);
 
 export function listSpoonjoyMcpTools(): SpoonjoyMcpToolInfo[] {
   return listSpoonjoyApiOperations().filter((tool) => !MCP_EXCLUDED_TOOLS.has(tool.name));
