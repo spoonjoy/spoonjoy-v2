@@ -90,9 +90,25 @@ export const DEFAULT_GEMINI_IMAGE_MODEL = "gemini-3.1-flash-image";
 export const DEFAULT_GEMINI_IMAGE_TIMEOUT_MS = 30_000;
 
 export class ImageGenError extends Error {
+  /** Original provider error code (e.g. `insufficient_quota`), when known. */
+  code: string | null;
+  /** Original provider error type, when known. */
+  type: string | null;
+  /** Original provider HTTP status, when known. */
+  status: number | null;
+  /** Original provider request id, when known. */
+  requestID: string | null;
+
   constructor(message: string, options?: { cause?: unknown }) {
     super(message);
     this.name = "ImageGenError";
+    // Preserve the original provider error fields off the cause so an
+    // out-of-credit (`insufficient_quota`) failure stays distinguishable from a
+    // transient `rate_limit_exceeded` even after the message is generalized.
+    this.code = errorCode(options?.cause);
+    this.type = errorType(options?.cause);
+    this.status = errorStatus(options?.cause);
+    this.requestID = errorRequestId(options?.cause);
     if (options?.cause !== undefined) {
       (this as { cause?: unknown }).cause = options.cause;
     }

@@ -590,6 +590,80 @@ describe("importRecipeFromUrl — extraction paths", () => {
         ),
       ).rejects.toMatchObject({ code: "llm-failed", status: 502 });
     });
+
+    it("captures an LLM-call failure to PostHog with the preserved OpenAI code", async () => {
+      const fixture = await loadFixture("no-jsonld-rich-html.html");
+      const chef = await makeChefForError();
+      const { RecipeLlmError } = await import("~/lib/recipe-import-llm.server");
+      const analyticsFetch = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+      const quotaCause = Object.assign(new Error("quota"), {
+        status: 429,
+        code: "insufficient_quota",
+        type: "insufficient_quota",
+      });
+      const llmRunner: RecipeLlmRunner = {
+        provider: "openai",
+        model: "gpt-4o-mini",
+        extract: vi.fn(async () => {
+          throw new RecipeLlmError("OpenAI rate limit exceeded", quotaCause);
+        }),
+      };
+
+      await expect(
+        importRecipeFromUrl(
+          { url: "https://example.com/r", chefId: chef.id },
+          baseDeps({
+            fetchImpl: makeFetchImpl(fixture),
+            llmRunner,
+            postHogConfig: { enabled: true, key: "ph_test", host: "https://posthog.example" },
+            analyticsFetchImpl: analyticsFetch as unknown as typeof fetch,
+          }),
+        ),
+      ).rejects.toMatchObject({ code: "llm-failed", status: 502 });
+
+      expect(analyticsFetch).toHaveBeenCalledTimes(1);
+      const body = JSON.parse(analyticsFetch.mock.calls[0][1].body as string);
+      expect(body.event).toBe("spoonjoy.llm_call.failed");
+      expect(body.distinct_id).toBe(chef.id);
+      expect(body.properties).toMatchObject({
+        operation: "recipe_import",
+        provider: "openai",
+        model: "gpt-4o-mini",
+        errorCode: "insufficient_quota",
+        errorStatus: 429,
+      });
+    });
+
+    it("uses analyticsDistinctId override and runner model fallback for LLM-failure telemetry", async () => {
+      const fixture = await loadFixture("no-jsonld-rich-html.html");
+      const chef = await makeChefForError();
+      const { RecipeLlmError } = await import("~/lib/recipe-import-llm.server");
+      const analyticsFetch = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+      // Runner exposes neither provider nor model → telemetry falls back.
+      const llmRunner: RecipeLlmRunner = {
+        extract: vi.fn(async () => {
+          throw new RecipeLlmError("boom");
+        }),
+      };
+
+      await expect(
+        importRecipeFromUrl(
+          { url: "https://example.com/r", chefId: chef.id },
+          baseDeps({
+            fetchImpl: makeFetchImpl(fixture),
+            llmRunner,
+            analyticsDistinctId: "service-account",
+            postHogConfig: { enabled: true, key: "ph_test", host: "https://posthog.example" },
+            analyticsFetchImpl: analyticsFetch as unknown as typeof fetch,
+          }),
+        ),
+      ).rejects.toMatchObject({ code: "llm-failed", status: 502 });
+
+      const body = JSON.parse(analyticsFetch.mock.calls[0][1].body as string);
+      expect(body.distinct_id).toBe("service-account");
+      expect(body.properties.provider).toBe("openai");
+      expect(body.properties.model).toBe("unknown");
+    });
   });
 
   describe("LLM runner edge cases", () => {

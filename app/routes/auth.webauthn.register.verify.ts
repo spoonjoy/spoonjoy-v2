@@ -3,6 +3,7 @@ import type { RegistrationResponseJSON } from "@simplewebauthn/server";
 import { getUserId } from "~/lib/session.server";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { configFromRequest, finishRegistration, WebAuthnError } from "~/lib/webauthn-route.server";
+import { authTelemetryFromContext } from "~/lib/auth-telemetry.server";
 
 export async function action({ request, context }: Route.ActionArgs) {
   const env = context.cloudflare?.env;
@@ -23,7 +24,14 @@ export async function action({ request, context }: Route.ActionArgs) {
 
   try {
     const db = await getRequestDb(context);
-    const result = await finishRegistration(db, userId, configFromRequest(request), body.response, body.name);
+    const result = await finishRegistration(
+      db,
+      userId,
+      configFromRequest(request),
+      body.response,
+      body.name,
+      authTelemetryFromContext(context),
+    );
     return Response.json(result);
   } catch (error) {
     const status = error instanceof WebAuthnError ? error.status : 400;

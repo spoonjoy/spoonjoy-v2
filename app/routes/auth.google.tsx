@@ -12,6 +12,7 @@ import {
   redirectTo,
 } from "~/lib/oauth-route.server";
 import { createGoogleAuthorizationURL, generateCodeVerifier } from "~/lib/google-oauth.server";
+import { authTelemetryFromContext } from "~/lib/auth-telemetry.server";
 
 async function initiateGoogleOAuth({ request, context }: Route.LoaderArgs | Route.ActionArgs) {
   const state = generateOAuthState();
@@ -24,7 +25,8 @@ async function initiateGoogleOAuth({ request, context }: Route.LoaderArgs | Rout
   let config;
   try {
     config = getGoogleOAuthConfig(getOAuthEnv(context));
-  } catch {
+  } catch (error) {
+    authTelemetryFromContext(context).captureException(error, { provider: "google", phase: "initiate" });
     return redirect(appendOAuthError(sessionData.failureRedirect, "oauth_unconfigured"));
   }
 

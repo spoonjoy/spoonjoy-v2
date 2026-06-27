@@ -269,6 +269,29 @@ describe("generatePlaceholderImage", () => {
     ).rejects.toMatchObject({ name: "ImageGenError", cause });
   });
 
+  it("preserves the OpenAI code/type/status on the wrapping ImageGenError", async () => {
+    const cause = Object.assign(new Error("You exceeded your quota"), {
+      status: 429,
+      code: "insufficient_quota",
+      type: "insufficient_quota",
+      requestID: "req_123",
+    });
+    const runner = mockRunner({
+      textToImage: vi.fn(async () => {
+        throw cause;
+      }),
+    });
+    await expect(
+      generatePlaceholderImage("X", null, { env: {}, runner }),
+    ).rejects.toMatchObject({
+      name: "ImageGenError",
+      code: "insufficient_quota",
+      type: "insufficient_quota",
+      status: 429,
+      requestID: "req_123",
+    });
+  });
+
   it("throws ImageGenError when the bucket fetch returns a non-OK response", async () => {
     const failingFetch = vi.fn(async () => ({
       ok: false,

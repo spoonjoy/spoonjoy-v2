@@ -183,7 +183,8 @@ describe("Apple OAuth routes", () => {
         code: "code",
         state: "state",
         user: "{\"name\":{\"firstName\":\"A\",\"lastName\":\"User\"}}",
-      }
+      },
+      expect.any(Function)
     );
   });
 
@@ -225,7 +226,8 @@ describe("Apple OAuth routes", () => {
         code: "code",
         state: "state",
         user: "{\"name\":{\"firstName\":\"A\",\"lastName\":\"User\"}}",
-      }
+      },
+      expect.any(Function)
     );
   });
 
@@ -264,7 +266,8 @@ describe("Apple OAuth routes", () => {
         code: "bad",
         state: "state",
         user: userPayload,
-      }
+      },
+      expect.any(Function)
     );
   });
 
@@ -439,7 +442,8 @@ describe("Apple OAuth routes", () => {
         privateKey: "apple-private-key",
       },
       legacyAppleRedirectUri,
-      { code: "", state: "state", user: undefined }
+      { code: "", state: "state", user: undefined },
+      expect.any(Function)
     );
   });
 

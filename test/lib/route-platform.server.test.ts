@@ -24,6 +24,9 @@ describe("route-platform.server", () => {
     delete process.env.INGREDIENT_PARSE_MODEL;
     delete process.env.INGREDIENT_PARSE_TIMEOUT_MS;
     delete process.env.INGREDIENT_PARSE_MAX_RETRIES;
+    delete process.env.POSTHOG_KEY;
+    delete process.env.POSTHOG_HOST;
+    delete process.env.POSTHOG_DISABLED;
   });
 
   it("returns the Cloudflare env from route context", () => {
@@ -40,6 +43,7 @@ describe("route-platform.server", () => {
   it("returns ingredient parser env from Cloudflare bindings before process env", () => {
     process.env.OPENAI_API_KEY = "process-key";
     process.env.INGREDIENT_PARSE_MODEL = "process-model";
+    process.env.POSTHOG_KEY = "process-ph";
 
     expect(
       getIngredientParserEnv({
@@ -50,6 +54,9 @@ describe("route-platform.server", () => {
             INGREDIENT_PARSE_MODEL: "cf-model",
             INGREDIENT_PARSE_TIMEOUT_MS: "9000",
             INGREDIENT_PARSE_MAX_RETRIES: "2",
+            POSTHOG_KEY: "cf-ph",
+            POSTHOG_HOST: "https://cf.posthog.example",
+            POSTHOG_DISABLED: "0",
           },
         },
       })
@@ -59,6 +66,9 @@ describe("route-platform.server", () => {
       INGREDIENT_PARSE_MODEL: "cf-model",
       INGREDIENT_PARSE_TIMEOUT_MS: "9000",
       INGREDIENT_PARSE_MAX_RETRIES: "2",
+      POSTHOG_KEY: "cf-ph",
+      POSTHOG_HOST: "https://cf.posthog.example",
+      POSTHOG_DISABLED: "0",
     });
   });
 
@@ -68,6 +78,9 @@ describe("route-platform.server", () => {
     process.env.INGREDIENT_PARSE_MODEL = "process-model";
     process.env.INGREDIENT_PARSE_TIMEOUT_MS = "7000";
     process.env.INGREDIENT_PARSE_MAX_RETRIES = "0";
+    process.env.POSTHOG_KEY = "process-ph";
+    process.env.POSTHOG_HOST = "https://process.posthog.example";
+    process.env.POSTHOG_DISABLED = "1";
 
     expect(getIngredientParserEnv({ cloudflare: { env: null } })).toEqual({
       OPENAI_API_KEY: "process-key",
@@ -75,6 +88,9 @@ describe("route-platform.server", () => {
       INGREDIENT_PARSE_MODEL: "process-model",
       INGREDIENT_PARSE_TIMEOUT_MS: "7000",
       INGREDIENT_PARSE_MAX_RETRIES: "0",
+      POSTHOG_KEY: "process-ph",
+      POSTHOG_HOST: "https://process.posthog.example",
+      POSTHOG_DISABLED: "1",
     });
   });
 

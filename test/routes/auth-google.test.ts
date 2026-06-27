@@ -205,7 +205,8 @@ describe("Google OAuth routes", () => {
     expect(mocks.verifyGoogleCallback).toHaveBeenCalledWith(
       { clientId: "google-client", clientSecret: "google-secret" },
       "https://spoonjoy.app/auth/google/callback",
-      { code: "", state: "state", codeVerifier: "verifier" }
+      { code: "", state: "state", codeVerifier: "verifier" },
+      expect.any(Function)
     );
   });
 

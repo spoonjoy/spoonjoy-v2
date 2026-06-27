@@ -479,4 +479,225 @@ describe("webauthn-route orchestration", () => {
       expect(new WebAuthnError("oops").status).toBe(400);
     });
   });
+
+  describe("telemetry on infra faults and verification failures", () => {
+    interface FakeTelemetry {
+      enabled: boolean;
+      captureException: ReturnType<typeof vi.fn>;
+      captureEvent: ReturnType<typeof vi.fn>;
+    }
+
+    function fakeTelemetry(): FakeTelemetry {
+      return { enabled: true, captureException: vi.fn(), captureEvent: vi.fn() };
+    }
+
+    /**
+     * Wrap the real db so a single nested model method rejects, simulating a D1
+     * read/write fault. Everything else delegates to the real client.
+     */
+    function dbFailingAt(
+      model: "user" | "userCredential",
+      method: string,
+      error: Error,
+    ): typeof db {
+      const real = db as unknown as Record<string, Record<string, unknown>>;
+      return new Proxy(db as object, {
+        get(target, prop: string) {
+          if (prop === model) {
+            return new Proxy(real[model], {
+              get(modelTarget, modelProp: string) {
+                if (modelProp === method) {
+                  return () => Promise.reject(error);
+                }
+                return (modelTarget as Record<string, unknown>)[modelProp];
+              },
+            });
+          }
+          return (target as Record<string, unknown>)[prop];
+        },
+      }) as typeof db;
+    }
+
+    it("captures an unexpected DB read fault in startRegistration (not the 404)", async () => {
+      const telemetry = fakeTelemetry();
+      const boom = new Error("D1 read failed");
+      const failing = dbFailingAt("user", "findUnique", boom);
+
+      await expect(startRegistration(failing, "user-1", config, telemetry)).rejects.toBe(boom);
+      expect(telemetry.captureException).toHaveBeenCalledWith(
+        boom,
+        { surface: "webauthn", phase: "register_options", distinct_id: "user-1" },
+      );
+    });
+
+    it("does NOT capture the expected 404 in startRegistration", async () => {
+      const telemetry = fakeTelemetry();
+      await expect(startRegistration(db, "missing", config, telemetry)).rejects.toMatchObject({ status: 404 });
+      expect(telemetry.captureException).not.toHaveBeenCalled();
+    });
+
+    it("captures an unexpected DB read fault in finishRegistration", async () => {
+      const telemetry = fakeTelemetry();
+      const boom = new Error("D1 read failed");
+      const failing = dbFailingAt("user", "findUnique", boom);
+
+      await expect(
+        finishRegistration(failing, "user-1", config, { id: "x" } as never, null, telemetry),
+      ).rejects.toBe(boom);
+      expect(telemetry.captureException).toHaveBeenCalledWith(
+        boom,
+        { surface: "webauthn", phase: "register_verify", distinct_id: "user-1" },
+      );
+    });
+
+    it("captures the persist fault after a verified registration", async () => {
+      const user = await db.user.create({ data: { ...createTestUser(), webAuthnChallenge: "reg_chal" } });
+      vi.mocked(verifyRegistration).mockResolvedValue({ verified: true } as never);
+      vi.mocked(credentialFromRegistration).mockReturnValue({
+        id: "persist_fail", publicKey: new Uint8Array([1]), counter: 0n, transports: null,
+      });
+      const telemetry = fakeTelemetry();
+      const boom = new Error("D1 upsert failed");
+      const failing = dbFailingAt("userCredential", "upsert", boom);
+
+      await expect(
+        finishRegistration(failing, user.id, config, { id: "persist_fail" } as never, null, telemetry),
+      ).rejects.toBe(boom);
+      expect(telemetry.captureException).toHaveBeenCalledWith(
+        boom,
+        { surface: "webauthn", phase: "register_verify", distinct_id: user.id },
+      );
+    });
+
+    it("emits a verify_threw event + captures when registration verification throws", async () => {
+      const user = await db.user.create({ data: { ...createTestUser(), webAuthnChallenge: "reg_chal" } });
+      const verifyError = new Error("bad attestation");
+      vi.mocked(verifyRegistration).mockRejectedValue(verifyError as never);
+      const telemetry = fakeTelemetry();
+
+      await expect(
+        finishRegistration(db, user.id, config, { id: "x" } as never, null, telemetry),
+      ).rejects.toMatchObject({ status: 400, message: "bad attestation" });
+      expect(telemetry.captureEvent).toHaveBeenCalledWith(
+        "spoonjoy.webauthn.failure",
+        user.id,
+        { surface: "webauthn", phase: "register_verify", outcome: "verify_threw" },
+      );
+      expect(telemetry.captureException).toHaveBeenCalledWith(
+        verifyError,
+        { surface: "webauthn", phase: "register_verify", distinct_id: user.id },
+      );
+    });
+
+    it("emits an unverified event when registration produces no credential", async () => {
+      const user = await db.user.create({ data: { ...createTestUser(), webAuthnChallenge: "reg_chal" } });
+      vi.mocked(verifyRegistration).mockResolvedValue({ verified: false } as never);
+      vi.mocked(credentialFromRegistration).mockReturnValue(null);
+      const telemetry = fakeTelemetry();
+
+      await expect(
+        finishRegistration(db, user.id, config, { id: "x" } as never, null, telemetry),
+      ).rejects.toMatchObject({ status: 400, message: "Registration could not be verified" });
+      expect(telemetry.captureEvent).toHaveBeenCalledWith(
+        "spoonjoy.webauthn.failure",
+        user.id,
+        { surface: "webauthn", phase: "register_verify", outcome: "unverified" },
+      );
+    });
+
+    it("captures an unexpected DB read fault in startAuthentication keyed by email", async () => {
+      const telemetry = fakeTelemetry();
+      const boom = new Error("D1 read failed");
+      const failing = dbFailingAt("user", "findUnique", boom);
+
+      await expect(startAuthentication(failing, "who@example.com", config, telemetry)).rejects.toBe(boom);
+      expect(telemetry.captureException).toHaveBeenCalledWith(
+        boom,
+        { surface: "webauthn", phase: "authenticate_options", distinct_id: "who@example.com" },
+      );
+    });
+
+    it("captures an unexpected DB read fault in finishAuthentication keyed by email", async () => {
+      const telemetry = fakeTelemetry();
+      const boom = new Error("D1 read failed");
+      const failing = dbFailingAt("user", "findUnique", boom);
+
+      await expect(
+        finishAuthentication(failing, "who@example.com", config, { id: "x" } as never, telemetry),
+      ).rejects.toBe(boom);
+      expect(telemetry.captureException).toHaveBeenCalledWith(
+        boom,
+        { surface: "webauthn", phase: "authenticate_verify", distinct_id: "who@example.com" },
+      );
+    });
+
+    it("emits a verify_threw event + captures when authentication verification throws", async () => {
+      const user = await db.user.create({
+        data: { ...createTestUser(), email: "throw-auth@example.com", webAuthnChallenge: "auth_chal" },
+      });
+      await db.userCredential.create({ data: { id: "ac1", userId: user.id, publicKey: new Uint8Array([1]), counter: 2n } });
+      const verifyError = new Error("signature counter regressed");
+      vi.mocked(verifyAuthentication).mockRejectedValue(verifyError as never);
+      const telemetry = fakeTelemetry();
+
+      await expect(
+        finishAuthentication(db, user.email, config, { id: "ac1" } as never, telemetry),
+      ).rejects.toMatchObject({ status: 400, message: "signature counter regressed" });
+      expect(telemetry.captureEvent).toHaveBeenCalledWith(
+        "spoonjoy.webauthn.failure",
+        user.id,
+        { surface: "webauthn", phase: "authenticate_verify", outcome: "verify_threw" },
+      );
+      expect(telemetry.captureException).toHaveBeenCalledWith(
+        verifyError,
+        { surface: "webauthn", phase: "authenticate_verify", distinct_id: user.id },
+      );
+    });
+
+    it("emits an unverified event when authentication reports not verified", async () => {
+      const user = await db.user.create({
+        data: { ...createTestUser(), email: "unverified-auth@example.com", webAuthnChallenge: "auth_chal" },
+      });
+      await db.userCredential.create({ data: { id: "ac2", userId: user.id, publicKey: new Uint8Array([1]), counter: 2n } });
+      vi.mocked(verifyAuthentication).mockResolvedValue({ verified: false } as never);
+      const telemetry = fakeTelemetry();
+
+      await expect(
+        finishAuthentication(db, user.email, config, { id: "ac2" } as never, telemetry),
+      ).rejects.toMatchObject({ status: 400, message: "Authentication could not be verified" });
+      expect(telemetry.captureEvent).toHaveBeenCalledWith(
+        "spoonjoy.webauthn.failure",
+        user.id,
+        { surface: "webauthn", phase: "authenticate_verify", outcome: "unverified" },
+      );
+    });
+
+    it("captures the counter-rotation fault after a verified authentication", async () => {
+      const user = await db.user.create({
+        data: { ...createTestUser(), email: "rotate-fail@example.com", webAuthnChallenge: "auth_chal" },
+      });
+      await db.userCredential.create({ data: { id: "ac3", userId: user.id, publicKey: new Uint8Array([1]), counter: 2n } });
+      vi.mocked(verifyAuthentication).mockResolvedValue({
+        verified: true, authenticationInfo: { newCounter: 7 },
+      } as never);
+      const telemetry = fakeTelemetry();
+      const boom = new Error("D1 counter update failed");
+      const failing = dbFailingAt("userCredential", "update", boom);
+
+      await expect(
+        finishAuthentication(failing, user.email, config, { id: "ac3" } as never, telemetry),
+      ).rejects.toBe(boom);
+      expect(telemetry.captureException).toHaveBeenCalledWith(
+        boom,
+        { surface: "webauthn", phase: "authenticate_verify", distinct_id: user.id },
+      );
+    });
+
+    it("does nothing when no telemetry sink is provided (back-compat)", async () => {
+      const boom = new Error("D1 read failed");
+      const failing = dbFailingAt("user", "findUnique", boom);
+      // No telemetry arg: the helper must still rethrow, just without capturing.
+      await expect(startAuthentication(failing, "who@example.com", config)).rejects.toBe(boom);
+    });
+  });
 });

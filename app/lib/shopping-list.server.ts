@@ -151,7 +151,9 @@ export async function handleShoppingListAction({ request, context }: ShoppingLis
 
       if (parserEnv.OPENAI_API_KEY) {
         try {
-          const parsedIngredients = await parseIngredients(ingredientText, parserEnv);
+          const parsedIngredients = await parseIngredients(ingredientText, parserEnv, {
+            distinctId: userId,
+          });
           const firstParsed = parsedIngredients[0];
 
           if (parsedIngredients.length === 1 && firstParsed) {

@@ -8,6 +8,7 @@ import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
 import { formatServingsLabel } from "~/lib/quantity";
 import { useState, useRef } from "react";
 import { absoluteUrlFromRequest, cookbookOgPath } from "~/lib/og-image.server";
+import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 
 interface CloudflareContextLike {
   cloudflare?: {
@@ -170,11 +171,12 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     }),
   };
 
+  const publicOrigin = resolveIssuerOrigin(request.url, context.cloudflare?.env?.SPOONJOY_BASE_URL);
   return {
     cookbook: cookbookWithCovers,
     coverImageUrls: cookbookWithCovers.recipes.map((item) => item.recipe.coverImageUrl),
-    canonicalUrl: absoluteUrlFromRequest(request.url, `/cookbooks/${id}`),
-    ogImageUrl: absoluteUrlFromRequest(request.url, cookbookOgPath(id)),
+    canonicalUrl: absoluteUrlFromRequest(publicOrigin, `/cookbooks/${id}`),
+    ogImageUrl: absoluteUrlFromRequest(publicOrigin, cookbookOgPath(id)),
     isOwner,
     availableRecipes,
   };
