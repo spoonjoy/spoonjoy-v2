@@ -10,6 +10,7 @@ import {
 } from "~/lib/api-auth.server";
 import {
   captureEvent,
+  captureException,
   requestContentBytes,
   resolvePostHogServerConfig,
   safeHeaderHost,
@@ -1755,6 +1756,7 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
     }
 
     logApiV1InternalError(args, requestId, error);
+    captureApiV1InternalException(args, error);
     const internalError = normalizeApiV1InternalError(error);
     const response = apiV1ErrorResponse(requestId, internalError);
     return observeApiV1Response(args, {
@@ -1782,4 +1784,30 @@ function logApiV1InternalError(args: ApiV1RouteArgs, requestId: string, error: u
       ? { name: error.name, message: error.message, stack: error.stack }
       : String(error),
   });
+}
+
+/**
+ * Capture the stack for an unexpected (non-`ApiV1Error`) internal failure.
+ * The lifecycle `spoonjoy.api_v1.request` event records only `error_code:
+ * "internal_error"` with no stack, so without this an infra/bug failure on a
+ * v1 route is invisible in exception telemetry. Wrapped in `ctx.waitUntil` so
+ * capture never blocks or breaks the 500 response.
+ */
+function captureApiV1InternalException(args: ApiV1RouteArgs, error: unknown): void {
+  const cloudflare = apiV1CloudflareFor(args);
+  const env = cloudflare?.env;
+  const waitUntil = apiV1WaitUntilFor(args);
+  if (!env || !waitUntil) return;
+
+  const postHogConfig = resolvePostHogServerConfig(env);
+  if (!postHogConfig.enabled) return;
+
+  waitUntil(
+    captureException(postHogConfig, {
+      error,
+      distinctId: "server",
+      route: new URL(args.request.url).pathname,
+      method: args.request.method,
+    }),
+  );
 }

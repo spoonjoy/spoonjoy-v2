@@ -939,6 +939,90 @@ describe("Recipes $id Edit Route", () => {
       }
     });
 
+    it("captures the update failure and orphan-cleanup failure when PostHog is configured", async () => {
+      const phCalls: Array<Record<string, unknown>> = [];
+      const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+        phCalls.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return new Response(null, { status: 200 });
+      });
+      const mockR2Bucket = {
+        put: vi.fn().mockResolvedValue(undefined),
+        // Cleanup delete throws → captured, must not escape the action.
+        delete: vi.fn().mockRejectedValue(new Error("R2 delete unavailable")),
+      };
+      const scheduled: Promise<unknown>[] = [];
+      const waitUntil = vi.fn((p: Promise<unknown>) => {
+        scheduled.push(p);
+      });
+      const originalUpdate = db.recipe.update;
+      // Fail the update AFTER the replacement image has landed in R2 so the
+      // orphan-cleanup path runs.
+      db.recipe.update = vi.fn().mockRejectedValue(new Error("Database connection failed"));
+
+      try {
+        const formData = new UndiciFormData();
+        formData.append("title", "Telemetry Update Failure");
+        formData.append("image", validImageFile("replacement.png", "image/png"));
+        const request = await createMultipartRequest(formData, testUserId);
+
+        const response = await action({
+          request,
+          context: {
+            cloudflare: {
+              env: { PHOTOS: mockR2Bucket, POSTHOG_KEY: "ph_test" },
+              ctx: { waitUntil },
+            },
+          },
+          params: { id: recipeId },
+        } as any);
+
+        const { status } = extractResponseData(response);
+        expect(status).toBe(500);
+        expect(mockR2Bucket.delete).toHaveBeenCalled();
+        await Promise.all(scheduled);
+
+        const exceptionMessages = phCalls
+          .filter((c) => c.event === "$exception")
+          .map((c) => (c.properties as Record<string, unknown>).$exception_message);
+        expect(exceptionMessages).toContain("Database connection failed");
+        expect(exceptionMessages).toContain("R2 delete unavailable");
+        expect(phCalls.some((c) => c.event === "spoonjoy.storage.orphan_cleanup_failed")).toBe(true);
+      } finally {
+        db.recipe.update = originalUpdate;
+        fetchMock.mockRestore();
+      }
+    });
+
+    it("captures the update failure fire-and-forget when no waitUntil is available", async () => {
+      const phCalls: Array<Record<string, unknown>> = [];
+      const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+        phCalls.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return new Response(null, { status: 200 });
+      });
+      const originalUpdate = db.recipe.update;
+      db.recipe.update = vi.fn().mockRejectedValue(new Error("Database connection failed"));
+
+      try {
+        const request = await createFormRequest({ title: "No WaitUntil Update" }, testUserId);
+
+        // POSTHOG_KEY set but no ctx.waitUntil → fire-and-forget capture path
+        // (no uploaded image, so cleanup is skipped).
+        const response = await action({
+          request,
+          context: { cloudflare: { env: { POSTHOG_KEY: "ph_test" } } },
+          params: { id: recipeId },
+        } as any);
+
+        const { status } = extractResponseData(response);
+        expect(status).toBe(500);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(phCalls.some((c) => c.event === "$exception")).toBe(true);
+      } finally {
+        db.recipe.update = originalUpdate;
+        fetchMock.mockRestore();
+      }
+    });
+
     it("should set an explicit no-cover state when clearImage is true", async () => {
       // First create a cover for the recipe
       const oldCover = await db.recipeCover.create({

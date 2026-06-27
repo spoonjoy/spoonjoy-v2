@@ -3,9 +3,11 @@ import { Request as UndiciRequest } from "undici";
 import { faker } from "@faker-js/faker";
 import { action, loader } from "~/routes/api.$";
 import { createApiCredential } from "~/lib/api-auth.server";
-import { captureEvent } from "~/lib/analytics-server";
+import { captureEvent, captureException } from "~/lib/analytics-server";
 import { getLocalDb } from "~/lib/db.server";
 import { sessionStorage } from "~/lib/session.server";
+import * as recipeImport from "~/lib/recipe-import.server";
+import { ImportRecipeError } from "~/lib/recipe-import.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { getOrCreateIngredientRef } from "../utils";
 
@@ -742,6 +744,132 @@ describe("Spoonjoy REST API route", () => {
       errorCode: "rate_limited",
       rateLimitScope: "token",
       forbidden: [token, malformedSplat],
+    });
+  });
+
+  describe("import_recipe_from_url failures", () => {
+    async function importToolCall(
+      requestId: string,
+      token: string,
+      env: Record<string, unknown> | null = { POSTHOG_KEY: "ph_test" },
+    ) {
+      return action(routeArgs(new UndiciRequest("http://localhost/api/tools/import_recipe_from_url", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          "X-Request-Id": requestId,
+        },
+        body: JSON.stringify({ url: "https://recipes.example/pasta" }),
+      }), "tools/import_recipe_from_url", env));
+    }
+
+    it("surfaces a server-side import failure at its real status and captures it with import_code", async () => {
+      const user = await db.user.create({ data: { email: uniqueEmail(), username: faker.internet.username() } });
+      const { token } = await createApiCredential(db, user.id, "Import token", { scopes: ["kitchen:write"] });
+      vi.mocked(captureEvent).mockClear();
+      vi.mocked(captureException).mockClear();
+      const importSpy = vi.spyOn(recipeImport, "importRecipeFromUrl")
+        .mockRejectedValueOnce(new ImportRecipeError("llm-failed", 502, "LLM extraction failed"));
+
+      try {
+        const response = await importToolCall("req_import_llm_failed", token);
+        expect(response.status).toBe(502);
+        await expect(readJson(response)).resolves.toMatchObject({
+          ok: false,
+          error: { status: 502 },
+        });
+        // Lifecycle event records the machine code instead of internal_error.
+        expectLegacyEvent({
+          requestId: "req_import_llm_failed",
+          operation: "import_recipe_from_url",
+          status: 502,
+          authMode: "bearer",
+          errorCode: "llm-failed",
+          forbidden: [token],
+        });
+        // The stack is preserved, tagged with the import_code.
+        expect(captureException).toHaveBeenCalledTimes(1);
+        const [, captureInput] = vi.mocked(captureException).mock.calls[0];
+        expect(captureInput).toMatchObject({
+          distinctId: "server",
+          route: "/api/tools/import_recipe_from_url",
+          method: "POST",
+          extras: { import_code: "llm-failed" },
+        });
+      } finally {
+        importSpy.mockRestore();
+      }
+    });
+
+    it("surfaces an expected import failure at its status without capturing an exception", async () => {
+      const user = await db.user.create({ data: { email: uniqueEmail(), username: faker.internet.username() } });
+      const { token } = await createApiCredential(db, user.id, "Import token", { scopes: ["kitchen:write"] });
+      vi.mocked(captureEvent).mockClear();
+      vi.mocked(captureException).mockClear();
+      // `video-unavailable` carries a 502 status but is an expected upstream 4xx
+      // (private/deleted video) — it must NOT be captured as an exception.
+      const importSpy = vi.spyOn(recipeImport, "importRecipeFromUrl")
+        .mockRejectedValueOnce(new ImportRecipeError("video-unavailable", 502, "video metadata unavailable"));
+
+      try {
+        const response = await importToolCall("req_import_video_unavailable", token);
+        expect(response.status).toBe(502);
+        expectLegacyEvent({
+          requestId: "req_import_video_unavailable",
+          operation: "import_recipe_from_url",
+          status: 502,
+          authMode: "bearer",
+          errorCode: "video-unavailable",
+          forbidden: [token],
+        });
+        expect(captureException).not.toHaveBeenCalled();
+      } finally {
+        importSpy.mockRestore();
+      }
+    });
+
+    it("surfaces an expected client import failure (bad-url) at its 4xx status without capturing", async () => {
+      const user = await db.user.create({ data: { email: uniqueEmail(), username: faker.internet.username() } });
+      const { token } = await createApiCredential(db, user.id, "Import token", { scopes: ["kitchen:write"] });
+      vi.mocked(captureEvent).mockClear();
+      vi.mocked(captureException).mockClear();
+      const importSpy = vi.spyOn(recipeImport, "importRecipeFromUrl")
+        .mockRejectedValueOnce(new ImportRecipeError("bad-url", 400, "Cannot parse URL"));
+
+      try {
+        const response = await importToolCall("req_import_bad_url", token);
+        expect(response.status).toBe(400);
+        expectLegacyEvent({
+          requestId: "req_import_bad_url",
+          operation: "import_recipe_from_url",
+          status: 400,
+          authMode: "bearer",
+          errorCode: "bad-url",
+          forbidden: [token],
+        });
+        expect(captureException).not.toHaveBeenCalled();
+      } finally {
+        importSpy.mockRestore();
+      }
+    });
+
+    it("still surfaces the import status when PostHog is unconfigured, without capturing", async () => {
+      const user = await db.user.create({ data: { email: uniqueEmail(), username: faker.internet.username() } });
+      const { token } = await createApiCredential(db, user.id, "Import token", { scopes: ["kitchen:write"] });
+      vi.mocked(captureException).mockClear();
+      const importSpy = vi.spyOn(recipeImport, "importRecipeFromUrl")
+        .mockRejectedValueOnce(new ImportRecipeError("llm-failed", 502, "LLM extraction failed"));
+
+      try {
+        // A capturable code, but no POSTHOG_KEY → resolvePostHogServerConfig is
+        // disabled, so capture is skipped while the status still passes through.
+        const response = await importToolCall("req_import_no_posthog", token, {});
+        expect(response.status).toBe(502);
+        expect(captureException).not.toHaveBeenCalled();
+      } finally {
+        importSpy.mockRestore();
+      }
     });
   });
 });

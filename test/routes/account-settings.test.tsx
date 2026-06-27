@@ -2328,6 +2328,74 @@ describe("Account Settings Route", () => {
 
         expect(result.success).toBe(true);
       });
+
+      it("captures the avatar R2 delete failure and still removes the photo", async () => {
+        // A served-photo key so deleteStoredImage actually hits the bucket.
+        await db.user.update({
+          where: { id: testUserId },
+          data: { photoUrl: `/photos/profiles/${testUserId}/avatar.png` },
+        });
+
+        const phCalls: Array<Record<string, unknown>> = [];
+        const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+          phCalls.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+          return new Response(null, { status: 200 });
+        });
+        const mockR2Bucket = {
+          delete: vi.fn().mockRejectedValue(new Error("R2 avatar delete unavailable")),
+        };
+        const scheduled: Promise<unknown>[] = [];
+        const waitUntil = vi.fn((p: Promise<unknown>) => {
+          scheduled.push(p);
+        });
+
+        const session = await sessionStorage.getSession();
+        session.set("userId", testUserId);
+        const setCookieHeader = await sessionStorage.commitSession(session);
+        const cookieValue = setCookieHeader.split(";")[0];
+
+        const formData = new FormData();
+        formData.append("intent", "removePhoto");
+
+        const headers = new Headers();
+        headers.set("Cookie", cookieValue);
+        headers.set("Content-Type", "application/x-www-form-urlencoded");
+
+        const request = new UndiciRequest("http://localhost:3000/account/settings", {
+          method: "POST",
+          headers,
+          body: new URLSearchParams(formData as any).toString(),
+        });
+
+        try {
+          const result = await action({
+            request,
+            context: {
+              cloudflare: {
+                env: { PHOTOS: mockR2Bucket, POSTHOG_KEY: "ph_test" },
+                ctx: { waitUntil },
+              },
+            },
+            params: {},
+          } as any);
+
+          // R2 delete threw, but the action still succeeds and clears the DB.
+          expect(result.success).toBe(true);
+          expect(mockR2Bucket.delete).toHaveBeenCalledWith(`profiles/${testUserId}/avatar.png`);
+          const updatedUser = await db.user.findUnique({ where: { id: testUserId } });
+          expect(updatedUser?.photoUrl).toBeNull();
+
+          await Promise.all(scheduled);
+          expect(phCalls.some((c) => c.event === "spoonjoy.storage.avatar_delete_failed")).toBe(true);
+          const exceptionCall = phCalls.find((c) => c.event === "$exception");
+          expect((exceptionCall?.properties as Record<string, unknown>)?.$exception_message).toBe(
+            "R2 avatar delete unavailable",
+          );
+          expect(exceptionCall?.distinct_id).toBe(testUserId);
+        } finally {
+          fetchMock.mockRestore();
+        }
+      });
     });
 
     describe("action - photo change (replace existing)", () => {

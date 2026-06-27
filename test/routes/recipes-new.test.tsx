@@ -483,6 +483,35 @@ describe("Recipes New Route", () => {
       }
     });
 
+    it("captures the create failure fire-and-forget when no waitUntil is available", async () => {
+      const phCalls: Array<Record<string, unknown>> = [];
+      const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+        phCalls.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return new Response(null, { status: 200 });
+      });
+      const originalCreate = db.recipe.create;
+      db.recipe.create = vi.fn().mockRejectedValue(new Error("Database connection failed")) as any;
+
+      try {
+        const request = await createFormRequest({ title: "No WaitUntil Recipe" }, testUserId);
+
+        // POSTHOG_KEY set but no ctx.waitUntil → fire-and-forget capture path.
+        const response = await action({
+          request,
+          context: { cloudflare: { env: { POSTHOG_KEY: "ph_test" } } },
+          params: {},
+        } as any);
+
+        const { status } = extractResponseData(response);
+        expect(status).toBe(500);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(phCalls.some((c) => c.event === "$exception")).toBe(true);
+      } finally {
+        db.recipe.create = originalCreate;
+        fetchMock.mockRestore();
+      }
+    });
+
     it("should return validation error for invalid image type", async () => {
       const formData = new UndiciFormData();
       formData.append("title", "Valid Title");
@@ -824,6 +853,58 @@ describe("Recipes New Route", () => {
         expect(mockR2Bucket.delete).toHaveBeenCalledWith(uploadedKey);
       } finally {
         db.recipe.create = originalCreate;
+      }
+    });
+
+    it("captures the create failure and orphan-cleanup failure when PostHog is configured", async () => {
+      const phCalls: Array<Record<string, unknown>> = [];
+      const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+        phCalls.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return new Response(null, { status: 200 });
+      });
+      const mockR2Bucket = {
+        put: vi.fn().mockResolvedValue(undefined),
+        // Cleanup delete itself throws → must be captured, not escape the action.
+        delete: vi.fn().mockRejectedValue(new Error("R2 delete unavailable")),
+      };
+      const scheduled: Promise<unknown>[] = [];
+      const waitUntil = vi.fn((promise: Promise<unknown>) => {
+        scheduled.push(promise);
+      });
+      const originalCreate = db.recipe.create;
+      db.recipe.create = vi.fn().mockRejectedValue(new Error("Database connection failed")) as any;
+
+      try {
+        const formData = new UndiciFormData();
+        formData.append("title", "Telemetry Failure Recipe");
+        formData.append("image", validImageFile("recipe.webp", "image/webp"));
+        const request = await createMultipartRequest(formData, testUserId);
+
+        const response = await action({
+          request,
+          context: {
+            cloudflare: {
+              env: { PHOTOS: mockR2Bucket, POSTHOG_KEY: "ph_test" },
+              ctx: { waitUntil },
+            },
+          },
+          params: {},
+        } as any);
+
+        const { status } = extractResponseData(response);
+        expect(status).toBe(500);
+        expect(mockR2Bucket.delete).toHaveBeenCalled();
+        await Promise.all(scheduled);
+
+        const exceptionMessages = phCalls
+          .filter((c) => c.event === "$exception")
+          .map((c) => (c.properties as Record<string, unknown>).$exception_message);
+        expect(exceptionMessages).toContain("Database connection failed");
+        expect(exceptionMessages).toContain("R2 delete unavailable");
+        expect(phCalls.some((c) => c.event === "spoonjoy.storage.orphan_cleanup_failed")).toBe(true);
+      } finally {
+        db.recipe.create = originalCreate;
+        fetchMock.mockRestore();
       }
     });
 

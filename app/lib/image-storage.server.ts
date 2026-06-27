@@ -1,4 +1,9 @@
 import { FOOD_IMAGE_TYPES, IMAGE_MAX_FILE_SIZE } from "~/lib/recipe-image";
+import {
+  captureEvent,
+  captureException,
+  type PostHogServerConfig,
+} from "~/lib/analytics-server";
 
 export { IMAGE_MAX_FILE_SIZE };
 export const RECIPE_IMAGE_TYPES = FOOD_IMAGE_TYPES;
@@ -348,4 +353,55 @@ export async function deleteStoredImage({ bucket, imageUrl }: DeleteStoredImageO
 
   await bucket.delete(key);
   return true;
+}
+
+interface DeleteStoredImageWithCaptureOptions extends DeleteStoredImageOptions {
+  /** Controlled `spoonjoy.storage.*` event name for a delete failure. */
+  event: `spoonjoy.storage.${string}`;
+  /** Resolved server PostHog config; capture is a no-op when disabled. */
+  postHogConfig: PostHogServerConfig;
+  /** Workers `ctx.waitUntil`, so capture outlives the response. Optional. */
+  waitUntil?: (promise: Promise<unknown>) => void;
+  /** Distinct id for the event/exception (a user id when known). */
+  distinctId?: string;
+  /** Extra controlled, privacy-safe metadata to attach to the event. */
+  extras?: Record<string, unknown>;
+}
+
+/**
+ * Delete an R2 object and, if the delete throws, record it instead of letting
+ * the error escape. R2 delete failures leave an orphaned object behind; on a
+ * cleanup path (recipe create/edit rollback, avatar removal) a thrown delete
+ * also masks the real error that triggered the cleanup. We capture the
+ * exception plus a controlled `spoonjoy.storage.*` event, then swallow — the
+ * delete is best-effort and must not break the user's request.
+ *
+ * Returns the `deleteStoredImage` result on success, or `false` if the delete
+ * threw (the failure was captured).
+ */
+export async function deleteStoredImageWithCapture({
+  bucket,
+  imageUrl,
+  event,
+  postHogConfig,
+  waitUntil,
+  distinctId = "server",
+  extras,
+}: DeleteStoredImageWithCaptureOptions): Promise<boolean> {
+  try {
+    return await deleteStoredImage({ bucket, imageUrl });
+  } catch (error) {
+    if (postHogConfig.enabled) {
+      const run = (promise: Promise<unknown>) => {
+        if (waitUntil) {
+          waitUntil(promise);
+        } else {
+          void promise;
+        }
+      };
+      run(captureException(postHogConfig, { error, distinctId, extras }));
+      run(captureEvent(postHogConfig, { event, distinctId, properties: extras }));
+    }
+    return false;
+  }
 }

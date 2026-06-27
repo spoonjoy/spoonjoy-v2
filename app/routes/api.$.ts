@@ -5,6 +5,7 @@ import { getRequestDb } from "~/lib/route-platform.server";
 import { callSpoonjoyApiOperation, listSpoonjoyApiOperations } from "~/lib/spoonjoy-api.server";
 import { buildSpoonjoyApiContext, resolveApiPrincipal } from "~/lib/spoonjoy-api-request.server";
 import { RequestBodyTooLargeError, readLimitedTextBody } from "~/lib/request-body-limit.server";
+import { ImportRecipeError, type ImportRecipeCode } from "~/lib/recipe-import.server";
 import {
   captureEvent,
   captureException,
@@ -34,6 +35,23 @@ const SECRET_BEARING_OPERATIONS = new Set([
 
 const NUMERIC_QUERY_KEYS = new Set(["duration", "limit", "quantity"]);
 const BOOLEAN_QUERY_KEYS = new Set(["checked"]);
+
+// Import error codes that represent an expected client-side outcome (bad URL,
+// quota, blocked host, unsupported page, deleted video, …). These are surfaced
+// at their proper status but NOT captured as exceptions — only genuine
+// upstream/infra failures (fetch/oembed/LLM 5xx, timeouts) reach PostHog. Note
+// `video-unavailable` carries a 502 status but is an expected upstream 4xx, so
+// it is skip-listed by code rather than by status.
+const EXPECTED_IMPORT_ERROR_CODES = new Set<ImportRecipeCode>([
+  "bad-url",
+  "fetch-blocked",
+  "fetch-too-large",
+  "not-html",
+  "no-content",
+  "rate-limited",
+  "title-conflict",
+  "video-unavailable",
+]);
 const LEGACY_SAFE_REQUEST_ID_RE = /^req_[a-z0-9][a-z0-9_-]{0,63}$/i;
 const LEGACY_UUID_REQUEST_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -368,6 +386,39 @@ async function handleApiRequest({ request, context, params }: Route.LoaderArgs |
         operation,
         principal,
         errorCode: "request_too_large",
+      });
+    }
+    if (error instanceof ImportRecipeError) {
+      // Surface the import failure at its real status with the machine code, so
+      // clients (and telemetry) see e.g. `fetch-timeout`/`llm-failed` instead of
+      // a flattened 500/`internal_error`. Capture the stack only for genuine
+      // upstream/infra failures — expected client outcomes stay quiet.
+      if (waitUntil && cfEnv && !EXPECTED_IMPORT_ERROR_CODES.has(error.code)) {
+        const phConfig = resolvePostHogServerConfig(cfEnv);
+        if (phConfig.enabled) {
+          waitUntil(
+            captureException(phConfig, {
+              error,
+              distinctId: "server",
+              route: new URL(request.url).pathname,
+              method: request.method,
+              extras: { import_code: error.code },
+            }),
+          );
+        }
+      }
+      const response = apiJson(
+        { ok: false, error: { message: error.message, status: error.status } },
+        error.status,
+      );
+      return observeLegacyApiResponse({
+        request,
+        context,
+        response,
+        startedAt,
+        operation,
+        principal,
+        errorCode: error.code,
       });
     }
     if (error instanceof Error && /not found/i.test(error.message)) {

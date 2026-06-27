@@ -1,7 +1,12 @@
 import { isbot } from "isbot";
 import { renderToReadableStream } from "react-dom/server";
-import type { AppLoadContext, EntryContext } from "react-router";
-import { ServerRouter } from "react-router";
+import type {
+  ActionFunctionArgs,
+  AppLoadContext,
+  EntryContext,
+  LoaderFunctionArgs,
+} from "react-router";
+import { isRouteErrorResponse, ServerRouter } from "react-router";
 import {
   captureException,
   resolvePostHogServerConfig,
@@ -57,4 +62,59 @@ export default async function handleRequest(
     headers: responseHeaders,
     status: responseStatusCode,
   });
+}
+
+/**
+ * React Router calls `handleError` for every error raised while handling a
+ * request — crucially including loader/action throws that get caught and
+ * rendered as an error boundary. The render-stream `onError` above only fires
+ * for errors thrown during rendering, so without this export every HTML
+ * loader/action failure (search/FTS reindex, D1 reads, account-settings
+ * actions, …) produced an error page with zero telemetry.
+ *
+ * Expected client outcomes are skipped: thrown `Response`s (redirects,
+ * `data(..., { status })`) never reach here, and bare route error responses
+ * (`throw new Response(...)`, 404s) are filtered out — React Router only
+ * forwards `ErrorResponse`s that carry an underlying thrown error. We guard
+ * against both again so an expected 4xx is never recorded as an exception.
+ *
+ * Capture is wrapped in `ctx.waitUntil` so it never blocks or breaks the
+ * error response.
+ */
+export function handleError(
+  error: unknown,
+  {
+    request,
+    context,
+  }: {
+    request: LoaderFunctionArgs["request"] | ActionFunctionArgs["request"];
+    context: LoaderFunctionArgs["context"] | ActionFunctionArgs["context"];
+  },
+): void {
+  // Expected client-visible outcomes are not exceptions.
+  if (error instanceof Response) return;
+  if (isRouteErrorResponse(error)) return;
+  // Aborted requests (client navigated away) are not server failures.
+  if (request.signal.aborted) return;
+
+  const loadContext = context as AppLoadContext;
+  const env = loadContext?.cloudflare?.env;
+  const ctx = loadContext?.cloudflare?.ctx;
+  if (!env) return;
+
+  const postHogConfig = resolvePostHogServerConfig(env);
+  if (!postHogConfig.enabled) return;
+
+  const capture = captureException(postHogConfig, {
+    error,
+    distinctId: "server",
+    route: new URL(request.url).pathname,
+    method: request.method,
+  });
+  if (ctx) {
+    ctx.waitUntil(capture);
+  } else {
+    // Fire-and-forget without waitUntil; never throws by design.
+    void capture;
+  }
 }
