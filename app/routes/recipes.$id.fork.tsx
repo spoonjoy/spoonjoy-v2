@@ -8,16 +8,22 @@ import {
 } from "~/lib/recipe-fork.server";
 import { notifyForkOfMyRecipe } from "~/lib/notification-triggers.server";
 import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
+import {
+  resolvePostHogServerConfig,
+  type PostHogServerConfig,
+  type PostHogServerEnv,
+} from "~/lib/analytics-server";
 
 interface CloudflareContextLike {
   cloudflare?: {
-    env?: VapidEnv | null;
+    env?: (VapidEnv & PostHogServerEnv) | null;
     ctx?: { waitUntil?: (promise: Promise<unknown>) => void };
   };
 }
 
 function getCloudflareCtx(context: AppLoadContext): {
   vapidEnv: VapidEnv;
+  postHogConfig: PostHogServerConfig;
   waitUntil?: (promise: Promise<unknown>) => void;
 } {
   const cf = (context as unknown as CloudflareContextLike).cloudflare;
@@ -28,6 +34,7 @@ function getCloudflareCtx(context: AppLoadContext): {
       VAPID_PRIVATE_KEY: envSource?.VAPID_PRIVATE_KEY,
       VAPID_SUBJECT: envSource?.VAPID_SUBJECT,
     },
+    postHogConfig: resolvePostHogServerConfig(envSource ?? {}),
     waitUntil: cf?.ctx?.waitUntil ? cf.ctx.waitUntil.bind(cf.ctx) : undefined,
   };
 }
@@ -45,7 +52,7 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
 
     // Fire-and-forget: notify the source chef when someone else forked.
     try {
-      const { vapidEnv, waitUntil } = getCloudflareCtx(context);
+      const { vapidEnv, postHogConfig, waitUntil } = getCloudflareCtx(context);
       const vapid = getVapidConfig(vapidEnv);
       const notifyTask = notifyForkOfMyRecipe(
         db,
@@ -56,7 +63,7 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
           sourceChefId: result.attribution.sourceChef.id,
           appliedTitle: result.appliedTitle,
         },
-        { vapid, waitUntil },
+        { vapid, waitUntil, postHogConfig },
       );
       if (waitUntil) {
         waitUntil(notifyTask);

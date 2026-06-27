@@ -30,7 +30,10 @@ import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
 import { absoluteUrlFromRequest, recipeOgPath } from "~/lib/og-image.server";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 import { buildRecipeJsonLd } from "~/lib/recipe-structured-data.server";
-import type { PostHogServerEnv } from "~/lib/analytics-server";
+import {
+  resolvePostHogServerConfig,
+  type PostHogServerEnv,
+} from "~/lib/analytics-server";
 import type { ImageGenEnv } from "~/lib/image-gen.server";
 import {
   decideSpoonCoverCreation,
@@ -386,6 +389,10 @@ async function handleCreateSpoon(
   }
 
   const { bucket, env, vapidEnv, waitUntil } = getCloudflareCtx(context);
+  // Resolve once: threaded into both the spoon notify and the origin-cook
+  // fan-out so silent dispatch/push failures self-capture (no-op when
+  // POSTHOG_KEY is absent).
+  const postHogConfig = resolvePostHogServerConfig(env ?? {});
 
   const result = await createSpoon(
     database,
@@ -399,7 +406,7 @@ async function handleCreateSpoon(
     const notifyTask = notifySpoonOnMyRecipe(
       database,
       { recipeId, spoonerId: userId },
-      { vapid, waitUntil },
+      { vapid, waitUntil, postHogConfig },
     );
     if (waitUntil) {
       waitUntil(notifyTask);
@@ -493,7 +500,7 @@ async function handleCreateSpoon(
           recipeTitle: recipeMeta.title,
           spoonerUsername: spooner.username,
         },
-        { vapid, waitUntil },
+        { vapid, waitUntil, postHogConfig },
       );
       if (waitUntil) {
         waitUntil(fanoutTask);
