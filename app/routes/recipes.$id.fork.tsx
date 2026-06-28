@@ -9,6 +9,7 @@ import {
 import { notifyForkOfMyRecipe } from "~/lib/notification-triggers.server";
 import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
 import {
+  captureException,
   resolvePostHogServerConfig,
   type PostHogServerConfig,
   type PostHogServerEnv,
@@ -81,6 +82,25 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
     }
     if (err instanceof ForkTitleExhaustedError) {
       throw new Response("Conflict", { status: 409 });
+    }
+    // Source-missing (404) and title-exhausted (409) are expected client
+    // outcomes handled above. Anything else is an unexpected fork failure
+    // (DB/infra fault) that rethrows into the error boundary as an opaque 500 —
+    // capture it (fire-and-forget, no-op without PostHog) before it goes silent.
+    const { postHogConfig, waitUntil } = getCloudflareCtx(context);
+    if (postHogConfig.enabled) {
+      const capture = captureException(postHogConfig, {
+        error: err,
+        distinctId: viewerId,
+        route: new URL(request.url).pathname,
+        method: request.method,
+        extras: { action: "fork_recipe", source_recipe_id: sourceRecipeId },
+      });
+      if (waitUntil) {
+        waitUntil(capture);
+      } else {
+        void capture;
+      }
     }
     throw err;
   }

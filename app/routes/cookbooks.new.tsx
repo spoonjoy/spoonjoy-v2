@@ -2,6 +2,7 @@ import type { Route } from "./+types/cookbooks.new";
 import { Form, redirect, data, useActionData } from "react-router";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
+import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Fieldset, Field, Label, ErrorMessage } from "~/components/ui/fieldset";
@@ -57,6 +58,25 @@ export async function action({ request, context }: Route.ActionArgs) {
         { errors: { title: "You already have a cookbook with this title" } },
         { status: 400 }
       );
+    }
+    // A non-P2002 failure is an unexpected create fault (DB/infra), previously
+    // flattened to this generic 500 with the real error discarded — capture it
+    // (fire-and-forget, no-op without PostHog) so it isn't silent.
+    const postHogConfig = resolvePostHogServerConfig(context.cloudflare?.env ?? {});
+    if (postHogConfig.enabled) {
+      const capture = captureException(postHogConfig, {
+        error,
+        distinctId: userId,
+        route: new URL(request.url).pathname,
+        method: request.method,
+        extras: { action: "create_cookbook" },
+      });
+      const waitUntil = context.cloudflare?.ctx?.waitUntil;
+      if (waitUntil) {
+        waitUntil.call(context.cloudflare!.ctx!, capture);
+      } else {
+        void capture;
+      }
     }
     return data(
       { errors: { general: "Failed to create cookbook. Please try again." } },

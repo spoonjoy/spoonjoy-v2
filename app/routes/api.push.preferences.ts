@@ -1,6 +1,7 @@
 import type { Route } from "./+types/api.push.preferences";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { getUserId } from "~/lib/session.server";
+import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
 
 const PREFERENCE_KEYS = [
   "notifySpoonOnMyRecipe",
@@ -52,11 +53,20 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   const db = await getRequestDb(context);
-  const pref = await db.notificationPreference.upsert({
-    where: { userId },
-    create: { userId, ...patch },
-    update: patch,
-  });
+  let pref;
+  try {
+    pref = await db.notificationPreference.upsert({
+      where: { userId },
+      create: { userId, ...patch },
+      update: patch,
+    });
+  } catch (error) {
+    // The body validated but the preference upsert failed (DB/infra fault). This
+    // was previously uncaught — capture it (fire-and-forget, no-op without
+    // PostHog) before flattening to a 500 the user sees as a generic failure.
+    capturePreferencesFailure(request, context, userId, error);
+    return jsonError(500, "Failed to update notification preferences");
+  }
 
   return Response.json(
     {
@@ -67,4 +77,27 @@ export async function action({ request, context }: Route.ActionArgs) {
     },
     { status: 200 },
   );
+}
+
+function capturePreferencesFailure(
+  request: Request,
+  context: Route.ActionArgs["context"],
+  userId: string,
+  error: unknown,
+): void {
+  const postHogConfig = resolvePostHogServerConfig(context.cloudflare?.env ?? {});
+  if (!postHogConfig.enabled) return;
+  const capture = captureException(postHogConfig, {
+    error,
+    distinctId: userId,
+    route: new URL(request.url).pathname,
+    method: request.method,
+    extras: { action: "update_push_preferences" },
+  });
+  const waitUntil = context.cloudflare?.ctx?.waitUntil;
+  if (waitUntil) {
+    waitUntil.call(context.cloudflare!.ctx!, capture);
+  } else {
+    void capture;
+  }
 }
