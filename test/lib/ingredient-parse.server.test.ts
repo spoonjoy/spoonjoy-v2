@@ -1154,12 +1154,93 @@ describe('Ingredient Parsing', () => {
       })
     })
 
+    describe('success telemetry capture', () => {
+      const POSTHOG_CONFIG = {
+        enabled: true as const,
+        key: 'ph_test',
+        host: 'https://posthog.example',
+      }
+
+      function mockSuccessfulParse() {
+        mockCreate.mockResolvedValueOnce({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  ingredients: [{ quantity: 2, unit: 'cup', ingredientName: 'flour' }],
+                }),
+              },
+            },
+          ],
+        })
+      }
+
+      it('captures an LLM-call success with privacy-safe props (no .failed) when PostHog is configured', async () => {
+        const analyticsFetch = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }))
+        mockSuccessfulParse()
+
+        const ingredients = await parseIngredients(
+          '2 cups flour',
+          { OPENAI_API_KEY: TEST_API_KEY, INGREDIENT_PARSE_MODEL: 'gpt-4o-mini' },
+          {
+            postHogConfig: POSTHOG_CONFIG,
+            fetchImpl: analyticsFetch as unknown as typeof fetch,
+            distinctId: 'chef_7',
+          }
+        )
+
+        expect(ingredients).toEqual([{ quantity: 2, unit: 'cup', ingredientName: 'flour' }])
+        expect(analyticsFetch).toHaveBeenCalledTimes(1)
+        const body = JSON.parse(analyticsFetch.mock.calls[0][1].body as string)
+        expect(body.event).toBe('spoonjoy.llm_call.succeeded')
+        expect(body.distinct_id).toBe('chef_7')
+        expect(body.properties).toMatchObject({
+          feature: 'llm_call',
+          operation: 'ingredient_parse',
+          provider: 'openai',
+          model: 'gpt-4o-mini',
+        })
+        expect(typeof body.properties.durationMs).toBe('number')
+        expect(body.properties.durationMs).toBeGreaterThanOrEqual(0)
+      })
+
+      it('does not call analytics on success when PostHog is unconfigured', async () => {
+        const analyticsFetch = vi.fn()
+        mockSuccessfulParse()
+
+        await parseIngredients('2 cups flour', TEST_API_KEY, {
+          fetchImpl: analyticsFetch as unknown as typeof fetch,
+        })
+
+        expect(analyticsFetch).not.toHaveBeenCalled()
+      })
+    })
+
     describe('failure telemetry capture', () => {
       const POSTHOG_CONFIG = {
         enabled: true as const,
         key: 'ph_test',
         host: 'https://posthog.example',
       }
+
+      it('emits .failed and NOT .succeeded when the call fails', async () => {
+        const analyticsFetch = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }))
+        mockCreate.mockRejectedValueOnce(new Error('network down'))
+
+        await expect(
+          parseIngredients('2 cups flour', TEST_API_KEY, {
+            postHogConfig: POSTHOG_CONFIG,
+            fetchImpl: analyticsFetch as unknown as typeof fetch,
+          })
+        ).rejects.toThrow(IngredientParseError)
+
+        expect(analyticsFetch).toHaveBeenCalledTimes(1)
+        const events = analyticsFetch.mock.calls.map(
+          (call) => JSON.parse(call[1].body as string).event
+        )
+        expect(events).toContain('spoonjoy.llm_call.failed')
+        expect(events).not.toContain('spoonjoy.llm_call.succeeded')
+      })
 
       it('captures an LLM-call failure with the preserved code when PostHog is configured', async () => {
         const analyticsFetch = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }))
