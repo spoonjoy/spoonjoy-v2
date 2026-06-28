@@ -18,6 +18,7 @@ const OPERATION_SCOPES = {
   "GET /api/v1/openapi.json": [],
   "GET /api/v1/openapi.sdk.json": [],
   "GET /api/v1/openapi.connector.json": [],
+  "GET /api/v1/search": [],
   "GET /api/v1/recipes": ["recipes:read"],
   "POST /api/v1/recipes/import": ["kitchen:write"],
   "GET /api/v1/recipes/{id}": ["recipes:read"],
@@ -32,7 +33,12 @@ const OPERATION_SCOPES = {
   "POST /api/v1/recipes/{id}/covers/regenerate": ["kitchen:write"],
   "POST /api/v1/recipes/{id}/covers/from-spoon/{spoonId}": ["kitchen:write"],
   "GET /api/v1/cookbooks": ["cookbooks:read"],
+  "POST /api/v1/cookbooks": ["kitchen:write"],
   "GET /api/v1/cookbooks/{id}": ["cookbooks:read"],
+  "PATCH /api/v1/cookbooks/{id}": ["kitchen:write"],
+  "DELETE /api/v1/cookbooks/{id}": ["kitchen:write"],
+  "POST /api/v1/cookbooks/{id}/recipes/{recipeId}": ["kitchen:write"],
+  "DELETE /api/v1/cookbooks/{id}/recipes/{recipeId}": ["kitchen:write"],
   "GET /api/v1/me": ["account:read"],
   "PATCH /api/v1/me": ["account:write"],
   "POST /api/v1/me/photo": ["account:write"],
@@ -176,7 +182,16 @@ describe("API v1 OpenAPI document", () => {
         const oauthScopes = operationScopes.filter((scope) => !scope.startsWith("tokens:"));
 
         const acceptedOauthScopes = op["x-accepted-oauth-scopes"] ?? [];
-        if (resource.auth === "bearer") {
+        if (resource.path === "/api/v1/search") {
+          expect(op.security).toEqual([
+            {},
+            { bearerAuth: [] },
+            { cookieAuth: [] },
+            { oauth2: ["shopping_list:read"] },
+            { oauth2: ["kitchen:read"] },
+          ]);
+          expect(op["x-credential-modes"]).toEqual(["anonymous", "session", "bearer", "oauth_pkce"]);
+        } else if (resource.auth === "bearer") {
           expect(op.security).toEqual(dedupeSecurity([
             { bearerAuth: [] },
             { cookieAuth: [] },
@@ -195,7 +210,9 @@ describe("API v1 OpenAPI document", () => {
         } else {
           expect(op.security).toEqual([{}]);
         }
-        if (oauthScopes.length > 0) {
+        if (resource.path === "/api/v1/search") {
+          expect(op["x-credential-modes"]).toContain("oauth_pkce");
+        } else if (oauthScopes.length > 0) {
           expect(op["x-credential-modes"]).toContain("oauth_pkce");
         } else {
           expect(op["x-credential-modes"]).not.toContain("oauth_pkce");
@@ -207,6 +224,31 @@ describe("API v1 OpenAPI document", () => {
     expect(operation(document, "/api/v1/recipes", "GET").parameters).toEqual(expect.arrayContaining([
       expect.objectContaining({ name: "query", in: "query", required: false }),
       expect.objectContaining({ name: "q", in: "query", required: false }),
+      expect.objectContaining({
+        name: "limit",
+        in: "query",
+        schema: { type: "integer", minimum: 1, maximum: 50, default: 20 },
+      }),
+    ]));
+    expect(operation(document, "/api/v1/search", "GET")).toMatchObject({
+      operationId: "getApiV1Search",
+      tags: ["Search"],
+      "x-auth": "optional",
+      "x-scopes": [],
+      "x-private-result-scope": {
+        scope: "shopping-list",
+        requiredScope: "shopping_list:read",
+        acceptedLegacyScope: "kitchen:read",
+      },
+    });
+    expect(operation(document, "/api/v1/search", "GET").parameters).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "query", in: "query", required: false }),
+      expect.objectContaining({ name: "q", in: "query", required: false }),
+      expect.objectContaining({
+        name: "scope",
+        in: "query",
+        schema: { type: "string", enum: ["all", "recipes", "cookbooks", "chefs", "shopping-list"], default: "all" },
+      }),
       expect.objectContaining({
         name: "limit",
         in: "query",
@@ -321,6 +363,24 @@ describe("API v1 OpenAPI document", () => {
         coverSourceType: "chef-upload",
         coverVariant: "image",
       })],
+    });
+    expect(responseExample(document, "/api/v1/search", "GET", "200").data).toMatchObject({
+      query: "pasta",
+      scope: "all",
+      limit: 20,
+      isAuthenticated: true,
+      results: [
+        expect.objectContaining({
+          type: "recipe",
+          canonicalUrl: "https://spoonjoy.app/recipes/recipe_1",
+          metadata: expect.objectContaining({ coverProvenanceLabel: "Chef photo" }),
+        }),
+        expect.objectContaining({
+          type: "shopping-list-item",
+          canonicalUrl: "https://spoonjoy.app/shopping-list",
+          metadata: expect.objectContaining({ checked: false }),
+        }),
+      ],
     });
     expect(responseExample(document, "/api/v1/recipes/{id}", "GET", "200").data.recipe).toMatchObject({
       coverProvenanceLabel: "Chef photo",
@@ -695,6 +755,7 @@ describe("API v1 OpenAPI document", () => {
     expect(Object.keys(connector.paths).sort()).toEqual([
       "/api/v1/cookbooks",
       "/api/v1/cookbooks/{id}",
+      "/api/v1/cookbooks/{id}/recipes/{recipeId}",
       "/api/v1/recipes",
       "/api/v1/recipes/import",
       "/api/v1/recipes/{id}",
@@ -735,6 +796,12 @@ describe("API v1 OpenAPI document", () => {
       nullable: true,
     });
     expect(connector.paths["/api/v1/shopping-list/items/{itemId}"].delete.requestBody).toBeUndefined();
+    expect(connector.paths["/api/v1/cookbooks/{id}"].delete.requestBody).toBeUndefined();
+    expect(connector.paths["/api/v1/cookbooks/{id}/recipes/{recipeId}"].delete.requestBody).toBeUndefined();
+    expect(connector.paths["/api/v1/cookbooks/{id}/recipes/{recipeId}"].post).toMatchObject({
+      "x-connector-role": "action",
+      "x-display-name": "Add recipe to cookbook",
+    });
     expect(connector.paths["/api/v1/shopping-list/add-from-recipe"].post).toMatchObject({
       "x-connector-role": "action",
       "x-display-name": "Add recipe ingredients to shopping list",
@@ -760,6 +827,12 @@ describe("API v1 OpenAPI document", () => {
     expect(sdk.paths["/api/tools/start_agent_connection"]).toBeDefined();
     expect(sdk.paths["/api/tools/poll_agent_connection"]).toBeDefined();
     expect(sdk.paths["/api/v1/openapi.json"]).toBeUndefined();
+    expect(sdk.paths["/api/v1/search"].get).toMatchObject({
+      operationId: "getApiV1Search",
+      "x-private-result-scope": expect.objectContaining({
+        requiredScope: "shopping_list:read",
+      }),
+    });
     expect(sdk.paths["/api/v1/recipes/{id}/covers"].get).toMatchObject({
       operationId: "getApiV1RecipeCovers",
       "x-scopes": ["kitchen:write"],

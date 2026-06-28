@@ -1967,6 +1967,7 @@ describe("importRecipeFromUrl — extraction paths", () => {
           imageGenRunner,
           llmRunner,
           logger,
+          analyticsFetchImpl: fetchImpl,
           env: {
             OPENAI_API_KEY: "test-key",
             POSTHOG_KEY: "ph_test",
@@ -2020,6 +2021,7 @@ describe("importRecipeFromUrl — extraction paths", () => {
           bucket,
           waitUntil,
           logger,
+          analyticsFetchImpl: fetchImpl,
           env: {
             OPENAI_API_KEY: "test-key",
             POSTHOG_KEY: "ph_test",

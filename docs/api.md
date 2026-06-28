@@ -19,6 +19,7 @@ Spoonjoy's public developer surface starts at `/api`, with compatibility aliases
 Available now:
 
 - Public recipe and cookbook reads
+- Cross-product API search across public recipes, public cookbooks, chefs, and authorized shopping-list items
 - Authenticated recipe import from URL, video URL, text, or JSON-LD
 - Public recipe spoon history plus authenticated recipe spoon create, update, and delete
 - Owner-scoped recipe cover candidate management for the authenticated chef's recipes
@@ -49,7 +50,7 @@ Generated SDKs should use `/api/v1/openapi.sdk.json`; it keeps REST v1 resources
 
 | Surface | Build with it | Current boundary |
 | --- | --- | --- |
-| REST API v1 | Public catalog clients, shopping-list sync, native recipe import, native recipe spoon and recipe-cover management, bearer-token scripts, generated SDKs | No general recipe create/edit/delete/export or private library endpoints yet. |
+| REST API v1 | Public catalog clients, global search, shopping-list sync, native recipe import, native recipe spoon and recipe-cover management, bearer-token scripts, generated SDKs | No general recipe create/edit/delete/export or private library endpoints yet. |
 | No-code connector profile | Zapier/Make/n8n-style searches, actions, and polling triggers | No webhooks, REST Hooks, SSE, event subscriptions, or DELETE request bodies. |
 | OAuth/PKCE | Third-party mobile, SaaS, extension, and connector account linking | Public clients only; no client secret, password grant, token-management scopes, or custom schemes. |
 | Delegated approval | CLIs, appliances, voice clients, and agents without a callback URL | Custom Spoonjoy approval flow, not OAuth Device Authorization Grant. |
@@ -70,6 +71,8 @@ trap 'rm -rf "$state_dir"' EXIT
 curl -fsS "$SJ_BASE/api/v1/health" | jq
 curl -fsS "$SJ_BASE/api/v1/recipes?query=pasta&limit=5" \
   | jq -r '.data.recipes[] | [.id, .title] | @tsv'
+curl -fsS "$SJ_BASE/api/v1/search?q=pasta&scope=all&limit=5" \
+  | jq -r '.data.results[] | [.type, .id, .title] | @tsv'
 ```
 
 For your first CLI, keep that split: public recipe/cookbook calls omit `Authorization`; private shopping-list calls use a shopping-list token. If you send a narrow shopping-list token to public recipe/cookbook endpoints, Spoonjoy validates it and can return `403 insufficient_scope` instead of falling back to anonymous.
@@ -430,6 +433,7 @@ API v1 is rate limited by IP and credential before authentication work. Anonymou
 | `GET` | `/api/v1/openapi.json` | Optional | none |
 | `GET` | `/api/v1/openapi.sdk.json` | Optional | none |
 | `GET` | `/api/v1/openapi.connector.json` | Optional | none |
+| `GET` | `/api/v1/search` | Optional | `shopping_list:read` only for private shopping-list results |
 | `GET` | `/api/v1/recipes` | Optional | `recipes:read` when authenticated |
 | `POST` | `/api/v1/recipes/import` | Authenticated chef | `kitchen:write` |
 | `GET` | `/api/v1/recipes/{id}` | Optional | `recipes:read` when authenticated |
@@ -444,7 +448,12 @@ API v1 is rate limited by IP and credential before authentication work. Anonymou
 | `POST` | `/api/v1/recipes/{id}/covers/regenerate` | Authenticated chef | `kitchen:write` |
 | `POST` | `/api/v1/recipes/{id}/covers/from-spoon/{spoonId}` | Authenticated chef | `kitchen:write` |
 | `GET` | `/api/v1/cookbooks` | Optional | `cookbooks:read` when authenticated |
+| `POST` | `/api/v1/cookbooks` | Authenticated chef | `kitchen:write` |
 | `GET` | `/api/v1/cookbooks/{id}` | Optional | `cookbooks:read` when authenticated |
+| `PATCH` | `/api/v1/cookbooks/{id}` | Authenticated chef | `kitchen:write` |
+| `DELETE` | `/api/v1/cookbooks/{id}` | Authenticated chef | `kitchen:write` |
+| `POST` | `/api/v1/cookbooks/{id}/recipes/{recipeId}` | Authenticated chef | `kitchen:write` |
+| `DELETE` | `/api/v1/cookbooks/{id}/recipes/{recipeId}` | Authenticated chef | `kitchen:write` |
 | `GET` | `/api/v1/me` | Authenticated chef | `account:read` |
 | `PATCH` | `/api/v1/me` | Authenticated chef | `account:write` |
 | `POST` | `/api/v1/me/photo` | Authenticated chef | `account:write` |
@@ -471,13 +480,17 @@ API v1 is rate limited by IP and credential before authentication work. Anonymou
 
 Store the returned `nextCursor` for a page only after applying every item in that response durably. Use `limit` from 1 to 50 for small payloads; `hasMore: true` means continue immediately with that checkpoint to drain the backlog. It is okay for crash-prone clients to checkpoint after each fully applied page, as long as local apply is idempotent and no cursor is persisted before all rows in that page are durable. Poll conservatively because webhooks, REST Hooks, SSE, and event subscriptions are not in v1 yet.
 
-Idempotent owner mutations use `clientMutationId`. This applies to recipe import, shopping-list writes, recipe spoon writes, and recipe-cover writes. The idempotency key is scoped to the chef, retained for 24 hours, and bound to method, path, and a canonicalized parsed JSON body. Persist the same request values for each mutation id before sending it; whitespace and object key order are ignored, while changed method, path, or body values return a conflict. A write retried after an OAuth access-token refresh still replays instead of duplicating because both credentials resolve to the same chef. Reusing the same mutation id with the same completed request body returns the recorded response with `mutation.replayed: true`; a concurrent retry can return `409 idempotency_in_progress` with `Retry-After: 2` and `error.details.retryAfterSeconds`. Wait at least that long, then retry the same request. Reusing a mutation id with a different method, path, or body returns `409 idempotency_conflict`.
+Idempotent owner mutations use `clientMutationId`. This applies to recipe import, cookbook writes, shopping-list writes, recipe spoon writes, and recipe-cover writes. The idempotency key is scoped to the chef, retained for 24 hours, and bound to method, path, and a canonicalized parsed JSON body. Persist the same request values for each mutation id before sending it; whitespace and object key order are ignored, while changed method, path, or body values return a conflict. A write retried after an OAuth access-token refresh still replays instead of duplicating because both credentials resolve to the same chef. Reusing the same mutation id with the same completed request body returns the recorded response with `mutation.replayed: true`; a concurrent retry can return `409 idempotency_in_progress` with `Retry-After: 2` and `error.details.retryAfterSeconds`. Wait at least that long, then retry the same request. Reusing a mutation id with a different method, path, or body returns `409 idempotency_conflict`.
 
 Mutation responses return the changed item or changed items plus mutation metadata, not the entire shopping list. Fetch `/api/v1/shopping-list` or `/api/v1/shopping-list/sync` when you need the current list view.
 
 Retry network timeouts, `429`, and `5xx` responses with the same mutation id. Refresh or reconnect on `401`. Do not retry validation, scope, or idempotency-conflict errors unchanged.
 
 Recipe and cookbook list endpoints are public catalog search endpoints today. They accept `limit`, `cursor`, and `query`/`q`; when both query aliases are supplied, `query` wins. Responses include `cursor`, `nextCursor`, and `hasMore`, plus `coverImageUrl` on recipe summaries and `coverImageUrls` on cookbook summaries. They do not yet provide full owner export or deleted recipe/cookbook tombstones. Use shopping-list sync for incremental owner data until export APIs exist.
+
+Cookbook write endpoints are owner-scoped native and automation surfaces. `POST /api/v1/cookbooks` creates an owned cookbook from `title`. `PATCH /api/v1/cookbooks/{id}` renames an owned cookbook. `DELETE /api/v1/cookbooks/{id}` deletes only the cookbook and its recipe links, never the recipes themselves. `POST /api/v1/cookbooks/{id}/recipes/{recipeId}` adds an active recipe to an owned cookbook and returns `added: false` as a successful no-op when the recipe is already present. `DELETE /api/v1/cookbooks/{id}/recipes/{recipeId}` removes the link and returns `removed: false` when the link is already absent. Delete endpoints accept `clientMutationId` in the JSON body, query string, or `X-Client-Mutation-Id` header.
+
+`GET /api/v1/search` is the native/global search endpoint. It accepts `query` or `q`, `scope` (`all`, `recipes`, `cookbooks`, `chefs`, or `shopping-list`), and `limit` from 1 to 50. Anonymous callers receive public recipe, cookbook, and chef result rows. Authenticated callers with `shopping_list:read` can also receive owner-scoped shopping-list item rows; explicit `scope=shopping-list` requires authentication and that scope. Results return mixed rows with `type`, `id`, owner fields, display text, `href`, `canonicalUrl`, optional `imageUrl`, score, and type-specific `metadata`.
 
 Public catalog cursors page by `createdAt` plus `id` for deterministic catalog walks. They are not repeatable snapshot guarantees, not `updatedAt` incremental feeds, and do not include deletion tombstones. New public records can appear during a long crawl. Restart a full crawl when you need to catch public recipe/cookbook edits or removals. Anonymous public recipe/cookbook responses expose `Cache-Control: public, max-age=60, stale-while-revalidate=300`; authenticated public reads are validated and returned with private/no-store cache headers. API v1 does not provide `ETag`, `Last-Modified`, or conditional request support yet.
 
@@ -495,7 +508,7 @@ Recipe cover management endpoints are owner-scoped native app surface, not publi
 
 Recipe-cover mutations are idempotent with `clientMutationId` and return `activeCover`, `previousActiveCover`, optional `createdCover` or `archivedCover`, optional `generationStatus`, warnings, and replay metadata. `PATCH /api/v1/recipes/{id}/covers` sets an explicit no-cover state and requires `confirmNoCover: true`. `PATCH /api/v1/recipes/{id}/covers/{coverId}` activates an existing candidate variant. `DELETE /api/v1/recipes/{id}/covers/{coverId}` archives a candidate and can either promote a replacement variant or confirm that the recipe should have no active cover. `POST /api/v1/recipes/{id}/covers/regenerate` schedules a new editorial image for an existing candidate. `POST /api/v1/recipes/{id}/covers/from-spoon/{spoonId}` creates a candidate from one of the recipe's spoon photos and can request editorial generation.
 
-The full OpenAPI document, SDK profile, and playground include recipe-cover operations. The no-code connector profile omits them because DELETE request bodies and owner-scoped visual management do not import cleanly into connector action builders.
+The full OpenAPI document, SDK profile, and playground include cookbook write and recipe-cover operations. The no-code connector profile includes cookbook JSON actions but omits recipe-cover operations because owner-scoped visual management does not import cleanly into connector action builders.
 
 ```bash
 curl -fsS -X POST 'https://spoonjoy.app/api/v1/shopping-list/items' \
@@ -512,6 +525,16 @@ curl -fsS -X POST 'https://spoonjoy.app/api/v1/shopping-list/clear-completed' \
   -H 'Authorization: Bearer sj_...' \
   -H 'Content-Type: application/json' \
   -d '{"clientMutationId":"clear-completed:2026-06-01"}'
+
+curl -fsS -X POST 'https://spoonjoy.app/api/v1/cookbooks' \
+  -H 'Authorization: Bearer sj_...' \
+  -H 'Content-Type: application/json' \
+  -d '{"clientMutationId":"cookbook:create:weeknight","title":"Weeknight Favorites"}'
+
+curl -fsS -X POST 'https://spoonjoy.app/api/v1/cookbooks/cookbook_1/recipes/recipe_1' \
+  -H 'Authorization: Bearer sj_...' \
+  -H 'Content-Type: application/json' \
+  -d '{"clientMutationId":"cookbook:add:recipe_1"}'
 
 curl -fsS -X POST 'https://spoonjoy.app/api/v1/shopping-list/clear-all' \
   -H 'Authorization: Bearer sj_...' \

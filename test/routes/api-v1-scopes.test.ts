@@ -112,6 +112,7 @@ describe("API v1 complete scope matrix", () => {
     expect(resolveApiV1ScopeRequirement("GET", "health")).toEqual({ auth: "optional", scopes: [] });
     expect(resolveApiV1ScopeRequirement("GET", "openapi.json")).toEqual({ auth: "optional", scopes: [] });
     expect(resolveApiV1ScopeRequirement("GET", "openapi.sdk.json")).toEqual({ auth: "optional", scopes: [] });
+    expect(resolveApiV1ScopeRequirement("GET", "search")).toEqual({ auth: "optional", scopes: [] });
     expect(resolveApiV1ScopeRequirement("GET", "recipes")).toEqual({ auth: "optional", scopes: ["recipes:read"] });
     expect(resolveApiV1ScopeRequirement("GET", "recipes/recipe_1")).toEqual({ auth: "optional", scopes: ["recipes:read"] });
     expect(resolveApiV1ScopeRequirement("GET", "recipes/recipe_1/spoons")).toEqual({ auth: "optional", scopes: ["recipes:read"] });
@@ -154,6 +155,7 @@ describe("API v1 complete scope matrix", () => {
       ["health", "http://localhost/api/v1/health", "health", fixture.noScopes.token],
       ["openapi", "http://localhost/api/v1/openapi.json", "openapi.json", fixture.noScopes.token],
       ["openapi-sdk", "http://localhost/api/v1/openapi.sdk.json", "openapi.sdk.json", fixture.noScopes.token],
+      ["search", "http://localhost/api/v1/search?q=matrix", "search", fixture.noScopes.token],
       ["recipes", "http://localhost/api/v1/recipes", "recipes", fixture.recipesRead.token],
       ["recipe", `http://localhost/api/v1/recipes/${fixture.recipe.id}`, `recipes/${fixture.recipe.id}`, fixture.recipesRead.token],
       ["cookbooks", "http://localhost/api/v1/cookbooks", "cookbooks", fixture.cookbooksRead.token],

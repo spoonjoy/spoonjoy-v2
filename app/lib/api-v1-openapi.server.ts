@@ -473,6 +473,20 @@ const schemas = {
     updatedAt: dateTimeSchema,
     recipes: { ...arrayOf(ref("RecipeSummary")), description: "Currently public, non-deleted recipe summaries in cookbook order." },
   }),
+  CreateCookbookRequest: objectSchema(["clientMutationId", "title"], {
+    clientMutationId: shortTextSchema,
+    title: shortTextSchema,
+  }),
+  UpdateCookbookRequest: objectSchema(["clientMutationId", "title"], {
+    clientMutationId: shortTextSchema,
+    title: shortTextSchema,
+  }),
+  DeleteCookbookRequest: objectSchema(["clientMutationId"], {
+    clientMutationId: shortTextSchema,
+  }),
+  CookbookRecipeMutationRequest: objectSchema(["clientMutationId"], {
+    clientMutationId: shortTextSchema,
+  }),
   LinkedAuthProvider: objectSchema(["provider", "providerUsername"], {
     provider: { type: "string", enum: ["apple", "github", "google"] },
     providerUsername: { type: "string" },
@@ -532,6 +546,24 @@ const schemas = {
     createdAt: dateTimeSchema,
     refreshTokenCount: { type: "integer", minimum: 0 },
     accessTokenCount: { type: "integer", minimum: 0 },
+  }),
+  SearchResult: objectSchema(["type", "id", "ownerId", "ownerUsername", "title", "subtitle", "snippet", "href", "canonicalUrl", "imageUrl", "score", "metadata"], {
+    type: { type: "string", enum: ["recipe", "cookbook", "chef", "shopping-list-item"] },
+    id: idSchema,
+    ownerId: idSchema,
+    ownerUsername: { type: "string" },
+    title: { type: "string" },
+    subtitle: { type: "string" },
+    snippet: { type: "string" },
+    href: { type: "string" },
+    canonicalUrl: uriSchema,
+    imageUrl: { type: ["string", "null"], format: "uri" },
+    score: { type: "number", description: "Lower values are better for full-text ranked queries. Empty-query recency results use 0." },
+    metadata: {
+      type: "object",
+      additionalProperties: true,
+      description: "Type-specific display metadata. Render values as data, not HTML.",
+    },
   }),
   CredentialMetadata: objectSchema(["id", "name", "tokenPrefix", "scopes", "createdAt", "updatedAt", "lastUsedAt", "revokedAt", "expiresAt"], {
     id: idSchema,
@@ -698,6 +730,13 @@ const schemas = {
     principal: { oneOf: [ref("ApiPrincipalSummary"), { type: "null" }] },
     scopes: arrayOf({ type: "string" }),
   }),
+  SearchData: objectSchema(["query", "scope", "limit", "isAuthenticated", "results"], {
+    query: { type: "string" },
+    scope: { type: "string", enum: ["all", "recipes", "cookbooks", "chefs", "shopping-list"] },
+    limit: { type: "integer" },
+    isAuthenticated: { type: "boolean" },
+    results: arrayOf(ref("SearchResult")),
+  }),
   RecipeListData: objectSchema(["query", "limit", "cursor", "nextCursor", "hasMore", "recipes"], {
     query: nullableStringSchema,
     limit: { type: "integer" },
@@ -758,6 +797,28 @@ const schemas = {
     cookbooks: arrayOf(ref("CookbookSummary")),
   }),
   CookbookDetailData: objectSchema(["cookbook"], { cookbook: ref("CookbookDetail") }),
+  CreateCookbookData: objectSchema(["created", "cookbook", "mutation"], {
+    created: { type: "boolean" },
+    cookbook: ref("CookbookDetail"),
+    mutation: ref("MutationMetadata"),
+  }),
+  UpdateCookbookData: objectSchema(["updated", "cookbook", "mutation"], {
+    updated: { type: "boolean" },
+    cookbook: ref("CookbookDetail"),
+    mutation: ref("MutationMetadata"),
+  }),
+  DeleteCookbookData: objectSchema(["deleted", "cookbook", "mutation"], {
+    deleted: { type: "boolean" },
+    cookbook: ref("CookbookDetail"),
+    mutation: ref("MutationMetadata"),
+  }),
+  CookbookRecipeMutationData: objectSchema(["recipeId", "cookbook", "mutation"], {
+    added: { type: "boolean" },
+    removed: { type: "boolean" },
+    recipeId: idSchema,
+    cookbook: ref("CookbookDetail"),
+    mutation: ref("MutationMetadata"),
+  }),
   OAuthConnectionListData: objectSchema(["connections"], {
     connections: arrayOf(ref("OAuthConnectionSummary")),
   }),
@@ -823,6 +884,7 @@ const schemas = {
   }),
   DiscoveryEnvelope: successEnvelope(ref("DiscoveryData")),
   HealthEnvelope: successEnvelope(ref("HealthData")),
+  SearchEnvelope: successEnvelope(ref("SearchData")),
   RecipeListEnvelope: successEnvelope(ref("RecipeListData")),
   RecipeDetailEnvelope: successEnvelope(ref("RecipeDetailData")),
   RecipeSpoonListEnvelope: successEnvelope(ref("RecipeSpoonListData")),
@@ -834,6 +896,10 @@ const schemas = {
   RecipeImportEnvelope: successEnvelope(ref("RecipeImportData")),
   CookbookListEnvelope: successEnvelope(ref("CookbookListData")),
   CookbookDetailEnvelope: successEnvelope(ref("CookbookDetailData")),
+  CreateCookbookEnvelope: successEnvelope(ref("CreateCookbookData")),
+  UpdateCookbookEnvelope: successEnvelope(ref("UpdateCookbookData")),
+  DeleteCookbookEnvelope: successEnvelope(ref("DeleteCookbookData")),
+  CookbookRecipeMutationEnvelope: successEnvelope(ref("CookbookRecipeMutationData")),
   AccountProfileEnvelope: successEnvelope(ref("AccountProfile")),
   NotificationPreferencesEnvelope: successEnvelope(ref("NotificationPreferences")),
   OAuthConnectionListEnvelope: successEnvelope(ref("OAuthConnectionListData")),
@@ -852,6 +918,7 @@ const schemas = {
 
 const pathParameters = {
   id: { name: "id", in: "path", required: true, description: "Spoonjoy resource id from a previous list response.", schema: idSchema },
+  recipeId: { name: "recipeId", in: "path", required: true, description: "Recipe id to add to or remove from an owned cookbook.", schema: idSchema },
   coverId: { name: "coverId", in: "path", required: true, description: "Recipe cover candidate id from GET /api/v1/recipes/{id}/covers.", schema: idSchema },
   spoonId: { name: "spoonId", in: "path", required: true, description: "Recipe spoon id from a cover-management spoon image candidate.", schema: idSchema },
   itemId: { name: "itemId", in: "path", required: true, description: "Shopping-list item id from GET /api/v1/shopping-list or /sync.", schema: idSchema },
@@ -876,6 +943,7 @@ const pathParameters = {
 const queryParameters = {
   query: { name: "query", in: "query", required: false, description: "Search text. When both query and q are sent, query wins.", schema: { type: "string" } },
   q: { name: "q", in: "query", required: false, description: "Search-text alias for clients that conventionally use q. Ignored when query is also present.", schema: { type: "string" } },
+  scope: { name: "scope", in: "query", required: false, description: "Global search scope. The legacy value shopping is accepted as shopping-list.", schema: { type: "string", enum: ["all", "recipes", "cookbooks", "chefs", "shopping-list"], default: "all" } },
   cursor: { name: "cursor", in: "query", required: false, description: "Opaque pagination cursor returned as nextCursor. Catalog cursors are v1.* values; shopping-list sync also accepts an ISO timestamp only as bootstrap compatibility.", schema: { type: "string" }, examples: { catalog: { value: "v1.cursor_from_nextCursor" }, sync: { value: "v1.cursor_or_iso_bootstrap" } } },
   limit: { name: "limit", in: "query", required: false, description: "Page size from 1 to 50. Defaults to 20.", schema: { type: "integer", minimum: 1, maximum: 50, default: 20 } },
   offset: { name: "offset", in: "query", required: false, description: "Zero-based offset for owner cover-history pagination.", schema: { type: "integer", minimum: 0, default: 0 } },
@@ -897,6 +965,9 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
   },
   "/api/v1/openapi.connector.json": {
     GET: { operationId: "getApiV1ConnectorOpenApi", tags: ["Discovery"], summary: "Fetch the no-code connector OpenAPI profile", auth: "optional", scopes: [], success: { 200: "ConnectorOpenApiDocument" }, errors: ["validation_error", "invalid_token", "method_not_allowed", "rate_limited", "internal_error"] },
+  },
+  "/api/v1/search": {
+    GET: { operationId: "getApiV1Search", tags: ["Search"], summary: "Search recipes, cookbooks, chefs, and authorized private shopping-list items", auth: "optional", scopes: [], success: { 200: "SearchEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "method_not_allowed", "rate_limited", "internal_error"], parameters: [queryParameters.query, queryParameters.q, queryParameters.scope, queryParameters.limit] },
   },
   "/api/v1/recipes": {
     GET: { operationId: "getApiV1Recipes", tags: ["Recipes"], summary: "Search public recipes", auth: "optional", scopes: ["recipes:read"], success: { 200: "RecipeListEnvelope" }, errors: ["validation_error", "invalid_cursor", "invalid_token", "insufficient_scope", "method_not_allowed", "rate_limited", "internal_error"], parameters: [queryParameters.query, queryParameters.q, queryParameters.cursor, queryParameters.limit] },
@@ -931,9 +1002,16 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
   },
   "/api/v1/cookbooks": {
     GET: { operationId: "getApiV1Cookbooks", tags: ["Cookbooks"], summary: "Search public cookbooks", auth: "optional", scopes: ["cookbooks:read"], success: { 200: "CookbookListEnvelope" }, errors: ["validation_error", "invalid_cursor", "invalid_token", "insufficient_scope", "method_not_allowed", "rate_limited", "internal_error"], parameters: [queryParameters.query, queryParameters.q, queryParameters.cursor, queryParameters.limit] },
+    POST: { operationId: "postApiV1Cookbooks", tags: ["Cookbooks"], summary: "Create an owned cookbook", auth: "bearer", scopes: ["kitchen:write"], success: { 201: "CreateCookbookEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "CreateCookbookRequest" },
   },
   "/api/v1/cookbooks/{id}": {
     GET: { operationId: "getApiV1Cookbook", tags: ["Cookbooks"], summary: "Read one public cookbook", auth: "optional", scopes: ["cookbooks:read"], success: { 200: "CookbookDetailEnvelope" }, errors: ["validation_error", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id] },
+    PATCH: { operationId: "patchApiV1Cookbook", tags: ["Cookbooks"], summary: "Rename an owned cookbook", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "UpdateCookbookEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id], requestBody: "UpdateCookbookRequest" },
+    DELETE: { operationId: "deleteApiV1Cookbook", tags: ["Cookbooks"], summary: "Delete an owned cookbook", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "DeleteCookbookEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id, pathParameters.clientMutationIdHeader], requestBody: "DeleteCookbookRequest" },
+  },
+  "/api/v1/cookbooks/{id}/recipes/{recipeId}": {
+    POST: { operationId: "postApiV1CookbookRecipe", tags: ["Cookbooks"], summary: "Add a recipe to an owned cookbook", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "CookbookRecipeMutationEnvelope", 201: "CookbookRecipeMutationEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id, pathParameters.recipeId], requestBody: "CookbookRecipeMutationRequest" },
+    DELETE: { operationId: "deleteApiV1CookbookRecipe", tags: ["Cookbooks"], summary: "Remove a recipe from an owned cookbook", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "CookbookRecipeMutationEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id, pathParameters.recipeId, pathParameters.clientMutationIdHeader], requestBody: "CookbookRecipeMutationRequest" },
   },
   "/api/v1/me": {
     GET: { operationId: "getApiV1Me", tags: ["Account"], summary: "Read the authenticated account profile", auth: "bearer", scopes: ["account:read"], success: { 200: "AccountProfileEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"] },
@@ -1128,6 +1206,36 @@ const exampleShoppingItem = {
   sortIndex: 0,
   updatedAt: exampleTimestamp,
 };
+const exampleSearchResults = [
+  {
+    type: "recipe",
+    id: "recipe_1",
+    ownerId: "chef_1",
+    ownerUsername: "ari",
+    title: "Pasta",
+    subtitle: "Recipe by ari",
+    snippet: "Weeknight pasta",
+    href: "/recipes/recipe_1",
+    canonicalUrl: "https://spoonjoy.app/recipes/recipe_1",
+    imageUrl: "https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg",
+    score: -1.25,
+    metadata: { chefUsername: "ari", ingredientNames: ["pasta"], coverProvenanceLabel: "Chef photo" },
+  },
+  {
+    type: "shopping-list-item",
+    id: "item_1",
+    ownerId: "chef_1",
+    ownerUsername: "ari",
+    title: "eggs",
+    subtitle: "Shopping list item for ari",
+    snippet: "12 each eggs",
+    href: "/shopping-list",
+    canonicalUrl: "https://spoonjoy.app/shopping-list",
+    imageUrl: null,
+    score: -0.5,
+    metadata: { quantity: 12, unit: "each", checked: false, categoryKey: null },
+  },
+];
 const exampleShoppingList = {
   id: "list_1",
   chef: exampleChef,
@@ -1189,6 +1297,17 @@ const responseExamples: Record<string, unknown> = {
       authenticated: true,
       principal: examplePrincipal,
       scopes: ["recipes:read"],
+    },
+  },
+  SearchEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      query: "pasta",
+      scope: "all",
+      limit: 20,
+      isAuthenticated: true,
+      results: exampleSearchResults,
     },
   },
   RecipeListEnvelope: {
@@ -1295,6 +1414,43 @@ const responseExamples: Record<string, unknown> = {
     },
   },
   CookbookDetailEnvelope: { ok: true, requestId: "req_example", data: { cookbook: exampleCookbookDetail } },
+  CreateCookbookEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      created: true,
+      cookbook: { ...exampleCookbookDetail, recipes: [] },
+      mutation: { clientMutationId: "device-uuid-cookbook-create", replayed: false },
+    },
+  },
+  UpdateCookbookEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      updated: true,
+      cookbook: { ...exampleCookbookDetail, title: "Weeknight Favorites" },
+      mutation: { clientMutationId: "device-uuid-cookbook-update", replayed: false },
+    },
+  },
+  DeleteCookbookEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      deleted: true,
+      cookbook: exampleCookbookDetail,
+      mutation: { clientMutationId: "device-uuid-cookbook-delete", replayed: false },
+    },
+  },
+  CookbookRecipeMutationEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      added: true,
+      recipeId: "recipe_1",
+      cookbook: exampleCookbookDetail,
+      mutation: { clientMutationId: "device-uuid-cookbook-recipe", replayed: false },
+    },
+  },
   AccountProfileEnvelope: { ok: true, requestId: "req_example", data: exampleAccountProfile },
   NotificationPreferencesEnvelope: { ok: true, requestId: "req_example", data: exampleNotificationPreferences },
   OAuthConnectionListEnvelope: { ok: true, requestId: "req_example", data: { connections: [exampleOAuthConnection] } },
@@ -1407,6 +1563,10 @@ const requestExamples: Record<string, unknown> = {
       capture: { source: "photo-library", assetIdentifier: "local-asset-1" },
     },
   },
+  CreateCookbookRequest: { clientMutationId: "device-uuid-cookbook-create", title: "Weeknight Favorites" },
+  UpdateCookbookRequest: { clientMutationId: "device-uuid-cookbook-update", title: "Weeknight Favorites" },
+  DeleteCookbookRequest: { clientMutationId: "device-uuid-cookbook-delete" },
+  CookbookRecipeMutationRequest: { clientMutationId: "device-uuid-cookbook-recipe" },
   CreateShoppingItemRequest: {
     clientMutationId: "device-uuid-1",
     name: "Eggs",
@@ -1617,6 +1777,13 @@ function isIdempotentRecipeImportMutation(path: ResourcePath, method: HttpMethod
   return path === "/api/v1/recipes/import" && method === "POST";
 }
 
+function isIdempotentCookbookMutation(path: ResourcePath, method: HttpMethod) {
+  if (method !== "POST" && method !== "PATCH" && method !== "DELETE") return false;
+  return path === "/api/v1/cookbooks" ||
+    path === "/api/v1/cookbooks/{id}" ||
+    path === "/api/v1/cookbooks/{id}/recipes/{recipeId}";
+}
+
 function retryPolicyFor(path: ResourcePath, method: HttpMethod) {
   if (path === "/api/v1/tokens" && method === "POST") {
     return {
@@ -1631,7 +1798,8 @@ function retryPolicyFor(path: ResourcePath, method: HttpMethod) {
     isIdempotentShoppingListMutation(path, method) ||
     isIdempotentCoverMutation(path, method) ||
     isIdempotentRecipeSpoonMutation(path, method) ||
-    isIdempotentRecipeImportMutation(path, method)
+    isIdempotentRecipeImportMutation(path, method) ||
+    isIdempotentCookbookMutation(path, method)
   ) {
     return {
       retryOn: ["network_timeout", "429", "5xx", "idempotency_in_progress"],
@@ -1693,6 +1861,21 @@ function idempotencyPolicyFor(path: ResourcePath, method: HttpMethod) {
       conflictStatus: 409,
       inProgressRetryAfterSeconds: 2,
       retryBodyRule: "Persist and retry the same parsed JSON body/source for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and source values still define conflicts.",
+    };
+  }
+  if (isIdempotentCookbookMutation(path, method)) {
+    return {
+      key: "clientMutationId",
+      location: method === "DELETE" ? "jsonBody, query, or X-Client-Mutation-Id" : "jsonBody",
+      retentionHours: 24,
+      replayStatus: path === "/api/v1/cookbooks" && method === "POST"
+        ? [201]
+        : path === "/api/v1/cookbooks/{id}/recipes/{recipeId}" && method === "POST"
+          ? [200, 201]
+          : [200],
+      conflictStatus: 409,
+      inProgressRetryAfterSeconds: 2,
+      retryBodyRule: "Persist and retry the same cookbook mutation body and path for this clientMutationId. Delete requests may put the idempotency key in the JSON body, query string, or X-Client-Mutation-Id header.",
     };
   }
   if (isIdempotentRecipeSpoonMutation(path, method)) {
@@ -1777,6 +1960,16 @@ function operationExtensions(path: ResourcePath, method: HttpMethod) {
     "x-retry-policy": retryPolicyFor(path, method),
     ...(cursorPolicy ? { "x-cursor-policy": cursorPolicy } : {}),
     ...(idempotencyPolicy ? { "x-idempotency": idempotencyPolicy } : {}),
+    ...(path === "/api/v1/search" && method === "GET"
+      ? {
+          "x-private-result-scope": {
+            scope: "shopping-list",
+            requiredScope: "shopping_list:read",
+            acceptedLegacyScope: "kitchen:read",
+            behavior: "Anonymous and under-scoped callers receive public recipe, cookbook, and chef rows. Explicit scope=shopping-list requires authentication and shopping-list read access.",
+          },
+        }
+      : {}),
     ...(path === "/api/v1/tokens" || path === "/api/v1/tokens/{credentialId}"
       ? {
           "x-personal-token-only": true,
@@ -2092,9 +2285,11 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
       const meta = operationMeta[path][method]!;
       const requirement = scopeRequirementForOperation(path, method);
       const responses: Record<string, unknown> = {};
+      const isSearchOperation = path === "/api/v1/search" && method === "GET";
       for (const [status, schemaName] of Object.entries(meta.success)) {
         responses[status] = successResponse(schemaName, {
           publicCache: method === "GET" && (
+            path === "/api/v1/search" ||
             path === "/api/v1/recipes" ||
             path === "/api/v1/recipes/{id}" ||
             path === "/api/v1/recipes/{id}/spoons" ||
@@ -2104,8 +2299,9 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
           noStore: requirement.auth === "bearer",
         });
       }
+      const errorScopes = isSearchOperation ? ["shopping_list:read"] : requirement.scopes;
       for (const [status, codes] of errorCodesByStatus(meta.errors)) {
-        responses[String(status)] = errorResponse(codes, requirement.scopes);
+        responses[String(status)] = errorResponse(codes, errorScopes);
       }
 
       const parameters = [...(meta.parameters ?? []), pathParameters.requestIdHeader];
@@ -2116,10 +2312,16 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
         summary: meta.summary,
         "x-auth": requirement.auth,
         "x-scopes": [...requirement.scopes],
-        "x-accepted-oauth-scopes": acceptedOauthScopeSets(requirement.scopes),
-        "x-credential-modes": credentialModesFor(requirement.auth, requirement.scopes),
+        "x-accepted-oauth-scopes": isSearchOperation
+          ? [["shopping_list:read"], ["kitchen:read"]]
+          : acceptedOauthScopeSets(requirement.scopes),
+        "x-credential-modes": isSearchOperation
+          ? ["anonymous", "session", "bearer", "oauth_pkce"]
+          : credentialModesFor(requirement.auth, requirement.scopes),
         ...operationExtensions(path, method),
-        security: securityFor(requirement.auth, requirement.scopes),
+        security: isSearchOperation
+          ? dedupeSecurityRequirements([{}, { bearerAuth: [] }, { cookieAuth: [] }, { oauth2: ["shopping_list:read"] }, { oauth2: ["kitchen:read"] }])
+          : securityFor(requirement.auth, requirement.scopes),
         parameters,
         ...(meta.requestBody
           ? {
@@ -2546,6 +2748,7 @@ const CONNECTOR_PATHS = new Set([
   "/api/v1/recipes/{id}",
   "/api/v1/cookbooks",
   "/api/v1/cookbooks/{id}",
+  "/api/v1/cookbooks/{id}/recipes/{recipeId}",
   "/api/v1/shopping-list",
   "/api/v1/shopping-list/sync",
   "/api/v1/shopping-list/items",
@@ -2564,6 +2767,7 @@ const SDK_PATHS = new Set([
   "/api/tools/poll_agent_connection",
   "/api/v1",
   "/api/v1/health",
+  "/api/v1/search",
   "/api/v1/recipes",
   "/api/v1/recipes/import",
   "/api/v1/recipes/{id}",
@@ -2575,6 +2779,7 @@ const SDK_PATHS = new Set([
   "/api/v1/recipes/{id}/covers/from-spoon/{spoonId}",
   "/api/v1/cookbooks",
   "/api/v1/cookbooks/{id}",
+  "/api/v1/cookbooks/{id}/recipes/{recipeId}",
   "/api/v1/me",
   "/api/v1/me/photo",
   "/api/v1/me/notification-preferences",
@@ -2700,6 +2905,30 @@ function annotateConnectorOperations(paths: MutableOpenApiDocument) {
         "x-item-path": "$.data.cookbooks",
         "x-cursor-path": "$.data.nextCursor",
       },
+      post: {
+        "x-connector-role": "action",
+        "x-display-name": "Create cookbook",
+      },
+    },
+    "/api/v1/cookbooks/{id}": {
+      patch: {
+        "x-connector-role": "action",
+        "x-display-name": "Rename cookbook",
+      },
+      delete: {
+        "x-connector-role": "action",
+        "x-display-name": "Delete cookbook",
+      },
+    },
+    "/api/v1/cookbooks/{id}/recipes/{recipeId}": {
+      post: {
+        "x-connector-role": "action",
+        "x-display-name": "Add recipe to cookbook",
+      },
+      delete: {
+        "x-connector-role": "action",
+        "x-display-name": "Remove recipe from cookbook",
+      },
     },
     "/api/v1/shopping-list/sync": {
       get: {
@@ -2762,6 +2991,14 @@ function stripCookieAuth(document: MutableOpenApiDocument) {
   stripCredentialMode(document.paths, "session");
 }
 
+function stripDeleteRequestBodies(paths: MutableOpenApiDocument) {
+  visitOpenApiNode(paths, (node) => {
+    if (node.delete && typeof node.delete === "object") {
+      delete node.delete.requestBody;
+    }
+  });
+}
+
 function sdkSchemasFor(document: MutableOpenApiDocument, paths: MutableOpenApiDocument) {
   return connectorSchemasFor(document, paths);
 }
@@ -2797,6 +3034,7 @@ export function buildApiV1ConnectorOpenApiDocument(options: BuildOpenApiOptions 
   stripCookieAuthFromConnectorPaths(paths);
   stripCredentialMode(paths, "session");
   preferOAuthForConnectorPaths(paths);
+  stripDeleteRequestBodies(paths);
   annotateConnectorOperations(paths);
   const schemas = connectorSchemasFor(full, paths);
   const document: MutableOpenApiDocument = {

@@ -16,7 +16,7 @@ export default defineConfig({
     sequence: {
       shuffle: false,
     },
-    exclude: ["**/node_modules/**", "**/e2e/**"],
+    exclude: ["**/node_modules/**", "**/e2e/**", "**/.claude/**"],
     coverage: {
       provider: "istanbul",
       reporter: ["text", "json", "html"],

@@ -33,6 +33,13 @@ import {
   buildApiV1OpenApiDocument,
   buildApiV1SdkOpenApiDocument,
 } from "~/lib/api-v1-openapi.server";
+import {
+  normalizeSearchLimit,
+  normalizeSearchScope,
+  searchSpoonjoy,
+  type SearchResult,
+  type SearchScope,
+} from "~/lib/search.server";
 import { enforceRateLimit } from "~/lib/rate-limit.server";
 import { getRequestDb } from "~/lib/route-platform.server";
 import {
@@ -321,6 +328,8 @@ function apiV1OperationFor(method: string, path: string): string | undefined {
       return "openapi.sdk.read";
     case "GET openapi-connector":
       return "openapi.connector.read";
+    case "GET search":
+      return "search.read";
     case "GET recipes":
       return "recipes.list";
     case "POST recipe-import":
@@ -349,8 +358,18 @@ function apiV1OperationFor(method: string, path: string): string | undefined {
       return "recipes.covers.from-spoon";
     case "GET cookbooks":
       return "cookbooks.list";
+    case "POST cookbooks-create":
+      return "cookbooks.create";
     case "GET cookbook":
       return "cookbooks.get";
+    case "PATCH cookbook-mutate":
+      return "cookbooks.update";
+    case "DELETE cookbook-mutate":
+      return "cookbooks.delete";
+    case "POST cookbook-recipes":
+      return "cookbooks.recipes.add";
+    case "DELETE cookbook-recipes":
+      return "cookbooks.recipes.remove";
     case "GET me":
       return "account.read";
     case "PATCH me":
@@ -405,7 +424,8 @@ function defaultIdempotencyOutcome(operation: string | undefined, errorCode: Api
     operation !== "shopping-list.clear-all" &&
     operation !== "recipes.import" &&
     !operation.startsWith("recipes.spoons.") &&
-    !operation.startsWith("recipes.covers.")
+    !operation.startsWith("recipes.covers.") &&
+    !operation.startsWith("cookbooks.")
   ) {
     return undefined;
   }
@@ -636,6 +656,16 @@ function parseShoppingSyncLimit(url: URL): number {
   return limit;
 }
 
+function parseSearchLimit(url: URL): number {
+  const raw = url.searchParams.get("limit");
+  if (raw === null || raw.trim() === "") return normalizeSearchLimit(null);
+  const limit = Number(raw);
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_LIST_LIMIT) {
+    throw new ApiV1Error("validation_error", "limit must be an integer between 1 and 50");
+  }
+  return normalizeSearchLimit(limit);
+}
+
 type ListCursor = { createdAt: Date; id: string; raw: string };
 
 function listCursorFor(row: Pick<RecipeSummaryRow, "createdAt" | "id">): string {
@@ -762,6 +792,68 @@ function publicAssetUrl(origin: string, value: string | null): string | null {
 }
 
 const API_V1_SPOON_CHEF_SELECT = { id: true, username: true, photoUrl: true } as const;
+
+function canReadPrivateSearch(principal: ApiPrincipal | null): principal is ApiPrincipal {
+  return Boolean(principal && principalHasScope(principal, "shopping_list:read"));
+}
+
+function viewerIdForSearchScope(scope: SearchScope, principal: ApiPrincipal | null): string | null {
+  if (scope === "shopping-list") {
+    if (!principal) {
+      throw new ApiV1Error("authentication_required", "Authentication required");
+    }
+    if (!canReadPrivateSearch(principal)) {
+      throw withApiV1ErrorPrincipal(
+        new ApiV1Error("insufficient_scope", "Missing required scope: shopping_list:read"),
+        principal,
+      );
+    }
+    return principal.id;
+  }
+
+  return canReadPrivateSearch(principal) ? principal.id : null;
+}
+
+function searchResultPayload(result: SearchResult, origin: string) {
+  return {
+    type: result.type,
+    id: result.id,
+    ownerId: result.ownerId,
+    ownerUsername: result.ownerUsername,
+    title: result.title,
+    subtitle: result.subtitle,
+    snippet: result.snippet,
+    href: result.href,
+    canonicalUrl: canonicalUrl(origin, result.href),
+    imageUrl: publicAssetUrl(origin, result.imageUrl),
+    score: result.score,
+    metadata: result.metadata,
+  };
+}
+
+async function handleSearch(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal | null) {
+  const db = await getRequestDb(args.context);
+  const url = new URL(args.request.url);
+  const origin = publicContentOrigin(args);
+  const query = (url.searchParams.get("query") ?? url.searchParams.get("q") ?? "").trim();
+  const scope = normalizeSearchScope(url.searchParams.get("scope"));
+  const limit = parseSearchLimit(url);
+  const viewerId = viewerIdForSearchScope(scope, principal);
+  const results = await searchSpoonjoy(db, {
+    query,
+    scope,
+    viewerId,
+    limit,
+  });
+
+  return apiV1Success(requestId, {
+    query,
+    scope,
+    limit,
+    isAuthenticated: Boolean(principal),
+    results: results.map((result) => searchResultPayload(result, origin)),
+  }, 200, principal ? authenticatedPublicCacheHeaders() : publicCacheHeaders());
+}
 
 type ApiV1SpoonWithChef = Prisma.RecipeSpoonGetPayload<{
   include: { chef: { select: typeof API_V1_SPOON_CHEF_SELECT } };
@@ -2342,6 +2434,210 @@ async function handleCookbookDetail(args: ApiV1RouteArgs, requestId: string, pri
   return apiV1Success(requestId, { cookbook: cookbookDetail(cookbook, origin) }, 200, principal ? authenticatedPublicCacheHeaders() : publicCacheHeaders());
 }
 
+function isPrismaErrorCode(error: unknown, code: string): boolean {
+  return Boolean(
+    error &&
+      typeof error === "object" &&
+      "code" in error &&
+      (error as { code?: unknown }).code === code,
+  );
+}
+
+async function loadExistingCookbookById(db: ApiV1Db, id: string) {
+  const cookbook = await loadCookbookById(db, id);
+  if (!cookbook) {
+    throw new ApiV1Error("not_found", "Cookbook not found", { resource: "cookbook", cookbookId: id });
+  }
+  return cookbook;
+}
+
+async function loadOwnedCookbookById(db: ApiV1Db, principal: ApiPrincipal, id: string) {
+  const cookbook = await loadExistingCookbookById(db, id);
+  if (cookbook.author.id !== principal.id) {
+    throw new ApiV1Error("insufficient_scope", "Only the cookbook owner can mutate this cookbook", { resource: "cookbook", cookbookId: id });
+  }
+  return cookbook;
+}
+
+function duplicateCookbookTitleError() {
+  return new ApiV1Error("validation_error", "You already have a cookbook with this title", { field: "title" });
+}
+
+async function handleCookbookCreate(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
+  const body = await parseApiV1JsonBody(args.request);
+  assertKnownFields(body, ["clientMutationId", "title"]);
+  const clientMutationId = nonblankString(body.clientMutationId, "clientMutationId");
+  const title = nonblankString(body.title, "title");
+  const origin = publicContentOrigin(args);
+
+  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "cookbooks.create", async (db) => {
+    let cookbookId: string;
+    try {
+      const created = await db.cookbook.create({
+        data: { title, authorId: principal.id },
+        select: { id: true },
+      });
+      cookbookId = created.id;
+    } catch (error) {
+      if (isPrismaErrorCode(error, "P2002")) {
+        throw duplicateCookbookTitleError();
+      }
+      throw error;
+    }
+
+    const cookbook = await loadExistingCookbookById(db, cookbookId);
+    return {
+      status: 201,
+      data: {
+        created: true,
+        cookbook: cookbookDetail(cookbook, origin),
+        mutation: { clientMutationId, replayed: false },
+      },
+    };
+  });
+}
+
+async function handleCookbookUpdate(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, id: string) {
+  const body = await parseApiV1JsonBody(args.request);
+  assertKnownFields(body, ["clientMutationId", "title"]);
+  const clientMutationId = nonblankString(body.clientMutationId, "clientMutationId");
+  const title = nonblankString(body.title, "title");
+  const origin = publicContentOrigin(args);
+
+  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "cookbooks.update", async (db) => {
+    await loadOwnedCookbookById(db, principal, id);
+    try {
+      await db.cookbook.update({
+        where: { id },
+        data: { title },
+      });
+    } catch (error) {
+      if (isPrismaErrorCode(error, "P2002")) {
+        throw duplicateCookbookTitleError();
+      }
+      throw error;
+    }
+
+    const cookbook = await loadExistingCookbookById(db, id);
+    return {
+      status: 200,
+      data: {
+        updated: true,
+        cookbook: cookbookDetail(cookbook, origin),
+        mutation: { clientMutationId, replayed: false },
+      },
+    };
+  });
+}
+
+async function handleCookbookDelete(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, id: string) {
+  const body = await parseApiV1JsonBody(args.request);
+  assertKnownFields(body, ["clientMutationId"]);
+  const url = new URL(args.request.url);
+  const clientMutationId = nonblankString(
+    body.clientMutationId ?? args.request.headers.get("X-Client-Mutation-Id") ?? url.searchParams.get("clientMutationId"),
+    "clientMutationId",
+  );
+  const idempotencyBody = { clientMutationId };
+  const origin = publicContentOrigin(args);
+
+  return await runIdempotentShoppingMutation(args, requestId, principal, idempotencyBody, clientMutationId, "cookbooks.delete", async (db) => {
+    const cookbook = await loadOwnedCookbookById(db, principal, id);
+    await db.cookbook.delete({ where: { id } });
+    return {
+      status: 200,
+      data: {
+        deleted: true,
+        cookbook: cookbookDetail(cookbook, origin),
+        mutation: { clientMutationId, replayed: false },
+      },
+    };
+  });
+}
+
+async function handleCookbookRecipeAdd(
+  args: ApiV1RouteArgs,
+  requestId: string,
+  principal: ApiPrincipal,
+  cookbookId: string,
+  recipeId: string,
+) {
+  const body = await parseApiV1JsonBody(args.request);
+  assertKnownFields(body, ["clientMutationId"]);
+  const clientMutationId = nonblankString(body.clientMutationId, "clientMutationId");
+  const origin = publicContentOrigin(args);
+
+  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "cookbooks.recipes.add", async (db) => {
+    await loadOwnedCookbookById(db, principal, cookbookId);
+    const recipe = await db.recipe.findFirst({
+      where: { id: recipeId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!recipe) {
+      throw new ApiV1Error("not_found", "Recipe not found", { resource: "recipe", recipeId });
+    }
+
+    let added = true;
+    try {
+      await db.recipeInCookbook.create({
+        data: { cookbookId, recipeId, addedById: principal.id },
+      });
+    } catch (error) {
+      if (isPrismaErrorCode(error, "P2002")) {
+        added = false;
+      } else {
+        throw error;
+      }
+    }
+
+    const cookbook = await loadExistingCookbookById(db, cookbookId);
+    return {
+      status: added ? 201 : 200,
+      data: {
+        added,
+        recipeId,
+        cookbook: cookbookDetail(cookbook, origin),
+        mutation: { clientMutationId, replayed: false },
+      },
+    };
+  });
+}
+
+async function handleCookbookRecipeRemove(
+  args: ApiV1RouteArgs,
+  requestId: string,
+  principal: ApiPrincipal,
+  cookbookId: string,
+  recipeId: string,
+) {
+  const body = await parseApiV1JsonBody(args.request);
+  assertKnownFields(body, ["clientMutationId"]);
+  const url = new URL(args.request.url);
+  const clientMutationId = nonblankString(
+    body.clientMutationId ?? args.request.headers.get("X-Client-Mutation-Id") ?? url.searchParams.get("clientMutationId"),
+    "clientMutationId",
+  );
+  const idempotencyBody = { clientMutationId };
+  const origin = publicContentOrigin(args);
+
+  return await runIdempotentShoppingMutation(args, requestId, principal, idempotencyBody, clientMutationId, "cookbooks.recipes.remove", async (db) => {
+    await loadOwnedCookbookById(db, principal, cookbookId);
+    const result = await db.recipeInCookbook.deleteMany({
+      where: { cookbookId, recipeId },
+    });
+    const cookbook = await loadExistingCookbookById(db, cookbookId);
+    return {
+      status: 200,
+      data: {
+        removed: result.count > 0,
+        recipeId,
+        cookbook: cookbookDetail(cookbook, origin),
+        mutation: { clientMutationId, replayed: false },
+      },
+    };
+  });
+}
+
 async function loadShoppingListForUser(db: ApiV1WriteDb, userId: string) {
   const include = {
     author: { select: { id: true, username: true } },
@@ -3701,6 +3997,12 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
       return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
     }
 
+    if (args.request.method === "GET" && path === "search") {
+      const principal = await authorize(path);
+      const response = await handleSearch(args, requestId, principal);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
     if (args.request.method === "GET" && path === "recipes") {
       const principal = await authorize(path);
       const response = await handleRecipeList(args, requestId, principal);
@@ -3790,9 +4092,39 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
       return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
     }
 
+    if (args.request.method === "POST" && path === "cookbooks") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleCookbookCreate(args, requestId, principal);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
     if (args.request.method === "GET" && segments[0] === "cookbooks" && segments.length === 2) {
       const principal = await authorize(path);
       const response = await handleCookbookDetail(args, requestId, principal, segments[1]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "PATCH" && segments[0] === "cookbooks" && segments.length === 2) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleCookbookUpdate(args, requestId, principal, segments[1]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "DELETE" && segments[0] === "cookbooks" && segments.length === 2) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleCookbookDelete(args, requestId, principal, segments[1]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "POST" && segments[0] === "cookbooks" && segments[2] === "recipes" && segments.length === 4) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleCookbookRecipeAdd(args, requestId, principal, segments[1], segments[3]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "DELETE" && segments[0] === "cookbooks" && segments[2] === "recipes" && segments.length === 4) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleCookbookRecipeRemove(args, requestId, principal, segments[1], segments[3]);
       return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
     }
 
