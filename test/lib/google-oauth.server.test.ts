@@ -892,5 +892,107 @@ describe("google-oauth.server", () => {
         });
       });
     });
+
+    // The telemetry-coverage allowlist categorizes google-oauth.server.ts as
+    // "delegated": the file emits no capture call of its own, but every failure
+    // path invokes the threaded `capture` callback so the auth-telemetry sink
+    // records it (with provider+phase[+httpStatus]). These tests pin that
+    // delegation so a refactor dropping a `capture?.()` call regresses here
+    // rather than silently turning the file into an uninstrumented gap.
+    describe("delegated capture callback", () => {
+      const validCallback: GoogleCallbackData = {
+        code: "valid-auth-code",
+        state: "valid-state",
+        codeVerifier: "valid-code-verifier-at-least-43-characters-long",
+      };
+
+      it("captures a userinfo non-2xx with the upstream status under the userinfo phase", async () => {
+        const capture = vi.fn();
+        setupMockUserinfoError(401, "Unauthorized");
+
+        const result = await verifyGoogleCallback(mockConfig, mockRedirectUri, validCallback, capture);
+
+        expect(result.error).toBe("userinfo_error");
+        expect(capture).toHaveBeenCalledTimes(1);
+        expect(capture).toHaveBeenCalledWith(
+          expect.objectContaining({ phase: "userinfo", httpStatus: 401 }),
+        );
+        expect(capture.mock.calls[0][0].error).toBeInstanceOf(Error);
+      });
+
+      it("captures a userinfo network error under the userinfo phase", async () => {
+        const capture = vi.fn();
+        setupMockNetworkError();
+
+        const result = await verifyGoogleCallback(mockConfig, mockRedirectUri, validCallback, capture);
+
+        expect(result.error).toBe("network_error");
+        expect(capture).toHaveBeenCalledWith(
+          expect.objectContaining({ phase: "userinfo" }),
+        );
+      });
+
+      it("captures an OAuth provider error under the token_exchange phase", async () => {
+        const capture = vi.fn();
+
+        const result = await verifyGoogleCallback(
+          mockConfig,
+          mockRedirectUri,
+          { ...validCallback, code: "code-that-triggers-oauth-error" },
+          capture,
+        );
+
+        expect(result.error).toBe("oauth_error");
+        expect(capture).toHaveBeenCalledWith(
+          expect.objectContaining({ phase: "token_exchange" }),
+        );
+      });
+
+      it("captures a token-exchange network error under the token_exchange phase", async () => {
+        const capture = vi.fn();
+
+        const result = await verifyGoogleCallback(
+          mockConfig,
+          mockRedirectUri,
+          { ...validCallback, code: "code-that-triggers-network-error" },
+          capture,
+        );
+
+        expect(result.error).toBe("network_error");
+        expect(capture).toHaveBeenCalledWith(
+          expect.objectContaining({ phase: "token_exchange" }),
+        );
+      });
+
+      it("captures a flattened-to-invalid_code failure under the token_exchange phase", async () => {
+        const capture = vi.fn();
+
+        const result = await verifyGoogleCallback(
+          mockConfig,
+          mockRedirectUri,
+          { ...validCallback, code: "invalid-code" },
+          capture,
+        );
+
+        expect(result.error).toBe("invalid_code");
+        expect(capture).toHaveBeenCalledWith(
+          expect.objectContaining({ phase: "token_exchange" }),
+        );
+      });
+
+      it("does NOT capture on the happy path", async () => {
+        const capture = vi.fn();
+        setupMockUserinfo({
+          sub: generateGoogleUserId(),
+          email: faker.internet.email().toLowerCase(),
+          email_verified: true,
+        });
+
+        const result = await verifyGoogleCallback(mockConfig, mockRedirectUri, validCallback, capture);
+
+        expect(result.success).toBe(true);
+        expect(capture).not.toHaveBeenCalled();
+      });
+    });
   });
 });

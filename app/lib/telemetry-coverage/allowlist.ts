@@ -195,39 +195,39 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
   },
   {
     file: "app/lib/oauth-route.server.ts",
-    category: "backfill",
+    category: "swallow",
     reason:
-      "OAuth provider-server route helper; catches flatten to OAuth error responses. Backfill: capture unexpected (non-protocol) failures via the auth telemetry sink.",
+      "Sole catch is in sameOriginReferer(): a malformed/absent Referer header is parsed to null so no same-origin default redirect is derived. Pure parse fallback; no user-facing failure is hidden, so no exception capture is warranted.",
   },
   {
     file: "app/lib/oauth-routes.server.ts",
-    category: "backfill",
+    category: "rethrow",
     reason:
-      "OAuth authorize/token/register/revoke handlers; many catches return spec-compliant OAuth errors. Backfill: capture only the unexpected server failures (most catches are expected protocol 4xx).",
+      "authorize/token/register/revoke handlers: catches either return spec-compliant OAuthError 4xx responses, parse-fail to 400, or best-effort telemetry-metadata fallbacks. The only unexpected (non-OAuthError) path re-throws via oauthErrorResponse() to the platform, where entry.server.tsx handleError captures it with route+method. No silent swallow.",
   },
   {
     file: "app/lib/oauth-server.server.ts",
-    category: "backfill",
+    category: "expected-4xx",
     reason:
-      "OAuth server core; catch guards token/grant handling. Backfill: capture unexpected grant-processing failures.",
+      "Sole catch is in isValidRedirectUri(): an unparseable redirect_uri returns false, which the caller maps to an invalid_redirect_uri client (4xx) error. Validation predicate over a client-supplied value; not an unexpected server exception.",
   },
   {
     file: "app/lib/apple-oauth.server.ts",
-    category: "backfill",
+    category: "delegated",
     reason:
-      "Apple client-secret JWT + token exchange. The callback orchestrator captures verify failures via the auth sink, but the low-level helper's own catches are uncaptured. Backfill: pass a capture callback (mirrors google/github helpers' phase capture).",
+      "Every catch in verifyAppleCallback already calls the threaded capture callback (capture?.({ error, phase })). The sole production caller (oauth-callback-route.server.ts) passes verifyCaptureFor(telemetry, provider), so a provider/crypto outage IS captured via the auth-telemetry PostHog sink with provider+phase. The static scanner cannot see the local-callback indirection; no capture call appears in the file itself.",
   },
   {
     file: "app/lib/google-oauth.server.ts",
-    category: "backfill",
+    category: "delegated",
     reason:
-      "Google token/userinfo helper; low-level catches map provider failures to errors surfaced upstream. Backfill: thread the verify-phase capture callback through (callback route captures the flattened error).",
+      "Every catch in verifyGoogleCallback (token exchange, userinfo non-2xx, network) already calls the threaded capture callback. The sole production caller (oauth-callback-route.server.ts) passes verifyCaptureFor(telemetry, provider), so failures ARE captured via the auth-telemetry sink with provider+phase+httpStatus. No capture call appears in the file itself (local-callback indirection the scanner cannot resolve).",
   },
   {
     file: "app/lib/github-oauth.server.ts",
-    category: "backfill",
+    category: "delegated",
     reason:
-      "GitHub token/userinfo helper; low-level catch surfaces provider failures upstream. Backfill: thread the verify-phase capture callback through (callback route captures the flattened error).",
+      "verifyGitHubCallback captures /user|/user/emails non-2xx and token-exchange/network failures via the threaded capture callback, and re-throws truly unexpected errors to the callback route (which captures + flattens). The sole production caller passes verifyCaptureFor(telemetry, provider), so failures reach the auth-telemetry sink with provider+phase+httpStatus. No capture call appears in the file itself (local-callback indirection).",
   },
 
   // --- route-level backfill candidates ---

@@ -736,5 +736,103 @@ not-base64-@@@
         expect(result.appleUser).toBeUndefined();
       });
     });
+
+    // The telemetry-coverage allowlist categorizes apple-oauth.server.ts as
+    // "delegated": the file emits no capture call of its own, but every failure
+    // path invokes the threaded `capture` callback so the auth-telemetry sink
+    // records it (with provider+phase). These tests pin that delegation so a
+    // refactor dropping a `capture?.()` call regresses here rather than
+    // silently turning the file into an uninstrumented gap.
+    describe("delegated capture callback", () => {
+      it("captures invalid user-parameter JSON under the verify phase (then continues)", async () => {
+        const capture = vi.fn();
+        const callbackData: AppleCallbackData = {
+          code: "valid-auth-code",
+          state: "valid-state",
+          user: "not-valid-json{{{",
+        };
+
+        const result = await verifyAppleCallback(mockConfig, mockRedirectUri, callbackData, capture);
+
+        // Verification still succeeds (name data is dropped), but the encoding
+        // failure is captured so a systematic bug is visible.
+        expect(result.success).toBe(true);
+        expect(capture).toHaveBeenCalledWith(
+          expect.objectContaining({ phase: "verify" }),
+        );
+        expect(capture.mock.calls[0][0].error).toBeInstanceOf(Error);
+      });
+
+      it("captures a misconfigured signing key under the config phase", async () => {
+        const capture = vi.fn();
+        const configWithMalformedKey: AppleOAuthConfig = {
+          ...mockConfig,
+          privateKey: `-----BEGIN PRIVATE KEY-----\nnot-base64-@@@\n-----END PRIVATE KEY-----`,
+        };
+        const callbackData: AppleCallbackData = { code: "valid-auth-code", state: "valid-state" };
+
+        const result = await verifyAppleCallback(configWithMalformedKey, mockRedirectUri, callbackData, capture);
+
+        expect(result.error).toBe("oauth_unconfigured");
+        expect(capture).toHaveBeenCalledWith(
+          expect.objectContaining({ phase: "config" }),
+        );
+      });
+
+      it("captures an OAuth provider error under the token_exchange phase", async () => {
+        const capture = vi.fn();
+        const callbackData: AppleCallbackData = {
+          code: "code-that-triggers-oauth-error",
+          state: "valid-state",
+        };
+
+        const result = await verifyAppleCallback(mockConfig, mockRedirectUri, callbackData, capture);
+
+        expect(result.error).toBe("oauth_error");
+        expect(capture).toHaveBeenCalledWith(
+          expect.objectContaining({ phase: "token_exchange" }),
+        );
+      });
+
+      it("captures a network error under the token_exchange phase", async () => {
+        const capture = vi.fn();
+        const callbackData: AppleCallbackData = {
+          code: "code-that-triggers-network-error",
+          state: "valid-state",
+        };
+
+        const result = await verifyAppleCallback(mockConfig, mockRedirectUri, callbackData, capture);
+
+        expect(result.error).toBe("network_error");
+        expect(capture).toHaveBeenCalledWith(
+          expect.objectContaining({ phase: "token_exchange" }),
+        );
+      });
+
+      it("captures a flattened-to-invalid_code failure under the token_exchange phase", async () => {
+        const capture = vi.fn();
+        const callbackData: AppleCallbackData = { code: "invalid-code", state: "valid-state" };
+
+        const result = await verifyAppleCallback(mockConfig, mockRedirectUri, callbackData, capture);
+
+        expect(result.error).toBe("invalid_code");
+        expect(capture).toHaveBeenCalledWith(
+          expect.objectContaining({ phase: "token_exchange" }),
+        );
+      });
+
+      it("does NOT capture on the happy path", async () => {
+        const capture = vi.fn();
+        mockArcticState.appleUserId = generateAppleUserId();
+        mockArcticState.email = faker.internet.email().toLowerCase();
+        mockArcticState.emailVerified = "true";
+        const callbackData: AppleCallbackData = { code: "valid-auth-code", state: "valid-state" };
+
+        const result = await verifyAppleCallback(mockConfig, mockRedirectUri, callbackData, capture);
+
+        expect(result.success).toBe(true);
+        expect(capture).not.toHaveBeenCalled();
+      });
+    });
   });
 });
