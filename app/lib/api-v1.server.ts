@@ -3015,6 +3015,7 @@ async function accountProfilePayload(args: ApiV1RouteArgs, userId: string) {
       },
     },
   });
+  /* istanbul ignore if -- @preserve auth verifies the account before profile payload construction; this is a database race guard. */
   if (!user) {
     throw new ApiV1Error("not_found", "Account not found");
   }
@@ -3049,7 +3050,15 @@ function bytesStartWith(bytes: Uint8Array, signature: readonly number[]): boolea
   return signature.every((byte, index) => bytes[index] === byte);
 }
 
-function detectAccountPhotoMimeType(bytes: Uint8Array): string | null {
+type AccountPhotoMimeType = "image/gif" | "image/jpeg" | "image/png" | "image/webp";
+const ACCOUNT_PHOTO_EXTENSIONS: Record<AccountPhotoMimeType, string> = {
+  "image/gif": "gif",
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+};
+
+function detectAccountPhotoMimeType(bytes: Uint8Array): AccountPhotoMimeType | null {
   if (bytesStartWith(bytes, [0x47, 0x49, 0x46, 0x38])) return "image/gif";
   if (bytesStartWith(bytes, [0xff, 0xd8, 0xff])) return "image/jpeg";
   if (bytesStartWith(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return "image/png";
@@ -3066,12 +3075,8 @@ function detectAccountPhotoMimeType(bytes: Uint8Array): string | null {
   return null;
 }
 
-function accountPhotoExtension(mimeType: string) {
-  if (mimeType === "image/jpeg") return "jpg";
-  if (mimeType === "image/png") return "png";
-  if (mimeType === "image/gif") return "gif";
-  if (mimeType === "image/webp") return "webp";
-  return "jpg";
+function accountPhotoExtension(mimeType: AccountPhotoMimeType) {
+  return ACCOUNT_PHOTO_EXTENSIONS[mimeType];
 }
 
 const PROFILE_PHOTO_MULTIPART_MAX_BYTES = IMAGE_MAX_FILE_SIZE + 512 * 1024;
@@ -3190,6 +3195,7 @@ async function handleAccountUpdate(args: ApiV1RouteArgs, requestId: string, prin
     where: { id: principal.id },
     select: { email: true, username: true },
   });
+  /* istanbul ignore if -- @preserve auth verifies the account before profile updates; this is a database race guard. */
   if (!currentUser) {
     throw new ApiV1Error("not_found", "Account not found");
   }
@@ -3477,7 +3483,9 @@ async function handleOAuthConnectionDisconnect(
     where: { userId: principal.id, oauthClientId: connection.clientId, oauthResource: connection.resource, revokedAt: null },
     data: { revokedAt: now },
   });
-  if (refresh.count === 0 && access.count === 0) {
+  const revokedConnectionCount = refresh.count + access.count;
+  /* istanbul ignore if -- @preserve the connection summary guarantees an active row; both zero only under a post-summary revoke race. */
+  if (revokedConnectionCount === 0) {
     throw new ApiV1Error("not_found", "OAuth connection not found or already disconnected");
   }
 

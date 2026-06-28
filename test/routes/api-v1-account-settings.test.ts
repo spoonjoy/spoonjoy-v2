@@ -196,6 +196,12 @@ describe("API v1 native account settings", () => {
     await expect(db.user.findUniqueOrThrow({ where: { id: userId } }))
       .resolves.toMatchObject({ email: newEmail.toLowerCase(), username: newUsername });
 
+    const noChange = await apiPatch("me", {
+      Authorization: `Bearer ${bearer.token}`,
+    }, "req_me_profile_no_change", { email: newEmail.toLowerCase(), username: newUsername });
+
+    expect(noChange.status).toBe(200);
+
     const emailConflict = await apiPatch("me", {
       Authorization: `Bearer ${bearer.token}`,
     }, "req_me_email_conflict", { email: other.email.toUpperCase(), username: newUsername });
@@ -208,6 +214,18 @@ describe("API v1 native account settings", () => {
       error: { code: "validation_error", details: { field: "email" } },
     });
 
+    const usernameConflict = await apiPatch("me", {
+      Authorization: `Bearer ${bearer.token}`,
+    }, "req_me_username_conflict", { email: newEmail, username: other.username });
+    const usernameConflictPayload = await readJson(usernameConflict);
+
+    expect(usernameConflict.status).toBe(400);
+    expect(usernameConflictPayload).toMatchObject({
+      ok: false,
+      requestId: "req_me_username_conflict",
+      error: { code: "validation_error", details: { field: "username" } },
+    });
+
     const invalid = await apiPatch("me", {
       Authorization: `Bearer ${bearer.token}`,
     }, "req_me_profile_invalid", { email: "not-an-email", username: "" });
@@ -215,6 +233,17 @@ describe("API v1 native account settings", () => {
 
     expect(invalid.status).toBe(400);
     expect(invalidPayload.error).toMatchObject({
+      code: "validation_error",
+      details: { fields: expect.arrayContaining(["email", "username"]) },
+    });
+
+    const nonStringInvalid = await apiPatch("me", {
+      Authorization: `Bearer ${bearer.token}`,
+    }, "req_me_profile_non_string_invalid", { email: 123, username: 456 });
+    const nonStringInvalidPayload = await readJson(nonStringInvalid);
+
+    expect(nonStringInvalid.status).toBe(400);
+    expect(nonStringInvalidPayload.error).toMatchObject({
       code: "validation_error",
       details: { fields: expect.arrayContaining(["email", "username"]) },
     });
@@ -257,6 +286,26 @@ describe("API v1 native account settings", () => {
         notifyCookbookSaveOfMine: false,
         notifyFellowChefOriginCook: true,
       });
+
+    const persisted = await apiGet("me/notification-preferences", { Cookie: cookie }, "req_me_notifications_persisted");
+    const persistedPayload = await readJson(persisted);
+
+    expect(persisted.status).toBe(200);
+    expect(persistedPayload.data).toEqual(updatePayload.data);
+
+    const invalid = await apiPatch("me/notification-preferences", { Cookie: cookie }, "req_me_notifications_invalid_boolean", {
+      notifySpoonOnMyRecipe: "false",
+      notifyForkOfMyRecipe: true,
+      notifyCookbookSaveOfMine: false,
+      notifyFellowChefOriginCook: true,
+    });
+    const invalidPayload = await readJson(invalid);
+
+    expect(invalid.status).toBe(400);
+    expect(invalidPayload.error).toMatchObject({
+      code: "validation_error",
+      details: { field: "notifySpoonOnMyRecipe" },
+    });
   });
 
   it("uploads, rejects, and removes native profile photos", async () => {
@@ -291,6 +340,49 @@ describe("API v1 native account settings", () => {
 
     expect(invalid.status).toBe(400);
     expect(invalidPayload.error).toMatchObject({ code: "validation_error", details: { field: "photo" } });
+
+    const missingFormData = new UndiciFormData();
+    const missing = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/me/photo", {
+      method: "POST",
+      headers: { Cookie: cookie, "X-Request-Id": "req_me_photo_missing" },
+      body: missingFormData,
+      duplex: "half",
+    }) as unknown as Request, "me/photo"));
+    const missingPayload = await readJson(missing);
+
+    expect(missing.status).toBe(400);
+    expect(missingPayload.error).toMatchObject({ code: "validation_error", details: { field: "photo", reason: "missing" } });
+
+    const noBody = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/me/photo", {
+      method: "POST",
+      headers: { Cookie: cookie, "Content-Type": "application/x-www-form-urlencoded", "X-Request-Id": "req_me_photo_no_body" },
+    }) as unknown as Request, "me/photo"));
+    const noBodyPayload = await readJson(noBody);
+
+    expect(noBody.status).toBe(400);
+    expect(noBodyPayload.error).toMatchObject({ code: "validation_error", details: { field: "photo", reason: "missing" } });
+
+    const urlEncodedBytes = new TextEncoder().encode("photo=");
+    const streamedWithLength = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/me/photo", {
+      method: "POST",
+      headers: {
+        Cookie: cookie,
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Content-Length": String(urlEncodedBytes.byteLength),
+        "X-Request-Id": "req_me_photo_streamed_with_length",
+      },
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(urlEncodedBytes);
+          controller.close();
+        },
+      }),
+      duplex: "half",
+    }) as unknown as Request, "me/photo"));
+    const streamedWithLengthPayload = await readJson(streamedWithLength);
+
+    expect(streamedWithLength.status).toBe(400);
+    expect(streamedWithLengthPayload.error).toMatchObject({ code: "validation_error", details: { field: "photo", reason: "missing" } });
 
     const spoofed = await uploadProfilePhoto(
       cookie,
@@ -363,6 +455,28 @@ describe("API v1 native account settings", () => {
     expect(oversizedChunked.status).toBe(400);
     expect(oversizedChunkedPayload.error).toMatchObject({ code: "validation_error", details: { field: "photo" } });
 
+    const cancelRejectingOversized = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/me/photo", {
+      method: "POST",
+      headers: {
+        Cookie: cookie,
+        "Content-Type": "multipart/form-data; boundary=spoonjoy-native-boundary",
+        "X-Request-Id": "req_me_photo_cancel_rejecting_oversized",
+      },
+      body: new ReadableStream<Uint8Array>({
+        pull(controller) {
+          controller.enqueue(new Uint8Array(6 * 1024 * 1024));
+        },
+        cancel() {
+          return Promise.reject(new Error("cancel rejected"));
+        },
+      }),
+      duplex: "half",
+    }) as unknown as Request, "me/photo"));
+    const cancelRejectingPayload = await readJson(cancelRejectingOversized);
+
+    expect(cancelRejectingOversized.status).toBe(400);
+    expect(cancelRejectingPayload.error).toMatchObject({ code: "validation_error", details: { field: "photo" } });
+
     const remove = await apiDelete("me/photo", { Cookie: cookie }, "req_me_photo_remove");
     const removePayload = await readJson(remove);
 
@@ -370,6 +484,28 @@ describe("API v1 native account settings", () => {
     expect(removePayload.data).toMatchObject({ photoUrl: null });
     await expect(db.user.findUniqueOrThrow({ where: { id: userId } }))
       .resolves.toMatchObject({ photoUrl: null });
+
+    await db.user.update({
+      where: { id: userId },
+      data: { photoUrl: `/photos/profiles/${userId}/avatar.jpg` },
+    });
+    const deleteCalls: string[] = [];
+    const removeWithEnv = await action(routeArgs(jsonRequest("me/photo", "DELETE", {
+      Cookie: cookie,
+      "X-Request-Id": "req_me_photo_remove_with_env",
+    }), "me/photo", {
+      cloudflare: {
+        env: {
+          POSTHOG_KEY: "ph_test",
+          PHOTOS: { delete: async (key: string) => { deleteCalls.push(key); } },
+        },
+      },
+    }));
+    const removeWithEnvPayload = await readJson(removeWithEnv);
+
+    expect(removeWithEnv.status).toBe(200);
+    expect(removeWithEnvPayload.data).toMatchObject({ photoUrl: null });
+    expect(deleteCalls).toEqual([`profiles/${userId}/avatar.jpg`]);
   });
 
   it("lists and disconnects OAuth app connections with opaque native IDs", async () => {
@@ -381,11 +517,20 @@ describe("API v1 native account settings", () => {
       },
     });
     await oauthConnectionFixture(userId, client.id, "https://spoonjoy.app/mcp", "shopping_list:read", new Date("2026-06-22T10:00:00.000Z"));
+    await oauthConnectionFixture(userId, client.id, "https://spoonjoy.app/mcp", "cookbooks:read", new Date("2026-06-22T10:00:00.000Z"));
     await oauthConnectionFixture(userId, client.id, "https://spoonjoy.app/mcp", "recipes:read shopping_list:write", new Date("2026-06-21T10:00:00.000Z"));
     const access = await createApiCredential(db, userId, "Meal planner access", {
       scopes: ["shopping_list:read"],
       oauthClientId: client.id,
       oauthResource: "https://spoonjoy.app/mcp",
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    const missingClientId = `cm_missing_${faker.string.alphanumeric(8)}`;
+    await oauthConnectionFixture(userId, missingClientId, null, "account:read", new Date("2026-06-20T10:00:00.000Z"));
+    await createApiCredential(db, userId, "Missing client access", {
+      scopes: ["account:read"],
+      oauthClientId: missingClientId,
+      oauthResource: null,
       expiresAt: new Date(Date.now() + 60_000),
     });
 
@@ -401,13 +546,58 @@ describe("API v1 native account settings", () => {
       clientId: client.id,
       clientName: "Meal planner",
       resource: "https://spoonjoy.app/mcp",
-      scopes: ["recipes:read", "shopping_list:read", "shopping_list:write"],
+      scopes: ["cookbooks:read", "recipes:read", "shopping_list:read", "shopping_list:write"],
       createdAt: "2026-06-21T10:00:00.000Z",
-      refreshTokenCount: 2,
+      refreshTokenCount: 3,
+      accessTokenCount: 1,
+    }), expect.objectContaining({
+      clientId: missingClientId,
+      clientName: missingClientId,
+      resource: null,
+      scopes: ["account:read"],
+      refreshTokenCount: 1,
       accessTokenCount: 1,
     })]);
 
-    const connectionId = payload.data.connections[0].id;
+    type NativeConnectionSummary = {
+      id: string;
+      clientId: string;
+      resource: string | null;
+    };
+    const connections = payload.data.connections as NativeConnectionSummary[];
+    const primaryConnection = connections.find((connection) =>
+      connection.clientId === client.id && connection.resource === "https://spoonjoy.app/mcp");
+
+    expect(primaryConnection).toBeDefined();
+    const connectionId = primaryConnection!.id;
+    const malformedPrefix = await apiDelete("me/connections/not-a-connection", {
+      Authorization: `Bearer ${token.token}`,
+    }, "req_me_connection_bad_prefix");
+
+    expect(malformedPrefix.status).toBe(404);
+
+    const wrongShapeId = `conn_${Buffer.from(JSON.stringify({
+      clientId: 123,
+      resource: null,
+      connectionKey: "bad",
+    })).toString("base64url")}`;
+    const wrongShape = await apiDelete(`me/connections/${wrongShapeId}`, {
+      Authorization: `Bearer ${token.token}`,
+    }, "req_me_connection_wrong_shape");
+
+    expect(wrongShape.status).toBe(404);
+
+    const invalidResourceId = `conn_${Buffer.from(JSON.stringify({
+      clientId: "client-with-invalid-resource",
+      resource: 123,
+      connectionKey: "bad-resource",
+    })).toString("base64url")}`;
+    const invalidResource = await apiDelete(`me/connections/${invalidResourceId}`, {
+      Authorization: `Bearer ${token.token}`,
+    }, "req_me_connection_invalid_resource");
+
+    expect(invalidResource.status).toBe(404);
+
     const disconnect = await apiDelete(`me/connections/${connectionId}`, {
       Authorization: `Bearer ${token.token}`,
     }, "req_me_connection_disconnect");

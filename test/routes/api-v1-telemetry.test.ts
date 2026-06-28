@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { faker } from "@faker-js/faker";
-import { Request as UndiciRequest } from "undici";
+import { FormData as UndiciFormData, Request as UndiciRequest } from "undici";
 import { action, loader } from "~/routes/api.v1.$";
 import * as apiAuth from "~/lib/api-auth.server";
 import { createApiCredential } from "~/lib/api-auth.server";
@@ -893,6 +893,159 @@ describe("API v1 mutation and validation telemetry", () => {
         createPayload.data.credential.tokenPrefix,
         revoke.bodyText,
       ],
+    });
+  });
+
+  it("captures native account settings operations without profile, token, or connection values", async () => {
+    const user = await db.user.create({ data: createTestUser() });
+    const cookie = await sessionCookie(user.id);
+    const connectionToken = await createApiCredential(db, user.id, "Telemetry connection token", {
+      scopes: ["tokens:read", "tokens:write"],
+    });
+
+    function expectAccountOperation(input: {
+      routeTemplate: string;
+      requestId: string;
+      operation: string;
+      status: number;
+      forbidden: readonly string[];
+    }) {
+      const event = apiV1Event(input.routeTemplate, input.requestId);
+      expect(event?.properties).toMatchObject({
+        route_template: input.routeTemplate,
+        request_id: input.requestId,
+        operation: input.operation,
+        status: input.status,
+      });
+      const serialized = JSON.stringify(event);
+      for (const forbidden of input.forbidden) {
+        expect(serialized).not.toContain(forbidden);
+      }
+      expect(serialized).not.toContain("Authorization");
+      expect(serialized).not.toContain("Bearer ");
+      expect(serialized).not.toContain("__session=");
+    }
+
+    const readProfile = await loader(routeArgs(apiRequest("http://localhost/api/v1/me", "req_account_operation_read", {
+      Cookie: cookie,
+    }), "me").args);
+    expect(readProfile.status).toBe(200);
+    expectAccountOperation({
+      routeTemplate: "/api/v1/me",
+      requestId: "req_account_operation_read",
+      operation: "account.read",
+      status: 200,
+      forbidden: [user.email, user.username, cookie],
+    });
+
+    const nextEmail = faker.internet.email();
+    const nextUsername = `telemetry_${faker.string.alphanumeric(8)}`;
+    const updateProfile = apiJsonRequest("PATCH", "me", "req_account_operation_update", { Cookie: cookie }, {
+      email: nextEmail,
+      username: nextUsername,
+    });
+    expect((await action(routeArgs(updateProfile.request, "me").args)).status).toBe(200);
+    expectAccountOperation({
+      routeTemplate: "/api/v1/me",
+      requestId: "req_account_operation_update",
+      operation: "account.update",
+      status: 200,
+      forbidden: [nextEmail, nextUsername, updateProfile.bodyText, cookie],
+    });
+
+    const photoForm = new UndiciFormData();
+    const uploadPhoto = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/me/photo", {
+      method: "POST",
+      headers: {
+        Cookie: cookie,
+        "X-Request-Id": "req_account_operation_photo_upload",
+        Origin: "https://client.example",
+        Referer: "https://docs.example/start?token=secret",
+        "User-Agent": "PostmanRuntime/7.39.0",
+      },
+      body: photoForm,
+      duplex: "half",
+    }) as unknown as Request, "me/photo").args);
+    expect(uploadPhoto.status).toBe(400);
+    expectAccountOperation({
+      routeTemplate: "/api/v1/me/photo",
+      requestId: "req_account_operation_photo_upload",
+      operation: "account.photo.upload",
+      status: 400,
+      forbidden: [cookie],
+    });
+
+    const removePhoto = apiJsonRequest("DELETE", "me/photo", "req_account_operation_photo_remove", { Cookie: cookie }, {});
+    expect((await action(routeArgs(removePhoto.request, "me/photo").args)).status).toBe(200);
+    expectAccountOperation({
+      routeTemplate: "/api/v1/me/photo",
+      requestId: "req_account_operation_photo_remove",
+      operation: "account.photo.remove",
+      status: 200,
+      forbidden: [removePhoto.bodyText, cookie],
+    });
+
+    const readNotifications = await loader(routeArgs(apiRequest(
+      "http://localhost/api/v1/me/notification-preferences",
+      "req_account_operation_notifications_read",
+      { Cookie: cookie },
+    ), "me/notification-preferences").args);
+    expect(readNotifications.status).toBe(200);
+    expectAccountOperation({
+      routeTemplate: "/api/v1/me/notification-preferences",
+      requestId: "req_account_operation_notifications_read",
+      operation: "account.notification-preferences.read",
+      status: 200,
+      forbidden: [cookie],
+    });
+
+    const updateNotifications = apiJsonRequest(
+      "PATCH",
+      "me/notification-preferences",
+      "req_account_operation_notifications_update",
+      { Cookie: cookie },
+      {
+        notifySpoonOnMyRecipe: true,
+        notifyForkOfMyRecipe: false,
+        notifyCookbookSaveOfMine: true,
+        notifyFellowChefOriginCook: false,
+      },
+    );
+    expect((await action(routeArgs(updateNotifications.request, "me/notification-preferences").args)).status).toBe(200);
+    expectAccountOperation({
+      routeTemplate: "/api/v1/me/notification-preferences",
+      requestId: "req_account_operation_notifications_update",
+      operation: "account.notification-preferences.update",
+      status: 200,
+      forbidden: [updateNotifications.bodyText, cookie],
+    });
+
+    const listConnections = await loader(routeArgs(apiRequest("http://localhost/api/v1/me/connections", "req_account_operation_connections_list", {
+      Authorization: `Bearer ${connectionToken.token}`,
+    }), "me/connections").args);
+    expect(listConnections.status).toBe(200);
+    expectAccountOperation({
+      routeTemplate: "/api/v1/me/connections",
+      requestId: "req_account_operation_connections_list",
+      operation: "account.connections.list",
+      status: 200,
+      forbidden: [connectionToken.token, connectionToken.credential.tokenPrefix],
+    });
+
+    const disconnect = apiJsonRequest(
+      "DELETE",
+      "me/connections/not-a-connection",
+      "req_account_operation_connection_disconnect",
+      { Authorization: `Bearer ${connectionToken.token}` },
+      {},
+    );
+    expect((await action(routeArgs(disconnect.request, "me/connections/not-a-connection").args)).status).toBe(404);
+    expectAccountOperation({
+      routeTemplate: "/api/v1/me/connections/{connectionId}",
+      requestId: "req_account_operation_connection_disconnect",
+      operation: "account.connections.disconnect",
+      status: 404,
+      forbidden: [connectionToken.token, connectionToken.credential.tokenPrefix, disconnect.bodyText, "not-a-connection"],
     });
   });
 

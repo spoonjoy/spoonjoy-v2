@@ -362,6 +362,14 @@ describe("/developers/playground", () => {
     expect((multipartOptions.headers as Record<string, string>)["Content-Type"]).toBeUndefined();
     expect(multipartOptions.body).toBeInstanceOf(FormData);
     expect([...(multipartOptions.body as FormData).entries()]).toEqual([["photo", file]]);
+    const emptyMultipartOptions = playgroundFetchOptions(uploadPhoto, "session", "", "", "pg_empty", {}, { photo: null });
+    expect(emptyMultipartOptions.body).toBeUndefined();
+    expect((emptyMultipartOptions.headers as Record<string, string>)["Content-Type"]).toBeUndefined();
+    const legacyMultipartWithoutFields = {
+      ...uploadPhoto,
+      requestBody: { ...uploadPhoto.requestBody!, fields: undefined },
+    } as unknown as typeof uploadPhoto;
+    expect(playgroundFetchOptions(legacyMultipartWithoutFields, "session", "", "", "pg_legacy").body).toBeUndefined();
     expect(playgroundBodyError(uploadPhoto, "", {})).toBe("Select photo before sending.");
     expect(playgroundBodyError(uploadPhoto, "", { photo: file })).toBeNull();
   });
@@ -688,6 +696,95 @@ describe("/developers/playground", () => {
     expect(await screen.findByText("201 Created")).toBeInTheDocument();
   });
 
+  it("sends generated multipart operations with selected files and safety reconfirmation", async () => {
+    const fetchMock = vi.fn(async () => mockApiResponse({
+      ok: true,
+      requestId: "req_photo_upload",
+      data: { profile: { id: "chef_playground_test", photoUrl: "/photos/profile.png" } },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await renderPlayground();
+    fireEvent.click(await screen.findByRole("button", { name: /Upload the authenticated account profile photo/i }));
+    expect(screen.getAllByText("account:write").length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("Multipart body")).toHaveTextContent("\"photo\": \"(binary image file)\"");
+
+    const photoInput = screen.getByLabelText(/Photo/) as HTMLInputElement;
+    expect(photoInput).toHaveAttribute("type", "file");
+    expect(photoInput).toHaveAttribute("accept", "image/jpeg,image/png,image/gif,image/webp");
+    expect(photoInput).toBeRequired();
+    expect(photoInput).toHaveAccessibleDescription("multipart required - (binary image file)");
+    expect(screen.getAllByText("Select photo before sending.").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Send Request" })).toBeDisabled();
+
+    const riskCheckbox = screen.getByLabelText(/I understand this request can change real Spoonjoy data/i);
+    fireEvent.click(riskCheckbox);
+    expect(riskCheckbox).toBeChecked();
+
+    const file = new File(["profile-bytes"], "profile.png", { type: "image/png" });
+    fireEvent.change(photoInput, { target: { files: [file] } });
+    await waitFor(() => expect(screen.getByLabelText(/I understand this request can change real Spoonjoy data/i)).not.toBeChecked());
+    expect(screen.getByText("Confirm this real-data operation before sending.")).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText(/I understand this request can change real Spoonjoy data/i));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Send Request" })).not.toBeDisabled());
+
+    fireEvent.submit(screen.getByRole("button", { name: "Send Request" }).closest("form")!);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(fetchMock).toHaveBeenCalledWith("/api/v1/me/photo", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: expect.objectContaining({ "X-Request-Id": expect.stringMatching(/^pg_/) }),
+      body: expect.any(FormData),
+    });
+    const options = fetchMock.mock.calls[0][1] as RequestInit;
+    expect((options.headers as Record<string, string>)["Content-Type"]).toBeUndefined();
+    expect([...(options.body as FormData).entries()]).toEqual([["photo", file]]);
+    expect(await screen.findByText("200 OK")).toBeInTheDocument();
+  });
+
+  it("renders optional multipart fields without accept or description metadata", async () => {
+    const uploadPhoto = API_V1_PLAYGROUND_MANIFEST.operations.find((operation) => operation.id === "POST /api/v1/me/photo")!;
+    const optionalMultipartManifest = {
+      ...API_V1_PLAYGROUND_MANIFEST,
+      operations: [{
+        ...uploadPhoto,
+        id: "POST /api/v1/me/photo-optional",
+        operationId: "postApiV1MePhotoOptional",
+        label: "Upload an optional profile photo",
+        path: "/api/v1/me/photo-optional",
+        risk: "safe",
+        requestBody: {
+          ...uploadPhoto.requestBody!,
+          required: false,
+          fields: [{
+            name: "photo",
+            label: "Photo",
+            required: false,
+            accept: "",
+            description: "",
+          }],
+        },
+      }],
+    };
+
+    await renderPlayground({
+      manifest: optionalMultipartManifest,
+      canonicalUrl: "https://spoonjoy.app/api/playground",
+      ogImageUrl: "https://spoonjoy.app/og/pages/api-playground.png",
+      viewer: { isAuthenticated: false },
+    } as PlaygroundLoaderData);
+
+    const optionalInput = await screen.findByLabelText(/Photo/) as HTMLInputElement;
+    expect(optionalInput).not.toHaveAttribute("accept");
+    expect(optionalInput).not.toBeRequired();
+    expect(optionalInput).toHaveAttribute("aria-required", "false");
+    expect(optionalInput).toHaveAccessibleDescription("multipart optional");
+
+    fireEvent.change(optionalInput, { target: { files: null } });
+    expect(screen.queryByText("Select photo before sending.")).not.toBeInTheDocument();
+  });
+
   it("blocks blank bearer mode before sending private requests", async () => {
     const fetchMock = vi.fn(async () => mockApiResponse({ ok: true }));
     vi.stubGlobal("fetch", fetchMock);
@@ -829,6 +926,14 @@ describe("/developers/playground", () => {
     expect(curlFor("/api/v1/me/photo", uploadPhoto, "bearer", "")).toContain("-F 'photo=@profile.jpg;type=image/jpeg'");
     expect(curlFor("/api/v1/me/photo", uploadPhoto, "bearer", "")).not.toContain("Content-Type");
     expect(curlFor("/api/v1/me/photo", uploadPhoto, "session", "")).toContain("const body = new FormData();");
+    expect(curlFor("/api/v1/me/photo", uploadPhoto, "session", "", "https://spoonjoy.app", { "X-Request-Id": "req_photo" }))
+      .toContain("\"X-Request-Id\": \"req_photo\"");
+    const multipartWithoutFields = {
+      ...uploadPhoto,
+      requestBody: { ...uploadPhoto.requestBody!, fields: [] },
+    };
+    expect(curlFor("/api/v1/me/photo", multipartWithoutFields, "session", "")).toContain("body.append(\"file\", fileInput.files[0]);");
+    expect(curlFor("/api/v1/me/photo", multipartWithoutFields, "bearer", "")).toContain("-F 'file=@profile.jpg;type=application/octet-stream'");
     expect(curlFor("/oauth/authorize?client_id=cm_1", authorize, "anonymous", "")).toContain(
       "open 'https://spoonjoy.app/oauth/authorize?client_id=cm_1'",
     );
