@@ -35,6 +35,10 @@ describe("generate-api-playground", () => {
         expect.objectContaining({ name: "X-Request-Id", in: "header" }),
       ]),
     });
+    const cookbookRecipeDelete = manifest.operations.find((operation) => operation.id === "DELETE /api/v1/cookbooks/{id}/recipes/{recipeId}");
+    const cookbookRecipeDeleteExamples = cookbookRecipeDelete?.responseExamples.map((example) => example.example).join("\n") ?? "";
+    expect(cookbookRecipeDeleteExamples).toContain("\"removed\": true");
+    expect(cookbookRecipeDeleteExamples).not.toContain("\"added\": true");
   });
 
   it("keeps the committed client manifest in sync with the generator output", async () => {

@@ -900,6 +900,7 @@ const schemas = {
   UpdateCookbookEnvelope: successEnvelope(ref("UpdateCookbookData")),
   DeleteCookbookEnvelope: successEnvelope(ref("DeleteCookbookData")),
   CookbookRecipeMutationEnvelope: successEnvelope(ref("CookbookRecipeMutationData")),
+  CookbookRecipeRemoveEnvelope: successEnvelope(ref("CookbookRecipeMutationData")),
   AccountProfileEnvelope: successEnvelope(ref("AccountProfile")),
   NotificationPreferencesEnvelope: successEnvelope(ref("NotificationPreferences")),
   OAuthConnectionListEnvelope: successEnvelope(ref("OAuthConnectionListData")),
@@ -1011,7 +1012,7 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
   },
   "/api/v1/cookbooks/{id}/recipes/{recipeId}": {
     POST: { operationId: "postApiV1CookbookRecipe", tags: ["Cookbooks"], summary: "Add a recipe to an owned cookbook", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "CookbookRecipeMutationEnvelope", 201: "CookbookRecipeMutationEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id, pathParameters.recipeId], requestBody: "CookbookRecipeMutationRequest" },
-    DELETE: { operationId: "deleteApiV1CookbookRecipe", tags: ["Cookbooks"], summary: "Remove a recipe from an owned cookbook", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "CookbookRecipeMutationEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id, pathParameters.recipeId, pathParameters.clientMutationIdHeader], requestBody: "CookbookRecipeMutationRequest" },
+    DELETE: { operationId: "deleteApiV1CookbookRecipe", tags: ["Cookbooks"], summary: "Remove a recipe from an owned cookbook", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "CookbookRecipeRemoveEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id, pathParameters.recipeId, pathParameters.clientMutationIdHeader], requestBody: "CookbookRecipeMutationRequest" },
   },
   "/api/v1/me": {
     GET: { operationId: "getApiV1Me", tags: ["Account"], summary: "Read the authenticated account profile", auth: "bearer", scopes: ["account:read"], success: { 200: "AccountProfileEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"] },
@@ -1157,6 +1158,12 @@ const exampleCookbookSummary = {
   updatedAt: exampleTimestamp,
 };
 const exampleCookbookDetail = { ...exampleCookbookSummary, recipes: [exampleRecipeSummary] };
+const exampleEmptyCookbookDetail = {
+  ...exampleCookbookSummary,
+  recipeCount: 0,
+  coverImageUrls: [],
+  recipes: [],
+};
 const exampleCredential = {
   id: "cred_1",
   name: "Tiny client",
@@ -1419,7 +1426,7 @@ const responseExamples: Record<string, unknown> = {
     requestId: "req_example",
     data: {
       created: true,
-      cookbook: { ...exampleCookbookDetail, recipes: [] },
+      cookbook: exampleEmptyCookbookDetail,
       mutation: { clientMutationId: "device-uuid-cookbook-create", replayed: false },
     },
   },
@@ -1449,6 +1456,16 @@ const responseExamples: Record<string, unknown> = {
       recipeId: "recipe_1",
       cookbook: exampleCookbookDetail,
       mutation: { clientMutationId: "device-uuid-cookbook-recipe", replayed: false },
+    },
+  },
+  CookbookRecipeRemoveEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      removed: true,
+      recipeId: "recipe_1",
+      cookbook: exampleEmptyCookbookDetail,
+      mutation: { clientMutationId: "device-uuid-cookbook-recipe-remove", replayed: false },
     },
   },
   AccountProfileEnvelope: { ok: true, requestId: "req_example", data: exampleAccountProfile },

@@ -418,6 +418,29 @@ describe("API v1 OpenAPI document", () => {
       coverSourceType: "chef-upload",
       coverVariant: "image",
     });
+    expect(responseExample(document, "/api/v1/cookbooks", "POST", "201").data).toMatchObject({
+      created: true,
+      cookbook: {
+        recipeCount: 0,
+        coverImageUrls: [],
+        recipes: [],
+      },
+      mutation: { clientMutationId: "device-uuid-cookbook-create", replayed: false },
+    });
+    expect(responseExample(document, "/api/v1/cookbooks/{id}/recipes/{recipeId}", "POST", "201").data).toMatchObject({
+      added: true,
+      recipeId: "recipe_1",
+      cookbook: { recipeCount: 1 },
+      mutation: { clientMutationId: "device-uuid-cookbook-recipe", replayed: false },
+    });
+    const removeCookbookRecipe = responseExample(document, "/api/v1/cookbooks/{id}/recipes/{recipeId}", "DELETE", "200").data;
+    expect(removeCookbookRecipe).toMatchObject({
+      removed: true,
+      recipeId: "recipe_1",
+      cookbook: { recipeCount: 0, recipes: [] },
+      mutation: { clientMutationId: "device-uuid-cookbook-recipe-remove", replayed: false },
+    });
+    expect(removeCookbookRecipe).not.toHaveProperty("added");
     expect(responseExample(document, "/api/v1/me", "GET", "200").data).toMatchObject({
       email: "ari@spoonjoy.app",
       username: "ari",
@@ -474,6 +497,10 @@ describe("API v1 OpenAPI document", () => {
       .toEqual({ clientMutationId: "device-uuid-clear-all" });
     expect(operation(document, "/api/v1/shopping-list/clear-completed", "POST").requestBody.content["application/json"].examples.example.value)
       .not.toEqual(operation(document, "/api/v1/shopping-list/clear-all", "POST").requestBody.content["application/json"].examples.example.value);
+    expect(operation(document, "/api/v1/cookbooks/{id}/recipes/{recipeId}", "POST").responses["201"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/CookbookRecipeMutationEnvelope");
+    expect(operation(document, "/api/v1/cookbooks/{id}/recipes/{recipeId}", "DELETE").responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/CookbookRecipeRemoveEnvelope");
 
     const authorizeParams = operation(document, "/oauth/authorize", "GET").parameters;
     expect(authorizeParams).toEqual(expect.arrayContaining([
