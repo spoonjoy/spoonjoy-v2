@@ -7,13 +7,52 @@
  *
  * Wrapped in try/catch so a dispatch failure can never break the action that
  * called us — push notifications are fire-and-forget.
+ *
+ * Telemetry: the trigger's OWN evaluation (the actor/recipe pre-load queries
+ * that run before `enqueueNotification`) is otherwise silent — a real D1
+ * failure there is swallowed by this catch and never reaches the dispatcher's
+ * own capture. We capture it here via the injected `deps.postHogConfig` (the
+ * same config the dispatcher uses), fire-and-forget, tagged with the trigger
+ * kind. The dispatcher already captures its durable-write / push failures, so
+ * a throw that surfaces from inside `enqueueNotification` is double-covered;
+ * that is acceptable for a fire-and-forget diagnostic and keeps the trigger's
+ * silent pre-load gap closed. No-op when PostHog is unconfigured.
  */
 
 import type { PrismaClient } from "@prisma/client";
 import {
   enqueueNotification,
   type NotificationDispatchDeps,
+  type NotificationKind,
 } from "~/lib/notification-dispatch.server";
+import { captureException } from "~/lib/analytics-server";
+
+/**
+ * Schedule a fire-and-forget capture of a swallowed trigger-evaluation failure.
+ * Runs via `deps.waitUntil` when present (so it can outlive the response),
+ * otherwise left to run detached. `captureException` already swallows its own
+ * errors and no-ops without a PostHog config, so this never throws and never
+ * blocks the originating action.
+ */
+function captureTriggerFailure(
+  deps: NotificationDispatchDeps,
+  recipientId: string,
+  kind: NotificationKind,
+  error: unknown,
+): void {
+  const config = deps.postHogConfig;
+  if (!config) return;
+  const task = captureException(config, {
+    error,
+    distinctId: recipientId,
+    extras: { kind, phase: "triggerEval" },
+  });
+  if (deps.waitUntil) {
+    deps.waitUntil(task);
+  } else {
+    void task;
+  }
+}
 
 export type NotifySpoonOnMyRecipeDeps = NotificationDispatchDeps;
 
@@ -55,8 +94,12 @@ export async function notifySpoonOnMyRecipe(
       },
       deps,
     );
-  } catch {
-    // Notifications must never break the originating action.
+  } catch (error) {
+    // Notifications must never break the originating action — but the
+    // recipe/spooner pre-load above is otherwise silent, so capture it. The
+    // recipient (recipe owner) may be unresolved here, so fall back to a stable
+    // server id; `kind` carries the diagnostic context.
+    captureTriggerFailure(deps, "server", "spoon_on_my_recipe", error);
   }
 }
 
@@ -98,8 +141,10 @@ export async function notifyForkOfMyRecipe(
       },
       deps,
     );
-  } catch {
-    // Notifications must never break the originating action.
+  } catch (error) {
+    // The forker pre-load above is otherwise silent; capture it. The recipient
+    // (source chef) IS known from the input, so attribute the failure to them.
+    captureTriggerFailure(deps, input.sourceChefId, "fork_of_my_recipe", error);
   }
 }
 
@@ -142,7 +187,10 @@ export async function notifyCookbookSaveOfMine(
       },
       deps,
     );
-  } catch {
-    // Notifications must never break the originating action.
+  } catch (error) {
+    // The recipe/actor pre-load above is otherwise silent; capture it. The
+    // recipient (recipe owner) may be unresolved here, so fall back to a stable
+    // server id; `kind` carries the diagnostic context.
+    captureTriggerFailure(deps, "server", "cookbook_save_of_mine", error);
   }
 }
