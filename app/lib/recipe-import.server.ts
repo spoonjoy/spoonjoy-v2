@@ -848,7 +848,12 @@ async function completeImportFromExtraction(input: {
 
   const ingredientParser: NonNullable<ImportRecipeDeps["ingredientParser"]> =
     deps.ingredientParser ??
-    ((text, env) => parseIngredients(text, env ?? undefined));
+    ((text, env) =>
+      parseIngredients(text, env ?? undefined, {
+        postHogConfig: deps.postHogConfig,
+        fetchImpl: deps.analyticsFetchImpl,
+        distinctId: deps.analyticsDistinctId ?? chefId,
+      }));
   const persisted = await persistRecipe(
     deps.db,
     chefId,

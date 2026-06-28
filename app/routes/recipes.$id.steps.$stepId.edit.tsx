@@ -162,7 +162,8 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     try {
       const parsedIngredients = await parseIngredients(
         ingredientText,
-        getIngredientParserEnv(context)
+        getIngredientParserEnv(context),
+        { distinctId: userId }
       );
       return data({ parsedIngredients });
     } catch (error) {
