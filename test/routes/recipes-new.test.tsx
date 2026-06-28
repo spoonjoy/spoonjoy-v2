@@ -236,7 +236,8 @@ describe("Recipes New Route", () => {
       expect(data.parsedIngredients).toEqual(parsedIngredients);
       expect(parseSpy).toHaveBeenCalledWith(
         "2 cups flour",
-        expect.objectContaining({ OPENAI_API_KEY: undefined })
+        expect.objectContaining({ OPENAI_API_KEY: undefined }),
+        { distinctId: testUserId }
       );
     });
 

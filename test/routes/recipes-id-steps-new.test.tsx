@@ -432,7 +432,8 @@ describe("Recipes $id Steps New Route", () => {
         ]);
         expect(parseSpy).toHaveBeenCalledWith(
           "2 cups flour",
-          expect.objectContaining({ OPENAI_API_KEY: "cf-test-key" })
+          expect.objectContaining({ OPENAI_API_KEY: "cf-test-key" }),
+          { distinctId: testUserId }
         );
       } finally {
         parseSpy.mockRestore();
