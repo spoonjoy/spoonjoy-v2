@@ -794,6 +794,116 @@ describe("importRecipeFromUrl — extraction paths", () => {
       expect(body.properties.provider).toBe("openai");
       expect(body.properties.model).toBe("unknown");
     });
+
+    it("captures an LLM-call success (not .failed) with privacy-safe props on the full-LLM path", async () => {
+      const fixture = await loadFixture("no-jsonld-rich-html.html");
+      const chef = await makeChefForError();
+      const analyticsFetch = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+      const llmRunner: RecipeLlmRunner = {
+        provider: "openai",
+        model: "gpt-4o-mini",
+        extract: vi.fn(async () => ({
+          title: "Extracted Cake",
+          description: null,
+          servings: null,
+          ingredients: ["1 cup flour"],
+          steps: ["Bake."],
+        })),
+      };
+
+      await importRecipeFromUrl(
+        { url: "https://example.com/r", chefId: chef.id },
+        baseDeps({
+          fetchImpl: makeFetchImpl(fixture),
+          llmRunner,
+          postHogConfig: { enabled: true, key: "ph_test", host: "https://posthog.example" },
+          analyticsFetchImpl: analyticsFetch as unknown as typeof fetch,
+        }),
+      );
+
+      const events = analyticsFetch.mock.calls.map(
+        (call) => JSON.parse(call[1].body as string),
+      );
+      const succeeded = events.find(
+        (e) => e.event === "spoonjoy.llm_call.succeeded",
+      );
+      expect(succeeded).toBeDefined();
+      expect(succeeded?.distinct_id).toBe(chef.id);
+      expect(succeeded?.properties).toMatchObject({
+        feature: "llm_call",
+        operation: "recipe_import",
+        provider: "openai",
+        model: "gpt-4o-mini",
+      });
+      expect(typeof succeeded?.properties.durationMs).toBe("number");
+      // Exactly one outcome event: success XOR failure.
+      expect(
+        events.some((e) => e.event === "spoonjoy.llm_call.failed"),
+      ).toBe(false);
+    });
+
+    it("captures an LLM-call success on the text-source path", async () => {
+      const chef = await makeChefForError();
+      const analyticsFetch = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+      const llmRunner: RecipeLlmRunner = {
+        provider: "openai",
+        model: "gpt-4o-mini",
+        extract: vi.fn(async () => ({
+          title: "Captured Stew",
+          description: null,
+          servings: null,
+          ingredients: ["2 carrots"],
+          steps: ["Simmer."],
+        })),
+      };
+
+      await importRecipeFromSource(
+        { chefId: chef.id, source: { type: "text", text: "carrot stew recipe" } },
+        baseDeps({
+          llmRunner,
+          postHogConfig: { enabled: true, key: "ph_test", host: "https://posthog.example" },
+          analyticsFetchImpl: analyticsFetch as unknown as typeof fetch,
+        }),
+      );
+
+      const events = analyticsFetch.mock.calls.map(
+        (call) => JSON.parse(call[1].body as string).event,
+      );
+      expect(events).toContain("spoonjoy.llm_call.succeeded");
+      expect(events).not.toContain("spoonjoy.llm_call.failed");
+    });
+
+    it("emits .failed and NOT .succeeded when the LLM call fails", async () => {
+      const fixture = await loadFixture("no-jsonld-rich-html.html");
+      const chef = await makeChefForError();
+      const { RecipeLlmError } = await import("~/lib/recipe-import-llm.server");
+      const analyticsFetch = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+      const llmRunner: RecipeLlmRunner = {
+        provider: "openai",
+        model: "gpt-4o-mini",
+        extract: vi.fn(async () => {
+          throw new RecipeLlmError("boom");
+        }),
+      };
+
+      await expect(
+        importRecipeFromUrl(
+          { url: "https://example.com/r", chefId: chef.id },
+          baseDeps({
+            fetchImpl: makeFetchImpl(fixture),
+            llmRunner,
+            postHogConfig: { enabled: true, key: "ph_test", host: "https://posthog.example" },
+            analyticsFetchImpl: analyticsFetch as unknown as typeof fetch,
+          }),
+        ),
+      ).rejects.toMatchObject({ code: "llm-failed", status: 502 });
+
+      const events = analyticsFetch.mock.calls.map(
+        (call) => JSON.parse(call[1].body as string).event,
+      );
+      expect(events).toContain("spoonjoy.llm_call.failed");
+      expect(events).not.toContain("spoonjoy.llm_call.succeeded");
+    });
   });
 
   describe("LLM runner edge cases", () => {

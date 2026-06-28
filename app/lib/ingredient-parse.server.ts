@@ -8,7 +8,7 @@
 import { z } from 'zod'
 import { createOpenAIClient } from '~/lib/openai-client.server'
 import { extractOpenAIErrorFields } from '~/lib/openai-error.server'
-import { captureLlmCallFailure } from '~/lib/llm-telemetry.server'
+import { captureLlmCallFailure, captureLlmCallSucceeded } from '~/lib/llm-telemetry.server'
 import type { PostHogServerConfig, PostHogServerEnv } from '~/lib/analytics-server'
 
 export const DEFAULT_INGREDIENT_PARSE_PROVIDER = 'openai'
@@ -292,6 +292,7 @@ export async function parseIngredients(
     maxRetries: config.maxRetries,
   })
 
+  const startedAt = Date.now()
   try {
     const response = await openai.chat.completions.create({
       model: config.model,
@@ -335,6 +336,13 @@ export async function parseIngredients(
       )
     }
 
+    await reportIngredientParseSuccess(
+      getConfigSource(configInput),
+      config,
+      Date.now() - startedAt,
+      telemetry
+    )
+
     return result.data.ingredients
   } catch (error) {
     const mapped =
@@ -344,6 +352,30 @@ export async function parseIngredients(
 
     throw mapped
   }
+}
+
+/**
+ * Capture a successful ingredient-parse LLM call to PostHog with privacy-safe
+ * metadata only (operation/provider/model/durationMs — never the parsed text or
+ * response). Never throws — telemetry must not turn a successful parse into a
+ * failure.
+ */
+async function reportIngredientParseSuccess(
+  env: IngredientParserEnv,
+  config: IngredientParserConfig,
+  durationMs: number,
+  telemetry: IngredientParseTelemetry | undefined
+): Promise<void> {
+  await captureLlmCallSucceeded({
+    env,
+    postHogConfig: telemetry?.postHogConfig,
+    fetchImpl: telemetry?.fetchImpl,
+    distinctId: telemetry?.distinctId,
+    operation: 'ingredient_parse',
+    provider: config.provider,
+    model: config.model,
+    durationMs,
+  })
 }
 
 /**

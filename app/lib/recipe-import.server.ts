@@ -36,7 +36,10 @@ import {
   parseIngredients,
   type ParsedIngredient,
 } from "~/lib/ingredient-parse.server";
-import { captureLlmCallFailure } from "~/lib/llm-telemetry.server";
+import {
+  captureLlmCallFailure,
+  captureLlmCallSucceeded,
+} from "~/lib/llm-telemetry.server";
 import { tryConsumeImageGenQuota } from "~/lib/image-gen-ledger.server";
 import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
 import { createCover } from "~/lib/recipe-cover.server";
@@ -243,6 +246,30 @@ function getLlmRunner(deps: ImportRecipeDeps): RecipeLlmRunner | null {
 }
 
 /**
+ * Capture a successful recipe-import LLM call to PostHog with privacy-safe
+ * metadata only (operation/provider/model/durationMs — never the page text or
+ * extracted recipe). Never throws — telemetry must not turn a successful
+ * extraction into a failure.
+ */
+async function captureRecipeLlmSuccess(
+  deps: ImportRecipeDeps,
+  chefId: string,
+  runner: RecipeLlmRunner,
+  durationMs: number,
+): Promise<void> {
+  await captureLlmCallSucceeded({
+    env: deps.env,
+    postHogConfig: deps.postHogConfig,
+    fetchImpl: deps.analyticsFetchImpl,
+    distinctId: deps.analyticsDistinctId ?? chefId,
+    operation: "recipe_import",
+    provider: runner.provider ?? RECIPE_LLM_PROVIDER,
+    model: runner.model ?? "unknown",
+    durationMs,
+  });
+}
+
+/**
  * Capture a recipe-import LLM-call failure to PostHog with the preserved OpenAI
  * error code/type/status. Never throws — telemetry must not mask the mapped
  * `ImportRecipeError` the caller re-throws.
@@ -395,8 +422,11 @@ async function runLlm(
     );
   }
   const text = htmlToPlainText(html);
+  const startedAt = Date.now();
   try {
-    return await llmRunner.extract(text);
+    const extracted = await llmRunner.extract(text);
+    await captureRecipeLlmSuccess(deps, chefId, llmRunner, Date.now() - startedAt);
+    return extracted;
   } catch (err) {
     if (err instanceof RecipeLlmError) {
       await captureRecipeLlmFailure(deps, chefId, llmRunner, err);
@@ -427,6 +457,7 @@ async function runTextExtraction(
     ingredients: string[];
     steps: string[];
   };
+  const startedAt = Date.now();
   try {
     extracted = await llmRunner.extract(text);
   } catch (err) {
@@ -436,6 +467,7 @@ async function runTextExtraction(
     }
     throw err;
   }
+  await captureRecipeLlmSuccess(deps, chefId, llmRunner, Date.now() - startedAt);
   if (!extracted.title || !extracted.title.trim()) {
     throw new ImportRecipeError(
       "no-content",
@@ -489,6 +521,7 @@ async function runVideoExtraction(
     throw mapOEmbedError(err as OEmbedError);
   }
   let extracted;
+  const startedAt = Date.now();
   try {
     extracted = await extractVideoRecipe(metadata, {
       llmRunner,
@@ -500,6 +533,7 @@ async function runVideoExtraction(
     }
     throw err;
   }
+  await captureRecipeLlmSuccess(deps, chefId, llmRunner, Date.now() - startedAt);
   if (!extracted.title || !extracted.title.trim()) {
     throw new ImportRecipeError(
       "no-content",
