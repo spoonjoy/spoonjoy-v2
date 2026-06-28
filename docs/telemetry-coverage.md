@@ -158,19 +158,22 @@ and a one-line reason rather than forcing telemetry:
 
 ## Current gap report (backlog)
 
-As of this gate's introduction there are **38** allowlisted gaps. The
-`backfill` and `llm-owned` entries are real instrumentation debt to be closed in
-follow-up PRs; the rest are deliberate (no telemetry warranted).
+The gate launched with **38** allowlisted gaps, including **24 `backfill`** entries
+(genuine instrumentation debt). That debt has since been **fully closed** (#217 / #218 /
+#219): 9 paths were instrumented and 15 were re-categorized as already-covered
+(`delegated` / `rethrow` / …). **0 `backfill` entries remain.**
+
+The allowlist now holds **29** entries — all deliberate (no telemetry warranted) except
+the single `llm-owned` entry tracked by the LLM-telemetry workstream:
 
 | Category | Count | Backfill priority |
 | --- | --- | --- |
-| `backfill` | 24 | yes — instrument these |
-| `delegated` | 4 | none (already instrumented via helper) |
+| `delegated` | 10 | none (instrumented via a shared helper) |
+| `rethrow` | 6 | none |
+| `swallow` | 5 | none |
+| `expected-4xx` | 4 | none |
 | `non-request` | 3 | none |
-| `swallow` | 3 | none |
-| `expected-4xx` | 2 | none |
-| `rethrow` | 1 | none |
-| `llm-owned` | 1 | owned by the LLM-telemetry PR |
+| `llm-owned` | 1 | owned by the LLM-telemetry workstream |
 
 The authoritative, per-file list with reasons is the single source of truth in
 [`allowlist.ts`](../app/lib/telemetry-coverage/allowlist.ts). To close a gap:
