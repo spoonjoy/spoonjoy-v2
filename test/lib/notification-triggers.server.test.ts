@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getLocalDb } from "~/lib/db.server";
 import {
   notifySpoonOnMyRecipe,
@@ -8,6 +8,13 @@ import {
   type NotifyForkOfMyRecipeDeps,
   type NotifyCookbookSaveOfMineDeps,
 } from "~/lib/notification-triggers.server";
+import type { PostHogServerConfig } from "~/lib/analytics-server";
+import {
+  drainScheduled,
+  makePostHogFetchSpy,
+  type CapturedPost,
+  type PostHogFetchSpy,
+} from "../helpers/posthog-capture";
 import { createTestUser } from "../utils";
 
 const VAPID = {
@@ -383,5 +390,172 @@ describe("notifyCookbookSaveOfMine", () => {
     } finally {
       db.notificationEvent.create = orig;
     }
+  });
+});
+
+// --- trigger-evaluation telemetry --------------------------------------------
+//
+// The trigger's OWN pre-load (recipe/actor lookup, run before the dispatcher)
+// is otherwise silent. These prove the swallowed failure is now captured via
+// the injected postHogConfig — fire-and-forget, tagged with the trigger kind
+// and phase=triggerEval — and that it stays a no-op without PostHog config.
+
+const ENABLED_POSTHOG: PostHogServerConfig = {
+  enabled: true,
+  key: "ph_test",
+  host: "https://us.i.posthog.com",
+};
+
+/** $exception capture posts (the shape captureException emits). */
+function exceptionPosts(posts: CapturedPost[]): CapturedPost[] {
+  return posts.filter((p) => p.event === "$exception");
+}
+
+describe("notification triggers — trigger-evaluation telemetry", () => {
+  let origFetch: typeof globalThis.fetch;
+  let spy: PostHogFetchSpy;
+
+  beforeEach(() => {
+    origFetch = globalThis.fetch;
+    spy = makePostHogFetchSpy();
+    globalThis.fetch = spy.impl;
+  });
+
+  afterEach(() => {
+    globalThis.fetch = origFetch;
+  });
+
+  /**
+   * Build deps whose recipe pre-load throws, so the trigger's own catch fires
+   * before the dispatcher is ever reached. The db is a minimal stub: only the
+   * methods the pre-load touches are present.
+   */
+  function makeThrowingDb(): { recipe: { findUnique: () => Promise<never> }; user: { findUnique: () => Promise<null> } } {
+    return {
+      recipe: {
+        findUnique: vi.fn(async () => {
+          throw new Error("D1 read failed");
+        }),
+      },
+      user: { findUnique: vi.fn(async () => null) },
+    };
+  }
+
+  it("notifySpoonOnMyRecipe captures the swallowed pre-load failure with kind + phase when config is enabled", async () => {
+    const scheduled: Promise<unknown>[] = [];
+    await notifySpoonOnMyRecipe(
+      makeThrowingDb() as never,
+      { recipeId: "r1", spoonerId: "s1" },
+      {
+        vapid: VAPID,
+        waitUntil: (p) => scheduled.push(p),
+        postHogConfig: ENABLED_POSTHOG,
+      },
+    );
+
+    // Capture is fire-and-forget, scheduled via waitUntil.
+    expect(scheduled.length).toBeGreaterThan(0);
+    await drainScheduled(scheduled);
+
+    const captures = exceptionPosts(spy.postHogPosts);
+    expect(captures).toHaveLength(1);
+    expect(captures[0]!.properties).toMatchObject({
+      kind: "spoon_on_my_recipe",
+      phase: "triggerEval",
+      $lib: "spoonjoy-server",
+    });
+  });
+
+  it("notifyForkOfMyRecipe captures with the source chef as distinctId and fork kind", async () => {
+    const scheduled: Promise<unknown>[] = [];
+    const db = {
+      user: {
+        findUnique: vi.fn(async () => {
+          throw new Error("D1 read failed");
+        }),
+      },
+    };
+    await notifyForkOfMyRecipe(
+      db as never,
+      {
+        forkedRecipeId: "f1",
+        sourceRecipeId: "src1",
+        forkerId: "forker1",
+        sourceChefId: "chef-owner",
+        appliedTitle: "Dish",
+      },
+      {
+        vapid: VAPID,
+        waitUntil: (p) => scheduled.push(p),
+        postHogConfig: ENABLED_POSTHOG,
+      },
+    );
+    await drainScheduled(scheduled);
+
+    const captures = exceptionPosts(spy.postHogPosts);
+    expect(captures).toHaveLength(1);
+    expect(captures[0]!.properties).toMatchObject({
+      kind: "fork_of_my_recipe",
+      phase: "triggerEval",
+    });
+    // distinct_id is the known recipient (source chef), not the server fallback.
+    expect(captures[0]!).toMatchObject({ distinct_id: "chef-owner" });
+  });
+
+  it("notifyCookbookSaveOfMine captures the swallowed pre-load failure", async () => {
+    const scheduled: Promise<unknown>[] = [];
+    await notifyCookbookSaveOfMine(
+      makeThrowingDb() as never,
+      { recipeId: "r1", actorId: "a1" },
+      {
+        vapid: VAPID,
+        waitUntil: (p) => scheduled.push(p),
+        postHogConfig: ENABLED_POSTHOG,
+      },
+    );
+    await drainScheduled(scheduled);
+
+    const captures = exceptionPosts(spy.postHogPosts);
+    expect(captures).toHaveLength(1);
+    expect(captures[0]!.properties).toMatchObject({
+      kind: "cookbook_save_of_mine",
+      phase: "triggerEval",
+    });
+  });
+
+  it("does NOT capture when no postHogConfig is supplied (no-op)", async () => {
+    const scheduled: Promise<unknown>[] = [];
+    await notifySpoonOnMyRecipe(
+      makeThrowingDb() as never,
+      { recipeId: "r1", spoonerId: "s1" },
+      { vapid: VAPID, waitUntil: (p) => scheduled.push(p) },
+    );
+    await drainScheduled(scheduled);
+    expect(exceptionPosts(spy.postHogPosts)).toHaveLength(0);
+  });
+
+  it("does NOT capture when the config is disabled (missing key)", async () => {
+    const scheduled: Promise<unknown>[] = [];
+    await notifySpoonOnMyRecipe(
+      makeThrowingDb() as never,
+      { recipeId: "r1", spoonerId: "s1" },
+      {
+        vapid: VAPID,
+        waitUntil: (p) => scheduled.push(p),
+        postHogConfig: { enabled: false, reason: "missing-key" },
+      },
+    );
+    await drainScheduled(scheduled);
+    expect(exceptionPosts(spy.postHogPosts)).toHaveLength(0);
+  });
+
+  it("still does not throw when capture is active and the pre-load fails", async () => {
+    await expect(
+      notifySpoonOnMyRecipe(
+        makeThrowingDb() as never,
+        { recipeId: "r1", spoonerId: "s1" },
+        { vapid: VAPID, postHogConfig: ENABLED_POSTHOG },
+      ),
+    ).resolves.not.toThrow();
   });
 });

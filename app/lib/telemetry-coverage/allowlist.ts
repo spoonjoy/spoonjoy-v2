@@ -78,6 +78,30 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
     reason:
       "Catch only recovers a unique-constraint idempotency race or re-throws; the API route layer (api-v1.server.ts) captures the surfaced exception.",
   },
+  {
+    file: "app/lib/recipe-import-fetch.server.ts",
+    category: "rethrow",
+    reason:
+      "Pure DI fetch wrapper (no PostHog config). Fetch/timeout catches throw a typed SafeFetchError; the import orchestrator maps it to ImportRecipeError, which api.$.ts captures with import_code for non-expected codes. The one bare catch (og:image URL parse) is a best-effort swallow that degrades the OG image hint to null.",
+  },
+  {
+    file: "app/lib/recipe-import-video.server.ts",
+    category: "rethrow",
+    reason:
+      "Video oEmbed adapter (no PostHog config). Every catch throws a typed OEmbedError preserving upstreamStatus/cause; the orchestrator's mapOEmbedError forwards the cause into ImportRecipeError, captured at api.$.ts. Not silent — surfaced to an instrumented caller.",
+  },
+  {
+    file: "app/lib/safe-image-fetch.server.ts",
+    category: "rethrow",
+    reason:
+      "SSRF-guarded DI fetch wrapper (no PostHog config). Catches map fetch/timeout to a typed Error surfaced to instrumented callers: the import orchestrator captures it via captureImportCoverException, and image-gen wraps it into ImageGenError captured by the stylization caller.",
+  },
+  {
+    file: "app/lib/image-gen.server.ts",
+    category: "rethrow",
+    reason:
+      "Lower-level image-gen helper (no PostHog config). Every catch wraps the provider error into ImageGenError/ImageProviderAttemptError preserving code/status/cause and rethrows; callers (spoon-cover-stylization.server.ts, ai-placeholder-cover.server.ts) emit captureImageGenerationException on the surfaced typed error.",
+  },
 
   // --- expected client (4xx) outcomes handled by the caller ---
   {
@@ -85,6 +109,12 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
     category: "expected-4xx",
     reason:
       "Validation/draft-parse catch maps to a 4xx form error returned to the user; not an unexpected server exception.",
+  },
+  {
+    file: "app/lib/spoonjoy-api-request.server.ts",
+    category: "expected-4xx",
+    reason:
+      "Sole catch is in resolveApiPrincipal: it swallows an expected 401 (ApiAuthError) only for public bootstrap ops and rethrows any other auth error so protected ops fail closed; the surfaced error is captured at the api.$.ts / http-mcp.server.ts route boundary. No transport catch exists.",
   },
   {
     file: "app/lib/shopping-list.server.ts",
@@ -114,6 +144,24 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
   },
   // --- catch IS instrumented in a shared helper the file delegates to ---
   {
+    file: "app/lib/recipe-detail.server.ts",
+    category: "delegated",
+    reason:
+      "Spoon-notify / origin-cook fan-out catches swallow only local getVapidConfig absence; the actual dispatch failures are captured by enqueueNotification via the threaded postHogConfig (proven by recipe-detail-posthog-wiring.test.ts). The remaining catches are a P2002 idempotent re-add (rethrows anything else) and an archiveRecipeCover -> 400 (expected-4xx).",
+  },
+  {
+    file: "app/lib/web-push.server.ts",
+    category: "delegated",
+    reason:
+      "Both catches return a typed SendPushResult ({ status: 'failed', httpStatus, error }) rather than throwing; the sole caller (notification-dispatch.server.ts) captures that result as a spoonjoy.push.send_failed event with the failureMode. Capture is delegated to the dispatcher.",
+  },
+  {
+    file: "app/lib/spoonjoy-api.server.ts",
+    category: "delegated",
+    reason:
+      "Handler catches are expected-4xx (coverLifecycleApiError -> ApiAuthError 400; fork -> ApiAuthError 404/409 else rethrow) or notification swallows that delegate capture to enqueueNotification via the threaded postHogConfig (proven by spoonjoy-api-posthog-wiring.test.ts). Genuine unexpected failures are captured at the api.$.ts and http-mcp.server.ts route boundaries.",
+  },
+  {
     file: "app/routes/auth.webauthn.register.options.ts",
     category: "delegated",
     reason:
@@ -139,60 +187,6 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
   },
 
   // --- backfill candidates: real user-facing server error paths ---
-  {
-    file: "app/lib/recipe-detail.server.ts",
-    category: "backfill",
-    reason:
-      "Recipe detail/spoon mutation paths have catch blocks that flatten to error responses without exception capture. Backfill: capture unexpected (non-4xx) failures with recipe/spoon context.",
-  },
-  {
-    file: "app/lib/recipe-import-fetch.server.ts",
-    category: "backfill",
-    reason:
-      "Source-fetch wrapper for recipe import; network/timeout failures are mapped to ImportRecipeError. Backfill: capture genuine upstream failures (the orchestrator captures only a subset).",
-  },
-  {
-    file: "app/lib/recipe-import-video.server.ts",
-    category: "backfill",
-    reason:
-      "Video oEmbed import adapter; provider/oEmbed failures degrade silently. Backfill: capture upstream failures with the provider + host family.",
-  },
-  {
-    file: "app/lib/safe-image-fetch.server.ts",
-    category: "backfill",
-    reason:
-      "SSRF-guarded image fetch used by cover/import flows; fetch failures return a typed miss. Backfill: capture unexpected fetch failures (distinct from policy rejections).",
-  },
-  {
-    file: "app/lib/image-gen.server.ts",
-    category: "backfill",
-    reason:
-      "Lower-level image-generation helper; some catches flatten provider errors without capture. Backfill: route remaining provider failures through captureImageGenerationException.",
-  },
-  {
-    file: "app/lib/notification-triggers.server.ts",
-    category: "backfill",
-    reason:
-      "Notification trigger evaluation; catches around fan-out scheduling swallow errors. Backfill: capture trigger-evaluation failures with the trigger kind.",
-  },
-  {
-    file: "app/lib/web-push.server.ts",
-    category: "backfill",
-    reason:
-      "Web Push send wrapper; non-410 send failures are not captured here. Backfill: capture unexpected push-send failures (the dispatcher captures a subset).",
-  },
-  {
-    file: "app/lib/spoonjoy-api.server.ts",
-    category: "backfill",
-    reason:
-      "Native-app API client surface; several catches map upstream failures to client responses without capture. Backfill: capture unexpected upstream failures with the operation name.",
-  },
-  {
-    file: "app/lib/spoonjoy-api-request.server.ts",
-    category: "backfill",
-    reason:
-      "Request helper for the native-app API surface; transport catch maps to a typed error. Backfill: capture unexpected transport failures.",
-  },
   {
     file: "app/lib/oauth-route.server.ts",
     category: "swallow",
