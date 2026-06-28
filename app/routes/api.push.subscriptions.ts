@@ -1,9 +1,37 @@
 import type { Route } from "./+types/api.push.subscriptions";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { getUserId } from "~/lib/session.server";
+import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
 
 function jsonError(status: number, message: string): Response {
   return Response.json({ error: message }, { status });
+}
+
+function captureSubscriptionFailure(
+  request: Request,
+  context: Route.ActionArgs["context"],
+  userId: string,
+  operation: "subscribe" | "unsubscribe",
+  error: unknown,
+): void {
+  // The request validated but the subscription persistence failed (DB/infra
+  // fault) — previously uncaught. Capture it (fire-and-forget, no-op without
+  // PostHog) before flattening to a 500.
+  const postHogConfig = resolvePostHogServerConfig(context.cloudflare?.env ?? {});
+  if (!postHogConfig.enabled) return;
+  const capture = captureException(postHogConfig, {
+    error,
+    distinctId: userId,
+    route: new URL(request.url).pathname,
+    method: request.method,
+    extras: { action: "push_subscription", operation },
+  });
+  const waitUntil = context.cloudflare?.ctx?.waitUntil;
+  if (waitUntil) {
+    waitUntil.call(context.cloudflare!.ctx!, capture);
+  } else {
+    void capture;
+  }
 }
 
 interface SubscribeBody {
@@ -46,30 +74,35 @@ export async function action({ request, context }: Route.ActionArgs) {
     const userAgent = typeof body.userAgent === "string" ? body.userAgent : null;
 
     const db = await getRequestDb(context);
-    const existing = await db.pushSubscription.findUnique({
-      where: { endpoint },
-      select: { id: true, userId: true },
-    });
-    if (existing && existing.userId === userId) {
-      await db.pushSubscription.update({
-        where: { id: existing.id },
-        data: { p256dh, authSecret: auth, userAgent, lastSeenAt: new Date() },
+    try {
+      const existing = await db.pushSubscription.findUnique({
+        where: { endpoint },
+        select: { id: true, userId: true },
       });
-      return Response.json({ ok: true, created: false }, { status: 200 });
-    }
-    if (existing && existing.userId !== userId) {
-      // Endpoint owned by someone else (e.g. user switched accounts on the same device).
-      // Re-assign to the current user — endpoints are device-scoped, not user-scoped.
-      await db.pushSubscription.update({
-        where: { id: existing.id },
-        data: { userId, p256dh, authSecret: auth, userAgent, lastSeenAt: new Date() },
+      if (existing && existing.userId === userId) {
+        await db.pushSubscription.update({
+          where: { id: existing.id },
+          data: { p256dh, authSecret: auth, userAgent, lastSeenAt: new Date() },
+        });
+        return Response.json({ ok: true, created: false }, { status: 200 });
+      }
+      if (existing && existing.userId !== userId) {
+        // Endpoint owned by someone else (e.g. user switched accounts on the same device).
+        // Re-assign to the current user — endpoints are device-scoped, not user-scoped.
+        await db.pushSubscription.update({
+          where: { id: existing.id },
+          data: { userId, p256dh, authSecret: auth, userAgent, lastSeenAt: new Date() },
+        });
+        return Response.json({ ok: true, created: false }, { status: 200 });
+      }
+      await db.pushSubscription.create({
+        data: { userId, endpoint, p256dh, authSecret: auth, userAgent },
       });
-      return Response.json({ ok: true, created: false }, { status: 200 });
+      return Response.json({ ok: true, created: true }, { status: 201 });
+    } catch (error) {
+      captureSubscriptionFailure(request, context, userId, "subscribe", error);
+      return jsonError(500, "Failed to save push subscription");
     }
-    await db.pushSubscription.create({
-      data: { userId, endpoint, p256dh, authSecret: auth, userAgent },
-    });
-    return Response.json({ ok: true, created: true }, { status: 201 });
   }
 
   if (request.method === "DELETE") {
@@ -78,13 +111,18 @@ export async function action({ request, context }: Route.ActionArgs) {
     const endpoint = typeof body.endpoint === "string" ? body.endpoint.trim() : "";
     if (!endpoint) return jsonError(400, "endpoint is required");
     const db = await getRequestDb(context);
-    const row = await db.pushSubscription.findUnique({
-      where: { endpoint },
-      select: { id: true, userId: true },
-    });
-    if (!row || row.userId !== userId) return jsonError(404, "Subscription not found");
-    await db.pushSubscription.delete({ where: { id: row.id } });
-    return new Response(null, { status: 204 });
+    try {
+      const row = await db.pushSubscription.findUnique({
+        where: { endpoint },
+        select: { id: true, userId: true },
+      });
+      if (!row || row.userId !== userId) return jsonError(404, "Subscription not found");
+      await db.pushSubscription.delete({ where: { id: row.id } });
+      return new Response(null, { status: 204 });
+    } catch (error) {
+      captureSubscriptionFailure(request, context, userId, "unsubscribe", error);
+      return jsonError(500, "Failed to delete push subscription");
+    }
   }
 
   return jsonError(405, `Method ${request.method} not allowed`);
