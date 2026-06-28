@@ -197,11 +197,13 @@ model OAuthRefreshToken {
   clientId  String
   scope     String
   resource  String?
+  connectionKey String?
   revokedAt DateTime?
   createdAt DateTime  @default(now())
 
   @@index([userId])
   @@index([clientId])
+  @@index([connectionKey])
 }
 
 model Recipe {

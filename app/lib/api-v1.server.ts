@@ -9,6 +9,10 @@ import {
   type ApiPrincipal,
 } from "~/lib/api-auth.server";
 import {
+  DEFAULT_NOTIFICATION_PREFERENCES,
+  type NotificationPreferenceFlags,
+} from "~/lib/account-settings.server";
+import {
   captureEvent,
   captureException,
   requestContentBytes,
@@ -38,6 +42,14 @@ import {
   API_V1_SCOPE_REQUIREMENTS,
   type ApiV1ErrorCode,
 } from "~/lib/api-v1-contract.server";
+import {
+  deleteStoredImageWithCapture,
+  hasUploadedImageFile,
+  storeImage,
+  validateImageFile,
+} from "~/lib/image-storage.server";
+import { IMAGE_MAX_FILE_SIZE, PROFILE_IMAGE_TYPES } from "~/lib/recipe-image";
+import { listUserPasskeys } from "~/lib/webauthn-route.server";
 import {
   archiveRecipeCover,
   createCover,
@@ -339,6 +351,22 @@ function apiV1OperationFor(method: string, path: string): string | undefined {
       return "cookbooks.list";
     case "GET cookbook":
       return "cookbooks.get";
+    case "GET me":
+      return "account.read";
+    case "PATCH me":
+      return "account.update";
+    case "POST me-photo":
+      return "account.photo.upload";
+    case "DELETE me-photo":
+      return "account.photo.remove";
+    case "GET me-notification-preferences":
+      return "account.notification-preferences.read";
+    case "PATCH me-notification-preferences":
+      return "account.notification-preferences.update";
+    case "GET me-connections":
+      return "account.connections.list";
+    case "DELETE me-connection":
+      return "account.connections.disconnect";
     case "GET shopping-list":
       return "shopping-list.read";
     case "GET shopping-list-sync":
@@ -2962,6 +2990,510 @@ async function handleShoppingClear(
   });
 }
 
+function privateAccountPhotoUrl(origin: string, value: string | null): string | null {
+  if (!value) return null;
+  if (value.startsWith("data:")) return value;
+  return publicAssetUrl(origin, value);
+}
+
+async function accountProfilePayload(args: ApiV1RouteArgs, userId: string) {
+  const db = await getRequestDb(args.context);
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      email: true,
+      username: true,
+      hashedPassword: true,
+      photoUrl: true,
+      OAuth: {
+        select: {
+          provider: true,
+          providerUsername: true,
+        },
+        orderBy: [{ provider: "asc" }],
+      },
+    },
+  });
+  if (!user) {
+    throw new ApiV1Error("not_found", "Account not found");
+  }
+
+  const passkeys = await listUserPasskeys(db, userId);
+  const origin = publicContentOrigin(args);
+  return {
+    id: user.id,
+    email: user.email,
+    username: user.username,
+    photoUrl: privateAccountPhotoUrl(origin, user.photoUrl),
+    hasPassword: user.hashedPassword !== null,
+    oauthAccounts: user.OAuth.map((account) => ({
+      provider: account.provider,
+      providerUsername: account.providerUsername,
+    })),
+    passkeys: passkeys.map((passkey) => ({
+      id: passkey.id,
+      name: passkey.name ?? "Passkey",
+      transports: passkey.transports,
+      createdAt: passkey.createdAt?.toISOString() ?? null,
+    })),
+  };
+}
+
+function isValidAccountEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function bytesStartWith(bytes: Uint8Array, signature: readonly number[]): boolean {
+  if (bytes.length < signature.length) return false;
+  return signature.every((byte, index) => bytes[index] === byte);
+}
+
+function detectAccountPhotoMimeType(bytes: Uint8Array): string | null {
+  if (bytesStartWith(bytes, [0x47, 0x49, 0x46, 0x38])) return "image/gif";
+  if (bytesStartWith(bytes, [0xff, 0xd8, 0xff])) return "image/jpeg";
+  if (bytesStartWith(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return "image/png";
+  if (
+    bytes.length >= 12 &&
+    bytesStartWith(bytes, [0x52, 0x49, 0x46, 0x46]) &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50
+  ) {
+    return "image/webp";
+  }
+  return null;
+}
+
+function accountPhotoExtension(mimeType: string) {
+  if (mimeType === "image/jpeg") return "jpg";
+  if (mimeType === "image/png") return "png";
+  if (mimeType === "image/gif") return "gif";
+  if (mimeType === "image/webp") return "webp";
+  return "jpg";
+}
+
+const PROFILE_PHOTO_MULTIPART_MAX_BYTES = IMAGE_MAX_FILE_SIZE + 512 * 1024;
+const UNKNOWN_MULTIPART_FILE_TYPES = new Set(["", "application/octet-stream"]);
+
+function accountPhotoTooLargeError() {
+  return new ApiV1Error("validation_error", "Photo must be less than 5MB", { field: "photo" });
+}
+
+async function accountPhotoFormDataWithinLimit(request: Request): Promise<FormData> {
+  const declaredLength = Number(request.headers.get("Content-Length") ?? "0");
+  if (Number.isFinite(declaredLength) && declaredLength > PROFILE_PHOTO_MULTIPART_MAX_BYTES) {
+    throw accountPhotoTooLargeError();
+  }
+
+  if (!request.body) {
+    return request.formData();
+  }
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > PROFILE_PHOTO_MULTIPART_MAX_BYTES) {
+        await reader.cancel().catch(() => undefined);
+        throw accountPhotoTooLargeError();
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const replayHeaders: Record<string, string> = {};
+  request.headers.forEach((value, key) => {
+    if (key.toLowerCase() !== "content-length") {
+      replayHeaders[key] = value;
+    }
+  });
+  const replayBytes = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    replayBytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  const RequestConstructor = request.constructor as new (input: string, init: RequestInit) => Request;
+  return await new RequestConstructor(request.url, {
+    method: request.method,
+    headers: replayHeaders,
+    body: new Blob([replayBytes.buffer]),
+  }).formData();
+}
+
+async function normalizeAccountPhotoFile(photo: File): Promise<File> {
+  const bytes = new Uint8Array(await photo.arrayBuffer());
+  const detectedType = detectAccountPhotoMimeType(bytes);
+  const declaredType = photo.type.trim();
+  if (
+    detectedType === null ||
+    (!UNKNOWN_MULTIPART_FILE_TYPES.has(declaredType) && detectedType !== declaredType)
+  ) {
+    throw new ApiV1Error("validation_error", "Please upload an image file", { field: "photo" });
+  }
+  return new File([bytes], `profile.${accountPhotoExtension(detectedType)}`, {
+    type: detectedType,
+    lastModified: photo.lastModified,
+  });
+}
+
+function booleanField(body: Record<string, unknown>, field: keyof NotificationPreferenceFlags): boolean {
+  const value = body[field];
+  if (typeof value !== "boolean") {
+    throw new ApiV1Error("validation_error", `${field} must be a boolean`, { field });
+  }
+  return value;
+}
+
+async function notificationPreferencesFor(db: ApiV1Db, userId: string): Promise<NotificationPreferenceFlags> {
+  const row = await db.notificationPreference.findUnique({ where: { userId } });
+  return row
+    ? {
+        notifySpoonOnMyRecipe: row.notifySpoonOnMyRecipe,
+        notifyForkOfMyRecipe: row.notifyForkOfMyRecipe,
+        notifyCookbookSaveOfMine: row.notifyCookbookSaveOfMine,
+        notifyFellowChefOriginCook: row.notifyFellowChefOriginCook,
+      }
+    : DEFAULT_NOTIFICATION_PREFERENCES;
+}
+
+async function handleAccountRead(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
+  return withApiV1Telemetry(
+    apiV1PrivateSuccess(requestId, await accountProfilePayload(args, principal.id)),
+    { idempotencyOutcome: "none" },
+  );
+}
+
+async function handleAccountUpdate(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
+  const body = await parseApiV1JsonBody(args.request);
+  assertKnownFields(body, ["email", "username", "clientMutationId"]);
+  const email = typeof body.email === "string" ? body.email.trim() : "";
+  const username = typeof body.username === "string" ? body.username.trim() : "";
+  const fieldErrors: string[] = [];
+  if (!email || !isValidAccountEmail(email)) fieldErrors.push("email");
+  if (!username) fieldErrors.push("username");
+  if (fieldErrors.length > 0) {
+    throw new ApiV1Error("validation_error", "Invalid account profile fields", { fields: fieldErrors });
+  }
+
+  const db = await getRequestDb(args.context);
+  const normalizedEmail = email.toLowerCase();
+  const currentUser = await db.user.findUnique({
+    where: { id: principal.id },
+    select: { email: true, username: true },
+  });
+  if (!currentUser) {
+    throw new ApiV1Error("not_found", "Account not found");
+  }
+
+  if (normalizedEmail !== currentUser.email.toLowerCase()) {
+    const existingEmail = await db.$queryRaw<{ id: string }[]>`
+      SELECT id FROM User WHERE LOWER(email) = ${normalizedEmail} AND id != ${principal.id}
+    `;
+    if (existingEmail.length > 0) {
+      throw new ApiV1Error("validation_error", "This email is already in use by another account", { field: "email" });
+    }
+  }
+
+  if (username !== currentUser.username) {
+    const existingUsername = await db.user.findUnique({
+      where: { username },
+      select: { id: true },
+    });
+    if (existingUsername && existingUsername.id !== principal.id) {
+      throw new ApiV1Error("validation_error", "This username is already taken", { field: "username" });
+    }
+  }
+
+  await db.user.update({
+    where: { id: principal.id },
+    data: {
+      email: normalizedEmail,
+      username,
+    },
+  });
+
+  return withApiV1Telemetry(
+    apiV1PrivateSuccess(requestId, await accountProfilePayload(args, principal.id)),
+    { idempotencyOutcome: "none" },
+  );
+}
+
+async function handleAccountPhotoUpload(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
+  const formData = await accountPhotoFormDataWithinLimit(args.request);
+  const photo = formData.get("photo");
+  if (!hasUploadedImageFile(photo)) {
+    throw new ApiV1Error("validation_error", "Please select a photo to upload", { field: "photo", reason: "missing" });
+  }
+
+  const imageError = validateImageFile(photo, {
+    allowedTypes: [...PROFILE_IMAGE_TYPES, ...UNKNOWN_MULTIPART_FILE_TYPES],
+    messages: {
+      invalidType: "Please upload an image file",
+      fileTooLarge: "Photo must be less than 5MB",
+    },
+  });
+  if (imageError) {
+    throw new ApiV1Error("validation_error", imageError, { field: "photo" });
+  }
+
+  const normalizedPhoto = await normalizeAccountPhotoFile(photo);
+  const photoUrl = await storeImage({
+    bucket: args.context.cloudflare?.env?.PHOTOS,
+    file: normalizedPhoto,
+    namespace: `profiles/${principal.id}`,
+  });
+  const db = await getRequestDb(args.context);
+  await db.user.update({
+    where: { id: principal.id },
+    data: { photoUrl },
+  });
+
+  return withApiV1Telemetry(
+    apiV1PrivateSuccess(requestId, await accountProfilePayload(args, principal.id)),
+    { idempotencyOutcome: "none" },
+  );
+}
+
+async function handleAccountPhotoRemove(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
+  const db = await getRequestDb(args.context);
+  const user = await db.user.findUnique({
+    where: { id: principal.id },
+    select: { photoUrl: true },
+  });
+  const env = args.context.cloudflare?.env;
+  const postHogConfig = env
+    ? resolvePostHogServerConfig(env)
+    : ({ enabled: false, reason: "missing-key" } as const);
+
+  await deleteStoredImageWithCapture({
+    bucket: env?.PHOTOS,
+    imageUrl: user?.photoUrl,
+    event: "spoonjoy.storage.avatar_delete_failed",
+    postHogConfig,
+    waitUntil: apiV1WaitUntilFor(args),
+    distinctId: principal.id,
+  });
+  await db.user.update({
+    where: { id: principal.id },
+    data: { photoUrl: null },
+  });
+
+  return withApiV1Telemetry(
+    apiV1PrivateSuccess(requestId, await accountProfilePayload(args, principal.id)),
+    { idempotencyOutcome: "none" },
+  );
+}
+
+async function handleNotificationPreferencesRead(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
+  const db = await getRequestDb(args.context);
+  return withApiV1Telemetry(
+    apiV1PrivateSuccess(requestId, await notificationPreferencesFor(db, principal.id)),
+    { idempotencyOutcome: "none" },
+  );
+}
+
+async function handleNotificationPreferencesUpdate(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
+  const body = await parseApiV1JsonBody(args.request);
+  assertKnownFields(body, [
+    "notifySpoonOnMyRecipe",
+    "notifyForkOfMyRecipe",
+    "notifyCookbookSaveOfMine",
+    "notifyFellowChefOriginCook",
+    "clientMutationId",
+  ]);
+  const preferences: NotificationPreferenceFlags = {
+    notifySpoonOnMyRecipe: booleanField(body, "notifySpoonOnMyRecipe"),
+    notifyForkOfMyRecipe: booleanField(body, "notifyForkOfMyRecipe"),
+    notifyCookbookSaveOfMine: booleanField(body, "notifyCookbookSaveOfMine"),
+    notifyFellowChefOriginCook: booleanField(body, "notifyFellowChefOriginCook"),
+  };
+  const db = await getRequestDb(args.context);
+  await db.notificationPreference.upsert({
+    where: { userId: principal.id },
+    create: {
+      userId: principal.id,
+      ...preferences,
+    },
+    update: preferences,
+  });
+
+  return withApiV1Telemetry(
+    apiV1PrivateSuccess(requestId, preferences),
+    { idempotencyOutcome: "none" },
+  );
+}
+
+function accountConnectionId(clientId: string, resource: string | null, connectionKey: string): string {
+  return `conn_${base64UrlEncodeText(JSON.stringify({ clientId, resource, connectionKey }))}`;
+}
+
+function parseAccountConnectionId(connectionId: string): { clientId: string; resource: string | null; connectionKey: string } {
+  if (!connectionId.startsWith("conn_")) {
+    throw new ApiV1Error("not_found", "OAuth connection not found");
+  }
+  try {
+    const parsed = JSON.parse(base64UrlDecodeText(connectionId.slice("conn_".length))) as unknown;
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      !Array.isArray(parsed) &&
+      typeof (parsed as { clientId?: unknown }).clientId === "string" &&
+      typeof (parsed as { connectionKey?: unknown }).connectionKey === "string"
+    ) {
+      const resource = (parsed as { resource?: unknown }).resource;
+      if (resource === null || typeof resource === "string") {
+        return {
+          clientId: (parsed as { clientId: string }).clientId,
+          resource,
+          connectionKey: (parsed as { connectionKey: string }).connectionKey,
+        };
+      }
+    }
+  } catch {
+    // Fall through to the not_found below so invalid opaque ids do not leak parser detail.
+  }
+  throw new ApiV1Error("not_found", "OAuth connection not found");
+}
+
+async function oauthConnectionSummaries(db: ApiV1Db, userId: string) {
+  const activeRefreshTokens = await db.oAuthRefreshToken.findMany({
+    where: { userId, revokedAt: null },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    select: {
+      id: true,
+      clientId: true,
+      resource: true,
+      scope: true,
+      connectionKey: true,
+      createdAt: true,
+    },
+  });
+  const oauthClientIds = [...new Set(activeRefreshTokens.map((token) => token.clientId))];
+  const oauthClients = oauthClientIds.length
+    ? await db.oAuthClient.findMany({
+        where: { id: { in: oauthClientIds } },
+        select: { id: true, clientName: true },
+      })
+    : [];
+  const clientNames = new Map(oauthClients.map((client) => [client.id, client.clientName]));
+  const accessCredentialCounts = await db.apiCredential.groupBy({
+    by: ["oauthClientId", "oauthResource"],
+    where: {
+      userId,
+      revokedAt: null,
+      oauthClientId: { in: oauthClientIds.length ? oauthClientIds : ["__none__"] },
+    },
+    _count: { _all: true },
+  });
+  const accessCounts = new Map(
+    accessCredentialCounts.map((row) => [
+      `${row.oauthClientId!}\u0000${row.oauthResource ?? ""}`,
+      row._count._all,
+    ]),
+  );
+  const groups = new Map<string, {
+    clientId: string;
+    clientName: string;
+    resource: string | null;
+    connectionKey: string;
+    scopes: Set<string>;
+    createdAt: Date;
+    refreshTokenCount: number;
+    accessTokenCount: number;
+  }>();
+  for (const token of activeRefreshTokens) {
+    const key = `${token.clientId}\u0000${token.resource ?? ""}`;
+    const connectionKey = token.connectionKey ?? token.id;
+    const existing = groups.get(key);
+    if (existing) {
+      for (const scope of token.scope.trim().split(/\s+/).filter(Boolean)) existing.scopes.add(scope);
+      if (token.createdAt < existing.createdAt) {
+        existing.createdAt = token.createdAt;
+        existing.connectionKey = connectionKey;
+      }
+      existing.refreshTokenCount += 1;
+      continue;
+    }
+    groups.set(key, {
+      clientId: token.clientId,
+      clientName: clientNames.get(token.clientId) ?? token.clientId,
+      resource: token.resource,
+      connectionKey,
+      scopes: new Set(token.scope.trim().split(/\s+/).filter(Boolean)),
+      createdAt: token.createdAt,
+      refreshTokenCount: 1,
+      accessTokenCount: accessCounts.get(key) ?? 0,
+    });
+  }
+
+  return Array.from(groups.values()).map((connection) => ({
+    id: accountConnectionId(connection.clientId, connection.resource, connection.connectionKey),
+    clientId: connection.clientId,
+    clientName: connection.clientName,
+    resource: connection.resource,
+    scopes: Array.from(connection.scopes).sort(),
+    createdAt: connection.createdAt.toISOString(),
+    refreshTokenCount: connection.refreshTokenCount,
+    accessTokenCount: connection.accessTokenCount,
+  }));
+}
+
+async function handleOAuthConnectionList(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
+  const db = await getRequestDb(args.context);
+  return withApiV1Telemetry(
+    apiV1PrivateSuccess(requestId, { connections: await oauthConnectionSummaries(db, principal.id) }),
+    { idempotencyOutcome: "none" },
+  );
+}
+
+async function handleOAuthConnectionDisconnect(
+  args: ApiV1RouteArgs,
+  requestId: string,
+  principal: ApiPrincipal,
+  connectionId: string,
+) {
+  parseAccountConnectionId(connectionId);
+  const db = await getRequestDb(args.context);
+  const connection = (await oauthConnectionSummaries(db, principal.id))
+    .find((candidate) => candidate.id === connectionId);
+  if (!connection) {
+    throw new ApiV1Error("not_found", "OAuth connection not found or already disconnected");
+  }
+  const now = new Date();
+  const refresh = await db.oAuthRefreshToken.updateMany({
+    where: { userId: principal.id, clientId: connection.clientId, resource: connection.resource, revokedAt: null },
+    data: { revokedAt: now },
+  });
+  const access = await db.apiCredential.updateMany({
+    where: { userId: principal.id, oauthClientId: connection.clientId, oauthResource: connection.resource, revokedAt: null },
+    data: { revokedAt: now },
+  });
+  if (refresh.count === 0 && access.count === 0) {
+    throw new ApiV1Error("not_found", "OAuth connection not found or already disconnected");
+  }
+
+  return withApiV1Telemetry(
+    apiV1PrivateSuccess(requestId, {
+      disconnected: true,
+      connectionId,
+      clientId: connection.clientId,
+      resource: connection.resource,
+      revokedRefreshTokens: refresh.count,
+      revokedAccessTokens: access.count,
+    }),
+    { idempotencyOutcome: "none" },
+  );
+}
+
 function credentialMetadata(credential: ApiCredential) {
   return {
     id: credential.id,
@@ -3253,6 +3785,54 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
     if (args.request.method === "GET" && segments[0] === "cookbooks" && segments.length === 2) {
       const principal = await authorize(path);
       const response = await handleCookbookDetail(args, requestId, principal, segments[1]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "GET" && path === "me") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleAccountRead(args, requestId, principal);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "PATCH" && path === "me") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleAccountUpdate(args, requestId, principal);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "POST" && path === "me/photo") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleAccountPhotoUpload(args, requestId, principal);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "DELETE" && path === "me/photo") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleAccountPhotoRemove(args, requestId, principal);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "GET" && path === "me/notification-preferences") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleNotificationPreferencesRead(args, requestId, principal);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "PATCH" && path === "me/notification-preferences") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleNotificationPreferencesUpdate(args, requestId, principal);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "GET" && path === "me/connections") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleOAuthConnectionList(args, requestId, principal);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "DELETE" && segments[0] === "me" && segments[1] === "connections" && segments.length === 3) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleOAuthConnectionDisconnect(args, requestId, principal, segments[2]);
       return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
     }
 

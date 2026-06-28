@@ -23,6 +23,7 @@ Available now:
 - Public recipe spoon history plus authenticated recipe spoon create, update, and delete
 - Owner-scoped recipe cover candidate management for the authenticated chef's recipes
 - Owner-scoped shopping-list read, sync, add, recipe-add, check, clear, and remove
+- Native account profile, profile-photo, notification-preference, token, and OAuth app connection settings
 - Session-created and bearer-created API tokens
 - OAuth/PKCE delegated access
 - Delegated agent/device approval links
@@ -146,6 +147,7 @@ External clients that run outside the Spoonjoy browser session use bearer creden
 
 Supported entry points:
 
+- Native account settings: `GET /api/v1/me`, `PATCH /api/v1/me`, `POST /api/v1/me/photo`, `DELETE /api/v1/me/photo`, `GET /api/v1/me/notification-preferences`, `PATCH /api/v1/me/notification-preferences`, `GET /api/v1/me/connections`, and `DELETE /api/v1/me/connections/{connectionId}`
 - Bearer credentials: `GET /api/v1/tokens`, `POST /api/v1/tokens`, and `DELETE /api/v1/tokens/{credentialId}`
 - OAuth/DCR clients: `POST /oauth/register`, `GET /oauth/authorize`, `POST /oauth/token`, and `POST /oauth/revoke`
 - Delegated agent connection: `POST /api/tools/start_agent_connection` and `POST /api/tools/poll_agent_connection`
@@ -277,7 +279,7 @@ When a signed-in session creates a token and omits `scopes`, Spoonjoy uses the d
 
 Use OAuth/PKCE when a third-party app needs the chef to consent without embedding a long-lived secret. Register a public client with `token_endpoint_auth_method: none`; there is no client secret. Redirect URIs must be HTTPS, with HTTP allowed only for `localhost` and `127.0.0.1`. Redirect URIs with fragments, embedded credentials, wildcards, custom schemes, or plain remote HTTP are rejected. Spoonjoy accepts common RFC 7591/OIDC client metadata such as `client_uri`, `contacts`, `policy_uri`, `software_id`, and `software_version`, but only stores `client_name` and exact `redirect_uris` today.
 
-OAuth accepts delegated `kitchen:read` and `kitchen:write` scopes plus least-privilege REST read/write scopes such as `shopping_list:read`, `shopping_list:write`, `recipes:read`, `cookbooks:read`, and `public:read`. Grocery-style apps should request `shopping_list:read shopping_list:write`, not broad kitchen scopes. Native Spoonjoy clients that manage recipe covers need `kitchen:write`. Do not request `offline_access`; OAuth returns refresh tokens with the authorization-code flow. Omitting `scope` grants the read-only default `kitchen:read`.
+OAuth accepts delegated `kitchen:read` and `kitchen:write` scopes plus least-privilege REST read/write scopes such as `account:read`, `account:write`, `shopping_list:read`, `shopping_list:write`, `recipes:read`, `cookbooks:read`, and `public:read`. Grocery-style apps should request `shopping_list:read shopping_list:write`, not broad kitchen scopes. Native Spoonjoy clients that manage recipe covers need `kitchen:write`; clients that manage profile, profile photo, or notification settings need explicit `account:*` scopes. Do not request `offline_access`; OAuth returns refresh tokens with the authorization-code flow. Omitting `scope` grants the read-only default `kitchen:read`.
 
 Generate a 43-128 character high-entropy `code_verifier` from unreserved PKCE characters, then send `code_challenge = BASE64URL(SHA256(code_verifier))` without padding and `code_challenge_method=S256`. The `plain` method is rejected. Always send and verify `state`.
 
@@ -382,10 +384,12 @@ Unauthenticated `/mcp` calls challenge with OAuth protected-resource metadata. M
 
 ## OAuth Scope Mapping
 
-OAuth/MCP consent can use broad `kitchen:read` and `kitchen:write` scopes or least-privilege REST scopes. The API maps delegated credentials onto owner-scoped operations while preventing cross-owner access. OAuth credentials do not receive token-management scopes.
+OAuth/MCP consent can use broad `kitchen:read` and `kitchen:write` scopes or least-privilege REST scopes. Account identity settings are intentionally separate: `kitchen:*` does not unlock `account:*`. The API maps delegated credentials onto owner-scoped operations while preventing cross-owner access. OAuth credentials do not receive token-management scopes.
 
 | OAuth scope | REST scopes unlocked |
 | --- | --- |
+| `account:read` | `account:read` |
+| `account:write` | `account:write` |
 | `kitchen:read` | `cookbooks:read`, `public:read`, `recipes:read`, `shopping_list:read` |
 | `kitchen:write` | `kitchen:write`, `shopping_list:write` |
 | `shopping_list:read` | `shopping_list:read` |
@@ -400,14 +404,17 @@ Fine-grained REST scopes are attached to bearer tokens and OAuth-issued API cred
 
 | Scope | Purpose |
 | --- | --- |
+| `account:read` | Read the authenticated owner's account profile and notification preference settings. |
+| `account:write` | Update the authenticated owner's profile, profile photo, and notification preference settings. |
+| `kitchen:read` | Read the authenticated owner's broad kitchen state, including public recipes, public cookbooks, and shopping-list reads. |
 | `kitchen:write` | Import recipes, manage owner recipe spoons and covers, and write the authenticated owner's shopping list when granted through OAuth kitchen consent. |
 | `public:read` | Read public recipe and cookbook data with a bearer or OAuth credential. Anonymous reads do not need it. |
 | `recipes:read` | Read public recipes and recipe detail. |
 | `cookbooks:read` | Read public cookbook lists and cookbook detail. |
 | `shopping_list:read` | Read the authenticated owner's active shopping list and sync feed. |
 | `shopping_list:write` | Add, check, or remove items from the authenticated owner's shopping list. |
-| `tokens:read` | List token metadata for the authenticated owner. |
-| `tokens:write` | Create or revoke scoped bearer credentials for the authenticated owner. |
+| `tokens:read` | List token metadata and OAuth app connection metadata for the authenticated owner. |
+| `tokens:write` | Create or revoke scoped bearer credentials and disconnect OAuth app connections for the authenticated owner. |
 | `offline_access` | Internal refresh-capable credential marker. Do not request it in OAuth authorize; OAuth returns refresh tokens from the code grant. |
 
 ## Rate Limiting
@@ -438,6 +445,14 @@ API v1 is rate limited by IP and credential before authentication work. Anonymou
 | `POST` | `/api/v1/recipes/{id}/covers/from-spoon/{spoonId}` | Authenticated chef | `kitchen:write` |
 | `GET` | `/api/v1/cookbooks` | Optional | `cookbooks:read` when authenticated |
 | `GET` | `/api/v1/cookbooks/{id}` | Optional | `cookbooks:read` when authenticated |
+| `GET` | `/api/v1/me` | Authenticated chef | `account:read` |
+| `PATCH` | `/api/v1/me` | Authenticated chef | `account:write` |
+| `POST` | `/api/v1/me/photo` | Authenticated chef | `account:write` |
+| `DELETE` | `/api/v1/me/photo` | Authenticated chef | `account:write` |
+| `GET` | `/api/v1/me/notification-preferences` | Authenticated chef | `account:read` |
+| `PATCH` | `/api/v1/me/notification-preferences` | Authenticated chef | `account:write` |
+| `GET` | `/api/v1/me/connections` | Authenticated chef | `tokens:read` |
+| `DELETE` | `/api/v1/me/connections/{connectionId}` | Authenticated chef | `tokens:write` |
 | `GET` | `/api/v1/shopping-list` | Authenticated chef | `shopping_list:read` |
 | `GET` | `/api/v1/shopping-list/sync` | Authenticated chef | `shopping_list:read` |
 | `POST` | `/api/v1/shopping-list/items` | Authenticated chef | `shopping_list:write` |

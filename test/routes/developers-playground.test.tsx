@@ -148,7 +148,11 @@ describe("/developers/playground", () => {
     expect(data.manifest.operations.find((operation) => operation.id === "GET /api/v1/recipes/{id}/covers")?.profiles).toEqual(["full", "sdk"]);
     expect(data.manifest.operations.find((operation) => operation.id === "POST /oauth/token")?.profiles).toEqual(["full", "sdk"]);
     expect(data.manifest.operations.find((operation) => operation.id === "POST /mcp")?.profiles).toEqual(["full"]);
-    expect(data.manifest.operations.length).toBe(38);
+    expect(data.manifest.operations.find((operation) => operation.id === "POST /api/v1/me/photo")?.requestBody).toMatchObject({
+      contentType: "multipart/form-data",
+      fields: [{ name: "photo", required: true, accept: "image/jpeg,image/png,image/gif,image/webp" }],
+    });
+    expect(data.manifest.operations.length).toBe(46);
   });
 
   it("uses the configured public origin for playground OG URLs", async () => {
@@ -168,6 +172,7 @@ describe("/developers/playground", () => {
       "Recipe Spoons",
       "Recipe Covers",
       "Cookbooks",
+      "Account",
       "Shopping List",
       "Tokens",
       "OAuth",
@@ -301,6 +306,7 @@ describe("/developers/playground", () => {
     const root = PLAYGROUND_OPERATIONS.find((operation) => operation.id === "GET /api/v1")!;
     const createToken = PLAYGROUND_OPERATIONS.find((operation) => operation.id === "POST /api/v1/tokens")!;
     const deleteItem = PLAYGROUND_OPERATIONS.find((operation) => operation.id === "DELETE /api/v1/shopping-list/items/{itemId}")!;
+    const uploadPhoto = PLAYGROUND_OPERATIONS.find((operation) => operation.id === "POST /api/v1/me/photo")!;
 
     expect(playgroundFetchOptions(root, "session", "", "", "pg_session")).toEqual({
       method: "GET",
@@ -345,6 +351,19 @@ describe("/developers/playground", () => {
     expect(playgroundBodyError(createToken, "")).toBe("This operation requires a request body.");
     expect(playgroundBodyError(createToken, "{bad")).toBe("JSON body is not valid.");
     expect(playgroundBodyError(createToken, "{\"name\":\"Client\"}")).toBeNull();
+
+    const file = new File(["GIF89a"], "profile.gif", { type: "image/gif" });
+    const multipartOptions = playgroundFetchOptions(uploadPhoto, "session", "", "", "pg_upload", {}, { photo: file });
+    expect(multipartOptions).toMatchObject({
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "X-Request-Id": "pg_upload" },
+    });
+    expect((multipartOptions.headers as Record<string, string>)["Content-Type"]).toBeUndefined();
+    expect(multipartOptions.body).toBeInstanceOf(FormData);
+    expect([...(multipartOptions.body as FormData).entries()]).toEqual([["photo", file]]);
+    expect(playgroundBodyError(uploadPhoto, "", {})).toBe("Select photo before sending.");
+    expect(playgroundBodyError(uploadPhoto, "", { photo: file })).toBeNull();
   });
 
   it("renders all operations and sends the default public recipes request anonymously", async () => {
@@ -789,6 +808,7 @@ describe("/developers/playground", () => {
     const createToken = PLAYGROUND_OPERATIONS.find((operation) => operation.id === "POST /api/v1/tokens")!;
     const authorize = PLAYGROUND_OPERATIONS.find((operation) => operation.id === "GET /oauth/authorize")!;
     const deleteItem = PLAYGROUND_OPERATIONS.find((operation) => operation.id === "DELETE /api/v1/shopping-list/items/{itemId}")!;
+    const uploadPhoto = PLAYGROUND_OPERATIONS.find((operation) => operation.id === "POST /api/v1/me/photo")!;
 
     expect(curlFor("/api/v1", root, "session", "")).toContain("Session mode is browser-only");
     expect(curlFor("/api/v1", root, "session", "")).toContain("await fetch(\"/api/v1\"");
@@ -806,6 +826,9 @@ describe("/developers/playground", () => {
     expect(curlFor("/api/v1/tokens", createToken, "bearer", "{\"name\":\"Client\"}")).toContain(
       "--data '{\"name\":\"Client\"}'",
     );
+    expect(curlFor("/api/v1/me/photo", uploadPhoto, "bearer", "")).toContain("-F 'photo=@profile.jpg;type=image/jpeg'");
+    expect(curlFor("/api/v1/me/photo", uploadPhoto, "bearer", "")).not.toContain("Content-Type");
+    expect(curlFor("/api/v1/me/photo", uploadPhoto, "session", "")).toContain("const body = new FormData();");
     expect(curlFor("/oauth/authorize?client_id=cm_1", authorize, "anonymous", "")).toContain(
       "open 'https://spoonjoy.app/oauth/authorize?client_id=cm_1'",
     );

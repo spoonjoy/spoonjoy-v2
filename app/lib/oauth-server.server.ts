@@ -20,6 +20,8 @@ type Database = PrismaClientType;
 
 /** Scopes Spoonjoy understands for delegated OAuth consent. */
 export const SUPPORTED_SCOPES = [
+  "account:read",
+  "account:write",
   "cookbooks:read",
   "kitchen:read",
   "kitchen:write",
@@ -274,10 +276,11 @@ function oauthCredentialName(clientName: string | null | undefined): string {
  */
 export async function issueConnectorTokens(
   db: Database,
-  input: { userId: string; clientId: string; scope: string; resource?: string | null; now?: Date },
+  input: { userId: string; clientId: string; scope: string; resource?: string | null; now?: Date; connectionKey?: string | null },
 ): Promise<IssuedConnectorTokens> {
   const now = input.now ?? new Date();
   const client = await getOAuthClient(db, input.clientId);
+  const connectionKey = input.connectionKey ?? randomToken("ocn_", 16);
   const { token: accessToken } = await createApiCredential(
     db,
     input.userId,
@@ -297,6 +300,7 @@ export async function issueConnectorTokens(
       clientId: input.clientId,
       scope: input.scope,
       resource: input.resource ?? null,
+      connectionKey,
     },
   });
   return {
@@ -381,5 +385,6 @@ export async function rotateConnectorTokens(
     scope: record.scope,
     resource: record.resource,
     now,
+    connectionKey: record.connectionKey ?? record.id,
   });
 }

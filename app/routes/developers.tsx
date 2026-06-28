@@ -24,6 +24,8 @@ import { CookbookHeader, CookbookPage, CookbookSectionTitle } from "~/components
 
 const DEVELOPER_SCOPES = [
   "public:read",
+  "account:read",
+  "account:write",
   "kitchen:read",
   "kitchen:write",
   "recipes:read",
@@ -40,6 +42,8 @@ const DEVELOPER_OG_PATH = pageOgPath("api");
 
 const scopeLabels: Record<string, string> = {
   "public:read": "Public read",
+  "account:read": "Account settings read",
+  "account:write": "Account settings write",
   "kitchen:read": "Delegated kitchen read",
   "kitchen:write": "Delegated kitchen write",
   "recipes:read": "Recipe graph read",
@@ -183,6 +187,21 @@ const externalGuideSteps = [
       "POST /api/v1/recipes/{id}/covers/from-spoon/{spoonId}",
     ].join("\n"),
   },
+  {
+    title: "Manage native account settings",
+    scope: "Requires account:* and tokens:*",
+    body: "Native clients can read and update the signed-in chef's profile, profile photo, notification preferences, token metadata, and OAuth app connections through API v1. Profile and notification settings use explicit account scopes; token and OAuth connection administration uses tokens scopes and returns generation-aware opaque connection ids for disconnects.",
+    sample: [
+      "GET /api/v1/me",
+      "PATCH /api/v1/me",
+      "POST /api/v1/me/photo",
+      "DELETE /api/v1/me/photo",
+      "GET /api/v1/me/notification-preferences",
+      "PATCH /api/v1/me/notification-preferences",
+      "GET /api/v1/me/connections",
+      "DELETE /api/v1/me/connections/{connectionId}",
+    ].join("\n"),
+  },
 ] as const;
 
 const tokenAcquisitionPaths = [
@@ -234,7 +253,7 @@ const authImplementationSteps = [
   {
     title: "OAuth/PKCE app",
     mode: "Delegated",
-    body: "Register a public client with token_endpoint_auth_method: none and no client secret, redirect the chef through consent, then exchange the single-use 60-second code with a form-encoded POST /oauth/token request. Registration accepts common RFC 7591/OIDC metadata, but Spoonjoy stores only client_name and exact redirect_uris today. Optional scope metadata can be validated at registration, but the authorize request scope is the grant. Use a 43-128 character high-entropy PKCE verifier, S256 code challenge, and state. If the chef is not signed in, Spoonjoy routes them through /login first, where password, passkey, and configured Google, GitHub, or Apple sign-in all return to consent. OAuth accepts kitchen scopes plus least-privilege public, recipe, cookbook, and shopping-list scopes. The returned sj_... access_token lasts 15 minutes (expires_in: 900), refresh_token rotates on every refresh grant, and POST /oauth/revoke disconnects the stored refresh token plus live OAuth access credentials for that client/resource.",
+    body: "Register a public client with token_endpoint_auth_method: none and no client secret, redirect the chef through consent, then exchange the single-use 60-second code with a form-encoded POST /oauth/token request. Registration accepts common RFC 7591/OIDC metadata, but Spoonjoy stores only client_name and exact redirect_uris today. Optional scope metadata can be validated at registration, but the authorize request scope is the grant. Use a 43-128 character high-entropy PKCE verifier, S256 code challenge, and state. If the chef is not signed in, Spoonjoy routes them through /login first, where password, passkey, and configured Google, GitHub, or Apple sign-in all return to consent. OAuth accepts account scopes, kitchen scopes, and least-privilege public, recipe, cookbook, and shopping-list scopes. The returned sj_... access_token lasts 15 minutes (expires_in: 900), refresh_token rotates on every refresh grant, and POST /oauth/revoke disconnects the stored refresh token plus live OAuth access credentials for that client/resource.",
     sample: "POST /oauth/register\nResponse: { \"client_id\": \"cm_client_id_from_register\" }\nGET /oauth/authorize?client_id=cm_client_id_from_register&redirect_uri=https%3A%2F%2Fexample.com%2Foauth%2Fcallback&response_type=code&scope=shopping_list%3Aread+shopping_list%3Awrite&state=...&code_challenge=...&code_challenge_method=S256\nPOST /oauth/token\nContent-Type: application/x-www-form-urlencoded\n\ngrant_type=authorization_code&client_id=...&redirect_uri=https%3A%2F%2Fexample.com%2Foauth%2Fcallback&code=...&code_verifier=...\n\nPOST /oauth/revoke\ntoken=ort_...&client_id=cm_client_id_from_register&token_type_hint=refresh_token",
   },
   {
@@ -636,7 +655,7 @@ export default function Developers() {
           Cookie-authenticated API mutations remain same-origin session calls and should never rely on copied cookies in external clients.
         </Text>
         <Text className="mb-5">
-          Do not request `offline_access` in OAuth authorize. OAuth clients can request kitchen scopes or least-privilege public, recipe, cookbook, and shopping-list scopes; refresh tokens are returned by the authorization-code flow.
+          Do not request `offline_access` in OAuth authorize. OAuth clients can request account scopes, kitchen scopes, or least-privilege public, recipe, cookbook, and shopping-list scopes; refresh tokens are returned by the authorization-code flow.
         </Text>
         <div className="grid gap-4">
           {authFlows.map((flow) => (
