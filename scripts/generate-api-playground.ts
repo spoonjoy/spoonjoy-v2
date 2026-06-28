@@ -56,6 +56,9 @@ type OpenApiOperation = {
       "application/x-www-form-urlencoded"?: {
         examples?: Record<string, { value?: unknown }>;
       };
+      "multipart/form-data"?: {
+        examples?: Record<string, { value?: unknown }>;
+      };
     };
   };
   responses?: Record<string, OpenApiResponse>;
@@ -146,19 +149,36 @@ function parameterFromOpenApi(path: string, parameter: OpenApiParameter) {
 function requestBodyExample(operation: OpenApiOperation) {
   const jsonExamples = operation.requestBody?.content?.["application/json"]?.examples;
   const formExamples = operation.requestBody?.content?.["application/x-www-form-urlencoded"]?.examples;
-  const examples = jsonExamples ?? formExamples;
+  const multipartExamples = operation.requestBody?.content?.["multipart/form-data"]?.examples;
+  const examples = jsonExamples ?? formExamples ?? multipartExamples;
   const example = examples?.example?.value ?? Object.values(examples ?? {})[0]?.value;
   if (example === undefined) return null;
-  const contentType = jsonExamples ? "application/json" : "application/x-www-form-urlencoded";
+  const contentType = jsonExamples
+    ? "application/json"
+    : formExamples
+      ? "application/x-www-form-urlencoded"
+      : "multipart/form-data";
+  const multipartFields = contentType === "multipart/form-data" && example && typeof example === "object" && !Array.isArray(example)
+    ? Object.entries(example as Record<string, unknown>).map(([name, value]) => ({
+        name,
+        label: titleCase(name),
+        required: Boolean(operation.requestBody?.required),
+        accept: name === "photo" ? "image/jpeg,image/png,image/gif,image/webp" : "",
+        description: typeof value === "string" ? value : "",
+      }))
+    : [];
   const renderExample = (value: unknown) => typeof value === "string"
     ? value
     : contentType === "application/json"
       ? JSON.stringify(value, null, 2)
-      : new URLSearchParams(Object.entries(value as Record<string, unknown>).map(([key, item]) => [key, String(item)])).toString();
+      : contentType === "application/x-www-form-urlencoded"
+        ? new URLSearchParams(Object.entries(value as Record<string, unknown>).map(([key, item]) => [key, String(item)])).toString()
+        : JSON.stringify(value, null, 2);
   const renderedExample = renderExample(example);
   return {
     required: Boolean(operation.requestBody?.required),
     contentType,
+    fields: multipartFields,
     example: renderedExample,
     examples: Object.entries(examples ?? {}).map(([name, item]) => ({
       name,
@@ -403,7 +423,14 @@ export type ApiV1PlaygroundOperation = {
   params: readonly ApiV1PlaygroundParam[];
   requestBody: null | {
     required: boolean;
-    contentType: "application/json" | "application/x-www-form-urlencoded";
+    contentType: "application/json" | "application/x-www-form-urlencoded" | "multipart/form-data";
+    fields: readonly {
+      name: string;
+      label: string;
+      required: boolean;
+      accept: string;
+      description: string;
+    }[];
     example: string;
     examples: readonly {
       name: string;

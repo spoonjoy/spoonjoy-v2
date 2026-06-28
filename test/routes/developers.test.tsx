@@ -50,6 +50,8 @@ describe("/developers route", () => {
     expect(data.ogImageUrl).toBe("https://spoonjoy.app/og/pages/api.png");
     expect(data.scopes).toEqual([
       "public:read",
+      "account:read",
+      "account:write",
       "kitchen:read",
       "kitchen:write",
       "recipes:read",

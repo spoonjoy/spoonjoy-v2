@@ -159,6 +159,8 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 const SCOPE_LABELS: Record<string, string> = {
+  "account:read": "View your account profile and notification settings",
+  "account:write": "Update your account profile, profile photo, and notification settings",
   "cookbooks:read": "View public cookbook data",
   "kitchen:read": "View public recipes, cookbooks, and your shopping list",
   "kitchen:write": "Add, edit, and remove Spoonjoy kitchen data through MCP tools and shopping-list operations",

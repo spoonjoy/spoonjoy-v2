@@ -39,6 +39,8 @@ describe("oauth metadata builders", () => {
       revocation_endpoint: "https://spoonjoy.app/oauth/revoke",
       registration_endpoint: "https://spoonjoy.app/oauth/register",
       scopes_supported: [
+        "account:read",
+        "account:write",
         "cookbooks:read",
         "kitchen:read",
         "kitchen:write",
@@ -59,6 +61,8 @@ describe("oauth metadata builders", () => {
       resource: "https://spoonjoy.app/mcp",
       authorization_servers: ["https://spoonjoy.app"],
       scopes_supported: [
+        "account:read",
+        "account:write",
         "cookbooks:read",
         "kitchen:read",
         "kitchen:write",

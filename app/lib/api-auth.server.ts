@@ -9,6 +9,8 @@ export const API_CREDENTIAL_SCOPE_VALUES = [
   "shopping_list:read",
   "shopping_list:write",
   "cookbooks:read",
+  "account:read",
+  "account:write",
   "tokens:read",
   "tokens:write",
   "offline_access",
@@ -20,6 +22,8 @@ export type ApiCredentialScope = (typeof API_CREDENTIAL_SCOPE_VALUES)[number];
 
 export const DEFAULT_PERSONAL_API_TOKEN_SCOPES = [
   "cookbooks:read",
+  "account:read",
+  "account:write",
   "public:read",
   "recipes:read",
   "shopping_list:read",
@@ -30,6 +34,8 @@ export const DEFAULT_PERSONAL_API_TOKEN_SCOPES = [
 
 export const ALL_FIRST_SLICE_SCOPES = [
   ...DEFAULT_PERSONAL_API_TOKEN_SCOPES,
+  "kitchen:read",
+  "kitchen:write",
   "offline_access",
 ] as const satisfies readonly ApiCredentialScope[];
 

@@ -71,7 +71,7 @@ describe("API authentication helpers", () => {
       userId: user.id,
       name: "Harness token",
       tokenPrefix: created.token.slice(0, 12),
-      scopes: "cookbooks:read public:read recipes:read shopping_list:read shopping_list:write tokens:read tokens:write",
+      scopes: "account:read account:write cookbooks:read public:read recipes:read shopping_list:read shopping_list:write tokens:read tokens:write",
       lastUsedAt: null,
       revokedAt: null,
     });
@@ -84,6 +84,8 @@ describe("API authentication helpers", () => {
       source: "bearer",
       credentialId: created.credential.id,
       scopes: [
+        "account:read",
+        "account:write",
         "cookbooks:read",
         "public:read",
         "recipes:read",

@@ -74,6 +74,7 @@ describe("normalizeScope", () => {
   it("passes through a supported subset", () => {
     expect(normalizeScope("kitchen:read")).toBe("kitchen:read");
     expect(normalizeScope("kitchen:read kitchen:write")).toBe("kitchen:read kitchen:write");
+    expect(normalizeScope("account:read account:write account:read")).toBe("account:read account:write");
   });
 
   it("rejects an unsupported scope", () => {
@@ -290,6 +291,41 @@ describe("connector token issuance + rotation", () => {
     await expect(
       rotateConnectorTokens(db, { refreshToken: first.refreshToken, clientId }),
     ).rejects.toMatchObject({ code: "invalid_grant" });
+  });
+
+  it("preserves the stable connection key while rotating refresh tokens", async () => {
+    const first = await issueConnectorTokens(db, { userId, clientId, scope: "account:read" });
+    const original = await db.oAuthRefreshToken.findFirstOrThrow({
+      where: { userId, clientId, revokedAt: null },
+    });
+
+    await rotateConnectorTokens(db, { refreshToken: first.refreshToken, clientId });
+
+    const rotated = await db.oAuthRefreshToken.findFirstOrThrow({
+      where: { userId, clientId, revokedAt: null },
+    });
+    expect(rotated.id).not.toBe(original.id);
+    expect(rotated.connectionKey).toBe(original.connectionKey);
+    expect(rotated.connectionKey).toMatch(/^ocn_/);
+  });
+
+  it("derives a stable connection key for legacy refresh tokens during rotation", async () => {
+    const first = await issueConnectorTokens(db, { userId, clientId, scope: "account:read" });
+    const legacy = await db.oAuthRefreshToken.findFirstOrThrow({
+      where: { userId, clientId, revokedAt: null },
+    });
+    await db.oAuthRefreshToken.update({
+      where: { id: legacy.id },
+      data: { connectionKey: null },
+    });
+
+    await rotateConnectorTokens(db, { refreshToken: first.refreshToken, clientId });
+
+    const rotated = await db.oAuthRefreshToken.findFirstOrThrow({
+      where: { userId, clientId, revokedAt: null },
+    });
+    expect(rotated.id).not.toBe(legacy.id);
+    expect(rotated.connectionKey).toBe(legacy.id);
   });
 
   it("rejects an empty refresh token", async () => {

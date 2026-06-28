@@ -23,6 +23,7 @@ interface OperationConfig {
   errors: ApiV1ErrorCode[];
   parameters?: unknown[];
   requestBody?: string;
+  requestBodyContentType?: "application/json" | "multipart/form-data";
 }
 
 interface BuildOpenApiOptions {
@@ -53,6 +54,15 @@ const formContentExamples = (schema: JsonSchema, examples: Record<string, unknow
     examples: Object.fromEntries(
       Object.entries(examples).map(([name, value]) => [name, { value }]),
     ),
+  },
+});
+
+const multipartContent = (schema: JsonSchema, example: unknown) => ({
+  "multipart/form-data": {
+    schema,
+    examples: {
+      example: { value: example },
+    },
   },
 });
 
@@ -169,7 +179,7 @@ const schemas = {
     token_endpoint_auth_method: { const: "none" },
     grant_types: arrayOf({ type: "string", enum: ["authorization_code", "refresh_token"] }),
     response_types: arrayOf({ type: "string", enum: ["code"] }),
-    scope: { type: "string", examples: ["kitchen:read", "shopping_list:read shopping_list:write"] },
+    scope: { type: "string", examples: ["kitchen:read", "account:read account:write", "shopping_list:read shopping_list:write"] },
     application_type: { type: "string", enum: ["web", "native"], description: "Accepted RFC 7591/OIDC client metadata. Spoonjoy stores redirect URIs and client_name; this field is accepted but not used." },
     client_uri: { ...uriSchema, description: "Accepted RFC 7591 metadata; not used by Spoonjoy." },
     logo_uri: { ...uriSchema, description: "Accepted RFC 7591 metadata; not used by Spoonjoy." },
@@ -241,7 +251,7 @@ const schemas = {
   }),
   AgentStartRequest: objectSchema([], {
     agentName: { type: "string" },
-    scopes: { type: "string", examples: ["shopping_list:read shopping_list:write", "kitchen:read kitchen:write"] },
+    scopes: { type: "string", examples: ["shopping_list:read shopping_list:write", "account:read account:write", "kitchen:read kitchen:write"] },
   }),
   AgentStartData: objectSchema(["deviceCode", "userCode", "authorizationUrl", "verificationUri", "verificationUriComplete", "expiresAt", "expiresIn", "interval", "message"], {
     deviceCode: { type: "string", pattern: "^sjdc_" },
@@ -462,6 +472,66 @@ const schemas = {
     createdAt: dateTimeSchema,
     updatedAt: dateTimeSchema,
     recipes: { ...arrayOf(ref("RecipeSummary")), description: "Currently public, non-deleted recipe summaries in cookbook order." },
+  }),
+  LinkedAuthProvider: objectSchema(["provider", "providerUsername"], {
+    provider: { type: "string", enum: ["apple", "github", "google"] },
+    providerUsername: { type: "string" },
+  }),
+  PasskeySummary: objectSchema(["id", "name", "transports", "createdAt"], {
+    id: idSchema,
+    name: { type: "string" },
+    transports: nullableStringSchema,
+    createdAt: nullableDateTimeSchema,
+  }),
+  AccountProfile: objectSchema(["id", "email", "username", "photoUrl", "hasPassword", "oauthAccounts", "passkeys"], {
+    id: idSchema,
+    email: { type: "string", format: "email" },
+    username: { type: "string", minLength: 1 },
+    photoUrl: { type: ["string", "null"], description: "Absolute /photos URL, data URL in local mode, or null." },
+    hasPassword: { type: "boolean" },
+    oauthAccounts: arrayOf(ref("LinkedAuthProvider")),
+    passkeys: arrayOf(ref("PasskeySummary")),
+  }),
+  UpdateAccountProfileRequest: objectSchema(["email", "username"], {
+    email: { type: "string", format: "email" },
+    username: { type: "string", minLength: 1, maxLength: 160 },
+    clientMutationId: shortTextSchema,
+  }),
+  ProfilePhotoUploadRequest: objectSchema(["photo"], {
+    photo: { type: "string", format: "binary", description: "JPEG, PNG, GIF, or WebP profile photo up to 5MB." },
+  }),
+  NotificationPreferences: objectSchema([
+    "notifySpoonOnMyRecipe",
+    "notifyForkOfMyRecipe",
+    "notifyCookbookSaveOfMine",
+    "notifyFellowChefOriginCook",
+  ], {
+    notifySpoonOnMyRecipe: { type: "boolean" },
+    notifyForkOfMyRecipe: { type: "boolean" },
+    notifyCookbookSaveOfMine: { type: "boolean" },
+    notifyFellowChefOriginCook: { type: "boolean" },
+  }),
+  UpdateNotificationPreferencesRequest: objectSchema([
+    "notifySpoonOnMyRecipe",
+    "notifyForkOfMyRecipe",
+    "notifyCookbookSaveOfMine",
+    "notifyFellowChefOriginCook",
+  ], {
+    notifySpoonOnMyRecipe: { type: "boolean" },
+    notifyForkOfMyRecipe: { type: "boolean" },
+    notifyCookbookSaveOfMine: { type: "boolean" },
+    notifyFellowChefOriginCook: { type: "boolean" },
+    clientMutationId: shortTextSchema,
+  }),
+  OAuthConnectionSummary: objectSchema(["id", "clientId", "clientName", "resource", "scopes", "createdAt", "refreshTokenCount", "accessTokenCount"], {
+    id: { type: "string", pattern: "^conn_" },
+    clientId: idSchema,
+    clientName: { type: "string" },
+    resource: nullableStringSchema,
+    scopes: arrayOf({ type: "string" }),
+    createdAt: dateTimeSchema,
+    refreshTokenCount: { type: "integer", minimum: 0 },
+    accessTokenCount: { type: "integer", minimum: 0 },
   }),
   CredentialMetadata: objectSchema(["id", "name", "tokenPrefix", "scopes", "createdAt", "updatedAt", "lastUsedAt", "revokedAt", "expiresAt"], {
     id: idSchema,
@@ -688,6 +758,17 @@ const schemas = {
     cookbooks: arrayOf(ref("CookbookSummary")),
   }),
   CookbookDetailData: objectSchema(["cookbook"], { cookbook: ref("CookbookDetail") }),
+  OAuthConnectionListData: objectSchema(["connections"], {
+    connections: arrayOf(ref("OAuthConnectionSummary")),
+  }),
+  DisconnectOAuthConnectionData: objectSchema(["disconnected", "connectionId", "clientId", "resource", "revokedRefreshTokens", "revokedAccessTokens"], {
+    disconnected: { type: "boolean" },
+    connectionId: { type: "string", pattern: "^conn_" },
+    clientId: idSchema,
+    resource: nullableStringSchema,
+    revokedRefreshTokens: { type: "integer", minimum: 0 },
+    revokedAccessTokens: { type: "integer", minimum: 0 },
+  }),
   TokenListData: objectSchema(["tokens"], { tokens: arrayOf(ref("CredentialMetadata")) }),
   CreateTokenData: objectSchema(["token", "credential"], {
     token: { type: "string" },
@@ -753,6 +834,10 @@ const schemas = {
   RecipeImportEnvelope: successEnvelope(ref("RecipeImportData")),
   CookbookListEnvelope: successEnvelope(ref("CookbookListData")),
   CookbookDetailEnvelope: successEnvelope(ref("CookbookDetailData")),
+  AccountProfileEnvelope: successEnvelope(ref("AccountProfile")),
+  NotificationPreferencesEnvelope: successEnvelope(ref("NotificationPreferences")),
+  OAuthConnectionListEnvelope: successEnvelope(ref("OAuthConnectionListData")),
+  DisconnectOAuthConnectionEnvelope: successEnvelope(ref("DisconnectOAuthConnectionData")),
   TokenListEnvelope: successEnvelope(ref("TokenListData")),
   CreateTokenEnvelope: successEnvelope(ref("CreateTokenData")),
   RevokeTokenEnvelope: successEnvelope(ref("RevokeTokenData")),
@@ -771,6 +856,7 @@ const pathParameters = {
   spoonId: { name: "spoonId", in: "path", required: true, description: "Recipe spoon id from a cover-management spoon image candidate.", schema: idSchema },
   itemId: { name: "itemId", in: "path", required: true, description: "Shopping-list item id from GET /api/v1/shopping-list or /sync.", schema: idSchema },
   credentialId: { name: "credentialId", in: "path", required: true, description: "Bearer credential id from GET /api/v1/tokens.", schema: idSchema },
+  connectionId: { name: "connectionId", in: "path", required: true, description: "Opaque OAuth app connection id from GET /api/v1/me/connections.", schema: { type: "string", pattern: "^conn_" } },
   requestIdHeader: {
     name: "X-Request-Id",
     in: "header",
@@ -848,6 +934,24 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
   },
   "/api/v1/cookbooks/{id}": {
     GET: { operationId: "getApiV1Cookbook", tags: ["Cookbooks"], summary: "Read one public cookbook", auth: "optional", scopes: ["cookbooks:read"], success: { 200: "CookbookDetailEnvelope" }, errors: ["validation_error", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id] },
+  },
+  "/api/v1/me": {
+    GET: { operationId: "getApiV1Me", tags: ["Account"], summary: "Read the authenticated account profile", auth: "bearer", scopes: ["account:read"], success: { 200: "AccountProfileEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"] },
+    PATCH: { operationId: "patchApiV1Me", tags: ["Account"], summary: "Update the authenticated account email and username", auth: "bearer", scopes: ["account:write"], success: { 200: "AccountProfileEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "UpdateAccountProfileRequest" },
+  },
+  "/api/v1/me/photo": {
+    POST: { operationId: "postApiV1MePhoto", tags: ["Account"], summary: "Upload the authenticated account profile photo", auth: "bearer", scopes: ["account:write"], success: { 200: "AccountProfileEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "ProfilePhotoUploadRequest", requestBodyContentType: "multipart/form-data" },
+    DELETE: { operationId: "deleteApiV1MePhoto", tags: ["Account"], summary: "Remove the authenticated account profile photo", auth: "bearer", scopes: ["account:write"], success: { 200: "AccountProfileEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"] },
+  },
+  "/api/v1/me/notification-preferences": {
+    GET: { operationId: "getApiV1MeNotificationPreferences", tags: ["Account"], summary: "Read account notification preferences", auth: "bearer", scopes: ["account:read"], success: { 200: "NotificationPreferencesEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "method_not_allowed", "rate_limited", "internal_error"] },
+    PATCH: { operationId: "patchApiV1MeNotificationPreferences", tags: ["Account"], summary: "Update account notification preferences", auth: "bearer", scopes: ["account:write"], success: { 200: "NotificationPreferencesEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "UpdateNotificationPreferencesRequest" },
+  },
+  "/api/v1/me/connections": {
+    GET: { operationId: "getApiV1MeConnections", tags: ["Account"], summary: "List OAuth app connections for the authenticated account", auth: "bearer", scopes: ["tokens:read"], success: { 200: "OAuthConnectionListEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "method_not_allowed", "rate_limited", "internal_error"] },
+  },
+  "/api/v1/me/connections/{connectionId}": {
+    DELETE: { operationId: "deleteApiV1MeConnection", tags: ["Account"], summary: "Disconnect an OAuth app connection", auth: "bearer", scopes: ["tokens:write"], success: { 200: "DisconnectOAuthConnectionEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.connectionId] },
   },
   "/api/v1/shopping-list": {
     GET: { operationId: "getApiV1ShoppingList", tags: ["Shopping List"], summary: "Read the authenticated shopping list", auth: "bearer", scopes: ["shopping_list:read"], success: { 200: "ShoppingListEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "method_not_allowed", "rate_limited", "internal_error"] },
@@ -985,6 +1089,31 @@ const exampleCredential = {
   lastUsedAt: null,
   revokedAt: null,
   expiresAt: null,
+};
+const exampleAccountProfile = {
+  id: "chef_1",
+  email: "ari@spoonjoy.app",
+  username: "ari",
+  photoUrl: "https://spoonjoy.app/photos/profiles/chef_1/avatar.jpg",
+  hasPassword: true,
+  oauthAccounts: [{ provider: "google", providerUsername: "ari@example.com" }],
+  passkeys: [{ id: "pk_1", name: "Kitchen Mac", transports: "internal", createdAt: exampleTimestamp }],
+};
+const exampleNotificationPreferences = {
+  notifySpoonOnMyRecipe: true,
+  notifyForkOfMyRecipe: true,
+  notifyCookbookSaveOfMine: true,
+  notifyFellowChefOriginCook: true,
+};
+const exampleOAuthConnection = {
+  id: "conn_eyJjbGllbnRJZCI6ImNtXzEiLCJyZXNvdXJjZSI6bnVsbCwiY29ubmVjdGlvbktleSI6Im9jbl9leGFtcGxlIn0",
+  clientId: "cm_1",
+  clientName: "Meal planner",
+  resource: null,
+  scopes: ["shopping_list:read", "shopping_list:write"],
+  createdAt: exampleTimestamp,
+  refreshTokenCount: 1,
+  accessTokenCount: 1,
 };
 const exampleShoppingItem = {
   id: "item_1",
@@ -1166,6 +1295,21 @@ const responseExamples: Record<string, unknown> = {
     },
   },
   CookbookDetailEnvelope: { ok: true, requestId: "req_example", data: { cookbook: exampleCookbookDetail } },
+  AccountProfileEnvelope: { ok: true, requestId: "req_example", data: exampleAccountProfile },
+  NotificationPreferencesEnvelope: { ok: true, requestId: "req_example", data: exampleNotificationPreferences },
+  OAuthConnectionListEnvelope: { ok: true, requestId: "req_example", data: { connections: [exampleOAuthConnection] } },
+  DisconnectOAuthConnectionEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      disconnected: true,
+      connectionId: exampleOAuthConnection.id,
+      clientId: exampleOAuthConnection.clientId,
+      resource: exampleOAuthConnection.resource,
+      revokedRefreshTokens: 1,
+      revokedAccessTokens: 1,
+    },
+  },
   TokenListEnvelope: { ok: true, requestId: "req_example", data: { tokens: [exampleCredential] } },
   CreateTokenEnvelope: { ok: true, requestId: "req_example", data: { token: "sj_secret", credential: exampleCredential } },
   RevokeTokenEnvelope: { ok: true, requestId: "req_example", data: { revoked: true, credential: { ...exampleCredential, revokedAt: exampleTimestamp } } },
@@ -1224,6 +1368,14 @@ const responseExamples: Record<string, unknown> = {
 };
 
 const requestExamples: Record<string, unknown> = {
+  UpdateAccountProfileRequest: { email: "ari@spoonjoy.app", username: "ari" },
+  ProfilePhotoUploadRequest: { photo: "(binary image file)" },
+  UpdateNotificationPreferencesRequest: {
+    notifySpoonOnMyRecipe: true,
+    notifyForkOfMyRecipe: true,
+    notifyCookbookSaveOfMine: false,
+    notifyFellowChefOriginCook: true,
+  },
   CreateTokenRequest: { name: "Tiny client", scopes: ["recipes:read", "shopping_list:read", "shopping_list:write"] },
   CreateRecipeSpoonRequest: {
     clientMutationId: "device-uuid-spoon-create",
@@ -1780,7 +1932,7 @@ function authOperationPaths() {
         summary: "Redirect the chef through OAuth consent",
         "x-auth": "optional",
         "x-scopes": [],
-        "x-grantable-scopes": ["cookbooks:read", "kitchen:read", "kitchen:write", "public:read", "recipes:read", "shopping_list:read", "shopping_list:write"],
+        "x-grantable-scopes": ["account:read", "account:write", "cookbooks:read", "kitchen:read", "kitchen:write", "public:read", "recipes:read", "shopping_list:read", "shopping_list:write"],
         "x-credential-modes": ["anonymous", "session"],
         security: [{}, { cookieAuth: [] }],
         parameters: [
@@ -1864,7 +2016,7 @@ function authOperationPaths() {
         summary: "Start a delegated approval connection",
         "x-auth": "optional",
         "x-scopes": [],
-        "x-grantable-scopes": ["kitchen:read", "kitchen:write", "shopping_list:read", "shopping_list:write"],
+        "x-grantable-scopes": ["account:read", "account:write", "kitchen:read", "kitchen:write", "shopping_list:read", "shopping_list:write"],
         "x-credential-modes": ["anonymous"],
         security: [{}],
         requestBody: {
@@ -1973,7 +2125,9 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
           ? {
               requestBody: {
                 required: true,
-                content: jsonContent(ref(meta.requestBody), requestExampleFor(meta.requestBody, path)),
+                content: meta.requestBodyContentType === "multipart/form-data"
+                  ? multipartContent(ref(meta.requestBody), requestExampleFor(meta.requestBody, path))
+                  : jsonContent(ref(meta.requestBody), requestExampleFor(meta.requestBody, path)),
               },
             }
           : {}),
@@ -2015,6 +2169,8 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
               tokenUrl: absoluteApiUrl(serverUrl, "/oauth/token"),
               refreshUrl: absoluteApiUrl(serverUrl, "/oauth/token"),
               scopes: {
+                "account:read": "Least-privilege delegated access to the chef's account profile and notification preferences.",
+                "account:write": "Least-privilege delegated access to update the chef's account profile, profile photo, and notification preferences.",
                 "cookbooks:read": "Least-privilege delegated access to public cookbook reads.",
                 "kitchen:read": "Delegated read access to public recipes, public cookbooks, and the chef's shopping list.",
                 "kitchen:write": "Delegated write access for MCP kitchen tools, recipe-cover management, and shopping-list mutations. Does not include token management.",
@@ -2031,6 +2187,8 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
       schemas,
     },
     "x-oauth-scope-map": {
+      "account:read": ["account:read"],
+      "account:write": ["account:write"],
       "kitchen:read": ["cookbooks:read", "public:read", "recipes:read", "shopping_list:read"],
       "kitchen:write": ["kitchen:write", "shopping_list:write"],
       "shopping_list:read": ["shopping_list:read"],
@@ -2074,7 +2232,7 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
         eyebrow: "Mobile, SaaS, extension",
         audience: "Use for third-party apps that can receive a redirect callback and should never handle a chef password.",
         endpoints: ["/.well-known/oauth-authorization-server", "/oauth/register", "/oauth/authorize", "/oauth/token", "/oauth/revoke"],
-        scopes: ["kitchen:read", "kitchen:write", "shopping_list:read", "shopping_list:write"],
+        scopes: ["account:read", "account:write", "kitchen:read", "kitchen:write", "shopping_list:read", "shopping_list:write"],
         notes: [
           "Dynamic client registration is public and returns token_endpoint_auth_method: none.",
           "Redirect URIs must be HTTPS; HTTP is accepted only for localhost and 127.0.0.1.",
@@ -2083,6 +2241,7 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
           `Access tokens are sj_... bearer credentials with a ${OAUTH_ACCESS_TOKEN_TTL_SECONDS}-second lifetime.`,
           "Refresh tokens are ort_... values and rotate on every refresh grant; POST /oauth/revoke disconnects a stored refresh token and revokes live OAuth access credentials for that client/resource.",
           "Registration validates optional scope metadata but does not grant it; the authorize request scope is the grant. Blank authorize scope defaults to kitchen:read, but apps should send explicit least-privilege scopes.",
+          "Account profile, profile-photo, and notification settings require explicit account:read or account:write; broad kitchen scopes do not include account identity settings.",
           "OAuth scopes never grant tokens:read or tokens:write; personal token management uses /api/v1/tokens.",
           "grant_type=password is never supported.",
           "Most OAuth errors use standard OAuth JSON. Rate-limit responses are Spoonjoy's generic rate-limit shape with Retry-After.",
@@ -2110,7 +2269,7 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
         eyebrow: "Agent, appliance, no callback",
         audience: "Use for agents, CLIs, kitchen displays, and constrained devices that can show a chef an approval URL but cannot run an OAuth callback.",
         endpoints: ["/api/tools/start_agent_connection", "/api/tools/poll_agent_connection", "/api/v1/tokens/{credentialId}"],
-        scopes: ["kitchen:read", "kitchen:write", "shopping_list:read", "shopping_list:write"],
+        scopes: ["account:read", "account:write", "kitchen:read", "kitchen:write", "shopping_list:read", "shopping_list:write"],
         notes: [
           "The device code expires after 10 minutes.",
           "Poll no faster than the returned interval, currently 2 seconds.",
@@ -2358,6 +2517,7 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
         "public recipe spoon history plus authenticated recipe spoon create, update, and delete",
         "Owner-scoped recipe cover candidate management",
         "owner-scoped shopping-list read, sync, item writes, recipe adds, and clear actions",
+        "native account profile, profile-photo, notification-preference, token, and OAuth app connection settings",
         "session-created and bearer-created API tokens",
         "OAuth/PKCE delegated access",
         "delegated agent/device approval links",
@@ -2415,6 +2575,11 @@ const SDK_PATHS = new Set([
   "/api/v1/recipes/{id}/covers/from-spoon/{spoonId}",
   "/api/v1/cookbooks",
   "/api/v1/cookbooks/{id}",
+  "/api/v1/me",
+  "/api/v1/me/photo",
+  "/api/v1/me/notification-preferences",
+  "/api/v1/me/connections",
+  "/api/v1/me/connections/{connectionId}",
   "/api/v1/shopping-list",
   "/api/v1/shopping-list/sync",
   "/api/v1/shopping-list/items",

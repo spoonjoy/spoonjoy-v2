@@ -33,6 +33,14 @@ const OPERATION_SCOPES = {
   "POST /api/v1/recipes/{id}/covers/from-spoon/{spoonId}": ["kitchen:write"],
   "GET /api/v1/cookbooks": ["cookbooks:read"],
   "GET /api/v1/cookbooks/{id}": ["cookbooks:read"],
+  "GET /api/v1/me": ["account:read"],
+  "PATCH /api/v1/me": ["account:write"],
+  "POST /api/v1/me/photo": ["account:write"],
+  "DELETE /api/v1/me/photo": ["account:write"],
+  "GET /api/v1/me/notification-preferences": ["account:read"],
+  "PATCH /api/v1/me/notification-preferences": ["account:write"],
+  "GET /api/v1/me/connections": ["tokens:read"],
+  "DELETE /api/v1/me/connections/{connectionId}": ["tokens:write"],
   "GET /api/v1/shopping-list": ["shopping_list:read"],
   "GET /api/v1/shopping-list/sync": ["shopping_list:read"],
   "POST /api/v1/shopping-list/items": ["shopping_list:write"],
@@ -107,6 +115,8 @@ describe("API v1 OpenAPI document", () => {
           authorizationUrl: "https://spoonjoy.app/oauth/authorize",
           tokenUrl: "https://spoonjoy.app/oauth/token",
           scopes: {
+            "account:read": expect.any(String),
+            "account:write": expect.any(String),
             "kitchen:read": expect.any(String),
             "kitchen:write": expect.any(String),
             "shopping_list:read": expect.any(String),
@@ -116,6 +126,8 @@ describe("API v1 OpenAPI document", () => {
       },
     });
     expect(document["x-oauth-scope-map"]).toEqual({
+      "account:read": ["account:read"],
+      "account:write": ["account:write"],
       "cookbooks:read": ["cookbooks:read"],
       "kitchen:read": ["cookbooks:read", "public:read", "recipes:read", "shopping_list:read"],
       "kitchen:write": ["kitchen:write", "shopping_list:write"],
@@ -346,6 +358,18 @@ describe("API v1 OpenAPI document", () => {
       coverSourceType: "chef-upload",
       coverVariant: "image",
     });
+    expect(responseExample(document, "/api/v1/me", "GET", "200").data).toMatchObject({
+      email: "ari@spoonjoy.app",
+      username: "ari",
+      oauthAccounts: [expect.objectContaining({ provider: "google" })],
+      passkeys: [expect.objectContaining({ name: "Kitchen Mac" })],
+    });
+    expect(responseExample(document, "/api/v1/me/notification-preferences", "GET", "200").data)
+      .toMatchObject({ notifySpoonOnMyRecipe: true, notifyFellowChefOriginCook: true });
+    expect(responseExample(document, "/api/v1/me/connections", "GET", "200").data.connections[0])
+      .toMatchObject({ id: expect.stringMatching(/^conn_/), clientName: "Meal planner" });
+    expect(responseExample(document, "/api/v1/me/connections/{connectionId}", "DELETE", "200").data)
+      .toMatchObject({ disconnected: true, revokedRefreshTokens: 1, revokedAccessTokens: 1 });
     expect(responseExample(document, "/api/v1/tokens", "GET", "200").data.tokens[0].scopes).toEqual(["recipes:read", "shopping_list:read", "shopping_list:write"]);
     expect(responseExample(document, "/api/v1/shopping-list/items", "POST", "201").data).toMatchObject({
       created: true,
@@ -369,6 +393,8 @@ describe("API v1 OpenAPI document", () => {
 
     expect(operation(document, "/api/v1/tokens", "POST").requestBody.content["application/json"].examples.example.value)
       .toEqual({ name: "Tiny client", scopes: ["recipes:read", "shopping_list:read", "shopping_list:write"] });
+    expect(operation(document, "/api/v1/me/photo", "POST").requestBody.content["multipart/form-data"].schema.$ref)
+      .toBe("#/components/schemas/ProfilePhotoUploadRequest");
     expect(operation(document, "/oauth/revoke", "POST").requestBody.content["application/x-www-form-urlencoded"].examples.refresh_token.value)
       .toMatchObject({ token: "ort_...", client_id: "cm_client_id_from_register" });
     expect(operation(document, "/api/v1/shopping-list/items", "POST").requestBody.content["application/json"].examples.example.value)
