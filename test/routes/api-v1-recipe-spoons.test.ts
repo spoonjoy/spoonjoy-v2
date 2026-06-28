@@ -648,10 +648,16 @@ describe("API v1 recipe spoons", () => {
       put: vi.fn(),
       delete: vi.fn(),
     } as unknown as R2Bucket;
-    const storageFailure = await action(routeArgs(jsonRequest(createUrl, "POST", fixture.ownerKitchenWrite.token, "req_spoon_photo_storage_error", {
-      clientMutationId: "spoon-photo-storage-error",
-      photoUrl: `/photos/${validCreateKey}`,
-    }), createSplat, backgroundContext({ PHOTOS: throwingBucket })));
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    let storageFailure: Response;
+    try {
+      storageFailure = await action(routeArgs(jsonRequest(createUrl, "POST", fixture.ownerKitchenWrite.token, "req_spoon_photo_storage_error", {
+        clientMutationId: "spoon-photo-storage-error",
+        photoUrl: `/photos/${validCreateKey}`,
+      }), createSplat, backgroundContext({ PHOTOS: throwingBucket })));
+    } finally {
+      errorSpy.mockRestore();
+    }
     expect(storageFailure.status).toBe(500);
     await expect(storageFailure.json()).resolves.toMatchObject({
       ok: false,

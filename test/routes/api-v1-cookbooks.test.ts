@@ -1,7 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { faker } from "@faker-js/faker";
 import { Request as UndiciRequest } from "undici";
-import { loader } from "~/routes/api.v1.$";
+import { action, loader } from "~/routes/api.v1.$";
 import { createApiCredential } from "~/lib/api-auth.server";
 import { getLocalDb } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
@@ -13,6 +13,18 @@ function routeArgs(request: Request, splat: string) {
 
 async function readJson(response: Response) {
   return await response.json() as any;
+}
+
+function bearer(token: string, requestId: string, extra: Record<string, string> = {}) {
+  return { Authorization: `Bearer ${token}`, "X-Request-Id": requestId, ...extra };
+}
+
+function jsonRequest(url: string, method: string, token: string, requestId: string, body: Record<string, unknown>) {
+  return new UndiciRequest(url, {
+    method,
+    headers: bearer(token, requestId, { "Content-Type": "application/json" }),
+    body: JSON.stringify(body),
+  }) as unknown as Request;
 }
 
 function expectEnvelopeHeaders(response: Response, requestId: string) {
@@ -449,5 +461,350 @@ describe("API v1 public cookbook reads", () => {
       requestId: "req_cookbook_scope",
       error: { code: "insufficient_scope", status: 403 },
     });
+  });
+
+  it("creates owner cookbooks with kitchen write scope and idempotent replay", async () => {
+    const owner = await db.user.create({ data: createTestUser() });
+    const token = await createApiCredential(db, owner.id, "Cookbook writer", { scopes: ["kitchen:write"] });
+    const readOnly = await createApiCredential(db, owner.id, "Cookbook reader", { scopes: ["cookbooks:read"] });
+    const title = `API v1 Created Cookbook ${faker.string.alphanumeric(8)}`;
+
+    const unauthenticated = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/cookbooks", {
+      method: "POST",
+      headers: { "X-Request-Id": "req_cookbook_create_auth" },
+    }) as unknown as Request, "cookbooks"));
+    expect(unauthenticated.status).toBe(401);
+    expectEnvelopeHeaders(unauthenticated, "req_cookbook_create_auth");
+
+    const insufficient = await action(routeArgs(jsonRequest("http://localhost/api/v1/cookbooks", "POST", readOnly.token, "req_cookbook_create_scope", {
+      clientMutationId: "cm_cookbook_create_scope",
+      title,
+    }), "cookbooks"));
+    expect(insufficient.status).toBe(403);
+    expectEnvelopeHeaders(insufficient, "req_cookbook_create_scope");
+
+    const invalid = await action(routeArgs(jsonRequest("http://localhost/api/v1/cookbooks", "POST", token.token, "req_cookbook_create_invalid", {
+      clientMutationId: "cm_cookbook_create_invalid",
+      title: "   ",
+    }), "cookbooks"));
+    expect(invalid.status).toBe(400);
+    await expect(readJson(invalid)).resolves.toMatchObject({
+      error: { code: "validation_error", status: 400 },
+    });
+
+    const created = await action(routeArgs(jsonRequest("http://localhost/api/v1/cookbooks", "POST", token.token, "req_cookbook_create", {
+      clientMutationId: "cm_cookbook_create",
+      title: `  ${title}  `,
+    }), "cookbooks"));
+    const createdPayload = await readJson(created);
+
+    expect(created.status).toBe(201);
+    expectEnvelopeHeaders(created, "req_cookbook_create");
+    expect(created.headers.get("Cache-Control")).toBe("private, no-store");
+    expect(createdPayload).toMatchObject({
+      ok: true,
+      requestId: "req_cookbook_create",
+      data: {
+        created: true,
+        cookbook: {
+          id: expect.any(String),
+          title,
+          chef: { id: owner.id, username: owner.username },
+          recipeCount: 0,
+          recipes: [],
+        },
+        mutation: { clientMutationId: "cm_cookbook_create", replayed: false },
+      },
+    });
+
+    const replay = await action(routeArgs(jsonRequest("http://localhost/api/v1/cookbooks", "POST", token.token, "req_cookbook_create_replay", {
+      clientMutationId: "cm_cookbook_create",
+      title: `  ${title}  `,
+    }), "cookbooks"));
+    const replayPayload = await readJson(replay);
+
+    expect(replay.status).toBe(201);
+    expect(replayPayload.requestId).toBe("req_cookbook_create_replay");
+    expect(replayPayload.data.mutation).toEqual({ clientMutationId: "cm_cookbook_create", replayed: true });
+    expect(replayPayload.data.cookbook.id).toBe(createdPayload.data.cookbook.id);
+
+    const conflict = await action(routeArgs(jsonRequest("http://localhost/api/v1/cookbooks", "POST", token.token, "req_cookbook_create_conflict", {
+      clientMutationId: "cm_cookbook_create",
+      title: `${title} changed`,
+    }), "cookbooks"));
+    expect(conflict.status).toBe(409);
+    await expect(readJson(conflict)).resolves.toMatchObject({
+      error: { code: "idempotency_conflict", status: 409 },
+    });
+
+    const duplicate = await action(routeArgs(jsonRequest("http://localhost/api/v1/cookbooks", "POST", token.token, "req_cookbook_create_duplicate", {
+      clientMutationId: "cm_cookbook_create_duplicate",
+      title,
+    }), "cookbooks"));
+    expect(duplicate.status).toBe(400);
+    await expect(readJson(duplicate)).resolves.toMatchObject({
+      error: { code: "validation_error", details: { field: "title" } },
+    });
+  });
+
+  it("updates and deletes only owner cookbooks with duplicate-title validation", async () => {
+    const first = await createCookbookFixture(db, "Api V1 Mutable Cookbook");
+    const sameOwnerOtherCookbook = await db.cookbook.create({
+      data: {
+        title: `Api V1 Mutable Sibling ${faker.string.alphanumeric(8)}`,
+        authorId: first.chef.id,
+      },
+    });
+    const outsider = await db.user.create({ data: createTestUser() });
+    const ownerToken = await createApiCredential(db, first.chef.id, "Cookbook owner writer", { scopes: ["kitchen:write"] });
+    const outsiderToken = await createApiCredential(db, outsider.id, "Cookbook outsider writer", { scopes: ["kitchen:write"] });
+    const renamed = `Api V1 Renamed Cookbook ${faker.string.alphanumeric(8)}`;
+
+    const missing = await action(routeArgs(jsonRequest("http://localhost/api/v1/cookbooks/missing-cookbook", "PATCH", ownerToken.token, "req_cookbook_update_missing", {
+      clientMutationId: "cm_cookbook_update_missing",
+      title: renamed,
+    }), "cookbooks/missing-cookbook"));
+    expect(missing.status).toBe(404);
+
+    const outsiderUpdate = await action(routeArgs(jsonRequest(`http://localhost/api/v1/cookbooks/${first.cookbook.id}`, "PATCH", outsiderToken.token, "req_cookbook_update_outsider", {
+      clientMutationId: "cm_cookbook_update_outsider",
+      title: renamed,
+    }), `cookbooks/${first.cookbook.id}`));
+    expect(outsiderUpdate.status).toBe(403);
+    await expect(readJson(outsiderUpdate)).resolves.toMatchObject({
+      error: { code: "insufficient_scope", details: { resource: "cookbook", cookbookId: first.cookbook.id } },
+    });
+
+    const updated = await action(routeArgs(jsonRequest(`http://localhost/api/v1/cookbooks/${first.cookbook.id}`, "PATCH", ownerToken.token, "req_cookbook_update", {
+      clientMutationId: "cm_cookbook_update",
+      title: ` ${renamed} `,
+    }), `cookbooks/${first.cookbook.id}`));
+    const updatedPayload = await readJson(updated);
+
+    expect(updated.status).toBe(200);
+    expectEnvelopeHeaders(updated, "req_cookbook_update");
+    expect(updatedPayload.data).toMatchObject({
+      updated: true,
+      cookbook: { id: first.cookbook.id, title: renamed },
+      mutation: { clientMutationId: "cm_cookbook_update", replayed: false },
+    });
+
+    const duplicateTitle = await action(routeArgs(jsonRequest(`http://localhost/api/v1/cookbooks/${first.cookbook.id}`, "PATCH", ownerToken.token, "req_cookbook_update_duplicate", {
+      clientMutationId: "cm_cookbook_update_duplicate",
+      title: sameOwnerOtherCookbook.title,
+    }), `cookbooks/${first.cookbook.id}`));
+    expect(duplicateTitle.status).toBe(400);
+    await expect(readJson(duplicateTitle)).resolves.toMatchObject({
+      error: { code: "validation_error", details: { field: "title" } },
+    });
+
+    const deleted = await action(routeArgs(new UndiciRequest(`http://localhost/api/v1/cookbooks/${first.cookbook.id}?clientMutationId=cm_cookbook_delete`, {
+      method: "DELETE",
+      headers: bearer(ownerToken.token, "req_cookbook_delete"),
+    }) as unknown as Request, `cookbooks/${first.cookbook.id}`));
+    const deletedPayload = await readJson(deleted);
+
+    expect(deleted.status).toBe(200);
+    expect(deletedPayload.data).toMatchObject({
+      deleted: true,
+      cookbook: { id: first.cookbook.id, title: renamed },
+      mutation: { clientMutationId: "cm_cookbook_delete", replayed: false },
+    });
+    await expect(db.cookbook.findUnique({ where: { id: first.cookbook.id } })).resolves.toBeNull();
+    await expect(db.recipe.findUnique({ where: { id: first.recipe.id } })).resolves.toMatchObject({ id: first.recipe.id });
+  });
+
+  it("returns internal_error when cookbook create and update writes fail unexpectedly", async () => {
+    const owner = await db.user.create({ data: createTestUser() });
+    const createToken = await createApiCredential(db, owner.id, "Cookbook fault writer", { scopes: ["kitchen:write"] });
+    const fixture = await createCookbookFixture(db, "Api V1 Fault Cookbook");
+    const updateToken = await createApiCredential(db, fixture.chef.id, "Cookbook update fault writer", { scopes: ["kitchen:write"] });
+    const originalCreate = db.cookbook.create;
+    const originalUpdate = db.cookbook.update;
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    try {
+      const createSpy = vi.fn().mockRejectedValueOnce(new Error("cookbook create storage unavailable"));
+      db.cookbook.create = createSpy as unknown as typeof db.cookbook.create;
+      const createFailure = await action(routeArgs(jsonRequest("http://localhost/api/v1/cookbooks", "POST", createToken.token, "req_cookbook_create_fault", {
+        clientMutationId: "cm_cookbook_create_fault",
+        title: `Api V1 Fault Create ${faker.string.alphanumeric(8)}`,
+      }), "cookbooks"));
+
+      expect(createFailure.status).toBe(500);
+      await expect(readJson(createFailure)).resolves.toMatchObject({
+        requestId: "req_cookbook_create_fault",
+        error: { code: "internal_error", status: 500 },
+      });
+      expect(createSpy).toHaveBeenCalledOnce();
+
+      const updateSpy = vi.fn().mockRejectedValueOnce(new Error("cookbook update storage unavailable"));
+      db.cookbook.update = updateSpy as unknown as typeof db.cookbook.update;
+      const updateFailure = await action(routeArgs(jsonRequest(`http://localhost/api/v1/cookbooks/${fixture.cookbook.id}`, "PATCH", updateToken.token, "req_cookbook_update_fault", {
+        clientMutationId: "cm_cookbook_update_fault",
+        title: `Api V1 Fault Update ${faker.string.alphanumeric(8)}`,
+      }), `cookbooks/${fixture.cookbook.id}`));
+
+      expect(updateFailure.status).toBe(500);
+      await expect(readJson(updateFailure)).resolves.toMatchObject({
+        requestId: "req_cookbook_update_fault",
+        error: { code: "internal_error", status: 500 },
+      });
+      expect(updateSpy).toHaveBeenCalledOnce();
+    } finally {
+      db.cookbook.create = originalCreate;
+      db.cookbook.update = originalUpdate;
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("adds and removes cookbook recipes with owner checks and idempotent no-op duplicate adds", async () => {
+    const fixture = await createCookbookFixture(db, "Api V1 Membership Cookbook");
+    const ownerToken = await createApiCredential(db, fixture.chef.id, "Cookbook membership writer", { scopes: ["kitchen:write"] });
+    const outsider = await db.user.create({ data: createTestUser() });
+    const outsiderToken = await createApiCredential(db, outsider.id, "Cookbook membership outsider", { scopes: ["kitchen:write"] });
+    const recipeToAdd = await db.recipe.create({
+      data: {
+        ...createTestRecipe(fixture.chef.id),
+        title: `Api V1 Membership Recipe ${faker.string.alphanumeric(8)}`,
+      },
+    });
+    const deletedRecipe = await db.recipe.create({
+      data: {
+        ...createTestRecipe(fixture.chef.id),
+        title: `Api V1 Membership Deleted ${faker.string.alphanumeric(8)}`,
+        deletedAt: new Date(),
+      },
+    });
+
+    const outsiderAdd = await action(routeArgs(jsonRequest(`http://localhost/api/v1/cookbooks/${fixture.cookbook.id}/recipes/${recipeToAdd.id}`, "POST", outsiderToken.token, "req_cookbook_recipe_add_outsider", {
+      clientMutationId: "cm_cookbook_recipe_add_outsider",
+    }), `cookbooks/${fixture.cookbook.id}/recipes/${recipeToAdd.id}`));
+    expect(outsiderAdd.status).toBe(403);
+
+    const missingRecipe = await action(routeArgs(jsonRequest(`http://localhost/api/v1/cookbooks/${fixture.cookbook.id}/recipes/${deletedRecipe.id}`, "POST", ownerToken.token, "req_cookbook_recipe_add_deleted", {
+      clientMutationId: "cm_cookbook_recipe_add_deleted",
+    }), `cookbooks/${fixture.cookbook.id}/recipes/${deletedRecipe.id}`));
+    expect(missingRecipe.status).toBe(404);
+    await expect(readJson(missingRecipe)).resolves.toMatchObject({
+      error: { code: "not_found", details: { resource: "recipe", recipeId: deletedRecipe.id } },
+    });
+
+    const added = await action(routeArgs(jsonRequest(`http://localhost/api/v1/cookbooks/${fixture.cookbook.id}/recipes/${recipeToAdd.id}`, "POST", ownerToken.token, "req_cookbook_recipe_add", {
+      clientMutationId: "cm_cookbook_recipe_add",
+    }), `cookbooks/${fixture.cookbook.id}/recipes/${recipeToAdd.id}`));
+    const addedPayload = await readJson(added);
+
+    expect(added.status).toBe(201);
+    expect(addedPayload.data).toMatchObject({
+      added: true,
+      recipeId: recipeToAdd.id,
+      cookbook: { id: fixture.cookbook.id, recipeCount: 2 },
+      mutation: { clientMutationId: "cm_cookbook_recipe_add", replayed: false },
+    });
+    expect(addedPayload.data.cookbook.recipes.map((recipe: { id: string }) => recipe.id)).toEqual([
+      fixture.recipe.id,
+      recipeToAdd.id,
+    ]);
+
+    const duplicate = await action(routeArgs(jsonRequest(`http://localhost/api/v1/cookbooks/${fixture.cookbook.id}/recipes/${recipeToAdd.id}`, "POST", ownerToken.token, "req_cookbook_recipe_add_duplicate", {
+      clientMutationId: "cm_cookbook_recipe_add_duplicate",
+    }), `cookbooks/${fixture.cookbook.id}/recipes/${recipeToAdd.id}`));
+    const duplicatePayload = await readJson(duplicate);
+
+    expect(duplicate.status).toBe(200);
+    expect(duplicatePayload.data).toMatchObject({
+      added: false,
+      cookbook: { id: fixture.cookbook.id, recipeCount: 2 },
+      mutation: { clientMutationId: "cm_cookbook_recipe_add_duplicate", replayed: false },
+    });
+
+    const removed = await action(routeArgs(jsonRequest(`http://localhost/api/v1/cookbooks/${fixture.cookbook.id}/recipes/${recipeToAdd.id}`, "DELETE", ownerToken.token, "req_cookbook_recipe_remove", {
+      clientMutationId: "cm_cookbook_recipe_remove",
+    }), `cookbooks/${fixture.cookbook.id}/recipes/${recipeToAdd.id}`));
+    const removedPayload = await readJson(removed);
+
+    expect(removed.status).toBe(200);
+    expect(removedPayload.data).toMatchObject({
+      removed: true,
+      recipeId: recipeToAdd.id,
+      cookbook: { id: fixture.cookbook.id, recipeCount: 1 },
+      mutation: { clientMutationId: "cm_cookbook_recipe_remove", replayed: false },
+    });
+
+    const removeAgain = await action(routeArgs(jsonRequest(`http://localhost/api/v1/cookbooks/${fixture.cookbook.id}/recipes/${recipeToAdd.id}`, "DELETE", ownerToken.token, "req_cookbook_recipe_remove_again", {
+      clientMutationId: "cm_cookbook_recipe_remove_again",
+    }), `cookbooks/${fixture.cookbook.id}/recipes/${recipeToAdd.id}`));
+    const removeAgainPayload = await readJson(removeAgain);
+
+    expect(removeAgain.status).toBe(200);
+    expect(removeAgainPayload.data).toMatchObject({
+      removed: false,
+      cookbook: { id: fixture.cookbook.id, recipeCount: 1 },
+      mutation: { clientMutationId: "cm_cookbook_recipe_remove_again", replayed: false },
+    });
+
+    await db.recipeInCookbook.create({
+      data: { cookbookId: fixture.cookbook.id, recipeId: recipeToAdd.id, addedById: fixture.chef.id },
+    });
+    const headerRemove = await action(routeArgs(new UndiciRequest(`http://localhost/api/v1/cookbooks/${fixture.cookbook.id}/recipes/${recipeToAdd.id}`, {
+      method: "DELETE",
+      headers: bearer(ownerToken.token, "req_cookbook_recipe_remove_header", {
+        "X-Client-Mutation-Id": "cm_cookbook_recipe_remove_header",
+      }),
+    }) as unknown as Request, `cookbooks/${fixture.cookbook.id}/recipes/${recipeToAdd.id}`));
+    const headerRemovePayload = await readJson(headerRemove);
+
+    expect(headerRemove.status).toBe(200);
+    expect(headerRemovePayload.data).toMatchObject({
+      removed: true,
+      mutation: { clientMutationId: "cm_cookbook_recipe_remove_header", replayed: false },
+    });
+
+    await db.recipeInCookbook.create({
+      data: { cookbookId: fixture.cookbook.id, recipeId: recipeToAdd.id, addedById: fixture.chef.id },
+    });
+    const queryRemove = await action(routeArgs(new UndiciRequest(`http://localhost/api/v1/cookbooks/${fixture.cookbook.id}/recipes/${recipeToAdd.id}?clientMutationId=cm_cookbook_recipe_remove_query`, {
+      method: "DELETE",
+      headers: bearer(ownerToken.token, "req_cookbook_recipe_remove_query"),
+    }) as unknown as Request, `cookbooks/${fixture.cookbook.id}/recipes/${recipeToAdd.id}`));
+    const queryRemovePayload = await readJson(queryRemove);
+
+    expect(queryRemove.status).toBe(200);
+    expect(queryRemovePayload.data).toMatchObject({
+      removed: true,
+      mutation: { clientMutationId: "cm_cookbook_recipe_remove_query", replayed: false },
+    });
+  });
+
+  it("returns internal_error when cookbook recipe membership writes fail unexpectedly", async () => {
+    const fixture = await createCookbookFixture(db, "Api V1 Membership Fault Cookbook");
+    const token = await createApiCredential(db, fixture.chef.id, "Cookbook membership fault writer", { scopes: ["kitchen:write"] });
+    const recipeToAdd = await db.recipe.create({
+      data: {
+        ...createTestRecipe(fixture.chef.id),
+        title: `Api V1 Membership Fault Recipe ${faker.string.alphanumeric(8)}`,
+      },
+    });
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const originalCreate = db.recipeInCookbook.create;
+
+    try {
+      const createSpy = vi.fn().mockRejectedValueOnce(new Error("membership storage unavailable"));
+      db.recipeInCookbook.create = createSpy as unknown as typeof db.recipeInCookbook.create;
+      const response = await action(routeArgs(jsonRequest(`http://localhost/api/v1/cookbooks/${fixture.cookbook.id}/recipes/${recipeToAdd.id}`, "POST", token.token, "req_cookbook_recipe_add_fault", {
+        clientMutationId: "cm_cookbook_recipe_add_fault",
+      }), `cookbooks/${fixture.cookbook.id}/recipes/${recipeToAdd.id}`));
+
+      expect(response.status).toBe(500);
+      await expect(readJson(response)).resolves.toMatchObject({
+        requestId: "req_cookbook_recipe_add_fault",
+        error: { code: "internal_error", status: 500 },
+      });
+      expect(createSpy).toHaveBeenCalledOnce();
+    } finally {
+      db.recipeInCookbook.create = originalCreate;
+      errorSpy.mockRestore();
+    }
   });
 });

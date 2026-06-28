@@ -49,6 +49,7 @@ describe("API v1 public/token scope matrix", () => {
     expect(resolveApiV1ScopeRequirement("GET", "health")).toEqual({ auth: "optional", scopes: [] });
     expect(resolveApiV1ScopeRequirement("GET", "openapi.json")).toEqual({ auth: "optional", scopes: [] });
     expect(resolveApiV1ScopeRequirement("GET", "openapi.sdk.json")).toEqual({ auth: "optional", scopes: [] });
+    expect(resolveApiV1ScopeRequirement("GET", "search")).toEqual({ auth: "optional", scopes: [] });
     expect(resolveApiV1ScopeRequirement("GET", "recipes")).toEqual({ auth: "optional", scopes: ["recipes:read"] });
     expect(resolveApiV1ScopeRequirement("GET", "recipes/recipe_1")).toEqual({ auth: "optional", scopes: ["recipes:read"] });
     expect(resolveApiV1ScopeRequirement("GET", "recipes/recipe_1/spoons")).toEqual({ auth: "optional", scopes: ["recipes:read"] });
@@ -73,6 +74,7 @@ describe("API v1 public/token scope matrix", () => {
       ["req_scope_health", "http://localhost/api/v1/health", "health"],
       ["req_scope_openapi", "http://localhost/api/v1/openapi.json", "openapi.json"],
       ["req_scope_openapi_sdk", "http://localhost/api/v1/openapi.sdk.json", "openapi.sdk.json"],
+      ["req_scope_search", "http://localhost/api/v1/search?q=scope", "search"],
     ] as const) {
       const anonymous = await loader(routeArgs(new UndiciRequest(path, {
         headers: { "X-Request-Id": `${requestId}_anon` },

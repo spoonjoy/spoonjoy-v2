@@ -356,6 +356,7 @@ describe("API v1 public telemetry", () => {
       ["http://localhost/api/v1/openapi.json", "openapi.json", "/api/v1/openapi.json", "req_api_openapi"],
       ["http://localhost/api/v1/openapi.connector.json", "openapi.connector.json", "/api/v1/openapi.connector.json", "req_api_openapi_connector"],
       ["http://localhost/api/v1/openapi.sdk.json", "openapi.sdk.json", "/api/v1/openapi.sdk.json", "req_api_openapi_sdk"],
+      ["http://localhost/api/v1/search?q=tomato&limit=1", "search", "/api/v1/search", "req_api_search"],
     ] as const) {
       const context = routeArgs(publicRequest(url, requestId), splat);
       const response = await loader(context.args);
@@ -369,6 +370,8 @@ describe("API v1 public telemetry", () => {
       .toBe("openapi.connector.read");
     expect(apiV1Event("/api/v1/openapi.sdk.json", "req_api_openapi_sdk")?.properties?.operation)
       .toBe("openapi.sdk.read");
+    expect(apiV1Event("/api/v1/search", "req_api_search")?.properties?.operation)
+      .toBe("search.read");
   });
 
   it("classifies coarse user-agent families and omits unsafe origin hosts", async () => {
@@ -585,6 +588,208 @@ describe("API v1 mutation and validation telemetry", () => {
       idempotencyOutcome: "committed",
       forbidden: ["raw-delete-mutation-id", createPayload.data.item.id, remove.bodyText],
     });
+  });
+
+  it("captures cookbook mutation operations without titles, route ids, mutation ids, or body values", async () => {
+    const user = await db.user.create({ data: createTestUser() });
+    const credential = await createApiCredential(db, user.id, "Telemetry Cookbook Writer", {
+      scopes: ["kitchen:write"],
+    });
+    const auth = { Authorization: `Bearer ${credential.token}` };
+    const title = `Telemetry Cookbook Secret ${faker.string.alphanumeric(8)}`;
+    const renamedTitle = `Telemetry Cookbook Renamed ${faker.string.alphanumeric(8)}`;
+    const recipe = await db.recipe.create({
+      data: {
+        ...createTestRecipe(user.id),
+        title: `Telemetry Cookbook Recipe ${faker.string.alphanumeric(8)}`,
+      },
+    });
+
+    const createBody = {
+      clientMutationId: "raw-cookbook-create-mutation-id",
+      title,
+    };
+    const create = apiJsonRequest("POST", "cookbooks", "req_cookbook_mutation_create", auth, createBody);
+    const createResponse = await action(routeArgs(create.request, "cookbooks").args);
+    const createPayload = await createResponse.json() as { data: { cookbook: { id: string } } };
+
+    expect(createResponse.status).toBe(201);
+    expectApiV1OperationEvent({
+      routeTemplate: "/api/v1/cookbooks",
+      requestId: "req_cookbook_mutation_create",
+      operation: "cookbooks.create",
+      status: 201,
+      authMode: "bearer",
+      requestBytes: create.bodyBytes,
+      idempotencyOutcome: "committed",
+      forbidden: [
+        title,
+        "raw-cookbook-create-mutation-id",
+        create.bodyText,
+        credential.token,
+        credential.credential.tokenPrefix,
+      ],
+    });
+
+    const updateBody = {
+      clientMutationId: "raw-cookbook-update-mutation-id",
+      title: renamedTitle,
+    };
+    const update = apiJsonRequest("PATCH", `cookbooks/${createPayload.data.cookbook.id}`, "req_cookbook_mutation_update", auth, updateBody);
+    const updateResponse = await action(routeArgs(update.request, `cookbooks/${createPayload.data.cookbook.id}`).args);
+
+    expect(updateResponse.status).toBe(200);
+    expectApiV1OperationEvent({
+      routeTemplate: "/api/v1/cookbooks/{id}",
+      requestId: "req_cookbook_mutation_update",
+      operation: "cookbooks.update",
+      status: 200,
+      authMode: "bearer",
+      requestBytes: update.bodyBytes,
+      idempotencyOutcome: "committed",
+      forbidden: [
+        createPayload.data.cookbook.id,
+        renamedTitle,
+        "raw-cookbook-update-mutation-id",
+        update.bodyText,
+      ],
+    });
+
+    const addBody = { clientMutationId: "raw-cookbook-add-recipe-mutation-id" };
+    const addPath = `cookbooks/${createPayload.data.cookbook.id}/recipes/${recipe.id}`;
+    const add = apiJsonRequest("POST", addPath, "req_cookbook_mutation_add_recipe", auth, addBody);
+    const addResponse = await action(routeArgs(add.request, addPath).args);
+
+    expect(addResponse.status).toBe(201);
+    expectApiV1OperationEvent({
+      routeTemplate: "/api/v1/cookbooks/{id}/recipes/{recipeId}",
+      requestId: "req_cookbook_mutation_add_recipe",
+      operation: "cookbooks.recipes.add",
+      status: 201,
+      authMode: "bearer",
+      requestBytes: add.bodyBytes,
+      idempotencyOutcome: "committed",
+      forbidden: [
+        createPayload.data.cookbook.id,
+        recipe.id,
+        "raw-cookbook-add-recipe-mutation-id",
+        add.bodyText,
+      ],
+    });
+
+    const removeBody = { clientMutationId: "raw-cookbook-remove-recipe-mutation-id" };
+    const remove = apiJsonRequest("DELETE", addPath, "req_cookbook_mutation_remove_recipe", auth, removeBody);
+    const removeResponse = await action(routeArgs(remove.request, addPath).args);
+
+    expect(removeResponse.status).toBe(200);
+    expectApiV1OperationEvent({
+      routeTemplate: "/api/v1/cookbooks/{id}/recipes/{recipeId}",
+      requestId: "req_cookbook_mutation_remove_recipe",
+      operation: "cookbooks.recipes.remove",
+      status: 200,
+      authMode: "bearer",
+      requestBytes: remove.bodyBytes,
+      idempotencyOutcome: "committed",
+      forbidden: [
+        createPayload.data.cookbook.id,
+        recipe.id,
+        "raw-cookbook-remove-recipe-mutation-id",
+        remove.bodyText,
+      ],
+    });
+
+    const deleteBody = { clientMutationId: "raw-cookbook-delete-mutation-id" };
+    const removeCookbook = apiJsonRequest("DELETE", `cookbooks/${createPayload.data.cookbook.id}`, "req_cookbook_mutation_delete", auth, deleteBody);
+    const removeCookbookResponse = await action(routeArgs(removeCookbook.request, `cookbooks/${createPayload.data.cookbook.id}`).args);
+
+    expect(removeCookbookResponse.status).toBe(200);
+    expectApiV1OperationEvent({
+      routeTemplate: "/api/v1/cookbooks/{id}",
+      requestId: "req_cookbook_mutation_delete",
+      operation: "cookbooks.delete",
+      status: 200,
+      authMode: "bearer",
+      requestBytes: removeCookbook.bodyBytes,
+      idempotencyOutcome: "committed",
+      forbidden: [
+        createPayload.data.cookbook.id,
+        "raw-cookbook-delete-mutation-id",
+        removeCookbook.bodyText,
+      ],
+    });
+  });
+
+  it("maps cookbook mutation auth failures through the generic operation mapper", async () => {
+    const cases = [
+      {
+        method: "POST" as const,
+        path: "cookbooks",
+        routeTemplate: "/api/v1/cookbooks",
+        requestId: "req_cookbook_create_missing_auth_operation",
+        operation: "cookbooks.create",
+        body: {
+          clientMutationId: "raw-cookbook-create-missing-auth",
+          title: "Telemetry Missing Auth Cookbook",
+        },
+        forbidden: ["Telemetry Missing Auth Cookbook", "raw-cookbook-create-missing-auth"],
+      },
+      {
+        method: "PATCH" as const,
+        path: "cookbooks/cookbook_secret_id",
+        routeTemplate: "/api/v1/cookbooks/{id}",
+        requestId: "req_cookbook_update_missing_auth_operation",
+        operation: "cookbooks.update",
+        body: {
+          clientMutationId: "raw-cookbook-update-missing-auth",
+          title: "Telemetry Missing Auth Rename",
+        },
+        forbidden: ["cookbook_secret_id", "Telemetry Missing Auth Rename", "raw-cookbook-update-missing-auth"],
+      },
+      {
+        method: "DELETE" as const,
+        path: "cookbooks/cookbook_delete_secret_id",
+        routeTemplate: "/api/v1/cookbooks/{id}",
+        requestId: "req_cookbook_delete_missing_auth_operation",
+        operation: "cookbooks.delete",
+        body: { clientMutationId: "raw-cookbook-delete-missing-auth" },
+        forbidden: ["cookbook_delete_secret_id", "raw-cookbook-delete-missing-auth"],
+      },
+      {
+        method: "POST" as const,
+        path: "cookbooks/cookbook_recipe_secret_id/recipes/recipe_add_secret_id",
+        routeTemplate: "/api/v1/cookbooks/{id}/recipes/{recipeId}",
+        requestId: "req_cookbook_recipe_add_missing_auth_operation",
+        operation: "cookbooks.recipes.add",
+        body: { clientMutationId: "raw-cookbook-recipe-add-missing-auth" },
+        forbidden: ["cookbook_recipe_secret_id", "recipe_add_secret_id", "raw-cookbook-recipe-add-missing-auth"],
+      },
+      {
+        method: "DELETE" as const,
+        path: "cookbooks/cookbook_recipe_secret_id/recipes/recipe_remove_secret_id",
+        routeTemplate: "/api/v1/cookbooks/{id}/recipes/{recipeId}",
+        requestId: "req_cookbook_recipe_remove_missing_auth_operation",
+        operation: "cookbooks.recipes.remove",
+        body: { clientMutationId: "raw-cookbook-recipe-remove-missing-auth" },
+        forbidden: ["cookbook_recipe_secret_id", "recipe_remove_secret_id", "raw-cookbook-recipe-remove-missing-auth"],
+      },
+    ];
+
+    for (const testCase of cases) {
+      const request = apiJsonRequest(testCase.method, testCase.path, testCase.requestId, {}, testCase.body);
+      const response = await action(routeArgs(request.request, testCase.path).args);
+
+      expect(response.status).toBe(401);
+      expectApiV1ErrorEvent({
+        routeTemplate: testCase.routeTemplate,
+        requestId: testCase.requestId,
+        operation: testCase.operation,
+        status: 401,
+        errorCode: "authentication_required",
+        authMode: "anonymous",
+        privacyClass: "private",
+        forbidden: [...testCase.forbidden, request.bodyText],
+      });
+    }
   });
 
   it("captures recipe cover operations without cover ids, mutation ids, or body values", async () => {

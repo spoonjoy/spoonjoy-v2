@@ -99,6 +99,7 @@ describe("/developers/playground", () => {
       auth: requirement.auth === "bearer" ? "authenticated" : "optional",
       scopes: [...requirement.scopes],
     })));
+    expect(data.manifest.operations.map((operation) => operation.id)).toContain("GET /api/v1/search");
     expect(data.manifest.operations.map((operation) => operation.id)).toContain("POST /api/v1/tokens");
     expect(data.manifest.operations.map((operation) => operation.id)).toContain("PATCH /api/v1/shopping-list/items/{itemId}");
     expect(data.manifest.operations.map((operation) => operation.id)).toEqual(expect.arrayContaining([
@@ -108,6 +109,13 @@ describe("/developers/playground", () => {
       "DELETE /api/v1/recipes/{id}/covers/{coverId}",
       "POST /api/v1/recipes/{id}/covers/regenerate",
       "POST /api/v1/recipes/{id}/covers/from-spoon/{spoonId}",
+    ]));
+    expect(data.manifest.operations.map((operation) => operation.id)).toEqual(expect.arrayContaining([
+      "POST /api/v1/cookbooks",
+      "PATCH /api/v1/cookbooks/{id}",
+      "DELETE /api/v1/cookbooks/{id}",
+      "POST /api/v1/cookbooks/{id}/recipes/{recipeId}",
+      "DELETE /api/v1/cookbooks/{id}/recipes/{recipeId}",
     ]));
     expect(data.manifest.operations.map((operation) => operation.id)).toEqual(expect.arrayContaining([
       "POST /oauth/register",
@@ -143,6 +151,8 @@ describe("/developers/playground", () => {
     expect(data.manifest.operations.find((operation) => operation.id === "POST /api/tools/poll_agent_connection")?.risk).toBe("secret");
     expect(data.manifest.operations.find((operation) => operation.id === "GET /api/v1/recipes")?.profiles).toEqual(["full", "connector", "sdk"]);
     expect(data.manifest.operations.find((operation) => operation.id === "POST /api/v1/recipes/import")?.profiles).toEqual(["full", "connector", "sdk"]);
+    expect(data.manifest.operations.find((operation) => operation.id === "POST /api/v1/cookbooks")?.profiles).toEqual(["full", "connector", "sdk"]);
+    expect(data.manifest.operations.find((operation) => operation.id === "POST /api/v1/cookbooks/{id}/recipes/{recipeId}")?.profiles).toEqual(["full", "connector", "sdk"]);
     expect(data.manifest.operations.find((operation) => operation.id === "GET /api/v1/recipes/{id}/spoons")?.profiles).toEqual(["full", "sdk"]);
     expect(data.manifest.operations.find((operation) => operation.id === "POST /api/v1/recipes/{id}/spoons")?.profiles).toEqual(["full", "sdk"]);
     expect(data.manifest.operations.find((operation) => operation.id === "GET /api/v1/recipes/{id}/covers")?.profiles).toEqual(["full", "sdk"]);
@@ -152,7 +162,7 @@ describe("/developers/playground", () => {
       contentType: "multipart/form-data",
       fields: [{ name: "photo", required: true, accept: "image/jpeg,image/png,image/gif,image/webp" }],
     });
-    expect(data.manifest.operations.length).toBe(46);
+    expect(data.manifest.operations.length).toBe(52);
   });
 
   it("uses the configured public origin for playground OG URLs", async () => {
@@ -168,6 +178,7 @@ describe("/developers/playground", () => {
   it("groups generated operations by OpenAPI tag", () => {
     expect(playgroundOperationGroups().map((group) => group.tag)).toEqual([
       "Discovery",
+      "Search",
       "Recipes",
       "Recipe Spoons",
       "Recipe Covers",
