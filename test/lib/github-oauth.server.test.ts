@@ -252,4 +252,94 @@ describe("github-oauth.server", () => {
 
     await expect(verifyGitHubCallback(config, redirectUri, callbackData())).rejects.toThrow("unexpected");
   });
+
+  // The telemetry-coverage allowlist categorizes github-oauth.server.ts as
+  // "delegated": the file emits no capture call of its own, but every failure
+  // path invokes the threaded `capture` callback so the auth-telemetry sink
+  // records it (with provider+phase+httpStatus). These tests pin that
+  // delegation so a refactor that drops a `capture?.()` call regresses here
+  // rather than silently turning the file into an uninstrumented gap.
+  describe("delegated capture callback", () => {
+    it("captures a /user non-2xx with the upstream status under the userinfo phase", async () => {
+      const capture = vi.fn();
+      mockFetch.mockResolvedValueOnce(mockJsonResponse({ error: "bad" }, false));
+
+      const result = await verifyGitHubCallback(config, redirectUri, callbackData(), capture);
+
+      expect(result.error).toBe("userinfo_error");
+      expect(capture).toHaveBeenCalledTimes(1);
+      expect(capture).toHaveBeenCalledWith(
+        expect.objectContaining({ phase: "userinfo", httpStatus: 500 }),
+      );
+      expect(capture.mock.calls[0][0].error).toBeInstanceOf(Error);
+    });
+
+    it("captures a /user/emails non-2xx with the upstream status under the userinfo phase", async () => {
+      const capture = vi.fn();
+      mockFetch
+        .mockResolvedValueOnce(mockJsonResponse({ id: 456, login: "x", email: null }))
+        .mockResolvedValueOnce(mockJsonResponse({ error: "bad" }, false));
+
+      const result = await verifyGitHubCallback(config, redirectUri, callbackData(), capture);
+
+      expect(result.error).toBe("email_required");
+      expect(capture).toHaveBeenCalledTimes(1);
+      expect(capture).toHaveBeenCalledWith(
+        expect.objectContaining({ phase: "userinfo", httpStatus: 500 }),
+      );
+    });
+
+    it("captures an OAuth provider error under the token_exchange phase", async () => {
+      const capture = vi.fn();
+      const oauthError = new Error("bad verifier");
+      oauthError.name = "OAuth2RequestError";
+      githubMock.validateAuthorizationCode.mockRejectedValueOnce(oauthError);
+
+      const result = await verifyGitHubCallback(config, redirectUri, callbackData(), capture);
+
+      expect(result.error).toBe("oauth_error");
+      expect(capture).toHaveBeenCalledWith(
+        expect.objectContaining({ error: oauthError, phase: "token_exchange" }),
+      );
+    });
+
+    it("captures a network error under the token_exchange phase", async () => {
+      const capture = vi.fn();
+      const networkError = new TypeError("fetch failed");
+      githubMock.validateAuthorizationCode.mockRejectedValueOnce(networkError);
+
+      const result = await verifyGitHubCallback(config, redirectUri, callbackData(), capture);
+
+      expect(result.error).toBe("network_error");
+      expect(capture).toHaveBeenCalledWith(
+        expect.objectContaining({ error: networkError, phase: "token_exchange" }),
+      );
+    });
+
+    it("does NOT capture on the happy path", async () => {
+      const capture = vi.fn();
+      mockFetch.mockResolvedValueOnce(mockJsonResponse({
+        id: 123,
+        login: "spoonfan",
+        name: "Spoon Fan",
+        email: "spoonfan@example.com",
+        avatar_url: null,
+      }));
+
+      const result = await verifyGitHubCallback(config, redirectUri, callbackData(), capture);
+
+      expect(result.success).toBe(true);
+      expect(capture).not.toHaveBeenCalled();
+    });
+
+    it("re-throws (does not capture) a truly unexpected error so the callback route captures it", async () => {
+      const capture = vi.fn();
+      githubMock.validateAuthorizationCode.mockRejectedValueOnce(new Error("unexpected"));
+
+      await expect(
+        verifyGitHubCallback(config, redirectUri, callbackData(), capture),
+      ).rejects.toThrow("unexpected");
+      expect(capture).not.toHaveBeenCalled();
+    });
+  });
 });
