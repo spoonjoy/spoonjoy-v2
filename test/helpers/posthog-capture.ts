@@ -48,6 +48,11 @@ export function pushSendFailedPosts(posts: CapturedPost[]): CapturedPost[] {
   return posts.filter((p) => p.event === "spoonjoy.push.send_failed");
 }
 
+/** Capture posts for PostHog's native `$exception` event (server captures). */
+export function exceptionPosts(posts: CapturedPost[]): CapturedPost[] {
+  return posts.filter((p) => p.event === "$exception");
+}
+
 /**
  * Drain a `waitUntil` queue until it stops growing. Dispatch schedules nested
  * work (per-recipient push sends, then the capture) onto the same queue, so a

@@ -20,6 +20,7 @@ import {
   createStepOutputUses,
 } from "~/lib/step-output-use-mutations.server";
 import { validateStepDeletion } from "~/lib/step-deletion-validation.server";
+import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
 import {
   parseIngredients,
   IngredientParseError,
@@ -357,6 +358,26 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 
     return redirect(`/recipes/${id}/edit`);
   } catch (error) {
+    // Ownership (403), not-found (404), and content/validation checks above all
+    // surface their own responses; reaching here means the step update itself
+    // failed (DB/infra fault). The real error was previously discarded behind
+    // this generic 500 — capture it (fire-and-forget, no-op without PostHog).
+    const postHogConfig = resolvePostHogServerConfig(context.cloudflare?.env ?? {});
+    if (postHogConfig.enabled) {
+      const capture = captureException(postHogConfig, {
+        error,
+        distinctId: userId,
+        route: new URL(request.url).pathname,
+        method: request.method,
+        extras: { action: "update_step", recipe_id: id, step_id: stepId },
+      });
+      const waitUntil = context.cloudflare?.ctx?.waitUntil;
+      if (waitUntil) {
+        waitUntil.call(context.cloudflare!.ctx!, capture);
+      } else {
+        void capture;
+      }
+    }
     return data(
       { errors: { general: "Failed to update step. Please try again." } },
       { status: 500 }

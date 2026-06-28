@@ -23,6 +23,7 @@ import {
   STEP_DESCRIPTION_MAX_LENGTH,
 } from "~/lib/validation";
 import { createStepOutputUses } from "~/lib/step-output-use-mutations.server";
+import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
 import {
   parseIngredients,
   IngredientParseError,
@@ -291,6 +292,26 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 
     return redirect(`/recipes/${id}/steps/${step.id}/edit?created=1`);
   } catch (error) {
+    // Validation + duplicate checks happened above and surface as 400s; reaching
+    // here means the step/ingredient persistence itself failed (DB/infra fault).
+    // The real error was previously discarded behind this generic 500 — capture
+    // it (fire-and-forget, no-op without PostHog) so the failure isn't silent.
+    const postHogConfig = resolvePostHogServerConfig(context.cloudflare?.env ?? {});
+    if (postHogConfig.enabled) {
+      const capture = captureException(postHogConfig, {
+        error,
+        distinctId: userId,
+        route: new URL(request.url).pathname,
+        method: request.method,
+        extras: { action: "create_step", recipe_id: id },
+      });
+      const waitUntil = context.cloudflare?.ctx?.waitUntil;
+      if (waitUntil) {
+        waitUntil.call(context.cloudflare!.ctx!, capture);
+      } else {
+        void capture;
+      }
+    }
     return data(
       { errors: { general: "Failed to create step. Please try again." } },
       { status: 500 }

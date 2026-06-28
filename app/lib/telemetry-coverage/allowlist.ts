@@ -224,60 +224,12 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
       "verifyGitHubCallback captures /user|/user/emails non-2xx and token-exchange/network failures via the threaded capture callback, and re-throws truly unexpected errors to the callback route (which captures + flattens). The sole production caller passes verifyCaptureFor(telemetry, provider), so failures reach the auth-telemetry sink with provider+phase+httpStatus. No capture call appears in the file itself (local-callback indirection).",
   },
 
-  // --- route-level backfill candidates ---
-  {
-    file: "app/routes/api.push.preferences.ts",
-    category: "backfill",
-    reason:
-      "Push-preferences action; catch flattens persistence failures to an error response without capture. Backfill: capture unexpected failures with the action name.",
-  },
-  {
-    file: "app/routes/api.push.public-key.ts",
-    category: "backfill",
-    reason:
-      "Public VAPID key endpoint; catch guards config read. Backfill: capture unexpected config/read failures.",
-  },
-  {
-    file: "app/routes/api.push.subscriptions.ts",
-    category: "backfill",
-    reason:
-      "Push-subscription create/delete action; catch flattens persistence failures. Backfill: capture unexpected failures with the subscription operation.",
-  },
+  // --- route-level: client-only swallow (server capture lives elsewhere) ---
   {
     file: "app/routes/recipes.$id.tsx",
-    category: "backfill",
+    category: "swallow",
     reason:
-      "Recipe detail route action(s); catches flatten mutation failures to error UI. Backfill: capture unexpected (non-4xx) action failures with the recipe id present.",
-  },
-  {
-    file: "app/routes/recipes.$id.fork.tsx",
-    category: "backfill",
-    reason:
-      "Recipe fork action; catch flattens fork failures to an error response. Backfill: capture unexpected fork failures.",
-  },
-  {
-    file: "app/routes/recipes.$id.steps.new.tsx",
-    category: "backfill",
-    reason:
-      "Add-step action; catch flattens persistence failures. Backfill: capture unexpected step-create failures.",
-  },
-  {
-    file: "app/routes/recipes.$id.steps.$stepId.edit.tsx",
-    category: "backfill",
-    reason:
-      "Edit-step action; catch flattens persistence failures. Backfill: capture unexpected step-edit failures.",
-  },
-  {
-    file: "app/routes/cookbooks.$id.tsx",
-    category: "backfill",
-    reason:
-      "Cookbook detail route action(s); catches flatten mutation failures. Backfill: capture unexpected (non-4xx) failures with the cookbook id.",
-  },
-  {
-    file: "app/routes/cookbooks.new.tsx",
-    category: "backfill",
-    reason:
-      "Create-cookbook action; catch flattens persistence failures. Backfill: capture unexpected create failures.",
+      "The only catches here are client-side cook-progress localStorage parse/read/write fallbacks (window-guarded); a corrupt or unavailable store degrades to a fresh session, no user-facing failure. The server action delegates to recipe-detail.server.ts, which owns mutation-failure capture.",
   },
 
   // --- owned by the parallel LLM-telemetry workstream ---

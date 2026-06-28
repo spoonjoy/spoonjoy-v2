@@ -6,6 +6,7 @@ import { getUserId, requireUserId } from "~/lib/session.server";
 import { notifyCookbookSaveOfMine } from "~/lib/notification-triggers.server";
 import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
 import {
+  captureException,
   resolvePostHogServerConfig,
   type PostHogServerConfig,
   type PostHogServerEnv,
@@ -38,6 +39,33 @@ function getNotificationCtx(context: AppLoadContext): {
     postHogConfig: resolvePostHogServerConfig(envSource ?? {}),
     waitUntil: cf?.ctx?.waitUntil ? cf.ctx.waitUntil.bind(cf.ctx) : undefined,
   };
+}
+
+function captureCookbookActionFailure(
+  request: Request,
+  context: AppLoadContext,
+  userId: string,
+  intent: string,
+  error: unknown,
+): void {
+  // P2002 (unique-title / idempotent re-add) is an expected client outcome
+  // handled by the caller. Reaching here is an unexpected mutation fault
+  // (DB/infra) that rethrows into the error boundary as an opaque 500 — capture
+  // it (fire-and-forget, no-op without PostHog) before it goes silent.
+  const { postHogConfig, waitUntil } = getNotificationCtx(context);
+  if (!postHogConfig.enabled) return;
+  const capture = captureException(postHogConfig, {
+    error,
+    distinctId: userId,
+    route: new URL(request.url).pathname,
+    method: request.method,
+    extras: { action: "cookbook_detail", intent },
+  });
+  if (waitUntil) {
+    waitUntil(capture);
+  } else {
+    void capture;
+  }
 }
 import { ConfirmationDialog } from "~/components/confirmation-dialog";
 import { Button } from "~/components/ui/button";
@@ -226,6 +254,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       if (error.code === "P2002") {
         return data({ error: "You already have a cookbook with this title" }, { status: 400 });
       }
+      captureCookbookActionFailure(request, context, userId, "updateTitle", error);
       throw error;
     }
   }
@@ -281,6 +310,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
           // Idempotent re-add — do NOT enqueue a second notification.
           return data({ success: true });
         }
+        captureCookbookActionFailure(request, context, userId, "addRecipe", error);
         throw error;
       }
     }
