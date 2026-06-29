@@ -95,6 +95,11 @@ export const SECURITY_HEADERS: Readonly<Record<string, string>> = {
   "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
   "X-Content-Type-Options": "nosniff",
   "X-Frame-Options": "DENY",
+  // Isolate the browsing context from cross-origin windows (defense-in-depth vs
+  // tabnabbing / cross-window XS-Leaks). `allow-popups` keeps any popups the app
+  // opens working; Spoonjoy uses redirect-based OAuth and `noopener` popups, so
+  // it never relies on a cross-origin `window.opener`.
+  "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
   "Referrer-Policy": "strict-origin-when-cross-origin",
   "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
   // Defines the `csp-endpoint` reporting group named by the CSP `report-to`
