@@ -514,7 +514,7 @@ async function reportIngredientParseSuccess(
     distinctId: telemetry?.distinctId,
     operation: 'ingredient_parse',
     provider,
-    model: config.model,
+    model: provider === 'gemini' ? config.geminiModel : config.model,
     durationMs,
   })
 }
@@ -538,7 +538,7 @@ async function reportIngredientParseFailure(
     distinctId: telemetry?.distinctId,
     operation: 'ingredient_parse',
     provider,
-    model: config.model,
+    model: provider === 'gemini' ? config.geminiModel : config.model,
     errorCode: error.code,
     errorType: error.type,
     errorStatus: error.status,
