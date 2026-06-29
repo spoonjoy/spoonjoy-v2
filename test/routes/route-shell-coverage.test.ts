@@ -54,17 +54,20 @@ describe("route shell coverage", () => {
 
   it("serves Apple App Site Association metadata for native Universal Links", async () => {
     const aasa = await import("~/routes/well-known.apple-app-site-association");
+    const { buildAppleAppSiteAssociation } = await import("~/lib/web-route-manifest.server");
 
-    const fallback = await aasa.loader(routeArgs(new Request("https://spoonjoy.app/.well-known/apple-app-site-association")));
-    expect(fallback.status).toBe(200);
-    expect(fallback.headers.get("Content-Type")).toContain("application/json");
-    expect(fallback.headers.get("Cache-Control")).toBe("public, max-age=3600");
-    await expect(fallback.json()).resolves.toMatchObject({
+    const response = await aasa.loader(routeArgs(new Request("https://spoonjoy.app/.well-known/apple-app-site-association"), {
+      context: { cloudflare: { env: { APPLE_TEAM_ID: "a1b2c3d4e5" } } },
+    }));
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Type")).toContain("application/json");
+    expect(response.headers.get("Cache-Control")).toBe("public, max-age=3600");
+    await expect(response.json()).resolves.toMatchObject({
       applinks: {
         apps: [],
         details: [
           {
-            appIDs: ["TEAMID.app.spoonjoy.Spoonjoy", "TEAMID.app.spoonjoy.Spoonjoy.mac"],
+            appIDs: ["A1B2C3D4E5.app.spoonjoy.Spoonjoy", "A1B2C3D4E5.app.spoonjoy.Spoonjoy.mac"],
             components: expect.arrayContaining([
               { "/": "/recipes/*" },
               { "/": "/cookbooks/*" },
@@ -76,10 +79,10 @@ describe("route shell coverage", () => {
       },
     });
 
-    const configured = aasa.buildAppleAppSiteAssociation({ SPOONJOY_APPLE_TEAM_ID: "a1b2c3d4e5" });
+    const configured = buildAppleAppSiteAssociation({ APPLE_TEAM_ID: "zyxwv98765" });
     expect(configured.applinks.details[0]?.appIDs).toEqual([
-      "A1B2C3D4E5.app.spoonjoy.Spoonjoy",
-      "A1B2C3D4E5.app.spoonjoy.Spoonjoy.mac",
+      "ZYXWV98765.app.spoonjoy.Spoonjoy",
+      "ZYXWV98765.app.spoonjoy.Spoonjoy.mac",
     ]);
   });
 
