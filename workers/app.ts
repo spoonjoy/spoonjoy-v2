@@ -1,7 +1,7 @@
 import { createRequestHandler } from "react-router";
 import { canonicalizeRequestUrlForHost } from "../app/lib/canonical-host.server";
 import { oauthCorsPreflightResponse } from "../app/lib/oauth-cors.server";
-import { withSecurityHeaders } from "../app/lib/security-headers.server";
+import { generateNonce, withSecurityHeaders } from "../app/lib/security-headers.server";
 import {
   captureException,
   resolvePostHogServerConfig,
@@ -32,10 +32,15 @@ export default {
     }
 
     try {
+      // One nonce per request: it must appear identically in the report-only
+      // CSP header (below) and in the SSR shell's inline <script> nonces,
+      // threaded via loadContext → entry.server → NonceContext.
+      const nonce = generateNonce();
       const response = await requestHandler(request, {
         cloudflare: { env, ctx },
+        nonce,
       });
-      return withSecurityHeaders(response);
+      return withSecurityHeaders(response, nonce);
     } catch (error) {
       // Outer catch: errors that escaped React Router's onError (e.g. thrown
       // before the response stream started, or from a non-route boundary).

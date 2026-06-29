@@ -11,6 +11,7 @@ import {
   captureException,
   resolvePostHogServerConfig,
 } from "~/lib/analytics-server";
+import { NonceContext } from "~/lib/nonce";
 
 export default async function handleRequest(
   request: Request,
@@ -26,8 +27,11 @@ export default async function handleRequest(
   const postHogConfig = env ? resolvePostHogServerConfig(env) : { enabled: false as const, reason: "missing-key" as const };
   const requestUrl = new URL(request.url);
 
+  const nonce = loadContext.nonce ?? "";
   const body = await renderToReadableStream(
-    <ServerRouter context={routerContext} url={request.url} />,
+    <NonceContext.Provider value={nonce}>
+      <ServerRouter context={routerContext} url={request.url} />
+    </NonceContext.Provider>,
     {
       onError(error: unknown) {
         responseStatusCode = 500;
