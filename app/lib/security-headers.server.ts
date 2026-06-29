@@ -53,6 +53,12 @@ function cspDirectives(nonce?: string): Record<string, readonly string[]> {
     "img-src": ["'self'", "data:", "blob:", "https:"],
     "connect-src": ["'self'", "https://us.i.posthog.com", "https://us-assets.i.posthog.com"],
     "report-uri": ["/csp-report"],
+    // Modern Reporting API: `report-to` names a group defined by the
+    // `Reporting-Endpoints` response header (see SECURITY_HEADERS). Kept
+    // alongside the deprecated-but-still-supported `report-uri` so violations
+    // are reported across both legacy and current browsers (Chrome has
+    // deprecated `report-uri`) during the report-only window.
+    "report-to": ["csp-endpoint"],
   };
 }
 
@@ -91,6 +97,9 @@ export const SECURITY_HEADERS: Readonly<Record<string, string>> = {
   "X-Frame-Options": "DENY",
   "Referrer-Policy": "strict-origin-when-cross-origin",
   "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+  // Defines the `csp-endpoint` reporting group named by the CSP `report-to`
+  // directive — points modern browsers' Reporting API at the same sink route.
+  "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
 };
 
 /**

@@ -123,8 +123,10 @@ describe("buildContentSecurityPolicy", () => {
     ]);
   });
 
-  it("points violations at the sink route", () => {
-    expect(directiveSources(buildContentSecurityPolicy(), "report-uri")).toEqual(["/csp-report"]);
+  it("points violations at the sink route (legacy report-uri + modern report-to)", () => {
+    const csp = buildContentSecurityPolicy();
+    expect(directiveSources(csp, "report-uri")).toEqual(["/csp-report"]);
+    expect(directiveSources(csp, "report-to")).toEqual(["csp-endpoint"]);
   });
 });
 
