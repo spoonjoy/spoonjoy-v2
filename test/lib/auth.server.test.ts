@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import bcrypt from "bcryptjs";
 import { db } from "~/lib/db.server";
 import {
   hashPassword,
@@ -130,6 +131,36 @@ describe("auth.server", () => {
 
       expect(user).not.toBeNull();
       expect(user?.email).toBe("test@example.com");
+    });
+
+    it("should return null for an account without a password (OAuth-only user)", async () => {
+      const email = faker.internet.email();
+      const username = faker.internet.username() + "_" + faker.string.alphanumeric(8);
+      // OAuth-only accounts have no password credential (hashedPassword is null).
+      await db.user.create({
+        data: { email: email.toLowerCase(), username },
+      });
+
+      const user = await authenticateUser(db, email, "anyPassword");
+
+      expect(user).toBeNull();
+    });
+
+    it("runs a bcrypt comparison even for an unknown email (constant-time, prevents user enumeration)", async () => {
+      const compareSpy = vi.spyOn(bcrypt, "compare");
+
+      const user = await authenticateUser(
+        db,
+        "definitely-not-registered@example.com",
+        "anyPassword"
+      );
+
+      expect(user).toBeNull();
+      // The comparison must still run when no account matches, so login latency
+      // doesn't reveal whether the email is registered.
+      expect(compareSpy).toHaveBeenCalledTimes(1);
+
+      compareSpy.mockRestore();
     });
   });
 
