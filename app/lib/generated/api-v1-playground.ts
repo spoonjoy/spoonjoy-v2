@@ -194,6 +194,20 @@ export const API_V1_PLAYGROUND_MANIFEST = {
   ],
   "clientScenarios": [
     {
+      "id": "spoonjoy-apple-native-dogfood",
+      "title": "Spoonjoy Apple native dogfood",
+      "eyebrow": "iOS + macOS",
+      "audience": "Use this shape for Spoonjoy's first-party native app and any Apple client that needs exact OAuth, offline cache, and sync behavior.",
+      "notes": [
+        "Register the HTTPS universal-link callback https://spoonjoy.app/oauth/callback and enable the Associated Domains entitlement applinks:spoonjoy.app; the custom URL scheme is for app navigation only, not OAuth.",
+        "Persist client_id, access_token, and rotating refresh_token in Keychain; clear state and code_verifier after successful token exchange.",
+        "Replace the stored refresh token atomically after every refresh and use single-flight refresh before retrying REST API v1 requests.",
+        "Decode Spoonjoy REST envelopes for /api/v1 resources and keep OAuth token/revoke responses on their OAuth protocol shape.",
+        "Apply the Offline Product Contract: cache account/environment/schema/freshness/source metadata, preserve server revision markers, queue only safe product writes with stable clientMutationId, and keep secrets out of general cache storage."
+      ],
+      "sample": "POST /oauth/register\n{\"client_name\":\"Spoonjoy Apple\",\"redirect_uris\":[\"https://spoonjoy.app/oauth/callback\"],\"token_endpoint_auth_method\":\"none\"}\n\nAssociated Domains: applinks:spoonjoy.app\nASWebAuthenticationSession.Callback.https(host: \"spoonjoy.app\", path: \"/oauth/callback\")\nStore client_id/access_token/refresh_token in Keychain; clear state/code_verifier after token exchange.\n\nGET /api/v1/shopping-list/sync?limit=50\nAuthorization: Bearer sj_...\n# Decode { ok, requestId, data } and apply items plus tombstones before saving nextCursor."
+    },
+    {
       "id": "cloudflare-worker-sync",
       "title": "Cloudflare Worker sync bridge",
       "eyebrow": "Serverless",
@@ -8455,6 +8469,11 @@ export const API_V1_PLAYGROUND_MANIFEST = {
             "name": "example",
             "label": "Example",
             "example": "{\n  \"client_name\": \"Grocery helper\",\n  \"redirect_uris\": [\n    \"https://example.com/oauth/callback\"\n  ],\n  \"token_endpoint_auth_method\": \"none\",\n  \"grant_types\": [\n    \"authorization_code\",\n    \"refresh_token\"\n  ],\n  \"response_types\": [\n    \"code\"\n  ]\n}"
+          },
+          {
+            "name": "spoonjoy_apple_native",
+            "label": "Spoonjoy Apple Native",
+            "example": "{\n  \"client_name\": \"Spoonjoy Apple\",\n  \"redirect_uris\": [\n    \"https://spoonjoy.app/oauth/callback\"\n  ],\n  \"token_endpoint_auth_method\": \"none\",\n  \"grant_types\": [\n    \"authorization_code\",\n    \"refresh_token\"\n  ],\n  \"response_types\": [\n    \"code\"\n  ]\n}"
           }
         ]
       },

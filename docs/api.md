@@ -222,13 +222,13 @@ grant_type=authorization_code&client_id=...&redirect_uri=https%3A%2F%2Fexample.c
 
 The token response contains `access_token: "sj_..."`, `token_type: "Bearer"`, `expires_in: 900`, `scope`, and a rotating `refresh_token`.
 
-Registration can validate optional `scope` metadata, but it does not grant or remember that scope. Always send the requested scope on `/oauth/authorize`; blank authorize scope defaults to `kitchen:read`.
+Registration can validate optional `scope` metadata, but it does not grant or remember that scope. Always send the requested scope on `/oauth/authorize`. Blank OAuth authorize scope defaults to kitchen:read.
 
 ### Delegated token: approval link
 
 For agents, CLIs, appliances, or devices that cannot run a browser-based OAuth callback, use the delegated approval link. Call `POST /api/tools/start_agent_connection`, show the returned `authorizationUrl` and `userCode` to the chef, then poll `POST /api/tools/poll_agent_connection` with the returned `deviceCode` no faster than the returned `interval`.
 
-Pass `scopes` to `start_agent_connection` for least privilege, for example `shopping_list:read shopping_list:write` for a tiny grocery sync client. Omitting `scopes` falls back to the same least-privilege shopping-list read/write default, but production clients should still send explicit scopes so consent is predictable.
+Pass `scopes` to `start_agent_connection` for least privilege, for example `shopping_list:read shopping_list:write` for a tiny grocery sync client. Omitted delegated approval scopes default to shopping_list:read shopping_list:write, but production clients should still send explicit scopes so consent is predictable.
 
 The device code expires after 10 minutes. Pending polls return `status: "pending"`. Approved polls return the `sj_...` token once plus credential metadata, including the credential `id`. Denied, expired, and already-claimed requests return those statuses. The token is a normal bearer credential. A least-privilege device can disconnect itself with `DELETE /api/v1/tokens/{credentialId}` when `{credentialId}` is its own returned credential id; revoking any other credential still requires `tokens:write`.
 
@@ -282,7 +282,7 @@ When a signed-in session creates a token and omits `scopes`, Spoonjoy uses the d
 
 Use OAuth/PKCE when a third-party app needs the chef to consent without embedding a long-lived secret. Register a public client with `token_endpoint_auth_method: none`; there is no client secret. Redirect URIs must be HTTPS, with HTTP allowed only for `localhost` and `127.0.0.1`. Redirect URIs with fragments, embedded credentials, wildcards, custom schemes, or plain remote HTTP are rejected. Spoonjoy accepts common RFC 7591/OIDC client metadata such as `client_uri`, `contacts`, `policy_uri`, `software_id`, and `software_version`, but only stores `client_name` and exact `redirect_uris` today.
 
-OAuth accepts delegated `kitchen:read` and `kitchen:write` scopes plus least-privilege REST read/write scopes such as `account:read`, `account:write`, `shopping_list:read`, `shopping_list:write`, `recipes:read`, `cookbooks:read`, and `public:read`. Grocery-style apps should request `shopping_list:read shopping_list:write`, not broad kitchen scopes. Native Spoonjoy clients that manage recipe covers need `kitchen:write`; clients that manage profile, profile photo, or notification settings need explicit `account:*` scopes. Do not request `offline_access`; OAuth returns refresh tokens with the authorization-code flow. Omitting `scope` grants the read-only default `kitchen:read`.
+OAuth accepts delegated `kitchen:read` and `kitchen:write` scopes plus least-privilege REST read/write scopes such as `account:read`, `account:write`, `shopping_list:read`, `shopping_list:write`, `recipes:read`, `cookbooks:read`, and `public:read`. Grocery-style apps should request `shopping_list:read shopping_list:write`, not broad kitchen scopes. Native Spoonjoy clients that manage recipe covers need `kitchen:write`; clients that manage profile, profile photo, or notification settings need explicit `account:*` scopes. Do not request `offline_access`; OAuth returns refresh tokens with the authorization-code flow. Blank OAuth authorize scope defaults to kitchen:read.
 
 Generate a 43-128 character high-entropy `code_verifier` from unreserved PKCE characters, then send `code_challenge = BASE64URL(SHA256(code_verifier))` without padding and `code_challenge_method=S256`. The `plain` method is rejected. Always send and verify `state`.
 
@@ -298,7 +298,7 @@ Content-Type: application/x-www-form-urlencoded
 grant_type=authorization_code&client_id=...&redirect_uri=https%3A%2F%2Fexample.com%2Foauth%2Fcallback&code=...&code_verifier=...
 ```
 
-The returned `access_token` is a normal `sj_...` Bearer credential that expires after 15 minutes (`expires_in: 900`). The returned refresh_token rotates on every refresh grant as an `ort_...` token, and a replayed refresh token is rejected. Refresh tokens are stored server-side only as hashes. Disconnect by revoking the stored refresh token with `POST /oauth/revoke`; Spoonjoy revokes live OAuth access credentials for that client/resource at the same time. OAuth never grants `tokens:read` or `tokens:write`; token management is for signed-in sessions or personal bearer credentials with explicit token scopes.
+The returned `access_token` is a normal `sj_...` Bearer credential that expires after 15 minutes (`expires_in: 900`). The returned refresh_token rotates on every refresh grant as an `ort_...` token, and a replayed refresh token is rejected. Refresh tokens are stored server-side only as hashes. Disconnect by revoking the stored refresh token with `POST /oauth/revoke`; Spoonjoy revokes live OAuth access credentials for that client/resource at the same time. OAuth never grants `tokens:read` or `tokens:write`; token management is for signed-in sessions or personal bearer credentials with explicit token scopes. OAuth kitchen scopes do not grant tokens:read or tokens:write.
 
 `client_id` is recommended on `/oauth/revoke` and Spoonjoy checks it when present. Possession of the refresh token is sufficient to revoke it, so a client can still disconnect if its local `client_id` storage was lost.
 
@@ -318,7 +318,7 @@ token=ort_...&client_id=cm_client_id_from_register&token_type_hint=refresh_token
 
 Browser clients may call `/oauth/register`, `/oauth/token`, and `/oauth/revoke` cross-origin; these endpoints answer `OPTIONS` with `Access-Control-Allow-Origin: *`, `Access-Control-Allow-Methods: POST, OPTIONS`, `Access-Control-Allow-Headers: Content-Type`, and no `Access-Control-Allow-Credentials`. Cookie-authenticated API mutations are same-origin only and are protected by the Spoonjoy session boundary: use relative URLs, `credentials: "same-origin"`, JSON requests, and no copied cookies. CORS does not make a copied session cookie safe for an external client. OAuth consent form submissions are same-origin POSTs.
 
-If an OAuth client sends the optional `resource` parameter, Spoonjoy currently accepts only the advertised MCP protected resource (`https://spoonjoy.app/mcp`) and binds the issued access credential to that audience. Resource-bound MCP tokens are rejected by REST API v1. Generic REST OAuth apps should omit `resource`. `POST /oauth/revoke` revokes the presented refresh token and live OAuth access credentials for that client/resource.
+If an OAuth client sends the optional `resource` parameter, Spoonjoy currently accepts only the advertised MCP protected resource and binds the issued access credential to that audience. Use resource=https://spoonjoy.app/mcp only for MCP OAuth. Omit resource for REST OAuth apps; resource-bound MCP tokens are rejected by REST API v1. `POST /oauth/revoke` revokes the presented refresh token and live OAuth access credentials for that client/resource.
 
 ### Auth failures
 
@@ -644,12 +644,12 @@ Bearer mode is for clients that cannot use the logged-in Spoonjoy browser sessio
 
 ### Native mobile OAuth
 
-iOS production apps should register an HTTPS universal-link redirect URI such as `https://example.com/spoonjoy/oauth/callback`, enable Associated Domains for that host, and run the browser step with `ASWebAuthenticationSession` or AppAuth. Android apps should register the same HTTPS shape, add an intent filter for the exact callback path, publish Digital Asset Links (`assetlinks.json`) for the package name plus SHA-256 signing cert, and run the browser step with Chrome Custom Tabs or AppAuth. Local development can use `http://localhost` or `http://127.0.0.1` loopback; custom schemes are rejected.
+iOS production apps should register an HTTPS universal-link redirect URI such as Spoonjoy Apple's `https://spoonjoy.app/oauth/callback`, enable Associated Domains for that host, and run the browser step with `ASWebAuthenticationSession` or AppAuth. Android apps should register the same HTTPS shape, add an intent filter for the exact callback path, publish Digital Asset Links (`assetlinks.json`) for the package name plus SHA-256 signing cert, and run the browser step with Chrome Custom Tabs or AppAuth. Local development can use `http://localhost` or `http://127.0.0.1` loopback; custom schemes are rejected.
 
 ```json
 {
-  "client_name": "Grocery helper",
-  "redirect_uris": ["https://example.com/spoonjoy/oauth/callback"],
+  "client_name": "Spoonjoy Apple",
+  "redirect_uris": ["https://spoonjoy.app/oauth/callback"],
   "token_endpoint_auth_method": "none"
 }
 ```
@@ -673,11 +673,14 @@ token=ort_...&client_id=cm_client_id_from_register&token_type_hint=refresh_token
 
 ### Native iOS OAuth quickstart
 
-Register an OAuth client once per app install or app environment, then persist the returned `client_id` in app storage. Do not register on every launch; public registration is rate limited and redirect URIs are exact-match. If you ship separate development, staging, and production callbacks, register separate clients and store the matching `client_id` with that environment.
+Spoonjoy Apple native dogfood quickstart: register an OAuth client once per app install or app environment, then persist client_id in Keychain. Do not register on every launch; public registration is rate limited and redirect URIs are exact-match. If you ship separate development, staging, and production callbacks, register separate clients and store the matching `client_id` with that environment.
 
-Use `ASWebAuthenticationSession` with a universal-link HTTPS callback in production, or localhost/127.0.0.1 loopback only for development. Store `access_token`, rotating `refresh_token`, `client_id`, `code_verifier`, and `state` in Keychain-backed storage. Replace the stored refresh token atomically every time refresh succeeds, and use a single-flight refresh task so concurrent `401` responses do not replay an old refresh token.
+Use `ASWebAuthenticationSession.Callback.https(host: "spoonjoy.app", path: "/oauth/callback")` with the production redirect `https://spoonjoy.app/oauth/callback`, plus the Associated Domains entitlement `applinks:spoonjoy.app`. The custom URL scheme is for app navigation only, not OAuth. Localhost/127.0.0.1 loopback is development-only. Native clients persist access_token and refresh_token in Keychain, keep `code_verifier` and `state` only until the callback is exchanged, and clear state and code_verifier after a successful token exchange. Native clients must replace the stored refresh token atomically every time refresh succeeds, use single-flight refresh so concurrent `401` responses do not replay an old refresh token, and decode Spoonjoy REST envelopes before mutating cache state.
 
 ```swift
+let redirectURI = URL(string: "https://spoonjoy.app/oauth/callback")!
+let callback = ASWebAuthenticationSession.Callback.https(host: "spoonjoy.app", path: "/oauth/callback")
+
 struct OAuthTokenResponse: Decodable {
   let access_token: String
   let refresh_token: String
@@ -723,11 +726,63 @@ func syncShoppingList(accessToken: String, cursor: String?) async throws -> Stri
   var request = URLRequest(url: components.url!)
   request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
   let (data, _) = try await URLSession.shared.data(for: request)
+  // Decode Spoonjoy REST envelopes before mutating cache state.
   let page = try JSONDecoder().decode(SyncEnvelope.self, from: data)
   applyItemsAndTombstones(page.data.items)
   return page.data.hasMore ? try await syncShoppingList(accessToken: accessToken, cursor: page.data.nextCursor) : page.data.nextCursor
 }
 ```
+
+### Profile photo upload/remove
+
+Native settings dogfoods `POST /api/v1/me/photo` and `DELETE /api/v1/me/photo` with `account:write`. Uploads are `multipart/form-data`. Do not set the Content-Type header manually for multipart uploads because the client runtime must add the generated boundary. Queue profile photo upload/remove only after local media staging has succeeded, and keep the staged media until the direct request or queued drain has proven completion.
+
+```bash
+curl -fsS -X POST 'https://spoonjoy.app/api/v1/me/photo' \
+  -H "Authorization: Bearer $SPOONJOY_TOKEN" \
+  -F 'photo=@profile.jpg;type=image/jpeg'
+
+curl -fsS -X DELETE 'https://spoonjoy.app/api/v1/me/photo' \
+  -H "Authorization: Bearer $SPOONJOY_TOKEN"
+```
+
+### DELETE idempotency
+
+X-Client-Mutation-Id is recommended for DELETE retries because many intermediaries and SDKs treat DELETE bodies inconsistently. API v1 also accepts JSON body clientMutationId where the endpoint declares a delete body, and shopping-list item DELETE accepts query string clientMutationId for clients that cannot send custom headers. Reuse the same id only with the same method, path, and body shape; conflicts return `409 idempotency_conflict`.
+
+```bash
+curl -fsS -X DELETE 'https://spoonjoy.app/api/v1/shopping-list/items/item_123' \
+  -H "Authorization: Bearer $SPOONJOY_TOKEN" \
+  -H 'X-Client-Mutation-Id: shopping-delete:item_123'
+
+curl -fsS -X DELETE 'https://spoonjoy.app/api/v1/shopping-list/items/item_123?clientMutationId=shopping-delete%3Aitem_123' \
+  -H "Authorization: Bearer $SPOONJOY_TOKEN"
+
+curl -fsS -X DELETE 'https://spoonjoy.app/api/v1/recipes/recipe_123/spoons/spoon_123' \
+  -H "Authorization: Bearer $SPOONJOY_TOKEN" \
+  -H 'Content-Type: application/json' \
+  --data '{"clientMutationId":"spoon-delete:spoon_123"}'
+
+curl -fsS -X DELETE 'https://spoonjoy.app/api/v1/cookbooks/cookbook_123' \
+  -H "Authorization: Bearer $SPOONJOY_TOKEN" \
+  -H 'X-Client-Mutation-Id: cookbook-delete:cookbook_123'
+```
+
+DELETE examples to mirror in native request builders: DELETE /api/v1/shopping-list/items/{itemId}, DELETE /api/v1/recipes/{id}/spoons/{spoonId}, and DELETE /api/v1/cookbooks/{id}.
+
+## Offline Product Contract
+
+Native clients treat offline support as product behavior, not a cache optimization. Every cached record must carry accountId, environment, schemaVersion, fetchedAt, lastValidatedAt, sourceEndpoint, and a server revision marker when available, such as cursor, etag, updatedAt, deletedAt, or an endpoint-specific tombstone token. Cache keys must include the full private visibility boundary so one account, environment, query, or scope cannot restore another account's private rows.
+
+Freshness thresholds are fixed for native cache and docs drift tests. Signed-in bootstrap, account, settings, and shopping data is fresh for 15 minutes after lastValidatedAt. Recipe detail, cookbook detail, spoon lists, profile/chef graph, and active cook-mode backing data is fresh for 6 hours. Catalog and search result pages are fresh for 24 hours. Local cook progress, capture/import drafts, queued mutations, and staged media are locally authoritative until synced, discarded, or conflicted.
+
+Profile display-field updates, profile photo upload/remove after local media staging, and notification preference updates are queueable. API token create/revoke, OAuth connection disconnect, logout/session revoke, passkey/password/provider-link actions are online-only and must never be queued by native UI, Siri, or Shortcuts. APNs device registration can queue only after the system device token already exists; the permission prompt and device-token acquisition are online-only.
+
+Queued mutations must include stable clientMutationId, endpoint path, method, idempotency key, payload schema version, created-at time, dependency ordering key, retry count, and last error. Queue replay is FIFO within an object dependency key and may run independent keys concurrently only after tests prove no ordering conflict. Retry with the same clientMutationId for timeouts, 429, and 5xx. Auth failure pauses the queue until reauth, validation conflict marks only that mutation conflicted, and server tombstones remove or conflict local records according to endpoint-specific tests.
+
+Do not store bearer tokens, refresh tokens, one-time token values, provider secrets, passkey material, or raw credential values in general cache storage. Use Keychain or session-owned storage for auth material. Cached API responses must filter or purge private rows on logout, account switch, environment switch, cache deletion, and tombstone/delete replay before rendering, donating App Intents entities, or indexing Spotlight content.
+
+Dismissal may hide only informational offline/stale states until connectivity, freshness, or account state changes. It must never hide queued work, sync failure, conflict, blocker, or destructive confirmation states. Feature-owned error states must distinguish true offline transport from backend/auth/application failures so a validation error or provider-secret blocker is not mislabeled as offline.
 
 ### Browser extension OAuth
 

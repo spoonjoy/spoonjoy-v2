@@ -271,10 +271,38 @@ const guideSteps = [
   "Use the sync cursor to fetch shopping-list changes, including removed items.",
 ] as const;
 
+const nativeDogfoodChecklist = [
+  "Use https://spoonjoy.app/oauth/callback as the production OAuth redirect and enable applinks:spoonjoy.app on the Apple targets.",
+  "Use ASWebAuthenticationSession.Callback.https(host: \"spoonjoy.app\", path: \"/oauth/callback\"); the custom URL scheme is for app navigation only, not OAuth.",
+  "Register once per app/environment, then persist client_id in Keychain and persist access_token and refresh_token in Keychain.",
+  "clear state and code_verifier after a successful token exchange, replace the stored refresh token atomically, and run single-flight refresh when concurrent requests hit 401.",
+  "decode Spoonjoy REST envelopes for /api/v1 resources: ok, requestId, data on success and ok, requestId, error on failure.",
+] as const;
+
+const nativeDogfoodSample = [
+  "POST /oauth/register",
+  "{ \"client_name\": \"Spoonjoy Apple\", \"redirect_uris\": [\"https://spoonjoy.app/oauth/callback\"], \"token_endpoint_auth_method\": \"none\" }",
+  "",
+  "GET /oauth/authorize?client_id=cm_client_id_from_register&redirect_uri=https%3A%2F%2Fspoonjoy.app%2Foauth%2Fcallback&response_type=code&scope=account%3Aread+account%3Awrite+kitchen%3Aread+kitchen%3Awrite+shopping_list%3Aread+shopping_list%3Awrite&state=...&code_challenge=...&code_challenge_method=S256",
+  "",
+  "ASWebAuthenticationSession.Callback.https(host: \"spoonjoy.app\", path: \"/oauth/callback\")",
+  "Associated Domains: applinks:spoonjoy.app",
+  "custom URL scheme is for app navigation only, not OAuth",
+].join("\n");
+
+const offlineProductContractRows = [
+  ["Metadata", "Every cached record carries accountId, environment, schemaVersion, fetchedAt, lastValidatedAt, sourceEndpoint, and a server revision marker such as cursor, etag, updatedAt, or a tombstone token."],
+  ["Freshness", "Account/settings/shopping bootstrap data is fresh for 15 minutes; detail/profile/spoon/cook-mode backing data is fresh for 6 hours; catalog/search result pages are fresh for 24 hours."],
+  ["Queueable account writes", "Profile display-field updates, profile photo upload/remove after local media staging, and notification preference updates are queueable."],
+  ["Online-only account actions", "API token create/revoke, OAuth connection disconnect, logout/session revoke, passkey/password/provider-link actions are online-only."],
+  ["Visible severe states", "queued work, sync failure, conflict, blocker, and destructive confirmation states remain visible until resolved."],
+] as const;
+
 const guideSections = [
   "Terminal Quickstart",
   "Current API Boundary",
   "External Client Guide",
+  "Spoonjoy Apple native dogfood quickstart",
   "Client Starting Points",
   "Token Acquisition",
   "Auth Implementation",
@@ -282,6 +310,7 @@ const guideSections = [
   "OAuth And Delegated Flows",
   "OAuth Scope Mapping",
   "Scenario Quickstarts",
+  "Offline Product Contract",
   "Reference",
   "Scopes",
   "Auth",
@@ -307,7 +336,7 @@ const scenarioQuickstarts = [
     title: "Native mobile OAuth",
     mode: "iOS + Android",
     body: "Register once per app install or environment, persist client_id, and do not register on every launch. Use HTTPS universal links or Android App Links for production callbacks, with localhost or 127.0.0.1 loopback only for development. Store tokens in Keychain or Android Keystore-backed storage. Refresh tokens rotate, so replace the stored refresh token atomically and use single-flight refresh when concurrent requests hit 401.",
-    sample: "POST /oauth/register\n{ \"client_name\": \"Grocery helper\", \"redirect_uris\": [\"https://example.com/spoonjoy/oauth/callback\"], \"token_endpoint_auth_method\": \"none\" }\n\nGET /oauth/authorize?...&state=client_state&code_challenge=pkce_s256&scope=shopping_list:read+shopping_list:write\n\nPOST /oauth/token\ngrant_type=authorization_code&client_id=cm_client_id_from_register&redirect_uri=https%3A%2F%2Fexample.com%2Fspoonjoy%2Foauth%2Fcallback&code=oac_...&code_verifier=pkce_verifier_...\n\nPOST /oauth/token\ngrant_type=refresh_token&client_id=cm_client_id_from_register&refresh_token=ort_...\n\nGET /api/v1/shopping-list/sync?limit=50",
+    sample: "POST /oauth/register\n{ \"client_name\": \"Spoonjoy Apple\", \"redirect_uris\": [\"https://spoonjoy.app/oauth/callback\"], \"token_endpoint_auth_method\": \"none\" }\n\nGET /oauth/authorize?...&state=client_state&code_challenge=pkce_s256&scope=shopping_list:read+shopping_list:write\n\nPOST /oauth/token\ngrant_type=authorization_code&client_id=cm_client_id_from_register&redirect_uri=https%3A%2F%2Fspoonjoy.app%2Foauth%2Fcallback&code=oac_...&code_verifier=pkce_verifier_...\n\nPOST /oauth/token\ngrant_type=refresh_token&client_id=cm_client_id_from_register&refresh_token=ort_...\n\nGET /api/v1/shopping-list/sync?limit=50",
   },
   {
     title: "Browser extension OAuth",
@@ -578,6 +607,25 @@ export default function Developers() {
         </div>
       </SectionShell>
 
+      <SectionShell title="Spoonjoy Apple native dogfood quickstart">
+        <div className="grid gap-6 lg:grid-cols-[minmax(14rem,20rem)_minmax(0,1fr)]">
+          <div>
+            <p className="font-sj-ui text-xs font-bold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">
+              Native Apple
+            </p>
+            <Text className="mt-3">
+              Spoonjoy Apple dogfoods the public REST and OAuth contracts with a real HTTPS universal-link redirect, Keychain-backed token storage, and the same offline sync rules as in-app UI, Siri, and Shortcuts.
+            </Text>
+            <ul className="mt-4 grid gap-2 text-sm/6 text-[var(--sj-ink-soft)]">
+              {nativeDogfoodChecklist.map((item) => <li key={item}>- {item}</li>)}
+            </ul>
+          </div>
+          <pre className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
+            {nativeDogfoodSample}
+          </pre>
+        </div>
+      </SectionShell>
+
       <SectionShell title="Token Acquisition">
         <div className="grid gap-4">
           {tokenAcquisitionPaths.map((path) => (
@@ -696,6 +744,9 @@ export default function Developers() {
         <Text className="mt-4">
           OAuth clients may request the delegated scopes above directly. Token-management scopes remain personal-token or Session-only and are not granted by OAuth.
         </Text>
+        <Text className="mt-3">
+          Blank OAuth authorize scope defaults to kitchen:read. Omitted delegated approval scopes default to shopping_list:read shopping_list:write. Omit resource for REST OAuth apps. Use resource=https://spoonjoy.app/mcp only for MCP OAuth; resource-bound MCP tokens are rejected by REST API v1. OAuth kitchen scopes do not grant tokens:read or tokens:write.
+        </Text>
       </SectionShell>
 
       <SectionShell title="Scenario Quickstarts">
@@ -718,6 +769,20 @@ export default function Developers() {
                 </pre>
               </div>
             </article>
+          ))}
+        </div>
+      </SectionShell>
+
+      <SectionShell title="Offline Product Contract">
+        <Text className="mb-5">
+          Native clients treat offline as product behavior. They restore cached reads only inside the account/environment/schema boundary, preserve freshness metadata, apply tombstones before advancing cursors, and queue only safe product mutations.
+        </Text>
+        <div className="grid gap-3">
+          {offlineProductContractRows.map(([label, body]) => (
+            <div key={label} className="border-b border-[var(--sj-border)] pb-3">
+              <p className="font-sj-ui text-sm/5 font-bold text-[var(--sj-ink)]">{label}</p>
+              <p className="mt-1 text-sm/6 text-[var(--sj-ink-soft)]">{body}</p>
+            </div>
           ))}
         </div>
       </SectionShell>

@@ -142,6 +142,7 @@ describe("/developers/playground", () => {
     expect(data.canonicalUrl).toBe("https://spoonjoy.app/api/playground");
     expect(data.ogImageUrl).toBe("https://spoonjoy.app/og/pages/api-playground.png");
     expect(data.manifest.clientScenarios.map((scenario) => scenario.id)).toEqual([
+      "spoonjoy-apple-native-dogfood",
       "cloudflare-worker-sync",
       "browser-extension-shopping-sync",
       "no-code-connector",
