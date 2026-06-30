@@ -66,13 +66,19 @@ export async function authenticateUser(
   });
 
   // Always run a bcrypt comparison — against the stored hash when the account
-  // exists with a password, otherwise against DECOY_PASSWORD_HASH — so response
-  // timing doesn't reveal whether the email is registered (anti-enumeration).
+  // exists with a password, otherwise against DECOY_PASSWORD_HASH — so the
+  // dominant cost (a ~70ms bcrypt compare) is paid whether or not the email is
+  // registered (anti-enumeration). This equalizes the bcrypt window, not the
+  // whole request: the preceding findUnique still differs slightly for a hit vs
+  // a miss, but that delta is negligible next to bcrypt.
   const isValid = await verifyPassword(
     password,
     user?.hashedPassword ?? DECOY_PASSWORD_HASH
   );
 
+  // When user / hashedPassword is absent, `isValid` was computed against the
+  // decoy and is intentionally ignored: the first two operands short-circuit to
+  // null, so a decoy match can never authenticate a non-existent account.
   if (!user || !user.hashedPassword || !isValid) {
     return null;
   }

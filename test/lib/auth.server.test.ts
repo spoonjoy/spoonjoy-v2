@@ -133,17 +133,24 @@ describe("auth.server", () => {
       expect(user?.email).toBe("test@example.com");
     });
 
-    it("should return null for an account without a password (OAuth-only user)", async () => {
+    it("returns null for an account without a password (OAuth-only user), still running the decoy compare", async () => {
       const email = faker.internet.email();
       const username = faker.internet.username() + "_" + faker.string.alphanumeric(8);
       // OAuth-only accounts have no password credential (hashedPassword is null).
       await db.user.create({
         data: { email: email.toLowerCase(), username },
       });
+      const compareSpy = vi.spyOn(bcrypt, "compare");
 
       const user = await authenticateUser(db, email, "anyPassword");
 
       expect(user).toBeNull();
+      // A passwordless account must still incur the decoy compare, so its login
+      // latency matches a password account's (anti-enumeration).
+      expect(compareSpy).toHaveBeenCalledTimes(1);
+      expect(compareSpy).toHaveBeenCalledWith("anyPassword", expect.stringMatching(/^\$2[ab]\$10\$/));
+
+      compareSpy.mockRestore();
     });
 
     it("runs a bcrypt comparison even for an unknown email (constant-time, prevents user enumeration)", async () => {
@@ -157,8 +164,11 @@ describe("auth.server", () => {
 
       expect(user).toBeNull();
       // The comparison must still run when no account matches, so login latency
-      // doesn't reveal whether the email is registered.
+      // doesn't reveal whether the email is registered — and against the cost-10
+      // decoy hash. Pinning the cost factor here means a future change that drops
+      // the constant-time property fails this test instead of passing silently.
       expect(compareSpy).toHaveBeenCalledTimes(1);
+      expect(compareSpy).toHaveBeenCalledWith("anyPassword", expect.stringMatching(/^\$2[ab]\$10\$/));
 
       compareSpy.mockRestore();
     });
