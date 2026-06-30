@@ -86,6 +86,7 @@ model ApiIdempotencyKey {
   responseStatus Int?
   responseBody   String?
   expiresAt      DateTime
+  tombstones     ApiMutationTombstone[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
@@ -94,6 +95,23 @@ model ApiIdempotencyKey {
   @@index([userId, createdAt])
   @@index([credentialId])
   @@index([expiresAt])
+}
+
+model ApiMutationTombstone {
+  id               String            @id @default(cuid())
+  idempotencyKeyId String
+  idempotencyKey   ApiIdempotencyKey @relation(fields: [idempotencyKeyId], references: [id], onDelete: Cascade)
+  operation        String
+  resourceType     String
+  resourceId       String
+  parentResourceId String?
+  payload          String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([idempotencyKeyId, resourceType, resourceId])
+  @@index([idempotencyKeyId])
+  @@index([resourceType, resourceId])
 }
 
 model AgentConnectionRequest {

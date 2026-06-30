@@ -27,7 +27,7 @@ function expectEnvelopeHeaders(response: Response, requestId: string) {
   expect(response.headers.get("X-Request-Id")).toBe(requestId);
   expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
   expect(response.headers.get("Access-Control-Allow-Headers")).toBe("Authorization, Content-Type, X-Request-Id, X-Client-Mutation-Id");
-  expect(response.headers.get("Access-Control-Allow-Methods")).toBe("GET, POST, PATCH, DELETE, OPTIONS");
+  expect(response.headers.get("Access-Control-Allow-Methods")).toBe("GET, POST, PATCH, PUT, DELETE, OPTIONS");
   expect(response.headers.get("Access-Control-Expose-Headers")).toBe("X-Request-Id, Retry-After");
 }
 

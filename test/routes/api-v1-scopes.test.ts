@@ -119,6 +119,14 @@ describe("API v1 complete scope matrix", () => {
     expect(resolveApiV1ScopeRequirement("PATCH", "recipes/recipe_1")).toEqual({ auth: "bearer", scopes: ["kitchen:write"] });
     expect(resolveApiV1ScopeRequirement("DELETE", "recipes/recipe_1")).toEqual({ auth: "bearer", scopes: ["kitchen:write"] });
     expect(resolveApiV1ScopeRequirement("POST", "recipes/recipe_1/fork")).toEqual({ auth: "bearer", scopes: ["kitchen:write"] });
+    expect(resolveApiV1ScopeRequirement("POST", "recipes/import")).toEqual({ auth: "bearer", scopes: ["kitchen:write"] });
+    expect(resolveApiV1ScopeRequirement("POST", "recipes/recipe_1/steps")).toEqual({ auth: "bearer", scopes: ["kitchen:write"] });
+    expect(resolveApiV1ScopeRequirement("PATCH", "recipes/recipe_1/steps/step_1")).toEqual({ auth: "bearer", scopes: ["kitchen:write"] });
+    expect(resolveApiV1ScopeRequirement("DELETE", "recipes/recipe_1/steps/step_1")).toEqual({ auth: "bearer", scopes: ["kitchen:write"] });
+    expect(resolveApiV1ScopeRequirement("POST", "recipes/recipe_1/steps/reorder")).toEqual({ auth: "bearer", scopes: ["kitchen:write"] });
+    expect(resolveApiV1ScopeRequirement("POST", "recipes/recipe_1/steps/step_1/ingredients")).toEqual({ auth: "bearer", scopes: ["kitchen:write"] });
+    expect(resolveApiV1ScopeRequirement("DELETE", "recipes/recipe_1/steps/step_1/ingredients/ingredient_1")).toEqual({ auth: "bearer", scopes: ["kitchen:write"] });
+    expect(resolveApiV1ScopeRequirement("PUT", "recipes/recipe_1/step-output-uses")).toEqual({ auth: "bearer", scopes: ["kitchen:write"] });
     expect(resolveApiV1ScopeRequirement("GET", "recipes/recipe_1/spoons")).toEqual({ auth: "optional", scopes: ["recipes:read"] });
     expect(resolveApiV1ScopeRequirement("POST", "recipes/recipe_1/spoons")).toEqual({ auth: "bearer", scopes: ["kitchen:write"] });
     expect(resolveApiV1ScopeRequirement("PATCH", "recipes/recipe_1/spoons/spoon_1")).toEqual({ auth: "bearer", scopes: ["kitchen:write"] });

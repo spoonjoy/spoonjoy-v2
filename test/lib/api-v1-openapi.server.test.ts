@@ -26,6 +26,13 @@ const OPERATION_SCOPES = {
   "PATCH /api/v1/recipes/{id}": ["kitchen:write"],
   "DELETE /api/v1/recipes/{id}": ["kitchen:write"],
   "POST /api/v1/recipes/{id}/fork": ["kitchen:write"],
+  "POST /api/v1/recipes/{id}/steps": ["kitchen:write"],
+  "PATCH /api/v1/recipes/{id}/steps/{stepId}": ["kitchen:write"],
+  "DELETE /api/v1/recipes/{id}/steps/{stepId}": ["kitchen:write"],
+  "POST /api/v1/recipes/{id}/steps/reorder": ["kitchen:write"],
+  "POST /api/v1/recipes/{id}/steps/{stepId}/ingredients": ["kitchen:write"],
+  "DELETE /api/v1/recipes/{id}/steps/{stepId}/ingredients/{ingredientId}": ["kitchen:write"],
+  "PUT /api/v1/recipes/{id}/step-output-uses": ["kitchen:write"],
   "GET /api/v1/recipes/{id}/spoons": ["recipes:read"],
   "POST /api/v1/recipes/{id}/spoons": ["kitchen:write"],
   "PATCH /api/v1/recipes/{id}/spoons/{spoonId}": ["kitchen:write"],
@@ -697,6 +704,66 @@ describe("API v1 OpenAPI document", () => {
       .toBe("#/components/schemas/ErrorEnvelope");
     expect(operation(document, "/api/v1/shopping-list/add-from-recipe", "POST").responses["404"].content["application/json"].schema.$ref)
       .toBe("#/components/schemas/ErrorEnvelope");
+  });
+
+  it("declares exact request and response schemas for recipe step mutations", () => {
+    const document = buildApiV1OpenApiDocument();
+
+    expect(operation(document, "/api/v1/recipes/{id}/steps", "POST").requestBody.content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/CreateRecipeStepRequest");
+    expect(operation(document, "/api/v1/recipes/{id}/steps", "POST").responses["201"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/CreateRecipeStepEnvelope");
+    expect(operation(document, "/api/v1/recipes/{id}/steps/{stepId}", "PATCH").requestBody.content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/UpdateRecipeStepRequest");
+    expect(operation(document, "/api/v1/recipes/{id}/steps/{stepId}", "PATCH").responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/UpdateRecipeStepEnvelope");
+    expect(operation(document, "/api/v1/recipes/{id}/steps/{stepId}", "DELETE").requestBody.content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/DeleteRecipeStepRequest");
+    expectFlexibleDeleteContract(document, "/api/v1/recipes/{id}/steps/{stepId}", "DeleteRecipeStepRequest");
+    expect(operation(document, "/api/v1/recipes/{id}/steps/{stepId}", "DELETE").responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/DeleteRecipeStepEnvelope");
+    expect(operation(document, "/api/v1/recipes/{id}/steps/reorder", "POST").requestBody.content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/ReorderRecipeStepRequest");
+    expect(operation(document, "/api/v1/recipes/{id}/steps/{stepId}/ingredients", "POST").requestBody.content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/CreateRecipeStepIngredientRequest");
+    expect(operation(document, "/api/v1/recipes/{id}/steps/{stepId}/ingredients/{ingredientId}", "DELETE").requestBody.content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/DeleteRecipeStepIngredientRequest");
+    expectFlexibleDeleteContract(document, "/api/v1/recipes/{id}/steps/{stepId}/ingredients/{ingredientId}", "DeleteRecipeStepIngredientRequest");
+    expect(operation(document, "/api/v1/recipes/{id}/step-output-uses", "PUT").requestBody.content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/ReplaceRecipeStepOutputUsesRequest");
+    expect(operation(document, "/api/v1/recipes/{id}/step-output-uses", "PUT").responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/ReplaceRecipeStepOutputUsesEnvelope");
+
+    expect(document.components.schemas.RecipeStep.required).toEqual([
+      "id",
+      "stepNum",
+      "stepTitle",
+      "description",
+      "duration",
+      "ingredients",
+      "usingSteps",
+    ]);
+    expect(document.components.schemas.RecipeStep.properties.usingSteps.items.$ref)
+      .toBe("#/components/schemas/RecipeStepOutputUse");
+    expect(operation(document, "/api/v1/recipes/{id}/steps", "POST")["x-idempotency"]).toMatchObject({
+      key: "clientMutationId",
+      location: "jsonBody",
+      replayStatus: [201],
+    });
+    expect(operation(document, "/api/v1/recipes/{id}/steps/{stepId}", "DELETE")["x-idempotency"]).toMatchObject({
+      key: "clientMutationId",
+      location: "jsonBody, query, or X-Client-Mutation-Id",
+      replayStatus: [200],
+    });
+    expect(operation(document, "/api/v1/recipes/{id}/steps/{stepId}/ingredients/{ingredientId}", "DELETE")["x-idempotency"]).toMatchObject({
+      key: "clientMutationId",
+      location: "jsonBody, query, or X-Client-Mutation-Id",
+      replayStatus: [200],
+    });
+    expect(responseExample(document, "/api/v1/recipes/{id}/steps", "POST", "201").data.step).toMatchObject({
+      id: "step_2",
+      usingSteps: [expect.objectContaining({ outputStepNum: 1 })],
+    });
   });
 
   it("declares exact request and response schemas for native account endpoints", () => {

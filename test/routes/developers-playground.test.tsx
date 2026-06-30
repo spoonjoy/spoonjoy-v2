@@ -118,6 +118,15 @@ describe("/developers/playground", () => {
       "DELETE /api/v1/cookbooks/{id}/recipes/{recipeId}",
     ]));
     expect(data.manifest.operations.map((operation) => operation.id)).toEqual(expect.arrayContaining([
+      "POST /api/v1/recipes/{id}/steps",
+      "PATCH /api/v1/recipes/{id}/steps/{stepId}",
+      "DELETE /api/v1/recipes/{id}/steps/{stepId}",
+      "POST /api/v1/recipes/{id}/steps/reorder",
+      "POST /api/v1/recipes/{id}/steps/{stepId}/ingredients",
+      "DELETE /api/v1/recipes/{id}/steps/{stepId}/ingredients/{ingredientId}",
+      "PUT /api/v1/recipes/{id}/step-output-uses",
+    ]));
+    expect(data.manifest.operations.map((operation) => operation.id)).toEqual(expect.arrayContaining([
       "POST /oauth/register",
       "GET /oauth/authorize",
       "POST /oauth/token",
@@ -157,13 +166,14 @@ describe("/developers/playground", () => {
     expect(data.manifest.operations.find((operation) => operation.id === "GET /api/v1/recipes/{id}/spoons")?.profiles).toEqual(["full", "sdk"]);
     expect(data.manifest.operations.find((operation) => operation.id === "POST /api/v1/recipes/{id}/spoons")?.profiles).toEqual(["full", "sdk"]);
     expect(data.manifest.operations.find((operation) => operation.id === "GET /api/v1/recipes/{id}/covers")?.profiles).toEqual(["full", "sdk"]);
+    expect(data.manifest.operations.find((operation) => operation.id === "PUT /api/v1/recipes/{id}/step-output-uses")?.risk).toBe("mutating");
     expect(data.manifest.operations.find((operation) => operation.id === "POST /oauth/token")?.profiles).toEqual(["full", "sdk"]);
     expect(data.manifest.operations.find((operation) => operation.id === "POST /mcp")?.profiles).toEqual(["full"]);
     expect(data.manifest.operations.find((operation) => operation.id === "POST /api/v1/me/photo")?.requestBody).toMatchObject({
       contentType: "multipart/form-data",
       fields: [{ name: "photo", required: true, accept: "image/jpeg,image/png,image/gif,image/webp" }],
     });
-    expect(data.manifest.operations.length).toBe(58);
+    expect(data.manifest.operations.length).toBe(65);
   });
 
   it("uses the configured public origin for playground OG URLs", async () => {
@@ -181,6 +191,7 @@ describe("/developers/playground", () => {
       "Discovery",
       "Search",
       "Recipes",
+      "Recipe Steps",
       "Recipe Spoons",
       "Recipe Covers",
       "Cookbooks",

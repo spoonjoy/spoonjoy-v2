@@ -114,7 +114,7 @@ const authModels = [
 
 const clientProfiles = [
   { title: "Tiny-device clients", href: "#scenario-quickstarts", body: "Use sync cursors, small payloads, and idempotent retries when a device is offline or battery constrained." },
-  { title: "Mobile apps", href: "#oauth-and-delegated-flows", body: "Read public recipes without auth, then request shopping-list scopes or kitchen:write for native recipe create, edit, delete, fork, import, spoon, and cover management after a chef connects their account." },
+  { title: "Mobile apps", href: "#oauth-and-delegated-flows", body: "Read public recipes without auth, then request shopping-list scopes or kitchen:write for native recipe create, edit, delete, fork, step editing, import, spoon, and cover management after a chef connects their account." },
   { title: "CLI/script clients", href: "#terminal-quickstart", body: "Use bearer credentials, curl, and OpenAPI JSON only when the script cannot share a Spoonjoy session." },
   { title: "Browser clients", href: "#auth-implementation", body: "Use same-origin Session only inside spoonjoy.app. Extensions and third-party browser apps use OAuth/PKCE." },
   { title: "Agent clients", href: "#oauth-and-delegated-flows", body: "Use MCP or delegated connection endpoints when a chef needs to approve an assistant-style runtime." },
@@ -299,7 +299,7 @@ const authImplementationSteps = [
 const guideSteps = [
   "Read public recipes and cookbooks anonymously before adding auth.",
   "Use Session for logged-in playground calls; use bearer or OAuth only when a client runs outside that session.",
-  "Use a stable mutation id for recipe create, update, delete, fork, import, and shopping-list writes, then retry with the same value when a network call is interrupted.",
+  "Use a stable mutation id for recipe create, update, delete, fork, step editing, import, and shopping-list writes, then retry with the same value when a network call is interrupted.",
   "Use the sync cursor to fetch shopping-list changes, including removed items.",
 ] as const;
 
@@ -357,7 +357,7 @@ const syncSafetyRows = [
   ["Cursor", "Use the returned nextCursor as the next request cursor after applying every item in the page durably. Treat it as opaque; ISO timestamps are accepted only as a bootstrap convenience."],
   ["Tombstones", "Sync includes deleted rows with deletedAt so offline clients can remove local items."],
   ["Pagination", "Use limit from 1 to 50 for small payloads. hasMore: true means continue with the returned nextCursor; webhooks, REST Hooks, SSE, and event subscriptions are not available yet."],
-  ["Idempotent owner mutations", "clientMutationId is scoped to the chef, retained for 24 hours, and bound to method, path, and body hash for recipe create, update, delete, fork, import, shopping-list writes, recipe spoon writes, and recipe-cover writes. Persist and retry the exact serialized body for that mutation id."],
+  ["Idempotent owner mutations", "clientMutationId is scoped to the chef, retained for 24 hours, and bound to method, path, and body hash for recipe create, update, delete, fork, step editing, import, shopping-list writes, recipe spoon writes, and recipe-cover writes. Persist and retry the exact serialized body for that mutation id."],
   ["Replay", "Retry the same request with the same clientMutationId after a timeout; Spoonjoy returns the recorded response with mutation.replayed: true."],
   ["Conflict", "Reusing the same clientMutationId for a different method, path, or body returns 409 idempotency_conflict."],
   ["Retries", "Retry network timeouts, 429, and 5xx responses with the same mutation id. Refresh or reconnect on 401. Do not retry validation, scope, or idempotency conflicts unchanged."],
@@ -403,8 +403,8 @@ const scenarioQuickstarts = [
   {
     title: "Recipe blog embeds",
     mode: "REST-powered embeds only",
-    body: "Fetch public JSON and render your own HTML with textContent, not innerHTML. Spoonjoy pages are not iframe embeds. Recipe steps are returned in ascending stepNum order, step duration is minutes when present, and ingredients are step-attached in API order. Validate sourceUrl as http/https before linking, write your own image alt text, and avoid copying photos where removals cannot be honored.",
-    sample: "GET /api/v1/recipes/{id}\nIf 404 not_found, hide or replace the embed before rendering stale content.\nRender servings, step ingredients, ordered steps, and attribution.creditText as a link to attribution.canonicalUrl.\nIf attribution.sourceRecipe.deleted is true, credit it as unavailable instead of linking it.",
+    body: "Fetch public JSON and render your own HTML with textContent, not innerHTML. Spoonjoy pages are not iframe embeds. Recipe steps are returned in ascending stepNum order, step duration is minutes when present, ingredients are step-attached in API order, and usingSteps lists prior step outputs used by a step. Validate sourceUrl as http/https before linking, write your own image alt text, and avoid copying photos where removals cannot be honored.",
+    sample: "GET /api/v1/recipes/{id}\nIf 404 not_found, hide or replace the embed before rendering stale content.\nRender servings, step ingredients, ordered steps, step output dependencies, and attribution.creditText as a link to attribution.canonicalUrl.\nIf attribution.sourceRecipe.deleted is true, credit it as unavailable instead of linking it.",
   },
 ] as const;
 

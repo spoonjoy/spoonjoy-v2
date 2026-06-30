@@ -202,7 +202,7 @@ function operationRisk(path: string, method: string) {
   if (path === "/oauth/authorize") return "mutating";
   if (path === "/api/v1/shopping-list/clear-completed" || path === "/api/v1/shopping-list/clear-all") return "destructive";
   if (method === "delete") return "destructive";
-  if (method === "post" || method === "patch") return "mutating";
+  if (method === "post" || method === "put" || method === "patch") return "mutating";
   return "safe";
 }
 

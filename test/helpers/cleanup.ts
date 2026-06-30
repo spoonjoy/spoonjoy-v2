@@ -33,6 +33,20 @@ export async function cleanupDatabase() {
     "documentCount" INTEGER NOT NULL DEFAULT 0,
     "rebuiltAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   );`);
+  await db.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "ApiMutationTombstone" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "idempotencyKeyId" TEXT NOT NULL,
+    "operation" TEXT NOT NULL,
+    "resourceType" TEXT NOT NULL,
+    "resourceId" TEXT NOT NULL,
+    "parentResourceId" TEXT,
+    "payload" TEXT,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "ApiMutationTombstone_idempotencyKeyId_fkey" FOREIGN KEY ("idempotencyKeyId") REFERENCES "ApiIdempotencyKey" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+  );`);
+  await db.$executeRawUnsafe('CREATE UNIQUE INDEX IF NOT EXISTS "ApiMutationTombstone_idempotencyKeyId_resourceType_resourceId_key" ON "ApiMutationTombstone"("idempotencyKeyId", "resourceType", "resourceId");');
+  await db.$executeRawUnsafe('CREATE INDEX IF NOT EXISTS "ApiMutationTombstone_idempotencyKeyId_idx" ON "ApiMutationTombstone"("idempotencyKeyId");');
+  await db.$executeRawUnsafe('CREATE INDEX IF NOT EXISTS "ApiMutationTombstone_resourceType_resourceId_idx" ON "ApiMutationTombstone"("resourceType", "resourceId");');
   await db.$executeRawUnsafe('DELETE FROM "SearchDocument";');
   await db.$executeRawUnsafe('DELETE FROM "SearchIndexMetadata";');
 
@@ -49,6 +63,7 @@ export async function cleanupDatabase() {
   await db.ingredientRef.deleteMany({});
   await db.unit.deleteMany({});
   await db.agentConnectionRequest.deleteMany({});
+  await db.apiMutationTombstone.deleteMany({});
   await db.apiIdempotencyKey.deleteMany({});
   await db.apiCredential.deleteMany({});
   await db.nativePushDevice.deleteMany({});

@@ -20,7 +20,7 @@ Available now:
 
 - Public recipe and cookbook reads
 - Cross-product API search across public recipes, public cookbooks, chefs, and authorized shopping-list items
-- Authenticated recipe create, update, delete, fork, and import from URL, video URL, text, or JSON-LD
+- Authenticated recipe create, update, delete, fork, step editing, and import from URL, video URL, text, or JSON-LD
 - Public recipe spoon history plus authenticated recipe spoon create, update, and delete
 - Owner-scoped recipe cover candidate management for the authenticated chef's recipes
 - Owner-scoped shopping-list read, sync, add, recipe-add, check, clear, and remove
@@ -32,7 +32,7 @@ Available now:
 
 Not in API v1 yet:
 
-- Recipe export endpoints beyond the current create, edit, delete, fork, import, spoon, and cover surfaces
+- Recipe export endpoints beyond the current create, edit, delete, fork, import, step, spoon, and cover surfaces
 - Private recipe-library endpoints
 - Inventory or pantry stock APIs
 - Meal plan or "today's recipes" APIs
@@ -50,7 +50,7 @@ Generated SDKs should use `/api/v1/openapi.sdk.json`; it keeps REST v1 resources
 
 | Surface | Build with it | Current boundary |
 | --- | --- | --- |
-| REST API v1 | Public catalog clients, global search, shopping-list sync, native recipe create/edit/delete/fork/import, native recipe spoon and recipe-cover management, bearer-token scripts, generated SDKs | No recipe export or private library endpoints yet. |
+| REST API v1 | Public catalog clients, global search, shopping-list sync, native recipe create/edit/delete/fork/import/step editing, native recipe spoon and recipe-cover management, bearer-token scripts, generated SDKs | No recipe export or private library endpoints yet. |
 | No-code connector profile | Zapier/Make/n8n-style searches, actions, and polling triggers | No webhooks, REST Hooks, SSE, event subscriptions, or DELETE request bodies. |
 | OAuth/PKCE | Third-party mobile, SaaS, extension, and connector account linking | Public clients only; no client secret, password grant, token-management scopes, or custom schemes. |
 | Delegated approval | CLIs, appliances, voice clients, and agents without a callback URL | Custom Spoonjoy approval flow, not OAuth Device Authorization Grant. |
@@ -441,6 +441,13 @@ API v1 is rate limited by IP and credential before authentication work. Anonymou
 | `DELETE` | `/api/v1/recipes/{id}` | Authenticated chef | `kitchen:write` |
 | `POST` | `/api/v1/recipes/{id}/fork` | Authenticated chef | `kitchen:write` |
 | `POST` | `/api/v1/recipes/import` | Authenticated chef | `kitchen:write` |
+| `POST` | `/api/v1/recipes/{id}/steps` | Authenticated chef | `kitchen:write` |
+| `PATCH` | `/api/v1/recipes/{id}/steps/{stepId}` | Authenticated chef | `kitchen:write` |
+| `DELETE` | `/api/v1/recipes/{id}/steps/{stepId}` | Authenticated chef | `kitchen:write` |
+| `POST` | `/api/v1/recipes/{id}/steps/reorder` | Authenticated chef | `kitchen:write` |
+| `POST` | `/api/v1/recipes/{id}/steps/{stepId}/ingredients` | Authenticated chef | `kitchen:write` |
+| `DELETE` | `/api/v1/recipes/{id}/steps/{stepId}/ingredients/{ingredientId}` | Authenticated chef | `kitchen:write` |
+| `PUT` | `/api/v1/recipes/{id}/step-output-uses` | Authenticated chef | `kitchen:write` |
 | `GET` | `/api/v1/recipes/{id}/spoons` | Optional | `recipes:read` when authenticated |
 | `POST` | `/api/v1/recipes/{id}/spoons` | Authenticated chef | `kitchen:write` |
 | `PATCH` | `/api/v1/recipes/{id}/spoons/{spoonId}` | Authenticated chef | `kitchen:write` |
@@ -486,7 +493,7 @@ API v1 is rate limited by IP and credential before authentication work. Anonymou
 
 Store the returned `nextCursor` for a page only after applying every item in that response durably. Use `limit` from 1 to 50 for small payloads; `hasMore: true` means continue immediately with that checkpoint to drain the backlog. It is okay for crash-prone clients to checkpoint after each fully applied page, as long as local apply is idempotent and no cursor is persisted before all rows in that page are durable. Poll conservatively because webhooks, REST Hooks, SSE, and event subscriptions are not in v1 yet.
 
-Idempotent owner mutations use `clientMutationId`. This applies to recipe create/update/delete/fork/import, cookbook writes, shopping-list writes, recipe spoon writes, and recipe-cover writes. The idempotency key is scoped to the chef, retained for 24 hours, and bound to method, path, and a canonicalized parsed JSON body. Persist the same request values for each mutation id before sending it; whitespace and object key order are ignored, while changed method, path, or body values return a conflict. A write retried after an OAuth access-token refresh still replays instead of duplicating because both credentials resolve to the same chef. Reusing the same mutation id with the same completed request body returns the recorded response with `mutation.replayed: true`; a concurrent retry can return `409 idempotency_in_progress` with `Retry-After: 2` and `error.details.retryAfterSeconds`. Wait at least that long, then retry the same request. Reusing a mutation id with a different method, path, or body returns `409 idempotency_conflict`.
+Idempotent owner mutations use `clientMutationId`. This applies to recipe create/update/delete/fork/import, recipe step and ingredient edits, cookbook writes, shopping-list writes, recipe spoon writes, and recipe-cover writes. The idempotency key is scoped to the chef, retained for 24 hours, and bound to method, path, and a canonicalized parsed JSON body. Persist the same request values for each mutation id before sending it; whitespace and object key order are ignored, while changed method, path, or body values return a conflict. A write retried after an OAuth access-token refresh still replays instead of duplicating because both credentials resolve to the same chef. Reusing the same mutation id with the same completed request body returns the recorded response with `mutation.replayed: true`; a concurrent retry can return `409 idempotency_in_progress` with `Retry-After: 2` and `error.details.retryAfterSeconds`. Wait at least that long, then retry the same request. Reusing a mutation id with a different method, path, or body returns `409 idempotency_conflict`.
 
 Mutation responses return the changed item or changed items plus mutation metadata, not the entire shopping list. Fetch `/api/v1/shopping-list` or `/api/v1/shopping-list/sync` when you need the current list view.
 
@@ -501,6 +508,8 @@ Cookbook write endpoints are owner-scoped native and automation surfaces. `POST 
 Public catalog cursors page by `createdAt` plus `id` for deterministic catalog walks. They are not repeatable snapshot guarantees, not `updatedAt` incremental feeds, and do not include deletion tombstones. New public records can appear during a long crawl. Restart a full crawl when you need to catch public recipe/cookbook edits or removals. Anonymous public recipe/cookbook responses expose `Cache-Control: public, max-age=60, stale-while-revalidate=300`; authenticated public reads are validated and returned with private/no-store cache headers. API v1 does not provide `ETag`, `Last-Modified`, or conditional request support yet.
 
 Recipe write endpoints are owner-scoped native and automation surfaces. `POST /api/v1/recipes` creates an owned draft recipe from title, optional description, servings, and steps. `PATCH /api/v1/recipes/{id}` updates owned recipe metadata fields. `DELETE /api/v1/recipes/{id}` soft-deletes an owned recipe and accepts `clientMutationId` in the JSON body, query string, or `X-Client-Mutation-Id` header. `POST /api/v1/recipes/{id}/fork` forks an active public source recipe into the authenticated chef's kitchen, copies the source graph, and returns fork metadata plus the new recipe detail.
+
+Recipe step endpoints expose the granular editor operations the native app needs without inventing a separate recipe model. `POST /api/v1/recipes/{id}/steps` appends or inserts a step with ingredients and output dependencies. `PATCH /api/v1/recipes/{id}/steps/{stepId}` updates step title, description, duration, and output dependencies. `DELETE /api/v1/recipes/{id}/steps/{stepId}` removes a step only when doing so preserves valid dependency graph rules. `POST /api/v1/recipes/{id}/steps/reorder` moves one step to a new step number. `POST /api/v1/recipes/{id}/steps/{stepId}/ingredients` and `DELETE /api/v1/recipes/{id}/steps/{stepId}/ingredients/{ingredientId}` edit step ingredients. `PUT /api/v1/recipes/{id}/step-output-uses` replaces one step's output-use links. All require `kitchen:write` and `clientMutationId`.
 
 Recipe import is an authenticated native app and automation surface. `POST /api/v1/recipes/import` requires `kitchen:write`, accepts a `clientMutationId`, and can import from a recipe URL, video URL, plain recipe text, or JSON-LD object. Native capture metadata is optional and currently records where a text import came from, such as camera OCR or photo-library OCR. Import responses include the created or existing recipe detail, `importCode`, `confidence`, normalized `source`, `coverPending`, optional `existingRecipeId`, and idempotency metadata. When the import provider is not configured, the endpoint returns `ok: true` with `data.recipe: null`, `importCode: "provider_secret_required"`, and a `blockers` entry so native clients can show a durable setup blocker instead of retrying in the background.
 
@@ -1034,7 +1043,7 @@ Spoonjoy supports REST-powered embeds, not iframe embeds. Spoonjoy pages intenti
 
 Treat recipe titles, descriptions, steps, ingredient names, units, and `attribution.sourceUrl` as user-provided content. Render text with DOM text APIs, validate `sourceUrl` before linking, and avoid copying Spoonjoy images or source-site URLs into contexts where you cannot honor removal requests.
 
-Recipe detail responses return `steps` in ascending `stepNum` order. Each step includes the ingredients attached to that step in API order. Ingredient `unit` values are free-form display strings, `duration` is minutes when present, and API v1 does not expose ingredient display-text, image alt text, or unit conversion metadata.
+Recipe detail responses return `steps` in ascending `stepNum` order. Each step includes attached ingredients and `usingSteps`, the prior step outputs this step depends on. Ingredient `unit` values are free-form display strings, `duration` is minutes when present, and API v1 does not expose ingredient display-text, image alt text, or unit conversion metadata.
 
 ```html
 <article id="spoonjoy-recipe"></article>
@@ -1092,6 +1101,9 @@ Recipe detail responses return `steps` in ascending `stepNum` order. Each step i
   for (const step of recipe.steps) {
     const row = document.createElement("li");
     appendText(row, "strong", step.stepTitle || `Step ${step.stepNum}`);
+    if (step.usingSteps?.length) {
+      appendText(row, "small", `Uses output from step ${step.usingSteps.map((use) => use.outputStepNum).join(", ")}`);
+    }
     appendText(row, "p", step.description);
     appendText(row, "small", step.duration == null ? "" : `${step.duration} min`);
     steps.append(row);

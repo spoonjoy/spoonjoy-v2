@@ -301,7 +301,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
   "currentCapabilities": {
     "available": [
       "public recipe and cookbook reads",
-      "Authenticated recipe create, update, delete, fork, and import from URL, video URL, text, or JSON-LD",
+      "Authenticated recipe create, update, delete, fork, step editing, and import from URL, video URL, text, or JSON-LD",
       "public recipe spoon history plus authenticated recipe spoon create, update, and delete",
       "Owner-scoped recipe cover candidate management",
       "owner-scoped shopping-list read, sync, item writes, recipe adds, and clear actions",
@@ -313,7 +313,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "cursor-paginated public recipe and cookbook lists"
     ],
     "notYetAvailable": [
-      "Recipe export endpoints beyond the current create, edit, delete, fork, import, spoon, and cover surfaces",
+      "Recipe export endpoints beyond the current create, edit, delete, fork, import, step, spoon, and cover surfaces",
       "Private recipe-library endpoints",
       "Inventory or pantry stock APIs",
       "Meal plan or \"today's recipes\" APIs",
@@ -420,7 +420,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"app\": \"spoonjoy\",\n    \"version\": \"v1\",\n    \"status\": \"ok\",\n    \"docsUrl\": \"https://spoonjoy.app/api\",\n    \"openapiUrl\": \"/api/v1/openapi.json\",\n    \"sdkOpenapiUrl\": \"/api/v1/openapi.sdk.json\",\n    \"connectorOpenapiUrl\": \"/api/v1/openapi.connector.json\",\n    \"resources\": [\n      {\n        \"name\": \"root\",\n        \"path\": \"/api/v1\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"health\",\n        \"path\": \"/api/v1/health\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"openapi\",\n        \"path\": \"/api/v1/openapi.json\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"openapi-sdk\",\n        \"path\": \"/api/v1/openapi.sdk.json\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"openapi-connector\",\n        \"path\": \"/api/v1/openapi.connector.json\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"search\",\n        \"path\": \"/api/v1/search\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"recipes\",\n        \"path\": \"/api/v1/recipes\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": [\n          \"recipes:read\"\n        ]\n      },\n      {\n        \"name\": \"recipe-create\",\n        \"path\": \"/api/v1/recipes\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe\",\n        \"path\": \"/api/v1/recipes/{id}\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": [\n          \"recipes:read\"\n        ]\n      },\n      {\n        \"name\": \"recipe-write\",\n        \"path\": \"/api/v1/recipes/{id}\",\n        \"methods\": [\n          \"PATCH\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-fork\",\n        \"path\": \"/api/v1/recipes/{id}/fork\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-import\",\n        \"path\": \"/api/v1/recipes/import\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-spoons\",\n        \"path\": \"/api/v1/recipes/{id}/spoons\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": [\n          \"recipes:read\"\n        ]\n      },\n      {\n        \"name\": \"recipe-spoons-create\",\n        \"path\": \"/api/v1/recipes/{id}/spoons\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-spoon\",\n        \"path\": \"/api/v1/recipes/{id}/spoons/{spoonId}\",\n        \"methods\": [\n          \"PATCH\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-covers\",\n        \"path\": \"/api/v1/recipes/{id}/covers\",\n        \"methods\": [\n          \"GET\",\n          \"PATCH\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-cover\",\n        \"path\": \"/api/v1/recipes/{id}/covers/{coverId}\",\n        \"methods\": [\n          \"PATCH\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-cover-regenerate\",\n        \"path\": \"/api/v1/recipes/{id}/covers/regenerate\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-cover-from-spoon\",\n        \"path\": \"/api/v1/recipes/{id}/covers/from-spoon/{spoonId}\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"cookbooks\",\n        \"path\": \"/api/v1/cookbooks\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": [\n          \"cookbooks:read\"\n        ]\n      },\n      {\n        \"name\": \"cookbooks-create\",\n        \"path\": \"/api/v1/cookbooks\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"cookbook\",\n        \"path\": \"/api/v1/cookbooks/{id}\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": [\n          \"cookbooks:read\"\n        ]\n      },\n      {\n        \"name\": \"cookbook-mutate\",\n        \"path\": \"/api/v1/cookbooks/{id}\",\n        \"methods\": [\n          \"PATCH\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"cookbook-recipes\",\n        \"path\": \"/api/v1/cookbooks/{id}/recipes/{recipeId}\",\n        \"methods\": [\n          \"POST\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"me\",\n        \"path\": \"/api/v1/me\",\n        \"methods\": [\n          \"GET\",\n          \"PATCH\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"account:read\",\n          \"account:write\"\n        ]\n      },\n      {\n        \"name\": \"me-photo\",\n        \"path\": \"/api/v1/me/photo\",\n        \"methods\": [\n          \"POST\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"account:write\"\n        ]\n      },\n      {\n        \"name\": \"me-notification-preferences\",\n        \"path\": \"/api/v1/me/notification-preferences\",\n        \"methods\": [\n          \"GET\",\n          \"PATCH\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"account:read\",\n          \"account:write\"\n        ]\n      },\n      {\n        \"name\": \"me-apns-devices\",\n        \"path\": \"/api/v1/me/apns-devices\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"account:write\"\n        ]\n      },\n      {\n        \"name\": \"me-apns-device\",\n        \"path\": \"/api/v1/me/apns-devices/{deviceId}\",\n        \"methods\": [\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"account:write\"\n        ]\n      },\n      {\n        \"name\": \"me-connections\",\n        \"path\": \"/api/v1/me/connections\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"tokens:read\"\n        ]\n      },\n      {\n        \"name\": \"me-connection\",\n        \"path\": \"/api/v1/me/connections/{connectionId}\",\n        \"methods\": [\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"tokens:write\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list\",\n        \"path\": \"/api/v1/shopping-list\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:read\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-sync\",\n        \"path\": \"/api/v1/shopping-list/sync\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:read\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-items\",\n        \"path\": \"/api/v1/shopping-list/items\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:write\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-item\",\n        \"path\": \"/api/v1/shopping-list/items/{itemId}\",\n        \"methods\": [\n          \"PATCH\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:write\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-add-from-recipe\",\n        \"path\": \"/api/v1/shopping-list/add-from-recipe\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:write\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-clear-completed\",\n        \"path\": \"/api/v1/shopping-list/clear-completed\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:write\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-clear-all\",\n        \"path\": \"/api/v1/shopping-list/clear-all\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:write\"\n        ]\n      },\n      {\n        \"name\": \"tokens\",\n        \"path\": \"/api/v1/tokens\",\n        \"methods\": [\n          \"GET\",\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"tokens:read\",\n          \"tokens:write\"\n        ]\n      },\n      {\n        \"name\": \"token\",\n        \"path\": \"/api/v1/tokens/{credentialId}\",\n        \"methods\": [\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"tokens:write\"\n        ]\n      }\n    ],\n    \"auth\": {\n      \"modes\": [\n        \"anonymous\",\n        \"session\",\n        \"bearer\",\n        \"oauth_pkce\",\n        \"delegated_agent\",\n        \"mcp\"\n      ],\n      \"tokenUrl\": \"/api/v1/tokens\",\n      \"revokeUrl\": \"/api/v1/tokens/{credentialId}\",\n      \"public\": {\n        \"anonymous\": true,\n        \"note\": \"Public recipe and cookbook reads can be called without credentials.\"\n      },\n      \"session\": {\n        \"tokenUrl\": \"/api/v1/tokens\",\n        \"note\": \"Same-origin Spoonjoy browser sessions can create personal bearer credentials.\"\n      },\n      \"bearer\": {\n        \"header\": \"Authorization: Bearer sj_...\",\n        \"tokenUrl\": \"/api/v1/tokens\",\n        \"revokeUrl\": \"/api/v1/tokens/{credentialId}\"\n      },\n      \"oauth\": {\n        \"register\": \"/oauth/register\",\n        \"authorize\": \"/oauth/authorize\",\n        \"token\": \"/oauth/token\",\n        \"revoke\": \"/oauth/revoke\"\n      },\n      \"mcp\": {\n        \"endpoint\": \"/mcp\",\n        \"startAgentConnection\": \"/api/tools/start_agent_connection\",\n        \"pollAgentConnection\": \"/api/tools/poll_agent_connection\"\n      }\n    }\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"app\": \"spoonjoy\",\n    \"version\": \"v1\",\n    \"status\": \"ok\",\n    \"docsUrl\": \"https://spoonjoy.app/api\",\n    \"openapiUrl\": \"/api/v1/openapi.json\",\n    \"sdkOpenapiUrl\": \"/api/v1/openapi.sdk.json\",\n    \"connectorOpenapiUrl\": \"/api/v1/openapi.connector.json\",\n    \"resources\": [\n      {\n        \"name\": \"root\",\n        \"path\": \"/api/v1\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"health\",\n        \"path\": \"/api/v1/health\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"openapi\",\n        \"path\": \"/api/v1/openapi.json\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"openapi-sdk\",\n        \"path\": \"/api/v1/openapi.sdk.json\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"openapi-connector\",\n        \"path\": \"/api/v1/openapi.connector.json\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"search\",\n        \"path\": \"/api/v1/search\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"recipes\",\n        \"path\": \"/api/v1/recipes\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": [\n          \"recipes:read\"\n        ]\n      },\n      {\n        \"name\": \"recipe-create\",\n        \"path\": \"/api/v1/recipes\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe\",\n        \"path\": \"/api/v1/recipes/{id}\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": [\n          \"recipes:read\"\n        ]\n      },\n      {\n        \"name\": \"recipe-write\",\n        \"path\": \"/api/v1/recipes/{id}\",\n        \"methods\": [\n          \"PATCH\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-fork\",\n        \"path\": \"/api/v1/recipes/{id}/fork\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-import\",\n        \"path\": \"/api/v1/recipes/import\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-steps\",\n        \"path\": \"/api/v1/recipes/{id}/steps\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-step\",\n        \"path\": \"/api/v1/recipes/{id}/steps/{stepId}\",\n        \"methods\": [\n          \"PATCH\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-step-reorder\",\n        \"path\": \"/api/v1/recipes/{id}/steps/reorder\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-step-ingredients\",\n        \"path\": \"/api/v1/recipes/{id}/steps/{stepId}/ingredients\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-step-ingredient\",\n        \"path\": \"/api/v1/recipes/{id}/steps/{stepId}/ingredients/{ingredientId}\",\n        \"methods\": [\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-step-output-uses\",\n        \"path\": \"/api/v1/recipes/{id}/step-output-uses\",\n        \"methods\": [\n          \"PUT\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-spoons\",\n        \"path\": \"/api/v1/recipes/{id}/spoons\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": [\n          \"recipes:read\"\n        ]\n      },\n      {\n        \"name\": \"recipe-spoons-create\",\n        \"path\": \"/api/v1/recipes/{id}/spoons\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-spoon\",\n        \"path\": \"/api/v1/recipes/{id}/spoons/{spoonId}\",\n        \"methods\": [\n          \"PATCH\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-covers\",\n        \"path\": \"/api/v1/recipes/{id}/covers\",\n        \"methods\": [\n          \"GET\",\n          \"PATCH\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-cover\",\n        \"path\": \"/api/v1/recipes/{id}/covers/{coverId}\",\n        \"methods\": [\n          \"PATCH\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-cover-regenerate\",\n        \"path\": \"/api/v1/recipes/{id}/covers/regenerate\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-cover-from-spoon\",\n        \"path\": \"/api/v1/recipes/{id}/covers/from-spoon/{spoonId}\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"cookbooks\",\n        \"path\": \"/api/v1/cookbooks\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": [\n          \"cookbooks:read\"\n        ]\n      },\n      {\n        \"name\": \"cookbooks-create\",\n        \"path\": \"/api/v1/cookbooks\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"cookbook\",\n        \"path\": \"/api/v1/cookbooks/{id}\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": [\n          \"cookbooks:read\"\n        ]\n      },\n      {\n        \"name\": \"cookbook-mutate\",\n        \"path\": \"/api/v1/cookbooks/{id}\",\n        \"methods\": [\n          \"PATCH\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"cookbook-recipes\",\n        \"path\": \"/api/v1/cookbooks/{id}/recipes/{recipeId}\",\n        \"methods\": [\n          \"POST\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"me\",\n        \"path\": \"/api/v1/me\",\n        \"methods\": [\n          \"GET\",\n          \"PATCH\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"account:read\",\n          \"account:write\"\n        ]\n      },\n      {\n        \"name\": \"me-photo\",\n        \"path\": \"/api/v1/me/photo\",\n        \"methods\": [\n          \"POST\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"account:write\"\n        ]\n      },\n      {\n        \"name\": \"me-notification-preferences\",\n        \"path\": \"/api/v1/me/notification-preferences\",\n        \"methods\": [\n          \"GET\",\n          \"PATCH\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"account:read\",\n          \"account:write\"\n        ]\n      },\n      {\n        \"name\": \"me-apns-devices\",\n        \"path\": \"/api/v1/me/apns-devices\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"account:write\"\n        ]\n      },\n      {\n        \"name\": \"me-apns-device\",\n        \"path\": \"/api/v1/me/apns-devices/{deviceId}\",\n        \"methods\": [\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"account:write\"\n        ]\n      },\n      {\n        \"name\": \"me-connections\",\n        \"path\": \"/api/v1/me/connections\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"tokens:read\"\n        ]\n      },\n      {\n        \"name\": \"me-connection\",\n        \"path\": \"/api/v1/me/connections/{connectionId}\",\n        \"methods\": [\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"tokens:write\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list\",\n        \"path\": \"/api/v1/shopping-list\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:read\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-sync\",\n        \"path\": \"/api/v1/shopping-list/sync\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:read\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-items\",\n        \"path\": \"/api/v1/shopping-list/items\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:write\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-item\",\n        \"path\": \"/api/v1/shopping-list/items/{itemId}\",\n        \"methods\": [\n          \"PATCH\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:write\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-add-from-recipe\",\n        \"path\": \"/api/v1/shopping-list/add-from-recipe\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:write\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-clear-completed\",\n        \"path\": \"/api/v1/shopping-list/clear-completed\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:write\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-clear-all\",\n        \"path\": \"/api/v1/shopping-list/clear-all\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:write\"\n        ]\n      },\n      {\n        \"name\": \"tokens\",\n        \"path\": \"/api/v1/tokens\",\n        \"methods\": [\n          \"GET\",\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"tokens:read\",\n          \"tokens:write\"\n        ]\n      },\n      {\n        \"name\": \"token\",\n        \"path\": \"/api/v1/tokens/{credentialId}\",\n        \"methods\": [\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"tokens:write\"\n        ]\n      }\n    ],\n    \"auth\": {\n      \"modes\": [\n        \"anonymous\",\n        \"session\",\n        \"bearer\",\n        \"oauth_pkce\",\n        \"delegated_agent\",\n        \"mcp\"\n      ],\n      \"tokenUrl\": \"/api/v1/tokens\",\n      \"revokeUrl\": \"/api/v1/tokens/{credentialId}\",\n      \"public\": {\n        \"anonymous\": true,\n        \"note\": \"Public recipe and cookbook reads can be called without credentials.\"\n      },\n      \"session\": {\n        \"tokenUrl\": \"/api/v1/tokens\",\n        \"note\": \"Same-origin Spoonjoy browser sessions can create personal bearer credentials.\"\n      },\n      \"bearer\": {\n        \"header\": \"Authorization: Bearer sj_...\",\n        \"tokenUrl\": \"/api/v1/tokens\",\n        \"revokeUrl\": \"/api/v1/tokens/{credentialId}\"\n      },\n      \"oauth\": {\n        \"register\": \"/oauth/register\",\n        \"authorize\": \"/oauth/authorize\",\n        \"token\": \"/oauth/token\",\n        \"revoke\": \"/oauth/revoke\"\n      },\n      \"mcp\": {\n        \"endpoint\": \"/mcp\",\n        \"startAgentConnection\": \"/api/tools/start_agent_connection\",\n        \"pollAgentConnection\": \"/api/tools/poll_agent_connection\"\n      }\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -1420,14 +1420,15 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "retryOn": [
           "network_timeout",
           "429",
-          "5xx"
+          "5xx",
+          "idempotency_in_progress"
         ],
         "retryAfterHeader": "Retry-After",
-        "preserveClientMutationId": false,
+        "preserveClientMutationId": true,
         "doNotRetryUnchanged": [
           "validation_error",
-          "invalid_cursor",
-          "insufficient_scope"
+          "insufficient_scope",
+          "idempotency_conflict"
         ]
       },
       "cursorPolicy": {
@@ -1533,7 +1534,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "201",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"created\": true,\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": null,\n        \"sourceHost\": null,\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"created\": true,\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": null,\n        \"sourceHost\": null,\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -1708,7 +1709,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    }\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -1781,14 +1782,15 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "retryOn": [
           "network_timeout",
           "429",
-          "5xx"
+          "5xx",
+          "idempotency_in_progress"
         ],
         "retryAfterHeader": "Retry-After",
-        "preserveClientMutationId": false,
+        "preserveClientMutationId": true,
         "doNotRetryUnchanged": [
           "validation_error",
-          "invalid_cursor",
-          "insufficient_scope"
+          "insufficient_scope",
+          "idempotency_conflict"
         ]
       },
       "cursorPolicy": null,
@@ -1902,7 +1904,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"updated\": true,\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"updated\": true,\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -1975,14 +1977,15 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "retryOn": [
           "network_timeout",
           "429",
-          "5xx"
+          "5xx",
+          "idempotency_in_progress"
         ],
         "retryAfterHeader": "Retry-After",
-        "preserveClientMutationId": false,
+        "preserveClientMutationId": true,
         "doNotRetryUnchanged": [
           "validation_error",
-          "invalid_cursor",
-          "insufficient_scope"
+          "insufficient_scope",
+          "idempotency_conflict"
         ]
       },
       "cursorPolicy": null,
@@ -2191,14 +2194,15 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "retryOn": [
           "network_timeout",
           "429",
-          "5xx"
+          "5xx",
+          "idempotency_in_progress"
         ],
         "retryAfterHeader": "Retry-After",
-        "preserveClientMutationId": false,
+        "preserveClientMutationId": true,
         "doNotRetryUnchanged": [
           "validation_error",
-          "invalid_cursor",
-          "insufficient_scope"
+          "insufficient_scope",
+          "idempotency_conflict"
         ]
       },
       "cursorPolicy": null,
@@ -2312,7 +2316,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "201",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"fork\": {\n      \"appliedTitle\": \"Pasta (variation 2)\",\n      \"sourceChef\": {\n        \"id\": \"chef_source\",\n        \"username\": \"jules\"\n      },\n      \"sourceRecipeId\": \"recipe_source_1\",\n      \"titleWasSuffixed\": true\n    },\n    \"recipe\": {\n      \"id\": \"recipe_fork_1\",\n      \"title\": \"Pasta (variation 2)\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_fork_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_fork_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta (variation 2) by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_fork_1\",\n        \"sourceUrl\": null,\n        \"sourceHost\": null,\n        \"sourceRecipe\": {\n          \"id\": \"recipe_source_1\",\n          \"title\": \"Pasta\",\n          \"chef\": {\n            \"id\": \"chef_source\",\n            \"username\": \"jules\"\n          },\n          \"href\": \"/recipes/recipe_source_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_source_1\",\n          \"deleted\": false\n        }\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"fork\": {\n      \"appliedTitle\": \"Pasta (variation 2)\",\n      \"sourceChef\": {\n        \"id\": \"chef_source\",\n        \"username\": \"jules\"\n      },\n      \"sourceRecipeId\": \"recipe_source_1\",\n      \"titleWasSuffixed\": true\n    },\n    \"recipe\": {\n      \"id\": \"recipe_fork_1\",\n      \"title\": \"Pasta (variation 2)\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_fork_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_fork_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta (variation 2) by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_fork_1\",\n        \"sourceUrl\": null,\n        \"sourceHost\": null,\n        \"sourceRecipe\": {\n          \"id\": \"recipe_source_1\",\n          \"title\": \"Pasta\",\n          \"chef\": {\n            \"id\": \"chef_source\",\n            \"username\": \"jules\"\n          },\n          \"href\": \"/recipes/recipe_source_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_source_1\",\n          \"deleted\": false\n        }\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -2506,13 +2510,13 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    },\n    \"importCode\": null,\n    \"blockers\": [],\n    \"confidence\": \"low\",\n    \"source\": \"llm\",\n    \"existingRecipeId\": null,\n    \"coverPending\": false,\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-import\",\n      \"replayed\": false\n    }\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    },\n    \"importCode\": null,\n    \"blockers\": [],\n    \"confidence\": \"low\",\n    \"source\": \"llm\",\n    \"existingRecipeId\": null,\n    \"coverPending\": false,\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-import\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "201",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    },\n    \"importCode\": null,\n    \"blockers\": [],\n    \"confidence\": \"low\",\n    \"source\": \"llm\",\n    \"existingRecipeId\": null,\n    \"coverPending\": false,\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-import\",\n      \"replayed\": false\n    }\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    },\n    \"importCode\": null,\n    \"blockers\": [],\n    \"confidence\": \"low\",\n    \"source\": \"llm\",\n    \"existingRecipeId\": null,\n    \"coverPending\": false,\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-import\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -2543,6 +2547,1464 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "name": "insufficient_scope",
           "label": "Insufficient Scope",
           "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "POST /api/v1/recipes/{id}/steps",
+      "operationId": "postApiV1RecipeSteps",
+      "label": "Create a recipe step",
+      "method": "POST",
+      "path": "/api/v1/recipes/{id}/steps",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Recipe Steps",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx",
+          "idempotency_in_progress"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": true,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "insufficient_scope",
+          "idempotency_conflict"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": {
+        "key": "clientMutationId",
+        "location": "jsonBody",
+        "retentionHours": 24,
+        "replayStatus": [
+          201
+        ],
+        "conflictStatus": 409,
+        "inProgressRetryAfterSeconds": 2,
+        "retryBodyRule": "Persist and retry the same parsed JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts."
+      },
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "write",
+      "risk": "mutating",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "label": "Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "recipe_1",
+          "description": "Spoonjoy resource id from a previous list response.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "contentType": "application/json",
+        "fields": [],
+        "example": "{\n  \"clientMutationId\": \"step-device-uuid-1\",\n  \"stepTitle\": \"Sauce\",\n  \"description\": \"Toss pasta with sauce.\",\n  \"duration\": 3,\n  \"ingredients\": [\n    {\n      \"quantity\": 2,\n      \"unit\": \"cloves\",\n      \"name\": \"garlic\"\n    }\n  ],\n  \"outputStepNums\": [\n    1\n  ]\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"step-device-uuid-1\",\n  \"stepTitle\": \"Sauce\",\n  \"description\": \"Toss pasta with sauce.\",\n  \"duration\": 3,\n  \"ingredients\": [\n    {\n      \"quantity\": 2,\n      \"unit\": \"cloves\",\n      \"name\": \"garlic\"\n    }\n  ],\n  \"outputStepNums\": [\n    1\n  ]\n}"
+          }
+        ]
+      },
+      "responseStatuses": [
+        "201",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "201",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "201",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"created\": true,\n    \"step\": {\n      \"id\": \"step_2\",\n      \"stepNum\": 2,\n      \"stepTitle\": \"Sauce\",\n      \"description\": \"Toss pasta with sauce.\",\n      \"duration\": 3,\n      \"ingredients\": [],\n      \"usingSteps\": [\n        {\n          \"id\": \"step_use_1\",\n          \"inputStepNum\": 2,\n          \"outputStepNum\": 1,\n          \"outputOfStep\": {\n            \"stepNum\": 1,\n            \"stepTitle\": null\n          }\n        }\n      ]\n    },\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "PATCH /api/v1/recipes/{id}/steps/{stepId}",
+      "operationId": "patchApiV1RecipeStep",
+      "label": "Update a recipe step",
+      "method": "PATCH",
+      "path": "/api/v1/recipes/{id}/steps/{stepId}",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Recipe Steps",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx",
+          "idempotency_in_progress"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": true,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "insufficient_scope",
+          "idempotency_conflict"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": {
+        "key": "clientMutationId",
+        "location": "jsonBody",
+        "retentionHours": 24,
+        "replayStatus": [
+          200
+        ],
+        "conflictStatus": 409,
+        "inProgressRetryAfterSeconds": 2,
+        "retryBodyRule": "Persist and retry the same parsed JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts."
+      },
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "write",
+      "risk": "mutating",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "label": "Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "recipe_1",
+          "description": "Spoonjoy resource id from a previous list response.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "stepId",
+          "in": "path",
+          "label": "Step Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "stepId",
+          "description": "Recipe step id from the recipe detail response.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "contentType": "application/json",
+        "fields": [],
+        "example": "{\n  \"clientMutationId\": \"step-device-uuid-2\",\n  \"stepTitle\": null,\n  \"description\": \"Toss pasta with glossy sauce.\",\n  \"duration\": null,\n  \"outputStepNums\": [\n    1\n  ]\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"step-device-uuid-2\",\n  \"stepTitle\": null,\n  \"description\": \"Toss pasta with glossy sauce.\",\n  \"duration\": null,\n  \"outputStepNums\": [\n    1\n  ]\n}"
+          }
+        ]
+      },
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"updated\": true,\n    \"step\": {\n      \"id\": \"step_2\",\n      \"stepNum\": 2,\n      \"stepTitle\": \"Sauce\",\n      \"description\": \"Toss pasta with glossy sauce.\",\n      \"duration\": null,\n      \"ingredients\": [],\n      \"usingSteps\": [\n        {\n          \"id\": \"step_use_1\",\n          \"inputStepNum\": 2,\n          \"outputStepNum\": 1,\n          \"outputOfStep\": {\n            \"stepNum\": 1,\n            \"stepTitle\": null\n          }\n        }\n      ]\n    },\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "DELETE /api/v1/recipes/{id}/steps/{stepId}",
+      "operationId": "deleteApiV1RecipeStep",
+      "label": "Delete a recipe step",
+      "method": "DELETE",
+      "path": "/api/v1/recipes/{id}/steps/{stepId}",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Recipe Steps",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx",
+          "idempotency_in_progress"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": true,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "insufficient_scope",
+          "idempotency_conflict"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": {
+        "key": "clientMutationId",
+        "location": "jsonBody, query, or X-Client-Mutation-Id",
+        "retentionHours": 24,
+        "replayStatus": [
+          200
+        ],
+        "conflictStatus": 409,
+        "inProgressRetryAfterSeconds": 2,
+        "retryBodyRule": "Persist and retry the same parsed JSON body for this clientMutationId, or the same X-Client-Mutation-Id header/query value when the DELETE body is omitted. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts."
+      },
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "destructive",
+      "risk": "destructive",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "label": "Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "recipe_1",
+          "description": "Spoonjoy resource id from a previous list response.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "stepId",
+          "in": "path",
+          "label": "Step Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "stepId",
+          "description": "Recipe step id from the recipe detail response.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Client-Mutation-Id",
+          "in": "header",
+          "label": "X Client Mutation Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "delete:item_1:uuid-or-hash",
+          "description": "Optional chef-wide idempotency key for this delete. Prefer the JSON body clientMutationId when possible, and use the same value when retrying the exact same request after a timeout.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "clientMutationId",
+          "in": "query",
+          "label": "Client Mutation Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "clientMutationId",
+          "description": "Optional chef-wide idempotency key for DELETE retries when a client cannot send a JSON body.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": false,
+        "contentType": "application/json",
+        "fields": [],
+        "example": "{\n  \"clientMutationId\": \"step-device-uuid-3\"\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"step-device-uuid-3\"\n}"
+          }
+        ]
+      },
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"deleted\": true,\n    \"step\": {\n      \"id\": \"step_2\"\n    },\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "POST /api/v1/recipes/{id}/steps/reorder",
+      "operationId": "postApiV1RecipeStepsReorder",
+      "label": "Reorder recipe steps",
+      "method": "POST",
+      "path": "/api/v1/recipes/{id}/steps/reorder",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Recipe Steps",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx",
+          "idempotency_in_progress"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": true,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "insufficient_scope",
+          "idempotency_conflict"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": {
+        "key": "clientMutationId",
+        "location": "jsonBody",
+        "retentionHours": 24,
+        "replayStatus": [
+          200
+        ],
+        "conflictStatus": 409,
+        "inProgressRetryAfterSeconds": 2,
+        "retryBodyRule": "Persist and retry the same parsed JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts."
+      },
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "write",
+      "risk": "mutating",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "label": "Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "recipe_1",
+          "description": "Spoonjoy resource id from a previous list response.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "contentType": "application/json",
+        "fields": [],
+        "example": "{\n  \"clientMutationId\": \"step-reorder-device-uuid-1\",\n  \"stepId\": \"step_2\",\n  \"toStepNum\": 2\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"step-reorder-device-uuid-1\",\n  \"stepId\": \"step_2\",\n  \"toStepNum\": 2\n}"
+          }
+        ]
+      },
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"reordered\": true,\n    \"step\": {\n      \"id\": \"step_2\",\n      \"stepNum\": 2,\n      \"stepTitle\": \"Sauce\",\n      \"description\": \"Toss pasta with sauce.\",\n      \"duration\": 3,\n      \"ingredients\": [],\n      \"usingSteps\": [\n        {\n          \"id\": \"step_use_1\",\n          \"inputStepNum\": 2,\n          \"outputStepNum\": 1,\n          \"outputOfStep\": {\n            \"stepNum\": 1,\n            \"stepTitle\": null\n          }\n        }\n      ]\n    },\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "POST /api/v1/recipes/{id}/steps/{stepId}/ingredients",
+      "operationId": "postApiV1RecipeStepIngredients",
+      "label": "Add a step ingredient",
+      "method": "POST",
+      "path": "/api/v1/recipes/{id}/steps/{stepId}/ingredients",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Recipe Steps",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx",
+          "idempotency_in_progress"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": true,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "insufficient_scope",
+          "idempotency_conflict"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": {
+        "key": "clientMutationId",
+        "location": "jsonBody",
+        "retentionHours": 24,
+        "replayStatus": [
+          201
+        ],
+        "conflictStatus": 409,
+        "inProgressRetryAfterSeconds": 2,
+        "retryBodyRule": "Persist and retry the same parsed JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts."
+      },
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "write",
+      "risk": "mutating",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "label": "Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "recipe_1",
+          "description": "Spoonjoy resource id from a previous list response.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "stepId",
+          "in": "path",
+          "label": "Step Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "stepId",
+          "description": "Recipe step id from the recipe detail response.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "contentType": "application/json",
+        "fields": [],
+        "example": "{\n  \"clientMutationId\": \"step-ingredient-device-uuid-1\",\n  \"quantity\": 2,\n  \"unit\": \"cloves\",\n  \"name\": \"garlic\"\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"step-ingredient-device-uuid-1\",\n  \"quantity\": 2,\n  \"unit\": \"cloves\",\n  \"name\": \"garlic\"\n}"
+          }
+        ]
+      },
+      "responseStatuses": [
+        "201",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "201",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "201",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"created\": true,\n    \"ingredient\": {\n      \"id\": \"ingredient_2\",\n      \"name\": \"garlic\",\n      \"quantity\": 2,\n      \"unit\": \"cloves\"\n    },\n    \"step\": {\n      \"id\": \"step_2\",\n      \"stepNum\": 2,\n      \"stepTitle\": \"Sauce\",\n      \"description\": \"Toss pasta with sauce.\",\n      \"duration\": 3,\n      \"ingredients\": [\n        {\n          \"id\": \"ingredient_2\",\n          \"name\": \"garlic\",\n          \"quantity\": 2,\n          \"unit\": \"cloves\"\n        }\n      ],\n      \"usingSteps\": [\n        {\n          \"id\": \"step_use_1\",\n          \"inputStepNum\": 2,\n          \"outputStepNum\": 1,\n          \"outputOfStep\": {\n            \"stepNum\": 1,\n            \"stepTitle\": null\n          }\n        }\n      ]\n    },\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_2\",\n              \"name\": \"garlic\",\n              \"quantity\": 2,\n              \"unit\": \"cloves\"\n            }\n          ],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "DELETE /api/v1/recipes/{id}/steps/{stepId}/ingredients/{ingredientId}",
+      "operationId": "deleteApiV1RecipeStepIngredient",
+      "label": "Delete a step ingredient",
+      "method": "DELETE",
+      "path": "/api/v1/recipes/{id}/steps/{stepId}/ingredients/{ingredientId}",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Recipe Steps",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx",
+          "idempotency_in_progress"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": true,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "insufficient_scope",
+          "idempotency_conflict"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": {
+        "key": "clientMutationId",
+        "location": "jsonBody, query, or X-Client-Mutation-Id",
+        "retentionHours": 24,
+        "replayStatus": [
+          200
+        ],
+        "conflictStatus": 409,
+        "inProgressRetryAfterSeconds": 2,
+        "retryBodyRule": "Persist and retry the same parsed JSON body for this clientMutationId, or the same X-Client-Mutation-Id header/query value when the DELETE body is omitted. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts."
+      },
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "destructive",
+      "risk": "destructive",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "label": "Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "recipe_1",
+          "description": "Spoonjoy resource id from a previous list response.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "stepId",
+          "in": "path",
+          "label": "Step Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "stepId",
+          "description": "Recipe step id from the recipe detail response.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "ingredientId",
+          "in": "path",
+          "label": "Ingredient Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "ingredientId",
+          "description": "Recipe step ingredient id from the recipe detail response.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Client-Mutation-Id",
+          "in": "header",
+          "label": "X Client Mutation Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "delete:item_1:uuid-or-hash",
+          "description": "Optional chef-wide idempotency key for this delete. Prefer the JSON body clientMutationId when possible, and use the same value when retrying the exact same request after a timeout.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "clientMutationId",
+          "in": "query",
+          "label": "Client Mutation Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "clientMutationId",
+          "description": "Optional chef-wide idempotency key for DELETE retries when a client cannot send a JSON body.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": false,
+        "contentType": "application/json",
+        "fields": [],
+        "example": "{\n  \"clientMutationId\": \"step-ingredient-device-uuid-2\"\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"step-ingredient-device-uuid-2\"\n}"
+          }
+        ]
+      },
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"deleted\": true,\n    \"ingredient\": {\n      \"id\": \"ingredient_2\"\n    },\n    \"step\": {\n      \"id\": \"step_2\",\n      \"stepNum\": 2,\n      \"stepTitle\": \"Sauce\",\n      \"description\": \"Toss pasta with sauce.\",\n      \"duration\": 3,\n      \"ingredients\": [],\n      \"usingSteps\": [\n        {\n          \"id\": \"step_use_1\",\n          \"inputStepNum\": 2,\n          \"outputStepNum\": 1,\n          \"outputOfStep\": {\n            \"stepNum\": 1,\n            \"stepTitle\": null\n          }\n        }\n      ]\n    },\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "PUT /api/v1/recipes/{id}/step-output-uses",
+      "operationId": "putApiV1RecipeStepOutputUses",
+      "label": "Replace step-output dependency uses",
+      "method": "PUT",
+      "path": "/api/v1/recipes/{id}/step-output-uses",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Recipe Steps",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": {
+        "key": "clientMutationId",
+        "location": "jsonBody",
+        "retentionHours": 24,
+        "replayStatus": [
+          200
+        ],
+        "conflictStatus": 409,
+        "inProgressRetryAfterSeconds": 2,
+        "retryBodyRule": "Persist and retry the same parsed JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts."
+      },
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "write",
+      "risk": "mutating",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "label": "Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "recipe_1",
+          "description": "Spoonjoy resource id from a previous list response.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "contentType": "application/json",
+        "fields": [],
+        "example": "{\n  \"clientMutationId\": \"step-output-device-uuid-1\",\n  \"inputStepId\": \"step_2\",\n  \"outputStepNums\": [\n    1\n  ]\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"step-output-device-uuid-1\",\n  \"inputStepId\": \"step_2\",\n  \"outputStepNums\": [\n    1\n  ]\n}"
+          }
+        ]
+      },
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"replaced\": true,\n    \"step\": {\n      \"id\": \"step_2\",\n      \"stepNum\": 2,\n      \"stepTitle\": \"Sauce\",\n      \"description\": \"Toss pasta with sauce.\",\n      \"duration\": 3,\n      \"ingredients\": [],\n      \"usingSteps\": [\n        {\n          \"id\": \"step_use_1\",\n          \"inputStepNum\": 2,\n          \"outputStepNum\": 1,\n          \"outputOfStep\": {\n            \"stepNum\": 1,\n            \"stepTitle\": null\n          }\n        }\n      ]\n    },\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Chef photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ]\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-1\",\n      \"replayed\": false\n    }\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
         },
         {
           "status": "405",
