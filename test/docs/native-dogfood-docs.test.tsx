@@ -80,7 +80,7 @@ const OFFLINE_PRODUCT_CONTRACT_MARKERS = [
   "15 minutes",
   "6 hours",
   "24 hours",
-  "Profile display-field updates, profile photo upload/remove after local media staging, and notification preference updates are queueable",
+      "Profile display-field updates, profile photo upload/remove after local media staging, notification preference updates, and APNs device registration/revocation after a system device token exists are queueable",
   "API token create/revoke, OAuth connection disconnect, logout/session revoke, passkey/password/provider-link actions are online-only",
   "queued work",
   "sync failure",

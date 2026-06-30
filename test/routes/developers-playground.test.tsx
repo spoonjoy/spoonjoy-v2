@@ -171,7 +171,10 @@ describe("/developers/playground", () => {
     expect(data.manifest.operations.find((operation) => operation.id === "POST /mcp")?.profiles).toEqual(["full"]);
     expect(data.manifest.operations.find((operation) => operation.id === "POST /api/v1/me/photo")?.requestBody).toMatchObject({
       contentType: "multipart/form-data",
-      fields: [{ name: "photo", required: true, accept: "image/jpeg,image/png,image/gif,image/webp" }],
+      fields: [
+        { name: "clientMutationId", required: true, accept: "" },
+        { name: "photo", required: true, accept: "image/jpeg,image/png,image/gif,image/webp" },
+      ],
     });
     expect(data.manifest.operations.length).toBe(65);
   });
@@ -376,7 +379,7 @@ describe("/developers/playground", () => {
     expect(playgroundBodyError(createToken, "{\"name\":\"Client\"}")).toBeNull();
 
     const file = new File(["GIF89a"], "profile.gif", { type: "image/gif" });
-    const multipartOptions = playgroundFetchOptions(uploadPhoto, "session", "", "", "pg_upload", {}, { photo: file });
+    const multipartOptions = playgroundFetchOptions(uploadPhoto, "session", "", "", "pg_upload", {}, { photo: file }, { clientMutationId: "profile-photo:test" });
     expect(multipartOptions).toMatchObject({
       method: "POST",
       credentials: "same-origin",
@@ -384,7 +387,10 @@ describe("/developers/playground", () => {
     });
     expect((multipartOptions.headers as Record<string, string>)["Content-Type"]).toBeUndefined();
     expect(multipartOptions.body).toBeInstanceOf(FormData);
-    expect([...(multipartOptions.body as FormData).entries()]).toEqual([["photo", file]]);
+    expect([...(multipartOptions.body as FormData).entries()]).toEqual([
+      ["clientMutationId", "profile-photo:test"],
+      ["photo", file],
+    ]);
     const emptyMultipartOptions = playgroundFetchOptions(uploadPhoto, "session", "", "", "pg_empty", {}, { photo: null });
     expect(emptyMultipartOptions.body).toBeUndefined();
     expect((emptyMultipartOptions.headers as Record<string, string>)["Content-Type"]).toBeUndefined();
@@ -393,8 +399,8 @@ describe("/developers/playground", () => {
       requestBody: { ...uploadPhoto.requestBody!, fields: undefined },
     } as unknown as typeof uploadPhoto;
     expect(playgroundFetchOptions(legacyMultipartWithoutFields, "session", "", "", "pg_legacy").body).toBeUndefined();
-    expect(playgroundBodyError(uploadPhoto, "", {})).toBe("Select photo before sending.");
-    expect(playgroundBodyError(uploadPhoto, "", { photo: file })).toBeNull();
+    expect(playgroundBodyError(uploadPhoto, "", {})).toBe("Select client mutation id before sending.");
+    expect(playgroundBodyError(uploadPhoto, "", { photo: file }, { clientMutationId: "profile-photo:test" })).toBeNull();
   });
 
   it("renders all operations and sends the default public recipes request anonymously", async () => {
@@ -730,22 +736,28 @@ describe("/developers/playground", () => {
     await renderPlayground();
     fireEvent.click(await screen.findByRole("button", { name: /Upload the authenticated account profile photo/i }));
     expect(screen.getAllByText("account:write").length).toBeGreaterThan(0);
-    expect(screen.getByLabelText("Multipart body")).toHaveTextContent("\"photo\": \"(binary image file)\"");
+	    expect(screen.getByLabelText("Multipart body")).toHaveTextContent("\"clientMutationId\": \"device-uuid-profile-photo\"");
+	    expect(screen.getByLabelText("Multipart body")).toHaveTextContent("\"photo\": \"(binary image file)\"");
 
-    const photoInput = screen.getByLabelText(/Photo/) as HTMLInputElement;
-    expect(photoInput).toHaveAttribute("type", "file");
+	    const mutationIdInput = screen.getByLabelText(/Client Mutation Id/) as HTMLInputElement;
+	    expect(mutationIdInput).toHaveAttribute("type", "text");
+	    expect(mutationIdInput).toHaveValue("device-uuid-profile-photo");
+	    expect(mutationIdInput).toBeRequired();
+	    const photoInput = screen.getByLabelText(/Photo/) as HTMLInputElement;
+	    expect(photoInput).toHaveAttribute("type", "file");
     expect(photoInput).toHaveAttribute("accept", "image/jpeg,image/png,image/gif,image/webp");
     expect(photoInput).toBeRequired();
     expect(photoInput).toHaveAccessibleDescription("multipart required - (binary image file)");
-    expect(screen.getAllByText("Select photo before sending.").length).toBeGreaterThan(0);
+	    expect(screen.getAllByText("Select photo before sending.").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Send Request" })).toBeDisabled();
 
     const riskCheckbox = screen.getByLabelText(/I understand this request can change real Spoonjoy data/i);
     fireEvent.click(riskCheckbox);
     expect(riskCheckbox).toBeChecked();
 
-    const file = new File(["profile-bytes"], "profile.png", { type: "image/png" });
-    fireEvent.change(photoInput, { target: { files: [file] } });
+	    const file = new File(["profile-bytes"], "profile.png", { type: "image/png" });
+	    fireEvent.change(mutationIdInput, { target: { value: "profile-photo:playground" } });
+	    fireEvent.change(photoInput, { target: { files: [file] } });
     await waitFor(() => expect(screen.getByLabelText(/I understand this request can change real Spoonjoy data/i)).not.toBeChecked());
     expect(screen.getByText("Confirm this real-data operation before sending.")).toBeInTheDocument();
     fireEvent.click(screen.getByLabelText(/I understand this request can change real Spoonjoy data/i));
@@ -762,7 +774,10 @@ describe("/developers/playground", () => {
     });
     const options = fetchMock.mock.calls[0][1] as RequestInit;
     expect((options.headers as Record<string, string>)["Content-Type"]).toBeUndefined();
-    expect([...(options.body as FormData).entries()]).toEqual([["photo", file]]);
+	    expect([...(options.body as FormData).entries()]).toEqual([
+	      ["clientMutationId", "profile-photo:playground"],
+	      ["photo", file],
+	    ]);
     expect(await screen.findByText("200 OK")).toBeInTheDocument();
   });
 
@@ -951,9 +966,12 @@ describe("/developers/playground", () => {
     expect(curlFor("/api/v1/tokens", createToken, "bearer", "{\"name\":\"Client\"}")).toContain(
       "--data '{\"name\":\"Client\"}'",
     );
+    expect(curlFor("/api/v1/me/photo", uploadPhoto, "bearer", "")).toContain("-F 'clientMutationId=device-uuid-profile-photo'");
     expect(curlFor("/api/v1/me/photo", uploadPhoto, "bearer", "")).toContain("-F 'photo=@profile.jpg;type=image/jpeg'");
     expect(curlFor("/api/v1/me/photo", uploadPhoto, "bearer", "")).not.toContain("Content-Type");
     expect(curlFor("/api/v1/me/photo", uploadPhoto, "session", "")).toContain("const body = new FormData();");
+    expect(curlFor("/api/v1/me/photo", uploadPhoto, "session", "")).toContain("body.append(\"clientMutationId\", \"device-uuid-profile-photo\");");
+    expect(curlFor("/api/v1/me/photo", uploadPhoto, "session", "")).toContain("body.append(\"photo\", fileInput.files[0]);");
     expect(curlFor("/api/v1/me/photo", uploadPhoto, "session", "", "https://spoonjoy.app", { "X-Request-Id": "req_photo" }))
       .toContain("\"X-Request-Id\": \"req_photo\"");
     const multipartWithoutFields = {

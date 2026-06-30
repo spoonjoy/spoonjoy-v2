@@ -325,7 +325,7 @@ const nativeDogfoodSample = [
 const offlineProductContractRows = [
   ["Metadata", "Every cached record carries accountId, environment, schemaVersion, fetchedAt, lastValidatedAt, sourceEndpoint, and a server revision marker such as cursor, etag, updatedAt, or a tombstone token."],
   ["Freshness", "Account/settings/shopping bootstrap data is fresh for 15 minutes; detail/profile/spoon/cook-mode backing data is fresh for 6 hours; catalog/search result pages are fresh for 24 hours."],
-  ["Queueable account writes", "Profile display-field updates, profile photo upload/remove after local media staging, and notification preference updates are queueable."],
+  ["Queueable account writes", "Profile display-field updates, profile photo upload/remove after local media staging, notification preference updates, and APNs device registration/revocation after a system device token exists are queueable."],
   ["Online-only account actions", "API token create/revoke, OAuth connection disconnect, logout/session revoke, passkey/password/provider-link actions are online-only."],
   ["Visible severe states", "queued work, sync failure, conflict, blocker, and destructive confirmation states remain visible until resolved."],
 ] as const;
@@ -357,7 +357,7 @@ const syncSafetyRows = [
   ["Cursor", "Use the returned nextCursor as the next request cursor after applying every item in the page durably. Treat it as opaque; ISO timestamps are accepted only as a bootstrap convenience."],
   ["Tombstones", "Sync includes deleted rows with deletedAt so offline clients can remove local items."],
   ["Pagination", "Use limit from 1 to 50 for small payloads. hasMore: true means continue with the returned nextCursor; webhooks, REST Hooks, SSE, and event subscriptions are not available yet."],
-  ["Idempotent owner mutations", "clientMutationId is scoped to the chef, retained for 24 hours, and bound to method, path, and body hash for recipe create, update, delete, fork, step editing, import, shopping-list writes, recipe spoon writes, and recipe-cover writes. Persist and retry the exact serialized body for that mutation id."],
+  ["Idempotent owner mutations", "clientMutationId is scoped to the chef, retained for 24 hours, and bound to method, path, and body hash for account profile, profile photo, notification preferences, APNs device registration/revocation, recipe create, update, delete, fork, step editing, import, cookbook writes, shopping-list writes, recipe spoon writes, and recipe-cover writes. Persist and retry the exact request values for that mutation id."],
   ["Replay", "Retry the same request with the same clientMutationId after a timeout; Spoonjoy returns the recorded response with mutation.replayed: true."],
   ["Conflict", "Reusing the same clientMutationId for a different method, path, or body returns 409 idempotency_conflict."],
   ["Retries", "Retry network timeouts, 429, and 5xx responses with the same mutation id. Refresh or reconnect on 401. Do not retry validation, scope, or idempotency conflicts unchanged."],

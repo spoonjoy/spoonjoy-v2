@@ -500,16 +500,22 @@ describe("API v1 OpenAPI document", () => {
     });
     expect(responseExample(document, "/api/v1/me/notification-preferences", "GET", "200").data)
       .toMatchObject({ notifySpoonOnMyRecipe: true, notifyFellowChefOriginCook: true });
-    expect(responseExample(document, "/api/v1/me/apns-devices", "POST", "201").data).toMatchObject({
-      created: true,
-      device: {
-        deviceId: "ios-simulator-1",
-        environment: "development",
-        tokenPrefix: "apns-token-",
-      },
-    });
-    expect(responseExample(document, "/api/v1/me/apns-devices/{deviceId}", "DELETE", "200").data)
-      .toMatchObject({ revoked: true, revokedCount: 1, devices: [expect.objectContaining({ deviceId: "ios-simulator-1" })] });
+	    expect(responseExample(document, "/api/v1/me/apns-devices", "POST", "201").data).toMatchObject({
+	      created: true,
+	      device: {
+	        deviceId: "ios-simulator-1",
+	        environment: "development",
+	        tokenPrefix: "apns-token-",
+	      },
+	      mutation: { clientMutationId: "device-uuid-apns-register", replayed: false },
+	    });
+	    expect(responseExample(document, "/api/v1/me/apns-devices/{deviceId}", "DELETE", "200").data)
+	      .toMatchObject({
+	        revoked: true,
+	        revokedCount: 1,
+	        devices: [expect.objectContaining({ deviceId: "ios-simulator-1" })],
+	        mutation: { clientMutationId: "device-uuid-apns-revoke", replayed: false },
+	      });
     expect(responseExample(document, "/api/v1/me/connections", "GET", "200").data.connections[0])
       .toMatchObject({ id: expect.stringMatching(/^conn_/), clientName: "Meal planner" });
     expect(responseExample(document, "/api/v1/me/connections/{connectionId}", "DELETE", "200").data)
@@ -539,8 +545,12 @@ describe("API v1 OpenAPI document", () => {
       .toEqual({ name: "Tiny client", scopes: ["recipes:read", "shopping_list:read", "shopping_list:write"] });
     expect(operation(document, "/api/v1/me/photo", "POST").requestBody.content["multipart/form-data"].schema.$ref)
       .toBe("#/components/schemas/ProfilePhotoUploadRequest");
-    expect(operation(document, "/api/v1/me/apns-devices", "POST").requestBody.content["application/json"].examples.example.value)
-      .toMatchObject({ deviceId: "ios-simulator-1", environment: "development" });
+	    expect(operation(document, "/api/v1/me/apns-devices", "POST").requestBody.content["application/json"].examples.example.value)
+	      .toMatchObject({
+	        clientMutationId: "device-uuid-apns-register",
+	        deviceId: "ios-simulator-1",
+	        environment: "development",
+	      });
     expect(operation(document, "/api/v1/me/apns-devices/{deviceId}", "DELETE").parameters)
       .toEqual(expect.arrayContaining([
         expect.objectContaining({ name: "deviceId", in: "path", required: true }),
@@ -773,8 +783,15 @@ describe("API v1 OpenAPI document", () => {
       .toBe("#/components/schemas/AccountProfileEnvelope");
     expect(operation(document, "/api/v1/me", "PATCH").requestBody.content["application/json"].schema.$ref)
       .toBe("#/components/schemas/UpdateAccountProfileRequest");
-    expect(operation(document, "/api/v1/me", "PATCH").responses["200"].content["application/json"].schema.$ref)
-      .toBe("#/components/schemas/AccountProfileEnvelope");
+	    expect(operation(document, "/api/v1/me", "PATCH").responses["200"].content["application/json"].schema.$ref)
+	      .toBe("#/components/schemas/AccountProfileMutationEnvelope");
+	    expect(operation(document, "/api/v1/me", "PATCH")).toMatchObject({
+	      "x-idempotency": expect.objectContaining({
+	        key: "clientMutationId",
+	        location: "jsonBody",
+	        replayStatus: [200],
+	      }),
+	    });
     expect(responseExample(document, "/api/v1/me", "GET", "200").data).toMatchObject({
       email: "ari@spoonjoy.app",
       username: "ari",
@@ -785,34 +802,53 @@ describe("API v1 OpenAPI document", () => {
     expect(operation(document, "/api/v1/me/photo", "POST").requestBody.content["multipart/form-data"].schema.$ref)
       .toBe("#/components/schemas/ProfilePhotoUploadRequest");
     expect(operation(document, "/api/v1/me/photo", "POST").requestBody.content["application/json"]).toBeUndefined();
-    expect(operation(document, "/api/v1/me/photo", "POST").responses["200"].content["application/json"].schema.$ref)
-      .toBe("#/components/schemas/AccountProfileEnvelope");
-    expect(operation(document, "/api/v1/me/photo", "DELETE").responses["200"].content["application/json"].schema.$ref)
-      .toBe("#/components/schemas/AccountProfileEnvelope");
-    expect(operation(document, "/api/v1/me/photo", "DELETE").parameters.map((parameter: { name: string }) => parameter.name))
-      .not.toContain("X-Client-Mutation-Id");
+	    expect(operation(document, "/api/v1/me/photo", "POST").responses["200"].content["application/json"].schema.$ref)
+	      .toBe("#/components/schemas/AccountProfileMutationEnvelope");
+	    expect(operation(document, "/api/v1/me/photo", "POST")).toMatchObject({
+	      "x-idempotency": expect.objectContaining({
+	        key: "clientMutationId",
+	        location: "multipartFormData",
+	        replayStatus: [200],
+	      }),
+	    });
+	    expect(operation(document, "/api/v1/me/photo", "DELETE").responses["200"].content["application/json"].schema.$ref)
+	      .toBe("#/components/schemas/AccountProfileMutationEnvelope");
+	    expectFlexibleDeleteContract(document, "/api/v1/me/photo", "AccountDeleteMutationRequest");
 
-    expect(operation(document, "/api/v1/me/notification-preferences", "GET").responses["200"].content["application/json"].schema.$ref)
-      .toBe("#/components/schemas/NotificationPreferencesEnvelope");
+	    expect(operation(document, "/api/v1/me/notification-preferences", "GET").responses["200"].content["application/json"].schema.$ref)
+	      .toBe("#/components/schemas/NotificationPreferencesEnvelope");
     expect(operation(document, "/api/v1/me/notification-preferences", "PATCH").requestBody.content["application/json"].schema.$ref)
       .toBe("#/components/schemas/UpdateNotificationPreferencesRequest");
-    expect(operation(document, "/api/v1/me/notification-preferences", "PATCH").responses["200"].content["application/json"].schema.$ref)
-      .toBe("#/components/schemas/NotificationPreferencesEnvelope");
+	    expect(operation(document, "/api/v1/me/notification-preferences", "PATCH").responses["200"].content["application/json"].schema.$ref)
+	      .toBe("#/components/schemas/NotificationPreferencesMutationEnvelope");
+	    expect(operation(document, "/api/v1/me/notification-preferences", "PATCH")).toMatchObject({
+	      "x-idempotency": expect.objectContaining({
+	        key: "clientMutationId",
+	        location: "jsonBody",
+	        replayStatus: [200],
+	      }),
+	    });
 
-    expect(operation(document, "/api/v1/me/apns-devices", "POST").requestBody.content["application/json"].schema.$ref)
-      .toBe("#/components/schemas/ApnsDeviceRegistrationRequest");
+	    expect(operation(document, "/api/v1/me/apns-devices", "POST").requestBody.content["application/json"].schema.$ref)
+	      .toBe("#/components/schemas/ApnsDeviceRegistrationRequest");
     expect(operation(document, "/api/v1/me/apns-devices", "POST").responses["200"].content["application/json"].schema.$ref)
       .toBe("#/components/schemas/ApnsDeviceRegistrationEnvelope");
-    expect(operation(document, "/api/v1/me/apns-devices", "POST").responses["201"].content["application/json"].schema.$ref)
-      .toBe("#/components/schemas/ApnsDeviceRegistrationEnvelope");
-    expect(responseExample(document, "/api/v1/me/apns-devices", "POST", "201").data.device)
-      .not.toEqual(expect.objectContaining({ token: expect.anything(), tokenHash: expect.anything() }));
-    expect(operation(document, "/api/v1/me/apns-devices/{deviceId}", "DELETE").responses["200"].content["application/json"].schema.$ref)
-      .toBe("#/components/schemas/ApnsDeviceRevokeEnvelope");
-    expect(operation(document, "/api/v1/me/apns-devices/{deviceId}", "DELETE").parameters.map((parameter: { name: string }) => parameter.name))
-      .toEqual(expect.arrayContaining(["deviceId", "X-Request-Id"]));
-    expect(operation(document, "/api/v1/me/apns-devices/{deviceId}", "DELETE").parameters.map((parameter: { name: string }) => parameter.name))
-      .not.toContain("X-Client-Mutation-Id");
+	    expect(operation(document, "/api/v1/me/apns-devices", "POST").responses["201"].content["application/json"].schema.$ref)
+	      .toBe("#/components/schemas/ApnsDeviceRegistrationEnvelope");
+	    expect(operation(document, "/api/v1/me/apns-devices", "POST")).toMatchObject({
+	      "x-idempotency": expect.objectContaining({
+	        key: "clientMutationId",
+	        location: "jsonBody",
+	        replayStatus: [200, 201],
+	      }),
+	    });
+	    expect(responseExample(document, "/api/v1/me/apns-devices", "POST", "201").data.device)
+	      .not.toEqual(expect.objectContaining({ token: expect.anything(), tokenHash: expect.anything() }));
+	    expect(operation(document, "/api/v1/me/apns-devices/{deviceId}", "DELETE").responses["200"].content["application/json"].schema.$ref)
+	      .toBe("#/components/schemas/ApnsDeviceRevokeEnvelope");
+	    expectFlexibleDeleteContract(document, "/api/v1/me/apns-devices/{deviceId}", "AccountDeleteMutationRequest");
+	    expect(operation(document, "/api/v1/me/apns-devices/{deviceId}", "DELETE").parameters.map((parameter: { name: string }) => parameter.name))
+	      .toEqual(expect.arrayContaining(["deviceId", "X-Request-Id", "X-Client-Mutation-Id", "clientMutationId"]));
 
     expect(operation(document, "/api/v1/me/connections", "GET").responses["200"].content["application/json"].schema.$ref)
       .toBe("#/components/schemas/OAuthConnectionListEnvelope");
@@ -910,8 +946,38 @@ describe("API v1 OpenAPI document", () => {
         categoryKey: { type: ["string", "null"] },
       },
     });
-    expect(components.schemas.CreateTokenRequest.properties.name).toEqual({ type: "string", minLength: 1, maxLength: 160 });
-    expect(components.schemas.CreateShoppingItemData.required).toEqual(["created", "updated", "item", "mutation"]);
+	    expect(components.schemas.CreateTokenRequest.properties.name).toEqual({ type: "string", minLength: 1, maxLength: 160 });
+	    expect(components.schemas.UpdateAccountProfileRequest).toMatchObject({
+	      additionalProperties: false,
+	      required: ["clientMutationId", "email", "username"],
+	      properties: {
+	        clientMutationId: { type: "string", minLength: 1, maxLength: 160 },
+	        email: { type: "string", format: "email" },
+	        username: { type: "string", minLength: 1, maxLength: 160 },
+	      },
+	    });
+	    expect(components.schemas.ProfilePhotoUploadRequest).toMatchObject({
+	      additionalProperties: false,
+	      required: ["clientMutationId", "photo"],
+	      properties: {
+	        clientMutationId: { type: "string", minLength: 1, maxLength: 160 },
+	        photo: { type: "string", format: "binary" },
+	      },
+	    });
+	    expect(components.schemas.UpdateNotificationPreferencesRequest.required).toEqual([
+	      "clientMutationId",
+	      "notifySpoonOnMyRecipe",
+	      "notifyForkOfMyRecipe",
+	      "notifyCookbookSaveOfMine",
+	      "notifyFellowChefOriginCook",
+	    ]);
+	    expect(components.schemas.ApnsDeviceRegistrationRequest.required).toEqual(["clientMutationId", "deviceId", "platform", "environment", "token"]);
+	    expect(components.schemas.AccountDeleteMutationRequest.required).toEqual(["clientMutationId"]);
+	    expect(components.schemas.AccountProfileMutationData.required).toContain("mutation");
+	    expect(components.schemas.NotificationPreferencesMutationData.required).toContain("mutation");
+	    expect(components.schemas.ApnsDeviceRegistrationData.required).toContain("mutation");
+	    expect(components.schemas.ApnsDeviceRevokeData.required).toContain("mutation");
+	    expect(components.schemas.CreateShoppingItemData.required).toEqual(["created", "updated", "item", "mutation"]);
     expect(components.schemas.UpdateShoppingItemData.required).toEqual(["item", "mutation"]);
     expect(components.schemas.DeleteShoppingItemData.required).toEqual(["removed", "item", "mutation"]);
     expect(components.schemas.AddRecipeIngredientsToShoppingListRequest).toMatchObject({

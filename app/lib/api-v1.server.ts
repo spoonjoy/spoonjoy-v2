@@ -473,6 +473,19 @@ function apiV1OperationFor(method: string, path: string): string | undefined {
   }
 }
 
+const IDEMPOTENT_ACCOUNT_OPERATIONS = new Set([
+  "account.update",
+  "account.photo.upload",
+  "account.photo.remove",
+  "account.notification-preferences.update",
+  "account.apns.register",
+  "account.apns.revoke",
+]);
+
+function isIdempotentAccountOperation(operation: string): boolean {
+  return IDEMPOTENT_ACCOUNT_OPERATIONS.has(operation);
+}
+
 function defaultIdempotencyOutcome(operation: string | undefined, errorCode: ApiV1ErrorCode | undefined) {
   if (!operation) return undefined;
   if (operation.startsWith("tokens.")) return "none";
@@ -488,7 +501,8 @@ function defaultIdempotencyOutcome(operation: string | undefined, errorCode: Api
     operation !== "recipes.fork" &&
     !operation.startsWith("recipes.spoons.") &&
     !operation.startsWith("recipes.covers.") &&
-    !operation.startsWith("cookbooks.")
+    !operation.startsWith("cookbooks.") &&
+    !isIdempotentAccountOperation(operation)
   ) {
     return undefined;
   }
@@ -3476,6 +3490,34 @@ async function accountProfilePayload(args: ApiV1RouteArgs, userId: string) {
   };
 }
 
+function mutationMetadata(clientMutationId: string) {
+  return { clientMutationId, replayed: false };
+}
+
+async function accountProfileMutationPayload(args: ApiV1RouteArgs, userId: string, clientMutationId: string) {
+  return {
+    ...await accountProfilePayload(args, userId),
+    mutation: mutationMetadata(clientMutationId),
+  };
+}
+
+function clientMutationIdFromBodyHeaderOrQuery(args: ApiV1RouteArgs, body: Record<string, unknown>) {
+  const url = new URL(args.request.url);
+  return nonblankString(
+    body.clientMutationId
+      ?? args.request.headers.get("X-Client-Mutation-Id")
+      ?? url.searchParams.get("clientMutationId"),
+    "clientMutationId",
+  );
+}
+
+function clientMutationIdFromFormDataHeaderOrQuery(args: ApiV1RouteArgs, formData: FormData) {
+  const formValue = formData.get("clientMutationId");
+  return clientMutationIdFromBodyHeaderOrQuery(args, {
+    clientMutationId: typeof formValue === "string" ? formValue : undefined,
+  });
+}
+
 function isValidAccountEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
@@ -3585,6 +3627,29 @@ async function normalizeAccountPhotoFile(photo: File): Promise<File> {
   });
 }
 
+async function sha256HexBytes(bytes: Uint8Array): Promise<string> {
+  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+  const digest = await crypto.subtle.digest("SHA-256", buffer);
+  return bytesToHex(new Uint8Array(digest));
+}
+
+async function accountPhotoIdempotencyValue(photo: FormDataEntryValue | null) {
+  if (photo instanceof File) {
+    const bytes = new Uint8Array(await photo.arrayBuffer());
+    return {
+      kind: "file",
+      sha256: await sha256HexBytes(bytes),
+      size: photo.size,
+      type: photo.type,
+      name: photo.name,
+    };
+  }
+  if (typeof photo === "string") {
+    return { kind: "field", value: photo };
+  }
+  return { kind: "missing" };
+}
+
 function booleanField(body: Record<string, unknown>, field: keyof NotificationPreferenceFlags): boolean {
   const value = body[field];
   if (typeof value !== "boolean") {
@@ -3615,6 +3680,7 @@ async function handleAccountRead(args: ApiV1RouteArgs, requestId: string, princi
 async function handleAccountUpdate(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
   const body = await parseApiV1JsonBody(args.request);
   assertKnownFields(body, ["email", "username", "clientMutationId"]);
+  const clientMutationId = nonblankString(body.clientMutationId, "clientMutationId");
   const email = typeof body.email === "string" ? body.email.trim() : "";
   const username = typeof body.username === "string" ? body.username.trim() : "";
   const fieldErrors: string[] = [];
@@ -3624,114 +3690,133 @@ async function handleAccountUpdate(args: ApiV1RouteArgs, requestId: string, prin
     throw new ApiV1Error("validation_error", "Invalid account profile fields", { fields: fieldErrors });
   }
 
-  const db = await getRequestDb(args.context);
   const normalizedEmail = email.toLowerCase();
-  const currentUser = await db.user.findUnique({
-    where: { id: principal.id },
-    select: { email: true, username: true },
-  });
-  /* istanbul ignore if -- @preserve auth verifies the account before profile updates; this is a database race guard. */
-  if (!currentUser) {
-    throw new ApiV1Error("not_found", "Account not found");
-  }
 
-  if (normalizedEmail !== currentUser.email.toLowerCase()) {
-    const existingEmail = await db.$queryRaw<{ id: string }[]>`
-      SELECT id FROM User WHERE LOWER(email) = ${normalizedEmail} AND id != ${principal.id}
-    `;
-    if (existingEmail.length > 0) {
-      throw new ApiV1Error("validation_error", "This email is already in use by another account", { field: "email" });
-    }
-  }
-
-  if (username !== currentUser.username) {
-    const existingUsername = await db.user.findUnique({
-      where: { username },
-      select: { id: true },
+  return await runIdempotentApiV1Mutation(args, requestId, principal, {
+    clientMutationId,
+    email: normalizedEmail,
+    username,
+  }, clientMutationId, "account.update", async (db) => {
+    const currentUser = await db.user.findUnique({
+      where: { id: principal.id },
+      select: { email: true, username: true },
     });
-    if (existingUsername && existingUsername.id !== principal.id) {
-      throw new ApiV1Error("validation_error", "This username is already taken", { field: "username" });
+    /* istanbul ignore if -- @preserve auth verifies the account before profile updates; this is a database race guard. */
+    if (!currentUser) {
+      throw new ApiV1Error("not_found", "Account not found");
     }
-  }
 
-  await db.user.update({
-    where: { id: principal.id },
-    data: {
-      email: normalizedEmail,
-      username,
-    },
+    if (normalizedEmail !== currentUser.email.toLowerCase()) {
+      const existingEmail = await db.$queryRaw<{ id: string }[]>`
+        SELECT id FROM User WHERE LOWER(email) = ${normalizedEmail} AND id != ${principal.id}
+      `;
+      if (existingEmail.length > 0) {
+        throw new ApiV1Error("validation_error", "This email is already in use by another account", { field: "email" });
+      }
+    }
+
+    if (username !== currentUser.username) {
+      const existingUsername = await db.user.findUnique({
+        where: { username },
+        select: { id: true },
+      });
+      if (existingUsername && existingUsername.id !== principal.id) {
+        throw new ApiV1Error("validation_error", "This username is already taken", { field: "username" });
+      }
+    }
+
+    await db.user.update({
+      where: { id: principal.id },
+      data: {
+        email: normalizedEmail,
+        username,
+      },
+    });
+
+    return {
+      status: 200,
+      data: await accountProfileMutationPayload(args, principal.id, clientMutationId),
+    };
   });
-
-  return withApiV1Telemetry(
-    apiV1PrivateSuccess(requestId, await accountProfilePayload(args, principal.id)),
-    { idempotencyOutcome: "none" },
-  );
 }
 
 async function handleAccountPhotoUpload(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
   const formData = await accountPhotoFormDataWithinLimit(args.request);
+  const clientMutationId = clientMutationIdFromFormDataHeaderOrQuery(args, formData);
   const photo = formData.get("photo");
-  if (!hasUploadedImageFile(photo)) {
-    throw new ApiV1Error("validation_error", "Please select a photo to upload", { field: "photo", reason: "missing" });
-  }
+  const idempotencyBody = {
+    clientMutationId,
+    photo: await accountPhotoIdempotencyValue(photo),
+  };
 
-  const imageError = validateImageFile(photo, {
-    allowedTypes: [...PROFILE_IMAGE_TYPES, ...UNKNOWN_MULTIPART_FILE_TYPES],
-    messages: {
-      invalidType: "Please upload an image file",
-      fileTooLarge: "Photo must be less than 5MB",
-    },
-  });
-  if (imageError) {
-    throw new ApiV1Error("validation_error", imageError, { field: "photo" });
-  }
+  return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, clientMutationId, "account.photo.upload", async (db) => {
+    if (!hasUploadedImageFile(photo)) {
+      throw new ApiV1Error("validation_error", "Please select a photo to upload", { field: "photo", reason: "missing" });
+    }
 
-  const normalizedPhoto = await normalizeAccountPhotoFile(photo);
-  const photoUrl = await storeImage({
-    bucket: args.context.cloudflare?.env?.PHOTOS,
-    file: normalizedPhoto,
-    namespace: `profiles/${principal.id}`,
-  });
-  const db = await getRequestDb(args.context);
-  await db.user.update({
-    where: { id: principal.id },
-    data: { photoUrl },
-  });
+    const imageError = validateImageFile(photo, {
+      allowedTypes: [...PROFILE_IMAGE_TYPES, ...UNKNOWN_MULTIPART_FILE_TYPES],
+      messages: {
+        invalidType: "Please upload an image file",
+        fileTooLarge: "Photo must be less than 5MB",
+      },
+    });
+    if (imageError) {
+      throw new ApiV1Error("validation_error", imageError, { field: "photo" });
+    }
 
-  return withApiV1Telemetry(
-    apiV1PrivateSuccess(requestId, await accountProfilePayload(args, principal.id)),
-    { idempotencyOutcome: "none" },
-  );
+    const normalizedPhoto = await normalizeAccountPhotoFile(photo);
+    const photoUrl = await storeImage({
+      bucket: args.context.cloudflare?.env?.PHOTOS,
+      file: normalizedPhoto,
+      namespace: `profiles/${principal.id}`,
+    });
+    await db.user.update({
+      where: { id: principal.id },
+      data: { photoUrl },
+    });
+
+    return {
+      status: 200,
+      data: await accountProfileMutationPayload(args, principal.id, clientMutationId),
+    };
+  });
 }
 
 async function handleAccountPhotoRemove(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
-  const db = await getRequestDb(args.context);
-  const user = await db.user.findUnique({
-    where: { id: principal.id },
-    select: { photoUrl: true },
-  });
-  const env = args.context.cloudflare?.env;
-  const postHogConfig = env
-    ? resolvePostHogServerConfig(env)
-    : ({ enabled: false, reason: "missing-key" } as const);
+  const body = await parseApiV1JsonBody(args.request);
+  assertKnownFields(body, ["clientMutationId"]);
+  const clientMutationId = clientMutationIdFromBodyHeaderOrQuery(args, body);
+  const idempotencyBody = { clientMutationId };
 
-  await deleteStoredImageWithCapture({
-    bucket: env?.PHOTOS,
-    imageUrl: user?.photoUrl,
-    event: "spoonjoy.storage.avatar_delete_failed",
-    postHogConfig,
-    waitUntil: apiV1WaitUntilFor(args),
-    distinctId: principal.id,
-  });
-  await db.user.update({
-    where: { id: principal.id },
-    data: { photoUrl: null },
-  });
+  return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, clientMutationId, "account.photo.remove", async (db) => {
+    const user = await db.user.findUnique({
+      where: { id: principal.id },
+      select: { photoUrl: true },
+    });
+    const env = args.context.cloudflare?.env;
+    const postHogConfig = env
+      ? resolvePostHogServerConfig(env)
+      : ({ enabled: false, reason: "missing-key" } as const);
 
-  return withApiV1Telemetry(
-    apiV1PrivateSuccess(requestId, await accountProfilePayload(args, principal.id)),
-    { idempotencyOutcome: "none" },
-  );
+    await deleteStoredImageWithCapture({
+      bucket: env?.PHOTOS,
+      imageUrl: user?.photoUrl,
+      event: "spoonjoy.storage.avatar_delete_failed",
+      postHogConfig,
+      waitUntil: apiV1WaitUntilFor(args),
+      distinctId: principal.id,
+    });
+    await db.user.update({
+      where: { id: principal.id },
+      data: { photoUrl: null },
+    });
+
+    return {
+      status: 200,
+      data: await accountProfileMutationPayload(args, principal.id, clientMutationId),
+    };
+  });
 }
 
 async function handleNotificationPreferencesRead(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
@@ -3751,29 +3836,39 @@ async function handleNotificationPreferencesUpdate(args: ApiV1RouteArgs, request
     "notifyFellowChefOriginCook",
     "clientMutationId",
   ]);
+  const clientMutationId = nonblankString(body.clientMutationId, "clientMutationId");
   const preferences: NotificationPreferenceFlags = {
     notifySpoonOnMyRecipe: booleanField(body, "notifySpoonOnMyRecipe"),
     notifyForkOfMyRecipe: booleanField(body, "notifyForkOfMyRecipe"),
     notifyCookbookSaveOfMine: booleanField(body, "notifyCookbookSaveOfMine"),
     notifyFellowChefOriginCook: booleanField(body, "notifyFellowChefOriginCook"),
   };
-  const db = await getRequestDb(args.context);
-  await db.notificationPreference.upsert({
-    where: { userId: principal.id },
-    create: {
-      userId: principal.id,
-      ...preferences,
-    },
-    update: preferences,
-  });
 
-  return withApiV1Telemetry(
-    apiV1PrivateSuccess(requestId, preferences),
-    { idempotencyOutcome: "none" },
-  );
+  return await runIdempotentApiV1Mutation(args, requestId, principal, {
+    clientMutationId,
+    ...preferences,
+  }, clientMutationId, "account.notification-preferences.update", async (db) => {
+    await db.notificationPreference.upsert({
+      where: { userId: principal.id },
+      create: {
+        userId: principal.id,
+        ...preferences,
+      },
+      update: preferences,
+    });
+
+    return {
+      status: 200,
+      data: {
+        ...preferences,
+        mutation: mutationMetadata(clientMutationId),
+      },
+    };
+  });
 }
 
 const APNS_DEVICE_FIELDS = [
+  "clientMutationId",
   "deviceId",
   "platform",
   "environment",
@@ -3854,6 +3949,7 @@ async function handleApnsDeviceRegister(args: ApiV1RouteArgs, requestId: string,
       fieldErrors[field] = "Unknown field";
     }
   }
+  const clientMutationId = apnsRequiredText(body, "clientMutationId", fieldErrors);
   const deviceId = apnsRequiredText(body, "deviceId", fieldErrors);
   const platform = apnsRequiredText(body, "platform", fieldErrors);
   const environment = apnsRequiredText(body, "environment", fieldErrors);
@@ -3871,79 +3967,91 @@ async function handleApnsDeviceRegister(args: ApiV1RouteArgs, requestId: string,
     throw new ApiV1Error("validation_error", "Invalid APNs device registration", { fieldErrors });
   }
 
-  const db = await getRequestDb(args.context);
-  const tokenHash = await hashApnsToken(token);
-  const now = new Date();
-  const existing = await db.nativePushDevice.findFirst({
-    where: { userId: principal.id, deviceId, platform, environment },
-  });
-  const device = existing
-    ? await db.nativePushDevice.update({
-        where: { id: existing.id },
-        data: {
-          tokenHash,
-          tokenPrefix: token.slice(0, 12),
-          deviceName,
-          appVersion,
-          enabledAt: now,
-          revokedAt: null,
-          lastRegisteredAt: now,
-        },
-      })
-    : await db.nativePushDevice.create({
-        data: {
-          userId: principal.id,
-          deviceId,
-          platform,
-          environment,
-          tokenHash,
-          tokenPrefix: token.slice(0, 12),
-          deviceName,
-          appVersion,
-          enabledAt: now,
-          lastRegisteredAt: now,
-        },
-      });
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "account.apns.register", async (db) => {
+    const tokenHash = await hashApnsToken(token);
+    const now = new Date();
+    const existing = await db.nativePushDevice.findFirst({
+      where: { userId: principal.id, deviceId, platform, environment },
+    });
+    const device = existing
+      ? await db.nativePushDevice.update({
+          where: { id: existing.id },
+          data: {
+            tokenHash,
+            tokenPrefix: token.slice(0, 12),
+            deviceName,
+            appVersion,
+            enabledAt: now,
+            revokedAt: null,
+            lastRegisteredAt: now,
+          },
+        })
+      : await db.nativePushDevice.create({
+          data: {
+            userId: principal.id,
+            deviceId,
+            platform,
+            environment,
+            tokenHash,
+            tokenPrefix: token.slice(0, 12),
+            deviceName,
+            appVersion,
+            enabledAt: now,
+            lastRegisteredAt: now,
+          },
+        });
 
-  return withApiV1Telemetry(
-    apiV1PrivateSuccess(requestId, { created: !existing, device: apnsDevicePayload(device) }, existing ? 200 : 201),
-    { idempotencyOutcome: "none" },
-  );
+    return {
+      status: existing ? 200 : 201,
+      data: {
+        created: !existing,
+        device: apnsDevicePayload(device),
+        mutation: mutationMetadata(clientMutationId),
+      },
+    };
+  });
 }
 
 async function handleApnsDeviceRevoke(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, deviceId: string) {
-  const db = await getRequestDb(args.context);
-  const existingDevices = await db.nativePushDevice.findMany({
-    where: { userId: principal.id, deviceId },
-    orderBy: [{ lastRegisteredAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
-  });
-  if (existingDevices.length === 0) {
-    throw new ApiV1Error("not_found", "Native push device not found");
-  }
+  const body = await parseApiV1JsonBody(args.request);
+  assertKnownFields(body, ["clientMutationId"]);
+  const clientMutationId = clientMutationIdFromBodyHeaderOrQuery(args, body);
+  const idempotencyBody = { clientMutationId };
 
-  const activeDeviceIds = existingDevices
-    .filter((device) => device.revokedAt === null)
-    .map((device) => device.id);
-  if (activeDeviceIds.length > 0) {
-    await db.nativePushDevice.updateMany({
-      where: { id: { in: activeDeviceIds } },
-      data: { revokedAt: new Date().toISOString() },
+  return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, clientMutationId, "account.apns.revoke", async (db) => {
+    const existingDevices = await db.nativePushDevice.findMany({
+      where: { userId: principal.id, deviceId },
+      orderBy: [{ lastRegisteredAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
     });
-  }
-  const devices = await db.nativePushDevice.findMany({
-    where: { userId: principal.id, deviceId },
-    orderBy: [{ lastRegisteredAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
-  });
+    if (existingDevices.length === 0) {
+      throw new ApiV1Error("not_found", "Native push device not found");
+    }
 
-  return withApiV1Telemetry(
-    apiV1PrivateSuccess(requestId, {
-      revoked: activeDeviceIds.length > 0,
-      revokedCount: activeDeviceIds.length,
-      device: apnsDevicePayload(devices[0]!),
-      devices: devices.map(apnsDevicePayload),
-    }),
-    { idempotencyOutcome: "none" },
-  );
+    const activeDeviceIds = existingDevices
+      .filter((device) => device.revokedAt === null)
+      .map((device) => device.id);
+    if (activeDeviceIds.length > 0) {
+      await db.nativePushDevice.updateMany({
+        where: { id: { in: activeDeviceIds } },
+        data: { revokedAt: new Date().toISOString() },
+      });
+    }
+    const devices = await db.nativePushDevice.findMany({
+      where: { userId: principal.id, deviceId },
+      orderBy: [{ lastRegisteredAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+    });
+
+    return {
+      status: 200,
+      data: {
+        revoked: activeDeviceIds.length > 0,
+        revokedCount: activeDeviceIds.length,
+        device: apnsDevicePayload(devices[0]!),
+        devices: devices.map(apnsDevicePayload),
+        mutation: mutationMetadata(clientMutationId),
+      },
+    };
+  });
 }
 
 function accountConnectionId(clientId: string, resource: string | null, connectionKey: string): string {

@@ -7714,18 +7714,29 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "retryOn": [
           "network_timeout",
           "429",
-          "5xx"
+          "5xx",
+          "idempotency_in_progress"
         ],
         "retryAfterHeader": "Retry-After",
-        "preserveClientMutationId": false,
+        "preserveClientMutationId": true,
         "doNotRetryUnchanged": [
           "validation_error",
-          "invalid_cursor",
-          "insufficient_scope"
+          "insufficient_scope",
+          "idempotency_conflict"
         ]
       },
       "cursorPolicy": null,
-      "idempotency": null,
+      "idempotency": {
+        "key": "clientMutationId",
+        "location": "jsonBody",
+        "retentionHours": 24,
+        "replayStatus": [
+          200
+        ],
+        "conflictStatus": 409,
+        "inProgressRetryAfterSeconds": 2,
+        "retryBodyRule": "Persist and retry the same parsed account JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts."
+      },
       "personalTokenOnly": false,
       "oauthNote": "",
       "selfRevokeException": "",
@@ -7750,12 +7761,12 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "required": true,
         "contentType": "application/json",
         "fields": [],
-        "example": "{\n  \"email\": \"ari@spoonjoy.app\",\n  \"username\": \"ari\"\n}",
+        "example": "{\n  \"clientMutationId\": \"device-uuid-account-update\",\n  \"email\": \"ari@spoonjoy.app\",\n  \"username\": \"ari\"\n}",
         "examples": [
           {
             "name": "example",
             "label": "Example",
-            "example": "{\n  \"email\": \"ari@spoonjoy.app\",\n  \"username\": \"ari\"\n}"
+            "example": "{\n  \"clientMutationId\": \"device-uuid-account-update\",\n  \"email\": \"ari@spoonjoy.app\",\n  \"username\": \"ari\"\n}"
           }
         ]
       },
@@ -7766,6 +7777,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "403",
         "404",
         "405",
+        "409",
         "429",
         "500"
       ],
@@ -7795,6 +7807,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "description": "Errors: method_not_allowed"
         },
         {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
           "status": "429",
           "description": "Errors: rate_limited"
         },
@@ -7808,7 +7824,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"id\": \"chef_1\",\n    \"email\": \"ari@spoonjoy.app\",\n    \"username\": \"ari\",\n    \"photoUrl\": \"https://spoonjoy.app/photos/profiles/chef_1/avatar.jpg\",\n    \"hasPassword\": true,\n    \"oauthAccounts\": [\n      {\n        \"provider\": \"google\",\n        \"providerUsername\": \"ari@example.com\"\n      }\n    ],\n    \"passkeys\": [\n      {\n        \"id\": \"pk_1\",\n        \"name\": \"Kitchen Mac\",\n        \"transports\": \"internal\",\n        \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n      }\n    ]\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"id\": \"chef_1\",\n    \"email\": \"ari@spoonjoy.app\",\n    \"username\": \"ari\",\n    \"photoUrl\": \"https://spoonjoy.app/photos/profiles/chef_1/avatar.jpg\",\n    \"hasPassword\": true,\n    \"oauthAccounts\": [\n      {\n        \"provider\": \"google\",\n        \"providerUsername\": \"ari@example.com\"\n      }\n    ],\n    \"passkeys\": [\n      {\n        \"id\": \"pk_1\",\n        \"name\": \"Kitchen Mac\",\n        \"transports\": \"internal\",\n        \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n      }\n    ],\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-account-update\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -7880,18 +7896,29 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "retryOn": [
           "network_timeout",
           "429",
-          "5xx"
+          "5xx",
+          "idempotency_in_progress"
         ],
         "retryAfterHeader": "Retry-After",
-        "preserveClientMutationId": false,
+        "preserveClientMutationId": true,
         "doNotRetryUnchanged": [
           "validation_error",
-          "invalid_cursor",
-          "insufficient_scope"
+          "insufficient_scope",
+          "idempotency_conflict"
         ]
       },
       "cursorPolicy": null,
-      "idempotency": null,
+      "idempotency": {
+        "key": "clientMutationId",
+        "location": "multipartFormData",
+        "retentionHours": 24,
+        "replayStatus": [
+          200
+        ],
+        "conflictStatus": 409,
+        "inProgressRetryAfterSeconds": 2,
+        "retryBodyRule": "Persist and retry the same multipart profile photo payload for this clientMutationId. The uploaded file digest, size, type, and field values define conflicts."
+      },
       "personalTokenOnly": false,
       "oauthNote": "",
       "selfRevokeException": "",
@@ -7917,6 +7944,13 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "contentType": "multipart/form-data",
         "fields": [
           {
+            "name": "clientMutationId",
+            "label": "Client Mutation Id",
+            "required": true,
+            "accept": "",
+            "description": "device-uuid-profile-photo"
+          },
+          {
             "name": "photo",
             "label": "Photo",
             "required": true,
@@ -7924,12 +7958,12 @@ export const API_V1_PLAYGROUND_MANIFEST = {
             "description": "(binary image file)"
           }
         ],
-        "example": "{\n  \"photo\": \"(binary image file)\"\n}",
+        "example": "{\n  \"clientMutationId\": \"device-uuid-profile-photo\",\n  \"photo\": \"(binary image file)\"\n}",
         "examples": [
           {
             "name": "example",
             "label": "Example",
-            "example": "{\n  \"photo\": \"(binary image file)\"\n}"
+            "example": "{\n  \"clientMutationId\": \"device-uuid-profile-photo\",\n  \"photo\": \"(binary image file)\"\n}"
           }
         ]
       },
@@ -7940,6 +7974,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "403",
         "404",
         "405",
+        "409",
         "429",
         "500"
       ],
@@ -7969,6 +8004,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "description": "Errors: method_not_allowed"
         },
         {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
           "status": "429",
           "description": "Errors: rate_limited"
         },
@@ -7982,7 +8021,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"id\": \"chef_1\",\n    \"email\": \"ari@spoonjoy.app\",\n    \"username\": \"ari\",\n    \"photoUrl\": \"https://spoonjoy.app/photos/profiles/chef_1/avatar.jpg\",\n    \"hasPassword\": true,\n    \"oauthAccounts\": [\n      {\n        \"provider\": \"google\",\n        \"providerUsername\": \"ari@example.com\"\n      }\n    ],\n    \"passkeys\": [\n      {\n        \"id\": \"pk_1\",\n        \"name\": \"Kitchen Mac\",\n        \"transports\": \"internal\",\n        \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n      }\n    ]\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"id\": \"chef_1\",\n    \"email\": \"ari@spoonjoy.app\",\n    \"username\": \"ari\",\n    \"photoUrl\": \"https://spoonjoy.app/photos/profiles/chef_1/avatar.jpg\",\n    \"hasPassword\": true,\n    \"oauthAccounts\": [\n      {\n        \"provider\": \"google\",\n        \"providerUsername\": \"ari@example.com\"\n      }\n    ],\n    \"passkeys\": [\n      {\n        \"id\": \"pk_1\",\n        \"name\": \"Kitchen Mac\",\n        \"transports\": \"internal\",\n        \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n      }\n    ],\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-account-update\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -8021,10 +8060,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
         },
         {
-          "status": "429",
-          "name": "rate_limited",
-          "label": "Rate Limited",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"rate_limited\",\n    \"message\": \"Too many requests\",\n    \"status\": 429\n  }\n}"
+          "status": "409",
+          "name": "idempotency_in_progress",
+          "label": "Idempotency In Progress",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"idempotency_in_progress\",\n    \"message\": \"Idempotency key is already in progress; retry shortly\",\n    \"status\": 409,\n    \"details\": {\n      \"retryAfterSeconds\": 2\n    }\n  }\n}"
         }
       ]
     },
@@ -8054,18 +8093,29 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "retryOn": [
           "network_timeout",
           "429",
-          "5xx"
+          "5xx",
+          "idempotency_in_progress"
         ],
         "retryAfterHeader": "Retry-After",
-        "preserveClientMutationId": false,
+        "preserveClientMutationId": true,
         "doNotRetryUnchanged": [
           "validation_error",
-          "invalid_cursor",
-          "insufficient_scope"
+          "insufficient_scope",
+          "idempotency_conflict"
         ]
       },
       "cursorPolicy": null,
-      "idempotency": null,
+      "idempotency": {
+        "key": "clientMutationId",
+        "location": "jsonBody, query, or X-Client-Mutation-Id",
+        "retentionHours": 24,
+        "replayStatus": [
+          200
+        ],
+        "conflictStatus": 409,
+        "inProgressRetryAfterSeconds": 2,
+        "retryBodyRule": "Persist and retry the same account mutation path for this clientMutationId. Delete requests may put the idempotency key in the JSON body, query string, or X-Client-Mutation-Id header."
+      },
       "personalTokenOnly": false,
       "oauthNote": "",
       "selfRevokeException": "",
@@ -8073,6 +8123,30 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "risk": "destructive",
       "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
       "params": [
+        {
+          "name": "X-Client-Mutation-Id",
+          "in": "header",
+          "label": "X Client Mutation Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "delete:item_1:uuid-or-hash",
+          "description": "Optional chef-wide idempotency key for this delete. Prefer the JSON body clientMutationId when possible, and use the same value when retrying the exact same request after a timeout.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "clientMutationId",
+          "in": "query",
+          "label": "Client Mutation Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "clientMutationId",
+          "description": "Optional chef-wide idempotency key for DELETE retries when a client cannot send a JSON body.",
+          "schema": {
+            "type": "string"
+          }
+        },
         {
           "name": "X-Request-Id",
           "in": "header",
@@ -8086,7 +8160,19 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         }
       ],
-      "requestBody": null,
+      "requestBody": {
+        "required": false,
+        "contentType": "application/json",
+        "fields": [],
+        "example": "{\n  \"clientMutationId\": \"device-uuid-account-delete\"\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"device-uuid-account-delete\"\n}"
+          }
+        ]
+      },
       "responseStatuses": [
         "200",
         "400",
@@ -8094,6 +8180,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "403",
         "404",
         "405",
+        "409",
         "429",
         "500"
       ],
@@ -8104,7 +8191,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         },
         {
           "status": "400",
-          "description": "Errors: validation_error"
+          "description": "Errors: invalid_json, validation_error"
         },
         {
           "status": "401",
@@ -8123,6 +8210,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "description": "Errors: method_not_allowed"
         },
         {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
           "status": "429",
           "description": "Errors: rate_limited"
         },
@@ -8136,7 +8227,13 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"id\": \"chef_1\",\n    \"email\": \"ari@spoonjoy.app\",\n    \"username\": \"ari\",\n    \"photoUrl\": \"https://spoonjoy.app/photos/profiles/chef_1/avatar.jpg\",\n    \"hasPassword\": true,\n    \"oauthAccounts\": [\n      {\n        \"provider\": \"google\",\n        \"providerUsername\": \"ari@example.com\"\n      }\n    ],\n    \"passkeys\": [\n      {\n        \"id\": \"pk_1\",\n        \"name\": \"Kitchen Mac\",\n        \"transports\": \"internal\",\n        \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n      }\n    ]\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"id\": \"chef_1\",\n    \"email\": \"ari@spoonjoy.app\",\n    \"username\": \"ari\",\n    \"photoUrl\": \"https://spoonjoy.app/photos/profiles/chef_1/avatar.jpg\",\n    \"hasPassword\": true,\n    \"oauthAccounts\": [\n      {\n        \"provider\": \"google\",\n        \"providerUsername\": \"ari@example.com\"\n      }\n    ],\n    \"passkeys\": [\n      {\n        \"id\": \"pk_1\",\n        \"name\": \"Kitchen Mac\",\n        \"transports\": \"internal\",\n        \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n      }\n    ],\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-account-update\",\n      \"replayed\": false\n    }\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "400",
@@ -8173,12 +8270,6 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "name": "method_not_allowed",
           "label": "Method Not Allowed",
           "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
-        },
-        {
-          "status": "429",
-          "name": "rate_limited",
-          "label": "Rate Limited",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"rate_limited\",\n    \"message\": \"Too many requests\",\n    \"status\": 429\n  }\n}"
         }
       ]
     },
@@ -8357,18 +8448,29 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "retryOn": [
           "network_timeout",
           "429",
-          "5xx"
+          "5xx",
+          "idempotency_in_progress"
         ],
         "retryAfterHeader": "Retry-After",
-        "preserveClientMutationId": false,
+        "preserveClientMutationId": true,
         "doNotRetryUnchanged": [
           "validation_error",
-          "invalid_cursor",
-          "insufficient_scope"
+          "insufficient_scope",
+          "idempotency_conflict"
         ]
       },
       "cursorPolicy": null,
-      "idempotency": null,
+      "idempotency": {
+        "key": "clientMutationId",
+        "location": "jsonBody",
+        "retentionHours": 24,
+        "replayStatus": [
+          200
+        ],
+        "conflictStatus": 409,
+        "inProgressRetryAfterSeconds": 2,
+        "retryBodyRule": "Persist and retry the same parsed account JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts."
+      },
       "personalTokenOnly": false,
       "oauthNote": "",
       "selfRevokeException": "",
@@ -8393,12 +8495,12 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "required": true,
         "contentType": "application/json",
         "fields": [],
-        "example": "{\n  \"notifySpoonOnMyRecipe\": true,\n  \"notifyForkOfMyRecipe\": true,\n  \"notifyCookbookSaveOfMine\": false,\n  \"notifyFellowChefOriginCook\": true\n}",
+        "example": "{\n  \"clientMutationId\": \"device-uuid-notification-preferences\",\n  \"notifySpoonOnMyRecipe\": true,\n  \"notifyForkOfMyRecipe\": true,\n  \"notifyCookbookSaveOfMine\": false,\n  \"notifyFellowChefOriginCook\": true\n}",
         "examples": [
           {
             "name": "example",
             "label": "Example",
-            "example": "{\n  \"notifySpoonOnMyRecipe\": true,\n  \"notifyForkOfMyRecipe\": true,\n  \"notifyCookbookSaveOfMine\": false,\n  \"notifyFellowChefOriginCook\": true\n}"
+            "example": "{\n  \"clientMutationId\": \"device-uuid-notification-preferences\",\n  \"notifySpoonOnMyRecipe\": true,\n  \"notifyForkOfMyRecipe\": true,\n  \"notifyCookbookSaveOfMine\": false,\n  \"notifyFellowChefOriginCook\": true\n}"
           }
         ]
       },
@@ -8408,6 +8510,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "401",
         "403",
         "405",
+        "409",
         "429",
         "500"
       ],
@@ -8433,6 +8536,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "description": "Errors: method_not_allowed"
         },
         {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
           "status": "429",
           "description": "Errors: rate_limited"
         },
@@ -8446,7 +8553,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"notifySpoonOnMyRecipe\": true,\n    \"notifyForkOfMyRecipe\": true,\n    \"notifyCookbookSaveOfMine\": true,\n    \"notifyFellowChefOriginCook\": true\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"notifySpoonOnMyRecipe\": true,\n    \"notifyForkOfMyRecipe\": true,\n    \"notifyCookbookSaveOfMine\": true,\n    \"notifyFellowChefOriginCook\": true,\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-notification-preferences\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -8485,10 +8592,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
         },
         {
-          "status": "429",
-          "name": "rate_limited",
-          "label": "Rate Limited",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"rate_limited\",\n    \"message\": \"Too many requests\",\n    \"status\": 429\n  }\n}"
+          "status": "409",
+          "name": "idempotency_in_progress",
+          "label": "Idempotency In Progress",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"idempotency_in_progress\",\n    \"message\": \"Idempotency key is already in progress; retry shortly\",\n    \"status\": 409,\n    \"details\": {\n      \"retryAfterSeconds\": 2\n    }\n  }\n}"
         }
       ]
     },
@@ -8517,18 +8624,30 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "retryOn": [
           "network_timeout",
           "429",
-          "5xx"
+          "5xx",
+          "idempotency_in_progress"
         ],
         "retryAfterHeader": "Retry-After",
-        "preserveClientMutationId": false,
+        "preserveClientMutationId": true,
         "doNotRetryUnchanged": [
           "validation_error",
-          "invalid_cursor",
-          "insufficient_scope"
+          "insufficient_scope",
+          "idempotency_conflict"
         ]
       },
       "cursorPolicy": null,
-      "idempotency": null,
+      "idempotency": {
+        "key": "clientMutationId",
+        "location": "jsonBody",
+        "retentionHours": 24,
+        "replayStatus": [
+          200,
+          201
+        ],
+        "conflictStatus": 409,
+        "inProgressRetryAfterSeconds": 2,
+        "retryBodyRule": "Persist and retry the same parsed account JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts."
+      },
       "personalTokenOnly": false,
       "oauthNote": "",
       "selfRevokeException": "",
@@ -8553,12 +8672,12 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "required": true,
         "contentType": "application/json",
         "fields": [],
-        "example": "{\n  \"deviceId\": \"ios-simulator-1\",\n  \"platform\": \"ios\",\n  \"environment\": \"development\",\n  \"token\": \"apns-token-example-secret\",\n  \"deviceName\": \"Ari's iPhone\",\n  \"appVersion\": \"1.0.0\"\n}",
+        "example": "{\n  \"clientMutationId\": \"device-uuid-apns-register\",\n  \"deviceId\": \"ios-simulator-1\",\n  \"platform\": \"ios\",\n  \"environment\": \"development\",\n  \"token\": \"apns-token-example-secret\",\n  \"deviceName\": \"Ari's iPhone\",\n  \"appVersion\": \"1.0.0\"\n}",
         "examples": [
           {
             "name": "example",
             "label": "Example",
-            "example": "{\n  \"deviceId\": \"ios-simulator-1\",\n  \"platform\": \"ios\",\n  \"environment\": \"development\",\n  \"token\": \"apns-token-example-secret\",\n  \"deviceName\": \"Ari's iPhone\",\n  \"appVersion\": \"1.0.0\"\n}"
+            "example": "{\n  \"clientMutationId\": \"device-uuid-apns-register\",\n  \"deviceId\": \"ios-simulator-1\",\n  \"platform\": \"ios\",\n  \"environment\": \"development\",\n  \"token\": \"apns-token-example-secret\",\n  \"deviceName\": \"Ari's iPhone\",\n  \"appVersion\": \"1.0.0\"\n}"
           }
         ]
       },
@@ -8569,6 +8688,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "401",
         "403",
         "405",
+        "409",
         "429",
         "500"
       ],
@@ -8598,6 +8718,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "description": "Errors: method_not_allowed"
         },
         {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
           "status": "429",
           "description": "Errors: rate_limited"
         },
@@ -8611,13 +8735,13 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"created\": true,\n    \"device\": {\n      \"id\": \"npd_1\",\n      \"deviceId\": \"ios-simulator-1\",\n      \"platform\": \"ios\",\n      \"environment\": \"development\",\n      \"tokenPrefix\": \"apns-token-\",\n      \"deviceName\": \"Ari's iPhone\",\n      \"appVersion\": \"1.0.0\",\n      \"enabledAt\": \"2026-06-01T00:00:00.000Z\",\n      \"revokedAt\": null,\n      \"lastRegisteredAt\": \"2026-06-01T00:00:00.000Z\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\"\n    }\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"created\": true,\n    \"device\": {\n      \"id\": \"npd_1\",\n      \"deviceId\": \"ios-simulator-1\",\n      \"platform\": \"ios\",\n      \"environment\": \"development\",\n      \"tokenPrefix\": \"apns-token-\",\n      \"deviceName\": \"Ari's iPhone\",\n      \"appVersion\": \"1.0.0\",\n      \"enabledAt\": \"2026-06-01T00:00:00.000Z\",\n      \"revokedAt\": null,\n      \"lastRegisteredAt\": \"2026-06-01T00:00:00.000Z\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-apns-register\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "201",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"created\": true,\n    \"device\": {\n      \"id\": \"npd_1\",\n      \"deviceId\": \"ios-simulator-1\",\n      \"platform\": \"ios\",\n      \"environment\": \"development\",\n      \"tokenPrefix\": \"apns-token-\",\n      \"deviceName\": \"Ari's iPhone\",\n      \"appVersion\": \"1.0.0\",\n      \"enabledAt\": \"2026-06-01T00:00:00.000Z\",\n      \"revokedAt\": null,\n      \"lastRegisteredAt\": \"2026-06-01T00:00:00.000Z\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\"\n    }\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"created\": true,\n    \"device\": {\n      \"id\": \"npd_1\",\n      \"deviceId\": \"ios-simulator-1\",\n      \"platform\": \"ios\",\n      \"environment\": \"development\",\n      \"tokenPrefix\": \"apns-token-\",\n      \"deviceName\": \"Ari's iPhone\",\n      \"appVersion\": \"1.0.0\",\n      \"enabledAt\": \"2026-06-01T00:00:00.000Z\",\n      \"revokedAt\": null,\n      \"lastRegisteredAt\": \"2026-06-01T00:00:00.000Z\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-apns-register\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -8682,18 +8806,29 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "retryOn": [
           "network_timeout",
           "429",
-          "5xx"
+          "5xx",
+          "idempotency_in_progress"
         ],
         "retryAfterHeader": "Retry-After",
-        "preserveClientMutationId": false,
+        "preserveClientMutationId": true,
         "doNotRetryUnchanged": [
           "validation_error",
-          "invalid_cursor",
-          "insufficient_scope"
+          "insufficient_scope",
+          "idempotency_conflict"
         ]
       },
       "cursorPolicy": null,
-      "idempotency": null,
+      "idempotency": {
+        "key": "clientMutationId",
+        "location": "jsonBody, query, or X-Client-Mutation-Id",
+        "retentionHours": 24,
+        "replayStatus": [
+          200
+        ],
+        "conflictStatus": 409,
+        "inProgressRetryAfterSeconds": 2,
+        "retryBodyRule": "Persist and retry the same account mutation path for this clientMutationId. Delete requests may put the idempotency key in the JSON body, query string, or X-Client-Mutation-Id header."
+      },
       "personalTokenOnly": false,
       "oauthNote": "",
       "selfRevokeException": "",
@@ -8714,6 +8849,30 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         },
         {
+          "name": "X-Client-Mutation-Id",
+          "in": "header",
+          "label": "X Client Mutation Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "delete:item_1:uuid-or-hash",
+          "description": "Optional chef-wide idempotency key for this delete. Prefer the JSON body clientMutationId when possible, and use the same value when retrying the exact same request after a timeout.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "clientMutationId",
+          "in": "query",
+          "label": "Client Mutation Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "clientMutationId",
+          "description": "Optional chef-wide idempotency key for DELETE retries when a client cannot send a JSON body.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
           "name": "X-Request-Id",
           "in": "header",
           "label": "X Request Id",
@@ -8726,7 +8885,19 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         }
       ],
-      "requestBody": null,
+      "requestBody": {
+        "required": false,
+        "contentType": "application/json",
+        "fields": [],
+        "example": "{\n  \"clientMutationId\": \"device-uuid-account-delete\"\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"device-uuid-account-delete\"\n}"
+          }
+        ]
+      },
       "responseStatuses": [
         "200",
         "400",
@@ -8734,6 +8905,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "403",
         "404",
         "405",
+        "409",
         "429",
         "500"
       ],
@@ -8744,7 +8916,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         },
         {
           "status": "400",
-          "description": "Errors: validation_error"
+          "description": "Errors: invalid_json, validation_error"
         },
         {
           "status": "401",
@@ -8763,6 +8935,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "description": "Errors: method_not_allowed"
         },
         {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
           "status": "429",
           "description": "Errors: rate_limited"
         },
@@ -8776,7 +8952,13 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"revoked\": true,\n    \"revokedCount\": 1,\n    \"device\": {\n      \"id\": \"npd_1\",\n      \"deviceId\": \"ios-simulator-1\",\n      \"platform\": \"ios\",\n      \"environment\": \"development\",\n      \"tokenPrefix\": \"apns-token-\",\n      \"deviceName\": \"Ari's iPhone\",\n      \"appVersion\": \"1.0.0\",\n      \"enabledAt\": \"2026-06-01T00:00:00.000Z\",\n      \"revokedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"lastRegisteredAt\": \"2026-06-01T00:00:00.000Z\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"devices\": [\n      {\n        \"id\": \"npd_1\",\n        \"deviceId\": \"ios-simulator-1\",\n        \"platform\": \"ios\",\n        \"environment\": \"development\",\n        \"tokenPrefix\": \"apns-token-\",\n        \"deviceName\": \"Ari's iPhone\",\n        \"appVersion\": \"1.0.0\",\n        \"enabledAt\": \"2026-06-01T00:00:00.000Z\",\n        \"revokedAt\": \"2026-06-01T00:00:00.000Z\",\n        \"lastRegisteredAt\": \"2026-06-01T00:00:00.000Z\",\n        \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n        \"updatedAt\": \"2026-06-01T00:00:00.000Z\"\n      }\n    ]\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"revoked\": true,\n    \"revokedCount\": 1,\n    \"device\": {\n      \"id\": \"npd_1\",\n      \"deviceId\": \"ios-simulator-1\",\n      \"platform\": \"ios\",\n      \"environment\": \"development\",\n      \"tokenPrefix\": \"apns-token-\",\n      \"deviceName\": \"Ari's iPhone\",\n      \"appVersion\": \"1.0.0\",\n      \"enabledAt\": \"2026-06-01T00:00:00.000Z\",\n      \"revokedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"lastRegisteredAt\": \"2026-06-01T00:00:00.000Z\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"devices\": [\n      {\n        \"id\": \"npd_1\",\n        \"deviceId\": \"ios-simulator-1\",\n        \"platform\": \"ios\",\n        \"environment\": \"development\",\n        \"tokenPrefix\": \"apns-token-\",\n        \"deviceName\": \"Ari's iPhone\",\n        \"appVersion\": \"1.0.0\",\n        \"enabledAt\": \"2026-06-01T00:00:00.000Z\",\n        \"revokedAt\": \"2026-06-01T00:00:00.000Z\",\n        \"lastRegisteredAt\": \"2026-06-01T00:00:00.000Z\",\n        \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n        \"updatedAt\": \"2026-06-01T00:00:00.000Z\"\n      }\n    ],\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-apns-revoke\",\n      \"replayed\": false\n    }\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
         },
         {
           "status": "400",
@@ -8813,12 +8995,6 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "name": "method_not_allowed",
           "label": "Method Not Allowed",
           "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
-        },
-        {
-          "status": "429",
-          "name": "rate_limited",
-          "label": "Rate Limited",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"rate_limited\",\n    \"message\": \"Too many requests\",\n    \"status\": 429\n  }\n}"
         }
       ]
     },

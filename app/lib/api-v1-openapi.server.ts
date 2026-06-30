@@ -123,6 +123,32 @@ function successEnvelope(dataSchema: JsonSchema): JsonSchema {
   });
 }
 
+const accountProfileProperties: Record<string, JsonSchema> = {
+  id: idSchema,
+  email: { type: "string", format: "email" },
+  username: { type: "string", minLength: 1 },
+  photoUrl: { type: ["string", "null"], description: "Absolute /photos URL, data URL in local mode, or null." },
+  hasPassword: { type: "boolean" },
+  oauthAccounts: arrayOf(ref("LinkedAuthProvider")),
+  passkeys: arrayOf(ref("PasskeySummary")),
+};
+
+const accountProfileRequired = ["id", "email", "username", "photoUrl", "hasPassword", "oauthAccounts", "passkeys"];
+
+const notificationPreferenceProperties: Record<string, JsonSchema> = {
+  notifySpoonOnMyRecipe: { type: "boolean" },
+  notifyForkOfMyRecipe: { type: "boolean" },
+  notifyCookbookSaveOfMine: { type: "boolean" },
+  notifyFellowChefOriginCook: { type: "boolean" },
+};
+
+const notificationPreferenceRequired = [
+  "notifySpoonOnMyRecipe",
+  "notifyForkOfMyRecipe",
+  "notifyCookbookSaveOfMine",
+  "notifyFellowChefOriginCook",
+];
+
 const schemas = {
   ErrorDetails: { type: "object", additionalProperties: true },
   ErrorObject: objectSchema(["code", "message", "status"], {
@@ -508,47 +534,43 @@ const schemas = {
     transports: nullableStringSchema,
     createdAt: nullableDateTimeSchema,
   }),
-  AccountProfile: objectSchema(["id", "email", "username", "photoUrl", "hasPassword", "oauthAccounts", "passkeys"], {
-    id: idSchema,
-    email: { type: "string", format: "email" },
-    username: { type: "string", minLength: 1 },
-    photoUrl: { type: ["string", "null"], description: "Absolute /photos URL, data URL in local mode, or null." },
-    hasPassword: { type: "boolean" },
-    oauthAccounts: arrayOf(ref("LinkedAuthProvider")),
-    passkeys: arrayOf(ref("PasskeySummary")),
+  AccountProfile: objectSchema(accountProfileRequired, accountProfileProperties),
+  AccountProfileMutationData: objectSchema([...accountProfileRequired, "mutation"], {
+    ...accountProfileProperties,
+    mutation: ref("MutationMetadata"),
   }),
-  UpdateAccountProfileRequest: objectSchema(["email", "username"], {
+  UpdateAccountProfileRequest: objectSchema(["clientMutationId", "email", "username"], {
+    clientMutationId: shortTextSchema,
     email: { type: "string", format: "email" },
     username: { type: "string", minLength: 1, maxLength: 160 },
-    clientMutationId: shortTextSchema,
   }),
-  ProfilePhotoUploadRequest: objectSchema(["photo"], {
+  ProfilePhotoUploadRequest: objectSchema(["clientMutationId", "photo"], {
+    clientMutationId: shortTextSchema,
     photo: { type: "string", format: "binary", description: "JPEG, PNG, GIF, or WebP profile photo up to 5MB." },
   }),
-  NotificationPreferences: objectSchema([
-    "notifySpoonOnMyRecipe",
-    "notifyForkOfMyRecipe",
-    "notifyCookbookSaveOfMine",
-    "notifyFellowChefOriginCook",
-  ], {
-    notifySpoonOnMyRecipe: { type: "boolean" },
-    notifyForkOfMyRecipe: { type: "boolean" },
-    notifyCookbookSaveOfMine: { type: "boolean" },
-    notifyFellowChefOriginCook: { type: "boolean" },
-  }),
-  UpdateNotificationPreferencesRequest: objectSchema([
-    "notifySpoonOnMyRecipe",
-    "notifyForkOfMyRecipe",
-    "notifyCookbookSaveOfMine",
-    "notifyFellowChefOriginCook",
-  ], {
-    notifySpoonOnMyRecipe: { type: "boolean" },
-    notifyForkOfMyRecipe: { type: "boolean" },
-    notifyCookbookSaveOfMine: { type: "boolean" },
-    notifyFellowChefOriginCook: { type: "boolean" },
+  AccountDeleteMutationRequest: objectSchema(["clientMutationId"], {
     clientMutationId: shortTextSchema,
   }),
-  ApnsDeviceRegistrationRequest: objectSchema(["deviceId", "platform", "environment", "token"], {
+  NotificationPreferences: objectSchema(notificationPreferenceRequired, notificationPreferenceProperties),
+  NotificationPreferencesMutationData: objectSchema([...notificationPreferenceRequired, "mutation"], {
+    ...notificationPreferenceProperties,
+    mutation: ref("MutationMetadata"),
+  }),
+  UpdateNotificationPreferencesRequest: objectSchema([
+    "clientMutationId",
+    "notifySpoonOnMyRecipe",
+    "notifyForkOfMyRecipe",
+    "notifyCookbookSaveOfMine",
+    "notifyFellowChefOriginCook",
+  ], {
+    clientMutationId: shortTextSchema,
+    notifySpoonOnMyRecipe: { type: "boolean" },
+    notifyForkOfMyRecipe: { type: "boolean" },
+    notifyCookbookSaveOfMine: { type: "boolean" },
+    notifyFellowChefOriginCook: { type: "boolean" },
+  }),
+  ApnsDeviceRegistrationRequest: objectSchema(["clientMutationId", "deviceId", "platform", "environment", "token"], {
+    clientMutationId: shortTextSchema,
     deviceId: { type: "string", minLength: 1, maxLength: 160 },
     platform: { type: "string", enum: ["ios", "ipados", "macos"] },
     environment: { type: "string", enum: ["development", "production"] },
@@ -570,15 +592,17 @@ const schemas = {
     createdAt: dateTimeSchema,
     updatedAt: dateTimeSchema,
   }),
-  ApnsDeviceRegistrationData: objectSchema(["created", "device"], {
+  ApnsDeviceRegistrationData: objectSchema(["created", "device", "mutation"], {
     created: { type: "boolean" },
     device: ref("ApnsDevice"),
+    mutation: ref("MutationMetadata"),
   }),
-  ApnsDeviceRevokeData: objectSchema(["revoked", "revokedCount", "device", "devices"], {
+  ApnsDeviceRevokeData: objectSchema(["revoked", "revokedCount", "device", "devices", "mutation"], {
     revoked: { type: "boolean" },
     revokedCount: { type: "integer", minimum: 0 },
     device: ref("ApnsDevice"),
     devices: arrayOf(ref("ApnsDevice")),
+    mutation: ref("MutationMetadata"),
   }),
   OAuthConnectionSummary: objectSchema(["id", "clientId", "clientName", "resource", "scopes", "createdAt", "refreshTokenCount", "accessTokenCount"], {
     id: { type: "string", pattern: "^conn_" },
@@ -1106,7 +1130,9 @@ const schemas = {
   CookbookRecipeMutationEnvelope: successEnvelope(ref("CookbookRecipeMutationData")),
   CookbookRecipeRemoveEnvelope: successEnvelope(ref("CookbookRecipeMutationData")),
   AccountProfileEnvelope: successEnvelope(ref("AccountProfile")),
+  AccountProfileMutationEnvelope: successEnvelope(ref("AccountProfileMutationData")),
   NotificationPreferencesEnvelope: successEnvelope(ref("NotificationPreferences")),
+  NotificationPreferencesMutationEnvelope: successEnvelope(ref("NotificationPreferencesMutationData")),
   ApnsDeviceRegistrationEnvelope: successEnvelope(ref("ApnsDeviceRegistrationData")),
   ApnsDeviceRevokeEnvelope: successEnvelope(ref("ApnsDeviceRevokeData")),
   OAuthConnectionListEnvelope: successEnvelope(ref("OAuthConnectionListData")),
@@ -1257,21 +1283,21 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
   },
   "/api/v1/me": {
     GET: { operationId: "getApiV1Me", tags: ["Account"], summary: "Read the authenticated account profile", auth: "bearer", scopes: ["account:read"], success: { 200: "AccountProfileEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"] },
-    PATCH: { operationId: "patchApiV1Me", tags: ["Account"], summary: "Update the authenticated account email and username", auth: "bearer", scopes: ["account:write"], success: { 200: "AccountProfileEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "UpdateAccountProfileRequest" },
+    PATCH: { operationId: "patchApiV1Me", tags: ["Account"], summary: "Update the authenticated account email and username", auth: "bearer", scopes: ["account:write"], success: { 200: "AccountProfileMutationEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "UpdateAccountProfileRequest" },
   },
   "/api/v1/me/photo": {
-    POST: { operationId: "postApiV1MePhoto", tags: ["Account"], summary: "Upload the authenticated account profile photo", auth: "bearer", scopes: ["account:write"], success: { 200: "AccountProfileEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "ProfilePhotoUploadRequest", requestBodyContentType: "multipart/form-data" },
-    DELETE: { operationId: "deleteApiV1MePhoto", tags: ["Account"], summary: "Remove the authenticated account profile photo", auth: "bearer", scopes: ["account:write"], success: { 200: "AccountProfileEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"] },
+    POST: { operationId: "postApiV1MePhoto", tags: ["Account"], summary: "Upload the authenticated account profile photo", auth: "bearer", scopes: ["account:write"], success: { 200: "AccountProfileMutationEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "ProfilePhotoUploadRequest", requestBodyContentType: "multipart/form-data" },
+    DELETE: { operationId: "deleteApiV1MePhoto", tags: ["Account"], summary: "Remove the authenticated account profile photo", auth: "bearer", scopes: ["account:write"], success: { 200: "AccountProfileMutationEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: deleteIdempotencyParameters(), requestBody: "AccountDeleteMutationRequest", requestBodyRequired: false },
   },
   "/api/v1/me/notification-preferences": {
     GET: { operationId: "getApiV1MeNotificationPreferences", tags: ["Account"], summary: "Read account notification preferences", auth: "bearer", scopes: ["account:read"], success: { 200: "NotificationPreferencesEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "method_not_allowed", "rate_limited", "internal_error"] },
-    PATCH: { operationId: "patchApiV1MeNotificationPreferences", tags: ["Account"], summary: "Update account notification preferences", auth: "bearer", scopes: ["account:write"], success: { 200: "NotificationPreferencesEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "UpdateNotificationPreferencesRequest" },
+    PATCH: { operationId: "patchApiV1MeNotificationPreferences", tags: ["Account"], summary: "Update account notification preferences", auth: "bearer", scopes: ["account:write"], success: { 200: "NotificationPreferencesMutationEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "UpdateNotificationPreferencesRequest" },
   },
   "/api/v1/me/apns-devices": {
-    POST: { operationId: "postApiV1MeApnsDevices", tags: ["Account"], summary: "Register or refresh a native APNs device", auth: "bearer", scopes: ["account:write"], success: { 200: "ApnsDeviceRegistrationEnvelope", 201: "ApnsDeviceRegistrationEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "ApnsDeviceRegistrationRequest" },
+    POST: { operationId: "postApiV1MeApnsDevices", tags: ["Account"], summary: "Register or refresh a native APNs device", auth: "bearer", scopes: ["account:write"], success: { 200: "ApnsDeviceRegistrationEnvelope", 201: "ApnsDeviceRegistrationEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "ApnsDeviceRegistrationRequest" },
   },
   "/api/v1/me/apns-devices/{deviceId}": {
-    DELETE: { operationId: "deleteApiV1MeApnsDevice", tags: ["Account"], summary: "Revoke native APNs registrations for one device", auth: "bearer", scopes: ["account:write"], success: { 200: "ApnsDeviceRevokeEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.deviceId] },
+    DELETE: { operationId: "deleteApiV1MeApnsDevice", tags: ["Account"], summary: "Revoke native APNs registrations for one device", auth: "bearer", scopes: ["account:write"], success: { 200: "ApnsDeviceRevokeEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: deleteIdempotencyParameters(pathParameters.deviceId), requestBody: "AccountDeleteMutationRequest", requestBodyRequired: false },
   },
   "/api/v1/me/connections": {
     GET: { operationId: "getApiV1MeConnections", tags: ["Account"], summary: "List OAuth app connections for the authenticated account", auth: "bearer", scopes: ["tokens:read"], success: { 200: "OAuthConnectionListEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "method_not_allowed", "rate_limited", "internal_error"] },
@@ -1893,12 +1919,42 @@ const responseExamples: Record<string, unknown> = {
     },
   },
   AccountProfileEnvelope: { ok: true, requestId: "req_example", data: exampleAccountProfile },
+  AccountProfileMutationEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      ...exampleAccountProfile,
+      mutation: { clientMutationId: "device-uuid-account-update", replayed: false },
+    },
+  },
   NotificationPreferencesEnvelope: { ok: true, requestId: "req_example", data: exampleNotificationPreferences },
-  ApnsDeviceRegistrationEnvelope: { ok: true, requestId: "req_example", data: { created: true, device: exampleApnsDevice } },
+  NotificationPreferencesMutationEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      ...exampleNotificationPreferences,
+      mutation: { clientMutationId: "device-uuid-notification-preferences", replayed: false },
+    },
+  },
+  ApnsDeviceRegistrationEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      created: true,
+      device: exampleApnsDevice,
+      mutation: { clientMutationId: "device-uuid-apns-register", replayed: false },
+    },
+  },
   ApnsDeviceRevokeEnvelope: {
     ok: true,
     requestId: "req_example",
-    data: { revoked: true, revokedCount: 1, device: { ...exampleApnsDevice, revokedAt: exampleTimestamp }, devices: [{ ...exampleApnsDevice, revokedAt: exampleTimestamp }] },
+    data: {
+      revoked: true,
+      revokedCount: 1,
+      device: { ...exampleApnsDevice, revokedAt: exampleTimestamp },
+      devices: [{ ...exampleApnsDevice, revokedAt: exampleTimestamp }],
+      mutation: { clientMutationId: "device-uuid-apns-revoke", replayed: false },
+    },
   },
   OAuthConnectionListEnvelope: { ok: true, requestId: "req_example", data: { connections: [exampleOAuthConnection] } },
   DisconnectOAuthConnectionEnvelope: {
@@ -2026,15 +2082,18 @@ const requestExamples: Record<string, unknown> = {
     inputStepId: "step_2",
     outputStepNums: [1],
   },
-  UpdateAccountProfileRequest: { email: "ari@spoonjoy.app", username: "ari" },
-  ProfilePhotoUploadRequest: { photo: "(binary image file)" },
+  UpdateAccountProfileRequest: { clientMutationId: "device-uuid-account-update", email: "ari@spoonjoy.app", username: "ari" },
+  ProfilePhotoUploadRequest: { clientMutationId: "device-uuid-profile-photo", photo: "(binary image file)" },
+  AccountDeleteMutationRequest: { clientMutationId: "device-uuid-account-delete" },
   UpdateNotificationPreferencesRequest: {
+    clientMutationId: "device-uuid-notification-preferences",
     notifySpoonOnMyRecipe: true,
     notifyForkOfMyRecipe: true,
     notifyCookbookSaveOfMine: false,
     notifyFellowChefOriginCook: true,
   },
   ApnsDeviceRegistrationRequest: {
+    clientMutationId: "device-uuid-apns-register",
     deviceId: "ios-simulator-1",
     platform: "ios",
     environment: "development",
@@ -2294,6 +2353,15 @@ function isIdempotentCookbookMutation(path: ResourcePath, method: HttpMethod) {
     path === "/api/v1/cookbooks/{id}/recipes/{recipeId}";
 }
 
+function isIdempotentAccountMutation(path: ResourcePath, method: HttpMethod) {
+  if (method !== "POST" && method !== "PATCH" && method !== "DELETE") return false;
+  return path === "/api/v1/me" ||
+    path === "/api/v1/me/photo" ||
+    path === "/api/v1/me/notification-preferences" ||
+    path === "/api/v1/me/apns-devices" ||
+    path === "/api/v1/me/apns-devices/{deviceId}";
+}
+
 function retryPolicyFor(path: ResourcePath, method: HttpMethod) {
   if (path === "/api/v1/tokens" && method === "POST") {
     return {
@@ -2307,10 +2375,11 @@ function retryPolicyFor(path: ResourcePath, method: HttpMethod) {
   if (
     isIdempotentShoppingListMutation(path, method) ||
     isIdempotentCoverMutation(path, method) ||
-    isIdempotentRecipeSpoonMutation(path, method) ||
-    isIdempotentRecipeImportMutation(path, method) ||
-    isIdempotentCookbookMutation(path, method)
-  ) {
+	    isIdempotentRecipeSpoonMutation(path, method) ||
+	    isIdempotentRecipeImportMutation(path, method) ||
+	    isIdempotentCookbookMutation(path, method) ||
+	    isIdempotentAccountMutation(path, method)
+	  ) {
     return {
       retryOn: ["network_timeout", "429", "5xx", "idempotency_in_progress"],
       retryAfterHeader: "Retry-After",
@@ -2465,6 +2534,27 @@ function idempotencyPolicyFor(path: ResourcePath, method: HttpMethod) {
       conflictStatus: 409,
       inProgressRetryAfterSeconds: 2,
       retryBodyRule: "Persist and retry the same cookbook mutation body and path for this clientMutationId. Delete requests may put the idempotency key in the JSON body, query string, or X-Client-Mutation-Id header.",
+    };
+  }
+  if (isIdempotentAccountMutation(path, method)) {
+    const isDelete = method === "DELETE";
+    const isPhotoUpload = path === "/api/v1/me/photo" && method === "POST";
+    return {
+      key: "clientMutationId",
+      location: isDelete
+        ? "jsonBody, query, or X-Client-Mutation-Id"
+        : isPhotoUpload
+          ? "multipartFormData"
+          : "jsonBody",
+      retentionHours: 24,
+      replayStatus: path === "/api/v1/me/apns-devices" && method === "POST" ? [200, 201] : [200],
+      conflictStatus: 409,
+      inProgressRetryAfterSeconds: 2,
+      retryBodyRule: isDelete
+        ? "Persist and retry the same account mutation path for this clientMutationId. Delete requests may put the idempotency key in the JSON body, query string, or X-Client-Mutation-Id header."
+        : isPhotoUpload
+          ? "Persist and retry the same multipart profile photo payload for this clientMutationId. The uploaded file digest, size, type, and field values define conflicts."
+          : "Persist and retry the same parsed account JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts.",
     };
   }
   if (isIdempotentRecipeSpoonMutation(path, method)) {

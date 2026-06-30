@@ -57,12 +57,13 @@ async function apiPost(path: string, headers: HeadersInit, requestId: string, bo
   return await action(routeArgs(jsonRequest(path, "POST", { "X-Request-Id": requestId, ...headers }, body), path));
 }
 
-async function apiDelete(path: string, headers: HeadersInit, requestId: string) {
-  return await action(routeArgs(jsonRequest(path, "DELETE", { "X-Request-Id": requestId, ...headers }), path));
+async function apiDelete(path: string, headers: HeadersInit, requestId: string, body?: unknown) {
+  return await action(routeArgs(jsonRequest(path, "DELETE", { "X-Request-Id": requestId, ...headers }, body), path.split("?")[0]));
 }
 
-async function uploadProfilePhoto(cookie: string, file: File, requestId: string) {
+async function uploadProfilePhoto(cookie: string, file: File, requestId: string, clientMutationId = `cm_${requestId}`) {
   const formData = new UndiciFormData();
+  formData.append("clientMutationId", clientMutationId);
   formData.append("photo", file);
   return await action(routeArgs(new UndiciRequest("http://localhost/api/v1/me/photo", {
     method: "POST",
@@ -185,30 +186,31 @@ describe("API v1 native account settings", () => {
     const newEmail = faker.internet.email().toUpperCase();
     const newUsername = `native_${faker.string.alphanumeric(8)}`;
 
-    const response = await apiPatch("me", {
-      Authorization: `Bearer ${bearer.token}`,
-    }, "req_me_profile_update", { email: newEmail, username: newUsername });
-    const payload = await readJson(response);
+	    const response = await apiPatch("me", {
+	      Authorization: `Bearer ${bearer.token}`,
+	    }, "req_me_profile_update", { clientMutationId: "cm_me_profile_update", email: newEmail, username: newUsername });
+	    const payload = await readJson(response);
 
     expect(response.status).toBe(200);
     expectEnvelopeHeaders(response, "req_me_profile_update");
     expect(payload.data).toMatchObject({
-      id: userId,
-      email: newEmail.toLowerCase(),
-      username: newUsername,
-    });
+	      id: userId,
+	      email: newEmail.toLowerCase(),
+	      username: newUsername,
+	      mutation: { clientMutationId: "cm_me_profile_update", replayed: false },
+	    });
     await expect(db.user.findUniqueOrThrow({ where: { id: userId } }))
       .resolves.toMatchObject({ email: newEmail.toLowerCase(), username: newUsername });
 
-    const noChange = await apiPatch("me", {
-      Authorization: `Bearer ${bearer.token}`,
-    }, "req_me_profile_no_change", { email: newEmail.toLowerCase(), username: newUsername });
+	    const noChange = await apiPatch("me", {
+	      Authorization: `Bearer ${bearer.token}`,
+	    }, "req_me_profile_no_change", { clientMutationId: "cm_me_profile_no_change", email: newEmail.toLowerCase(), username: newUsername });
 
     expect(noChange.status).toBe(200);
 
-    const emailConflict = await apiPatch("me", {
-      Authorization: `Bearer ${bearer.token}`,
-    }, "req_me_email_conflict", { email: other.email.toUpperCase(), username: newUsername });
+	    const emailConflict = await apiPatch("me", {
+	      Authorization: `Bearer ${bearer.token}`,
+	    }, "req_me_email_conflict", { clientMutationId: "cm_me_email_conflict", email: other.email.toUpperCase(), username: newUsername });
     const emailConflictPayload = await readJson(emailConflict);
 
     expect(emailConflict.status).toBe(400);
@@ -218,9 +220,9 @@ describe("API v1 native account settings", () => {
       error: { code: "validation_error", details: { field: "email" } },
     });
 
-    const usernameConflict = await apiPatch("me", {
-      Authorization: `Bearer ${bearer.token}`,
-    }, "req_me_username_conflict", { email: newEmail, username: other.username });
+	    const usernameConflict = await apiPatch("me", {
+	      Authorization: `Bearer ${bearer.token}`,
+	    }, "req_me_username_conflict", { clientMutationId: "cm_me_username_conflict", email: newEmail, username: other.username });
     const usernameConflictPayload = await readJson(usernameConflict);
 
     expect(usernameConflict.status).toBe(400);
@@ -230,9 +232,9 @@ describe("API v1 native account settings", () => {
       error: { code: "validation_error", details: { field: "username" } },
     });
 
-    const invalid = await apiPatch("me", {
-      Authorization: `Bearer ${bearer.token}`,
-    }, "req_me_profile_invalid", { email: "not-an-email", username: "" });
+	    const invalid = await apiPatch("me", {
+	      Authorization: `Bearer ${bearer.token}`,
+	    }, "req_me_profile_invalid", { clientMutationId: "cm_me_profile_invalid", email: "not-an-email", username: "" });
     const invalidPayload = await readJson(invalid);
 
     expect(invalid.status).toBe(400);
@@ -241,9 +243,9 @@ describe("API v1 native account settings", () => {
       details: { fields: expect.arrayContaining(["email", "username"]) },
     });
 
-    const nonStringInvalid = await apiPatch("me", {
-      Authorization: `Bearer ${bearer.token}`,
-    }, "req_me_profile_non_string_invalid", { email: 123, username: 456 });
+	    const nonStringInvalid = await apiPatch("me", {
+	      Authorization: `Bearer ${bearer.token}`,
+	    }, "req_me_profile_non_string_invalid", { clientMutationId: "cm_me_profile_non_string_invalid", email: 123, username: 456 });
     const nonStringInvalidPayload = await readJson(nonStringInvalid);
 
     expect(nonStringInvalid.status).toBe(400);
@@ -267,10 +269,11 @@ describe("API v1 native account settings", () => {
       notifyFellowChefOriginCook: true,
     });
 
-    const update = await apiPatch("me/notification-preferences", { Cookie: cookie }, "req_me_notifications_update", {
-      notifySpoonOnMyRecipe: false,
-      notifyForkOfMyRecipe: true,
-      notifyCookbookSaveOfMine: false,
+	    const update = await apiPatch("me/notification-preferences", { Cookie: cookie }, "req_me_notifications_update", {
+	      clientMutationId: "cm_me_notifications_update",
+	      notifySpoonOnMyRecipe: false,
+	      notifyForkOfMyRecipe: true,
+	      notifyCookbookSaveOfMine: false,
       notifyFellowChefOriginCook: true,
     });
     const updatePayload = await readJson(update);
@@ -278,11 +281,12 @@ describe("API v1 native account settings", () => {
     expect(update.status).toBe(200);
     expectEnvelopeHeaders(update, "req_me_notifications_update");
     expect(updatePayload.data).toEqual({
-      notifySpoonOnMyRecipe: false,
-      notifyForkOfMyRecipe: true,
-      notifyCookbookSaveOfMine: false,
-      notifyFellowChefOriginCook: true,
-    });
+	      notifySpoonOnMyRecipe: false,
+	      notifyForkOfMyRecipe: true,
+	      notifyCookbookSaveOfMine: false,
+	      notifyFellowChefOriginCook: true,
+	      mutation: { clientMutationId: "cm_me_notifications_update", replayed: false },
+	    });
     await expect(db.notificationPreference.findUniqueOrThrow({ where: { userId } }))
       .resolves.toMatchObject({
         notifySpoonOnMyRecipe: false,
@@ -291,15 +295,21 @@ describe("API v1 native account settings", () => {
         notifyFellowChefOriginCook: true,
       });
 
-    const persisted = await apiGet("me/notification-preferences", { Cookie: cookie }, "req_me_notifications_persisted");
-    const persistedPayload = await readJson(persisted);
+	    const persisted = await apiGet("me/notification-preferences", { Cookie: cookie }, "req_me_notifications_persisted");
+	    const persistedPayload = await readJson(persisted);
 
-    expect(persisted.status).toBe(200);
-    expect(persistedPayload.data).toEqual(updatePayload.data);
+	    expect(persisted.status).toBe(200);
+	    expect(persistedPayload.data).toEqual({
+	      notifySpoonOnMyRecipe: false,
+	      notifyForkOfMyRecipe: true,
+	      notifyCookbookSaveOfMine: false,
+	      notifyFellowChefOriginCook: true,
+	    });
 
-    const invalid = await apiPatch("me/notification-preferences", { Cookie: cookie }, "req_me_notifications_invalid_boolean", {
-      notifySpoonOnMyRecipe: "false",
-      notifyForkOfMyRecipe: true,
+	    const invalid = await apiPatch("me/notification-preferences", { Cookie: cookie }, "req_me_notifications_invalid_boolean", {
+	      clientMutationId: "cm_me_notifications_invalid_boolean",
+	      notifySpoonOnMyRecipe: "false",
+	      notifyForkOfMyRecipe: true,
       notifyCookbookSaveOfMine: false,
       notifyFellowChefOriginCook: true,
     });
@@ -316,9 +326,10 @@ describe("API v1 native account settings", () => {
     const token = await createApiCredential(db, userId, "Native APNs writer", { scopes: ["account:write"] });
     const auth = { Authorization: `Bearer ${token.token}` };
 
-    const development = await apiPost("me/apns-devices", auth, "req_me_apns_register_dev", {
-      deviceId: "device-main",
-      platform: "ios",
+	    const development = await apiPost("me/apns-devices", auth, "req_me_apns_register_dev", {
+	      clientMutationId: "cm_me_apns_register_dev",
+	      deviceId: "device-main",
+	      platform: "ios",
       environment: "development",
       token: "apns-token-development-secret",
       deviceName: "Kitchen iPhone",
@@ -338,21 +349,24 @@ describe("API v1 native account settings", () => {
         deviceName: "Kitchen iPhone",
         appVersion: "1.0.0",
         revokedAt: null,
-      },
-    });
+	      },
+	      mutation: { clientMutationId: "cm_me_apns_register_dev", replayed: false },
+	    });
     expect(JSON.stringify(developmentPayload)).not.toContain("development-secret");
     expect(JSON.stringify(developmentPayload)).not.toContain("tokenHash");
 
-    const production = await apiPost("me/apns-devices", auth, "req_me_apns_register_prod", {
-      deviceId: "device-main",
+	    const production = await apiPost("me/apns-devices", auth, "req_me_apns_register_prod", {
+	      clientMutationId: "cm_me_apns_register_prod",
+	      deviceId: "device-main",
       platform: "ios",
       environment: "production",
       token: "apns-token-production-secret",
     });
     expect(production.status).toBe(201);
 
-    const refreshed = await apiPost("me/apns-devices", auth, "req_me_apns_refresh_dev", {
-      deviceId: "device-main",
+	    const refreshed = await apiPost("me/apns-devices", auth, "req_me_apns_refresh_dev", {
+	      clientMutationId: "cm_me_apns_refresh_dev",
+	      deviceId: "device-main",
       platform: "ios",
       environment: "development",
       token: "apns-token-development-rotated",
@@ -371,30 +385,36 @@ describe("API v1 native account settings", () => {
         deviceName: "Ari's iPhone",
         appVersion: "1.0.1",
         revokedAt: null,
-      },
-    });
+	      },
+	      mutation: { clientMutationId: "cm_me_apns_refresh_dev", replayed: false },
+	    });
     await expect(db.nativePushDevice.count({ where: { userId, deviceId: "device-main" } })).resolves.toBe(2);
 
-    const revoke = await apiDelete("me/apns-devices/device-main", auth, "req_me_apns_revoke");
+	    const revoke = await apiDelete("me/apns-devices/device-main?clientMutationId=cm_me_apns_revoke", auth, "req_me_apns_revoke");
     const revokePayload = await readJson(revoke);
 
     expect(revoke.status).toBe(200);
     expectEnvelopeHeaders(revoke, "req_me_apns_revoke");
     expect(revokePayload.data).toMatchObject({
-      revoked: true,
-      revokedCount: 2,
-      device: { deviceId: "device-main" },
-    });
+	      revoked: true,
+	      revokedCount: 2,
+	      device: { deviceId: "device-main" },
+	      mutation: { clientMutationId: "cm_me_apns_revoke", replayed: false },
+	    });
     expect(revokePayload.data.devices).toHaveLength(2);
     expect(revokePayload.data.devices.every((device: { revokedAt: string | null }) => device.revokedAt !== null)).toBe(true);
 
-    const alreadyRevoked = await apiDelete("me/apns-devices/device-main", auth, "req_me_apns_revoke_again");
+	    const alreadyRevoked = await apiDelete("me/apns-devices/device-main", {
+	      ...auth,
+	      "X-Client-Mutation-Id": "cm_me_apns_revoke_again",
+	    }, "req_me_apns_revoke_again");
     const alreadyRevokedPayload = await readJson(alreadyRevoked);
     expect(alreadyRevoked.status).toBe(200);
     expect(alreadyRevokedPayload.data).toMatchObject({ revoked: false, revokedCount: 0 });
 
-    const invalid = await apiPost("me/apns-devices", auth, "req_me_apns_invalid", {
-      deviceId: "device-main",
+	    const invalid = await apiPost("me/apns-devices", auth, "req_me_apns_invalid", {
+	      clientMutationId: "cm_me_apns_invalid",
+	      deviceId: "device-main",
       platform: "watchos",
       environment: "development",
       token: "",
@@ -434,8 +454,9 @@ describe("API v1 native account settings", () => {
         .resolves.toMatchObject({ photoUrl: uploadPayload.data.photoUrl });
     }
 
-    const invalidFormData = new UndiciFormData();
-    invalidFormData.append("photo", new File(["hello"], "notes.txt", { type: "text/plain" }));
+	    const invalidFormData = new UndiciFormData();
+	    invalidFormData.append("clientMutationId", "cm_me_photo_invalid");
+	    invalidFormData.append("photo", new File(["hello"], "notes.txt", { type: "text/plain" }));
     const invalid = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/me/photo", {
       method: "POST",
       headers: { Cookie: cookie, "X-Request-Id": "req_me_photo_invalid" },
@@ -447,7 +468,8 @@ describe("API v1 native account settings", () => {
     expect(invalid.status).toBe(400);
     expect(invalidPayload.error).toMatchObject({ code: "validation_error", details: { field: "photo" } });
 
-    const missingFormData = new UndiciFormData();
+	    const missingFormData = new UndiciFormData();
+	    missingFormData.append("clientMutationId", "cm_me_photo_missing");
     const missing = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/me/photo", {
       method: "POST",
       headers: { Cookie: cookie, "X-Request-Id": "req_me_photo_missing" },
@@ -461,14 +483,14 @@ describe("API v1 native account settings", () => {
 
     const noBody = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/me/photo", {
       method: "POST",
-      headers: { Cookie: cookie, "Content-Type": "application/x-www-form-urlencoded", "X-Request-Id": "req_me_photo_no_body" },
+	      headers: { Cookie: cookie, "Content-Type": "application/x-www-form-urlencoded", "X-Client-Mutation-Id": "cm_me_photo_no_body", "X-Request-Id": "req_me_photo_no_body" },
     }) as unknown as Request, "me/photo"));
     const noBodyPayload = await readJson(noBody);
 
     expect(noBody.status).toBe(400);
     expect(noBodyPayload.error).toMatchObject({ code: "validation_error", details: { field: "photo", reason: "missing" } });
 
-    const urlEncodedBytes = new TextEncoder().encode("photo=");
+	    const urlEncodedBytes = new TextEncoder().encode("clientMutationId=cm_me_photo_streamed_with_length&photo=");
     const streamedWithLength = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/me/photo", {
       method: "POST",
       headers: {
@@ -530,10 +552,10 @@ describe("API v1 native account settings", () => {
     expect(oversized.status).toBe(400);
     expect(oversizedPayload.error).toMatchObject({ code: "validation_error", details: { field: "photo" } });
 
-    const oversizedDeclared = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/me/photo", {
-      method: "POST",
-      headers: { Cookie: cookie, "Content-Length": String(6 * 1024 * 1024), "X-Request-Id": "req_me_photo_declared_oversized" },
-      body: new UndiciFormData(),
+	    const oversizedDeclared = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/me/photo", {
+	      method: "POST",
+	      headers: { Cookie: cookie, "Content-Length": String(6 * 1024 * 1024), "X-Client-Mutation-Id": "cm_me_photo_declared_oversized", "X-Request-Id": "req_me_photo_declared_oversized" },
+	      body: new UndiciFormData(),
       duplex: "half",
     }) as unknown as Request, "me/photo"));
     const oversizedDeclaredPayload = await readJson(oversizedDeclared);
@@ -544,9 +566,10 @@ describe("API v1 native account settings", () => {
     const oversizedChunked = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/me/photo", {
       method: "POST",
       headers: {
-        Cookie: cookie,
-        "Content-Type": "multipart/form-data; boundary=spoonjoy-native-boundary",
-        "X-Request-Id": "req_me_photo_chunked_oversized",
+	        Cookie: cookie,
+	        "Content-Type": "multipart/form-data; boundary=spoonjoy-native-boundary",
+	        "X-Client-Mutation-Id": "cm_me_photo_chunked_oversized",
+	        "X-Request-Id": "req_me_photo_chunked_oversized",
       },
       body: new ReadableStream<Uint8Array>({
         start(controller) {
@@ -564,9 +587,10 @@ describe("API v1 native account settings", () => {
     const cancelRejectingOversized = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/me/photo", {
       method: "POST",
       headers: {
-        Cookie: cookie,
-        "Content-Type": "multipart/form-data; boundary=spoonjoy-native-boundary",
-        "X-Request-Id": "req_me_photo_cancel_rejecting_oversized",
+	        Cookie: cookie,
+	        "Content-Type": "multipart/form-data; boundary=spoonjoy-native-boundary",
+	        "X-Client-Mutation-Id": "cm_me_photo_cancel_rejecting_oversized",
+	        "X-Request-Id": "req_me_photo_cancel_rejecting_oversized",
       },
       body: new ReadableStream<Uint8Array>({
         pull(controller) {
@@ -583,11 +607,14 @@ describe("API v1 native account settings", () => {
     expect(cancelRejectingOversized.status).toBe(400);
     expect(cancelRejectingPayload.error).toMatchObject({ code: "validation_error", details: { field: "photo" } });
 
-    const remove = await apiDelete("me/photo", { Cookie: cookie }, "req_me_photo_remove");
+	    const remove = await apiDelete("me/photo?clientMutationId=cm_me_photo_remove", { Cookie: cookie }, "req_me_photo_remove");
     const removePayload = await readJson(remove);
 
     expect(remove.status).toBe(200);
-    expect(removePayload.data).toMatchObject({ photoUrl: null });
+	    expect(removePayload.data).toMatchObject({
+	      photoUrl: null,
+	      mutation: { clientMutationId: "cm_me_photo_remove", replayed: false },
+	    });
     await expect(db.user.findUniqueOrThrow({ where: { id: userId } }))
       .resolves.toMatchObject({ photoUrl: null });
 
@@ -596,10 +623,10 @@ describe("API v1 native account settings", () => {
       data: { photoUrl: `/photos/profiles/${userId}/avatar.jpg` },
     });
     const deleteCalls: string[] = [];
-    const removeWithEnv = await action(routeArgs(jsonRequest("me/photo", "DELETE", {
-      Cookie: cookie,
-      "X-Request-Id": "req_me_photo_remove_with_env",
-    }), "me/photo", {
+	    const removeWithEnv = await action(routeArgs(jsonRequest("me/photo", "DELETE", {
+	      Cookie: cookie,
+	      "X-Request-Id": "req_me_photo_remove_with_env",
+	    }, { clientMutationId: "cm_me_photo_remove_with_env" }), "me/photo", {
       cloudflare: {
         env: {
           POSTHOG_KEY: "ph_test",
@@ -610,9 +637,127 @@ describe("API v1 native account settings", () => {
     const removeWithEnvPayload = await readJson(removeWithEnv);
 
     expect(removeWithEnv.status).toBe(200);
-    expect(removeWithEnvPayload.data).toMatchObject({ photoUrl: null });
-    expect(deleteCalls).toEqual([`profiles/${userId}/avatar.jpg`]);
-  });
+	    expect(removeWithEnvPayload.data).toMatchObject({
+	      photoUrl: null,
+	      mutation: { clientMutationId: "cm_me_photo_remove_with_env", replayed: false },
+	    });
+	    expect(deleteCalls).toEqual([`profiles/${userId}/avatar.jpg`]);
+	  });
+
+	  it("replays idempotent native account mutations and rejects body conflicts", async () => {
+	    const bearer = await createApiCredential(db, userId, "Native account idempotency", { scopes: ["account:write"] });
+	    const auth = { Authorization: `Bearer ${bearer.token}` };
+	    const cookie = await sessionCookie(userId);
+	    const profileBody = {
+	      clientMutationId: "cm_account_profile_replay",
+	      email: faker.internet.email().toUpperCase(),
+	      username: `native_replay_${faker.string.alphanumeric(8)}`,
+	    };
+
+	    const profile = await apiPatch("me", auth, "req_account_profile_first", profileBody);
+	    const profileReplay = await apiPatch("me", auth, "req_account_profile_replay", profileBody);
+	    const profileConflict = await apiPatch("me", auth, "req_account_profile_conflict", {
+	      ...profileBody,
+	      username: `native_conflict_${faker.string.alphanumeric(8)}`,
+	    });
+	    const profilePayload = await readJson(profile);
+	    const profileReplayPayload = await readJson(profileReplay);
+	    const profileConflictPayload = await readJson(profileConflict);
+
+	    expect(profile.status).toBe(200);
+	    expect(profilePayload.data.mutation).toEqual({ clientMutationId: "cm_account_profile_replay", replayed: false });
+	    expect(profileReplay.status).toBe(200);
+	    expect(profileReplayPayload).toMatchObject({
+	      requestId: "req_account_profile_replay",
+	      data: {
+	        email: profileBody.email.toLowerCase(),
+	        username: profileBody.username,
+	        mutation: { clientMutationId: "cm_account_profile_replay", replayed: true },
+	      },
+	    });
+	    expect(profileConflict.status).toBe(409);
+	    expect(profileConflictPayload.error.code).toBe("idempotency_conflict");
+
+	    const preferencesBody = {
+	      clientMutationId: "cm_account_preferences_replay",
+	      notifySpoonOnMyRecipe: false,
+	      notifyForkOfMyRecipe: false,
+	      notifyCookbookSaveOfMine: true,
+	      notifyFellowChefOriginCook: false,
+	    };
+	    const preferences = await apiPatch("me/notification-preferences", { Cookie: cookie }, "req_account_preferences_first", preferencesBody);
+	    const preferencesReplay = await apiPatch("me/notification-preferences", { Cookie: cookie }, "req_account_preferences_replay", preferencesBody);
+	    const preferencesPayload = await readJson(preferences);
+	    const preferencesReplayPayload = await readJson(preferencesReplay);
+
+	    expect(preferences.status).toBe(200);
+	    expect(preferencesPayload.data.mutation).toEqual({ clientMutationId: "cm_account_preferences_replay", replayed: false });
+	    expect(preferencesReplay.status).toBe(200);
+	    expect(preferencesReplayPayload.data.mutation).toEqual({ clientMutationId: "cm_account_preferences_replay", replayed: true });
+
+	    const photoFile = () => new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00])], "profile.png", { type: "image/png" });
+	    const photo = await uploadProfilePhoto(cookie, photoFile(), "req_account_photo_first", "cm_account_photo_replay");
+	    const photoReplay = await uploadProfilePhoto(cookie, photoFile(), "req_account_photo_replay", "cm_account_photo_replay");
+	    const photoPayload = await readJson(photo);
+	    const photoReplayPayload = await readJson(photoReplay);
+
+	    expect(photo.status).toBe(200);
+	    expect(photoPayload.data.mutation).toEqual({ clientMutationId: "cm_account_photo_replay", replayed: false });
+	    expect(photoReplay.status).toBe(200);
+	    expect(photoReplayPayload.data).toMatchObject({
+	      photoUrl: photoPayload.data.photoUrl,
+	      mutation: { clientMutationId: "cm_account_photo_replay", replayed: true },
+	    });
+
+	    const photoRemove = await apiDelete("me/photo?clientMutationId=cm_account_photo_remove_replay", { Cookie: cookie }, "req_account_photo_remove_first");
+	    const photoRemoveReplay = await apiDelete("me/photo?clientMutationId=cm_account_photo_remove_replay", { Cookie: cookie }, "req_account_photo_remove_replay");
+	    const photoRemovePayload = await readJson(photoRemove);
+	    const photoRemoveReplayPayload = await readJson(photoRemoveReplay);
+
+	    expect(photoRemove.status).toBe(200);
+	    expect(photoRemovePayload.data.mutation).toEqual({ clientMutationId: "cm_account_photo_remove_replay", replayed: false });
+	    expect(photoRemoveReplay.status).toBe(200);
+	    expect(photoRemoveReplayPayload.data.mutation).toEqual({ clientMutationId: "cm_account_photo_remove_replay", replayed: true });
+
+	    const apnsBody = {
+	      clientMutationId: "cm_account_apns_replay",
+	      deviceId: "device-replay",
+	      platform: "ios",
+	      environment: "development",
+	      token: "apns-token-replay-secret",
+	      deviceName: "Replay iPhone",
+	    };
+	    const apns = await apiPost("me/apns-devices", auth, "req_account_apns_first", apnsBody);
+	    const apnsReplay = await apiPost("me/apns-devices", auth, "req_account_apns_replay", apnsBody);
+	    const apnsPayload = await readJson(apns);
+	    const apnsReplayPayload = await readJson(apnsReplay);
+
+	    expect(apns.status).toBe(201);
+	    expect(apnsPayload.data.mutation).toEqual({ clientMutationId: "cm_account_apns_replay", replayed: false });
+	    expect(apnsReplay.status).toBe(201);
+	    expect(apnsReplayPayload.data).toMatchObject({
+	      created: true,
+	      device: { deviceId: "device-replay", deviceName: "Replay iPhone" },
+	      mutation: { clientMutationId: "cm_account_apns_replay", replayed: true },
+	    });
+	    await expect(db.nativePushDevice.count({ where: { userId, deviceId: "device-replay" } })).resolves.toBe(1);
+
+	    const apnsRevoke = await apiDelete("me/apns-devices/device-replay", {
+	      ...auth,
+	      "X-Client-Mutation-Id": "cm_account_apns_revoke_replay",
+	    }, "req_account_apns_revoke_first");
+	    const apnsRevokeReplay = await apiDelete("me/apns-devices/device-replay", {
+	      ...auth,
+	      "X-Client-Mutation-Id": "cm_account_apns_revoke_replay",
+	    }, "req_account_apns_revoke_replay");
+	    const apnsRevokePayload = await readJson(apnsRevoke);
+	    const apnsRevokeReplayPayload = await readJson(apnsRevokeReplay);
+
+	    expect(apnsRevoke.status).toBe(200);
+	    expect(apnsRevokePayload.data.mutation).toEqual({ clientMutationId: "cm_account_apns_revoke_replay", replayed: false });
+	    expect(apnsRevokeReplay.status).toBe(200);
+	    expect(apnsRevokeReplayPayload.data.mutation).toEqual({ clientMutationId: "cm_account_apns_revoke_replay", replayed: true });
+	  });
 
   it("lists and disconnects OAuth app connections with opaque native IDs", async () => {
     const token = await createApiCredential(db, userId, "Native token admin", { scopes: ["tokens:read", "tokens:write"] });

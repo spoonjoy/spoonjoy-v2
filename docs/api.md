@@ -493,7 +493,7 @@ API v1 is rate limited by IP and credential before authentication work. Anonymou
 
 Store the returned `nextCursor` for a page only after applying every item in that response durably. Use `limit` from 1 to 50 for small payloads; `hasMore: true` means continue immediately with that checkpoint to drain the backlog. It is okay for crash-prone clients to checkpoint after each fully applied page, as long as local apply is idempotent and no cursor is persisted before all rows in that page are durable. Poll conservatively because webhooks, REST Hooks, SSE, and event subscriptions are not in v1 yet.
 
-Idempotent owner mutations use `clientMutationId`. This applies to recipe create/update/delete/fork/import, recipe step and ingredient edits, cookbook writes, shopping-list writes, recipe spoon writes, and recipe-cover writes. The idempotency key is scoped to the chef, retained for 24 hours, and bound to method, path, and a canonicalized parsed JSON body. Persist the same request values for each mutation id before sending it; whitespace and object key order are ignored, while changed method, path, or body values return a conflict. A write retried after an OAuth access-token refresh still replays instead of duplicating because both credentials resolve to the same chef. Reusing the same mutation id with the same completed request body returns the recorded response with `mutation.replayed: true`; a concurrent retry can return `409 idempotency_in_progress` with `Retry-After: 2` and `error.details.retryAfterSeconds`. Wait at least that long, then retry the same request. Reusing a mutation id with a different method, path, or body returns `409 idempotency_conflict`.
+Idempotent owner mutations use `clientMutationId`. This applies to profile display-field updates, profile photo upload/remove, notification preference updates, APNs device registration/revocation after a system token exists, recipe create/update/delete/fork/import, recipe step and ingredient edits, cookbook writes, shopping-list writes, recipe spoon writes, and recipe-cover writes. The idempotency key is scoped to the chef, retained for 24 hours, and bound to method, path, and a canonicalized parsed JSON body; multipart profile-photo uploads are bound to the mutation id plus uploaded file digest, size, type, and field values. Persist the same request values for each mutation id before sending it; whitespace and object key order are ignored, while changed method, path, or body values return a conflict. A write retried after an OAuth access-token refresh still replays instead of duplicating because both credentials resolve to the same chef. Reusing the same mutation id with the same completed request body returns the recorded response with `mutation.replayed: true`; a concurrent retry can return `409 idempotency_in_progress` with `Retry-After: 2` and `error.details.retryAfterSeconds`. Wait at least that long, then retry the same request. Reusing a mutation id with a different method, path, or body returns `409 idempotency_conflict`.
 
 Mutation responses return the changed item or changed items plus mutation metadata, not the entire shopping list. Fetch `/api/v1/shopping-list` or `/api/v1/shopping-list/sync` when you need the current list view.
 
@@ -757,10 +757,12 @@ Native settings dogfoods `POST /api/v1/me/photo` and `DELETE /api/v1/me/photo` w
 ```bash
 curl -fsS -X POST 'https://spoonjoy.app/api/v1/me/photo' \
   -H "Authorization: Bearer $SPOONJOY_TOKEN" \
+  -F 'clientMutationId=profile-photo:local-media-123' \
   -F 'photo=@profile.jpg;type=image/jpeg'
 
 curl -fsS -X DELETE 'https://spoonjoy.app/api/v1/me/photo' \
-  -H "Authorization: Bearer $SPOONJOY_TOKEN"
+  -H "Authorization: Bearer $SPOONJOY_TOKEN" \
+  -H 'X-Client-Mutation-Id: profile-photo-remove:local-media-123'
 ```
 
 ### DELETE idempotency
@@ -783,9 +785,13 @@ curl -fsS -X DELETE 'https://spoonjoy.app/api/v1/recipes/recipe_123/spoons/spoon
 curl -fsS -X DELETE 'https://spoonjoy.app/api/v1/cookbooks/cookbook_123' \
   -H "Authorization: Bearer $SPOONJOY_TOKEN" \
   -H 'X-Client-Mutation-Id: cookbook-delete:cookbook_123'
+
+curl -fsS -X DELETE 'https://spoonjoy.app/api/v1/me/apns-devices/device-main' \
+  -H "Authorization: Bearer $SPOONJOY_TOKEN" \
+  -H 'X-Client-Mutation-Id: apns-revoke:device-main'
 ```
 
-DELETE examples to mirror in native request builders: DELETE /api/v1/shopping-list/items/{itemId}, DELETE /api/v1/recipes/{id}/spoons/{spoonId}, and DELETE /api/v1/cookbooks/{id}.
+DELETE examples to mirror in native request builders: DELETE /api/v1/shopping-list/items/{itemId}, DELETE /api/v1/recipes/{id}/spoons/{spoonId}, DELETE /api/v1/cookbooks/{id}, DELETE /api/v1/me/photo, and DELETE /api/v1/me/apns-devices/{deviceId}.
 
 ## Offline Product Contract
 
@@ -793,7 +799,7 @@ Native clients treat offline support as product behavior, not a cache optimizati
 
 Freshness thresholds are fixed for native cache and docs drift tests. Signed-in bootstrap, account, settings, and shopping data is fresh for 15 minutes after lastValidatedAt. Recipe detail, cookbook detail, spoon lists, profile/chef graph, and active cook-mode backing data is fresh for 6 hours. Catalog and search result pages are fresh for 24 hours. Local cook progress, capture/import drafts, queued mutations, and staged media are locally authoritative until synced, discarded, or conflicted.
 
-Profile display-field updates, profile photo upload/remove after local media staging, and notification preference updates are queueable. API token create/revoke, OAuth connection disconnect, logout/session revoke, passkey/password/provider-link actions are online-only and must never be queued by native UI, Siri, or Shortcuts. APNs device registration can queue only after the system device token already exists; the permission prompt and device-token acquisition are online-only.
+Profile display-field updates, profile photo upload/remove after local media staging, notification preference updates, and APNs device registration/revocation after a system device token exists are queueable. API token create/revoke, OAuth connection disconnect, logout/session revoke, passkey/password/provider-link actions are online-only and must never be queued by native UI, Siri, or Shortcuts. APNs permission prompts and device-token acquisition are online-only.
 
 Queued mutations must include stable clientMutationId, endpoint path, method, idempotency key, payload schema version, created-at time, dependency ordering key, retry count, and last error. Queue replay is FIFO within an object dependency key and may run independent keys concurrently only after tests prove no ordering conflict. Retry with the same clientMutationId for timeouts, 429, and 5xx. Auth failure pauses the queue until reauth, validation conflict marks only that mutation conflicted, and server tombstones remove or conflict local records according to endpoint-specific tests.
 
