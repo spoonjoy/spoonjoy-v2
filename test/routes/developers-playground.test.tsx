@@ -897,8 +897,11 @@ describe("/developers/playground", () => {
     fireEvent.change(document.querySelector<HTMLInputElement>("#param-path-itemId")!, { target: { value: "item_1" } });
     const deleteBody = screen.getByLabelText("JSON body");
     expect((deleteBody as HTMLTextAreaElement).value).toContain("\"clientMutationId\": \"device-uuid-3\"");
-    expect(document.querySelector<HTMLInputElement>("#param-header-X-Client-Mutation-Id")).toBeInTheDocument();
+    const headerMutationId = document.querySelector<HTMLInputElement>("#param-header-X-Client-Mutation-Id");
+    expect(headerMutationId).toBeInTheDocument();
     expect(document.querySelector<HTMLInputElement>("#param-query-clientMutationId")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "Fresh mutation id" })[0]);
+    expect(headerMutationId?.value).toMatch(/^deleteApiV1ShoppingListItem:/);
 
     fireEvent.click(screen.getByRole("button", { name: /Revoke a bearer credential/i }));
     expect(screen.getByText(/A bearer credential may revoke its own credential id/i)).toBeInTheDocument();
