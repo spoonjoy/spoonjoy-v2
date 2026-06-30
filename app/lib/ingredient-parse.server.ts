@@ -9,6 +9,11 @@ import { z } from 'zod'
 import { createOpenAIClient } from '~/lib/openai-client.server'
 import { extractOpenAIErrorFields } from '~/lib/openai-error.server'
 import { captureLlmCallFailure, captureLlmCallSucceeded } from '~/lib/llm-telemetry.server'
+import {
+  DEFAULT_GEMINI_TEXT_MODEL,
+  DEFAULT_GEMINI_TEXT_TIMEOUT_MS,
+  geminiGenerateJson,
+} from '~/lib/gemini-text.server'
 import type { PostHogServerConfig, PostHogServerEnv } from '~/lib/analytics-server'
 
 export const DEFAULT_INGREDIENT_PARSE_PROVIDER = 'openai'
@@ -24,6 +29,9 @@ export interface IngredientParserEnv extends PostHogServerEnv {
   INGREDIENT_PARSE_MODEL?: string
   INGREDIENT_PARSE_TIMEOUT_MS?: string
   INGREDIENT_PARSE_MAX_RETRIES?: string
+  GOOGLE_API_KEY?: string
+  GEMINI_TEXT_MODEL?: string
+  GEMINI_TEXT_TIMEOUT_MS?: string
 }
 
 /**
@@ -44,6 +52,9 @@ export interface IngredientParserConfig {
   model: string
   timeoutMs: number
   maxRetries: number
+  googleApiKey: string
+  geminiModel: string
+  geminiTimeoutMs: number
 }
 
 export type IngredientParserConfigInput = string | IngredientParserEnv | undefined
@@ -135,6 +146,30 @@ const INGREDIENT_RESPONSE_JSON_SCHEMA = {
 } as const
 
 /**
+ * Gemini structured-output response schema (OpenAPI subset). Mirrors
+ * {@link INGREDIENT_RESPONSE_JSON_SCHEMA} so the Gemini fallback is constrained
+ * to the same `{ ingredients: [{ quantity, unit, ingredientName }] }` shape.
+ */
+const GEMINI_INGREDIENT_RESPONSE_SCHEMA = {
+  type: 'object',
+  properties: {
+    ingredients: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          quantity: { type: 'number' },
+          unit: { type: 'string' },
+          ingredientName: { type: 'string' },
+        },
+        required: ['quantity', 'unit', 'ingredientName'],
+      },
+    },
+  },
+  required: ['ingredients'],
+} as const
+
+/**
  * System prompt for the ingredient parsing LLM.
  */
 const SYSTEM_PROMPT = `You are an expert recipe ingredient parser. Parse natural language ingredient descriptions into structured data.
@@ -209,6 +244,13 @@ export function resolveIngredientParserConfig(input?: IngredientParserConfigInpu
       DEFAULT_INGREDIENT_PARSE_MAX_RETRIES,
       0
     ),
+    googleApiKey: resolveNonEmpty(source.GOOGLE_API_KEY, ''),
+    geminiModel: resolveNonEmpty(source.GEMINI_TEXT_MODEL, DEFAULT_GEMINI_TEXT_MODEL),
+    geminiTimeoutMs: resolveInteger(
+      source.GEMINI_TEXT_TIMEOUT_MS,
+      DEFAULT_GEMINI_TEXT_TIMEOUT_MS,
+      1
+    ),
   }
 }
 
@@ -257,6 +299,34 @@ function mapOpenAIError(error: unknown): IngredientParseError {
 }
 
 /**
+ * Decide whether a (mapped) OpenAI failure is transient enough to warrant
+ * falling through to the Gemini fallback.
+ *
+ * Retryable: rate limit (429), request timeout (408), and 5xx service failures.
+ * NOT retryable: auth failures (401/403) — a bad/absent OpenAI key won't be
+ * fixed by re-asking; and parse/refusal/empty/schema/generic errors (which carry
+ * no `status`) — those are not provider outages, so the fallback can't help.
+ *
+ * For transport-level failures the OpenAI SDK reports without an HTTP status
+ * (timeouts, dropped connections), we fall back when the mapped message names a
+ * known transient transport condition.
+ */
+export function isRetryableForFallback(error: IngredientParseError): boolean {
+  if (error.status !== null) {
+    return error.status === 429 || error.status === 408 || error.status >= 500
+  }
+
+  const message = error.message.toLowerCase()
+  return (
+    message.includes('timeout') ||
+    message.includes('timed out') ||
+    message.includes('connection') ||
+    message.includes('network') ||
+    message.includes('temporary service failure')
+  )
+}
+
+/**
  * Parse natural language ingredient text into structured data using the configured provider.
  *
  * @param text - The ingredient text to parse (e.g., "2 cups flour" or multiple lines)
@@ -286,72 +356,142 @@ export async function parseIngredients(
     throw new IngredientParseError('OpenAI API key is required')
   }
 
+  const env = getConfigSource(configInput)
+
+  const startedAt = Date.now()
+  try {
+    const ingredients = await parseWithOpenAI(text, config)
+    await reportIngredientParseSuccess(env, config, 'openai', Date.now() - startedAt, telemetry)
+    return ingredients
+  } catch (error) {
+    const mapped = error instanceof IngredientParseError ? error : mapOpenAIError(error)
+
+    await reportIngredientParseFailure(env, config, 'openai', mapped, telemetry)
+
+    if (config.googleApiKey && isRetryableForFallback(mapped)) {
+      const geminiStartedAt = Date.now()
+      try {
+        const ingredients = await parseWithGemini(text, config)
+        await reportIngredientParseSuccess(
+          env,
+          config,
+          'gemini',
+          Date.now() - geminiStartedAt,
+          telemetry
+        )
+        return ingredients
+      } catch (geminiError) {
+        const geminiMapped =
+          geminiError instanceof IngredientParseError
+            ? geminiError
+            : new IngredientParseError('Gemini fallback failed', geminiError)
+
+        await reportIngredientParseFailure(env, config, 'gemini', geminiMapped, telemetry)
+      }
+    }
+
+    throw mapped
+  }
+}
+
+/**
+ * Call the primary provider (OpenAI structured outputs), parse, and validate the
+ * response. Throws {@link IngredientParseError} for an empty/refused/malformed
+ * response and lets raw provider errors propagate (the caller maps them).
+ */
+async function parseWithOpenAI(
+  text: string,
+  config: IngredientParserConfig
+): Promise<ParsedIngredient[]> {
   const openai = createOpenAIClient({
     apiKey: config.apiKey,
     timeout: config.timeoutMs,
     maxRetries: config.maxRetries,
   })
 
-  const startedAt = Date.now()
-  try {
-    const response = await openai.chat.completions.create({
-      model: config.model,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: text },
-      ],
-      response_format: {
-        type: 'json_schema',
-        json_schema: INGREDIENT_RESPONSE_JSON_SCHEMA,
-      },
-    })
+  const response = await openai.chat.completions.create({
+    model: config.model,
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: text },
+    ],
+    response_format: {
+      type: 'json_schema',
+      json_schema: INGREDIENT_RESPONSE_JSON_SCHEMA,
+    },
+  })
 
-    const choice = response.choices[0]
-    if (!choice) {
-      throw new IngredientParseError('No response from OpenAI API')
-    }
-
-    const refusal = choice.message.refusal
-    if (refusal) {
-      throw new IngredientParseError('OpenAI refused to parse this ingredient text')
-    }
-
-    const content = choice.message.content
-    if (!content) {
-      throw new IngredientParseError('Empty response content from OpenAI API')
-    }
-
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(content)
-    } catch (jsonError) {
-      throw new IngredientParseError('Invalid JSON in OpenAI response', jsonError)
-    }
-
-    const result = ParsedIngredientsResponseSchema.safeParse(parsed)
-    if (!result.success) {
-      throw new IngredientParseError(
-        `Response does not match expected schema: ${result.error.message}`,
-        result.error
-      )
-    }
-
-    await reportIngredientParseSuccess(
-      getConfigSource(configInput),
-      config,
-      Date.now() - startedAt,
-      telemetry
-    )
-
-    return result.data.ingredients
-  } catch (error) {
-    const mapped =
-      error instanceof IngredientParseError ? error : mapOpenAIError(error)
-
-    await reportIngredientParseFailure(getConfigSource(configInput), config, mapped, telemetry)
-
-    throw mapped
+  const choice = response.choices[0]
+  if (!choice) {
+    throw new IngredientParseError('No response from OpenAI API')
   }
+
+  const refusal = choice.message.refusal
+  if (refusal) {
+    throw new IngredientParseError('OpenAI refused to parse this ingredient text')
+  }
+
+  const content = choice.message.content
+  if (!content) {
+    throw new IngredientParseError('Empty response content from OpenAI API')
+  }
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(content)
+  } catch (jsonError) {
+    throw new IngredientParseError('Invalid JSON in OpenAI response', jsonError)
+  }
+
+  const result = ParsedIngredientsResponseSchema.safeParse(parsed)
+  if (!result.success) {
+    throw new IngredientParseError(
+      `Response does not match expected schema: ${result.error.message}`,
+      result.error
+    )
+  }
+
+  return result.data.ingredients
+}
+
+/**
+ * Call the Gemini fallback provider, parse, and validate the response against
+ * the same {@link ParsedIngredientsResponseSchema} as the primary path. Throws
+ * {@link IngredientParseError} on invalid JSON or a schema mismatch; the raw
+ * {@link import('~/lib/gemini-text.server').GeminiTextError} for transport /
+ * API / empty-content failures propagates to the caller.
+ */
+async function parseWithGemini(
+  text: string,
+  config: IngredientParserConfig
+): Promise<ParsedIngredient[]> {
+  const raw = await geminiGenerateJson({
+    config: {
+      apiKey: config.googleApiKey,
+      model: config.geminiModel,
+      timeoutMs: config.geminiTimeoutMs,
+    },
+    systemPrompt: SYSTEM_PROMPT,
+    userText: text,
+    responseSchema: GEMINI_INGREDIENT_RESPONSE_SCHEMA,
+  })
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch (jsonError) {
+    throw new IngredientParseError('Invalid JSON in Gemini response', jsonError)
+  }
+
+  const result = ParsedIngredientsResponseSchema.safeParse(parsed)
+  if (!result.success) {
+    throw new IngredientParseError(
+      'Gemini response does not match expected schema',
+      result.error
+    )
+  }
+
+  return result.data.ingredients
 }
 
 /**
@@ -363,6 +503,7 @@ export async function parseIngredients(
 async function reportIngredientParseSuccess(
   env: IngredientParserEnv,
   config: IngredientParserConfig,
+  provider: string,
   durationMs: number,
   telemetry: IngredientParseTelemetry | undefined
 ): Promise<void> {
@@ -372,8 +513,8 @@ async function reportIngredientParseSuccess(
     fetchImpl: telemetry?.fetchImpl,
     distinctId: telemetry?.distinctId,
     operation: 'ingredient_parse',
-    provider: config.provider,
-    model: config.model,
+    provider,
+    model: provider === 'gemini' ? config.geminiModel : config.model,
     durationMs,
   })
 }
@@ -386,6 +527,7 @@ async function reportIngredientParseSuccess(
 async function reportIngredientParseFailure(
   env: IngredientParserEnv,
   config: IngredientParserConfig,
+  provider: string,
   error: IngredientParseError,
   telemetry: IngredientParseTelemetry | undefined
 ): Promise<void> {
@@ -395,8 +537,8 @@ async function reportIngredientParseFailure(
     fetchImpl: telemetry?.fetchImpl,
     distinctId: telemetry?.distinctId,
     operation: 'ingredient_parse',
-    provider: config.provider,
-    model: config.model,
+    provider,
+    model: provider === 'gemini' ? config.geminiModel : config.model,
     errorCode: error.code,
     errorType: error.type,
     errorStatus: error.status,

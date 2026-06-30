@@ -239,6 +239,12 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
     reason:
       "LLM fallback extractor for recipe import. Instrumentation of the OpenAI call failure path is owned by the parallel LLM-telemetry PR (captureLlmCallFailure); not touched here.",
   },
+  {
+    file: "app/lib/gemini-text.server.ts",
+    category: "rethrow",
+    reason:
+      "Generic Gemini text adapter (no PostHog config). Every catch throws a typed GeminiTextError preserving status/code/cause for timeout/network/non-2xx/non-JSON/empty-content; the sole caller (ingredient-parse.server.ts parseWithGemini -> parseIngredients) captures the surfaced failure via captureLlmCallFailure with provider='gemini'. Not silent — surfaced to an instrumented caller.",
+  },
 ];
 
 /** Allowlist as a `file -> reason` map for the ratchet check. */
