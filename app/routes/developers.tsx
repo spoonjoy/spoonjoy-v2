@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { API_V1_ERROR_STATUS, API_V1_RESOURCES, API_V1_SCOPE_REQUIREMENTS } from "~/lib/api-v1-contract.server";
 import { captureSafeClientEvent } from "~/lib/analytics";
-import { API_V1_PLAYGROUND_MANIFEST } from "~/lib/generated/api-v1-playground";
+import { API_V1_PLAYGROUND_MANIFEST, type ApiV1PlaygroundManifest } from "~/lib/generated/api-v1-playground";
 import { OG_IMAGE_HEIGHT, OG_IMAGE_WIDTH, PAGE_OG_CARDS, absoluteUrlFromPreferredBase, pageOgPath } from "~/lib/og-metadata";
 import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
@@ -54,6 +54,36 @@ const scopeLabels: Record<string, string> = {
   "tokens:write": "Bearer credential create and revoke",
 };
 
+type DeveloperResource = {
+  name: string;
+  path: string;
+  methods: readonly string[];
+  auth: string;
+  scopes: readonly string[];
+};
+
+type DeveloperScopeRequirement = {
+  path: string;
+  method: string;
+  auth: string;
+  scopes: readonly string[];
+};
+
+type DevelopersLoaderData = {
+  resources: readonly DeveloperResource[];
+  scopeRequirements: readonly DeveloperScopeRequirement[];
+  errorStatus: Record<string, number>;
+  openapiUrl: string;
+  sdkOpenapiUrl: string;
+  connectorOpenapiUrl: string;
+  scopes: readonly string[];
+  authFlows: ApiV1PlaygroundManifest["authFlows"];
+  oauthScopeMap: Record<string, readonly string[]>;
+  currentCapabilities: ApiV1PlaygroundManifest["currentCapabilities"];
+  canonicalUrl: string;
+  ogImageUrl: string;
+};
+
 const authModels = [
   {
     title: "Spoonjoy session",
@@ -84,7 +114,7 @@ const authModels = [
 
 const clientProfiles = [
   { title: "Tiny-device clients", href: "#scenario-quickstarts", body: "Use sync cursors, small payloads, and idempotent retries when a device is offline or battery constrained." },
-  { title: "Mobile apps", href: "#oauth-and-delegated-flows", body: "Read public recipes without auth, then request shopping-list scopes or kitchen:write for recipe spoon and recipe-cover management after a chef connects their account." },
+  { title: "Mobile apps", href: "#oauth-and-delegated-flows", body: "Read public recipes without auth, then request shopping-list scopes or kitchen:write for native recipe create, edit, delete, fork, import, spoon, and cover management after a chef connects their account." },
   { title: "CLI/script clients", href: "#terminal-quickstart", body: "Use bearer credentials, curl, and OpenAPI JSON only when the script cannot share a Spoonjoy session." },
   { title: "Browser clients", href: "#auth-implementation", body: "Use same-origin Session only inside spoonjoy.app. Extensions and third-party browser apps use OAuth/PKCE." },
   { title: "Agent clients", href: "#oauth-and-delegated-flows", body: "Use MCP or delegated connection endpoints when a chef needs to approve an assistant-style runtime." },
@@ -190,7 +220,7 @@ const externalGuideSteps = [
   {
     title: "Manage native account settings",
     scope: "Requires account:* and tokens:*",
-    body: "Native clients can read and update the signed-in chef's profile, profile photo, notification preferences, token metadata, and OAuth app connections through API v1. Profile and notification settings use explicit account scopes; token and OAuth connection administration uses tokens scopes and returns generation-aware opaque connection ids for disconnects.",
+    body: "Native clients can read and update the signed-in chef's profile, profile photo, notification preferences, APNs device registrations, token metadata, and OAuth app connections through API v1. Profile, notification, and APNs settings use explicit account scopes; token and OAuth connection administration uses tokens scopes and returns generation-aware opaque connection ids for disconnects.",
     sample: [
       "GET /api/v1/me",
       "PATCH /api/v1/me",
@@ -198,6 +228,8 @@ const externalGuideSteps = [
       "DELETE /api/v1/me/photo",
       "GET /api/v1/me/notification-preferences",
       "PATCH /api/v1/me/notification-preferences",
+      "POST /api/v1/me/apns-devices",
+      "DELETE /api/v1/me/apns-devices/{deviceId}",
       "GET /api/v1/me/connections",
       "DELETE /api/v1/me/connections/{connectionId}",
     ].join("\n"),
@@ -267,7 +299,7 @@ const authImplementationSteps = [
 const guideSteps = [
   "Read public recipes and cookbooks anonymously before adding auth.",
   "Use Session for logged-in playground calls; use bearer or OAuth only when a client runs outside that session.",
-  "Use a stable mutation id for recipe import and shopping-list writes, then retry with the same value when a network call is interrupted.",
+  "Use a stable mutation id for recipe create, update, delete, fork, import, and shopping-list writes, then retry with the same value when a network call is interrupted.",
   "Use the sync cursor to fetch shopping-list changes, including removed items.",
 ] as const;
 
@@ -325,7 +357,7 @@ const syncSafetyRows = [
   ["Cursor", "Use the returned nextCursor as the next request cursor after applying every item in the page durably. Treat it as opaque; ISO timestamps are accepted only as a bootstrap convenience."],
   ["Tombstones", "Sync includes deleted rows with deletedAt so offline clients can remove local items."],
   ["Pagination", "Use limit from 1 to 50 for small payloads. hasMore: true means continue with the returned nextCursor; webhooks, REST Hooks, SSE, and event subscriptions are not available yet."],
-  ["Idempotent owner mutations", "clientMutationId is scoped to the chef, retained for 24 hours, and bound to method, path, and body hash for recipe import, shopping-list writes, recipe spoon writes, and recipe-cover writes. Persist and retry the exact serialized body for that mutation id."],
+  ["Idempotent owner mutations", "clientMutationId is scoped to the chef, retained for 24 hours, and bound to method, path, and body hash for recipe create, update, delete, fork, import, shopping-list writes, recipe spoon writes, and recipe-cover writes. Persist and retry the exact serialized body for that mutation id."],
   ["Replay", "Retry the same request with the same clientMutationId after a timeout; Spoonjoy returns the recorded response with mutation.replayed: true."],
   ["Conflict", "Reusing the same clientMutationId for a different method, path, or body returns 409 idempotency_conflict."],
   ["Retries", "Retry network timeouts, 429, and 5xx responses with the same mutation id. Refresh or reconnect on 401. Do not retry validation, scope, or idempotency conflicts unchanged."],
@@ -402,7 +434,7 @@ export function meta({ data }: { data?: { canonicalUrl?: string; ogImageUrl?: st
   ];
 }
 
-export function loader(args?: { request?: Request; context?: { cloudflare?: { env?: Pick<Env, "SPOONJOY_BASE_URL"> | null } } }) {
+export function loader(args?: { request?: Request; context?: { cloudflare?: { env?: Pick<Env, "SPOONJOY_BASE_URL"> | null } } }): DevelopersLoaderData {
   const requestUrl = args?.request?.url;
   const baseUrl = args?.context?.cloudflare?.env?.SPOONJOY_BASE_URL;
 
@@ -448,7 +480,7 @@ function scopeTone(scope: string) {
 }
 
 export default function Developers() {
-  const { resources, scopeRequirements, errorStatus, openapiUrl, sdkOpenapiUrl, connectorOpenapiUrl, scopes, authFlows, oauthScopeMap, currentCapabilities } = useLoaderData<typeof loader>();
+  const { resources, scopeRequirements, errorStatus, openapiUrl, sdkOpenapiUrl, connectorOpenapiUrl, scopes, authFlows, oauthScopeMap, currentCapabilities } = useLoaderData<DevelopersLoaderData>();
   const posthog = usePostHog();
   const docsViewTelemetrySent = useRef(false);
 
@@ -548,7 +580,7 @@ export default function Developers() {
               {currentCapabilities.notYetAvailable.map((item) => <li key={item}>- {item}</li>)}
             </ul>
             <Text className="mt-3">
-              Corporate tenant/admin APIs, inventory, meal plans, full exports, canonical unit conversion, webhooks, REST Hooks, batch mutations, and general recipe create/edit/delete/export endpoints are future API surface, not hidden current endpoints.
+              Corporate tenant/admin APIs, inventory, meal plans, full exports, canonical unit conversion, webhooks, REST Hooks, batch mutations, and recipe export endpoints are future API surface, not hidden current endpoints.
             </Text>
             <Text className="mt-3">
               Delegated approval helper endpoints under /api/tools/* are part of the current public connection flow. Other legacy app-only /api/* routes are not the external contract.
@@ -812,7 +844,7 @@ export default function Developers() {
                     <span key={method} className="inline-flex items-center gap-2">
                       <MethodBadge method={method} />
                       {requirement?.scopes.length ? (
-                        requirement.scopes.map((scope) => (
+                        requirement.scopes.map((scope: string) => (
                           <Badge key={scope} color={scopeTone(scope) as "amber" | "green" | "red" | "zinc"}>
                             {scope}
                           </Badge>
@@ -834,7 +866,7 @@ export default function Developers() {
 
       <SectionShell title="Scopes">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {scopes.map((scope) => (
+          {scopes.map((scope: string) => (
             <div key={scope} className="border border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_70%,transparent)] p-4">
               <p className="font-sj-ui text-sm/5 font-bold text-[var(--sj-ink)]">
                 {scope}

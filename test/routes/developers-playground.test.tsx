@@ -163,7 +163,7 @@ describe("/developers/playground", () => {
       contentType: "multipart/form-data",
       fields: [{ name: "photo", required: true, accept: "image/jpeg,image/png,image/gif,image/webp" }],
     });
-    expect(data.manifest.operations.length).toBe(52);
+    expect(data.manifest.operations.length).toBe(58);
   });
 
   it("uses the configured public origin for playground OG URLs", async () => {

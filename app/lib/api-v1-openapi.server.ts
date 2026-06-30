@@ -779,6 +779,68 @@ const schemas = {
     recipes: arrayOf(ref("RecipeSummary")),
   }),
   RecipeDetailData: objectSchema(["recipe"], { recipe: ref("RecipeDetail") }),
+  RecipeIngredientInput: objectSchema(["quantity", "unit", "name"], {
+    quantity: { type: "number", minimum: 0.001, maximum: 99999 },
+    unit: { type: "string", minLength: 1, maxLength: 50 },
+    name: { type: "string", minLength: 1, maxLength: 100 },
+  }),
+  RecipeStepInput: objectSchema(["description"], {
+    stepTitle: { type: ["string", "null"], maxLength: 200 },
+    description: { type: "string", minLength: 1, maxLength: 5000 },
+    duration: { type: ["integer", "null"], minimum: 1 },
+    ingredients: arrayOf(ref("RecipeIngredientInput")),
+  }),
+  CreateRecipeRequest: objectSchema(["clientMutationId", "title"], {
+    clientMutationId: shortTextSchema,
+    title: { type: "string", minLength: 1, maxLength: 200 },
+    description: { type: ["string", "null"], maxLength: 2000 },
+    servings: { type: ["string", "null"], maxLength: 100 },
+    steps: arrayOf(ref("RecipeStepInput")),
+  }),
+  UpdateRecipeRequest: objectSchema(["clientMutationId"], {
+    clientMutationId: shortTextSchema,
+    title: { type: "string", minLength: 1, maxLength: 200 },
+    description: { type: ["string", "null"], maxLength: 2000 },
+    servings: { type: ["string", "null"], maxLength: 100 },
+  }),
+  DeleteRecipeRequest: objectSchema(["clientMutationId"], {
+    clientMutationId: shortTextSchema,
+  }),
+  ForkRecipeRequest: objectSchema(["clientMutationId"], {
+    clientMutationId: shortTextSchema,
+    title: { type: ["string", "null"], minLength: 1, maxLength: 200 },
+  }),
+  DeletedRecipeTombstone: objectSchema(["id", "deletedAt", "updatedAt"], {
+    id: idSchema,
+    deletedAt: dateTimeSchema,
+    updatedAt: dateTimeSchema,
+  }),
+  RecipeForkMetadata: objectSchema(["appliedTitle", "sourceChef", "sourceRecipeId", "titleWasSuffixed"], {
+    appliedTitle: { type: "string" },
+    sourceChef: ref("ChefSummary"),
+    sourceRecipeId: idSchema,
+    titleWasSuffixed: { type: "boolean" },
+  }),
+  CreateRecipeData: objectSchema(["created", "recipe", "mutation"], {
+    created: { type: "boolean" },
+    recipe: ref("RecipeDetail"),
+    mutation: ref("MutationMetadata"),
+  }),
+  UpdateRecipeData: objectSchema(["updated", "recipe", "mutation"], {
+    updated: { type: "boolean" },
+    recipe: ref("RecipeDetail"),
+    mutation: ref("MutationMetadata"),
+  }),
+  DeleteRecipeData: objectSchema(["deleted", "recipe", "mutation"], {
+    deleted: { type: "boolean" },
+    recipe: ref("DeletedRecipeTombstone"),
+    mutation: ref("MutationMetadata"),
+  }),
+  ForkRecipeData: objectSchema(["fork", "recipe", "mutation"], {
+    fork: ref("RecipeForkMetadata"),
+    recipe: ref("RecipeDetail"),
+    mutation: ref("MutationMetadata"),
+  }),
   RecipeSpoonListData: objectSchema(["limit", "cursor", "nextCursor", "hasMore", "spoons"], {
     limit: { type: "integer" },
     cursor: nullableStringSchema,
@@ -920,6 +982,10 @@ const schemas = {
   SearchEnvelope: successEnvelope(ref("SearchData")),
   RecipeListEnvelope: successEnvelope(ref("RecipeListData")),
   RecipeDetailEnvelope: successEnvelope(ref("RecipeDetailData")),
+  CreateRecipeEnvelope: successEnvelope(ref("CreateRecipeData")),
+  UpdateRecipeEnvelope: successEnvelope(ref("UpdateRecipeData")),
+  DeleteRecipeEnvelope: successEnvelope(ref("DeleteRecipeData")),
+  ForkRecipeEnvelope: successEnvelope(ref("ForkRecipeData")),
   RecipeSpoonListEnvelope: successEnvelope(ref("RecipeSpoonListData")),
   CreateRecipeSpoonEnvelope: successEnvelope(ref("RecipeSpoonMutationData")),
   UpdateRecipeSpoonEnvelope: successEnvelope(ref("RecipeSpoonMutationData")),
@@ -1015,12 +1081,18 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
   },
   "/api/v1/recipes": {
     GET: { operationId: "getApiV1Recipes", tags: ["Recipes"], summary: "Search public recipes", auth: "optional", scopes: ["recipes:read"], success: { 200: "RecipeListEnvelope" }, errors: ["validation_error", "invalid_cursor", "invalid_token", "insufficient_scope", "method_not_allowed", "rate_limited", "internal_error"], parameters: [queryParameters.query, queryParameters.q, queryParameters.cursor, queryParameters.limit] },
-  },
-  "/api/v1/recipes/import": {
-    POST: { operationId: "postApiV1RecipeImport", tags: ["Recipes"], summary: "Import a recipe from URL, video, text, or JSON-LD", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "RecipeImportEnvelope", 201: "RecipeImportEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "upstream_error", "upstream_timeout", "internal_error"], requestBody: "RecipeImportRequest" },
+    POST: { operationId: "postApiV1Recipes", tags: ["Recipes"], summary: "Create a recipe", auth: "bearer", scopes: ["kitchen:write"], success: { 201: "CreateRecipeEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "CreateRecipeRequest" },
   },
   "/api/v1/recipes/{id}": {
     GET: { operationId: "getApiV1Recipe", tags: ["Recipes"], summary: "Read one public recipe", auth: "optional", scopes: ["recipes:read"], success: { 200: "RecipeDetailEnvelope" }, errors: ["validation_error", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id] },
+    PATCH: { operationId: "patchApiV1Recipe", tags: ["Recipes"], summary: "Update a recipe", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "UpdateRecipeEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id], requestBody: "UpdateRecipeRequest" },
+    DELETE: { operationId: "deleteApiV1Recipe", tags: ["Recipes"], summary: "Delete a recipe", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "DeleteRecipeEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: deleteIdempotencyParameters(pathParameters.id), requestBody: "DeleteRecipeRequest", requestBodyRequired: false },
+  },
+  "/api/v1/recipes/{id}/fork": {
+    POST: { operationId: "postApiV1RecipeFork", tags: ["Recipes"], summary: "Fork a recipe", auth: "bearer", scopes: ["kitchen:write"], success: { 201: "ForkRecipeEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id], requestBody: "ForkRecipeRequest" },
+  },
+  "/api/v1/recipes/import": {
+    POST: { operationId: "postApiV1RecipeImport", tags: ["Recipes"], summary: "Import a recipe from URL, video, text, or JSON-LD", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "RecipeImportEnvelope", 201: "RecipeImportEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "upstream_error", "upstream_timeout", "internal_error"], requestBody: "RecipeImportRequest" },
   },
   "/api/v1/recipes/{id}/spoons": {
     GET: { operationId: "getApiV1RecipeSpoons", tags: ["Recipe Spoons"], summary: "List recent public cook events for one recipe", auth: "optional", scopes: ["recipes:read"], success: { 200: "RecipeSpoonListEnvelope" }, errors: ["validation_error", "invalid_cursor", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id, queryParameters.cursor, queryParameters.limit] },
@@ -1114,6 +1186,7 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
 
 const exampleTimestamp = "2026-06-01T00:00:00.000Z";
 const exampleChef = { id: "chef_1", username: "ari" };
+const exampleSourceChef = { id: "chef_source", username: "jules" };
 const examplePrincipal = { ...exampleChef, source: "bearer" };
 const exampleRecipeIngredient = { id: "ingredient_1", name: "pasta", quantity: 1, unit: "lb" };
 const exampleRecipeStep = {
@@ -1157,6 +1230,36 @@ const exampleRecipeDetail = {
   steps: [exampleRecipeStep],
   cookbooks: [exampleCookbookLink],
 };
+const exampleCreatedRecipeDetail = {
+  ...exampleRecipeDetail,
+  attribution: {
+    ...exampleRecipeDetail.attribution,
+    sourceUrl: null,
+    sourceHost: null,
+    sourceRecipe: null,
+  },
+};
+const exampleForkedRecipeDetail = {
+  ...exampleRecipeDetail,
+  id: "recipe_fork_1",
+  title: "Pasta (variation 2)",
+  href: "/recipes/recipe_fork_1",
+  canonicalUrl: "https://spoonjoy.app/recipes/recipe_fork_1",
+  attribution: {
+    creditText: "Pasta (variation 2) by ari on Spoonjoy",
+    canonicalUrl: "https://spoonjoy.app/recipes/recipe_fork_1",
+    sourceUrl: null,
+    sourceHost: null,
+    sourceRecipe: {
+      id: "recipe_source_1",
+      title: "Pasta",
+      chef: exampleSourceChef,
+      href: "/recipes/recipe_source_1",
+      canonicalUrl: "https://spoonjoy.app/recipes/recipe_source_1",
+      deleted: false,
+    },
+  },
+};
 const exampleRecipeCover = {
   id: "cover_1",
   recipeId: "recipe_1",
@@ -1190,6 +1293,17 @@ const exampleRecipeSpoon = {
   note: "Added more lemon.",
   nextTime: "Try a wider pan.",
   deletedAt: null,
+};
+const exampleDeletedRecipe = {
+  id: "recipe_1",
+  deletedAt: exampleTimestamp,
+  updatedAt: exampleTimestamp,
+};
+const exampleRecipeFork = {
+  appliedTitle: "Pasta (variation 2)",
+  sourceChef: exampleSourceChef,
+  sourceRecipeId: "recipe_source_1",
+  titleWasSuffixed: true,
 };
 const exampleCookbookSummary = {
   id: "cookbook_1",
@@ -1393,6 +1507,26 @@ const responseExamples: Record<string, unknown> = {
     },
   },
   RecipeDetailEnvelope: { ok: true, requestId: "req_example", data: { recipe: exampleRecipeDetail } },
+  CreateRecipeEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: { created: true, recipe: exampleCreatedRecipeDetail, mutation: exampleMutation },
+  },
+  UpdateRecipeEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: { updated: true, recipe: exampleRecipeDetail, mutation: exampleMutation },
+  },
+  DeleteRecipeEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: { deleted: true, recipe: exampleDeletedRecipe, mutation: exampleMutation },
+  },
+  ForkRecipeEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: { fork: exampleRecipeFork, recipe: exampleForkedRecipeDetail, mutation: exampleMutation },
+  },
   RecipeSpoonListEnvelope: {
     ok: true,
     requestId: "req_example",
@@ -1610,6 +1744,28 @@ const responseExamples: Record<string, unknown> = {
 };
 
 const requestExamples: Record<string, unknown> = {
+  CreateRecipeRequest: {
+    clientMutationId: "device-uuid-recipe-create",
+    title: "Pasta",
+    description: "Weeknight pasta",
+    servings: "4",
+    steps: [
+      {
+        stepTitle: null,
+        description: "Boil pasta.",
+        duration: null,
+        ingredients: [{ quantity: 1, unit: "lb", name: "pasta" }],
+      },
+    ],
+  },
+  UpdateRecipeRequest: {
+    clientMutationId: "device-uuid-recipe-update",
+    title: "Better Pasta",
+    description: null,
+    servings: "6",
+  },
+  DeleteRecipeRequest: { clientMutationId: "device-uuid-recipe-delete" },
+  ForkRecipeRequest: { clientMutationId: "device-uuid-recipe-fork", title: "My Pasta" },
   UpdateAccountProfileRequest: { email: "ari@spoonjoy.app", username: "ari" },
   ProfilePhotoUploadRequest: { photo: "(binary image file)" },
   UpdateNotificationPreferencesRequest: {
@@ -1946,6 +2102,50 @@ function cursorPolicyFor(path: ResourcePath) {
 }
 
 function idempotencyPolicyFor(path: ResourcePath, method: HttpMethod) {
+  if (path === "/api/v1/recipes" && method === "POST") {
+    return {
+      key: "clientMutationId",
+      location: "jsonBody",
+      retentionHours: 24,
+      replayStatus: [201],
+      conflictStatus: 409,
+      inProgressRetryAfterSeconds: 2,
+      retryBodyRule: "Persist and retry the same parsed JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts.",
+    };
+  }
+  if (path === "/api/v1/recipes/{id}" && method === "PATCH") {
+    return {
+      key: "clientMutationId",
+      location: "jsonBody",
+      retentionHours: 24,
+      replayStatus: [200],
+      conflictStatus: 409,
+      inProgressRetryAfterSeconds: 2,
+      retryBodyRule: "Persist and retry the same parsed JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts.",
+    };
+  }
+  if (path === "/api/v1/recipes/{id}" && method === "DELETE") {
+    return {
+      key: "clientMutationId",
+      location: "jsonBody, query, or X-Client-Mutation-Id",
+      retentionHours: 24,
+      replayStatus: [200],
+      conflictStatus: 409,
+      inProgressRetryAfterSeconds: 2,
+      retryBodyRule: "Persist and retry the same recipe delete path for this clientMutationId. Delete requests may put the idempotency key in the JSON body, query string, or X-Client-Mutation-Id header.",
+    };
+  }
+  if (path === "/api/v1/recipes/{id}/fork" && method === "POST") {
+    return {
+      key: "clientMutationId",
+      location: "jsonBody",
+      retentionHours: 24,
+      replayStatus: [201],
+      conflictStatus: 409,
+      inProgressRetryAfterSeconds: 2,
+      retryBodyRule: "Persist and retry the same parsed JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts.",
+    };
+  }
   if (isIdempotentRecipeImportMutation(path, method)) {
     return {
       key: "clientMutationId",
@@ -2845,11 +3045,11 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
     "x-current-capabilities": {
       available: [
         "public recipe and cookbook reads",
-        "authenticated recipe import from URL, video URL, text, or JSON-LD",
+        "Authenticated recipe create, update, delete, fork, and import from URL, video URL, text, or JSON-LD",
         "public recipe spoon history plus authenticated recipe spoon create, update, and delete",
         "Owner-scoped recipe cover candidate management",
         "owner-scoped shopping-list read, sync, item writes, recipe adds, and clear actions",
-        "native account profile, profile-photo, notification-preference, token, and OAuth app connection settings",
+        "native account profile, profile-photo, notification-preference, APNs device, token, and OAuth app connection settings",
         "session-created and bearer-created API tokens",
         "OAuth/PKCE delegated access",
         "delegated agent/device approval links",
@@ -2857,7 +3057,7 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
         "cursor-paginated public recipe and cookbook lists",
       ],
       notYetAvailable: [
-        "General recipe create, edit, delete, or export endpoints beyond recipe import and owner cover management",
+        "Recipe export endpoints beyond the current create, edit, delete, fork, import, spoon, and cover surfaces",
         "Private recipe-library endpoints",
         "Inventory or pantry stock APIs",
         "Meal plan or \"today's recipes\" APIs",

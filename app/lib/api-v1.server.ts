@@ -40,6 +40,19 @@ import {
   type SearchResult,
   type SearchScope,
 } from "~/lib/search.server";
+import {
+  createNativeRecipe,
+  deleteNativeRecipe,
+  forkNativeRecipe,
+  parseNativeRecipeCreateBody,
+  parseNativeRecipeDeleteBody,
+  parseNativeRecipeForkBody,
+  parseNativeRecipePatchBody,
+  updateNativeRecipe,
+  type ApiV1RecipeWriteResult,
+} from "~/lib/api-v1-recipe-writes.server";
+import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
+import { notifyForkOfMyRecipe } from "~/lib/notification-triggers.server";
 import { enforceRateLimit } from "~/lib/rate-limit.server";
 import { getRequestDb } from "~/lib/route-platform.server";
 import {
@@ -336,6 +349,14 @@ function apiV1OperationFor(method: string, path: string): string | undefined {
       return "recipes.import";
     case "GET recipe":
       return "recipes.get";
+    case "POST recipe-create":
+      return "recipes.create";
+    case "PATCH recipe-write":
+      return "recipes.update";
+    case "DELETE recipe-write":
+      return "recipes.delete";
+    case "POST recipe-fork":
+      return "recipes.fork";
     case "GET recipe-spoons":
       return "recipes.spoons.list";
     case "POST recipe-spoons-create":
@@ -427,6 +448,10 @@ function defaultIdempotencyOutcome(operation: string | undefined, errorCode: Api
     operation !== "shopping-list.clear-completed" &&
     operation !== "shopping-list.clear-all" &&
     operation !== "recipes.import" &&
+    operation !== "recipes.create" &&
+    operation !== "recipes.update" &&
+    operation !== "recipes.delete" &&
+    operation !== "recipes.fork" &&
     !operation.startsWith("recipes.spoons.") &&
     !operation.startsWith("recipes.covers.") &&
     !operation.startsWith("cookbooks.")
@@ -1569,7 +1594,7 @@ async function handleRecipeImport(args: ApiV1RouteArgs, requestId: string, princ
   const source = parseRecipeImportSource(body.source);
   const dryRun = optionalBoolean(body.dryRun, "dryRun");
 
-  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "recipes.import", async (db, reservation) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "recipes.import", async (db, reservation) => {
     if (!recipeImportProvidersConfigured(args)) {
       return {
         status: 200,
@@ -1849,7 +1874,7 @@ async function handleRecipeSpoonCreate(args: ApiV1RouteArgs, requestId: string, 
   const cookedAt = optionalIsoDate(body.cookedAt, "cookedAt");
   const photoUrl = optionalNullableString(body.photoUrl, "photoUrl", 2048);
   const useAsRecipeCover = optionalBoolean(body.useAsRecipeCover, "useAsRecipeCover");
-  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "recipes.spoons.create", async (db, reservation) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "recipes.spoons.create", async (db, reservation) => {
     await loadActiveRecipeForSpoons(db, recipeId);
     let created: Awaited<ReturnType<typeof createSpoon>>;
     try {
@@ -1912,7 +1937,7 @@ async function handleRecipeSpoonUpdate(args: ApiV1RouteArgs, requestId: string, 
   if (hasOwnField(body, "nextTime")) patch.nextTime = optionalNullableString(body.nextTime, "nextTime");
   if (hasOwnField(body, "cookedAt")) patch.cookedAt = optionalIsoDate(body.cookedAt, "cookedAt");
   if (hasOwnField(body, "photoUrl")) patch.photoUrl = optionalNullableString(body.photoUrl, "photoUrl", 2048);
-  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "recipes.spoons.update", async (db) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "recipes.spoons.update", async (db) => {
     const origin = publicContentOrigin(args);
     await loadSpoonInRecipe(db, recipeId, spoonId);
     try {
@@ -1947,7 +1972,7 @@ async function handleRecipeSpoonDelete(args: ApiV1RouteArgs, requestId: string, 
   );
   const idempotencyBody = { clientMutationId };
 
-  return await runIdempotentShoppingMutation(args, requestId, principal, idempotencyBody, clientMutationId, "recipes.spoons.delete", async (db) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, clientMutationId, "recipes.spoons.delete", async (db) => {
     const origin = publicContentOrigin(args);
     await loadSpoonInRecipe(db, recipeId, spoonId);
     let deleted: RecipeSpoon;
@@ -2043,7 +2068,7 @@ async function handleRecipeCoverSetNoCover(args: ApiV1RouteArgs, requestId: stri
     throw new ApiV1Error("validation_error", "confirmNoCover must be true");
   }
 
-  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "recipes.covers.set-no-cover", async (db) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "recipes.covers.set-no-cover", async (db) => {
     const origin = publicContentOrigin(args);
     const recipe = await loadOwnedCoverRecipe(db, principal, recipeId);
     const previousActiveCover = await activeFullCoverPayload(db, recipe, origin);
@@ -2080,7 +2105,7 @@ async function handleRecipeCoverActivate(args: ApiV1RouteArgs, requestId: string
   const clientMutationId = nonblankString(body.clientMutationId, "clientMutationId");
   const variant = requiredCoverVariant(body.variant);
 
-  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "recipes.covers.activate", async (db) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "recipes.covers.activate", async (db) => {
     const origin = publicContentOrigin(args);
     const recipe = await loadOwnedCoverRecipe(db, principal, recipeId);
     const previousActiveCover = await activeFullCoverPayload(db, recipe, origin);
@@ -2115,7 +2140,7 @@ async function handleRecipeCoverArchive(args: ApiV1RouteArgs, requestId: string,
   const confirmNoCover = optionalBoolean(body.confirmNoCover, "confirmNoCover");
   const deleteSafeObjects = optionalBoolean(body.deleteSafeObjects, "deleteSafeObjects");
 
-  return await runIdempotentShoppingMutation(args, requestId, principal, idempotencyBody, clientMutationId, "recipes.covers.archive", async (db) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, clientMutationId, "recipes.covers.archive", async (db) => {
     const origin = publicContentOrigin(args);
     const recipe = await loadOwnedCoverRecipe(db, principal, recipeId);
     const previousActiveCover = await activeFullCoverPayload(db, recipe, origin);
@@ -2154,7 +2179,7 @@ async function handleRecipeCoverRegenerate(args: ApiV1RouteArgs, requestId: stri
   const coverId = nonblankString(body.coverId, "coverId");
   const activateWhenReady = optionalBoolean(body.activateWhenReady, "activateWhenReady");
 
-  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "recipes.covers.regenerate", async (db) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "recipes.covers.regenerate", async (db) => {
     const origin = publicContentOrigin(args);
     const recipe = await loadOwnedCoverRecipe(db, principal, recipeId);
     const previousActiveCover = await activeFullCoverPayload(db, recipe, origin);
@@ -2216,7 +2241,7 @@ async function handleRecipeCoverFromSpoon(args: ApiV1RouteArgs, requestId: strin
   const activate = optionalBoolean(body.activate, "activate");
   const generateEditorial = optionalBoolean(body.generateEditorial, "generateEditorial", true);
 
-  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "recipes.covers.from-spoon", async (db) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "recipes.covers.from-spoon", async (db) => {
     const origin = publicContentOrigin(args);
     const recipe = await loadOwnedCoverRecipe(db, principal, recipeId);
     const previousActiveCover = await activeFullCoverPayload(db, recipe, origin);
@@ -2474,7 +2499,7 @@ async function handleCookbookCreate(args: ApiV1RouteArgs, requestId: string, pri
   const title = nonblankString(body.title, "title");
   const origin = publicContentOrigin(args);
 
-  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "cookbooks.create", async (db) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "cookbooks.create", async (db) => {
     let cookbookId: string;
     try {
       const created = await db.cookbook.create({
@@ -2508,7 +2533,7 @@ async function handleCookbookUpdate(args: ApiV1RouteArgs, requestId: string, pri
   const title = nonblankString(body.title, "title");
   const origin = publicContentOrigin(args);
 
-  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "cookbooks.update", async (db) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "cookbooks.update", async (db) => {
     await loadOwnedCookbookById(db, principal, id);
     try {
       await db.cookbook.update({
@@ -2545,7 +2570,7 @@ async function handleCookbookDelete(args: ApiV1RouteArgs, requestId: string, pri
   const idempotencyBody = { clientMutationId };
   const origin = publicContentOrigin(args);
 
-  return await runIdempotentShoppingMutation(args, requestId, principal, idempotencyBody, clientMutationId, "cookbooks.delete", async (db) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, clientMutationId, "cookbooks.delete", async (db) => {
     const cookbook = await loadOwnedCookbookById(db, principal, id);
     await db.cookbook.delete({ where: { id } });
     return {
@@ -2571,7 +2596,7 @@ async function handleCookbookRecipeAdd(
   const clientMutationId = nonblankString(body.clientMutationId, "clientMutationId");
   const origin = publicContentOrigin(args);
 
-  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "cookbooks.recipes.add", async (db) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "cookbooks.recipes.add", async (db) => {
     await loadOwnedCookbookById(db, principal, cookbookId);
     const recipe = await db.recipe.findFirst({
       where: { id: recipeId, deletedAt: null },
@@ -2624,7 +2649,7 @@ async function handleCookbookRecipeRemove(
   const idempotencyBody = { clientMutationId };
   const origin = publicContentOrigin(args);
 
-  return await runIdempotentShoppingMutation(args, requestId, principal, idempotencyBody, clientMutationId, "cookbooks.recipes.remove", async (db) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, clientMutationId, "cookbooks.recipes.remove", async (db) => {
     await loadOwnedCookbookById(db, principal, cookbookId);
     const result = await db.recipeInCookbook.deleteMany({
       where: { cookbookId, recipeId },
@@ -2864,6 +2889,26 @@ function idempotentMutationBody(
   return { ok: true, requestId, data };
 }
 
+const IDEMPOTENCY_RECOVERY_TIMESTAMP_TOLERANCE_MS = 1_000;
+
+type ApiV1IdempotentMutationResult = { status: number; data: Record<string, unknown> };
+type ApiV1IdempotentRecovery = (
+  db: ApiV1WriteDb,
+  reservation: ApiIdempotencyKey,
+) => Promise<ApiV1IdempotentMutationResult | null>;
+type ApiV1IdempotentMutationOptions = {
+  beforeWrite?: (
+    db: ApiV1WriteDb,
+    record: ApiIdempotencyKey,
+  ) => Promise<void>;
+  deleteReservationOnWriteError?: boolean;
+  hasRecoverableWrite?: (
+    db: ApiV1WriteDb,
+    record: ApiIdempotencyKey,
+  ) => Promise<boolean>;
+  recoverInFlight?: ApiV1IdempotentRecovery;
+};
+
 export async function shouldKeepIdempotencyReservationForRecovery(input: {
   deleteReservationOnWriteError?: boolean;
   hasRecoverableWrite?: () => Promise<boolean>;
@@ -2888,30 +2933,66 @@ export async function deleteIdempotencyReservationAfterWriteError(input: {
   }
 }
 
-async function runIdempotentShoppingMutation(
+function apiV1IdempotentResponse(
+  requestId: string,
+  operation: string,
+  result: ApiV1IdempotentMutationResult,
+  idempotencyOutcome: ApiV1TelemetryMetadata["idempotencyOutcome"],
+): Response {
+  const responseBody = idempotentMutationBody(requestId, result.data);
+  return withApiV1Telemetry(Response.json(responseBody, {
+    status: result.status,
+    headers: apiV1PrivateHeaders(requestId),
+  }), { idempotencyOutcome, operation });
+}
+
+function apiV1RecoveredReplayResponse(
+  requestId: string,
+  operation: string,
+  result: ApiV1IdempotentMutationResult,
+): Response {
+  const responseBody = idempotentMutationBody(requestId, result.data);
+  const replay = replayIdempotencyResponse({
+    responseStatus: result.status,
+    responseBody: JSON.stringify(responseBody),
+  }, requestId);
+  return withApiV1Telemetry(Response.json(replay.body, {
+    status: replay.status,
+    headers: apiV1PrivateHeaders(requestId),
+  }), { idempotencyOutcome: "replayed", operation });
+}
+
+async function completeRecoveredIdempotencyKey(
+  db: ApiV1WriteDb,
+  reservation: ApiIdempotencyKey,
+  requestId: string,
+  result: ApiV1IdempotentMutationResult,
+) {
+  await completeIdempotencyKey(db, reservation.id, {
+    status: result.status,
+    body: idempotentMutationBody(requestId, result.data),
+  });
+}
+
+function normalizeApiV1IdempotentMutationOptions(
+  optionsOrRecovery?: ApiV1IdempotentMutationOptions | ApiV1IdempotentRecovery,
+): ApiV1IdempotentMutationOptions {
+  return typeof optionsOrRecovery === "function"
+    ? { deleteReservationOnWriteError: false, recoverInFlight: optionsOrRecovery }
+    : optionsOrRecovery ?? {};
+}
+
+export async function runIdempotentApiV1Mutation(
   args: ApiV1RouteArgs,
   requestId: string,
   principal: ApiPrincipal,
   body: Record<string, unknown>,
   clientMutationId: string,
   operation: string,
-  write: (db: ApiV1WriteDb, reservation: ApiIdempotencyKey) => Promise<{ status: number; data: Record<string, unknown> }>,
-  options: {
-    beforeWrite?: (
-      db: ApiV1WriteDb,
-      record: ApiIdempotencyKey,
-    ) => Promise<void>;
-    deleteReservationOnWriteError?: boolean;
-    hasRecoverableWrite?: (
-      db: ApiV1WriteDb,
-      record: ApiIdempotencyKey,
-    ) => Promise<boolean>;
-    recoverInFlight?: (
-      db: ApiV1WriteDb,
-      record: ApiIdempotencyKey,
-    ) => Promise<{ status: number; data: Record<string, unknown> } | null>;
-  } = {},
+  write: (db: ApiV1WriteDb, reservation: ApiIdempotencyKey) => Promise<ApiV1IdempotentMutationResult>,
+  optionsOrRecovery?: ApiV1IdempotentMutationOptions | ApiV1IdempotentRecovery,
 ) {
+  const options = normalizeApiV1IdempotentMutationOptions(optionsOrRecovery);
   const db = await getRequestDb(args.context);
   const path = normalizeApiV1Path(args.params["*"]);
   const requestHash = await hashIdempotencyRequest({
@@ -2939,19 +3020,8 @@ async function runIdempotentShoppingMutation(
   if (reservation.status === "in_flight") {
     const recovered = await options.recoverInFlight?.(db, reservation.record);
     if (recovered) {
-      const storedBody = idempotentMutationBody(requestId, recovered.data);
-      await completeIdempotencyKey(db, reservation.record.id, {
-        status: recovered.status,
-        body: storedBody,
-      });
-      const replay = replayIdempotencyResponse({
-        responseStatus: recovered.status,
-        responseBody: JSON.stringify(storedBody),
-      }, requestId);
-      return withApiV1Telemetry(Response.json(replay.body, {
-        status: replay.status,
-        headers: apiV1PrivateHeaders(requestId),
-      }), { idempotencyOutcome: "replayed", operation });
+      await completeRecoveredIdempotencyKey(db, reservation.record, requestId, recovered);
+      return apiV1RecoveredReplayResponse(requestId, operation, recovered);
     }
     throw new ApiV1Error(
       "idempotency_in_progress",
@@ -2969,6 +3039,11 @@ async function runIdempotentShoppingMutation(
     await options.beforeWrite?.(db, reservation.record);
     result = await write(db, reservation.record);
   } catch (error) {
+    const recovered = await options.recoverInFlight?.(db, reservation.record);
+    if (recovered) {
+      await completeRecoveredIdempotencyKey(db, reservation.record, requestId, recovered);
+      return apiV1IdempotentResponse(requestId, operation, recovered, "committed");
+    }
     const keepReservationForRecovery = await shouldKeepIdempotencyReservationForRecovery({
       deleteReservationOnWriteError: options.deleteReservationOnWriteError,
       hasRecoverableWrite: options.hasRecoverableWrite
@@ -2983,10 +3058,14 @@ async function runIdempotentShoppingMutation(
   }
 
   const responseBody = idempotentMutationBody(requestId, result.data);
-  await completeIdempotencyKey(db, reservation.record.id, {
-    status: result.status,
-    body: responseBody,
-  });
+  try {
+    await completeIdempotencyKey(db, reservation.record.id, {
+      status: result.status,
+      body: responseBody,
+    });
+  } catch (error) {
+    if (!options.recoverInFlight) throw error;
+  }
 
   return withApiV1Telemetry(Response.json(responseBody, {
     status: result.status,
@@ -3004,7 +3083,7 @@ async function handleShoppingItemCreate(args: ApiV1RouteArgs, requestId: string,
   const categoryKey = optionalNullableString(body.categoryKey, "categoryKey");
   const iconKey = optionalNullableString(body.iconKey, "iconKey");
 
-  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "shopping-list.items.create", async (db) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "shopping-list.items.create", async (db) => {
     const list = await loadShoppingListForUser(db, principal.id);
     const ingredientRef = await getOrCreateApiV1IngredientRef(db, name);
     const unit = unitName ? await getOrCreateApiV1Unit(db, unitName) : null;
@@ -3062,7 +3141,7 @@ async function handleShoppingItemCheck(args: ApiV1RouteArgs, requestId: string, 
   const clientMutationId = nonblankString(body.clientMutationId, "clientMutationId");
   const checked = requiredBoolean(body.checked, "checked");
 
-  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "shopping-list.items.check", async (db) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "shopping-list.items.check", async (db) => {
     const list = await loadShoppingListForUser(db, principal.id);
     const existing = await db.shoppingListItem.findFirst({
       where: { id: itemId, shoppingListId: list.id },
@@ -3104,7 +3183,7 @@ async function handleShoppingItemDelete(args: ApiV1RouteArgs, requestId: string,
   );
   const idempotencyBody = { clientMutationId };
 
-  return await runIdempotentShoppingMutation(args, requestId, principal, idempotencyBody, clientMutationId, "shopping-list.items.delete", async (db) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, clientMutationId, "shopping-list.items.delete", async (db) => {
     const list = await loadShoppingListForUser(db, principal.id);
     const existing = await db.shoppingListItem.findFirst({
       where: { id: itemId, shoppingListId: list.id },
@@ -3136,7 +3215,7 @@ async function handleShoppingAddFromRecipe(args: ApiV1RouteArgs, requestId: stri
   const recipeId = nonblankString(body.recipeId, "recipeId");
   const scaleFactor = optionalPositiveNumber(body.scaleFactor, "scaleFactor") ?? 1;
 
-  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "shopping-list.add-from-recipe", async (db) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "shopping-list.add-from-recipe", async (db) => {
     const list = await loadShoppingListForUser(db, principal.id);
     const recipe = await db.recipe.findFirst({
       where: { id: recipeId, deletedAt: null },
@@ -3258,7 +3337,7 @@ async function handleShoppingClear(
   const clientMutationId = nonblankString(body.clientMutationId, "clientMutationId");
   const operation = mode === "completed" ? "shopping-list.clear-completed" : "shopping-list.clear-all";
 
-  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, operation, async (db) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, operation, async (db) => {
     const list = await loadShoppingListForUser(db, principal.id);
     const items = await db.shoppingListItem.findMany({
       where: {
@@ -3975,6 +4054,301 @@ async function handleOAuthConnectionDisconnect(
   );
 }
 
+function recipeWriteResultOrThrow<T>(
+  result: ApiV1RecipeWriteResult<T>,
+): { status: number; data: T } {
+  if (!result.ok) {
+    throw new ApiV1Error(result.code, result.message, result.details);
+  }
+  return result;
+}
+
+async function serializedRecipeOrThrow(db: ApiV1WriteDb, recipeId: string, origin: string) {
+  const recipe = await loadRecipeById(db, recipeId);
+  /* istanbul ignore next -- @preserve post-write reads are covered on every recipe write path; this is a defensive invariant tripwire. */
+  if (!recipe) {
+    throw new Error(`Recipe ${recipeId} was not readable after write`);
+  }
+  return recipeDetail(recipe, origin);
+}
+
+async function recoverNativeRecipeCreate(
+  db: ApiV1WriteDb,
+  reservation: ApiIdempotencyKey,
+  input: { clientMutationId: string; origin: string; principalId: string },
+): Promise<ApiV1IdempotentMutationResult | null> {
+  const recipe = await loadRecipeById(db, reservation.id);
+  if (!recipe || recipe.chef.id !== input.principalId) return null;
+  return {
+    status: 201,
+    data: {
+      created: true,
+      recipe: recipeDetail(recipe, input.origin),
+      mutation: { clientMutationId: input.clientMutationId, replayed: false },
+    },
+  };
+}
+
+async function recoverNativeRecipeUpdate(
+  db: ApiV1WriteDb,
+  _reservation: ApiIdempotencyKey,
+  input: {
+    clientMutationId: string;
+    fields: {
+      title?: string;
+      description?: string | null;
+      servings?: string | null;
+    };
+    origin: string;
+    principalId: string;
+    recipeId: string;
+    updated: boolean;
+  },
+): Promise<ApiV1IdempotentMutationResult | null> {
+  const recipe = await loadRecipeById(db, input.recipeId);
+  if (!recipe || recipe.chef.id !== input.principalId) return null;
+  if (input.fields.title !== undefined && recipe.title !== input.fields.title) return null;
+  if (input.fields.description !== undefined && recipe.description !== input.fields.description) return null;
+  if (input.fields.servings !== undefined && recipe.servings !== input.fields.servings) return null;
+  return {
+    status: 200,
+    data: {
+      updated: input.updated,
+      recipe: recipeDetail(recipe, input.origin),
+      mutation: { clientMutationId: input.clientMutationId, replayed: false },
+    },
+  };
+}
+
+async function recoverNativeRecipeDelete(
+  db: ApiV1WriteDb,
+  reservation: ApiIdempotencyKey,
+  input: { clientMutationId: string; principalId: string; recipeId: string },
+): Promise<ApiV1IdempotentMutationResult | null> {
+  const recipe = await db.recipe.findUnique({
+    where: { id: input.recipeId },
+    select: { id: true, chefId: true, deletedAt: true, updatedAt: true },
+  });
+  if (!recipe || recipe.chefId !== input.principalId || !recipe.deletedAt) return null;
+  if (
+    recipe.deletedAt.getTime() + IDEMPOTENCY_RECOVERY_TIMESTAMP_TOLERANCE_MS <
+    reservation.createdAt.getTime()
+  ) {
+    return null;
+  }
+  return {
+    status: 200,
+    data: {
+      deleted: true,
+      recipe: {
+        id: recipe.id,
+        deletedAt: recipe.deletedAt.toISOString(),
+        updatedAt: recipe.updatedAt.toISOString(),
+      },
+      mutation: { clientMutationId: input.clientMutationId, replayed: false },
+    },
+  };
+}
+
+async function recoverNativeRecipeFork(
+  db: ApiV1WriteDb,
+  reservation: ApiIdempotencyKey,
+  input: {
+    clientMutationId: string;
+    origin: string;
+    principalId: string;
+    sourceRecipeId: string;
+    titleOverride: string | null;
+  },
+): Promise<ApiV1IdempotentMutationResult | null> {
+  const recipe = await loadRecipeById(db, reservation.id);
+  if (
+    !recipe ||
+    recipe.chef.id !== input.principalId ||
+    recipe.sourceRecipe?.id !== input.sourceRecipeId ||
+    !recipe.sourceRecipe.chef
+  ) {
+    return null;
+  }
+
+  const baseTitle = input.titleOverride ?? recipe.sourceRecipe.title;
+  return {
+    status: 201,
+    data: {
+      fork: {
+        appliedTitle: recipe.title,
+        sourceChef: {
+          id: recipe.sourceRecipe.chef.id,
+          username: recipe.sourceRecipe.chef.username,
+        },
+        sourceRecipeId: recipe.sourceRecipe.id,
+        titleWasSuffixed: recipe.title !== baseTitle,
+      },
+      recipe: recipeDetail(recipe, input.origin),
+      mutation: { clientMutationId: input.clientMutationId, replayed: false },
+    },
+  };
+}
+
+async function handleRecipeCreate(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
+  const body = await parseApiV1JsonBody(args.request);
+  const parsed = parseNativeRecipeCreateBody(body);
+  if (!parsed.ok) {
+    throw new ApiV1Error(parsed.code, parsed.message, parsed.details);
+  }
+  const origin = publicContentOrigin(args);
+
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, parsed.data.clientMutationId, "recipes.create", async (db, reservation) => {
+    const created = recipeWriteResultOrThrow(await createNativeRecipe(db, principal.id, parsed.data, { recipeId: reservation.id }));
+    const recipe = await serializedRecipeOrThrow(db, created.data.recipeId, origin);
+    return {
+      status: created.status,
+      data: {
+        created: true,
+        recipe,
+        mutation: { clientMutationId: parsed.data.clientMutationId, replayed: false },
+      },
+    };
+  }, (db, reservation) => recoverNativeRecipeCreate(db, reservation, {
+    clientMutationId: parsed.data.clientMutationId,
+    origin,
+    principalId: principal.id,
+  }));
+}
+
+async function handleRecipeUpdate(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string) {
+  const body = await parseApiV1JsonBody(args.request);
+  const parsed = parseNativeRecipePatchBody(body);
+  if (!parsed.ok) {
+    throw new ApiV1Error(parsed.code, parsed.message, parsed.details);
+  }
+  const origin = publicContentOrigin(args);
+  const updated = Object.keys(parsed.data.fields).length > 0;
+
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, parsed.data.clientMutationId, "recipes.update", async (db) => {
+    const updated = recipeWriteResultOrThrow(await updateNativeRecipe(db, principal.id, recipeId, parsed.data));
+    const recipe = await serializedRecipeOrThrow(db, updated.data.recipeId, origin);
+    return {
+      status: updated.status,
+      data: {
+        updated: updated.data.updated,
+        recipe,
+        mutation: { clientMutationId: parsed.data.clientMutationId, replayed: false },
+      },
+    };
+  }, (db, reservation) => recoverNativeRecipeUpdate(db, reservation, {
+    clientMutationId: parsed.data.clientMutationId,
+    origin,
+    principalId: principal.id,
+    recipeId,
+    fields: parsed.data.fields,
+    updated,
+  }));
+}
+
+async function handleRecipeDelete(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string) {
+  const body = await parseApiV1JsonBody(args.request);
+  const url = new URL(args.request.url);
+  const parsed = parseNativeRecipeDeleteBody(
+    body,
+    args.request.headers.get("X-Client-Mutation-Id") ?? url.searchParams.get("clientMutationId"),
+  );
+  if (!parsed.ok) {
+    throw new ApiV1Error(parsed.code, parsed.message, parsed.details);
+  }
+
+  const idempotencyBody = { clientMutationId: parsed.data.clientMutationId };
+  return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, parsed.data.clientMutationId, "recipes.delete", async (db) => {
+    const deleted = recipeWriteResultOrThrow(await deleteNativeRecipe(db, principal.id, recipeId));
+    return {
+      status: deleted.status,
+      data: {
+        deleted: true,
+        recipe: {
+          id: deleted.data.recipe.id,
+          deletedAt: deleted.data.recipe.deletedAt.toISOString(),
+          updatedAt: deleted.data.recipe.updatedAt.toISOString(),
+        },
+        mutation: { clientMutationId: parsed.data.clientMutationId, replayed: false },
+      },
+    };
+  }, (db, reservation) => recoverNativeRecipeDelete(db, reservation, {
+    clientMutationId: parsed.data.clientMutationId,
+    principalId: principal.id,
+    recipeId,
+  }));
+}
+
+async function notifyNativeRecipeFork(
+  args: ApiV1RouteArgs,
+  db: ApiV1WriteDb,
+  input: {
+    appliedTitle: string;
+    forkerId: string;
+    forkedRecipeId: string;
+    sourceChefId: string;
+    sourceRecipeId: string;
+  },
+) {
+  try {
+    const vapid = getVapidConfig((args.context.cloudflare?.env ?? {}) as VapidEnv);
+    const waitUntil = apiV1WaitUntilFor(args);
+    const notifyTask = notifyForkOfMyRecipe(
+      db,
+      {
+        forkedRecipeId: input.forkedRecipeId,
+        sourceRecipeId: input.sourceRecipeId,
+        forkerId: input.forkerId,
+        sourceChefId: input.sourceChefId,
+        appliedTitle: input.appliedTitle,
+      },
+      { vapid, waitUntil },
+    );
+    if (waitUntil) {
+      waitUntil(notifyTask);
+    } else {
+      await notifyTask;
+    }
+  } catch {
+    // VAPID is optional in local/dev environments; missing push config must not break a fork.
+  }
+}
+
+async function handleRecipeFork(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, sourceRecipeId: string) {
+  const body = await parseApiV1JsonBody(args.request);
+  const parsed = parseNativeRecipeForkBody(body);
+  if (!parsed.ok) {
+    throw new ApiV1Error(parsed.code, parsed.message, parsed.details);
+  }
+  const origin = publicContentOrigin(args);
+
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, parsed.data.clientMutationId, "recipes.fork", async (db, reservation) => {
+    const forked = recipeWriteResultOrThrow(await forkNativeRecipe(db, principal.id, sourceRecipeId, parsed.data, { recipeId: reservation.id }));
+    await notifyNativeRecipeFork(args, db, {
+      appliedTitle: forked.data.fork.appliedTitle,
+      forkerId: principal.id,
+      forkedRecipeId: forked.data.recipeId,
+      sourceChefId: forked.data.fork.sourceChef.id,
+      sourceRecipeId: forked.data.fork.sourceRecipeId,
+    });
+    const recipe = await serializedRecipeOrThrow(db, forked.data.recipeId, origin);
+    return {
+      status: forked.status,
+      data: {
+        fork: forked.data.fork,
+        recipe,
+        mutation: { clientMutationId: parsed.data.clientMutationId, replayed: false },
+      },
+    };
+  }, (db, reservation) => recoverNativeRecipeFork(db, reservation, {
+    clientMutationId: parsed.data.clientMutationId,
+    origin,
+    principalId: principal.id,
+    sourceRecipeId,
+    titleOverride: parsed.data.titleOverride,
+  }));
+}
+
 function credentialMetadata(credential: ApiCredential) {
   return {
     id: credential.id,
@@ -4186,6 +4560,12 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
       return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
     }
 
+    if (args.request.method === "POST" && path === "recipes") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeCreate(args, requestId, principal);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
     const segments = path.split("/").filter(Boolean);
     if (path === "recipes/import" && args.request.method !== "POST") {
       throw new ApiV1Error("method_not_allowed", "Method not allowed", { allow: "POST" });
@@ -4200,6 +4580,24 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
     if (args.request.method === "GET" && segments[0] === "recipes" && segments.length === 2) {
       const principal = await authorize(path);
       const response = await handleRecipeDetail(args, requestId, principal, segments[1]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "PATCH" && segments[0] === "recipes" && segments.length === 2) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeUpdate(args, requestId, principal, segments[1]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "DELETE" && segments[0] === "recipes" && segments.length === 2) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeDelete(args, requestId, principal, segments[1]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "POST" && segments[0] === "recipes" && segments[2] === "fork" && segments.length === 3) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeFork(args, requestId, principal, segments[1]);
       return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
     }
 

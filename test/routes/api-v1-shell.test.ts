@@ -375,13 +375,13 @@ describe("/api/v1 shell", () => {
     });
 
     const unsupportedKnownPath = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/recipes", {
-      method: "POST",
-      headers: { "X-Request-Id": "req_post_recipes" },
+      method: "DELETE",
+      headers: { "X-Request-Id": "req_delete_recipes" },
     }) as unknown as Request, "recipes"));
     expect(unsupportedKnownPath.status).toBe(405);
     await expect(readJson(unsupportedKnownPath)).resolves.toMatchObject({
       ok: false,
-      requestId: "req_post_recipes",
+      requestId: "req_delete_recipes",
       error: { code: "method_not_allowed", status: 405 },
     });
 

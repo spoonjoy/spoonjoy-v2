@@ -506,6 +506,42 @@ describe("API v1 mutation and validation telemetry", () => {
     });
   });
 
+  it("captures recipe write operation names on authentication failures", async () => {
+    const fixture = await createRecipeFixture(db);
+
+    for (const [method, path, routeTemplate, requestId, operation, body] of [
+      ["POST", "recipes", "/api/v1/recipes", "req_recipe_create_auth_operation", "recipes.create", {
+        clientMutationId: "telemetry-create",
+        title: "Telemetry Create",
+      }],
+      ["PATCH", `recipes/${fixture.recipe.id}`, "/api/v1/recipes/{id}", "req_recipe_update_auth_operation", "recipes.update", {
+        clientMutationId: "telemetry-update",
+        title: "Telemetry Update",
+      }],
+      ["DELETE", `recipes/${fixture.recipe.id}`, "/api/v1/recipes/{id}", "req_recipe_delete_auth_operation", "recipes.delete", {
+        clientMutationId: "telemetry-delete",
+      }],
+      ["POST", `recipes/${fixture.recipe.id}/fork`, "/api/v1/recipes/{id}/fork", "req_recipe_fork_auth_operation", "recipes.fork", {
+        clientMutationId: "telemetry-fork",
+      }],
+    ] as const) {
+      const request = apiJsonRequest(method, path, requestId, {}, body);
+      const response = await action(routeArgs(request.request, path).args);
+
+      expect(response.status).toBe(401);
+      expectApiV1ErrorEvent({
+        routeTemplate,
+        requestId,
+        status: 401,
+        errorCode: "authentication_required",
+        authMode: "anonymous",
+        operation,
+        privacyClass: "private",
+        forbidden: [request.bodyText, fixture.recipe.title],
+      });
+    }
+  });
+
   it("captures shopping-list item create, check, and delete operations without body values", async () => {
     const user = await db.user.create({ data: createTestUser() });
     const credential = await createApiCredential(db, user.id, "Telemetry Shopping Writer", {
