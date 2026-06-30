@@ -44,21 +44,24 @@ describe("smoke-live helpers", () => {
       "wrangler",
       "d1",
       "execute",
-      "DB",
+      "spoonjoy-qa",
       "--remote",
-      "--env",
-      "qa",
       "--command",
       `DELETE FROM "User" WHERE email = 'codex-smoke-qa@example.com';`,
     ]);
   });
 
-  it("builds explicit production cleanup args without --env qa", () => {
-    const args = buildCleanupD1Args("codex-smoke-prod@example.com", { targetEnv: "production" });
-
-    expect(args).toContain("--remote");
-    expect(args).not.toContain("--env");
-    expect(args).not.toContain("qa");
+  it("builds explicit production cleanup args by database name", () => {
+    expect(buildCleanupD1Args("codex-smoke-prod@example.com", { targetEnv: "production" })).toEqual([
+      "exec",
+      "wrangler",
+      "d1",
+      "execute",
+      "spoonjoy",
+      "--remote",
+      "--command",
+      `DELETE FROM "User" WHERE email = 'codex-smoke-prod@example.com';`,
+    ]);
   });
 
   it("builds QA user-count verification args with --env qa", () => {
@@ -67,10 +70,8 @@ describe("smoke-live helpers", () => {
       "wrangler",
       "d1",
       "execute",
-      "DB",
+      "spoonjoy-qa",
       "--remote",
-      "--env",
-      "qa",
       "--command",
       `SELECT COUNT(*) AS count FROM "User" WHERE email = 'codex-smoke-qa@example.com';`,
     ]);
