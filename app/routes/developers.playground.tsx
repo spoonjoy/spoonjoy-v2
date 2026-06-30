@@ -146,6 +146,7 @@ export function curlFor(
   bodyText: string,
   baseUrl = "https://spoonjoy.app",
   params: Record<string, string> = {},
+  multipartValues: MultipartValues = defaultMultipartValuesFor(operation),
 ) {
   const absoluteUrl = `${baseUrl.replace(/\/$/, "")}${path}`;
   const isMultipart = operation.requestBody?.contentType === "multipart/form-data";
@@ -161,7 +162,6 @@ export function curlFor(
       .filter((param) => param.in === "header" && params[param.name]?.trim())
       .map((param) => `    ${JSON.stringify(param.name)}: ${JSON.stringify(params[param.name]!.trim())},`);
     if (isMultipart) {
-      const multipartValues = defaultMultipartValuesFor(operation);
       const fields = operation.requestBody?.fields.length
         ? operation.requestBody.fields
         : [{ name: "file", label: "File", required: true, accept: "application/octet-stream", description: "" }];
@@ -210,7 +210,6 @@ export function curlFor(
     }
   }
   if (isMultipart) {
-    const multipartValues = defaultMultipartValuesFor(operation);
     const fields = operation.requestBody?.fields.length
       ? operation.requestBody.fields
       : [{ name: "file", label: "File", required: true, accept: "application/octet-stream", description: "" }];
@@ -670,7 +669,7 @@ export default function DeveloperPlayground() {
   const path = useMemo(() => playgroundPath(selected, params), [selected, params]);
   /* istanbul ignore next -- @preserve SSR fallback for non-interactive rendering; playground tests run with a browser-like window. */
   const curlBaseUrl = typeof window === "undefined" ? "https://spoonjoy.app" : window.location.origin;
-  const curl = curlFor(path, selected, authMode, bodyText, curlBaseUrl, params);
+  const curl = curlFor(path, selected, authMode, bodyText, curlBaseUrl, params, multipartValues);
   const missingParams = missingRequiredParams(selected, params);
   const authModeAllowed = selected.credentialModes.includes(authMode);
   const bearerError = authMode === "bearer" && !token.trim() ? "Paste a bearer token before sending in Bearer mode." : null;

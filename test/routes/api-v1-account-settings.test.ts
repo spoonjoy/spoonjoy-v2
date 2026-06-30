@@ -708,9 +708,10 @@ describe("API v1 native account settings", () => {
 	    expect(preferencesReplay.status).toBe(200);
 	    expect(preferencesReplayPayload.data.mutation).toEqual({ clientMutationId: "cm_account_preferences_replay", replayed: true });
 
-	    const photoFile = () => new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00])], "profile.png", { type: "image/png" });
-	    const photo = await uploadProfilePhoto(cookie, photoFile(), "req_account_photo_first", "cm_account_photo_replay");
-	    const photoReplay = await uploadProfilePhoto(cookie, photoFile(), "req_account_photo_replay", "cm_account_photo_replay");
+    const photoBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
+    const photoFile = (name = "profile.png") => new File([photoBytes], name, { type: "image/png" });
+    const photo = await uploadProfilePhoto(cookie, photoFile(), "req_account_photo_first", "cm_account_photo_replay");
+    const photoReplay = await uploadProfilePhoto(cookie, photoFile("renamed-staged-profile.png"), "req_account_photo_replay", "cm_account_photo_replay");
 	    const photoPayload = await readJson(photo);
 	    const photoReplayPayload = await readJson(photoReplay);
 

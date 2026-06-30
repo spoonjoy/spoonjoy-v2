@@ -1027,10 +1027,28 @@ describe("/developers/playground", () => {
       "--data '{\"name\":\"Client\"}'",
     );
     expect(curlFor("/api/v1/me/photo", uploadPhoto, "bearer", "")).toContain("-F 'clientMutationId=device-uuid-profile-photo'");
+    expect((curlFor as (...args: unknown[]) => string)(
+      "/api/v1/me/photo",
+      uploadPhoto,
+      "bearer",
+      "",
+      "https://spoonjoy.app",
+      {},
+      { clientMutationId: "profile-photo:edited" },
+    )).toContain("-F 'clientMutationId=profile-photo:edited'");
     expect(curlFor("/api/v1/me/photo", uploadPhoto, "bearer", "")).toContain("-F 'photo=@profile.jpg;type=image/jpeg'");
     expect(curlFor("/api/v1/me/photo", uploadPhoto, "bearer", "")).not.toContain("Content-Type");
     expect(curlFor("/api/v1/me/photo", uploadPhoto, "session", "")).toContain("const body = new FormData();");
     expect(curlFor("/api/v1/me/photo", uploadPhoto, "session", "")).toContain("body.append(\"clientMutationId\", \"device-uuid-profile-photo\");");
+    expect((curlFor as (...args: unknown[]) => string)(
+      "/api/v1/me/photo",
+      uploadPhoto,
+      "session",
+      "",
+      "https://spoonjoy.app",
+      {},
+      { clientMutationId: "profile-photo:edited" },
+    )).toContain("body.append(\"clientMutationId\", \"profile-photo:edited\");");
     expect(curlFor("/api/v1/me/photo", uploadPhoto, "session", "")).toContain("body.append(\"photo\", fileInput.files[0]);");
     expect(curlFor("/api/v1/me/photo", uploadPhoto, "session", "", "https://spoonjoy.app", { "X-Request-Id": "req_photo" }))
       .toContain("\"X-Request-Id\": \"req_photo\"");

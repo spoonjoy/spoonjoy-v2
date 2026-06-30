@@ -82,6 +82,12 @@ function responseExample(document: any, path: string, method: string, status: st
   return (examples.example ?? Object.values(examples)[0] as any).value;
 }
 
+function requestExample(document: any, path: string, method: string) {
+  const content = operation(document, path, method).requestBody?.content ?? {};
+  const examples = content["application/json"]?.examples ?? content["multipart/form-data"]?.examples;
+  return examples?.example?.value;
+}
+
 function errorExample(document: any, path: string, method: string, status: string, code: string) {
   return operation(document, path, method).responses[status].content["application/json"].examples[code].value;
 }
@@ -534,7 +540,7 @@ describe("API v1 OpenAPI document", () => {
     });
     expect(responseExample(document, "/api/v1/shopping-list/clear-all", "POST", "200").data).toMatchObject({
       removed: 1,
-      mutation: { clientMutationId: "device-uuid-5", replayed: false },
+      mutation: { clientMutationId: "device-uuid-clear-all", replayed: false },
     });
     expect(errorExample(document, "/api/v1/health", "GET", "401", "invalid_token").error.code).toBe("invalid_token");
     expect(errorExample(document, "/api/v1/shopping-list", "GET", "401", "authentication_required").error.code).toBe("authentication_required");
@@ -648,6 +654,28 @@ describe("API v1 OpenAPI document", () => {
               expect(value).toEqual(expect.any(Object));
             }
           }
+        }
+      }
+    }
+  });
+
+  it("keeps idempotent request and response examples on the same client mutation id", () => {
+    const document = buildApiV1OpenApiDocument();
+
+    for (const resource of API_V1_RESOURCES) {
+      for (const method of resource.methods) {
+        const op = operation(document, resource.path, method);
+        const requestClientMutationId = requestExample(document, resource.path, method)?.clientMutationId;
+        if (!op["x-idempotency"] || typeof requestClientMutationId !== "string") continue;
+
+        for (const status of op["x-idempotency"].replayStatus) {
+          const responseClientMutationId = responseExample(document, resource.path, method, String(status))
+            .data
+            ?.mutation
+            ?.clientMutationId;
+          if (typeof responseClientMutationId !== "string") continue;
+
+          expect(responseClientMutationId, `${method} ${resource.path} ${status}`).toBe(requestClientMutationId);
         }
       }
     }

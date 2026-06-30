@@ -3641,7 +3641,6 @@ async function accountPhotoIdempotencyValue(photo: FormDataEntryValue | null) {
       sha256: await sha256HexBytes(bytes),
       size: photo.size,
       type: photo.type,
-      name: photo.name,
     };
   }
   if (typeof photo === "string") {

@@ -249,6 +249,11 @@ source_test_mappings = [
     "artifacts" => ["web/unit-25c-web-final-green-coverage.log"]
   },
   {
+    "source" => "app/lib/telemetry-coverage/allowlist.ts",
+    "tests" => ["test/lib/telemetry-coverage.test.ts"],
+    "artifacts" => ["web/unit-25c-web-final-green-coverage.log"]
+  },
+  {
     "source" => "app/routes/oauth.callback.tsx",
     "tests" => ["test/routes/oauth-callback.test.tsx", "test/routes/aasa-contract.test.ts"],
     "artifacts" => ["web/unit-20c-aasa-green.log", "web/unit-25c-web-final-green-coverage.log"]
@@ -267,6 +272,11 @@ source_test_mappings = [
     "source" => "docs/api.md",
     "tests" => ["test/docs/developer-platform-docs.test.ts", "test/docs/native-dogfood-docs.test.tsx"],
     "artifacts" => ["web/unit-24a-docs-red.log", "web/unit-24b-docs-green.log", "web/unit-24c-docs-docs-drift.log"]
+  },
+  {
+    "source" => "docs/telemetry-coverage.md",
+    "tests" => ["test/lib/telemetry-coverage.test.ts"],
+    "artifacts" => ["web/unit-25c-web-final-green-coverage.log"]
   },
   {
     "source" => "scripts/generate-api-playground.ts",
@@ -342,6 +352,7 @@ def source_mapping_scope?(path)
   path.start_with?("app/routes/") ||
     path.start_with?("app/lib/") ||
     path == "docs/api.md" ||
+    path == "docs/telemetry-coverage.md" ||
     path == "scripts/generate-api-playground.ts" ||
     path == "vite.config.ts"
 end
