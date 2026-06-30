@@ -7,11 +7,12 @@ const appDirectory = new URL("./app", import.meta.url).pathname;
 const componentsDirectory = new URL("./app/components", import.meta.url).pathname;
 const prismaWasmClient = new URL("./node_modules/.prisma/client/wasm.js", import.meta.url).pathname;
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [
     cloudflare({ viteEnvironment: { name: "ssr" } }),
     reactRouter(),
   ],
+  optimizeDeps: command === "build" ? { noDiscovery: true, include: [] } : undefined,
   build: {
     rollupOptions: {
       onLog(level, log, defaultHandler) {
@@ -29,4 +30,4 @@ export default defineConfig({
       ".prisma/client/default": prismaWasmClient,
     },
   },
-});
+}));

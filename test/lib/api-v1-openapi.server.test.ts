@@ -73,6 +73,28 @@ function errorExample(document: any, path: string, method: string, status: strin
   return operation(document, path, method).responses[status].content["application/json"].examples[code].value;
 }
 
+function expectFlexibleDeleteContract(document: any, path: string, requestSchema: string) {
+  const deleteOperation = operation(document, path, "DELETE");
+
+  expect(deleteOperation.requestBody).toMatchObject({
+    required: false,
+    content: {
+      "application/json": {
+        schema: { $ref: `#/components/schemas/${requestSchema}` },
+      },
+    },
+  });
+  expect(deleteOperation.parameters).toEqual(expect.arrayContaining([
+    expect.objectContaining({ name: "X-Client-Mutation-Id", in: "header", required: false }),
+    expect.objectContaining({ name: "clientMutationId", in: "query", required: false }),
+    expect.objectContaining({ name: "X-Request-Id", in: "header", required: false }),
+  ]));
+  expect(deleteOperation["x-idempotency"]).toMatchObject({
+    key: "clientMutationId",
+    location: "jsonBody, query, or X-Client-Mutation-Id",
+  });
+}
+
 function dedupeSecurity(security: Array<Record<string, unknown>>) {
   const seen = new Set<string>();
   return security.filter((entry) => {
@@ -144,6 +166,7 @@ describe("API v1 OpenAPI document", () => {
     });
     expect(document["x-auth-flows"].map((flow: { id: string }) => flow.id)).toEqual(["oauth-pkce", "delegated-approval", "mcp"]);
     expect(document["x-client-scenarios"].map((scenario: { id: string }) => scenario.id)).toEqual([
+      "spoonjoy-apple-native-dogfood",
       "cloudflare-worker-sync",
       "browser-extension-shopping-sync",
       "no-code-connector",
@@ -309,7 +332,20 @@ describe("API v1 OpenAPI document", () => {
         location: "jsonBody, query, or X-Client-Mutation-Id",
         replayStatus: [200],
       }),
+      requestBody: {
+        required: false,
+        content: {
+          "application/json": {
+            schema: { $ref: "#/components/schemas/DeleteRecipeSpoonRequest" },
+          },
+        },
+      },
     });
+    expect(operation(document, "/api/v1/recipes/{id}/spoons/{spoonId}", "DELETE").parameters).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "X-Client-Mutation-Id", in: "header", required: false }),
+      expect.objectContaining({ name: "clientMutationId", in: "query", required: false }),
+      expect.objectContaining({ name: "X-Request-Id", in: "header", required: false }),
+    ]));
     expect(operation(document, "/api/v1/shopping-list/sync", "GET").parameters).toEqual(expect.arrayContaining([
       expect.objectContaining({ name: "cursor", in: "query", required: false, schema: { type: "string" } }),
       expect.objectContaining({
@@ -588,12 +624,11 @@ describe("API v1 OpenAPI document", () => {
       .toBe("#/components/schemas/AddRecipeIngredientsToShoppingListRequest");
     expect(operation(document, "/api/v1/shopping-list/clear-all", "POST").requestBody.content["application/json"].schema.$ref)
       .toBe("#/components/schemas/ClearShoppingListRequest");
-    expect(operation(document, "/api/v1/shopping-list/items/{itemId}", "DELETE").requestBody).toBeUndefined();
-    expect(operation(document, "/api/v1/shopping-list/items/{itemId}", "DELETE").parameters).toEqual(expect.arrayContaining([
-      expect.objectContaining({ name: "itemId", in: "path", required: true }),
-      expect.objectContaining({ name: "X-Client-Mutation-Id", in: "header", required: true }),
-      expect.objectContaining({ name: "X-Request-Id", in: "header", required: false }),
-    ]));
+    expectFlexibleDeleteContract(document, "/api/v1/shopping-list/items/{itemId}", "DeleteShoppingItemRequest");
+    expect(operation(document, "/api/v1/shopping-list/items/{itemId}", "DELETE").parameters)
+      .toEqual(expect.arrayContaining([expect.objectContaining({ name: "itemId", in: "path", required: true })]));
+    expectFlexibleDeleteContract(document, "/api/v1/cookbooks/{id}", "DeleteCookbookRequest");
+    expectFlexibleDeleteContract(document, "/api/v1/cookbooks/{id}/recipes/{recipeId}", "CookbookRecipeMutationRequest");
     expect(operation(document, "/api/v1/shopping-list/sync", "GET")["x-cursor-policy"]).toMatchObject({
       cursor: "opaque",
       tombstones: expect.any(String),
@@ -603,6 +638,12 @@ describe("API v1 OpenAPI document", () => {
       retentionHours: 24,
       inProgressRetryAfterSeconds: 2,
       retryBodyRule: expect.stringContaining("canonicalizes object key order"),
+    });
+    expect(operation(document, "/api/v1/shopping-list/items/{itemId}", "DELETE")["x-idempotency"]).toMatchObject({
+      key: "clientMutationId",
+      location: "jsonBody, query, or X-Client-Mutation-Id",
+      replayStatus: [200],
+      retryBodyRule: expect.stringContaining("JSON body, query string, or X-Client-Mutation-Id header"),
     });
     expect(operation(document, "/api/v1/shopping-list/add-from-recipe", "POST")["x-idempotency"]).toMatchObject({
       key: "clientMutationId",
@@ -872,6 +913,9 @@ describe("API v1 OpenAPI document", () => {
       operationId: "postApiV1RecipeCoverFromSpoon",
       "x-scopes": ["kitchen:write"],
     });
+    expectFlexibleDeleteContract(sdk, "/api/v1/shopping-list/items/{itemId}", "DeleteShoppingItemRequest");
+    expectFlexibleDeleteContract(sdk, "/api/v1/recipes/{id}/spoons/{spoonId}", "DeleteRecipeSpoonRequest");
+    expectFlexibleDeleteContract(sdk, "/api/v1/cookbooks/{id}", "DeleteCookbookRequest");
     expect(sdk.components.securitySchemes.cookieAuth).toBeUndefined();
     expect(JSON.stringify(sdk.paths)).not.toContain("cookieAuth");
     expect(sdk["x-sdk-profile"].omitted).toContain("same-origin cookieAuth");

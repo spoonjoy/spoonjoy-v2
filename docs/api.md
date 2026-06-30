@@ -660,7 +660,7 @@ Generate a PKCE verifier in the app, store it only until the code exchange succe
 POST /oauth/token
 Content-Type: application/x-www-form-urlencoded
 
-grant_type=authorization_code&client_id=cm_client_id_from_register&redirect_uri=https%3A%2F%2Fexample.com%2Fspoonjoy%2Foauth%2Fcallback&code=oac_...&code_verifier=pkce_verifier_...
+grant_type=authorization_code&client_id=cm_client_id_from_register&redirect_uri=https%3A%2F%2Fspoonjoy.app%2Foauth%2Fcallback&code=oac_...&code_verifier=pkce_verifier_...
 
 POST /oauth/token
 Content-Type: application/x-www-form-urlencoded

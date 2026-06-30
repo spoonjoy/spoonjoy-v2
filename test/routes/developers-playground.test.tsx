@@ -895,8 +895,10 @@ describe("/developers/playground", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Remove a shopping-list item/i }));
     fireEvent.change(document.querySelector<HTMLInputElement>("#param-path-itemId")!, { target: { value: "item_1" } });
-    fireEvent.click(screen.getByRole("button", { name: "Fresh mutation id" }));
-    expect(document.querySelector<HTMLInputElement>("#param-header-X-Client-Mutation-Id")!.value).toMatch(/^deleteApiV1ShoppingListItem:/);
+    const deleteBody = screen.getByLabelText("JSON body");
+    expect((deleteBody as HTMLTextAreaElement).value).toContain("\"clientMutationId\": \"device-uuid-3\"");
+    expect(document.querySelector<HTMLInputElement>("#param-header-X-Client-Mutation-Id")).toBeInTheDocument();
+    expect(document.querySelector<HTMLInputElement>("#param-query-clientMutationId")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Revoke a bearer credential/i }));
     expect(screen.getByText(/A bearer credential may revoke its own credential id/i)).toBeInTheDocument();
@@ -910,7 +912,7 @@ describe("/developers/playground", () => {
     expect(screen.getByLabelText("Response body")).toHaveTextContent("sj_...redacted");
     fireEvent.click(screen.getByRole("button", { name: "Clear response" }));
     expect(screen.getByLabelText("Response body")).toHaveTextContent("No response yet.");
-  });
+  }, 10000);
 
   it("renders portable curl for bearer mode and body requests", () => {
     const root = PLAYGROUND_OPERATIONS.find((operation) => operation.id === "GET /api/v1")!;

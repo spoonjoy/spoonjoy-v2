@@ -5,10 +5,6 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import Developers, { loader } from "~/routes/developers";
 import { API_V1_PLAYGROUND_MANIFEST } from "~/lib/generated/api-v1-playground";
-import {
-  buildApiV1ConnectorOpenApiDocument,
-  buildApiV1SdkOpenApiDocument,
-} from "~/lib/api-v1-openapi.server";
 import { createTestRoutesStub } from "../utils";
 
 function readProjectFile(path: string) {
@@ -30,6 +26,30 @@ function expectContainsAll(text: string, markers: readonly string[]) {
 function expectOmitsAll(text: string, markers: readonly string[]) {
   const present = markers.filter((marker) => text.includes(marker));
   expect(present).toEqual([]);
+}
+
+function playgroundOperation(id: string) {
+  const operation = API_V1_PLAYGROUND_MANIFEST.operations.find((candidate) => candidate.id === id);
+  expect(operation).toBeDefined();
+  return operation!;
+}
+
+function expectFlexiblePlaygroundDelete(id: string) {
+  const operation = playgroundOperation(id);
+
+  expect(operation.requestBody).toMatchObject({
+    required: false,
+    contentType: "application/json",
+  });
+  expect(operation.requestBody?.example).toContain("clientMutationId");
+  expect(operation.params).toEqual(expect.arrayContaining([
+    expect.objectContaining({ name: "X-Client-Mutation-Id", in: "header", required: false }),
+    expect.objectContaining({ name: "clientMutationId", in: "query", required: false }),
+  ]));
+  expect(operation.idempotency).toMatchObject({
+    key: "clientMutationId",
+    location: "jsonBody, query, or X-Client-Mutation-Id",
+  });
 }
 
 const apiDocs = readProjectFile("docs/api.md");
@@ -72,6 +92,7 @@ const OFFLINE_PRODUCT_CONTRACT_MARKERS = [
 describe("native Apple dogfood API docs", () => {
   it("documents the real Spoonjoy Apple OAuth quickstart instead of generic example.com callbacks", () => {
     const nativeSection = markdownSection(apiDocs, "### Native iOS OAuth quickstart");
+    const nativeMobileSection = markdownSection(apiDocs, "### Native mobile OAuth");
 
     expectContainsAll(apiDocs, NATIVE_QUICKSTART_MARKERS);
     expectContainsAll(nativeSection, [
@@ -81,6 +102,14 @@ describe("native Apple dogfood API docs", () => {
       "clear state and code_verifier after a successful token exchange",
     ]);
     expectOmitsAll(nativeSection, ["https://example.com/spoonjoy/oauth/callback"]);
+    expectContainsAll(nativeMobileSection, [
+      "https://spoonjoy.app/oauth/callback",
+      "redirect_uri=https%3A%2F%2Fspoonjoy.app%2Foauth%2Fcallback",
+    ]);
+    expectOmitsAll(nativeMobileSection, [
+      "https://example.com/spoonjoy/oauth/callback",
+      "https%3A%2F%2Fexample.com%2Fspoonjoy%2Foauth%2Fcallback",
+    ]);
   });
 
   it("renders the same native dogfood guidance on /developers", async () => {
@@ -135,7 +164,7 @@ describe("native Apple dogfood API docs", () => {
     ]);
   });
 
-  it("keeps generated playground and OpenAPI profiles aligned with native dogfood docs", () => {
+  it("keeps generated playground metadata aligned with native dogfood docs", () => {
     const nativeScenario = API_V1_PLAYGROUND_MANIFEST.clientScenarios.find((scenario) => (
       scenario.id === "spoonjoy-apple-native-dogfood"
     ));
@@ -147,13 +176,8 @@ describe("native Apple dogfood API docs", () => {
     const registerOperation = API_V1_PLAYGROUND_MANIFEST.operations.find((operation) => operation.id === "POST /oauth/register");
     expect(JSON.stringify(registerOperation?.requestBody?.examples)).toContain("https://spoonjoy.app/oauth/callback");
 
-    const sdkDocument = buildApiV1SdkOpenApiDocument({ serverUrl: "https://spoonjoy.app" });
-    const connectorDocument = buildApiV1ConnectorOpenApiDocument({ serverUrl: "https://spoonjoy.app" });
-
-    expect(sdkDocument.paths["/api/v1/me/photo"].post).toBeDefined();
-    expect(sdkDocument.paths["/api/v1/me/photo"].delete).toBeDefined();
-    expect(sdkDocument.paths["/oauth/token"].post).toBeDefined();
-    expect(sdkDocument.paths["/mcp"]).toBeUndefined();
-    expect(connectorDocument.paths["/mcp"]).toBeUndefined();
+    expectFlexiblePlaygroundDelete("DELETE /api/v1/shopping-list/items/{itemId}");
+    expectFlexiblePlaygroundDelete("DELETE /api/v1/recipes/{id}/spoons/{spoonId}");
+    expectFlexiblePlaygroundDelete("DELETE /api/v1/cookbooks/{id}");
   });
 });

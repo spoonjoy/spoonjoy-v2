@@ -2461,6 +2461,30 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         },
         {
+          "name": "X-Client-Mutation-Id",
+          "in": "header",
+          "label": "X Client Mutation Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "delete:item_1:uuid-or-hash",
+          "description": "Optional chef-wide idempotency key for this delete. Prefer the JSON body clientMutationId when possible, and use the same value when retrying the exact same request after a timeout.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "clientMutationId",
+          "in": "query",
+          "label": "Client Mutation Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "clientMutationId",
+          "description": "Optional chef-wide idempotency key for DELETE retries when a client cannot send a JSON body.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
           "name": "X-Request-Id",
           "in": "header",
           "label": "X Request Id",
@@ -2474,7 +2498,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         }
       ],
       "requestBody": {
-        "required": true,
+        "required": false,
         "contentType": "application/json",
         "fields": [],
         "example": "{\n  \"clientMutationId\": \"device-uuid-spoon-delete\"\n}",
@@ -3272,6 +3296,30 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         },
         {
+          "name": "X-Client-Mutation-Id",
+          "in": "header",
+          "label": "X Client Mutation Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "delete:item_1:uuid-or-hash",
+          "description": "Optional chef-wide idempotency key for this delete. Prefer the JSON body clientMutationId when possible, and use the same value when retrying the exact same request after a timeout.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "clientMutationId",
+          "in": "query",
+          "label": "Client Mutation Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "clientMutationId",
+          "description": "Optional chef-wide idempotency key for DELETE retries when a client cannot send a JSON body.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
           "name": "X-Request-Id",
           "in": "header",
           "label": "X Request Id",
@@ -3285,7 +3333,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         }
       ],
       "requestBody": {
-        "required": true,
+        "required": false,
         "contentType": "application/json",
         "fields": [],
         "example": "{\n  \"clientMutationId\": \"device-uuid-cover-archive\",\n  \"confirmNoCover\": true,\n  \"deleteSafeObjects\": false\n}",
@@ -4644,10 +4692,22 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "name": "X-Client-Mutation-Id",
           "in": "header",
           "label": "X Client Mutation Id",
-          "required": true,
+          "required": false,
           "defaultValue": "",
           "placeholder": "delete:item_1:uuid-or-hash",
-          "description": "Chef-wide idempotency key for this delete. Use the same value when retrying the exact same request after a timeout.",
+          "description": "Optional chef-wide idempotency key for this delete. Prefer the JSON body clientMutationId when possible, and use the same value when retrying the exact same request after a timeout.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "clientMutationId",
+          "in": "query",
+          "label": "Client Mutation Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "clientMutationId",
+          "description": "Optional chef-wide idempotency key for DELETE retries when a client cannot send a JSON body.",
           "schema": {
             "type": "string"
           }
@@ -4666,7 +4726,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         }
       ],
       "requestBody": {
-        "required": true,
+        "required": false,
         "contentType": "application/json",
         "fields": [],
         "example": "{\n  \"clientMutationId\": \"device-uuid-cookbook-delete\"\n}",
@@ -5076,10 +5136,22 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "name": "X-Client-Mutation-Id",
           "in": "header",
           "label": "X Client Mutation Id",
-          "required": true,
+          "required": false,
           "defaultValue": "",
           "placeholder": "delete:item_1:uuid-or-hash",
-          "description": "Chef-wide idempotency key for this delete. Use the same value when retrying the exact same request after a timeout.",
+          "description": "Optional chef-wide idempotency key for this delete. Prefer the JSON body clientMutationId when possible, and use the same value when retrying the exact same request after a timeout.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "clientMutationId",
+          "in": "query",
+          "label": "Client Mutation Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "clientMutationId",
+          "description": "Optional chef-wide idempotency key for DELETE retries when a client cannot send a JSON body.",
           "schema": {
             "type": "string"
           }
@@ -5098,7 +5170,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         }
       ],
       "requestBody": {
-        "required": true,
+        "required": false,
         "contentType": "application/json",
         "fields": [],
         "example": "{\n  \"clientMutationId\": \"device-uuid-cookbook-recipe\"\n}",
@@ -7259,14 +7331,15 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       },
       "cursorPolicy": null,
       "idempotency": {
-        "key": "X-Client-Mutation-Id",
-        "location": "header",
+        "key": "clientMutationId",
+        "location": "jsonBody, query, or X-Client-Mutation-Id",
         "retentionHours": 24,
         "replayStatus": [
           200
         ],
         "conflictStatus": 409,
-        "inProgressRetryAfterSeconds": 2
+        "inProgressRetryAfterSeconds": 2,
+        "retryBodyRule": "Persist and retry the same delete target for this clientMutationId. Delete requests may put the idempotency key in the JSON body, query string, or X-Client-Mutation-Id header."
       },
       "personalTokenOnly": false,
       "oauthNote": "",
@@ -7291,10 +7364,22 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "name": "X-Client-Mutation-Id",
           "in": "header",
           "label": "X Client Mutation Id",
-          "required": true,
+          "required": false,
           "defaultValue": "",
           "placeholder": "delete:item_1:uuid-or-hash",
-          "description": "Chef-wide idempotency key for this delete. Use the same value when retrying the exact same request after a timeout.",
+          "description": "Optional chef-wide idempotency key for this delete. Prefer the JSON body clientMutationId when possible, and use the same value when retrying the exact same request after a timeout.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "clientMutationId",
+          "in": "query",
+          "label": "Client Mutation Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "clientMutationId",
+          "description": "Optional chef-wide idempotency key for DELETE retries when a client cannot send a JSON body.",
           "schema": {
             "type": "string"
           }
@@ -7312,7 +7397,19 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         }
       ],
-      "requestBody": null,
+      "requestBody": {
+        "required": false,
+        "contentType": "application/json",
+        "fields": [],
+        "example": "{\n  \"clientMutationId\": \"device-uuid-3\"\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"device-uuid-3\"\n}"
+          }
+        ]
+      },
       "responseStatuses": [
         "200",
         "400",

@@ -23,6 +23,7 @@ interface OperationConfig {
   errors: ApiV1ErrorCode[];
   parameters?: unknown[];
   requestBody?: string;
+  requestBodyRequired?: boolean;
   requestBodyContentType?: "application/json" | "multipart/form-data";
 }
 
@@ -935,8 +936,8 @@ const pathParameters = {
   clientMutationIdHeader: {
     name: "X-Client-Mutation-Id",
     in: "header",
-    required: true,
-    description: "Chef-wide idempotency key for this delete. Use the same value when retrying the exact same request after a timeout.",
+    required: false,
+    description: "Optional chef-wide idempotency key for this delete. Prefer the JSON body clientMutationId when possible, and use the same value when retrying the exact same request after a timeout.",
     schema: { type: "string", minLength: 1, maxLength: 160 },
   },
 };
@@ -949,7 +950,14 @@ const queryParameters = {
   limit: { name: "limit", in: "query", required: false, description: "Page size from 1 to 50. Defaults to 20.", schema: { type: "integer", minimum: 1, maximum: 50, default: 20 } },
   offset: { name: "offset", in: "query", required: false, description: "Zero-based offset for owner cover-history pagination.", schema: { type: "integer", minimum: 0, default: 0 } },
   includeArchived: { name: "includeArchived", in: "query", required: false, description: "Include archived cover rows in owner cover history.", schema: { type: "boolean", default: false } },
+  clientMutationId: { name: "clientMutationId", in: "query", required: false, description: "Optional chef-wide idempotency key for DELETE retries when a client cannot send a JSON body.", schema: { type: "string", minLength: 1, maxLength: 160 } },
 };
+
+const deleteIdempotencyParameters = (...parameters: unknown[]) => [
+  ...parameters,
+  pathParameters.clientMutationIdHeader,
+  queryParameters.clientMutationId,
+];
 
 const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationConfig>>> = {
   "/api/v1": {
@@ -985,7 +993,7 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
   },
   "/api/v1/recipes/{id}/spoons/{spoonId}": {
     PATCH: { operationId: "patchApiV1RecipeSpoon", tags: ["Recipe Spoons"], summary: "Update one owned recipe spoon cook event", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "UpdateRecipeSpoonEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id, pathParameters.spoonId], requestBody: "UpdateRecipeSpoonRequest" },
-    DELETE: { operationId: "deleteApiV1RecipeSpoon", tags: ["Recipe Spoons"], summary: "Soft-delete one owned recipe spoon cook event", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "DeleteRecipeSpoonEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id, pathParameters.spoonId], requestBody: "DeleteRecipeSpoonRequest" },
+    DELETE: { operationId: "deleteApiV1RecipeSpoon", tags: ["Recipe Spoons"], summary: "Soft-delete one owned recipe spoon cook event", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "DeleteRecipeSpoonEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: deleteIdempotencyParameters(pathParameters.id, pathParameters.spoonId), requestBody: "DeleteRecipeSpoonRequest", requestBodyRequired: false },
   },
   "/api/v1/recipes/{id}/covers": {
     GET: { operationId: "getApiV1RecipeCovers", tags: ["Recipe Covers"], summary: "List owner recipe cover candidates and spoon photo sources", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "RecipeCoverListEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id, queryParameters.includeArchived, queryParameters.limit, queryParameters.offset] },
@@ -993,7 +1001,7 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
   },
   "/api/v1/recipes/{id}/covers/{coverId}": {
     PATCH: { operationId: "patchApiV1RecipeCover", tags: ["Recipe Covers"], summary: "Set an existing cover variant active", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "RecipeCoverMutationEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id, pathParameters.coverId], requestBody: "SetRecipeCoverRequest" },
-    DELETE: { operationId: "deleteApiV1RecipeCover", tags: ["Recipe Covers"], summary: "Archive a recipe cover candidate", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "RecipeCoverMutationEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id, pathParameters.coverId], requestBody: "ArchiveRecipeCoverRequest" },
+    DELETE: { operationId: "deleteApiV1RecipeCover", tags: ["Recipe Covers"], summary: "Archive a recipe cover candidate", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "RecipeCoverMutationEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: deleteIdempotencyParameters(pathParameters.id, pathParameters.coverId), requestBody: "ArchiveRecipeCoverRequest", requestBodyRequired: false },
   },
   "/api/v1/recipes/{id}/covers/regenerate": {
     POST: { operationId: "postApiV1RecipeCoverRegenerate", tags: ["Recipe Covers"], summary: "Regenerate the editorial image for a cover", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "RecipeCoverMutationEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id], requestBody: "RegenerateRecipeCoverRequest" },
@@ -1008,11 +1016,11 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
   "/api/v1/cookbooks/{id}": {
     GET: { operationId: "getApiV1Cookbook", tags: ["Cookbooks"], summary: "Read one public cookbook", auth: "optional", scopes: ["cookbooks:read"], success: { 200: "CookbookDetailEnvelope" }, errors: ["validation_error", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id] },
     PATCH: { operationId: "patchApiV1Cookbook", tags: ["Cookbooks"], summary: "Rename an owned cookbook", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "UpdateCookbookEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id], requestBody: "UpdateCookbookRequest" },
-    DELETE: { operationId: "deleteApiV1Cookbook", tags: ["Cookbooks"], summary: "Delete an owned cookbook", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "DeleteCookbookEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id, pathParameters.clientMutationIdHeader], requestBody: "DeleteCookbookRequest" },
+    DELETE: { operationId: "deleteApiV1Cookbook", tags: ["Cookbooks"], summary: "Delete an owned cookbook", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "DeleteCookbookEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: deleteIdempotencyParameters(pathParameters.id), requestBody: "DeleteCookbookRequest", requestBodyRequired: false },
   },
   "/api/v1/cookbooks/{id}/recipes/{recipeId}": {
     POST: { operationId: "postApiV1CookbookRecipe", tags: ["Cookbooks"], summary: "Add a recipe to an owned cookbook", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "CookbookRecipeMutationEnvelope", 201: "CookbookRecipeMutationEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id, pathParameters.recipeId], requestBody: "CookbookRecipeMutationRequest" },
-    DELETE: { operationId: "deleteApiV1CookbookRecipe", tags: ["Cookbooks"], summary: "Remove a recipe from an owned cookbook", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "CookbookRecipeRemoveEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id, pathParameters.recipeId, pathParameters.clientMutationIdHeader], requestBody: "CookbookRecipeMutationRequest" },
+    DELETE: { operationId: "deleteApiV1CookbookRecipe", tags: ["Cookbooks"], summary: "Remove a recipe from an owned cookbook", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "CookbookRecipeRemoveEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: deleteIdempotencyParameters(pathParameters.id, pathParameters.recipeId), requestBody: "CookbookRecipeMutationRequest", requestBodyRequired: false },
   },
   "/api/v1/me": {
     GET: { operationId: "getApiV1Me", tags: ["Account"], summary: "Read the authenticated account profile", auth: "bearer", scopes: ["account:read"], success: { 200: "AccountProfileEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"] },
@@ -1043,7 +1051,7 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
   },
   "/api/v1/shopping-list/items/{itemId}": {
     PATCH: { operationId: "patchApiV1ShoppingListItem", tags: ["Shopping List"], summary: "Set a shopping-list item checked state", auth: "bearer", scopes: ["shopping_list:write"], success: { 200: "UpdateShoppingItemEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.itemId], requestBody: "CheckShoppingItemRequest" },
-    DELETE: { operationId: "deleteApiV1ShoppingListItem", tags: ["Shopping List"], summary: "Remove a shopping-list item", auth: "bearer", scopes: ["shopping_list:write"], success: { 200: "DeleteShoppingItemEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.itemId, pathParameters.clientMutationIdHeader] },
+    DELETE: { operationId: "deleteApiV1ShoppingListItem", tags: ["Shopping List"], summary: "Remove a shopping-list item", auth: "bearer", scopes: ["shopping_list:write"], success: { 200: "DeleteShoppingItemEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: deleteIdempotencyParameters(pathParameters.itemId), requestBody: "DeleteShoppingItemRequest", requestBodyRequired: false },
   },
   "/api/v1/shopping-list/add-from-recipe": {
     POST: { operationId: "postApiV1ShoppingListAddFromRecipe", tags: ["Shopping List"], summary: "Add recipe ingredients to the shopping list", auth: "bearer", scopes: ["shopping_list:write"], success: { 200: "AddRecipeIngredientsToShoppingListEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "AddRecipeIngredientsToShoppingListRequest" },
@@ -1959,12 +1967,13 @@ function idempotencyPolicyFor(path: ResourcePath, method: HttpMethod) {
   }
   if (path === "/api/v1/shopping-list/items/{itemId}" && method === "DELETE") {
     return {
-      key: "X-Client-Mutation-Id",
-      location: "header",
+      key: "clientMutationId",
+      location: "jsonBody, query, or X-Client-Mutation-Id",
       retentionHours: 24,
       replayStatus: [200],
       conflictStatus: 409,
       inProgressRetryAfterSeconds: 2,
+      retryBodyRule: "Persist and retry the same delete target for this clientMutationId. Delete requests may put the idempotency key in the JSON body, query string, or X-Client-Mutation-Id header.",
     };
   }
   return null;
@@ -2353,7 +2362,7 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
         ...(meta.requestBody
           ? {
               requestBody: {
-                required: true,
+                required: meta.requestBodyRequired ?? true,
                 content: meta.requestBodyContentType === "multipart/form-data"
                   ? multipartContent(ref(meta.requestBody), requestExampleFor(meta.requestBody, path))
                   : jsonContent(ref(meta.requestBody), requestExampleFor(meta.requestBody, path)),
