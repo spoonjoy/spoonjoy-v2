@@ -7,6 +7,7 @@ import { createUser } from "~/lib/auth.server";
 import { db } from "~/lib/db.server";
 import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
+import { createTestUser } from "../utils";
 
 function routeArgs(request: Request, splat: string, context: Record<string, unknown> = {}) {
   return {
@@ -387,8 +388,43 @@ describe("API v1 native account settings", () => {
         revokedAt: null,
 	      },
 	      mutation: { clientMutationId: "cm_me_apns_refresh_dev", replayed: false },
-	    });
+    });
     await expect(db.nativePushDevice.count({ where: { userId, deviceId: "device-main" } })).resolves.toBe(2);
+
+    const otherUser = await db.user.create({ data: createTestUser() });
+    const otherToken = await createApiCredential(db, otherUser.id, "Native APNs transfer writer", { scopes: ["account:write"] });
+    const transferred = await apiPost("me/apns-devices", { Authorization: `Bearer ${otherToken.token}` }, "req_me_apns_transfer", {
+      clientMutationId: "cm_me_apns_transfer",
+      deviceId: "device-other-account",
+      platform: "ios",
+      environment: "development",
+      token: "apns-token-development-rotated",
+    });
+    const transferredPayload = await readJson(transferred);
+
+    expect(transferred.status).toBe(201);
+    expect(transferredPayload.data).toMatchObject({
+      created: true,
+      device: { deviceId: "device-other-account", revokedAt: null },
+    });
+    await expect(db.nativePushDevice.count({
+      where: {
+        userId,
+        platform: "ios",
+        environment: "development",
+        tokenPrefix: "apns-token-d",
+        revokedAt: null,
+      },
+    })).resolves.toBe(0);
+    await expect(db.nativePushDevice.count({
+      where: {
+        userId: otherUser.id,
+        platform: "ios",
+        environment: "development",
+        tokenPrefix: "apns-token-d",
+        revokedAt: null,
+      },
+    })).resolves.toBe(1);
 
 	    const revoke = await apiDelete("me/apns-devices/device-main?clientMutationId=cm_me_apns_revoke", auth, "req_me_apns_revoke");
     const revokePayload = await readJson(revoke);
@@ -397,7 +433,7 @@ describe("API v1 native account settings", () => {
     expectEnvelopeHeaders(revoke, "req_me_apns_revoke");
     expect(revokePayload.data).toMatchObject({
 	      revoked: true,
-	      revokedCount: 2,
+	      revokedCount: 1,
 	      device: { deviceId: "device-main" },
 	      mutation: { clientMutationId: "cm_me_apns_revoke", replayed: false },
 	    });

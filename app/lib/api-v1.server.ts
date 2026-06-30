@@ -3969,6 +3969,21 @@ async function handleApnsDeviceRegister(args: ApiV1RouteArgs, requestId: string,
   return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "account.apns.register", async (db) => {
     const tokenHash = await hashApnsToken(token);
     const now = new Date();
+    await db.nativePushDevice.updateMany({
+      where: {
+        tokenHash,
+        platform,
+        environment,
+        revokedAt: null,
+        NOT: {
+          userId: principal.id,
+          deviceId,
+          platform,
+          environment,
+        },
+      },
+      data: { revokedAt: now.toISOString() },
+    });
     const existing = await db.nativePushDevice.findFirst({
       where: { userId: principal.id, deviceId, platform, environment },
     });
@@ -4788,9 +4803,24 @@ async function recoverNativeRecipeStepIngredientDelete(
 
 async function recoverNativeRecipeStepReorder(
   db: ApiV1WriteDb,
-  _reservation: ApiIdempotencyKey,
-  input: { clientMutationId: string; origin: string; principalId: string; recipeId: string; stepId: string; toStepNum: number; reordered: boolean },
+  reservation: ApiIdempotencyKey,
+  input: { clientMutationId: string; origin: string; principalId: string; recipeId: string; stepId: string; toStepNum: number },
 ): Promise<ApiV1IdempotentMutationResult | null> {
+  const tombstone = await findMutationTombstone(db, reservation, {
+    operation: "recipes.steps.reorder",
+    resourceType: "recipe_step_reorder",
+    resourceId: input.stepId,
+    parentResourceId: input.recipeId,
+  });
+  if (!tombstone?.payload) return null;
+  let payload: { toStepNum?: unknown; reordered?: unknown };
+  try {
+    payload = JSON.parse(tombstone.payload) as { toStepNum?: unknown; reordered?: unknown };
+  } catch {
+    return null;
+  }
+  if (payload.toStepNum !== input.toStepNum || typeof payload.reordered !== "boolean") return null;
+
   const recipeRow = await loadRecipeById(db, input.recipeId);
   if (!recipeRow || recipeRow.chef.id !== input.principalId) return null;
   const recipe = recipeDetail(recipeRow, input.origin);
@@ -4799,7 +4829,7 @@ async function recoverNativeRecipeStepReorder(
   return {
     status: 200,
     data: {
-      reordered: input.reordered,
+      reordered: payload.reordered,
       step,
       recipe,
       mutation: { clientMutationId: input.clientMutationId, replayed: false },
@@ -5012,8 +5042,30 @@ async function handleRecipeStepReorder(args: ApiV1RouteArgs, requestId: string, 
   }
   const origin = publicContentOrigin(args);
 
-  return await runIdempotentApiV1Mutation(args, requestId, principal, body, parsed.data.clientMutationId, "recipes.steps.reorder", async (db) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, parsed.data.clientMutationId, "recipes.steps.reorder", async (db, reservation) => {
     const reordered = recipeStepResultOrThrow(await reorderNativeRecipeStep(db, principal.id, recipeId, parsed.data));
+    await db.apiMutationTombstone.upsert({
+      where: {
+        idempotencyKeyId_resourceType_resourceId: {
+          idempotencyKeyId: reservation.id,
+          resourceType: "recipe_step_reorder",
+          resourceId: parsed.data.stepId,
+        },
+      },
+      update: {
+        operation: "recipes.steps.reorder",
+        parentResourceId: recipeId,
+        payload: JSON.stringify({ recipeId, stepId: parsed.data.stepId, toStepNum: parsed.data.toStepNum, reordered: reordered.data.reordered }),
+      },
+      create: {
+        idempotencyKeyId: reservation.id,
+        operation: "recipes.steps.reorder",
+        resourceType: "recipe_step_reorder",
+        resourceId: parsed.data.stepId,
+        parentResourceId: recipeId,
+        payload: JSON.stringify({ recipeId, stepId: parsed.data.stepId, toStepNum: parsed.data.toStepNum, reordered: reordered.data.reordered }),
+      },
+    });
     const { recipe, step } = await serializedRecipeStepOrThrow(db, reordered.data.recipeId, reordered.data.stepId, origin);
     return {
       status: reordered.status,
@@ -5031,7 +5083,6 @@ async function handleRecipeStepReorder(args: ApiV1RouteArgs, requestId: string, 
     recipeId,
     stepId: parsed.data.stepId,
     toStepNum: parsed.data.toStepNum,
-    reordered: true,
   }));
 }
 

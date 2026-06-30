@@ -12,7 +12,7 @@ const MIGRATION_PATH = resolve(
   "..",
   "..",
   "migrations",
-  "0019_native_push_devices.sql",
+  "0020_native_push_devices.sql",
 );
 
 interface TableInfoRow {
@@ -67,7 +67,7 @@ function hasIndex(db: DatabaseSyncType, tableName: string, columns: string[], un
   ));
 }
 
-describe("migration 0019 — native push devices", () => {
+describe("migration 0020 — native push devices", () => {
   let db: DatabaseSyncType;
 
   beforeAll(() => {

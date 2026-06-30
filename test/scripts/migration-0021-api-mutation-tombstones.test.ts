@@ -12,7 +12,7 @@ const MIGRATION_PATH = resolve(
   "..",
   "..",
   "migrations",
-  "0020_api_mutation_tombstones.sql",
+  "0021_api_mutation_tombstones.sql",
 );
 
 interface TableInfoRow {
@@ -64,7 +64,7 @@ function hasIndex(db: DatabaseSyncType, columns: string[], unique = false): bool
   return indexes.some((index) => index.unique === (unique ? 1 : 0) && indexColumns(db, index.name).join("|") === columns.join("|"));
 }
 
-describe("migration 0020 — API mutation tombstones", () => {
+describe("migration 0021 — API mutation tombstones", () => {
   let db: DatabaseSyncType;
 
   beforeAll(() => {

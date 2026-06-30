@@ -57,8 +57,10 @@ export async function cleanupDatabase() {
   await db.recipeStep.deleteMany({});
   await db.recipeInCookbook.deleteMany({});
   await db.cookbook.deleteMany({});
-  // Clear fork attribution before deleting recipes (Recipe.sourceRecipe uses onDelete: Restrict).
-  await db.recipe.updateMany({ data: { sourceRecipeId: null } });
+  // Clear self/cyclic recipe links before deleting recipe-adjacent rows.
+  await db.recipe.updateMany({ data: { activeCoverId: null, sourceRecipeId: null } });
+  await db.recipeCover.deleteMany({});
+  await db.recipeSpoon.deleteMany({});
   await db.recipe.deleteMany({});
   await db.ingredientRef.deleteMany({});
   await db.unit.deleteMany({});
@@ -67,6 +69,10 @@ export async function cleanupDatabase() {
   await db.apiIdempotencyKey.deleteMany({});
   await db.apiCredential.deleteMany({});
   await db.nativePushDevice.deleteMany({});
+  await db.notificationPreference.deleteMany({});
+  await db.notificationEvent.deleteMany({});
+  await db.pushSubscription.deleteMany({});
+  await db.imageGenLedger.deleteMany({});
   await db.oAuthAuthCode.deleteMany({});
   await db.oAuthRefreshToken.deleteMany({});
   await db.oAuthClient.deleteMany({});

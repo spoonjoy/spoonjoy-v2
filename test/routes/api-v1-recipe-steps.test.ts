@@ -1260,11 +1260,26 @@ describe("API v1 recipe step and dependency mutations", () => {
       stepId: reorderFixture.steps[2].id,
       toStepNum: 2,
     };
-    await reserveRouteMutation(db, reorderFixture, {
+    const reorderReservation = await reserveRouteMutation(db, reorderFixture, {
       method: "POST",
       path: reorderPath,
       body: reorderBody,
       operation: "recipes.steps.reorder",
+    });
+    await db.apiMutationTombstone.create({
+      data: {
+        idempotencyKeyId: reorderReservation.id,
+        operation: "recipes.steps.reorder",
+        resourceType: "recipe_step_reorder",
+        resourceId: reorderFixture.steps[2].id,
+        parentResourceId: reorderFixture.recipe.id,
+        payload: JSON.stringify({
+          recipeId: reorderFixture.recipe.id,
+          stepId: reorderFixture.steps[2].id,
+          toStepNum: 2,
+          reordered: true,
+        }),
+      },
     });
     await db.recipeStep.update({ where: { id: reorderFixture.steps[1].id }, data: { stepNum: 99 } });
     await db.recipeStep.update({ where: { id: reorderFixture.steps[2].id }, data: { stepNum: 2 } });
@@ -1280,6 +1295,46 @@ describe("API v1 recipe step and dependency mutations", () => {
       step: { id: reorderFixture.steps[2].id, stepNum: 2 },
     });
     expectMutationShape(reorderPayload.data.mutation, reorderBody.clientMutationId, true);
+
+    const noOpReorderFixture = await createRecipeStepFixture(db);
+    const noOpReorderPath = `recipes/${noOpReorderFixture.recipe.id}/steps/reorder`;
+    const noOpReorderBody = {
+      clientMutationId: "step-reorder-no-op-recovery",
+      stepId: noOpReorderFixture.steps[1].id,
+      toStepNum: 2,
+    };
+    const noOpReorderReservation = await reserveRouteMutation(db, noOpReorderFixture, {
+      method: "POST",
+      path: noOpReorderPath,
+      body: noOpReorderBody,
+      operation: "recipes.steps.reorder",
+    });
+    await db.apiMutationTombstone.create({
+      data: {
+        idempotencyKeyId: noOpReorderReservation.id,
+        operation: "recipes.steps.reorder",
+        resourceType: "recipe_step_reorder",
+        resourceId: noOpReorderFixture.steps[1].id,
+        parentResourceId: noOpReorderFixture.recipe.id,
+        payload: JSON.stringify({
+          recipeId: noOpReorderFixture.recipe.id,
+          stepId: noOpReorderFixture.steps[1].id,
+          toStepNum: 2,
+          reordered: false,
+        }),
+      },
+    });
+    const recoveredNoOpReorder = await action(routeArgs(
+      mutationRequest("POST", noOpReorderPath, noOpReorderFixture.writer.token, "req_step_reorder_no_op_recovery", noOpReorderBody),
+      noOpReorderPath,
+    ));
+    const noOpReorderPayload = await readJson(recoveredNoOpReorder);
+    expect(recoveredNoOpReorder.status).toBe(200);
+    expect(noOpReorderPayload.data).toMatchObject({
+      reordered: false,
+      step: { id: noOpReorderFixture.steps[1].id, stepNum: 2 },
+    });
+    expectMutationShape(noOpReorderPayload.data.mutation, noOpReorderBody.clientMutationId, true);
 
     const outputFixture = await createRecipeStepFixture(db);
     const outputPath = `recipes/${outputFixture.recipe.id}/step-output-uses`;
@@ -1845,6 +1900,89 @@ describe("API v1 recipe step and dependency mutations", () => {
     ));
     expect(response.status).toBe(409);
     expectErrorEnvelope(await readJson(response), "req_step_reorder_corrupt_recovery", "idempotency_in_progress", 409);
+
+    const expectUnrecoveredReorderRecovery = async (
+      suffix: string,
+      payload: string | Record<string, unknown>,
+      mutate?: (fixture: Awaited<ReturnType<typeof createRecipeStepFixture>>) => Promise<void>,
+    ) => {
+      const recoveryFixture = await createRecipeStepFixture(db);
+      const recoveryPath = `recipes/${recoveryFixture.recipe.id}/steps/reorder`;
+      const recoveryBody = {
+        clientMutationId: `step-reorder-${suffix}`,
+        stepId: recoveryFixture.steps[1].id,
+        toStepNum: 2,
+      };
+      const reservation = await reserveRouteMutation(db, recoveryFixture, {
+        method: "POST",
+        path: recoveryPath,
+        body: recoveryBody,
+        operation: "recipes.steps.reorder",
+      });
+      await db.apiMutationTombstone.create({
+        data: {
+          idempotencyKeyId: reservation.id,
+          operation: "recipes.steps.reorder",
+          resourceType: "recipe_step_reorder",
+          resourceId: recoveryFixture.steps[1].id,
+          parentResourceId: recoveryFixture.recipe.id,
+          payload: typeof payload === "string" ? payload : JSON.stringify(payload),
+        },
+      });
+      await mutate?.(recoveryFixture);
+      const recoveryResponse = await action(routeArgs(
+        mutationRequest("POST", recoveryPath, recoveryFixture.writer.token, `req_step_reorder_${suffix}`, recoveryBody),
+        recoveryPath,
+      ));
+      expect(recoveryResponse.status).toBe(409);
+      expectErrorEnvelope(await readJson(recoveryResponse), `req_step_reorder_${suffix}`, "idempotency_in_progress", 409);
+    };
+
+    await expectUnrecoveredReorderRecovery("malformed_tombstone", "{");
+    await expectUnrecoveredReorderRecovery("target_mismatch", {
+      recipeId: "ignored",
+      stepId: "ignored",
+      toStepNum: 3,
+      reordered: false,
+    });
+    await expectUnrecoveredReorderRecovery("result_mismatch", {
+      recipeId: "ignored",
+      stepId: "ignored",
+      toStepNum: 2,
+      reordered: "false",
+    });
+    await expectUnrecoveredReorderRecovery("missing_recipe", {
+      toStepNum: 2,
+      reordered: false,
+    }, async (recoveryFixture) => {
+      await db.recipe.delete({ where: { id: recoveryFixture.recipe.id } });
+    });
+    await expectUnrecoveredReorderRecovery("wrong_owner", {
+      toStepNum: 2,
+      reordered: false,
+    }, async (recoveryFixture) => {
+      await db.recipe.update({ where: { id: recoveryFixture.recipe.id }, data: { chefId: recoveryFixture.otherChef.id } });
+    });
+    await expectUnrecoveredReorderRecovery("missing_step", {
+      toStepNum: 2,
+      reordered: false,
+    }, async (recoveryFixture) => {
+      await db.recipeStep.delete({ where: { id: recoveryFixture.steps[1].id } });
+    });
+    await expectUnrecoveredReorderRecovery("step_moved_away", {
+      toStepNum: 2,
+      reordered: false,
+    }, async (recoveryFixture) => {
+      await db.stepOutputUse.deleteMany({ where: { recipeId: recoveryFixture.recipe.id } });
+      await db.recipeStep.update({ where: { id: recoveryFixture.steps[1].id }, data: { stepNum: 99 } });
+    });
+    await expectUnrecoveredReorderRecovery("noncontiguous_order", {
+      toStepNum: 2,
+      reordered: false,
+    }, async (recoveryFixture) => {
+      await db.stepOutputUse.deleteMany({ where: { recipeId: recoveryFixture.recipe.id } });
+      await db.recipeStep.update({ where: { id: recoveryFixture.steps[2].id }, data: { stepNum: 4 } });
+    });
   });
 
   it("protects step deletion and reorder operations that would break step-output dependencies", async () => {
