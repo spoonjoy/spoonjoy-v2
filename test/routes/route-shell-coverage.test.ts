@@ -73,6 +73,7 @@ describe("route shell coverage", () => {
               { "/": "/cookbooks/*" },
               { "/": "/search", "?": { "*": "*" } },
               { "/": "/account/settings" },
+              { "/": "/oauth/callback", "?": { "*": "*" } },
             ]),
           },
         ],

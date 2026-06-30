@@ -130,7 +130,11 @@ describe("Apple app-site-association and route classification contract", () => {
       "/search",
       "/recipes/new",
       "/account/settings",
+      "/oauth/callback",
+      "/oauth/callback",
     ]);
+    expect(componentKeys.has(canonical({ "/": "/oauth/callback" }))).toBe(true);
+    expect(componentKeys.has(canonical({ "/": "/oauth/callback", "?": { "*": "*" } }))).toBe(true);
     expect(componentPaths).not.toContain("/capture");
     expect(componentPaths).not.toContain("/import");
     expect(componentPaths).not.toContain("/api/*");
