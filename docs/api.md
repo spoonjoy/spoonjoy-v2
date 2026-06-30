@@ -20,11 +20,11 @@ Available now:
 
 - Public recipe and cookbook reads
 - Cross-product API search across public recipes, public cookbooks, chefs, and authorized shopping-list items
-- Authenticated recipe import from URL, video URL, text, or JSON-LD
+- Authenticated recipe create, update, delete, fork, step editing, and import from URL, video URL, text, or JSON-LD
 - Public recipe spoon history plus authenticated recipe spoon create, update, and delete
 - Owner-scoped recipe cover candidate management for the authenticated chef's recipes
 - Owner-scoped shopping-list read, sync, add, recipe-add, check, clear, and remove
-- Native account profile, profile-photo, notification-preference, token, and OAuth app connection settings
+- Native account profile, profile-photo, notification-preference, APNs device, token, and OAuth app connection settings
 - Session-created and bearer-created API tokens
 - OAuth/PKCE delegated access
 - Delegated agent/device approval links
@@ -32,7 +32,7 @@ Available now:
 
 Not in API v1 yet:
 
-- General recipe create, edit, delete, or export endpoints beyond recipe import and owner cover management
+- Recipe export endpoints beyond the current create, edit, delete, fork, import, step, spoon, and cover surfaces
 - Private recipe-library endpoints
 - Inventory or pantry stock APIs
 - Meal plan or "today's recipes" APIs
@@ -50,7 +50,7 @@ Generated SDKs should use `/api/v1/openapi.sdk.json`; it keeps REST v1 resources
 
 | Surface | Build with it | Current boundary |
 | --- | --- | --- |
-| REST API v1 | Public catalog clients, global search, shopping-list sync, native recipe import, native recipe spoon and recipe-cover management, bearer-token scripts, generated SDKs | No general recipe create/edit/delete/export or private library endpoints yet. |
+| REST API v1 | Public catalog clients, global search, shopping-list sync, native recipe create/edit/delete/fork/import/step editing, native recipe spoon and recipe-cover management, bearer-token scripts, generated SDKs | No recipe export or private library endpoints yet. |
 | No-code connector profile | Zapier/Make/n8n-style searches, actions, and polling triggers | No webhooks, REST Hooks, SSE, event subscriptions, or DELETE request bodies. |
 | OAuth/PKCE | Third-party mobile, SaaS, extension, and connector account linking | Public clients only; no client secret, password grant, token-management scopes, or custom schemes. |
 | Delegated approval | CLIs, appliances, voice clients, and agents without a callback URL | Custom Spoonjoy approval flow, not OAuth Device Authorization Grant. |
@@ -150,7 +150,7 @@ External clients that run outside the Spoonjoy browser session use bearer creden
 
 Supported entry points:
 
-- Native account settings: `GET /api/v1/me`, `PATCH /api/v1/me`, `POST /api/v1/me/photo`, `DELETE /api/v1/me/photo`, `GET /api/v1/me/notification-preferences`, `PATCH /api/v1/me/notification-preferences`, `GET /api/v1/me/connections`, and `DELETE /api/v1/me/connections/{connectionId}`
+- Native account settings: `GET /api/v1/me`, `PATCH /api/v1/me`, `POST /api/v1/me/photo`, `DELETE /api/v1/me/photo`, `GET /api/v1/me/notification-preferences`, `PATCH /api/v1/me/notification-preferences`, `POST /api/v1/me/apns-devices`, `DELETE /api/v1/me/apns-devices/{deviceId}`, `GET /api/v1/me/connections`, and `DELETE /api/v1/me/connections/{connectionId}`
 - Bearer credentials: `GET /api/v1/tokens`, `POST /api/v1/tokens`, and `DELETE /api/v1/tokens/{credentialId}`
 - OAuth/DCR clients: `POST /oauth/register`, `GET /oauth/authorize`, `POST /oauth/token`, and `POST /oauth/revoke`
 - Delegated agent connection: `POST /api/tools/start_agent_connection` and `POST /api/tools/poll_agent_connection`
@@ -222,13 +222,13 @@ grant_type=authorization_code&client_id=...&redirect_uri=https%3A%2F%2Fexample.c
 
 The token response contains `access_token: "sj_..."`, `token_type: "Bearer"`, `expires_in: 900`, `scope`, and a rotating `refresh_token`.
 
-Registration can validate optional `scope` metadata, but it does not grant or remember that scope. Always send the requested scope on `/oauth/authorize`; blank authorize scope defaults to `kitchen:read`.
+Registration can validate optional `scope` metadata, but it does not grant or remember that scope. Always send the requested scope on `/oauth/authorize`. Blank OAuth authorize scope defaults to kitchen:read.
 
 ### Delegated token: approval link
 
 For agents, CLIs, appliances, or devices that cannot run a browser-based OAuth callback, use the delegated approval link. Call `POST /api/tools/start_agent_connection`, show the returned `authorizationUrl` and `userCode` to the chef, then poll `POST /api/tools/poll_agent_connection` with the returned `deviceCode` no faster than the returned `interval`.
 
-Pass `scopes` to `start_agent_connection` for least privilege, for example `shopping_list:read shopping_list:write` for a tiny grocery sync client. Omitting `scopes` falls back to the same least-privilege shopping-list read/write default, but production clients should still send explicit scopes so consent is predictable.
+Pass `scopes` to `start_agent_connection` for least privilege, for example `shopping_list:read shopping_list:write` for a tiny grocery sync client. Omitted delegated approval scopes default to shopping_list:read shopping_list:write, but production clients should still send explicit scopes so consent is predictable.
 
 The device code expires after 10 minutes. Pending polls return `status: "pending"`. Approved polls return the `sj_...` token once plus credential metadata, including the credential `id`. Denied, expired, and already-claimed requests return those statuses. The token is a normal bearer credential. A least-privilege device can disconnect itself with `DELETE /api/v1/tokens/{credentialId}` when `{credentialId}` is its own returned credential id; revoking any other credential still requires `tokens:write`.
 
@@ -282,7 +282,7 @@ When a signed-in session creates a token and omits `scopes`, Spoonjoy uses the d
 
 Use OAuth/PKCE when a third-party app needs the chef to consent without embedding a long-lived secret. Register a public client with `token_endpoint_auth_method: none`; there is no client secret. Redirect URIs must be HTTPS, with HTTP allowed only for `localhost` and `127.0.0.1`. Redirect URIs with fragments, embedded credentials, wildcards, custom schemes, or plain remote HTTP are rejected. Spoonjoy accepts common RFC 7591/OIDC client metadata such as `client_uri`, `contacts`, `policy_uri`, `software_id`, and `software_version`, but only stores `client_name` and exact `redirect_uris` today.
 
-OAuth accepts delegated `kitchen:read` and `kitchen:write` scopes plus least-privilege REST read/write scopes such as `account:read`, `account:write`, `shopping_list:read`, `shopping_list:write`, `recipes:read`, `cookbooks:read`, and `public:read`. Grocery-style apps should request `shopping_list:read shopping_list:write`, not broad kitchen scopes. Native Spoonjoy clients that manage recipe covers need `kitchen:write`; clients that manage profile, profile photo, or notification settings need explicit `account:*` scopes. Do not request `offline_access`; OAuth returns refresh tokens with the authorization-code flow. Omitting `scope` grants the read-only default `kitchen:read`.
+OAuth accepts delegated `kitchen:read` and `kitchen:write` scopes plus least-privilege REST read/write scopes such as `account:read`, `account:write`, `shopping_list:read`, `shopping_list:write`, `recipes:read`, `cookbooks:read`, and `public:read`. Grocery-style apps should request `shopping_list:read shopping_list:write`, not broad kitchen scopes. Native Spoonjoy clients that create, update, delete, fork, import, spoon, or cover recipes need `kitchen:write`; clients that manage profile, profile photo, notification settings, or APNs device registration need explicit `account:*` scopes. Do not request `offline_access`; OAuth returns refresh tokens with the authorization-code flow. Blank OAuth authorize scope defaults to kitchen:read.
 
 Generate a 43-128 character high-entropy `code_verifier` from unreserved PKCE characters, then send `code_challenge = BASE64URL(SHA256(code_verifier))` without padding and `code_challenge_method=S256`. The `plain` method is rejected. Always send and verify `state`.
 
@@ -298,7 +298,7 @@ Content-Type: application/x-www-form-urlencoded
 grant_type=authorization_code&client_id=...&redirect_uri=https%3A%2F%2Fexample.com%2Foauth%2Fcallback&code=...&code_verifier=...
 ```
 
-The returned `access_token` is a normal `sj_...` Bearer credential that expires after 15 minutes (`expires_in: 900`). The returned refresh_token rotates on every refresh grant as an `ort_...` token, and a replayed refresh token is rejected. Refresh tokens are stored server-side only as hashes. Disconnect by revoking the stored refresh token with `POST /oauth/revoke`; Spoonjoy revokes live OAuth access credentials for that client/resource at the same time. OAuth never grants `tokens:read` or `tokens:write`; token management is for signed-in sessions or personal bearer credentials with explicit token scopes.
+The returned `access_token` is a normal `sj_...` Bearer credential that expires after 15 minutes (`expires_in: 900`). The returned refresh_token rotates on every refresh grant as an `ort_...` token, and a replayed refresh token is rejected. Refresh tokens are stored server-side only as hashes. Disconnect by revoking the stored refresh token with `POST /oauth/revoke`; Spoonjoy revokes live OAuth access credentials for that client/resource at the same time. OAuth never grants `tokens:read` or `tokens:write`; token management is for signed-in sessions or personal bearer credentials with explicit token scopes. OAuth kitchen scopes do not grant tokens:read or tokens:write.
 
 `client_id` is recommended on `/oauth/revoke` and Spoonjoy checks it when present. Possession of the refresh token is sufficient to revoke it, so a client can still disconnect if its local `client_id` storage was lost.
 
@@ -318,7 +318,7 @@ token=ort_...&client_id=cm_client_id_from_register&token_type_hint=refresh_token
 
 Browser clients may call `/oauth/register`, `/oauth/token`, and `/oauth/revoke` cross-origin; these endpoints answer `OPTIONS` with `Access-Control-Allow-Origin: *`, `Access-Control-Allow-Methods: POST, OPTIONS`, `Access-Control-Allow-Headers: Content-Type`, and no `Access-Control-Allow-Credentials`. Cookie-authenticated API mutations are same-origin only and are protected by the Spoonjoy session boundary: use relative URLs, `credentials: "same-origin"`, JSON requests, and no copied cookies. CORS does not make a copied session cookie safe for an external client. OAuth consent form submissions are same-origin POSTs.
 
-If an OAuth client sends the optional `resource` parameter, Spoonjoy currently accepts only the advertised MCP protected resource (`https://spoonjoy.app/mcp`) and binds the issued access credential to that audience. Resource-bound MCP tokens are rejected by REST API v1. Generic REST OAuth apps should omit `resource`. `POST /oauth/revoke` revokes the presented refresh token and live OAuth access credentials for that client/resource.
+If an OAuth client sends the optional `resource` parameter, Spoonjoy currently accepts only the advertised MCP protected resource and binds the issued access credential to that audience. Use resource=https://spoonjoy.app/mcp only for MCP OAuth. Omit resource for REST OAuth apps; resource-bound MCP tokens are rejected by REST API v1. `POST /oauth/revoke` revokes the presented refresh token and live OAuth access credentials for that client/resource.
 
 ### Auth failures
 
@@ -408,9 +408,9 @@ Fine-grained REST scopes are attached to bearer tokens and OAuth-issued API cred
 | Scope | Purpose |
 | --- | --- |
 | `account:read` | Read the authenticated owner's account profile and notification preference settings. |
-| `account:write` | Update the authenticated owner's profile, profile photo, and notification preference settings. |
+| `account:write` | Update the authenticated owner's profile, profile photo, notification preference settings, and APNs device registrations. |
 | `kitchen:read` | Read the authenticated owner's broad kitchen state, including public recipes, public cookbooks, and shopping-list reads. |
-| `kitchen:write` | Import recipes, manage owner recipe spoons and covers, and write the authenticated owner's shopping list when granted through OAuth kitchen consent. |
+| `kitchen:write` | Create, update, delete, fork, import, spoon, and cover owner recipes, and write the authenticated owner's shopping list when granted through OAuth kitchen consent. |
 | `public:read` | Read public recipe and cookbook data with a bearer or OAuth credential. Anonymous reads do not need it. |
 | `recipes:read` | Read public recipes and recipe detail. |
 | `cookbooks:read` | Read public cookbook lists and cookbook detail. |
@@ -435,8 +435,19 @@ API v1 is rate limited by IP and credential before authentication work. Anonymou
 | `GET` | `/api/v1/openapi.connector.json` | Optional | none |
 | `GET` | `/api/v1/search` | Optional | `shopping_list:read` only for private shopping-list results |
 | `GET` | `/api/v1/recipes` | Optional | `recipes:read` when authenticated |
-| `POST` | `/api/v1/recipes/import` | Authenticated chef | `kitchen:write` |
+| `POST` | `/api/v1/recipes` | Authenticated chef | `kitchen:write` |
 | `GET` | `/api/v1/recipes/{id}` | Optional | `recipes:read` when authenticated |
+| `PATCH` | `/api/v1/recipes/{id}` | Authenticated chef | `kitchen:write` |
+| `DELETE` | `/api/v1/recipes/{id}` | Authenticated chef | `kitchen:write` |
+| `POST` | `/api/v1/recipes/{id}/fork` | Authenticated chef | `kitchen:write` |
+| `POST` | `/api/v1/recipes/import` | Authenticated chef | `kitchen:write` |
+| `POST` | `/api/v1/recipes/{id}/steps` | Authenticated chef | `kitchen:write` |
+| `PATCH` | `/api/v1/recipes/{id}/steps/{stepId}` | Authenticated chef | `kitchen:write` |
+| `DELETE` | `/api/v1/recipes/{id}/steps/{stepId}` | Authenticated chef | `kitchen:write` |
+| `POST` | `/api/v1/recipes/{id}/steps/reorder` | Authenticated chef | `kitchen:write` |
+| `POST` | `/api/v1/recipes/{id}/steps/{stepId}/ingredients` | Authenticated chef | `kitchen:write` |
+| `DELETE` | `/api/v1/recipes/{id}/steps/{stepId}/ingredients/{ingredientId}` | Authenticated chef | `kitchen:write` |
+| `PUT` | `/api/v1/recipes/{id}/step-output-uses` | Authenticated chef | `kitchen:write` |
 | `GET` | `/api/v1/recipes/{id}/spoons` | Optional | `recipes:read` when authenticated |
 | `POST` | `/api/v1/recipes/{id}/spoons` | Authenticated chef | `kitchen:write` |
 | `PATCH` | `/api/v1/recipes/{id}/spoons/{spoonId}` | Authenticated chef | `kitchen:write` |
@@ -460,6 +471,8 @@ API v1 is rate limited by IP and credential before authentication work. Anonymou
 | `DELETE` | `/api/v1/me/photo` | Authenticated chef | `account:write` |
 | `GET` | `/api/v1/me/notification-preferences` | Authenticated chef | `account:read` |
 | `PATCH` | `/api/v1/me/notification-preferences` | Authenticated chef | `account:write` |
+| `POST` | `/api/v1/me/apns-devices` | Authenticated chef | `account:write` |
+| `DELETE` | `/api/v1/me/apns-devices/{deviceId}` | Authenticated chef | `account:write` |
 | `GET` | `/api/v1/me/connections` | Authenticated chef | `tokens:read` |
 | `DELETE` | `/api/v1/me/connections/{connectionId}` | Authenticated chef | `tokens:write` |
 | `GET` | `/api/v1/shopping-list` | Authenticated chef | `shopping_list:read` |
@@ -480,7 +493,7 @@ API v1 is rate limited by IP and credential before authentication work. Anonymou
 
 Store the returned `nextCursor` for a page only after applying every item in that response durably. Use `limit` from 1 to 50 for small payloads; `hasMore: true` means continue immediately with that checkpoint to drain the backlog. It is okay for crash-prone clients to checkpoint after each fully applied page, as long as local apply is idempotent and no cursor is persisted before all rows in that page are durable. Poll conservatively because webhooks, REST Hooks, SSE, and event subscriptions are not in v1 yet.
 
-Idempotent owner mutations use `clientMutationId`. This applies to recipe import, cookbook writes, shopping-list writes, recipe spoon writes, and recipe-cover writes. The idempotency key is scoped to the chef, retained for 24 hours, and bound to method, path, and a canonicalized parsed JSON body. Persist the same request values for each mutation id before sending it; whitespace and object key order are ignored, while changed method, path, or body values return a conflict. A write retried after an OAuth access-token refresh still replays instead of duplicating because both credentials resolve to the same chef. Reusing the same mutation id with the same completed request body returns the recorded response with `mutation.replayed: true`; a concurrent retry can return `409 idempotency_in_progress` with `Retry-After: 2` and `error.details.retryAfterSeconds`. Wait at least that long, then retry the same request. Reusing a mutation id with a different method, path, or body returns `409 idempotency_conflict`.
+Idempotent owner mutations use `clientMutationId`. This applies to profile display-field updates, profile photo upload/remove, notification preference updates, APNs device registration/revocation after a system token exists, recipe create/update/delete/fork/import, recipe step and ingredient edits, cookbook writes, shopping-list writes, recipe spoon writes, and recipe-cover writes. The idempotency key is scoped to the chef, retained for 24 hours, and bound to method, path, and a canonicalized parsed JSON body; multipart profile-photo uploads are bound to the mutation id plus uploaded file digest, size, type, and field values. Persist the same request values for each mutation id before sending it; whitespace and object key order are ignored, while changed method, path, or body values return a conflict. A write retried after an OAuth access-token refresh still replays instead of duplicating because both credentials resolve to the same chef. Reusing the same mutation id with the same completed request body returns the recorded response with `mutation.replayed: true`; a concurrent retry can return `409 idempotency_in_progress` with `Retry-After: 2` and `error.details.retryAfterSeconds`. Wait at least that long, then retry the same request. Reusing a mutation id with a different method, path, or body returns `409 idempotency_conflict`.
 
 Mutation responses return the changed item or changed items plus mutation metadata, not the entire shopping list. Fetch `/api/v1/shopping-list` or `/api/v1/shopping-list/sync` when you need the current list view.
 
@@ -493,6 +506,10 @@ Cookbook write endpoints are owner-scoped native and automation surfaces. `POST 
 `GET /api/v1/search` is the native/global search endpoint. It accepts `query` or `q`, `scope` (`all`, `recipes`, `cookbooks`, `chefs`, or `shopping-list`), and `limit` from 1 to 50. Anonymous callers receive public recipe, cookbook, and chef result rows. Authenticated callers with `shopping_list:read` can also receive owner-scoped shopping-list item rows; explicit `scope=shopping-list` requires authentication and that scope. Results return mixed rows with `type`, `id`, owner fields, display text, `href`, `canonicalUrl`, optional `imageUrl`, score, and type-specific `metadata`.
 
 Public catalog cursors page by `createdAt` plus `id` for deterministic catalog walks. They are not repeatable snapshot guarantees, not `updatedAt` incremental feeds, and do not include deletion tombstones. New public records can appear during a long crawl. Restart a full crawl when you need to catch public recipe/cookbook edits or removals. Anonymous public recipe/cookbook responses expose `Cache-Control: public, max-age=60, stale-while-revalidate=300`; authenticated public reads are validated and returned with private/no-store cache headers. API v1 does not provide `ETag`, `Last-Modified`, or conditional request support yet.
+
+Recipe write endpoints are owner-scoped native and automation surfaces. `POST /api/v1/recipes` creates an owned draft recipe from title, optional description, servings, and steps. `PATCH /api/v1/recipes/{id}` updates owned recipe metadata fields. `DELETE /api/v1/recipes/{id}` soft-deletes an owned recipe and accepts `clientMutationId` in the JSON body, query string, or `X-Client-Mutation-Id` header. `POST /api/v1/recipes/{id}/fork` forks an active public source recipe into the authenticated chef's kitchen, copies the source graph, and returns fork metadata plus the new recipe detail.
+
+Recipe step endpoints expose the granular editor operations the native app needs without inventing a separate recipe model. `POST /api/v1/recipes/{id}/steps` appends or inserts a step with ingredients and output dependencies. `PATCH /api/v1/recipes/{id}/steps/{stepId}` updates step title, description, duration, and output dependencies. `DELETE /api/v1/recipes/{id}/steps/{stepId}` removes a step only when doing so preserves valid dependency graph rules. `POST /api/v1/recipes/{id}/steps/reorder` moves one step to a new step number. `POST /api/v1/recipes/{id}/steps/{stepId}/ingredients` and `DELETE /api/v1/recipes/{id}/steps/{stepId}/ingredients/{ingredientId}` edit step ingredients. `PUT /api/v1/recipes/{id}/step-output-uses` replaces one step's output-use links. All require `kitchen:write` and `clientMutationId`.
 
 Recipe import is an authenticated native app and automation surface. `POST /api/v1/recipes/import` requires `kitchen:write`, accepts a `clientMutationId`, and can import from a recipe URL, video URL, plain recipe text, or JSON-LD object. Native capture metadata is optional and currently records where a text import came from, such as camera OCR or photo-library OCR. Import responses include the created or existing recipe detail, `importCode`, `confidence`, normalized `source`, `coverPending`, optional `existingRecipeId`, and idempotency metadata. When the import provider is not configured, the endpoint returns `ok: true` with `data.recipe: null`, `importCode: "provider_secret_required"`, and a `blockers` entry so native clients can show a durable setup blocker instead of retrying in the background.
 
@@ -644,12 +661,12 @@ Bearer mode is for clients that cannot use the logged-in Spoonjoy browser sessio
 
 ### Native mobile OAuth
 
-iOS production apps should register an HTTPS universal-link redirect URI such as `https://example.com/spoonjoy/oauth/callback`, enable Associated Domains for that host, and run the browser step with `ASWebAuthenticationSession` or AppAuth. Android apps should register the same HTTPS shape, add an intent filter for the exact callback path, publish Digital Asset Links (`assetlinks.json`) for the package name plus SHA-256 signing cert, and run the browser step with Chrome Custom Tabs or AppAuth. Local development can use `http://localhost` or `http://127.0.0.1` loopback; custom schemes are rejected.
+iOS production apps should register an HTTPS universal-link redirect URI such as Spoonjoy Apple's `https://spoonjoy.app/oauth/callback`, enable Associated Domains for that host, and run the browser step with `ASWebAuthenticationSession` or AppAuth. Android apps should register the same HTTPS shape, add an intent filter for the exact callback path, publish Digital Asset Links (`assetlinks.json`) for the package name plus SHA-256 signing cert, and run the browser step with Chrome Custom Tabs or AppAuth. Local development can use `http://localhost` or `http://127.0.0.1` loopback; custom schemes are rejected.
 
 ```json
 {
-  "client_name": "Grocery helper",
-  "redirect_uris": ["https://example.com/spoonjoy/oauth/callback"],
+  "client_name": "Spoonjoy Apple",
+  "redirect_uris": ["https://spoonjoy.app/oauth/callback"],
   "token_endpoint_auth_method": "none"
 }
 ```
@@ -660,7 +677,7 @@ Generate a PKCE verifier in the app, store it only until the code exchange succe
 POST /oauth/token
 Content-Type: application/x-www-form-urlencoded
 
-grant_type=authorization_code&client_id=cm_client_id_from_register&redirect_uri=https%3A%2F%2Fexample.com%2Fspoonjoy%2Foauth%2Fcallback&code=oac_...&code_verifier=pkce_verifier_...
+grant_type=authorization_code&client_id=cm_client_id_from_register&redirect_uri=https%3A%2F%2Fspoonjoy.app%2Foauth%2Fcallback&code=oac_...&code_verifier=pkce_verifier_...
 
 POST /oauth/token
 Content-Type: application/x-www-form-urlencoded
@@ -673,11 +690,14 @@ token=ort_...&client_id=cm_client_id_from_register&token_type_hint=refresh_token
 
 ### Native iOS OAuth quickstart
 
-Register an OAuth client once per app install or app environment, then persist the returned `client_id` in app storage. Do not register on every launch; public registration is rate limited and redirect URIs are exact-match. If you ship separate development, staging, and production callbacks, register separate clients and store the matching `client_id` with that environment.
+Spoonjoy Apple native dogfood quickstart: register an OAuth client once per app install or app environment, then persist client_id in Keychain. Do not register on every launch; public registration is rate limited and redirect URIs are exact-match. If you ship separate development, staging, and production callbacks, register separate clients and store the matching `client_id` with that environment.
 
-Use `ASWebAuthenticationSession` with a universal-link HTTPS callback in production, or localhost/127.0.0.1 loopback only for development. Store `access_token`, rotating `refresh_token`, `client_id`, `code_verifier`, and `state` in Keychain-backed storage. Replace the stored refresh token atomically every time refresh succeeds, and use a single-flight refresh task so concurrent `401` responses do not replay an old refresh token.
+Use `ASWebAuthenticationSession.Callback.https(host: "spoonjoy.app", path: "/oauth/callback")` with the production redirect `https://spoonjoy.app/oauth/callback`, plus the Associated Domains entitlement `applinks:spoonjoy.app`. The custom URL scheme is for app navigation only, not OAuth. Localhost/127.0.0.1 loopback is development-only. Native clients persist access_token and refresh_token in Keychain, keep `code_verifier` and `state` only until the callback is exchanged, and clear state and code_verifier after a successful token exchange. Native clients must replace the stored refresh token atomically every time refresh succeeds, use single-flight refresh so concurrent `401` responses do not replay an old refresh token, and decode Spoonjoy REST envelopes before mutating cache state.
 
 ```swift
+let redirectURI = URL(string: "https://spoonjoy.app/oauth/callback")!
+let callback = ASWebAuthenticationSession.Callback.https(host: "spoonjoy.app", path: "/oauth/callback")
+
 struct OAuthTokenResponse: Decodable {
   let access_token: String
   let refresh_token: String
@@ -723,11 +743,69 @@ func syncShoppingList(accessToken: String, cursor: String?) async throws -> Stri
   var request = URLRequest(url: components.url!)
   request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
   let (data, _) = try await URLSession.shared.data(for: request)
+  // Decode Spoonjoy REST envelopes before mutating cache state.
   let page = try JSONDecoder().decode(SyncEnvelope.self, from: data)
   applyItemsAndTombstones(page.data.items)
   return page.data.hasMore ? try await syncShoppingList(accessToken: accessToken, cursor: page.data.nextCursor) : page.data.nextCursor
 }
 ```
+
+### Profile photo upload/remove
+
+Native settings dogfoods `POST /api/v1/me/photo` and `DELETE /api/v1/me/photo` with `account:write`. Uploads are `multipart/form-data`. Do not set the Content-Type header manually for multipart uploads because the client runtime must add the generated boundary. Queue profile photo upload/remove only after local media staging has succeeded, and keep the staged media until the direct request or queued drain has proven completion.
+
+```bash
+curl -fsS -X POST 'https://spoonjoy.app/api/v1/me/photo' \
+  -H "Authorization: Bearer $SPOONJOY_TOKEN" \
+  -F 'clientMutationId=profile-photo:local-media-123' \
+  -F 'photo=@profile.jpg;type=image/jpeg'
+
+curl -fsS -X DELETE 'https://spoonjoy.app/api/v1/me/photo' \
+  -H "Authorization: Bearer $SPOONJOY_TOKEN" \
+  -H 'X-Client-Mutation-Id: profile-photo-remove:local-media-123'
+```
+
+### DELETE idempotency
+
+X-Client-Mutation-Id is recommended for DELETE retries because many intermediaries and SDKs treat DELETE bodies inconsistently. API v1 also accepts JSON body `clientMutationId` where the endpoint declares a delete body, and idempotent DELETE endpoints accept query string `clientMutationId` for clients that cannot send custom headers. Reuse the same id only with the same method, path, and body shape; conflicts return `409 idempotency_conflict`.
+
+```bash
+curl -fsS -X DELETE 'https://spoonjoy.app/api/v1/shopping-list/items/item_123' \
+  -H "Authorization: Bearer $SPOONJOY_TOKEN" \
+  -H 'X-Client-Mutation-Id: shopping-delete:item_123'
+
+curl -fsS -X DELETE 'https://spoonjoy.app/api/v1/shopping-list/items/item_123?clientMutationId=shopping-delete%3Aitem_123' \
+  -H "Authorization: Bearer $SPOONJOY_TOKEN"
+
+curl -fsS -X DELETE 'https://spoonjoy.app/api/v1/recipes/recipe_123/spoons/spoon_123' \
+  -H "Authorization: Bearer $SPOONJOY_TOKEN" \
+  -H 'Content-Type: application/json' \
+  --data '{"clientMutationId":"spoon-delete:spoon_123"}'
+
+curl -fsS -X DELETE 'https://spoonjoy.app/api/v1/cookbooks/cookbook_123' \
+  -H "Authorization: Bearer $SPOONJOY_TOKEN" \
+  -H 'X-Client-Mutation-Id: cookbook-delete:cookbook_123'
+
+curl -fsS -X DELETE 'https://spoonjoy.app/api/v1/me/apns-devices/device-main' \
+  -H "Authorization: Bearer $SPOONJOY_TOKEN" \
+  -H 'X-Client-Mutation-Id: apns-revoke:device-main'
+```
+
+DELETE examples to mirror in native request builders: DELETE /api/v1/shopping-list/items/{itemId}, DELETE /api/v1/recipes/{id}/spoons/{spoonId}, DELETE /api/v1/cookbooks/{id}, DELETE /api/v1/me/photo, and DELETE /api/v1/me/apns-devices/{deviceId}.
+
+## Offline Product Contract
+
+Native clients treat offline support as product behavior, not a cache optimization. Every cached record must carry accountId, environment, schemaVersion, fetchedAt, lastValidatedAt, sourceEndpoint, and a server revision marker when available, such as cursor, etag, updatedAt, deletedAt, or an endpoint-specific tombstone token. Cache keys must include the full private visibility boundary so one account, environment, query, or scope cannot restore another account's private rows.
+
+Freshness thresholds are fixed for native cache and docs drift tests. Signed-in bootstrap, account, settings, and shopping data is fresh for 15 minutes after lastValidatedAt. Recipe detail, cookbook detail, spoon lists, profile/chef graph, and active cook-mode backing data is fresh for 6 hours. Catalog and search result pages are fresh for 24 hours. Local cook progress, capture/import drafts, queued mutations, and staged media are locally authoritative until synced, discarded, or conflicted.
+
+Profile display-field updates, profile photo upload/remove after local media staging, notification preference updates, and APNs device registration/revocation after a system device token exists are queueable. API token create/revoke, OAuth connection disconnect, logout/session revoke, passkey/password/provider-link actions are online-only and must never be queued by native UI, Siri, or Shortcuts. APNs permission prompts and device-token acquisition are online-only.
+
+Queued mutations must include stable clientMutationId, endpoint path, method, idempotency key, payload schema version, created-at time, dependency ordering key, retry count, and last error. Queue replay is FIFO within an object dependency key and may run independent keys concurrently only after tests prove no ordering conflict. Retry with the same clientMutationId for timeouts, 429, and 5xx. Auth failure pauses the queue until reauth, validation conflict marks only that mutation conflicted, and server tombstones remove or conflict local records according to endpoint-specific tests.
+
+Do not store bearer tokens, refresh tokens, one-time token values, provider secrets, passkey material, or raw credential values in general cache storage. Use Keychain or session-owned storage for auth material. Cached API responses must filter or purge private rows on logout, account switch, environment switch, cache deletion, and tombstone/delete replay before rendering, donating App Intents entities, or indexing Spotlight content.
+
+Dismissal may hide only informational offline/stale states until connectivity, freshness, or account state changes. It must never hide queued work, sync failure, conflict, blocker, or destructive confirmation states. Feature-owned error states must distinguish true offline transport from backend/auth/application failures so a validation error or provider-secret blocker is not mislabeled as offline.
 
 ### Browser extension OAuth
 
@@ -971,7 +1049,7 @@ Spoonjoy supports REST-powered embeds, not iframe embeds. Spoonjoy pages intenti
 
 Treat recipe titles, descriptions, steps, ingredient names, units, and `attribution.sourceUrl` as user-provided content. Render text with DOM text APIs, validate `sourceUrl` before linking, and avoid copying Spoonjoy images or source-site URLs into contexts where you cannot honor removal requests.
 
-Recipe detail responses return `steps` in ascending `stepNum` order. Each step includes the ingredients attached to that step in API order. Ingredient `unit` values are free-form display strings, `duration` is minutes when present, and API v1 does not expose ingredient display-text, image alt text, or unit conversion metadata.
+Recipe detail responses return `steps` in ascending `stepNum` order. Each step includes attached ingredients and `usingSteps`, the prior step outputs this step depends on. Ingredient `unit` values are free-form display strings, `duration` is minutes when present, and API v1 does not expose ingredient display-text, image alt text, or unit conversion metadata.
 
 ```html
 <article id="spoonjoy-recipe"></article>
@@ -1029,6 +1107,9 @@ Recipe detail responses return `steps` in ascending `stepNum` order. Each step i
   for (const step of recipe.steps) {
     const row = document.createElement("li");
     appendText(row, "strong", step.stepTitle || `Step ${step.stepNum}`);
+    if (step.usingSteps?.length) {
+      appendText(row, "small", `Uses output from step ${step.usingSteps.map((use) => use.outputStepNum).join(", ")}`);
+    }
     appendText(row, "p", step.description);
     appendText(row, "small", step.duration == null ? "" : `${step.duration} min`);
     steps.append(row);

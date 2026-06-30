@@ -38,6 +38,22 @@ describe("withSecurityHeaders", () => {
     await expect(result.text()).resolves.toBe("hello");
   });
 
+  it("preserves an explicit no-referrer policy for sensitive routes", () => {
+    const result = withSecurityHeaders(
+      new Response("ok", { headers: { "Referrer-Policy": "no-referrer" } }),
+    );
+
+    expect(result.headers.get("Referrer-Policy")).toBe("no-referrer");
+  });
+
+  it("normalizes weaker explicit referrer policies to the baseline", () => {
+    const result = withSecurityHeaders(
+      new Response("ok", { headers: { "Referrer-Policy": "unsafe-url" } }),
+    );
+
+    expect(result.headers.get("Referrer-Policy")).toBe("strict-origin-when-cross-origin");
+  });
+
   it("carries the Location header through on a redirect (null body)", () => {
     const result = withSecurityHeaders(
       new Response(null, { status: 308, headers: { Location: "https://spoonjoy.app/" } }),

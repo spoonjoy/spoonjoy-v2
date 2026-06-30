@@ -1,4 +1,4 @@
-import type { ApiCredential, ApiIdempotencyKey, Prisma, RecipeCover, RecipeSpoon } from "@prisma/client";
+import type { ApiCredential, ApiIdempotencyKey, NativePushDevice, Prisma, RecipeCover, RecipeSpoon } from "@prisma/client";
 import type { AppLoadContext } from "react-router";
 import {
   ApiAuthError,
@@ -40,6 +40,39 @@ import {
   type SearchResult,
   type SearchScope,
 } from "~/lib/search.server";
+import {
+  createNativeRecipe,
+  deleteNativeRecipe,
+  forkNativeRecipe,
+  parseNativeRecipeCreateBody,
+  parseNativeRecipeDeleteBody,
+  parseNativeRecipeForkBody,
+  parseNativeRecipePatchBody,
+  updateNativeRecipe,
+  type ApiV1RecipeWriteResult,
+} from "~/lib/api-v1-recipe-writes.server";
+import {
+  createNativeRecipeStep,
+  createNativeRecipeStepIngredient,
+  deleteNativeRecipeStep,
+  deleteNativeRecipeStepIngredient,
+  parseNativeRecipeStepCreateBody,
+  parseNativeRecipeStepDeleteBody,
+  parseNativeRecipeStepIngredientCreateBody,
+  parseNativeRecipeStepIngredientDeleteBody,
+  parseNativeRecipeStepOutputUsesBody,
+  parseNativeRecipeStepPatchBody,
+  parseNativeRecipeStepReorderBody,
+  reorderNativeRecipeStep,
+  replaceNativeRecipeStepOutputUses,
+  updateNativeRecipeStep,
+  type ApiV1RecipeStepResult,
+  type NativeRecipeStepCreateInput,
+  type NativeRecipeStepIngredientInput,
+  type NativeRecipeStepIngredientCreateInput,
+} from "~/lib/api-v1-recipe-steps.server";
+import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
+import { notifyForkOfMyRecipe } from "~/lib/notification-triggers.server";
 import { enforceRateLimit } from "~/lib/rate-limit.server";
 import { getRequestDb } from "~/lib/route-platform.server";
 import {
@@ -157,7 +190,7 @@ export function apiV1Headers(requestId: string, json = true): Headers {
     "X-Request-Id": requestId,
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Request-Id, X-Client-Mutation-Id",
-    "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, PATCH, PUT, DELETE, OPTIONS",
     "Access-Control-Expose-Headers": "X-Request-Id, Retry-After",
   });
   if (json) {
@@ -336,6 +369,28 @@ function apiV1OperationFor(method: string, path: string): string | undefined {
       return "recipes.import";
     case "GET recipe":
       return "recipes.get";
+    case "POST recipe-create":
+      return "recipes.create";
+    case "PATCH recipe-write":
+      return "recipes.update";
+    case "DELETE recipe-write":
+      return "recipes.delete";
+    case "POST recipe-fork":
+      return "recipes.fork";
+    case "POST recipe-steps":
+      return "recipes.steps.create";
+    case "PATCH recipe-step":
+      return "recipes.steps.update";
+    case "DELETE recipe-step":
+      return "recipes.steps.delete";
+    case "POST recipe-step-reorder":
+      return "recipes.steps.reorder";
+    case "POST recipe-step-ingredients":
+      return "recipes.steps.ingredients.create";
+    case "DELETE recipe-step-ingredient":
+      return "recipes.steps.ingredients.delete";
+    case "PUT recipe-step-output-uses":
+      return "recipes.steps.output-uses.replace";
     case "GET recipe-spoons":
       return "recipes.spoons.list";
     case "POST recipe-spoons-create":
@@ -382,6 +437,10 @@ function apiV1OperationFor(method: string, path: string): string | undefined {
       return "account.notification-preferences.read";
     case "PATCH me-notification-preferences":
       return "account.notification-preferences.update";
+    case "POST me-apns-devices":
+      return "account.apns.register";
+    case "DELETE me-apns-device":
+      return "account.apns.revoke";
     case "GET me-connections":
       return "account.connections.list";
     case "DELETE me-connection":
@@ -414,6 +473,19 @@ function apiV1OperationFor(method: string, path: string): string | undefined {
   }
 }
 
+const IDEMPOTENT_ACCOUNT_OPERATIONS = new Set([
+  "account.update",
+  "account.photo.upload",
+  "account.photo.remove",
+  "account.notification-preferences.update",
+  "account.apns.register",
+  "account.apns.revoke",
+]);
+
+function isIdempotentAccountOperation(operation: string): boolean {
+  return IDEMPOTENT_ACCOUNT_OPERATIONS.has(operation);
+}
+
 function defaultIdempotencyOutcome(operation: string | undefined, errorCode: ApiV1ErrorCode | undefined) {
   if (!operation) return undefined;
   if (operation.startsWith("tokens.")) return "none";
@@ -423,9 +495,14 @@ function defaultIdempotencyOutcome(operation: string | undefined, errorCode: Api
     operation !== "shopping-list.clear-completed" &&
     operation !== "shopping-list.clear-all" &&
     operation !== "recipes.import" &&
+    operation !== "recipes.create" &&
+    operation !== "recipes.update" &&
+    operation !== "recipes.delete" &&
+    operation !== "recipes.fork" &&
     !operation.startsWith("recipes.spoons.") &&
     !operation.startsWith("recipes.covers.") &&
-    !operation.startsWith("cookbooks.")
+    !operation.startsWith("cookbooks.") &&
+    !isIdempotentAccountOperation(operation)
   ) {
     return undefined;
   }
@@ -1012,6 +1089,17 @@ function recipeDetail(recipe: RecipeRow, origin: string) {
             quantity: ingredient.quantity,
             unit: ingredient.unit.name,
           })),
+        usingSteps: [...step.usingSteps]
+          .sort((a, b) => a.outputStepNum - b.outputStepNum)
+          .map((use) => ({
+            id: use.id,
+            inputStepNum: use.inputStepNum,
+            outputStepNum: use.outputStepNum,
+            outputOfStep: {
+              stepNum: use.outputOfStep.stepNum,
+              stepTitle: use.outputOfStep.stepTitle,
+            },
+          })),
       })),
     cookbooks: recipe.cookbooks.map((entry) => ({
       id: entry.cookbook.id,
@@ -1312,6 +1400,15 @@ async function loadRecipeById(db: Awaited<ReturnType<typeof getRequestDb>>, id: 
               unit: { select: { name: true } },
             },
           },
+          usingSteps: {
+            select: {
+              id: true,
+              inputStepNum: true,
+              outputStepNum: true,
+              outputOfStep: { select: { stepNum: true, stepTitle: true } },
+            },
+            orderBy: { outputStepNum: "asc" },
+          },
         },
       },
       cookbooks: {
@@ -1565,7 +1662,7 @@ async function handleRecipeImport(args: ApiV1RouteArgs, requestId: string, princ
   const source = parseRecipeImportSource(body.source);
   const dryRun = optionalBoolean(body.dryRun, "dryRun");
 
-  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "recipes.import", async (db, reservation) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "recipes.import", async (db, reservation) => {
     if (!recipeImportProvidersConfigured(args)) {
       return {
         status: 200,
@@ -1845,7 +1942,7 @@ async function handleRecipeSpoonCreate(args: ApiV1RouteArgs, requestId: string, 
   const cookedAt = optionalIsoDate(body.cookedAt, "cookedAt");
   const photoUrl = optionalNullableString(body.photoUrl, "photoUrl", 2048);
   const useAsRecipeCover = optionalBoolean(body.useAsRecipeCover, "useAsRecipeCover");
-  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "recipes.spoons.create", async (db, reservation) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "recipes.spoons.create", async (db, reservation) => {
     await loadActiveRecipeForSpoons(db, recipeId);
     let created: Awaited<ReturnType<typeof createSpoon>>;
     try {
@@ -1908,7 +2005,7 @@ async function handleRecipeSpoonUpdate(args: ApiV1RouteArgs, requestId: string, 
   if (hasOwnField(body, "nextTime")) patch.nextTime = optionalNullableString(body.nextTime, "nextTime");
   if (hasOwnField(body, "cookedAt")) patch.cookedAt = optionalIsoDate(body.cookedAt, "cookedAt");
   if (hasOwnField(body, "photoUrl")) patch.photoUrl = optionalNullableString(body.photoUrl, "photoUrl", 2048);
-  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "recipes.spoons.update", async (db) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "recipes.spoons.update", async (db) => {
     const origin = publicContentOrigin(args);
     await loadSpoonInRecipe(db, recipeId, spoonId);
     try {
@@ -1943,7 +2040,7 @@ async function handleRecipeSpoonDelete(args: ApiV1RouteArgs, requestId: string, 
   );
   const idempotencyBody = { clientMutationId };
 
-  return await runIdempotentShoppingMutation(args, requestId, principal, idempotencyBody, clientMutationId, "recipes.spoons.delete", async (db) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, clientMutationId, "recipes.spoons.delete", async (db) => {
     const origin = publicContentOrigin(args);
     await loadSpoonInRecipe(db, recipeId, spoonId);
     let deleted: RecipeSpoon;
@@ -2039,7 +2136,7 @@ async function handleRecipeCoverSetNoCover(args: ApiV1RouteArgs, requestId: stri
     throw new ApiV1Error("validation_error", "confirmNoCover must be true");
   }
 
-  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "recipes.covers.set-no-cover", async (db) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "recipes.covers.set-no-cover", async (db) => {
     const origin = publicContentOrigin(args);
     const recipe = await loadOwnedCoverRecipe(db, principal, recipeId);
     const previousActiveCover = await activeFullCoverPayload(db, recipe, origin);
@@ -2076,7 +2173,7 @@ async function handleRecipeCoverActivate(args: ApiV1RouteArgs, requestId: string
   const clientMutationId = nonblankString(body.clientMutationId, "clientMutationId");
   const variant = requiredCoverVariant(body.variant);
 
-  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "recipes.covers.activate", async (db) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "recipes.covers.activate", async (db) => {
     const origin = publicContentOrigin(args);
     const recipe = await loadOwnedCoverRecipe(db, principal, recipeId);
     const previousActiveCover = await activeFullCoverPayload(db, recipe, origin);
@@ -2111,7 +2208,7 @@ async function handleRecipeCoverArchive(args: ApiV1RouteArgs, requestId: string,
   const confirmNoCover = optionalBoolean(body.confirmNoCover, "confirmNoCover");
   const deleteSafeObjects = optionalBoolean(body.deleteSafeObjects, "deleteSafeObjects");
 
-  return await runIdempotentShoppingMutation(args, requestId, principal, idempotencyBody, clientMutationId, "recipes.covers.archive", async (db) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, clientMutationId, "recipes.covers.archive", async (db) => {
     const origin = publicContentOrigin(args);
     const recipe = await loadOwnedCoverRecipe(db, principal, recipeId);
     const previousActiveCover = await activeFullCoverPayload(db, recipe, origin);
@@ -2150,7 +2247,7 @@ async function handleRecipeCoverRegenerate(args: ApiV1RouteArgs, requestId: stri
   const coverId = nonblankString(body.coverId, "coverId");
   const activateWhenReady = optionalBoolean(body.activateWhenReady, "activateWhenReady");
 
-  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "recipes.covers.regenerate", async (db) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "recipes.covers.regenerate", async (db) => {
     const origin = publicContentOrigin(args);
     const recipe = await loadOwnedCoverRecipe(db, principal, recipeId);
     const previousActiveCover = await activeFullCoverPayload(db, recipe, origin);
@@ -2212,7 +2309,7 @@ async function handleRecipeCoverFromSpoon(args: ApiV1RouteArgs, requestId: strin
   const activate = optionalBoolean(body.activate, "activate");
   const generateEditorial = optionalBoolean(body.generateEditorial, "generateEditorial", true);
 
-  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "recipes.covers.from-spoon", async (db) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "recipes.covers.from-spoon", async (db) => {
     const origin = publicContentOrigin(args);
     const recipe = await loadOwnedCoverRecipe(db, principal, recipeId);
     const previousActiveCover = await activeFullCoverPayload(db, recipe, origin);
@@ -2470,7 +2567,7 @@ async function handleCookbookCreate(args: ApiV1RouteArgs, requestId: string, pri
   const title = nonblankString(body.title, "title");
   const origin = publicContentOrigin(args);
 
-  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "cookbooks.create", async (db) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "cookbooks.create", async (db) => {
     let cookbookId: string;
     try {
       const created = await db.cookbook.create({
@@ -2504,7 +2601,7 @@ async function handleCookbookUpdate(args: ApiV1RouteArgs, requestId: string, pri
   const title = nonblankString(body.title, "title");
   const origin = publicContentOrigin(args);
 
-  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "cookbooks.update", async (db) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "cookbooks.update", async (db) => {
     await loadOwnedCookbookById(db, principal, id);
     try {
       await db.cookbook.update({
@@ -2541,7 +2638,7 @@ async function handleCookbookDelete(args: ApiV1RouteArgs, requestId: string, pri
   const idempotencyBody = { clientMutationId };
   const origin = publicContentOrigin(args);
 
-  return await runIdempotentShoppingMutation(args, requestId, principal, idempotencyBody, clientMutationId, "cookbooks.delete", async (db) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, clientMutationId, "cookbooks.delete", async (db) => {
     const cookbook = await loadOwnedCookbookById(db, principal, id);
     await db.cookbook.delete({ where: { id } });
     return {
@@ -2567,7 +2664,7 @@ async function handleCookbookRecipeAdd(
   const clientMutationId = nonblankString(body.clientMutationId, "clientMutationId");
   const origin = publicContentOrigin(args);
 
-  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "cookbooks.recipes.add", async (db) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "cookbooks.recipes.add", async (db) => {
     await loadOwnedCookbookById(db, principal, cookbookId);
     const recipe = await db.recipe.findFirst({
       where: { id: recipeId, deletedAt: null },
@@ -2620,7 +2717,7 @@ async function handleCookbookRecipeRemove(
   const idempotencyBody = { clientMutationId };
   const origin = publicContentOrigin(args);
 
-  return await runIdempotentShoppingMutation(args, requestId, principal, idempotencyBody, clientMutationId, "cookbooks.recipes.remove", async (db) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, clientMutationId, "cookbooks.recipes.remove", async (db) => {
     await loadOwnedCookbookById(db, principal, cookbookId);
     const result = await db.recipeInCookbook.deleteMany({
       where: { cookbookId, recipeId },
@@ -2860,6 +2957,26 @@ function idempotentMutationBody(
   return { ok: true, requestId, data };
 }
 
+const IDEMPOTENCY_RECOVERY_TIMESTAMP_TOLERANCE_MS = 1_000;
+
+type ApiV1IdempotentMutationResult = { status: number; data: Record<string, unknown> };
+type ApiV1IdempotentRecovery = (
+  db: ApiV1WriteDb,
+  reservation: ApiIdempotencyKey,
+) => Promise<ApiV1IdempotentMutationResult | null>;
+type ApiV1IdempotentMutationOptions = {
+  beforeWrite?: (
+    db: ApiV1WriteDb,
+    record: ApiIdempotencyKey,
+  ) => Promise<void>;
+  deleteReservationOnWriteError?: boolean;
+  hasRecoverableWrite?: (
+    db: ApiV1WriteDb,
+    record: ApiIdempotencyKey,
+  ) => Promise<boolean>;
+  recoverInFlight?: ApiV1IdempotentRecovery;
+};
+
 export async function shouldKeepIdempotencyReservationForRecovery(input: {
   deleteReservationOnWriteError?: boolean;
   hasRecoverableWrite?: () => Promise<boolean>;
@@ -2884,30 +3001,66 @@ export async function deleteIdempotencyReservationAfterWriteError(input: {
   }
 }
 
-async function runIdempotentShoppingMutation(
+function apiV1IdempotentResponse(
+  requestId: string,
+  operation: string,
+  result: ApiV1IdempotentMutationResult,
+  idempotencyOutcome: ApiV1TelemetryMetadata["idempotencyOutcome"],
+): Response {
+  const responseBody = idempotentMutationBody(requestId, result.data);
+  return withApiV1Telemetry(Response.json(responseBody, {
+    status: result.status,
+    headers: apiV1PrivateHeaders(requestId),
+  }), { idempotencyOutcome, operation });
+}
+
+function apiV1RecoveredReplayResponse(
+  requestId: string,
+  operation: string,
+  result: ApiV1IdempotentMutationResult,
+): Response {
+  const responseBody = idempotentMutationBody(requestId, result.data);
+  const replay = replayIdempotencyResponse({
+    responseStatus: result.status,
+    responseBody: JSON.stringify(responseBody),
+  }, requestId);
+  return withApiV1Telemetry(Response.json(replay.body, {
+    status: replay.status,
+    headers: apiV1PrivateHeaders(requestId),
+  }), { idempotencyOutcome: "replayed", operation });
+}
+
+async function completeRecoveredIdempotencyKey(
+  db: ApiV1WriteDb,
+  reservation: ApiIdempotencyKey,
+  requestId: string,
+  result: ApiV1IdempotentMutationResult,
+) {
+  await completeIdempotencyKey(db, reservation.id, {
+    status: result.status,
+    body: idempotentMutationBody(requestId, result.data),
+  });
+}
+
+function normalizeApiV1IdempotentMutationOptions(
+  optionsOrRecovery?: ApiV1IdempotentMutationOptions | ApiV1IdempotentRecovery,
+): ApiV1IdempotentMutationOptions {
+  return typeof optionsOrRecovery === "function"
+    ? { deleteReservationOnWriteError: false, recoverInFlight: optionsOrRecovery }
+    : optionsOrRecovery ?? {};
+}
+
+export async function runIdempotentApiV1Mutation(
   args: ApiV1RouteArgs,
   requestId: string,
   principal: ApiPrincipal,
   body: Record<string, unknown>,
   clientMutationId: string,
   operation: string,
-  write: (db: ApiV1WriteDb, reservation: ApiIdempotencyKey) => Promise<{ status: number; data: Record<string, unknown> }>,
-  options: {
-    beforeWrite?: (
-      db: ApiV1WriteDb,
-      record: ApiIdempotencyKey,
-    ) => Promise<void>;
-    deleteReservationOnWriteError?: boolean;
-    hasRecoverableWrite?: (
-      db: ApiV1WriteDb,
-      record: ApiIdempotencyKey,
-    ) => Promise<boolean>;
-    recoverInFlight?: (
-      db: ApiV1WriteDb,
-      record: ApiIdempotencyKey,
-    ) => Promise<{ status: number; data: Record<string, unknown> } | null>;
-  } = {},
+  write: (db: ApiV1WriteDb, reservation: ApiIdempotencyKey) => Promise<ApiV1IdempotentMutationResult>,
+  optionsOrRecovery?: ApiV1IdempotentMutationOptions | ApiV1IdempotentRecovery,
 ) {
+  const options = normalizeApiV1IdempotentMutationOptions(optionsOrRecovery);
   const db = await getRequestDb(args.context);
   const path = normalizeApiV1Path(args.params["*"]);
   const requestHash = await hashIdempotencyRequest({
@@ -2935,19 +3088,8 @@ async function runIdempotentShoppingMutation(
   if (reservation.status === "in_flight") {
     const recovered = await options.recoverInFlight?.(db, reservation.record);
     if (recovered) {
-      const storedBody = idempotentMutationBody(requestId, recovered.data);
-      await completeIdempotencyKey(db, reservation.record.id, {
-        status: recovered.status,
-        body: storedBody,
-      });
-      const replay = replayIdempotencyResponse({
-        responseStatus: recovered.status,
-        responseBody: JSON.stringify(storedBody),
-      }, requestId);
-      return withApiV1Telemetry(Response.json(replay.body, {
-        status: replay.status,
-        headers: apiV1PrivateHeaders(requestId),
-      }), { idempotencyOutcome: "replayed", operation });
+      await completeRecoveredIdempotencyKey(db, reservation.record, requestId, recovered);
+      return apiV1RecoveredReplayResponse(requestId, operation, recovered);
     }
     throw new ApiV1Error(
       "idempotency_in_progress",
@@ -2965,6 +3107,13 @@ async function runIdempotentShoppingMutation(
     await options.beforeWrite?.(db, reservation.record);
     result = await write(db, reservation.record);
   } catch (error) {
+    const recovered = error instanceof ApiV1Error
+      ? null
+      : await options.recoverInFlight?.(db, reservation.record);
+    if (recovered) {
+      await completeRecoveredIdempotencyKey(db, reservation.record, requestId, recovered);
+      return apiV1IdempotentResponse(requestId, operation, recovered, "committed");
+    }
     const keepReservationForRecovery = await shouldKeepIdempotencyReservationForRecovery({
       deleteReservationOnWriteError: options.deleteReservationOnWriteError,
       hasRecoverableWrite: options.hasRecoverableWrite
@@ -2979,10 +3128,14 @@ async function runIdempotentShoppingMutation(
   }
 
   const responseBody = idempotentMutationBody(requestId, result.data);
-  await completeIdempotencyKey(db, reservation.record.id, {
-    status: result.status,
-    body: responseBody,
-  });
+  try {
+    await completeIdempotencyKey(db, reservation.record.id, {
+      status: result.status,
+      body: responseBody,
+    });
+  } catch (error) {
+    if (!options.recoverInFlight) throw error;
+  }
 
   return withApiV1Telemetry(Response.json(responseBody, {
     status: result.status,
@@ -3000,7 +3153,7 @@ async function handleShoppingItemCreate(args: ApiV1RouteArgs, requestId: string,
   const categoryKey = optionalNullableString(body.categoryKey, "categoryKey");
   const iconKey = optionalNullableString(body.iconKey, "iconKey");
 
-  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "shopping-list.items.create", async (db) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "shopping-list.items.create", async (db) => {
     const list = await loadShoppingListForUser(db, principal.id);
     const ingredientRef = await getOrCreateApiV1IngredientRef(db, name);
     const unit = unitName ? await getOrCreateApiV1Unit(db, unitName) : null;
@@ -3058,7 +3211,7 @@ async function handleShoppingItemCheck(args: ApiV1RouteArgs, requestId: string, 
   const clientMutationId = nonblankString(body.clientMutationId, "clientMutationId");
   const checked = requiredBoolean(body.checked, "checked");
 
-  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "shopping-list.items.check", async (db) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "shopping-list.items.check", async (db) => {
     const list = await loadShoppingListForUser(db, principal.id);
     const existing = await db.shoppingListItem.findFirst({
       where: { id: itemId, shoppingListId: list.id },
@@ -3100,7 +3253,7 @@ async function handleShoppingItemDelete(args: ApiV1RouteArgs, requestId: string,
   );
   const idempotencyBody = { clientMutationId };
 
-  return await runIdempotentShoppingMutation(args, requestId, principal, idempotencyBody, clientMutationId, "shopping-list.items.delete", async (db) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, clientMutationId, "shopping-list.items.delete", async (db) => {
     const list = await loadShoppingListForUser(db, principal.id);
     const existing = await db.shoppingListItem.findFirst({
       where: { id: itemId, shoppingListId: list.id },
@@ -3132,7 +3285,7 @@ async function handleShoppingAddFromRecipe(args: ApiV1RouteArgs, requestId: stri
   const recipeId = nonblankString(body.recipeId, "recipeId");
   const scaleFactor = optionalPositiveNumber(body.scaleFactor, "scaleFactor") ?? 1;
 
-  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, "shopping-list.add-from-recipe", async (db) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "shopping-list.add-from-recipe", async (db) => {
     const list = await loadShoppingListForUser(db, principal.id);
     const recipe = await db.recipe.findFirst({
       where: { id: recipeId, deletedAt: null },
@@ -3254,7 +3407,7 @@ async function handleShoppingClear(
   const clientMutationId = nonblankString(body.clientMutationId, "clientMutationId");
   const operation = mode === "completed" ? "shopping-list.clear-completed" : "shopping-list.clear-all";
 
-  return await runIdempotentShoppingMutation(args, requestId, principal, body, clientMutationId, operation, async (db) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, operation, async (db) => {
     const list = await loadShoppingListForUser(db, principal.id);
     const items = await db.shoppingListItem.findMany({
       where: {
@@ -3335,6 +3488,34 @@ async function accountProfilePayload(args: ApiV1RouteArgs, userId: string) {
       createdAt: passkey.createdAt?.toISOString() ?? null,
     })),
   };
+}
+
+function mutationMetadata(clientMutationId: string) {
+  return { clientMutationId, replayed: false };
+}
+
+async function accountProfileMutationPayload(args: ApiV1RouteArgs, userId: string, clientMutationId: string) {
+  return {
+    ...await accountProfilePayload(args, userId),
+    mutation: mutationMetadata(clientMutationId),
+  };
+}
+
+function clientMutationIdFromBodyHeaderOrQuery(args: ApiV1RouteArgs, body: Record<string, unknown>) {
+  const url = new URL(args.request.url);
+  return nonblankString(
+    body.clientMutationId
+      ?? args.request.headers.get("X-Client-Mutation-Id")
+      ?? url.searchParams.get("clientMutationId"),
+    "clientMutationId",
+  );
+}
+
+function clientMutationIdFromFormDataHeaderOrQuery(args: ApiV1RouteArgs, formData: FormData) {
+  const formValue = formData.get("clientMutationId");
+  return clientMutationIdFromBodyHeaderOrQuery(args, {
+    clientMutationId: typeof formValue === "string" ? formValue : undefined,
+  });
 }
 
 function isValidAccountEmail(email: string): boolean {
@@ -3446,6 +3627,28 @@ async function normalizeAccountPhotoFile(photo: File): Promise<File> {
   });
 }
 
+async function sha256HexBytes(bytes: Uint8Array): Promise<string> {
+  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+  const digest = await crypto.subtle.digest("SHA-256", buffer);
+  return bytesToHex(new Uint8Array(digest));
+}
+
+async function accountPhotoIdempotencyValue(photo: FormDataEntryValue | null) {
+  if (photo instanceof File) {
+    const bytes = new Uint8Array(await photo.arrayBuffer());
+    return {
+      kind: "file",
+      sha256: await sha256HexBytes(bytes),
+      size: photo.size,
+      type: photo.type,
+    };
+  }
+  if (typeof photo === "string") {
+    return { kind: "field", value: photo };
+  }
+  return { kind: "missing" };
+}
+
 function booleanField(body: Record<string, unknown>, field: keyof NotificationPreferenceFlags): boolean {
   const value = body[field];
   if (typeof value !== "boolean") {
@@ -3476,6 +3679,7 @@ async function handleAccountRead(args: ApiV1RouteArgs, requestId: string, princi
 async function handleAccountUpdate(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
   const body = await parseApiV1JsonBody(args.request);
   assertKnownFields(body, ["email", "username", "clientMutationId"]);
+  const clientMutationId = nonblankString(body.clientMutationId, "clientMutationId");
   const email = typeof body.email === "string" ? body.email.trim() : "";
   const username = typeof body.username === "string" ? body.username.trim() : "";
   const fieldErrors: string[] = [];
@@ -3485,114 +3689,133 @@ async function handleAccountUpdate(args: ApiV1RouteArgs, requestId: string, prin
     throw new ApiV1Error("validation_error", "Invalid account profile fields", { fields: fieldErrors });
   }
 
-  const db = await getRequestDb(args.context);
   const normalizedEmail = email.toLowerCase();
-  const currentUser = await db.user.findUnique({
-    where: { id: principal.id },
-    select: { email: true, username: true },
-  });
-  /* istanbul ignore if -- @preserve auth verifies the account before profile updates; this is a database race guard. */
-  if (!currentUser) {
-    throw new ApiV1Error("not_found", "Account not found");
-  }
 
-  if (normalizedEmail !== currentUser.email.toLowerCase()) {
-    const existingEmail = await db.$queryRaw<{ id: string }[]>`
-      SELECT id FROM User WHERE LOWER(email) = ${normalizedEmail} AND id != ${principal.id}
-    `;
-    if (existingEmail.length > 0) {
-      throw new ApiV1Error("validation_error", "This email is already in use by another account", { field: "email" });
-    }
-  }
-
-  if (username !== currentUser.username) {
-    const existingUsername = await db.user.findUnique({
-      where: { username },
-      select: { id: true },
+  return await runIdempotentApiV1Mutation(args, requestId, principal, {
+    clientMutationId,
+    email: normalizedEmail,
+    username,
+  }, clientMutationId, "account.update", async (db) => {
+    const currentUser = await db.user.findUnique({
+      where: { id: principal.id },
+      select: { email: true, username: true },
     });
-    if (existingUsername && existingUsername.id !== principal.id) {
-      throw new ApiV1Error("validation_error", "This username is already taken", { field: "username" });
+    /* istanbul ignore if -- @preserve auth verifies the account before profile updates; this is a database race guard. */
+    if (!currentUser) {
+      throw new ApiV1Error("not_found", "Account not found");
     }
-  }
 
-  await db.user.update({
-    where: { id: principal.id },
-    data: {
-      email: normalizedEmail,
-      username,
-    },
+    if (normalizedEmail !== currentUser.email.toLowerCase()) {
+      const existingEmail = await db.$queryRaw<{ id: string }[]>`
+        SELECT id FROM User WHERE LOWER(email) = ${normalizedEmail} AND id != ${principal.id}
+      `;
+      if (existingEmail.length > 0) {
+        throw new ApiV1Error("validation_error", "This email is already in use by another account", { field: "email" });
+      }
+    }
+
+    if (username !== currentUser.username) {
+      const existingUsername = await db.user.findUnique({
+        where: { username },
+        select: { id: true },
+      });
+      if (existingUsername && existingUsername.id !== principal.id) {
+        throw new ApiV1Error("validation_error", "This username is already taken", { field: "username" });
+      }
+    }
+
+    await db.user.update({
+      where: { id: principal.id },
+      data: {
+        email: normalizedEmail,
+        username,
+      },
+    });
+
+    return {
+      status: 200,
+      data: await accountProfileMutationPayload(args, principal.id, clientMutationId),
+    };
   });
-
-  return withApiV1Telemetry(
-    apiV1PrivateSuccess(requestId, await accountProfilePayload(args, principal.id)),
-    { idempotencyOutcome: "none" },
-  );
 }
 
 async function handleAccountPhotoUpload(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
   const formData = await accountPhotoFormDataWithinLimit(args.request);
+  const clientMutationId = clientMutationIdFromFormDataHeaderOrQuery(args, formData);
   const photo = formData.get("photo");
-  if (!hasUploadedImageFile(photo)) {
-    throw new ApiV1Error("validation_error", "Please select a photo to upload", { field: "photo", reason: "missing" });
-  }
+  const idempotencyBody = {
+    clientMutationId,
+    photo: await accountPhotoIdempotencyValue(photo),
+  };
 
-  const imageError = validateImageFile(photo, {
-    allowedTypes: [...PROFILE_IMAGE_TYPES, ...UNKNOWN_MULTIPART_FILE_TYPES],
-    messages: {
-      invalidType: "Please upload an image file",
-      fileTooLarge: "Photo must be less than 5MB",
-    },
-  });
-  if (imageError) {
-    throw new ApiV1Error("validation_error", imageError, { field: "photo" });
-  }
+  return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, clientMutationId, "account.photo.upload", async (db) => {
+    if (!hasUploadedImageFile(photo)) {
+      throw new ApiV1Error("validation_error", "Please select a photo to upload", { field: "photo", reason: "missing" });
+    }
 
-  const normalizedPhoto = await normalizeAccountPhotoFile(photo);
-  const photoUrl = await storeImage({
-    bucket: args.context.cloudflare?.env?.PHOTOS,
-    file: normalizedPhoto,
-    namespace: `profiles/${principal.id}`,
-  });
-  const db = await getRequestDb(args.context);
-  await db.user.update({
-    where: { id: principal.id },
-    data: { photoUrl },
-  });
+    const imageError = validateImageFile(photo, {
+      allowedTypes: [...PROFILE_IMAGE_TYPES, ...UNKNOWN_MULTIPART_FILE_TYPES],
+      messages: {
+        invalidType: "Please upload an image file",
+        fileTooLarge: "Photo must be less than 5MB",
+      },
+    });
+    if (imageError) {
+      throw new ApiV1Error("validation_error", imageError, { field: "photo" });
+    }
 
-  return withApiV1Telemetry(
-    apiV1PrivateSuccess(requestId, await accountProfilePayload(args, principal.id)),
-    { idempotencyOutcome: "none" },
-  );
+    const normalizedPhoto = await normalizeAccountPhotoFile(photo);
+    const photoUrl = await storeImage({
+      bucket: args.context.cloudflare?.env?.PHOTOS,
+      file: normalizedPhoto,
+      namespace: `profiles/${principal.id}`,
+    });
+    await db.user.update({
+      where: { id: principal.id },
+      data: { photoUrl },
+    });
+
+    return {
+      status: 200,
+      data: await accountProfileMutationPayload(args, principal.id, clientMutationId),
+    };
+  });
 }
 
 async function handleAccountPhotoRemove(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
-  const db = await getRequestDb(args.context);
-  const user = await db.user.findUnique({
-    where: { id: principal.id },
-    select: { photoUrl: true },
-  });
-  const env = args.context.cloudflare?.env;
-  const postHogConfig = env
-    ? resolvePostHogServerConfig(env)
-    : ({ enabled: false, reason: "missing-key" } as const);
+  const body = await parseApiV1JsonBody(args.request);
+  assertKnownFields(body, ["clientMutationId"]);
+  const clientMutationId = clientMutationIdFromBodyHeaderOrQuery(args, body);
+  const idempotencyBody = { clientMutationId };
 
-  await deleteStoredImageWithCapture({
-    bucket: env?.PHOTOS,
-    imageUrl: user?.photoUrl,
-    event: "spoonjoy.storage.avatar_delete_failed",
-    postHogConfig,
-    waitUntil: apiV1WaitUntilFor(args),
-    distinctId: principal.id,
-  });
-  await db.user.update({
-    where: { id: principal.id },
-    data: { photoUrl: null },
-  });
+  return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, clientMutationId, "account.photo.remove", async (db) => {
+    const user = await db.user.findUnique({
+      where: { id: principal.id },
+      select: { photoUrl: true },
+    });
+    const env = args.context.cloudflare?.env;
+    const postHogConfig = env
+      ? resolvePostHogServerConfig(env)
+      : ({ enabled: false, reason: "missing-key" } as const);
 
-  return withApiV1Telemetry(
-    apiV1PrivateSuccess(requestId, await accountProfilePayload(args, principal.id)),
-    { idempotencyOutcome: "none" },
-  );
+    await deleteStoredImageWithCapture({
+      bucket: env?.PHOTOS,
+      imageUrl: user?.photoUrl,
+      event: "spoonjoy.storage.avatar_delete_failed",
+      postHogConfig,
+      waitUntil: apiV1WaitUntilFor(args),
+      distinctId: principal.id,
+    });
+    await db.user.update({
+      where: { id: principal.id },
+      data: { photoUrl: null },
+    });
+
+    return {
+      status: 200,
+      data: await accountProfileMutationPayload(args, principal.id, clientMutationId),
+    };
+  });
 }
 
 async function handleNotificationPreferencesRead(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
@@ -3612,26 +3835,237 @@ async function handleNotificationPreferencesUpdate(args: ApiV1RouteArgs, request
     "notifyFellowChefOriginCook",
     "clientMutationId",
   ]);
+  const clientMutationId = nonblankString(body.clientMutationId, "clientMutationId");
   const preferences: NotificationPreferenceFlags = {
     notifySpoonOnMyRecipe: booleanField(body, "notifySpoonOnMyRecipe"),
     notifyForkOfMyRecipe: booleanField(body, "notifyForkOfMyRecipe"),
     notifyCookbookSaveOfMine: booleanField(body, "notifyCookbookSaveOfMine"),
     notifyFellowChefOriginCook: booleanField(body, "notifyFellowChefOriginCook"),
   };
-  const db = await getRequestDb(args.context);
-  await db.notificationPreference.upsert({
-    where: { userId: principal.id },
-    create: {
-      userId: principal.id,
-      ...preferences,
-    },
-    update: preferences,
-  });
 
-  return withApiV1Telemetry(
-    apiV1PrivateSuccess(requestId, preferences),
-    { idempotencyOutcome: "none" },
-  );
+  return await runIdempotentApiV1Mutation(args, requestId, principal, {
+    clientMutationId,
+    ...preferences,
+  }, clientMutationId, "account.notification-preferences.update", async (db) => {
+    await db.notificationPreference.upsert({
+      where: { userId: principal.id },
+      create: {
+        userId: principal.id,
+        ...preferences,
+      },
+      update: preferences,
+    });
+
+    return {
+      status: 200,
+      data: {
+        ...preferences,
+        mutation: mutationMetadata(clientMutationId),
+      },
+    };
+  });
+}
+
+const APNS_DEVICE_FIELDS = [
+  "clientMutationId",
+  "deviceId",
+  "platform",
+  "environment",
+  "token",
+  "deviceName",
+  "appVersion",
+] as const;
+const APNS_PLATFORMS = new Set(["ios", "ipados", "macos"]);
+const APNS_ENVIRONMENTS = new Set(["development", "production"]);
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function hashApnsToken(token: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
+  return bytesToHex(new Uint8Array(digest));
+}
+
+function apnsRequiredText(
+  body: Record<string, unknown>,
+  field: typeof APNS_DEVICE_FIELDS[number],
+  errors: Record<string, string>,
+  maxLength = MAX_SHORT_TEXT_LENGTH,
+) {
+  const value = body[field];
+  if (typeof value !== "string" || value.trim() === "") {
+    errors[field] = `${field} must be a nonblank string`;
+    return "";
+  }
+  const trimmed = value.trim();
+  if (trimmed.length > maxLength) {
+    errors[field] = `${field} must be at most ${maxLength} characters`;
+    return "";
+  }
+  return trimmed;
+}
+
+function apnsOptionalText(
+  body: Record<string, unknown>,
+  field: typeof APNS_DEVICE_FIELDS[number],
+  errors: Record<string, string>,
+) {
+  if (body[field] === undefined || body[field] === null) return null;
+  return apnsRequiredText(body, field, errors);
+}
+
+function apiDateTime(value: Date | string): string {
+  return typeof value === "string" ? value : value.toISOString();
+}
+
+function nullableApiDateTime(value: Date | string | null): string | null {
+  return value === null ? null : apiDateTime(value);
+}
+
+function apnsDevicePayload(device: NativePushDevice) {
+  return {
+    id: device.id,
+    deviceId: device.deviceId,
+    platform: device.platform,
+    environment: device.environment,
+    tokenPrefix: device.tokenPrefix,
+    deviceName: device.deviceName,
+    appVersion: device.appVersion,
+    enabledAt: apiDateTime(device.enabledAt),
+    revokedAt: nullableApiDateTime(device.revokedAt),
+    lastRegisteredAt: apiDateTime(device.lastRegisteredAt),
+    createdAt: apiDateTime(device.createdAt),
+    updatedAt: apiDateTime(device.updatedAt),
+  };
+}
+
+async function handleApnsDeviceRegister(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
+  const body = await parseApiV1JsonBody(args.request);
+  const fieldErrors: Record<string, string> = {};
+  for (const field of Object.keys(body)) {
+    if (!(APNS_DEVICE_FIELDS as readonly string[]).includes(field)) {
+      fieldErrors[field] = "Unknown field";
+    }
+  }
+  const clientMutationId = apnsRequiredText(body, "clientMutationId", fieldErrors);
+  const deviceId = apnsRequiredText(body, "deviceId", fieldErrors);
+  const platform = apnsRequiredText(body, "platform", fieldErrors);
+  const environment = apnsRequiredText(body, "environment", fieldErrors);
+  const token = apnsRequiredText(body, "token", fieldErrors, 4096);
+  const deviceName = apnsOptionalText(body, "deviceName", fieldErrors);
+  const appVersion = apnsOptionalText(body, "appVersion", fieldErrors);
+
+  if (platform && !APNS_PLATFORMS.has(platform)) {
+    fieldErrors.platform = "platform must be ios, ipados, or macos";
+  }
+  if (environment && !APNS_ENVIRONMENTS.has(environment)) {
+    fieldErrors.environment = "environment must be development or production";
+  }
+  if (Object.keys(fieldErrors).length > 0) {
+    throw new ApiV1Error("validation_error", "Invalid APNs device registration", { fieldErrors });
+  }
+
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "account.apns.register", async (db) => {
+    const tokenHash = await hashApnsToken(token);
+    const now = new Date();
+    await db.nativePushDevice.updateMany({
+      where: {
+        tokenHash,
+        platform,
+        environment,
+        revokedAt: null,
+        NOT: {
+          userId: principal.id,
+          deviceId,
+          platform,
+          environment,
+        },
+      },
+      data: { revokedAt: now.toISOString() },
+    });
+    const existing = await db.nativePushDevice.findFirst({
+      where: { userId: principal.id, deviceId, platform, environment },
+    });
+    const device = existing
+      ? await db.nativePushDevice.update({
+          where: { id: existing.id },
+          data: {
+            tokenHash,
+            tokenPrefix: token.slice(0, 12),
+            deviceName,
+            appVersion,
+            enabledAt: now,
+            revokedAt: null,
+            lastRegisteredAt: now,
+          },
+        })
+      : await db.nativePushDevice.create({
+          data: {
+            userId: principal.id,
+            deviceId,
+            platform,
+            environment,
+            tokenHash,
+            tokenPrefix: token.slice(0, 12),
+            deviceName,
+            appVersion,
+            enabledAt: now,
+            lastRegisteredAt: now,
+          },
+        });
+
+    return {
+      status: existing ? 200 : 201,
+      data: {
+        created: !existing,
+        device: apnsDevicePayload(device),
+        mutation: mutationMetadata(clientMutationId),
+      },
+    };
+  });
+}
+
+async function handleApnsDeviceRevoke(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, deviceId: string) {
+  const body = await parseApiV1JsonBody(args.request);
+  assertKnownFields(body, ["clientMutationId"]);
+  const clientMutationId = clientMutationIdFromBodyHeaderOrQuery(args, body);
+  const idempotencyBody = { clientMutationId };
+
+  return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, clientMutationId, "account.apns.revoke", async (db) => {
+    const existingDevices = await db.nativePushDevice.findMany({
+      where: { userId: principal.id, deviceId },
+      orderBy: [{ lastRegisteredAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+    });
+    if (existingDevices.length === 0) {
+      throw new ApiV1Error("not_found", "Native push device not found");
+    }
+
+    const activeDeviceIds = existingDevices
+      .filter((device) => device.revokedAt === null)
+      .map((device) => device.id);
+    if (activeDeviceIds.length > 0) {
+      await db.nativePushDevice.updateMany({
+        where: { id: { in: activeDeviceIds } },
+        data: { revokedAt: new Date().toISOString() },
+      });
+    }
+    const devices = await db.nativePushDevice.findMany({
+      where: { userId: principal.id, deviceId },
+      orderBy: [{ lastRegisteredAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+    });
+
+    return {
+      status: 200,
+      data: {
+        revoked: activeDeviceIds.length > 0,
+        revokedCount: activeDeviceIds.length,
+        device: apnsDevicePayload(devices[0]!),
+        devices: devices.map(apnsDevicePayload),
+        mutation: mutationMetadata(clientMutationId),
+      },
+    };
+  });
 }
 
 function accountConnectionId(clientId: string, resource: string | null, connectionKey: string): string {
@@ -3796,6 +4230,870 @@ async function handleOAuthConnectionDisconnect(
     }),
     { idempotencyOutcome: "none" },
   );
+}
+
+function recipeWriteResultOrThrow<T>(
+  result: ApiV1RecipeWriteResult<T>,
+): { status: number; data: T } {
+  if (!result.ok) {
+    throw new ApiV1Error(result.code, result.message, result.details);
+  }
+  return result;
+}
+
+function recipeStepResultOrThrow<T>(
+  result: ApiV1RecipeStepResult<T>,
+): { status: number; data: T } {
+  if (!result.ok) {
+    throw new ApiV1Error(result.code, result.message, result.details);
+  }
+  return result;
+}
+
+async function serializedRecipeOrThrow(db: ApiV1WriteDb, recipeId: string, origin: string) {
+  const recipe = await loadRecipeById(db, recipeId);
+  /* istanbul ignore next -- @preserve post-write reads are covered on every recipe write path; this is a defensive invariant tripwire. */
+  if (!recipe) {
+    throw new Error(`Recipe ${recipeId} was not readable after write`);
+  }
+  return recipeDetail(recipe, origin);
+}
+
+type SerializedRecipe = Awaited<ReturnType<typeof serializedRecipeOrThrow>>;
+type SerializedRecipeStep = SerializedRecipe["steps"][number];
+
+function findSerializedStep(recipe: SerializedRecipe, stepId: string): SerializedRecipeStep | null {
+  return recipe.steps.find((step) => step.id === stepId) ?? null;
+}
+
+function findSerializedIngredient(recipe: SerializedRecipe, stepId: string, ingredientId: string) {
+  const step = findSerializedStep(recipe, stepId);
+  const ingredient = step?.ingredients.find((candidate) => candidate.id === ingredientId) ?? null;
+  return step && ingredient ? { step, ingredient } : null;
+}
+
+async function serializedRecipeStepOrThrow(
+  db: ApiV1WriteDb,
+  recipeId: string,
+  stepId: string,
+  origin: string,
+) {
+  const recipe = await serializedRecipeOrThrow(db, recipeId, origin);
+  const step = findSerializedStep(recipe, stepId);
+  /* istanbul ignore next -- @preserve post-write reads are covered on every step write path; this is a defensive invariant tripwire. */
+  if (!step) {
+    throw new Error(`Recipe step ${stepId} was not readable after write`);
+  }
+  return { recipe, step };
+}
+
+async function serializedRecipeStepIngredientOrThrow(
+  db: ApiV1WriteDb,
+  recipeId: string,
+  stepId: string,
+  ingredientId: string,
+  origin: string,
+) {
+  const recipe = await serializedRecipeOrThrow(db, recipeId, origin);
+  const match = findSerializedIngredient(recipe, stepId, ingredientId);
+  /* istanbul ignore next -- @preserve post-write reads are covered on every step ingredient write path; this is a defensive invariant tripwire. */
+  if (!match) {
+    throw new Error(`Recipe step ingredient ${ingredientId} was not readable after write`);
+  }
+  return { recipe, step: match.step, ingredient: match.ingredient };
+}
+
+function numericArraysEqual(actual: number[], expected: number[]) {
+  if (actual.length !== expected.length) return false;
+  return actual.every((value, index) => value === expected[index]);
+}
+
+function normalizedText(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function outputStepNumsForSerializedStep(step: SerializedRecipeStep) {
+  return step.usingSteps.map((use) => use.outputStepNum).sort((a, b) => a - b);
+}
+
+function requestedOutputStepNums(outputStepNums: number[]) {
+  return [...new Set(outputStepNums)].sort((a, b) => a - b);
+}
+
+function recipeStepOrderIsContiguous(recipe: SerializedRecipe) {
+  const stepNums = recipe.steps.map((step) => step.stepNum).sort((a, b) => a - b);
+  return stepNums.every((stepNum, index) => stepNum === index + 1);
+}
+
+function ingredientInputsMatch(
+  actual: SerializedRecipeStep["ingredients"],
+  expected: NativeRecipeStepIngredientInput[],
+) {
+  if (actual.length !== expected.length) return false;
+  const actualKeys = actual
+    .map((ingredient) => `${normalizedText(ingredient.name)}\u0000${normalizedText(ingredient.unit)}\u0000${ingredient.quantity}`)
+    .sort();
+  const expectedKeys = expected
+    .map((ingredient) => `${normalizedText(ingredient.ingredientName)}\u0000${normalizedText(ingredient.unit)}\u0000${ingredient.quantity}`)
+    .sort();
+  return actualKeys.every((key, index) => key === expectedKeys[index]);
+}
+
+function stepMatchesCreateInput(step: SerializedRecipeStep, input: NativeRecipeStepCreateInput) {
+  if (input.stepNum !== undefined && step.stepNum !== input.stepNum) return false;
+  if (step.stepTitle !== input.stepTitle) return false;
+  if (step.description !== input.description) return false;
+  if (step.duration !== input.duration) return false;
+  if (!numericArraysEqual(outputStepNumsForSerializedStep(step), requestedOutputStepNums(input.outputStepNums))) return false;
+  if (!ingredientInputsMatch(step.ingredients, input.ingredients)) return false;
+  return true;
+}
+
+function ingredientMatchesCreateInput(
+  actual: SerializedRecipeStep["ingredients"][number],
+  expected: NativeRecipeStepIngredientCreateInput,
+) {
+  return actual.quantity === expected.quantity &&
+    normalizedText(actual.unit) === normalizedText(expected.unit) &&
+    normalizedText(actual.name) === normalizedText(expected.ingredientName);
+}
+
+async function findMutationTombstone(
+  db: ApiV1WriteDb,
+  reservation: ApiIdempotencyKey,
+  input: { operation: string; resourceType: string; resourceId: string; parentResourceId?: string },
+) {
+  const tombstone = await db.apiMutationTombstone.findUnique({
+    where: {
+      idempotencyKeyId_resourceType_resourceId: {
+        idempotencyKeyId: reservation.id,
+        resourceType: input.resourceType,
+        resourceId: input.resourceId,
+      },
+    },
+  });
+  if (!tombstone || tombstone.operation !== input.operation) return null;
+  if (input.parentResourceId !== undefined && tombstone.parentResourceId !== input.parentResourceId) return null;
+  return tombstone;
+}
+
+async function recoverNativeRecipeCreate(
+  db: ApiV1WriteDb,
+  reservation: ApiIdempotencyKey,
+  input: { clientMutationId: string; origin: string; principalId: string },
+): Promise<ApiV1IdempotentMutationResult | null> {
+  const recipe = await loadRecipeById(db, reservation.id);
+  if (!recipe || recipe.chef.id !== input.principalId) return null;
+  return {
+    status: 201,
+    data: {
+      created: true,
+      recipe: recipeDetail(recipe, input.origin),
+      mutation: { clientMutationId: input.clientMutationId, replayed: false },
+    },
+  };
+}
+
+async function recoverNativeRecipeUpdate(
+  db: ApiV1WriteDb,
+  _reservation: ApiIdempotencyKey,
+  input: {
+    clientMutationId: string;
+    fields: {
+      title?: string;
+      description?: string | null;
+      servings?: string | null;
+    };
+    origin: string;
+    principalId: string;
+    recipeId: string;
+    updated: boolean;
+  },
+): Promise<ApiV1IdempotentMutationResult | null> {
+  const recipe = await loadRecipeById(db, input.recipeId);
+  if (!recipe || recipe.chef.id !== input.principalId) return null;
+  if (input.fields.title !== undefined && recipe.title !== input.fields.title) return null;
+  if (input.fields.description !== undefined && recipe.description !== input.fields.description) return null;
+  if (input.fields.servings !== undefined && recipe.servings !== input.fields.servings) return null;
+  return {
+    status: 200,
+    data: {
+      updated: input.updated,
+      recipe: recipeDetail(recipe, input.origin),
+      mutation: { clientMutationId: input.clientMutationId, replayed: false },
+    },
+  };
+}
+
+async function recoverNativeRecipeDelete(
+  db: ApiV1WriteDb,
+  reservation: ApiIdempotencyKey,
+  input: { clientMutationId: string; principalId: string; recipeId: string },
+): Promise<ApiV1IdempotentMutationResult | null> {
+  const recipe = await db.recipe.findUnique({
+    where: { id: input.recipeId },
+    select: { id: true, chefId: true, deletedAt: true, updatedAt: true },
+  });
+  if (!recipe || recipe.chefId !== input.principalId || !recipe.deletedAt) return null;
+  if (
+    recipe.deletedAt.getTime() + IDEMPOTENCY_RECOVERY_TIMESTAMP_TOLERANCE_MS <
+    reservation.createdAt.getTime()
+  ) {
+    return null;
+  }
+  return {
+    status: 200,
+    data: {
+      deleted: true,
+      recipe: {
+        id: recipe.id,
+        deletedAt: recipe.deletedAt.toISOString(),
+        updatedAt: recipe.updatedAt.toISOString(),
+      },
+      mutation: { clientMutationId: input.clientMutationId, replayed: false },
+    },
+  };
+}
+
+async function recoverNativeRecipeFork(
+  db: ApiV1WriteDb,
+  reservation: ApiIdempotencyKey,
+  input: {
+    clientMutationId: string;
+    origin: string;
+    principalId: string;
+    sourceRecipeId: string;
+    titleOverride: string | null;
+  },
+): Promise<ApiV1IdempotentMutationResult | null> {
+  const recipe = await loadRecipeById(db, reservation.id);
+  if (
+    !recipe ||
+    recipe.chef.id !== input.principalId ||
+    recipe.sourceRecipe?.id !== input.sourceRecipeId ||
+    !recipe.sourceRecipe.chef
+  ) {
+    return null;
+  }
+
+  const baseTitle = input.titleOverride ?? recipe.sourceRecipe.title;
+  return {
+    status: 201,
+    data: {
+      fork: {
+        appliedTitle: recipe.title,
+        sourceChef: {
+          id: recipe.sourceRecipe.chef.id,
+          username: recipe.sourceRecipe.chef.username,
+        },
+        sourceRecipeId: recipe.sourceRecipe.id,
+        titleWasSuffixed: recipe.title !== baseTitle,
+      },
+      recipe: recipeDetail(recipe, input.origin),
+      mutation: { clientMutationId: input.clientMutationId, replayed: false },
+    },
+  };
+}
+
+async function handleRecipeCreate(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
+  const body = await parseApiV1JsonBody(args.request);
+  const parsed = parseNativeRecipeCreateBody(body);
+  if (!parsed.ok) {
+    throw new ApiV1Error(parsed.code, parsed.message, parsed.details);
+  }
+  const origin = publicContentOrigin(args);
+
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, parsed.data.clientMutationId, "recipes.create", async (db, reservation) => {
+    const created = recipeWriteResultOrThrow(await createNativeRecipe(db, principal.id, parsed.data, { recipeId: reservation.id }));
+    const recipe = await serializedRecipeOrThrow(db, created.data.recipeId, origin);
+    return {
+      status: created.status,
+      data: {
+        created: true,
+        recipe,
+        mutation: { clientMutationId: parsed.data.clientMutationId, replayed: false },
+      },
+    };
+  }, (db, reservation) => recoverNativeRecipeCreate(db, reservation, {
+    clientMutationId: parsed.data.clientMutationId,
+    origin,
+    principalId: principal.id,
+  }));
+}
+
+async function handleRecipeUpdate(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string) {
+  const body = await parseApiV1JsonBody(args.request);
+  const parsed = parseNativeRecipePatchBody(body);
+  if (!parsed.ok) {
+    throw new ApiV1Error(parsed.code, parsed.message, parsed.details);
+  }
+  const origin = publicContentOrigin(args);
+  const updated = Object.keys(parsed.data.fields).length > 0;
+
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, parsed.data.clientMutationId, "recipes.update", async (db) => {
+    const updated = recipeWriteResultOrThrow(await updateNativeRecipe(db, principal.id, recipeId, parsed.data));
+    const recipe = await serializedRecipeOrThrow(db, updated.data.recipeId, origin);
+    return {
+      status: updated.status,
+      data: {
+        updated: updated.data.updated,
+        recipe,
+        mutation: { clientMutationId: parsed.data.clientMutationId, replayed: false },
+      },
+    };
+  }, (db, reservation) => recoverNativeRecipeUpdate(db, reservation, {
+    clientMutationId: parsed.data.clientMutationId,
+    origin,
+    principalId: principal.id,
+    recipeId,
+    fields: parsed.data.fields,
+    updated,
+  }));
+}
+
+async function handleRecipeDelete(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string) {
+  const body = await parseApiV1JsonBody(args.request);
+  const url = new URL(args.request.url);
+  const parsed = parseNativeRecipeDeleteBody(
+    body,
+    args.request.headers.get("X-Client-Mutation-Id") ?? url.searchParams.get("clientMutationId"),
+  );
+  if (!parsed.ok) {
+    throw new ApiV1Error(parsed.code, parsed.message, parsed.details);
+  }
+
+  const idempotencyBody = { clientMutationId: parsed.data.clientMutationId };
+  return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, parsed.data.clientMutationId, "recipes.delete", async (db) => {
+    const deleted = recipeWriteResultOrThrow(await deleteNativeRecipe(db, principal.id, recipeId));
+    return {
+      status: deleted.status,
+      data: {
+        deleted: true,
+        recipe: {
+          id: deleted.data.recipe.id,
+          deletedAt: deleted.data.recipe.deletedAt.toISOString(),
+          updatedAt: deleted.data.recipe.updatedAt.toISOString(),
+        },
+        mutation: { clientMutationId: parsed.data.clientMutationId, replayed: false },
+      },
+    };
+  }, (db, reservation) => recoverNativeRecipeDelete(db, reservation, {
+    clientMutationId: parsed.data.clientMutationId,
+    principalId: principal.id,
+    recipeId,
+  }));
+}
+
+async function notifyNativeRecipeFork(
+  args: ApiV1RouteArgs,
+  db: ApiV1WriteDb,
+  input: {
+    appliedTitle: string;
+    forkerId: string;
+    forkedRecipeId: string;
+    sourceChefId: string;
+    sourceRecipeId: string;
+  },
+) {
+  try {
+    const vapid = getVapidConfig((args.context.cloudflare?.env ?? {}) as VapidEnv);
+    const waitUntil = apiV1WaitUntilFor(args);
+    const notifyTask = notifyForkOfMyRecipe(
+      db,
+      {
+        forkedRecipeId: input.forkedRecipeId,
+        sourceRecipeId: input.sourceRecipeId,
+        forkerId: input.forkerId,
+        sourceChefId: input.sourceChefId,
+        appliedTitle: input.appliedTitle,
+      },
+      { vapid, waitUntil },
+    );
+    if (waitUntil) {
+      waitUntil(notifyTask);
+    } else {
+      await notifyTask;
+    }
+  } catch {
+    // VAPID is optional in local/dev environments; missing push config must not break a fork.
+  }
+}
+
+async function handleRecipeFork(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, sourceRecipeId: string) {
+  const body = await parseApiV1JsonBody(args.request);
+  const parsed = parseNativeRecipeForkBody(body);
+  if (!parsed.ok) {
+    throw new ApiV1Error(parsed.code, parsed.message, parsed.details);
+  }
+  const origin = publicContentOrigin(args);
+
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, parsed.data.clientMutationId, "recipes.fork", async (db, reservation) => {
+    const forked = recipeWriteResultOrThrow(await forkNativeRecipe(db, principal.id, sourceRecipeId, parsed.data, { recipeId: reservation.id }));
+    await notifyNativeRecipeFork(args, db, {
+      appliedTitle: forked.data.fork.appliedTitle,
+      forkerId: principal.id,
+      forkedRecipeId: forked.data.recipeId,
+      sourceChefId: forked.data.fork.sourceChef.id,
+      sourceRecipeId: forked.data.fork.sourceRecipeId,
+    });
+    const recipe = await serializedRecipeOrThrow(db, forked.data.recipeId, origin);
+    return {
+      status: forked.status,
+      data: {
+        fork: forked.data.fork,
+        recipe,
+        mutation: { clientMutationId: parsed.data.clientMutationId, replayed: false },
+      },
+    };
+  }, (db, reservation) => recoverNativeRecipeFork(db, reservation, {
+    clientMutationId: parsed.data.clientMutationId,
+    origin,
+    principalId: principal.id,
+    sourceRecipeId,
+    titleOverride: parsed.data.titleOverride,
+  }));
+}
+
+async function recoverNativeRecipeStepCreate(
+  db: ApiV1WriteDb,
+  reservation: ApiIdempotencyKey,
+  input: { clientMutationId: string; origin: string; principalId: string; recipeId: string; request: NativeRecipeStepCreateInput },
+): Promise<ApiV1IdempotentMutationResult | null> {
+  const recipeRow = await loadRecipeById(db, input.recipeId);
+  if (!recipeRow || recipeRow.chef.id !== input.principalId) return null;
+  const recipe = recipeDetail(recipeRow, input.origin);
+  const step = findSerializedStep(recipe, reservation.id);
+  if (!step || !stepMatchesCreateInput(step, input.request)) return null;
+  return {
+    status: 201,
+    data: {
+      created: true,
+      step,
+      recipe,
+      mutation: { clientMutationId: input.clientMutationId, replayed: false },
+    },
+  };
+}
+
+async function recoverNativeRecipeStepUpdate(
+  db: ApiV1WriteDb,
+  _reservation: ApiIdempotencyKey,
+  input: {
+    clientMutationId: string;
+    origin: string;
+    principalId: string;
+    recipeId: string;
+    stepId: string;
+    fields: {
+      stepTitle?: string | null;
+      description?: string;
+      duration?: number | null;
+      outputStepNums?: number[];
+    };
+    updated: boolean;
+  },
+): Promise<ApiV1IdempotentMutationResult | null> {
+  const recipeRow = await loadRecipeById(db, input.recipeId);
+  if (!recipeRow || recipeRow.chef.id !== input.principalId) return null;
+  const recipe = recipeDetail(recipeRow, input.origin);
+  const step = findSerializedStep(recipe, input.stepId);
+  if (!step) return null;
+  if (input.fields.stepTitle !== undefined && step.stepTitle !== input.fields.stepTitle) return null;
+  if (input.fields.description !== undefined && step.description !== input.fields.description) return null;
+  if (input.fields.duration !== undefined && step.duration !== input.fields.duration) return null;
+  if (
+    input.fields.outputStepNums !== undefined &&
+    !numericArraysEqual(
+      outputStepNumsForSerializedStep(step),
+      requestedOutputStepNums(input.fields.outputStepNums),
+    )
+  ) {
+    return null;
+  }
+  return {
+    status: 200,
+    data: {
+      updated: input.updated,
+      step,
+      recipe,
+      mutation: { clientMutationId: input.clientMutationId, replayed: false },
+    },
+  };
+}
+
+async function recoverNativeRecipeStepDelete(
+  db: ApiV1WriteDb,
+  reservation: ApiIdempotencyKey,
+  input: { clientMutationId: string; origin: string; principalId: string; recipeId: string; stepId: string },
+): Promise<ApiV1IdempotentMutationResult | null> {
+  const tombstone = await findMutationTombstone(db, reservation, {
+    operation: "recipes.steps.delete",
+    resourceType: "recipe_step",
+    resourceId: input.stepId,
+    parentResourceId: input.recipeId,
+  });
+  if (!tombstone) return null;
+
+  const recipeRow = await loadRecipeById(db, input.recipeId);
+  if (!recipeRow || recipeRow.chef.id !== input.principalId) return null;
+  const recipe = recipeDetail(recipeRow, input.origin);
+  if (findSerializedStep(recipe, input.stepId)) return null;
+  return {
+    status: 200,
+    data: {
+      deleted: true,
+      step: { id: input.stepId },
+      recipe,
+      mutation: { clientMutationId: input.clientMutationId, replayed: false },
+    },
+  };
+}
+
+async function recoverNativeRecipeStepIngredientCreate(
+  db: ApiV1WriteDb,
+  reservation: ApiIdempotencyKey,
+  input: { clientMutationId: string; origin: string; principalId: string; recipeId: string; stepId: string; request: NativeRecipeStepIngredientCreateInput },
+): Promise<ApiV1IdempotentMutationResult | null> {
+  const recipeRow = await loadRecipeById(db, input.recipeId);
+  if (!recipeRow || recipeRow.chef.id !== input.principalId) return null;
+  const recipe = recipeDetail(recipeRow, input.origin);
+  const match = findSerializedIngredient(recipe, input.stepId, reservation.id);
+  if (!match || !ingredientMatchesCreateInput(match.ingredient, input.request)) return null;
+  return {
+    status: 201,
+    data: {
+      created: true,
+      ingredient: match.ingredient,
+      step: match.step,
+      recipe,
+      mutation: { clientMutationId: input.clientMutationId, replayed: false },
+    },
+  };
+}
+
+async function recoverNativeRecipeStepIngredientDelete(
+  db: ApiV1WriteDb,
+  reservation: ApiIdempotencyKey,
+  input: { clientMutationId: string; origin: string; principalId: string; recipeId: string; stepId: string; ingredientId: string },
+): Promise<ApiV1IdempotentMutationResult | null> {
+  const tombstone = await findMutationTombstone(db, reservation, {
+    operation: "recipes.steps.ingredients.delete",
+    resourceType: "recipe_step_ingredient",
+    resourceId: input.ingredientId,
+    parentResourceId: input.stepId,
+  });
+  if (!tombstone) return null;
+
+  const recipeRow = await loadRecipeById(db, input.recipeId);
+  if (!recipeRow || recipeRow.chef.id !== input.principalId) return null;
+  const recipe = recipeDetail(recipeRow, input.origin);
+  const step = findSerializedStep(recipe, input.stepId);
+  if (!step || step.ingredients.some((ingredient) => ingredient.id === input.ingredientId)) return null;
+  return {
+    status: 200,
+    data: {
+      deleted: true,
+      ingredient: { id: input.ingredientId },
+      step,
+      recipe,
+      mutation: { clientMutationId: input.clientMutationId, replayed: false },
+    },
+  };
+}
+
+async function recoverNativeRecipeStepReorder(
+  db: ApiV1WriteDb,
+  reservation: ApiIdempotencyKey,
+  input: { clientMutationId: string; origin: string; principalId: string; recipeId: string; stepId: string; toStepNum: number },
+): Promise<ApiV1IdempotentMutationResult | null> {
+  const tombstone = await findMutationTombstone(db, reservation, {
+    operation: "recipes.steps.reorder",
+    resourceType: "recipe_step_reorder",
+    resourceId: input.stepId,
+    parentResourceId: input.recipeId,
+  });
+  if (!tombstone?.payload) return null;
+  let payload: { toStepNum?: unknown; reordered?: unknown };
+  try {
+    payload = JSON.parse(tombstone.payload) as { toStepNum?: unknown; reordered?: unknown };
+  } catch {
+    return null;
+  }
+  if (payload.toStepNum !== input.toStepNum || typeof payload.reordered !== "boolean") return null;
+
+  const recipeRow = await loadRecipeById(db, input.recipeId);
+  if (!recipeRow || recipeRow.chef.id !== input.principalId) return null;
+  const recipe = recipeDetail(recipeRow, input.origin);
+  const step = findSerializedStep(recipe, input.stepId);
+  if (!step || step.stepNum !== input.toStepNum || !recipeStepOrderIsContiguous(recipe)) return null;
+  return {
+    status: 200,
+    data: {
+      reordered: payload.reordered,
+      step,
+      recipe,
+      mutation: { clientMutationId: input.clientMutationId, replayed: false },
+    },
+  };
+}
+
+async function recoverNativeRecipeStepOutputUses(
+  db: ApiV1WriteDb,
+  _reservation: ApiIdempotencyKey,
+  input: { clientMutationId: string; origin: string; principalId: string; recipeId: string; stepId: string; outputStepNums: number[] },
+): Promise<ApiV1IdempotentMutationResult | null> {
+  const recipeRow = await loadRecipeById(db, input.recipeId);
+  if (!recipeRow || recipeRow.chef.id !== input.principalId) return null;
+  const recipe = recipeDetail(recipeRow, input.origin);
+  const step = findSerializedStep(recipe, input.stepId);
+  if (!step) return null;
+  if (!numericArraysEqual(
+    outputStepNumsForSerializedStep(step),
+    requestedOutputStepNums(input.outputStepNums),
+  )) {
+    return null;
+  }
+  return {
+    status: 200,
+    data: {
+      replaced: true,
+      step,
+      recipe,
+      mutation: { clientMutationId: input.clientMutationId, replayed: false },
+    },
+  };
+}
+
+async function handleRecipeStepCreate(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string) {
+  const body = await parseApiV1JsonBody(args.request);
+  const parsed = parseNativeRecipeStepCreateBody(body);
+  if (!parsed.ok) {
+    throw new ApiV1Error(parsed.code, parsed.message, parsed.details);
+  }
+  const origin = publicContentOrigin(args);
+
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, parsed.data.clientMutationId, "recipes.steps.create", async (db, reservation) => {
+    const created = recipeStepResultOrThrow(await createNativeRecipeStep(db, principal.id, recipeId, parsed.data, { stepId: reservation.id }));
+    const { recipe, step } = await serializedRecipeStepOrThrow(db, created.data.recipeId, created.data.stepId, origin);
+    return {
+      status: created.status,
+      data: {
+        created: true,
+        step,
+        recipe,
+        mutation: { clientMutationId: parsed.data.clientMutationId, replayed: false },
+      },
+    };
+  }, (db, reservation) => recoverNativeRecipeStepCreate(db, reservation, {
+    clientMutationId: parsed.data.clientMutationId,
+    origin,
+    principalId: principal.id,
+    recipeId,
+    request: parsed.data,
+  }));
+}
+
+async function handleRecipeStepUpdate(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string, stepId: string) {
+  const body = await parseApiV1JsonBody(args.request);
+  const parsed = parseNativeRecipeStepPatchBody(body);
+  if (!parsed.ok) {
+    throw new ApiV1Error(parsed.code, parsed.message, parsed.details);
+  }
+  const origin = publicContentOrigin(args);
+  const updated = Object.keys(parsed.data.fields).length > 0;
+
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, parsed.data.clientMutationId, "recipes.steps.update", async (db) => {
+    const saved = recipeStepResultOrThrow(await updateNativeRecipeStep(db, principal.id, recipeId, stepId, parsed.data));
+    const { recipe, step } = await serializedRecipeStepOrThrow(db, saved.data.recipeId, saved.data.stepId, origin);
+    return {
+      status: saved.status,
+      data: {
+        updated: saved.data.updated,
+        step,
+        recipe,
+        mutation: { clientMutationId: parsed.data.clientMutationId, replayed: false },
+      },
+    };
+  }, (db, reservation) => recoverNativeRecipeStepUpdate(db, reservation, {
+    clientMutationId: parsed.data.clientMutationId,
+    origin,
+    principalId: principal.id,
+    recipeId,
+    stepId,
+    fields: parsed.data.fields,
+    updated,
+  }));
+}
+
+async function handleRecipeStepDelete(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string, stepId: string) {
+  const body = await parseApiV1JsonBody(args.request);
+  const url = new URL(args.request.url);
+  const parsed = parseNativeRecipeStepDeleteBody(
+    body,
+    args.request.headers.get("X-Client-Mutation-Id") ?? url.searchParams.get("clientMutationId"),
+  );
+  if (!parsed.ok) {
+    throw new ApiV1Error(parsed.code, parsed.message, parsed.details);
+  }
+
+  const origin = publicContentOrigin(args);
+  const idempotencyBody = { clientMutationId: parsed.data.clientMutationId };
+  return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, parsed.data.clientMutationId, "recipes.steps.delete", async (db, reservation) => {
+    const deleted = recipeStepResultOrThrow(await deleteNativeRecipeStep(db, principal.id, recipeId, stepId, {
+      tombstone: { idempotencyKeyId: reservation.id, operation: "recipes.steps.delete" },
+    }));
+    const recipe = await serializedRecipeOrThrow(db, deleted.data.recipeId, origin);
+    return {
+      status: deleted.status,
+      data: {
+        deleted: true,
+        step: deleted.data.step,
+        recipe,
+        mutation: { clientMutationId: parsed.data.clientMutationId, replayed: false },
+      },
+    };
+  }, (db, reservation) => recoverNativeRecipeStepDelete(db, reservation, {
+    clientMutationId: parsed.data.clientMutationId,
+    origin,
+    principalId: principal.id,
+    recipeId,
+    stepId,
+  }));
+}
+
+async function handleRecipeStepIngredientCreate(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string, stepId: string) {
+  const body = await parseApiV1JsonBody(args.request);
+  const parsed = parseNativeRecipeStepIngredientCreateBody(body);
+  if (!parsed.ok) {
+    throw new ApiV1Error(parsed.code, parsed.message, parsed.details);
+  }
+  const origin = publicContentOrigin(args);
+
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, parsed.data.clientMutationId, "recipes.steps.ingredients.create", async (db, reservation) => {
+    const created = recipeStepResultOrThrow(await createNativeRecipeStepIngredient(db, principal.id, recipeId, stepId, parsed.data, { ingredientId: reservation.id }));
+    const { recipe, step, ingredient } = await serializedRecipeStepIngredientOrThrow(db, created.data.recipeId, created.data.stepId, created.data.ingredientId, origin);
+    return {
+      status: created.status,
+      data: {
+        created: true,
+        ingredient,
+        step,
+        recipe,
+        mutation: { clientMutationId: parsed.data.clientMutationId, replayed: false },
+      },
+    };
+  }, (db, reservation) => recoverNativeRecipeStepIngredientCreate(db, reservation, {
+    clientMutationId: parsed.data.clientMutationId,
+    origin,
+    principalId: principal.id,
+    recipeId,
+    stepId,
+    request: parsed.data,
+  }));
+}
+
+async function handleRecipeStepIngredientDelete(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string, stepId: string, ingredientId: string) {
+  const body = await parseApiV1JsonBody(args.request);
+  const url = new URL(args.request.url);
+  const parsed = parseNativeRecipeStepIngredientDeleteBody(
+    body,
+    args.request.headers.get("X-Client-Mutation-Id") ?? url.searchParams.get("clientMutationId"),
+  );
+  if (!parsed.ok) {
+    throw new ApiV1Error(parsed.code, parsed.message, parsed.details);
+  }
+
+  const origin = publicContentOrigin(args);
+  const idempotencyBody = { clientMutationId: parsed.data.clientMutationId };
+  return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, parsed.data.clientMutationId, "recipes.steps.ingredients.delete", async (db, reservation) => {
+    const deleted = recipeStepResultOrThrow(await deleteNativeRecipeStepIngredient(db, principal.id, recipeId, stepId, ingredientId, {
+      tombstone: { idempotencyKeyId: reservation.id, operation: "recipes.steps.ingredients.delete" },
+    }));
+    const recipe = await serializedRecipeOrThrow(db, deleted.data.recipeId, origin);
+    const step = findSerializedStep(recipe, deleted.data.stepId);
+    if (!step) {
+      throw new Error(`Recipe step ${deleted.data.stepId} was not readable after ingredient delete`);
+    }
+    return {
+      status: deleted.status,
+      data: {
+        deleted: true,
+        ingredient: deleted.data.ingredient,
+        step,
+        recipe,
+        mutation: { clientMutationId: parsed.data.clientMutationId, replayed: false },
+      },
+    };
+  }, (db, reservation) => recoverNativeRecipeStepIngredientDelete(db, reservation, {
+    clientMutationId: parsed.data.clientMutationId,
+    origin,
+    principalId: principal.id,
+    recipeId,
+    stepId,
+    ingredientId,
+  }));
+}
+
+async function handleRecipeStepReorder(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string) {
+  const body = await parseApiV1JsonBody(args.request);
+  const parsed = parseNativeRecipeStepReorderBody(body);
+  if (!parsed.ok) {
+    throw new ApiV1Error(parsed.code, parsed.message, parsed.details);
+  }
+  const origin = publicContentOrigin(args);
+
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, parsed.data.clientMutationId, "recipes.steps.reorder", async (db, reservation) => {
+    const reordered = recipeStepResultOrThrow(await reorderNativeRecipeStep(db, principal.id, recipeId, parsed.data, {
+      tombstone: { idempotencyKeyId: reservation.id, operation: "recipes.steps.reorder" },
+    }));
+    const { recipe, step } = await serializedRecipeStepOrThrow(db, reordered.data.recipeId, reordered.data.stepId, origin);
+    return {
+      status: reordered.status,
+      data: {
+        reordered: reordered.data.reordered,
+        step,
+        recipe,
+        mutation: { clientMutationId: parsed.data.clientMutationId, replayed: false },
+      },
+    };
+  }, (db, reservation) => recoverNativeRecipeStepReorder(db, reservation, {
+    clientMutationId: parsed.data.clientMutationId,
+    origin,
+    principalId: principal.id,
+    recipeId,
+    stepId: parsed.data.stepId,
+    toStepNum: parsed.data.toStepNum,
+  }));
+}
+
+async function handleRecipeStepOutputUsesReplace(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string) {
+  const body = await parseApiV1JsonBody(args.request);
+  const parsed = parseNativeRecipeStepOutputUsesBody(body);
+  if (!parsed.ok) {
+    throw new ApiV1Error(parsed.code, parsed.message, parsed.details);
+  }
+  const origin = publicContentOrigin(args);
+
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, parsed.data.clientMutationId, "recipes.steps.output-uses.replace", async (db) => {
+    const replaced = recipeStepResultOrThrow(await replaceNativeRecipeStepOutputUses(db, principal.id, recipeId, parsed.data));
+    const { recipe, step } = await serializedRecipeStepOrThrow(db, replaced.data.recipeId, replaced.data.stepId, origin);
+    return {
+      status: replaced.status,
+      data: {
+        replaced: replaced.data.replaced,
+        step,
+        recipe,
+        mutation: { clientMutationId: parsed.data.clientMutationId, replayed: false },
+      },
+    };
+  }, (db, reservation) => recoverNativeRecipeStepOutputUses(db, reservation, {
+    clientMutationId: parsed.data.clientMutationId,
+    origin,
+    principalId: principal.id,
+    recipeId,
+    stepId: parsed.data.inputStepId,
+    outputStepNums: parsed.data.outputStepNums,
+  }));
 }
 
 function credentialMetadata(credential: ApiCredential) {
@@ -4009,6 +5307,12 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
       return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
     }
 
+    if (args.request.method === "POST" && path === "recipes") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeCreate(args, requestId, principal);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
     const segments = path.split("/").filter(Boolean);
     if (path === "recipes/import" && args.request.method !== "POST") {
       throw new ApiV1Error("method_not_allowed", "Method not allowed", { allow: "POST" });
@@ -4023,6 +5327,66 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
     if (args.request.method === "GET" && segments[0] === "recipes" && segments.length === 2) {
       const principal = await authorize(path);
       const response = await handleRecipeDetail(args, requestId, principal, segments[1]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "PATCH" && segments[0] === "recipes" && segments.length === 2) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeUpdate(args, requestId, principal, segments[1]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "DELETE" && segments[0] === "recipes" && segments.length === 2) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeDelete(args, requestId, principal, segments[1]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "POST" && segments[0] === "recipes" && segments[2] === "fork" && segments.length === 3) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeFork(args, requestId, principal, segments[1]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "POST" && segments[0] === "recipes" && segments[2] === "steps" && segments.length === 3) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeStepCreate(args, requestId, principal, segments[1]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "PATCH" && segments[0] === "recipes" && segments[2] === "steps" && segments.length === 4) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeStepUpdate(args, requestId, principal, segments[1], segments[3]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "DELETE" && segments[0] === "recipes" && segments[2] === "steps" && segments.length === 4) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeStepDelete(args, requestId, principal, segments[1], segments[3]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "POST" && segments[0] === "recipes" && segments[2] === "steps" && segments[3] === "reorder" && segments.length === 4) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeStepReorder(args, requestId, principal, segments[1]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "POST" && segments[0] === "recipes" && segments[2] === "steps" && segments[4] === "ingredients" && segments.length === 5) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeStepIngredientCreate(args, requestId, principal, segments[1], segments[3]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "DELETE" && segments[0] === "recipes" && segments[2] === "steps" && segments[4] === "ingredients" && segments.length === 6) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeStepIngredientDelete(args, requestId, principal, segments[1], segments[3], segments[5]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "PUT" && segments[0] === "recipes" && segments[2] === "step-output-uses" && segments.length === 3) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeStepOutputUsesReplace(args, requestId, principal, segments[1]);
       return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
     }
 
@@ -4164,6 +5528,18 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
       return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
     }
 
+    if (args.request.method === "POST" && path === "me/apns-devices") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleApnsDeviceRegister(args, requestId, principal);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "DELETE" && segments[0] === "me" && segments[1] === "apns-devices" && segments.length === 3) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleApnsDeviceRevoke(args, requestId, principal, segments[2]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
     if (args.request.method === "GET" && path === "me/connections") {
       const principal = await authorize(path) as ApiPrincipal;
       const response = await handleOAuthConnectionList(args, requestId, principal);
@@ -4242,13 +5618,13 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
       return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
     }
 
-    if (args.request.method !== "GET" && args.request.method !== "POST" && args.request.method !== "PATCH" && args.request.method !== "DELETE") {
-      throw new ApiV1Error("method_not_allowed", "Method not allowed", { allow: allowedApiV1Methods(path) ?? "GET, POST, PATCH, DELETE" });
+    if (args.request.method !== "GET" && args.request.method !== "POST" && args.request.method !== "PUT" && args.request.method !== "PATCH" && args.request.method !== "DELETE") {
+      throw new ApiV1Error("method_not_allowed", "Method not allowed", { allow: allowedApiV1Methods(path) ?? "GET, POST, PATCH, PUT, DELETE" });
     }
 
     if (isKnownApiV1Path(path)) {
       /* istanbul ignore next -- @preserve known paths always have an allowed-method header from API_V1_RESOURCES. */
-      throw new ApiV1Error("method_not_allowed", "Method not allowed", { allow: allowedApiV1Methods(path) ?? "GET, POST, PATCH, DELETE" });
+      throw new ApiV1Error("method_not_allowed", "Method not allowed", { allow: allowedApiV1Methods(path) ?? "GET, POST, PATCH, PUT, DELETE" });
     }
 
     if (args.request.method === "GET") {

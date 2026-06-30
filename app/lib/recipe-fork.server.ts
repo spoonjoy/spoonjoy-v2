@@ -29,6 +29,7 @@ export interface ForkRecipeInput {
   sourceRecipeId: string;
   viewerId: string;
   titleOverride?: string | null;
+  recipeId?: string;
 }
 
 const sourceInclude = {
@@ -131,6 +132,7 @@ export async function forkRecipe(
   const { title } = await resolveTitle(db, input.viewerId, baseTitle);
   const created = await db.recipe.create({
     data: {
+      id: input.recipeId,
       title,
       description: source.description,
       servings: source.servings,

@@ -30,6 +30,8 @@ type PlaygroundResponse = {
   elapsedMs: number;
   secrets?: Array<{ label: string; value: string }>;
 };
+type MultipartValues = Record<string, string>;
+type MultipartField = NonNullable<ApiV1PlaygroundOperation["requestBody"]>["fields"][number];
 
 export const PLAYGROUND_OPERATIONS: readonly ApiV1PlaygroundOperation[] = API_V1_PLAYGROUND_MANIFEST.operations;
 
@@ -67,6 +69,28 @@ function defaultBodies(operations: readonly ApiV1PlaygroundOperation[]): Record<
   return Object.fromEntries(
     operations.map((operation) => [operation.id, operation.requestBody?.example ?? ""]),
   );
+}
+
+function defaultMultipartValuesFor(operation: ApiV1PlaygroundOperation): MultipartValues {
+  if (operation.requestBody?.contentType !== "multipart/form-data") return {};
+  try {
+    const parsed = JSON.parse(operation.requestBody.example) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      operation.requestBody.fields
+        .filter((field) => !field.accept)
+        .map((field) => {
+          const value = (parsed as Record<string, unknown>)[field.name];
+          return [field.name, value === undefined || value === null ? "" : String(value)];
+        }),
+    );
+  } catch {
+    return {};
+  }
+}
+
+function defaultMultipartValuesByOperation(operations: readonly ApiV1PlaygroundOperation[]) {
+  return Object.fromEntries(operations.map((operation) => [operation.id, defaultMultipartValuesFor(operation)]));
 }
 
 function defaultParamsByOperation(operations: readonly ApiV1PlaygroundOperation[]) {
@@ -110,6 +134,11 @@ function shellQuote(value: string) {
   return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
+function multipartTextValue(field: MultipartField, values: MultipartValues) {
+  const value = values[field.name]?.trim();
+  return value || (field.required ? `REPLACE_${field.name}` : "");
+}
+
 export function curlFor(
   path: string,
   operation: ApiV1PlaygroundOperation,
@@ -117,6 +146,7 @@ export function curlFor(
   bodyText: string,
   baseUrl = "https://spoonjoy.app",
   params: Record<string, string> = {},
+  multipartValues: MultipartValues = defaultMultipartValuesFor(operation),
 ) {
   const absoluteUrl = `${baseUrl.replace(/\/$/, "")}${path}`;
   const isMultipart = operation.requestBody?.contentType === "multipart/form-data";
@@ -134,11 +164,16 @@ export function curlFor(
     if (isMultipart) {
       const fields = operation.requestBody?.fields.length
         ? operation.requestBody.fields
-        : [{ name: "file", label: "File", required: true, accept: "", description: "" }];
+        : [{ name: "file", label: "File", required: true, accept: "application/octet-stream", description: "" }];
+      const appendLines = fields.flatMap((field) => (
+        field.accept
+          ? [`body.append(${JSON.stringify(field.name)}, fileInput.files[0]);`]
+          : [`body.append(${JSON.stringify(field.name)}, ${JSON.stringify(multipartTextValue(field, multipartValues))});`]
+      ));
       return [
         "// Session mode is browser-only: run from a signed-in Spoonjoy page.",
         "const body = new FormData();",
-        ...fields.map((field) => `body.append(${JSON.stringify(field.name)}, fileInput.files[0]);`),
+        ...appendLines,
         `await fetch(${JSON.stringify(path)}, {`,
         `  method: ${JSON.stringify(operation.method)},`,
         `  credentials: "same-origin",`,
@@ -177,8 +212,13 @@ export function curlFor(
   if (isMultipart) {
     const fields = operation.requestBody?.fields.length
       ? operation.requestBody.fields
-      : [{ name: "file", label: "File", required: true, accept: "", description: "" }];
+      : [{ name: "file", label: "File", required: true, accept: "application/octet-stream", description: "" }];
     for (const field of fields) {
+      if (!field.accept) {
+        const value = multipartTextValue(field, multipartValues);
+        if (value) lines.push(`  -F ${shellQuote(`${field.name}=${value}`)}`);
+        continue;
+      }
       const contentType = field.accept.split(",")[0] || "application/octet-stream";
       lines.push(`  -F ${shellQuote(`${field.name}=@profile.jpg;type=${contentType}`)}`);
     }
@@ -241,6 +281,7 @@ export function playgroundFetchOptions(
   requestId = playgroundRequestId(),
   params: Record<string, string> = {},
   multipartFiles: Record<string, File | null> = {},
+  multipartValues: MultipartValues = {},
 ): RequestInit {
   const headers: Record<string, string> = { "X-Request-Id": requestId };
   if (authMode === "bearer" && token.trim()) headers.Authorization = `Bearer ${token.trim()}`;
@@ -259,9 +300,16 @@ export function playgroundFetchOptions(
     multipartBody = new FormData();
     let hasMultipartBody = false;
     for (const field of operation.requestBody?.fields ?? []) {
-      const file = multipartFiles[field.name];
-      if (!file) continue;
-      multipartBody.append(field.name, file);
+      if (field.accept) {
+        const file = multipartFiles[field.name];
+        if (!file) continue;
+        multipartBody.append(field.name, file);
+        hasMultipartBody = true;
+        continue;
+      }
+      const value = multipartValues[field.name]?.trim();
+      if (!value) continue;
+      multipartBody.append(field.name, value);
       hasMultipartBody = true;
     }
     if (!hasMultipartBody) multipartBody = null;
@@ -279,10 +327,14 @@ export function playgroundBodyError(
   operation: ApiV1PlaygroundOperation,
   bodyText: string,
   multipartFiles: Record<string, File | null> = {},
+  multipartValues: MultipartValues = {},
 ) {
   if (!operation.requestBody) return null;
   if (operation.requestBody.contentType === "multipart/form-data") {
-    const missingField = operation.requestBody.fields.find((field) => field.required && !multipartFiles[field.name]);
+    const missingField = operation.requestBody.fields.find((field) => (
+      field.required &&
+      (field.accept ? !multipartFiles[field.name] : !multipartValues[field.name]?.trim())
+    ));
     return missingField ? `Select ${missingField.label.toLowerCase()} before sending.` : null;
   }
   const trimmedBody = bodyText.trim();
@@ -594,6 +646,9 @@ export default function DeveloperPlayground() {
   ));
   const [bodiesByOperation, setBodiesByOperation] = useState<Record<string, string>>(() => defaultBodies(operations));
   const [multipartFilesByOperation, setMultipartFilesByOperation] = useState<Record<string, Record<string, File | null>>>({});
+  const [multipartValuesByOperation, setMultipartValuesByOperation] = useState<Record<string, MultipartValues>>(() => (
+    defaultMultipartValuesByOperation(operations)
+  ));
   const [authMode, setAuthMode] = useState<PlaygroundAuthMode>(() => defaultAuthModeFor(selected, isAuthenticated));
   const [token, setToken] = useState("");
   const [pkceVerifier, setPkceVerifier] = useState("");
@@ -610,14 +665,15 @@ export default function DeveloperPlayground() {
   const params = paramsByOperation[selected.id]!;
   const bodyText = bodiesByOperation[selected.id]!;
   const multipartFiles = multipartFilesByOperation[selected.id] ?? {};
+  const multipartValues = multipartValuesByOperation[selected.id]!;
   const path = useMemo(() => playgroundPath(selected, params), [selected, params]);
   /* istanbul ignore next -- @preserve SSR fallback for non-interactive rendering; playground tests run with a browser-like window. */
   const curlBaseUrl = typeof window === "undefined" ? "https://spoonjoy.app" : window.location.origin;
-  const curl = curlFor(path, selected, authMode, bodyText, curlBaseUrl, params);
+  const curl = curlFor(path, selected, authMode, bodyText, curlBaseUrl, params, multipartValues);
   const missingParams = missingRequiredParams(selected, params);
   const authModeAllowed = selected.credentialModes.includes(authMode);
   const bearerError = authMode === "bearer" && !token.trim() ? "Paste a bearer token before sending in Bearer mode." : null;
-  const bodyError = playgroundBodyError(selected, bodyText, multipartFiles);
+  const bodyError = playgroundBodyError(selected, bodyText, multipartFiles, multipartValues);
   const riskNeedsConfirmation = selected.risk !== "safe";
   const riskError = riskNeedsConfirmation && !confirmedRisk ? "Confirm this real-data operation before sending." : null;
   const validationErrors = [
@@ -740,6 +796,17 @@ export default function DeveloperPlayground() {
     }));
   }
 
+  function updateMultipartValue(name: string, value: string) {
+    setConfirmedRisk(false);
+    setMultipartValuesByOperation((current) => ({
+      ...current,
+      [selected.id]: {
+        ...current[selected.id]!,
+        [name]: value,
+      },
+    }));
+  }
+
   function generateBodyMutationId() {
     try {
       const parsed = JSON.parse(bodyText) as Record<string, unknown>;
@@ -749,33 +816,35 @@ export default function DeveloperPlayground() {
     }
   }
 
-	  async function sendRequest(event: FormEvent<HTMLFormElement>) {
-	    event.preventDefault();
-	    if (validationErrors.length) return;
-      const multipartBodyPresent = selected.requestBody?.contentType === "multipart/form-data"
-        ? Object.values(multipartFiles).some(Boolean)
-        : false;
-	    capturePlaygroundTelemetry("spoonjoy.developer.playground.request_submitted", {
-	      request_body_present: Boolean((bodyText.trim() || multipartBodyPresent) && selected.method !== "GET"),
-	      validation_error_count: validationErrors.length,
-	    }, selected);
-	    if (selected.kind === "redirect") {
-	      if (pkceVerifier) {
-          window.sessionStorage?.setItem(PKCE_SESSION_STORAGE_KEY, JSON.stringify({
-            code_verifier: pkceVerifier,
-            state: params.state,
-            code_challenge: params.code_challenge,
-            client_id: params.client_id,
-            redirect_uri: params.redirect_uri,
-          }));
-        }
-	      window.open(path, "_blank", "noopener,noreferrer");
-	      return;
-	    }
+  async function sendRequest(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (validationErrors.length) return;
+    const multipartFilePresent = Object.values(multipartFiles).some(Boolean);
+    const multipartTextPresent = Object.values(multipartValues).some((value) => value.trim());
+    const multipartBodyPresent = selected.requestBody?.contentType === "multipart/form-data"
+      ? multipartFilePresent || multipartTextPresent
+      : false;
+    capturePlaygroundTelemetry("spoonjoy.developer.playground.request_submitted", {
+      request_body_present: Boolean((bodyText.trim() || multipartBodyPresent) && selected.method !== "GET"),
+      validation_error_count: validationErrors.length,
+    }, selected);
+    if (selected.kind === "redirect") {
+      if (pkceVerifier) {
+        window.sessionStorage?.setItem(PKCE_SESSION_STORAGE_KEY, JSON.stringify({
+          code_verifier: pkceVerifier,
+          state: params.state,
+          code_challenge: params.code_challenge,
+          client_id: params.client_id,
+          redirect_uri: params.redirect_uri,
+        }));
+      }
+      window.open(path, "_blank", "noopener,noreferrer");
+      return;
+    }
     setIsSending(true);
     const startedAt = Date.now();
     try {
-      const result = await fetch(path, playgroundFetchOptions(selected, authMode, token, bodyText, playgroundRequestId(), params, multipartFiles));
+      const result = await fetch(path, playgroundFetchOptions(selected, authMode, token, bodyText, playgroundRequestId(), params, multipartFiles, multipartValues));
       const elapsedMs = Date.now() - startedAt;
       setResponse(await playgroundResponseFromFetchResult(result, {
         method: selected.method,
@@ -916,16 +985,16 @@ export default function DeveloperPlayground() {
           <p className="font-sj-ui text-sm font-semibold text-[var(--sj-ink)]">API surface</p>
           <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="API surface filter">
             {SURFACES.map((item) => (
-	              <button
-	                key={item.id}
-	                type="button"
-	                role="radio"
-	                aria-checked={surface === item.id}
-	                tabIndex={surface === item.id ? 0 : -1}
-	                data-radio-value={item.id}
-	                onClick={() => selectSurface(item.id)}
-	                onKeyDown={(event) => rovingRadioKeyDown(event, SURFACES.map((surfaceItem) => surfaceItem.id), surface, selectSurface)}
-	                className={`inline-flex min-h-10 items-center justify-center border px-3 font-sj-ui text-sm font-bold transition ${
+              <button
+                key={item.id}
+                type="button"
+                role="radio"
+                aria-checked={surface === item.id}
+                tabIndex={surface === item.id ? 0 : -1}
+                data-radio-value={item.id}
+                onClick={() => selectSurface(item.id)}
+                onKeyDown={(event) => rovingRadioKeyDown(event, SURFACES.map((surfaceItem) => surfaceItem.id), surface, selectSurface)}
+                className={`inline-flex min-h-10 items-center justify-center border px-3 font-sj-ui text-sm font-bold transition ${
                   surface === item.id
                     ? "border-[var(--sj-brass)] bg-[color-mix(in_srgb,var(--sj-brass)_12%,var(--sj-panel-solid))] text-[var(--sj-ink)]"
                     : "border-[var(--sj-border)] bg-[var(--sj-paper)] text-[var(--sj-ink-soft)] hover:border-[var(--sj-border-strong)]"
@@ -941,11 +1010,11 @@ export default function DeveloperPlayground() {
         </div>
         <div className="grid gap-2">
           <p className="font-sj-ui text-sm font-semibold text-[var(--sj-ink)]">Import URL</p>
-	          <p className="break-words font-mono text-xs/5 text-[var(--sj-ink-soft)]">
-	            {absoluteSpecUrl(selectedSurface.url)}
-	          </p>
-	          <div className="flex flex-wrap gap-2">
-	            <CopyButton value={absoluteSpecUrl(selectedSurface.url)} label="Copy import URL" />
+          <p className="break-words font-mono text-xs/5 text-[var(--sj-ink-soft)]">
+            {absoluteSpecUrl(selectedSurface.url)}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <CopyButton value={absoluteSpecUrl(selectedSurface.url)} label="Copy import URL" />
             <Button href={selectedSurface.url} plain>
               <Braces data-slot="icon" aria-hidden="true" />
               Open Spec
@@ -1263,19 +1332,33 @@ export default function DeveloperPlayground() {
                     {selected.requestBody.fields.map((field) => {
                       const fieldId = `multipart-${selected.operationId}-${field.name}`;
                       const hintId = `${fieldId}-hint`;
+                      const isFileField = Boolean(field.accept);
                       return (
                         <label key={field.name} className="grid gap-2">
                           {field.label}
-                          <input
-                            id={fieldId}
-                            type="file"
-                            accept={field.accept || undefined}
-                            required={field.required}
-                            aria-required={field.required}
-                            aria-describedby={hintId}
-                            onChange={(event) => updateMultipartFile(field.name, event.currentTarget.files?.[0] ?? null)}
-                            className="min-h-11 border border-[var(--sj-border)] bg-[var(--sj-paper)] px-3 py-2 text-base font-normal text-[var(--sj-ink)] outline-none file:mr-3 file:border-0 file:bg-[var(--sj-brass)] file:px-3 file:py-1.5 file:font-sj-ui file:text-sm file:font-bold file:text-[var(--sj-on-brass)] focus:border-[var(--sj-brass)]"
-                          />
+                          {isFileField ? (
+                            <input
+                              id={fieldId}
+                              type="file"
+                              accept={field.accept}
+                              required={field.required}
+                              aria-required={field.required}
+                              aria-describedby={hintId}
+                              onChange={(event) => updateMultipartFile(field.name, event.currentTarget.files?.[0] ?? null)}
+                              className="min-h-11 border border-[var(--sj-border)] bg-[var(--sj-paper)] px-3 py-2 text-base font-normal text-[var(--sj-ink)] outline-none file:mr-3 file:border-0 file:bg-[var(--sj-brass)] file:px-3 file:py-1.5 file:font-sj-ui file:text-sm file:font-bold file:text-[var(--sj-on-brass)] focus:border-[var(--sj-brass)]"
+                            />
+                          ) : (
+                            <input
+                              id={fieldId}
+                              type="text"
+                              value={multipartValues[field.name]!}
+                              required={field.required}
+                              aria-required={field.required}
+                              aria-describedby={hintId}
+                              onChange={(event) => updateMultipartValue(field.name, event.currentTarget.value)}
+                              className="min-h-11 border border-[var(--sj-border)] bg-[var(--sj-paper)] px-3 py-2 font-mono text-sm font-normal text-[var(--sj-ink)] outline-none focus:border-[var(--sj-brass)]"
+                            />
+                          )}
                           <span id={hintId} className="font-mono text-xs font-normal text-[var(--sj-ink-soft)]">
                             {field.required ? "multipart required" : "multipart optional"}
                             {field.description ? ` - ${field.description}` : ""}

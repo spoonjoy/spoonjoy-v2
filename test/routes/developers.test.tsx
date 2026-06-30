@@ -207,6 +207,8 @@ describe("/developers route", () => {
     expect(screen.getByText(/API v1 REST response shape/i)).toBeInTheDocument();
     expect(screen.getByText(/Protocol exceptions/i)).toBeInTheDocument();
     expect(screen.getByText(/Idempotent owner mutations/i)).toBeInTheDocument();
+    expect(screen.getByText(/account profile, profile photo, notification preferences/i)).toBeInTheDocument();
+    expect(screen.getByText(/cookbook writes/i)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Recipe spoon endpoints" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Manage owner recipe covers" })).toBeInTheDocument();
     expect(screen.getAllByText(/recipe-cover management/i).length).toBeGreaterThan(0);

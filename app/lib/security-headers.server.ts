@@ -115,11 +115,15 @@ export const SECURITY_HEADERS: Readonly<Record<string, string>> = {
  * Rebuilds the response so a streamed SSR body, a redirect (null body +
  * `Location`), or an immutable `Response.redirect` result all pick the headers
  * up uniformly. Existing headers are preserved; the security headers win on
- * any key collision.
+ * any key collision, except an explicit `Referrer-Policy: no-referrer`, which
+ * is stricter than the baseline for sensitive callback routes.
  */
 export function withSecurityHeaders(response: Response, nonce?: string): Response {
   const headers = new Headers(response.headers);
   for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
+    if (name === "Referrer-Policy" && headers.get(name)?.trim().toLowerCase() === "no-referrer") {
+      continue;
+    }
     headers.set(name, value);
   }
   headers.set(

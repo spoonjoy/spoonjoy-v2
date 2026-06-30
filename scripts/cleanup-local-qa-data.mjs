@@ -887,6 +887,9 @@ WHERE userId IN (SELECT id FROM disposable_users);
 DELETE FROM UserCredential
 WHERE userId IN (SELECT id FROM disposable_users);
 
+DELETE FROM NativePushDevice
+WHERE userId IN (SELECT id FROM disposable_users);
+
 DELETE FROM PushSubscription
 WHERE userId IN (SELECT id FROM disposable_users);
 

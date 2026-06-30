@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { API_V1_ERROR_STATUS, API_V1_RESOURCES, API_V1_SCOPE_REQUIREMENTS } from "~/lib/api-v1-contract.server";
 import { captureSafeClientEvent } from "~/lib/analytics";
-import { API_V1_PLAYGROUND_MANIFEST } from "~/lib/generated/api-v1-playground";
+import { API_V1_PLAYGROUND_MANIFEST, type ApiV1PlaygroundManifest } from "~/lib/generated/api-v1-playground";
 import { OG_IMAGE_HEIGHT, OG_IMAGE_WIDTH, PAGE_OG_CARDS, absoluteUrlFromPreferredBase, pageOgPath } from "~/lib/og-metadata";
 import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
@@ -54,6 +54,36 @@ const scopeLabels: Record<string, string> = {
   "tokens:write": "Bearer credential create and revoke",
 };
 
+type DeveloperResource = {
+  name: string;
+  path: string;
+  methods: readonly string[];
+  auth: string;
+  scopes: readonly string[];
+};
+
+type DeveloperScopeRequirement = {
+  path: string;
+  method: string;
+  auth: string;
+  scopes: readonly string[];
+};
+
+type DevelopersLoaderData = {
+  resources: readonly DeveloperResource[];
+  scopeRequirements: readonly DeveloperScopeRequirement[];
+  errorStatus: Record<string, number>;
+  openapiUrl: string;
+  sdkOpenapiUrl: string;
+  connectorOpenapiUrl: string;
+  scopes: readonly string[];
+  authFlows: ApiV1PlaygroundManifest["authFlows"];
+  oauthScopeMap: Record<string, readonly string[]>;
+  currentCapabilities: ApiV1PlaygroundManifest["currentCapabilities"];
+  canonicalUrl: string;
+  ogImageUrl: string;
+};
+
 const authModels = [
   {
     title: "Spoonjoy session",
@@ -84,7 +114,7 @@ const authModels = [
 
 const clientProfiles = [
   { title: "Tiny-device clients", href: "#scenario-quickstarts", body: "Use sync cursors, small payloads, and idempotent retries when a device is offline or battery constrained." },
-  { title: "Mobile apps", href: "#oauth-and-delegated-flows", body: "Read public recipes without auth, then request shopping-list scopes or kitchen:write for recipe spoon and recipe-cover management after a chef connects their account." },
+  { title: "Mobile apps", href: "#oauth-and-delegated-flows", body: "Read public recipes without auth, then request shopping-list scopes or kitchen:write for native recipe create, edit, delete, fork, step editing, import, spoon, and cover management after a chef connects their account." },
   { title: "CLI/script clients", href: "#terminal-quickstart", body: "Use bearer credentials, curl, and OpenAPI JSON only when the script cannot share a Spoonjoy session." },
   { title: "Browser clients", href: "#auth-implementation", body: "Use same-origin Session only inside spoonjoy.app. Extensions and third-party browser apps use OAuth/PKCE." },
   { title: "Agent clients", href: "#oauth-and-delegated-flows", body: "Use MCP or delegated connection endpoints when a chef needs to approve an assistant-style runtime." },
@@ -190,7 +220,7 @@ const externalGuideSteps = [
   {
     title: "Manage native account settings",
     scope: "Requires account:* and tokens:*",
-    body: "Native clients can read and update the signed-in chef's profile, profile photo, notification preferences, token metadata, and OAuth app connections through API v1. Profile and notification settings use explicit account scopes; token and OAuth connection administration uses tokens scopes and returns generation-aware opaque connection ids for disconnects.",
+    body: "Native clients can read and update the signed-in chef's profile, profile photo, notification preferences, APNs device registrations, token metadata, and OAuth app connections through API v1. Profile, notification, and APNs settings use explicit account scopes; token and OAuth connection administration uses tokens scopes and returns generation-aware opaque connection ids for disconnects.",
     sample: [
       "GET /api/v1/me",
       "PATCH /api/v1/me",
@@ -198,6 +228,8 @@ const externalGuideSteps = [
       "DELETE /api/v1/me/photo",
       "GET /api/v1/me/notification-preferences",
       "PATCH /api/v1/me/notification-preferences",
+      "POST /api/v1/me/apns-devices",
+      "DELETE /api/v1/me/apns-devices/{deviceId}",
       "GET /api/v1/me/connections",
       "DELETE /api/v1/me/connections/{connectionId}",
     ].join("\n"),
@@ -267,14 +299,42 @@ const authImplementationSteps = [
 const guideSteps = [
   "Read public recipes and cookbooks anonymously before adding auth.",
   "Use Session for logged-in playground calls; use bearer or OAuth only when a client runs outside that session.",
-  "Use a stable mutation id for recipe import and shopping-list writes, then retry with the same value when a network call is interrupted.",
+  "Use a stable mutation id for recipe create, update, delete, fork, step editing, import, and shopping-list writes, then retry with the same value when a network call is interrupted.",
   "Use the sync cursor to fetch shopping-list changes, including removed items.",
+] as const;
+
+const nativeDogfoodChecklist = [
+  "Use https://spoonjoy.app/oauth/callback as the production OAuth redirect and enable applinks:spoonjoy.app on the Apple targets.",
+  "Use ASWebAuthenticationSession.Callback.https(host: \"spoonjoy.app\", path: \"/oauth/callback\"); the custom URL scheme is for app navigation only, not OAuth.",
+  "Register once per app/environment, then persist client_id in Keychain and persist access_token and refresh_token in Keychain.",
+  "clear state and code_verifier after a successful token exchange, replace the stored refresh token atomically, and run single-flight refresh when concurrent requests hit 401.",
+  "decode Spoonjoy REST envelopes for /api/v1 resources: ok, requestId, data on success and ok, requestId, error on failure.",
+] as const;
+
+const nativeDogfoodSample = [
+  "POST /oauth/register",
+  "{ \"client_name\": \"Spoonjoy Apple\", \"redirect_uris\": [\"https://spoonjoy.app/oauth/callback\"], \"token_endpoint_auth_method\": \"none\" }",
+  "",
+  "GET /oauth/authorize?client_id=cm_client_id_from_register&redirect_uri=https%3A%2F%2Fspoonjoy.app%2Foauth%2Fcallback&response_type=code&scope=account%3Aread+account%3Awrite+kitchen%3Aread+kitchen%3Awrite+shopping_list%3Aread+shopping_list%3Awrite&state=...&code_challenge=...&code_challenge_method=S256",
+  "",
+  "ASWebAuthenticationSession.Callback.https(host: \"spoonjoy.app\", path: \"/oauth/callback\")",
+  "Associated Domains: applinks:spoonjoy.app",
+  "custom URL scheme is for app navigation only, not OAuth",
+].join("\n");
+
+const offlineProductContractRows = [
+  ["Metadata", "Every cached record carries accountId, environment, schemaVersion, fetchedAt, lastValidatedAt, sourceEndpoint, and a server revision marker such as cursor, etag, updatedAt, or a tombstone token."],
+  ["Freshness", "Account/settings/shopping bootstrap data is fresh for 15 minutes; detail/profile/spoon/cook-mode backing data is fresh for 6 hours; catalog/search result pages are fresh for 24 hours."],
+  ["Queueable account writes", "Profile display-field updates, profile photo upload/remove after local media staging, notification preference updates, and APNs device registration/revocation after a system device token exists are queueable."],
+  ["Online-only account actions", "API token create/revoke, OAuth connection disconnect, logout/session revoke, passkey/password/provider-link actions are online-only."],
+  ["Visible severe states", "queued work, sync failure, conflict, blocker, and destructive confirmation states remain visible until resolved."],
 ] as const;
 
 const guideSections = [
   "Terminal Quickstart",
   "Current API Boundary",
   "External Client Guide",
+  "Spoonjoy Apple native dogfood quickstart",
   "Client Starting Points",
   "Token Acquisition",
   "Auth Implementation",
@@ -282,6 +342,7 @@ const guideSections = [
   "OAuth And Delegated Flows",
   "OAuth Scope Mapping",
   "Scenario Quickstarts",
+  "Offline Product Contract",
   "Reference",
   "Scopes",
   "Auth",
@@ -296,7 +357,7 @@ const syncSafetyRows = [
   ["Cursor", "Use the returned nextCursor as the next request cursor after applying every item in the page durably. Treat it as opaque; ISO timestamps are accepted only as a bootstrap convenience."],
   ["Tombstones", "Sync includes deleted rows with deletedAt so offline clients can remove local items."],
   ["Pagination", "Use limit from 1 to 50 for small payloads. hasMore: true means continue with the returned nextCursor; webhooks, REST Hooks, SSE, and event subscriptions are not available yet."],
-  ["Idempotent owner mutations", "clientMutationId is scoped to the chef, retained for 24 hours, and bound to method, path, and body hash for recipe import, shopping-list writes, recipe spoon writes, and recipe-cover writes. Persist and retry the exact serialized body for that mutation id."],
+  ["Idempotent owner mutations", "clientMutationId is scoped to the chef, retained for 24 hours, and bound to method, path, and body hash for account profile, profile photo, notification preferences, APNs device registration/revocation, recipe create, update, delete, fork, step editing, import, cookbook writes, shopping-list writes, recipe spoon writes, and recipe-cover writes. Persist and retry the exact request values for that mutation id."],
   ["Replay", "Retry the same request with the same clientMutationId after a timeout; Spoonjoy returns the recorded response with mutation.replayed: true."],
   ["Conflict", "Reusing the same clientMutationId for a different method, path, or body returns 409 idempotency_conflict."],
   ["Retries", "Retry network timeouts, 429, and 5xx responses with the same mutation id. Refresh or reconnect on 401. Do not retry validation, scope, or idempotency conflicts unchanged."],
@@ -307,7 +368,7 @@ const scenarioQuickstarts = [
     title: "Native mobile OAuth",
     mode: "iOS + Android",
     body: "Register once per app install or environment, persist client_id, and do not register on every launch. Use HTTPS universal links or Android App Links for production callbacks, with localhost or 127.0.0.1 loopback only for development. Store tokens in Keychain or Android Keystore-backed storage. Refresh tokens rotate, so replace the stored refresh token atomically and use single-flight refresh when concurrent requests hit 401.",
-    sample: "POST /oauth/register\n{ \"client_name\": \"Grocery helper\", \"redirect_uris\": [\"https://example.com/spoonjoy/oauth/callback\"], \"token_endpoint_auth_method\": \"none\" }\n\nGET /oauth/authorize?...&state=client_state&code_challenge=pkce_s256&scope=shopping_list:read+shopping_list:write\n\nPOST /oauth/token\ngrant_type=authorization_code&client_id=cm_client_id_from_register&redirect_uri=https%3A%2F%2Fexample.com%2Fspoonjoy%2Foauth%2Fcallback&code=oac_...&code_verifier=pkce_verifier_...\n\nPOST /oauth/token\ngrant_type=refresh_token&client_id=cm_client_id_from_register&refresh_token=ort_...\n\nGET /api/v1/shopping-list/sync?limit=50",
+    sample: "POST /oauth/register\n{ \"client_name\": \"Spoonjoy Apple\", \"redirect_uris\": [\"https://spoonjoy.app/oauth/callback\"], \"token_endpoint_auth_method\": \"none\" }\n\nGET /oauth/authorize?...&state=client_state&code_challenge=pkce_s256&scope=shopping_list:read+shopping_list:write\n\nPOST /oauth/token\ngrant_type=authorization_code&client_id=cm_client_id_from_register&redirect_uri=https%3A%2F%2Fspoonjoy.app%2Foauth%2Fcallback&code=oac_...&code_verifier=pkce_verifier_...\n\nPOST /oauth/token\ngrant_type=refresh_token&client_id=cm_client_id_from_register&refresh_token=ort_...\n\nGET /api/v1/shopping-list/sync?limit=50",
   },
   {
     title: "Browser extension OAuth",
@@ -342,8 +403,8 @@ const scenarioQuickstarts = [
   {
     title: "Recipe blog embeds",
     mode: "REST-powered embeds only",
-    body: "Fetch public JSON and render your own HTML with textContent, not innerHTML. Spoonjoy pages are not iframe embeds. Recipe steps are returned in ascending stepNum order, step duration is minutes when present, and ingredients are step-attached in API order. Validate sourceUrl as http/https before linking, write your own image alt text, and avoid copying photos where removals cannot be honored.",
-    sample: "GET /api/v1/recipes/{id}\nIf 404 not_found, hide or replace the embed before rendering stale content.\nRender servings, step ingredients, ordered steps, and attribution.creditText as a link to attribution.canonicalUrl.\nIf attribution.sourceRecipe.deleted is true, credit it as unavailable instead of linking it.",
+    body: "Fetch public JSON and render your own HTML with textContent, not innerHTML. Spoonjoy pages are not iframe embeds. Recipe steps are returned in ascending stepNum order, step duration is minutes when present, ingredients are step-attached in API order, and usingSteps lists prior step outputs used by a step. Validate sourceUrl as http/https before linking, write your own image alt text, and avoid copying photos where removals cannot be honored.",
+    sample: "GET /api/v1/recipes/{id}\nIf 404 not_found, hide or replace the embed before rendering stale content.\nRender servings, step ingredients, ordered steps, step output dependencies, and attribution.creditText as a link to attribution.canonicalUrl.\nIf attribution.sourceRecipe.deleted is true, credit it as unavailable instead of linking it.",
   },
 ] as const;
 
@@ -373,7 +434,7 @@ export function meta({ data }: { data?: { canonicalUrl?: string; ogImageUrl?: st
   ];
 }
 
-export function loader(args?: { request?: Request; context?: { cloudflare?: { env?: Pick<Env, "SPOONJOY_BASE_URL"> | null } } }) {
+export function loader(args?: { request?: Request; context?: { cloudflare?: { env?: Pick<Env, "SPOONJOY_BASE_URL"> | null } } }): DevelopersLoaderData {
   const requestUrl = args?.request?.url;
   const baseUrl = args?.context?.cloudflare?.env?.SPOONJOY_BASE_URL;
 
@@ -419,7 +480,7 @@ function scopeTone(scope: string) {
 }
 
 export default function Developers() {
-  const { resources, scopeRequirements, errorStatus, openapiUrl, sdkOpenapiUrl, connectorOpenapiUrl, scopes, authFlows, oauthScopeMap, currentCapabilities } = useLoaderData<typeof loader>();
+  const { resources, scopeRequirements, errorStatus, openapiUrl, sdkOpenapiUrl, connectorOpenapiUrl, scopes, authFlows, oauthScopeMap, currentCapabilities } = useLoaderData<DevelopersLoaderData>();
   const posthog = usePostHog();
   const docsViewTelemetrySent = useRef(false);
 
@@ -519,7 +580,7 @@ export default function Developers() {
               {currentCapabilities.notYetAvailable.map((item) => <li key={item}>- {item}</li>)}
             </ul>
             <Text className="mt-3">
-              Corporate tenant/admin APIs, inventory, meal plans, full exports, canonical unit conversion, webhooks, REST Hooks, batch mutations, and general recipe create/edit/delete/export endpoints are future API surface, not hidden current endpoints.
+              Corporate tenant/admin APIs, inventory, meal plans, full exports, canonical unit conversion, webhooks, REST Hooks, batch mutations, and recipe export endpoints are future API surface, not hidden current endpoints.
             </Text>
             <Text className="mt-3">
               Delegated approval helper endpoints under /api/tools/* are part of the current public connection flow. Other legacy app-only /api/* routes are not the external contract.
@@ -575,6 +636,25 @@ export default function Developers() {
               </article>
             ))}
           </div>
+        </div>
+      </SectionShell>
+
+      <SectionShell title="Spoonjoy Apple native dogfood quickstart">
+        <div className="grid gap-6 lg:grid-cols-[minmax(14rem,20rem)_minmax(0,1fr)]">
+          <div>
+            <p className="font-sj-ui text-xs font-bold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">
+              Native Apple
+            </p>
+            <Text className="mt-3">
+              Spoonjoy Apple dogfoods the public REST and OAuth contracts with a real HTTPS universal-link redirect, Keychain-backed token storage, and the same offline sync rules as in-app UI, Siri, and Shortcuts.
+            </Text>
+            <ul className="mt-4 grid gap-2 text-sm/6 text-[var(--sj-ink-soft)]">
+              {nativeDogfoodChecklist.map((item) => <li key={item}>- {item}</li>)}
+            </ul>
+          </div>
+          <pre className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
+            {nativeDogfoodSample}
+          </pre>
         </div>
       </SectionShell>
 
@@ -696,6 +776,9 @@ export default function Developers() {
         <Text className="mt-4">
           OAuth clients may request the delegated scopes above directly. Token-management scopes remain personal-token or Session-only and are not granted by OAuth.
         </Text>
+        <Text className="mt-3">
+          Blank OAuth authorize scope defaults to kitchen:read. Omitted delegated approval scopes default to shopping_list:read shopping_list:write. Omit resource for REST OAuth apps. Use resource=https://spoonjoy.app/mcp only for MCP OAuth; resource-bound MCP tokens are rejected by REST API v1. OAuth kitchen scopes do not grant tokens:read or tokens:write.
+        </Text>
       </SectionShell>
 
       <SectionShell title="Scenario Quickstarts">
@@ -718,6 +801,20 @@ export default function Developers() {
                 </pre>
               </div>
             </article>
+          ))}
+        </div>
+      </SectionShell>
+
+      <SectionShell title="Offline Product Contract">
+        <Text className="mb-5">
+          Native clients treat offline as product behavior. They restore cached reads only inside the account/environment/schema boundary, preserve freshness metadata, apply tombstones before advancing cursors, and queue only safe product mutations.
+        </Text>
+        <div className="grid gap-3">
+          {offlineProductContractRows.map(([label, body]) => (
+            <div key={label} className="border-b border-[var(--sj-border)] pb-3">
+              <p className="font-sj-ui text-sm/5 font-bold text-[var(--sj-ink)]">{label}</p>
+              <p className="mt-1 text-sm/6 text-[var(--sj-ink-soft)]">{body}</p>
+            </div>
           ))}
         </div>
       </SectionShell>
@@ -747,7 +844,7 @@ export default function Developers() {
                     <span key={method} className="inline-flex items-center gap-2">
                       <MethodBadge method={method} />
                       {requirement?.scopes.length ? (
-                        requirement.scopes.map((scope) => (
+                        requirement.scopes.map((scope: string) => (
                           <Badge key={scope} color={scopeTone(scope) as "amber" | "green" | "red" | "zinc"}>
                             {scope}
                           </Badge>
@@ -769,7 +866,7 @@ export default function Developers() {
 
       <SectionShell title="Scopes">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {scopes.map((scope) => (
+          {scopes.map((scope: string) => (
             <div key={scope} className="border border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_70%,transparent)] p-4">
               <p className="font-sj-ui text-sm/5 font-bold text-[var(--sj-ink)]">
                 {scope}

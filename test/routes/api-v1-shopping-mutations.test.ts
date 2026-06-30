@@ -50,7 +50,7 @@ function expectEnvelopeHeaders(response: Response, requestId: string) {
   expect(response.headers.get("X-Request-Id")).toBe(requestId);
   expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
   expect(response.headers.get("Access-Control-Allow-Headers")).toBe("Authorization, Content-Type, X-Request-Id, X-Client-Mutation-Id");
-  expect(response.headers.get("Access-Control-Allow-Methods")).toBe("GET, POST, PATCH, DELETE, OPTIONS");
+  expect(response.headers.get("Access-Control-Allow-Methods")).toBe("GET, POST, PATCH, PUT, DELETE, OPTIONS");
   expect(response.headers.get("Access-Control-Expose-Headers")).toBe("X-Request-Id, Retry-After");
 }
 
@@ -258,6 +258,73 @@ describe("API v1 shopping-list mutations", () => {
       }),
     }) as unknown as Request, "shopping-list/items"));
     expect(sessionAdd.status).toBe(201);
+  });
+
+  it("accepts DELETE clientMutationId from the JSON body, query string, or header", async () => {
+    const fixture = await createShoppingMutationFixture(db);
+    const bodyItem = await createExistingItem(db, fixture.user.id, `Body delete eggs ${faker.string.alphanumeric(6)}`);
+    const queryItem = await createExistingItem(db, fixture.user.id, `Query delete milk ${faker.string.alphanumeric(6)}`);
+    const headerItem = await createExistingItem(db, fixture.user.id, `Header delete bread ${faker.string.alphanumeric(6)}`);
+
+    const bodyDelete = await action(routeArgs(
+      mutationRequest("DELETE", `shopping-list/items/${bodyItem.id}`, fixture.credential.token, "req_delete_body_id", {
+        clientMutationId: "delete-body-id",
+      }),
+      `shopping-list/items/${bodyItem.id}`,
+    ));
+    const bodyDeletePayload = await readJson(bodyDelete);
+
+    expect(bodyDelete.status).toBe(200);
+    expectEnvelopeHeaders(bodyDelete, "req_delete_body_id");
+    expectSuccessEnvelope(bodyDeletePayload, "req_delete_body_id");
+    expect(bodyDeletePayload.data).toMatchObject({
+      removed: true,
+      item: { id: bodyItem.id, deletedAt: expect.any(String) },
+    });
+    expectMutationShape(bodyDeletePayload.data.mutation, "delete-body-id", false);
+
+    const queryDelete = await action(routeArgs(new UndiciRequest(
+      `http://localhost/api/v1/shopping-list/items/${queryItem.id}?clientMutationId=delete-query-id`,
+      {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${fixture.credential.token}`,
+          "X-Request-Id": "req_delete_query_id",
+        },
+      },
+    ) as unknown as Request, `shopping-list/items/${queryItem.id}`));
+    const queryDeletePayload = await readJson(queryDelete);
+
+    expect(queryDelete.status).toBe(200);
+    expectEnvelopeHeaders(queryDelete, "req_delete_query_id");
+    expectSuccessEnvelope(queryDeletePayload, "req_delete_query_id");
+    expect(queryDeletePayload.data).toMatchObject({
+      removed: true,
+      item: { id: queryItem.id, deletedAt: expect.any(String) },
+    });
+    expectMutationShape(queryDeletePayload.data.mutation, "delete-query-id", false);
+
+    const headerDelete = await action(routeArgs(new UndiciRequest(
+      `http://localhost/api/v1/shopping-list/items/${headerItem.id}`,
+      {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${fixture.credential.token}`,
+          "X-Request-Id": "req_delete_header_id",
+          "X-Client-Mutation-Id": "delete-header-id",
+        },
+      },
+    ) as unknown as Request, `shopping-list/items/${headerItem.id}`));
+    const headerDeletePayload = await readJson(headerDelete);
+
+    expect(headerDelete.status).toBe(200);
+    expectEnvelopeHeaders(headerDelete, "req_delete_header_id");
+    expectSuccessEnvelope(headerDeletePayload, "req_delete_header_id");
+    expect(headerDeletePayload.data).toMatchObject({
+      removed: true,
+      item: { id: headerItem.id, deletedAt: expect.any(String) },
+    });
+    expectMutationShape(headerDeletePayload.data.mutation, "delete-header-id", false);
   });
 
   it("restores matching items, rejects unknown fields, and requires clientMutationId", async () => {

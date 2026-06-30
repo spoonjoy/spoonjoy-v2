@@ -118,6 +118,15 @@ describe("/developers/playground", () => {
       "DELETE /api/v1/cookbooks/{id}/recipes/{recipeId}",
     ]));
     expect(data.manifest.operations.map((operation) => operation.id)).toEqual(expect.arrayContaining([
+      "POST /api/v1/recipes/{id}/steps",
+      "PATCH /api/v1/recipes/{id}/steps/{stepId}",
+      "DELETE /api/v1/recipes/{id}/steps/{stepId}",
+      "POST /api/v1/recipes/{id}/steps/reorder",
+      "POST /api/v1/recipes/{id}/steps/{stepId}/ingredients",
+      "DELETE /api/v1/recipes/{id}/steps/{stepId}/ingredients/{ingredientId}",
+      "PUT /api/v1/recipes/{id}/step-output-uses",
+    ]));
+    expect(data.manifest.operations.map((operation) => operation.id)).toEqual(expect.arrayContaining([
       "POST /oauth/register",
       "GET /oauth/authorize",
       "POST /oauth/token",
@@ -142,6 +151,7 @@ describe("/developers/playground", () => {
     expect(data.canonicalUrl).toBe("https://spoonjoy.app/api/playground");
     expect(data.ogImageUrl).toBe("https://spoonjoy.app/og/pages/api-playground.png");
     expect(data.manifest.clientScenarios.map((scenario) => scenario.id)).toEqual([
+      "spoonjoy-apple-native-dogfood",
       "cloudflare-worker-sync",
       "browser-extension-shopping-sync",
       "no-code-connector",
@@ -156,13 +166,17 @@ describe("/developers/playground", () => {
     expect(data.manifest.operations.find((operation) => operation.id === "GET /api/v1/recipes/{id}/spoons")?.profiles).toEqual(["full", "sdk"]);
     expect(data.manifest.operations.find((operation) => operation.id === "POST /api/v1/recipes/{id}/spoons")?.profiles).toEqual(["full", "sdk"]);
     expect(data.manifest.operations.find((operation) => operation.id === "GET /api/v1/recipes/{id}/covers")?.profiles).toEqual(["full", "sdk"]);
+    expect(data.manifest.operations.find((operation) => operation.id === "PUT /api/v1/recipes/{id}/step-output-uses")?.risk).toBe("mutating");
     expect(data.manifest.operations.find((operation) => operation.id === "POST /oauth/token")?.profiles).toEqual(["full", "sdk"]);
     expect(data.manifest.operations.find((operation) => operation.id === "POST /mcp")?.profiles).toEqual(["full"]);
     expect(data.manifest.operations.find((operation) => operation.id === "POST /api/v1/me/photo")?.requestBody).toMatchObject({
       contentType: "multipart/form-data",
-      fields: [{ name: "photo", required: true, accept: "image/jpeg,image/png,image/gif,image/webp" }],
+      fields: [
+        { name: "clientMutationId", required: true, accept: "" },
+        { name: "photo", required: true, accept: "image/jpeg,image/png,image/gif,image/webp" },
+      ],
     });
-    expect(data.manifest.operations.length).toBe(52);
+    expect(data.manifest.operations.length).toBe(65);
   });
 
   it("uses the configured public origin for playground OG URLs", async () => {
@@ -180,6 +194,7 @@ describe("/developers/playground", () => {
       "Discovery",
       "Search",
       "Recipes",
+      "Recipe Steps",
       "Recipe Spoons",
       "Recipe Covers",
       "Cookbooks",
@@ -364,7 +379,7 @@ describe("/developers/playground", () => {
     expect(playgroundBodyError(createToken, "{\"name\":\"Client\"}")).toBeNull();
 
     const file = new File(["GIF89a"], "profile.gif", { type: "image/gif" });
-    const multipartOptions = playgroundFetchOptions(uploadPhoto, "session", "", "", "pg_upload", {}, { photo: file });
+    const multipartOptions = playgroundFetchOptions(uploadPhoto, "session", "", "", "pg_upload", {}, { photo: file }, { clientMutationId: "profile-photo:test" });
     expect(multipartOptions).toMatchObject({
       method: "POST",
       credentials: "same-origin",
@@ -372,7 +387,10 @@ describe("/developers/playground", () => {
     });
     expect((multipartOptions.headers as Record<string, string>)["Content-Type"]).toBeUndefined();
     expect(multipartOptions.body).toBeInstanceOf(FormData);
-    expect([...(multipartOptions.body as FormData).entries()]).toEqual([["photo", file]]);
+    expect([...(multipartOptions.body as FormData).entries()]).toEqual([
+      ["clientMutationId", "profile-photo:test"],
+      ["photo", file],
+    ]);
     const emptyMultipartOptions = playgroundFetchOptions(uploadPhoto, "session", "", "", "pg_empty", {}, { photo: null });
     expect(emptyMultipartOptions.body).toBeUndefined();
     expect((emptyMultipartOptions.headers as Record<string, string>)["Content-Type"]).toBeUndefined();
@@ -381,8 +399,8 @@ describe("/developers/playground", () => {
       requestBody: { ...uploadPhoto.requestBody!, fields: undefined },
     } as unknown as typeof uploadPhoto;
     expect(playgroundFetchOptions(legacyMultipartWithoutFields, "session", "", "", "pg_legacy").body).toBeUndefined();
-    expect(playgroundBodyError(uploadPhoto, "", {})).toBe("Select photo before sending.");
-    expect(playgroundBodyError(uploadPhoto, "", { photo: file })).toBeNull();
+    expect(playgroundBodyError(uploadPhoto, "", {})).toBe("Select client mutation id before sending.");
+    expect(playgroundBodyError(uploadPhoto, "", { photo: file }, { clientMutationId: "profile-photo:test" })).toBeNull();
   });
 
   it("renders all operations and sends the default public recipes request anonymously", async () => {
@@ -718,22 +736,30 @@ describe("/developers/playground", () => {
     await renderPlayground();
     fireEvent.click(await screen.findByRole("button", { name: /Upload the authenticated account profile photo/i }));
     expect(screen.getAllByText("account:write").length).toBeGreaterThan(0);
-    expect(screen.getByLabelText("Multipart body")).toHaveTextContent("\"photo\": \"(binary image file)\"");
+	    expect(screen.getByLabelText("Multipart body")).toHaveTextContent("\"clientMutationId\": \"device-uuid-profile-photo\"");
+	    expect(screen.getByLabelText("Multipart body")).toHaveTextContent("\"photo\": \"(binary image file)\"");
 
-    const photoInput = screen.getByLabelText(/Photo/) as HTMLInputElement;
-    expect(photoInput).toHaveAttribute("type", "file");
+	    const mutationIdInput = screen.getByLabelText(/Client Mutation Id/) as HTMLInputElement;
+	    expect(mutationIdInput).toHaveAttribute("type", "text");
+	    expect(mutationIdInput).toHaveValue("device-uuid-profile-photo");
+	    expect(mutationIdInput).toBeRequired();
+	    const photoInput = screen.getByLabelText(/Photo/) as HTMLInputElement;
+	    expect(photoInput).toHaveAttribute("type", "file");
     expect(photoInput).toHaveAttribute("accept", "image/jpeg,image/png,image/gif,image/webp");
     expect(photoInput).toBeRequired();
     expect(photoInput).toHaveAccessibleDescription("multipart required - (binary image file)");
-    expect(screen.getAllByText("Select photo before sending.").length).toBeGreaterThan(0);
+	    expect(screen.getAllByText("Select photo before sending.").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Send Request" })).toBeDisabled();
+    fireEvent.change(photoInput, { target: { files: [] } });
     expect(screen.getByRole("button", { name: "Send Request" })).toBeDisabled();
 
     const riskCheckbox = screen.getByLabelText(/I understand this request can change real Spoonjoy data/i);
     fireEvent.click(riskCheckbox);
     expect(riskCheckbox).toBeChecked();
 
-    const file = new File(["profile-bytes"], "profile.png", { type: "image/png" });
-    fireEvent.change(photoInput, { target: { files: [file] } });
+	    const file = new File(["profile-bytes"], "profile.png", { type: "image/png" });
+	    fireEvent.change(mutationIdInput, { target: { value: "profile-photo:playground" } });
+	    fireEvent.change(photoInput, { target: { files: [file] } });
     await waitFor(() => expect(screen.getByLabelText(/I understand this request can change real Spoonjoy data/i)).not.toBeChecked());
     expect(screen.getByText("Confirm this real-data operation before sending.")).toBeInTheDocument();
     fireEvent.click(screen.getByLabelText(/I understand this request can change real Spoonjoy data/i));
@@ -750,7 +776,10 @@ describe("/developers/playground", () => {
     });
     const options = fetchMock.mock.calls[0][1] as RequestInit;
     expect((options.headers as Record<string, string>)["Content-Type"]).toBeUndefined();
-    expect([...(options.body as FormData).entries()]).toEqual([["photo", file]]);
+	    expect([...(options.body as FormData).entries()]).toEqual([
+	      ["clientMutationId", "profile-photo:playground"],
+	      ["photo", file],
+	    ]);
     expect(await screen.findByText("200 OK")).toBeInTheDocument();
   });
 
@@ -768,6 +797,7 @@ describe("/developers/playground", () => {
         requestBody: {
           ...uploadPhoto.requestBody!,
           required: false,
+          example: "{}",
           fields: [{
             name: "photo",
             label: "Photo",
@@ -791,9 +821,66 @@ describe("/developers/playground", () => {
     expect(optionalInput).not.toBeRequired();
     expect(optionalInput).toHaveAttribute("aria-required", "false");
     expect(optionalInput).toHaveAccessibleDescription("multipart optional");
+    expect(optionalInput).toHaveValue("");
 
-    fireEvent.change(optionalInput, { target: { files: null } });
+    fireEvent.change(optionalInput, { target: { value: "optional text value" } });
+    expect(optionalInput).toHaveValue("optional text value");
     expect(screen.queryByText("Select photo before sending.")).not.toBeInTheDocument();
+  });
+
+  it("sends text-only multipart operations and reports body-present telemetry", async () => {
+    const uploadPhoto = API_V1_PLAYGROUND_MANIFEST.operations.find((operation) => operation.id === "POST /api/v1/me/photo")!;
+    const textOnlyMultipartManifest = {
+      ...API_V1_PLAYGROUND_MANIFEST,
+      operations: [{
+        ...uploadPhoto,
+        id: "POST /api/v1/me/photo-text-only",
+        operationId: "postApiV1MePhotoTextOnly",
+        label: "Submit a text-only multipart body",
+        path: "/api/v1/me/photo-text-only",
+        auth: "optional",
+        credentialModes: ["anonymous"],
+        risk: "safe",
+        requestBody: {
+          ...uploadPhoto.requestBody!,
+          fields: [{
+            name: "clientMutationId",
+            label: "Client Mutation Id",
+            required: true,
+            accept: "",
+            description: "text-only-mutation",
+          }],
+          example: "{\"clientMutationId\":\"text-only-mutation\"}",
+        },
+      }],
+    };
+    const fetchMock = vi.fn(async () => mockApiResponse({ ok: true }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await renderPlayground({
+      manifest: textOnlyMultipartManifest,
+      canonicalUrl: "https://spoonjoy.app/api/playground",
+      ogImageUrl: "https://spoonjoy.app/og/pages/api-playground.png",
+      viewer: { isAuthenticated: false },
+    } as PlaygroundLoaderData);
+
+    expect(await screen.findByLabelText(/Client Mutation Id/)).toHaveValue("text-only-mutation");
+    posthogCapture.mockClear();
+    fireEvent.submit(screen.getByRole("button", { name: "Send Request" }).closest("form")!);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const options = fetchMock.mock.calls[0][1] as RequestInit;
+    expect([...(options.body as FormData).entries()]).toEqual([
+      ["clientMutationId", "text-only-mutation"],
+    ]);
+    expect(posthogCapture).toHaveBeenCalledWith(
+      "spoonjoy.developer.playground.request_submitted",
+      expect.objectContaining({
+        operation_id: "POST /api/v1/me/photo-text-only",
+        request_body_present: true,
+        validation_error_count: 0,
+      }),
+    );
   });
 
   it("blocks blank bearer mode before sending private requests", async () => {
@@ -894,8 +981,13 @@ describe("/developers/playground", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Remove a shopping-list item/i }));
     fireEvent.change(document.querySelector<HTMLInputElement>("#param-path-itemId")!, { target: { value: "item_1" } });
-    fireEvent.click(screen.getByRole("button", { name: "Fresh mutation id" }));
-    expect(document.querySelector<HTMLInputElement>("#param-header-X-Client-Mutation-Id")!.value).toMatch(/^deleteApiV1ShoppingListItem:/);
+    const deleteBody = screen.getByLabelText("JSON body");
+    expect((deleteBody as HTMLTextAreaElement).value).toContain("\"clientMutationId\": \"device-uuid-3\"");
+    const headerMutationId = document.querySelector<HTMLInputElement>("#param-header-X-Client-Mutation-Id");
+    expect(headerMutationId).toBeInTheDocument();
+    expect(document.querySelector<HTMLInputElement>("#param-query-clientMutationId")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "Fresh mutation id" })[0]);
+    expect(headerMutationId?.value).toMatch(/^deleteApiV1ShoppingListItem:/);
 
     fireEvent.click(screen.getByRole("button", { name: /Revoke a bearer credential/i }));
     expect(screen.getByText(/A bearer credential may revoke its own credential id/i)).toBeInTheDocument();
@@ -909,7 +1001,7 @@ describe("/developers/playground", () => {
     expect(screen.getByLabelText("Response body")).toHaveTextContent("sj_...redacted");
     fireEvent.click(screen.getByRole("button", { name: "Clear response" }));
     expect(screen.getByLabelText("Response body")).toHaveTextContent("No response yet.");
-  });
+  }, 10000);
 
   it("renders portable curl for bearer mode and body requests", () => {
     const root = PLAYGROUND_OPERATIONS.find((operation) => operation.id === "GET /api/v1")!;
@@ -934,9 +1026,30 @@ describe("/developers/playground", () => {
     expect(curlFor("/api/v1/tokens", createToken, "bearer", "{\"name\":\"Client\"}")).toContain(
       "--data '{\"name\":\"Client\"}'",
     );
+    expect(curlFor("/api/v1/me/photo", uploadPhoto, "bearer", "")).toContain("-F 'clientMutationId=device-uuid-profile-photo'");
+    expect((curlFor as (...args: unknown[]) => string)(
+      "/api/v1/me/photo",
+      uploadPhoto,
+      "bearer",
+      "",
+      "https://spoonjoy.app",
+      {},
+      { clientMutationId: "profile-photo:edited" },
+    )).toContain("-F 'clientMutationId=profile-photo:edited'");
     expect(curlFor("/api/v1/me/photo", uploadPhoto, "bearer", "")).toContain("-F 'photo=@profile.jpg;type=image/jpeg'");
     expect(curlFor("/api/v1/me/photo", uploadPhoto, "bearer", "")).not.toContain("Content-Type");
     expect(curlFor("/api/v1/me/photo", uploadPhoto, "session", "")).toContain("const body = new FormData();");
+    expect(curlFor("/api/v1/me/photo", uploadPhoto, "session", "")).toContain("body.append(\"clientMutationId\", \"device-uuid-profile-photo\");");
+    expect((curlFor as (...args: unknown[]) => string)(
+      "/api/v1/me/photo",
+      uploadPhoto,
+      "session",
+      "",
+      "https://spoonjoy.app",
+      {},
+      { clientMutationId: "profile-photo:edited" },
+    )).toContain("body.append(\"clientMutationId\", \"profile-photo:edited\");");
+    expect(curlFor("/api/v1/me/photo", uploadPhoto, "session", "")).toContain("body.append(\"photo\", fileInput.files[0]);");
     expect(curlFor("/api/v1/me/photo", uploadPhoto, "session", "", "https://spoonjoy.app", { "X-Request-Id": "req_photo" }))
       .toContain("\"X-Request-Id\": \"req_photo\"");
     const multipartWithoutFields = {
@@ -945,6 +1058,45 @@ describe("/developers/playground", () => {
     };
     expect(curlFor("/api/v1/me/photo", multipartWithoutFields, "session", "")).toContain("body.append(\"file\", fileInput.files[0]);");
     expect(curlFor("/api/v1/me/photo", multipartWithoutFields, "bearer", "")).toContain("-F 'file=@profile.jpg;type=application/octet-stream'");
+    const multipartArrayExample = {
+      ...uploadPhoto,
+      requestBody: { ...uploadPhoto.requestBody!, example: "[]" },
+    };
+    expect(curlFor("/api/v1/me/photo", multipartArrayExample, "bearer", ""))
+      .toContain("-F 'clientMutationId=REPLACE_clientMutationId'");
+    const multipartMissingTextValue = {
+      ...uploadPhoto,
+      requestBody: { ...uploadPhoto.requestBody!, example: "{}" },
+    };
+    expect(curlFor("/api/v1/me/photo", multipartMissingTextValue, "session", ""))
+      .toContain("body.append(\"clientMutationId\", \"REPLACE_clientMutationId\");");
+    const multipartWithInvalidExample = {
+      ...uploadPhoto,
+      requestBody: { ...uploadPhoto.requestBody!, example: "{not json" },
+    };
+    expect(curlFor("/api/v1/me/photo", multipartWithInvalidExample, "session", ""))
+      .toContain("body.append(\"clientMutationId\", \"REPLACE_clientMutationId\");");
+    expect(curlFor("/api/v1/me/photo", multipartWithInvalidExample, "bearer", ""))
+      .toContain("-F 'clientMutationId=REPLACE_clientMutationId'");
+    const optionalMultipartText = {
+      ...uploadPhoto,
+      requestBody: {
+        ...uploadPhoto.requestBody!,
+        fields: [{ name: "caption", label: "Caption", required: false, accept: "", description: "" }],
+        example: "{}",
+      },
+    };
+    expect(curlFor("/api/v1/me/photo", optionalMultipartText, "bearer", "")).not.toContain("-F 'caption=");
+    const multipartEmptyAcceptFile = {
+      ...uploadPhoto,
+      requestBody: {
+        ...uploadPhoto.requestBody!,
+        fields: [{ name: "photo", label: "Photo", required: true, accept: ",", description: "" }],
+        example: "{}",
+      },
+    };
+    expect(curlFor("/api/v1/me/photo", multipartEmptyAcceptFile, "bearer", ""))
+      .toContain("-F 'photo=@profile.jpg;type=application/octet-stream'");
     expect(curlFor("/oauth/authorize?client_id=cm_1", authorize, "anonymous", "")).toContain(
       "open 'https://spoonjoy.app/oauth/authorize?client_id=cm_1'",
     );

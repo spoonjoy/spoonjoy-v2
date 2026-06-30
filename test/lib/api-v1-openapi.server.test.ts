@@ -20,8 +20,19 @@ const OPERATION_SCOPES = {
   "GET /api/v1/openapi.connector.json": [],
   "GET /api/v1/search": [],
   "GET /api/v1/recipes": ["recipes:read"],
+  "POST /api/v1/recipes": ["kitchen:write"],
   "POST /api/v1/recipes/import": ["kitchen:write"],
   "GET /api/v1/recipes/{id}": ["recipes:read"],
+  "PATCH /api/v1/recipes/{id}": ["kitchen:write"],
+  "DELETE /api/v1/recipes/{id}": ["kitchen:write"],
+  "POST /api/v1/recipes/{id}/fork": ["kitchen:write"],
+  "POST /api/v1/recipes/{id}/steps": ["kitchen:write"],
+  "PATCH /api/v1/recipes/{id}/steps/{stepId}": ["kitchen:write"],
+  "DELETE /api/v1/recipes/{id}/steps/{stepId}": ["kitchen:write"],
+  "POST /api/v1/recipes/{id}/steps/reorder": ["kitchen:write"],
+  "POST /api/v1/recipes/{id}/steps/{stepId}/ingredients": ["kitchen:write"],
+  "DELETE /api/v1/recipes/{id}/steps/{stepId}/ingredients/{ingredientId}": ["kitchen:write"],
+  "PUT /api/v1/recipes/{id}/step-output-uses": ["kitchen:write"],
   "GET /api/v1/recipes/{id}/spoons": ["recipes:read"],
   "POST /api/v1/recipes/{id}/spoons": ["kitchen:write"],
   "PATCH /api/v1/recipes/{id}/spoons/{spoonId}": ["kitchen:write"],
@@ -45,6 +56,8 @@ const OPERATION_SCOPES = {
   "DELETE /api/v1/me/photo": ["account:write"],
   "GET /api/v1/me/notification-preferences": ["account:read"],
   "PATCH /api/v1/me/notification-preferences": ["account:write"],
+  "POST /api/v1/me/apns-devices": ["account:write"],
+  "DELETE /api/v1/me/apns-devices/{deviceId}": ["account:write"],
   "GET /api/v1/me/connections": ["tokens:read"],
   "DELETE /api/v1/me/connections/{connectionId}": ["tokens:write"],
   "GET /api/v1/shopping-list": ["shopping_list:read"],
@@ -69,8 +82,38 @@ function responseExample(document: any, path: string, method: string, status: st
   return (examples.example ?? Object.values(examples)[0] as any).value;
 }
 
+function requestExample(document: any, path: string, method: string) {
+  const content = operation(document, path, method).requestBody?.content ?? {};
+  const examples = content["application/json"]?.examples ?? content["multipart/form-data"]?.examples;
+  return examples?.example?.value;
+}
+
 function errorExample(document: any, path: string, method: string, status: string, code: string) {
   return operation(document, path, method).responses[status].content["application/json"].examples[code].value;
+}
+
+function expectFlexibleDeleteContract(document: any, path: string, requestSchema: string) {
+  const deleteOperation = operation(document, path, "DELETE");
+
+  expect(deleteOperation.requestBody).toMatchObject({
+    required: false,
+    content: {
+      "application/json": {
+        schema: { $ref: `#/components/schemas/${requestSchema}` },
+      },
+    },
+  });
+  expect(deleteOperation.parameters).toEqual(expect.arrayContaining([
+    expect.objectContaining({ name: "X-Client-Mutation-Id", in: "header", required: false }),
+    expect.objectContaining({ name: "clientMutationId", in: "query", required: false }),
+    expect.objectContaining({ name: "X-Request-Id", in: "header", required: false }),
+  ]));
+  expect(deleteOperation["x-idempotency"]).toMatchObject({
+    key: "clientMutationId",
+    location: "jsonBody, query, or X-Client-Mutation-Id",
+  });
+  expect(deleteOperation.responses["400"].content["application/json"].examples.invalid_json.value.error.code)
+    .toBe("invalid_json");
 }
 
 function dedupeSecurity(security: Array<Record<string, unknown>>) {
@@ -144,6 +187,7 @@ describe("API v1 OpenAPI document", () => {
     });
     expect(document["x-auth-flows"].map((flow: { id: string }) => flow.id)).toEqual(["oauth-pkce", "delegated-approval", "mcp"]);
     expect(document["x-client-scenarios"].map((scenario: { id: string }) => scenario.id)).toEqual([
+      "spoonjoy-apple-native-dogfood",
       "cloudflare-worker-sync",
       "browser-extension-shopping-sync",
       "no-code-connector",
@@ -309,7 +353,20 @@ describe("API v1 OpenAPI document", () => {
         location: "jsonBody, query, or X-Client-Mutation-Id",
         replayStatus: [200],
       }),
+      requestBody: {
+        required: false,
+        content: {
+          "application/json": {
+            schema: { $ref: "#/components/schemas/DeleteRecipeSpoonRequest" },
+          },
+        },
+      },
     });
+    expect(operation(document, "/api/v1/recipes/{id}/spoons/{spoonId}", "DELETE").parameters).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "X-Client-Mutation-Id", in: "header", required: false }),
+      expect.objectContaining({ name: "clientMutationId", in: "query", required: false }),
+      expect.objectContaining({ name: "X-Request-Id", in: "header", required: false }),
+    ]));
     expect(operation(document, "/api/v1/shopping-list/sync", "GET").parameters).toEqual(expect.arrayContaining([
       expect.objectContaining({ name: "cursor", in: "query", required: false, schema: { type: "string" } }),
       expect.objectContaining({
@@ -449,6 +506,22 @@ describe("API v1 OpenAPI document", () => {
     });
     expect(responseExample(document, "/api/v1/me/notification-preferences", "GET", "200").data)
       .toMatchObject({ notifySpoonOnMyRecipe: true, notifyFellowChefOriginCook: true });
+	    expect(responseExample(document, "/api/v1/me/apns-devices", "POST", "201").data).toMatchObject({
+	      created: true,
+	      device: {
+	        deviceId: "ios-simulator-1",
+	        environment: "development",
+	        tokenPrefix: "apns-token-",
+	      },
+	      mutation: { clientMutationId: "device-uuid-apns-register", replayed: false },
+	    });
+	    expect(responseExample(document, "/api/v1/me/apns-devices/{deviceId}", "DELETE", "200").data)
+	      .toMatchObject({
+	        revoked: true,
+	        revokedCount: 1,
+	        devices: [expect.objectContaining({ deviceId: "ios-simulator-1" })],
+	        mutation: { clientMutationId: "device-uuid-apns-revoke", replayed: false },
+	      });
     expect(responseExample(document, "/api/v1/me/connections", "GET", "200").data.connections[0])
       .toMatchObject({ id: expect.stringMatching(/^conn_/), clientName: "Meal planner" });
     expect(responseExample(document, "/api/v1/me/connections/{connectionId}", "DELETE", "200").data)
@@ -467,7 +540,7 @@ describe("API v1 OpenAPI document", () => {
     });
     expect(responseExample(document, "/api/v1/shopping-list/clear-all", "POST", "200").data).toMatchObject({
       removed: 1,
-      mutation: { clientMutationId: "device-uuid-5", replayed: false },
+      mutation: { clientMutationId: "device-uuid-clear-all", replayed: false },
     });
     expect(errorExample(document, "/api/v1/health", "GET", "401", "invalid_token").error.code).toBe("invalid_token");
     expect(errorExample(document, "/api/v1/shopping-list", "GET", "401", "authentication_required").error.code).toBe("authentication_required");
@@ -478,6 +551,17 @@ describe("API v1 OpenAPI document", () => {
       .toEqual({ name: "Tiny client", scopes: ["recipes:read", "shopping_list:read", "shopping_list:write"] });
     expect(operation(document, "/api/v1/me/photo", "POST").requestBody.content["multipart/form-data"].schema.$ref)
       .toBe("#/components/schemas/ProfilePhotoUploadRequest");
+	    expect(operation(document, "/api/v1/me/apns-devices", "POST").requestBody.content["application/json"].examples.example.value)
+	      .toMatchObject({
+	        clientMutationId: "device-uuid-apns-register",
+	        deviceId: "ios-simulator-1",
+	        environment: "development",
+	      });
+    expect(operation(document, "/api/v1/me/apns-devices/{deviceId}", "DELETE").parameters)
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ name: "deviceId", in: "path", required: true }),
+        expect.objectContaining({ name: "X-Request-Id", in: "header", required: false }),
+      ]));
     expect(operation(document, "/oauth/revoke", "POST").requestBody.content["application/x-www-form-urlencoded"].examples.refresh_token.value)
       .toMatchObject({ token: "ort_...", client_id: "cm_client_id_from_register" });
     expect(operation(document, "/api/v1/shopping-list/items", "POST").requestBody.content["application/json"].examples.example.value)
@@ -575,6 +659,28 @@ describe("API v1 OpenAPI document", () => {
     }
   });
 
+  it("keeps idempotent request and response examples on the same client mutation id", () => {
+    const document = buildApiV1OpenApiDocument();
+
+    for (const resource of API_V1_RESOURCES) {
+      for (const method of resource.methods) {
+        const op = operation(document, resource.path, method);
+        const requestClientMutationId = requestExample(document, resource.path, method)?.clientMutationId;
+        if (!op["x-idempotency"] || typeof requestClientMutationId !== "string") continue;
+
+        for (const status of op["x-idempotency"].replayStatus) {
+          const responseClientMutationId = responseExample(document, resource.path, method, String(status))
+            .data
+            ?.mutation
+            ?.clientMutationId;
+          if (typeof responseClientMutationId !== "string") continue;
+
+          expect(responseClientMutationId, `${method} ${resource.path} ${status}`).toBe(requestClientMutationId);
+        }
+      }
+    }
+  });
+
   it("declares exact request and response schemas for tokens and shopping-list mutations", () => {
     const document = buildApiV1OpenApiDocument();
 
@@ -588,12 +694,11 @@ describe("API v1 OpenAPI document", () => {
       .toBe("#/components/schemas/AddRecipeIngredientsToShoppingListRequest");
     expect(operation(document, "/api/v1/shopping-list/clear-all", "POST").requestBody.content["application/json"].schema.$ref)
       .toBe("#/components/schemas/ClearShoppingListRequest");
-    expect(operation(document, "/api/v1/shopping-list/items/{itemId}", "DELETE").requestBody).toBeUndefined();
-    expect(operation(document, "/api/v1/shopping-list/items/{itemId}", "DELETE").parameters).toEqual(expect.arrayContaining([
-      expect.objectContaining({ name: "itemId", in: "path", required: true }),
-      expect.objectContaining({ name: "X-Client-Mutation-Id", in: "header", required: true }),
-      expect.objectContaining({ name: "X-Request-Id", in: "header", required: false }),
-    ]));
+    expectFlexibleDeleteContract(document, "/api/v1/shopping-list/items/{itemId}", "DeleteShoppingItemRequest");
+    expect(operation(document, "/api/v1/shopping-list/items/{itemId}", "DELETE").parameters)
+      .toEqual(expect.arrayContaining([expect.objectContaining({ name: "itemId", in: "path", required: true })]));
+    expectFlexibleDeleteContract(document, "/api/v1/cookbooks/{id}", "DeleteCookbookRequest");
+    expectFlexibleDeleteContract(document, "/api/v1/cookbooks/{id}/recipes/{recipeId}", "CookbookRecipeMutationRequest");
     expect(operation(document, "/api/v1/shopping-list/sync", "GET")["x-cursor-policy"]).toMatchObject({
       cursor: "opaque",
       tombstones: expect.any(String),
@@ -603,6 +708,12 @@ describe("API v1 OpenAPI document", () => {
       retentionHours: 24,
       inProgressRetryAfterSeconds: 2,
       retryBodyRule: expect.stringContaining("canonicalizes object key order"),
+    });
+    expect(operation(document, "/api/v1/shopping-list/items/{itemId}", "DELETE")["x-idempotency"]).toMatchObject({
+      key: "clientMutationId",
+      location: "jsonBody, query, or X-Client-Mutation-Id",
+      replayStatus: [200],
+      retryBodyRule: expect.stringContaining("JSON body, query string, or X-Client-Mutation-Id header"),
     });
     expect(operation(document, "/api/v1/shopping-list/add-from-recipe", "POST")["x-idempotency"]).toMatchObject({
       key: "clientMutationId",
@@ -631,6 +742,148 @@ describe("API v1 OpenAPI document", () => {
       .toBe("#/components/schemas/ErrorEnvelope");
     expect(operation(document, "/api/v1/shopping-list/add-from-recipe", "POST").responses["404"].content["application/json"].schema.$ref)
       .toBe("#/components/schemas/ErrorEnvelope");
+  });
+
+  it("declares exact request and response schemas for recipe step mutations", () => {
+    const document = buildApiV1OpenApiDocument();
+
+    expect(operation(document, "/api/v1/recipes/{id}/steps", "POST").requestBody.content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/CreateRecipeStepRequest");
+    expect(operation(document, "/api/v1/recipes/{id}/steps", "POST").responses["201"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/CreateRecipeStepEnvelope");
+    expect(operation(document, "/api/v1/recipes/{id}/steps/{stepId}", "PATCH").requestBody.content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/UpdateRecipeStepRequest");
+    expect(operation(document, "/api/v1/recipes/{id}/steps/{stepId}", "PATCH").responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/UpdateRecipeStepEnvelope");
+    expect(operation(document, "/api/v1/recipes/{id}/steps/{stepId}", "DELETE").requestBody.content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/DeleteRecipeStepRequest");
+    expectFlexibleDeleteContract(document, "/api/v1/recipes/{id}/steps/{stepId}", "DeleteRecipeStepRequest");
+    expect(operation(document, "/api/v1/recipes/{id}/steps/{stepId}", "DELETE").responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/DeleteRecipeStepEnvelope");
+    expect(operation(document, "/api/v1/recipes/{id}/steps/reorder", "POST").requestBody.content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/ReorderRecipeStepRequest");
+    expect(operation(document, "/api/v1/recipes/{id}/steps/{stepId}/ingredients", "POST").requestBody.content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/CreateRecipeStepIngredientRequest");
+    expect(operation(document, "/api/v1/recipes/{id}/steps/{stepId}/ingredients/{ingredientId}", "DELETE").requestBody.content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/DeleteRecipeStepIngredientRequest");
+    expectFlexibleDeleteContract(document, "/api/v1/recipes/{id}/steps/{stepId}/ingredients/{ingredientId}", "DeleteRecipeStepIngredientRequest");
+    expect(operation(document, "/api/v1/recipes/{id}/step-output-uses", "PUT").requestBody.content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/ReplaceRecipeStepOutputUsesRequest");
+    expect(operation(document, "/api/v1/recipes/{id}/step-output-uses", "PUT").responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/ReplaceRecipeStepOutputUsesEnvelope");
+
+    expect(document.components.schemas.RecipeStep.required).toEqual([
+      "id",
+      "stepNum",
+      "stepTitle",
+      "description",
+      "duration",
+      "ingredients",
+      "usingSteps",
+    ]);
+    expect(document.components.schemas.RecipeStep.properties.usingSteps.items.$ref)
+      .toBe("#/components/schemas/RecipeStepOutputUse");
+    expect(operation(document, "/api/v1/recipes/{id}/steps", "POST")["x-idempotency"]).toMatchObject({
+      key: "clientMutationId",
+      location: "jsonBody",
+      replayStatus: [201],
+    });
+    expect(operation(document, "/api/v1/recipes/{id}/steps/{stepId}", "DELETE")["x-idempotency"]).toMatchObject({
+      key: "clientMutationId",
+      location: "jsonBody, query, or X-Client-Mutation-Id",
+      replayStatus: [200],
+    });
+    expect(operation(document, "/api/v1/recipes/{id}/steps/{stepId}/ingredients/{ingredientId}", "DELETE")["x-idempotency"]).toMatchObject({
+      key: "clientMutationId",
+      location: "jsonBody, query, or X-Client-Mutation-Id",
+      replayStatus: [200],
+    });
+    expect(responseExample(document, "/api/v1/recipes/{id}/steps", "POST", "201").data.step).toMatchObject({
+      id: "step_2",
+      usingSteps: [expect.objectContaining({ outputStepNum: 1 })],
+    });
+  });
+
+  it("declares exact request and response schemas for native account endpoints", () => {
+    const document = buildApiV1OpenApiDocument();
+
+    expect(operation(document, "/api/v1/me", "GET").responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/AccountProfileEnvelope");
+    expect(operation(document, "/api/v1/me", "PATCH").requestBody.content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/UpdateAccountProfileRequest");
+	    expect(operation(document, "/api/v1/me", "PATCH").responses["200"].content["application/json"].schema.$ref)
+	      .toBe("#/components/schemas/AccountProfileMutationEnvelope");
+	    expect(operation(document, "/api/v1/me", "PATCH")).toMatchObject({
+	      "x-idempotency": expect.objectContaining({
+	        key: "clientMutationId",
+	        location: "jsonBody",
+	        replayStatus: [200],
+	      }),
+	    });
+    expect(responseExample(document, "/api/v1/me", "GET", "200").data).toMatchObject({
+      email: "ari@spoonjoy.app",
+      username: "ari",
+      oauthAccounts: [expect.objectContaining({ provider: "google" })],
+      passkeys: [expect.objectContaining({ name: "Kitchen Mac" })],
+    });
+
+    expect(operation(document, "/api/v1/me/photo", "POST").requestBody.content["multipart/form-data"].schema.$ref)
+      .toBe("#/components/schemas/ProfilePhotoUploadRequest");
+    expect(operation(document, "/api/v1/me/photo", "POST").requestBody.content["application/json"]).toBeUndefined();
+	    expect(operation(document, "/api/v1/me/photo", "POST").responses["200"].content["application/json"].schema.$ref)
+	      .toBe("#/components/schemas/AccountProfileMutationEnvelope");
+	    expect(operation(document, "/api/v1/me/photo", "POST")).toMatchObject({
+	      "x-idempotency": expect.objectContaining({
+	        key: "clientMutationId",
+	        location: "multipartFormData",
+	        replayStatus: [200],
+	      }),
+	    });
+	    expect(operation(document, "/api/v1/me/photo", "DELETE").responses["200"].content["application/json"].schema.$ref)
+	      .toBe("#/components/schemas/AccountProfileMutationEnvelope");
+	    expectFlexibleDeleteContract(document, "/api/v1/me/photo", "AccountDeleteMutationRequest");
+
+	    expect(operation(document, "/api/v1/me/notification-preferences", "GET").responses["200"].content["application/json"].schema.$ref)
+	      .toBe("#/components/schemas/NotificationPreferencesEnvelope");
+    expect(operation(document, "/api/v1/me/notification-preferences", "PATCH").requestBody.content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/UpdateNotificationPreferencesRequest");
+	    expect(operation(document, "/api/v1/me/notification-preferences", "PATCH").responses["200"].content["application/json"].schema.$ref)
+	      .toBe("#/components/schemas/NotificationPreferencesMutationEnvelope");
+	    expect(operation(document, "/api/v1/me/notification-preferences", "PATCH")).toMatchObject({
+	      "x-idempotency": expect.objectContaining({
+	        key: "clientMutationId",
+	        location: "jsonBody",
+	        replayStatus: [200],
+	      }),
+	    });
+
+	    expect(operation(document, "/api/v1/me/apns-devices", "POST").requestBody.content["application/json"].schema.$ref)
+	      .toBe("#/components/schemas/ApnsDeviceRegistrationRequest");
+    expect(operation(document, "/api/v1/me/apns-devices", "POST").responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/ApnsDeviceRegistrationEnvelope");
+	    expect(operation(document, "/api/v1/me/apns-devices", "POST").responses["201"].content["application/json"].schema.$ref)
+	      .toBe("#/components/schemas/ApnsDeviceRegistrationEnvelope");
+	    expect(operation(document, "/api/v1/me/apns-devices", "POST")).toMatchObject({
+	      "x-idempotency": expect.objectContaining({
+	        key: "clientMutationId",
+	        location: "jsonBody",
+	        replayStatus: [200, 201],
+	      }),
+	    });
+	    expect(responseExample(document, "/api/v1/me/apns-devices", "POST", "201").data.device)
+	      .not.toEqual(expect.objectContaining({ token: expect.anything(), tokenHash: expect.anything() }));
+	    expect(operation(document, "/api/v1/me/apns-devices/{deviceId}", "DELETE").responses["200"].content["application/json"].schema.$ref)
+	      .toBe("#/components/schemas/ApnsDeviceRevokeEnvelope");
+	    expectFlexibleDeleteContract(document, "/api/v1/me/apns-devices/{deviceId}", "AccountDeleteMutationRequest");
+	    expect(operation(document, "/api/v1/me/apns-devices/{deviceId}", "DELETE").parameters.map((parameter: { name: string }) => parameter.name))
+	      .toEqual(expect.arrayContaining(["deviceId", "X-Request-Id", "X-Client-Mutation-Id", "clientMutationId"]));
+
+    expect(operation(document, "/api/v1/me/connections", "GET").responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/OAuthConnectionListEnvelope");
+    expect(operation(document, "/api/v1/me/connections/{connectionId}", "DELETE").responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/DisconnectOAuthConnectionEnvelope");
+    expect(operation(document, "/api/v1/me/connections/{connectionId}", "DELETE").parameters.map((parameter: { name: string }) => parameter.name))
+      .not.toContain("X-Client-Mutation-Id");
   });
 
   it("defines reusable schemas with strict objects, nullable fields, and error enums", () => {
@@ -721,8 +974,38 @@ describe("API v1 OpenAPI document", () => {
         categoryKey: { type: ["string", "null"] },
       },
     });
-    expect(components.schemas.CreateTokenRequest.properties.name).toEqual({ type: "string", minLength: 1, maxLength: 160 });
-    expect(components.schemas.CreateShoppingItemData.required).toEqual(["created", "updated", "item", "mutation"]);
+	    expect(components.schemas.CreateTokenRequest.properties.name).toEqual({ type: "string", minLength: 1, maxLength: 160 });
+	    expect(components.schemas.UpdateAccountProfileRequest).toMatchObject({
+	      additionalProperties: false,
+	      required: ["clientMutationId", "email", "username"],
+	      properties: {
+	        clientMutationId: { type: "string", minLength: 1, maxLength: 160 },
+	        email: { type: "string", format: "email" },
+	        username: { type: "string", minLength: 1, maxLength: 160 },
+	      },
+	    });
+	    expect(components.schemas.ProfilePhotoUploadRequest).toMatchObject({
+	      additionalProperties: false,
+	      required: ["clientMutationId", "photo"],
+	      properties: {
+	        clientMutationId: { type: "string", minLength: 1, maxLength: 160 },
+	        photo: { type: "string", format: "binary" },
+	      },
+	    });
+	    expect(components.schemas.UpdateNotificationPreferencesRequest.required).toEqual([
+	      "clientMutationId",
+	      "notifySpoonOnMyRecipe",
+	      "notifyForkOfMyRecipe",
+	      "notifyCookbookSaveOfMine",
+	      "notifyFellowChefOriginCook",
+	    ]);
+	    expect(components.schemas.ApnsDeviceRegistrationRequest.required).toEqual(["clientMutationId", "deviceId", "platform", "environment", "token"]);
+	    expect(components.schemas.AccountDeleteMutationRequest.required).toEqual(["clientMutationId"]);
+	    expect(components.schemas.AccountProfileMutationData.required).toContain("mutation");
+	    expect(components.schemas.NotificationPreferencesMutationData.required).toContain("mutation");
+	    expect(components.schemas.ApnsDeviceRegistrationData.required).toContain("mutation");
+	    expect(components.schemas.ApnsDeviceRevokeData.required).toContain("mutation");
+	    expect(components.schemas.CreateShoppingItemData.required).toEqual(["created", "updated", "item", "mutation"]);
     expect(components.schemas.UpdateShoppingItemData.required).toEqual(["item", "mutation"]);
     expect(components.schemas.DeleteShoppingItemData.required).toEqual(["removed", "item", "mutation"]);
     expect(components.schemas.AddRecipeIngredientsToShoppingListRequest).toMatchObject({
@@ -872,6 +1155,9 @@ describe("API v1 OpenAPI document", () => {
       operationId: "postApiV1RecipeCoverFromSpoon",
       "x-scopes": ["kitchen:write"],
     });
+    expectFlexibleDeleteContract(sdk, "/api/v1/shopping-list/items/{itemId}", "DeleteShoppingItemRequest");
+    expectFlexibleDeleteContract(sdk, "/api/v1/recipes/{id}/spoons/{spoonId}", "DeleteRecipeSpoonRequest");
+    expectFlexibleDeleteContract(sdk, "/api/v1/cookbooks/{id}", "DeleteCookbookRequest");
     expect(sdk.components.securitySchemes.cookieAuth).toBeUndefined();
     expect(JSON.stringify(sdk.paths)).not.toContain("cookieAuth");
     expect(sdk["x-sdk-profile"].omitted).toContain("same-origin cookieAuth");

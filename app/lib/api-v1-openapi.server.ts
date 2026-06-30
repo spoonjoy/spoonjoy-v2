@@ -23,6 +23,7 @@ interface OperationConfig {
   errors: ApiV1ErrorCode[];
   parameters?: unknown[];
   requestBody?: string;
+  requestBodyRequired?: boolean;
   requestBodyContentType?: "application/json" | "multipart/form-data";
 }
 
@@ -121,6 +122,32 @@ function successEnvelope(dataSchema: JsonSchema): JsonSchema {
     data: dataSchema,
   });
 }
+
+const accountProfileProperties: Record<string, JsonSchema> = {
+  id: idSchema,
+  email: { type: "string", format: "email" },
+  username: { type: "string", minLength: 1 },
+  photoUrl: { type: ["string", "null"], description: "Absolute /photos URL, data URL in local mode, or null." },
+  hasPassword: { type: "boolean" },
+  oauthAccounts: arrayOf(ref("LinkedAuthProvider")),
+  passkeys: arrayOf(ref("PasskeySummary")),
+};
+
+const accountProfileRequired = ["id", "email", "username", "photoUrl", "hasPassword", "oauthAccounts", "passkeys"];
+
+const notificationPreferenceProperties: Record<string, JsonSchema> = {
+  notifySpoonOnMyRecipe: { type: "boolean" },
+  notifyForkOfMyRecipe: { type: "boolean" },
+  notifyCookbookSaveOfMine: { type: "boolean" },
+  notifyFellowChefOriginCook: { type: "boolean" },
+};
+
+const notificationPreferenceRequired = [
+  "notifySpoonOnMyRecipe",
+  "notifyForkOfMyRecipe",
+  "notifyCookbookSaveOfMine",
+  "notifyFellowChefOriginCook",
+];
 
 const schemas = {
   ErrorDetails: { type: "object", additionalProperties: true },
@@ -334,13 +361,23 @@ const schemas = {
     quantity: { type: "number", description: "Author-provided numeric quantity. API v1 does not expose a separate free-form display line or conversion metadata." },
     unit: { ...nullableStringSchema, description: "Author-provided free-form display unit. Null when unset; not a canonical unit registry value." },
   }),
-  RecipeStep: objectSchema(["id", "stepNum", "stepTitle", "description", "duration", "ingredients"], {
+  RecipeStepOutputUse: objectSchema(["id", "inputStepNum", "outputStepNum", "outputOfStep"], {
+    id: idSchema,
+    inputStepNum: { type: "integer", description: "Step number that consumes output from another step." },
+    outputStepNum: { type: "integer", description: "Step number whose output is used by inputStepNum." },
+    outputOfStep: objectSchema(["stepNum", "stepTitle"], {
+      stepNum: { type: "integer" },
+      stepTitle: nullableStringSchema,
+    }),
+  }),
+  RecipeStep: objectSchema(["id", "stepNum", "stepTitle", "description", "duration", "ingredients", "usingSteps"], {
     id: idSchema,
     stepNum: { type: "integer", description: "Display order. Recipe detail responses return steps in ascending stepNum order." },
     stepTitle: { ...nullableStringSchema, description: "Optional author-provided step heading. Render as text, not HTML." },
     description: { type: "string", description: "Author-provided instruction text. Render as text, not HTML." },
     duration: { type: ["integer", "null"], description: "Minutes, when the author supplied a duration. Null means no duration was set." },
     ingredients: { ...arrayOf(ref("RecipeIngredient")), description: "Ingredients attached to this step, in API order. API v1 does not expose a separate ingredient display-text field." },
+    usingSteps: { ...arrayOf(ref("RecipeStepOutputUse")), description: "Prior recipe steps whose outputs this step uses, ordered by outputStepNum." },
   }),
   CookbookLink: objectSchema(["id", "title", "href", "canonicalUrl"], {
     id: idSchema,
@@ -497,45 +534,75 @@ const schemas = {
     transports: nullableStringSchema,
     createdAt: nullableDateTimeSchema,
   }),
-  AccountProfile: objectSchema(["id", "email", "username", "photoUrl", "hasPassword", "oauthAccounts", "passkeys"], {
-    id: idSchema,
-    email: { type: "string", format: "email" },
-    username: { type: "string", minLength: 1 },
-    photoUrl: { type: ["string", "null"], description: "Absolute /photos URL, data URL in local mode, or null." },
-    hasPassword: { type: "boolean" },
-    oauthAccounts: arrayOf(ref("LinkedAuthProvider")),
-    passkeys: arrayOf(ref("PasskeySummary")),
+  AccountProfile: objectSchema(accountProfileRequired, accountProfileProperties),
+  AccountProfileMutationData: objectSchema([...accountProfileRequired, "mutation"], {
+    ...accountProfileProperties,
+    mutation: ref("MutationMetadata"),
   }),
-  UpdateAccountProfileRequest: objectSchema(["email", "username"], {
+  UpdateAccountProfileRequest: objectSchema(["clientMutationId", "email", "username"], {
+    clientMutationId: shortTextSchema,
     email: { type: "string", format: "email" },
     username: { type: "string", minLength: 1, maxLength: 160 },
-    clientMutationId: shortTextSchema,
   }),
-  ProfilePhotoUploadRequest: objectSchema(["photo"], {
+  ProfilePhotoUploadRequest: objectSchema(["clientMutationId", "photo"], {
+    clientMutationId: shortTextSchema,
     photo: { type: "string", format: "binary", description: "JPEG, PNG, GIF, or WebP profile photo up to 5MB." },
   }),
-  NotificationPreferences: objectSchema([
+  AccountDeleteMutationRequest: objectSchema(["clientMutationId"], {
+    clientMutationId: shortTextSchema,
+  }),
+  NotificationPreferences: objectSchema(notificationPreferenceRequired, notificationPreferenceProperties),
+  NotificationPreferencesMutationData: objectSchema([...notificationPreferenceRequired, "mutation"], {
+    ...notificationPreferenceProperties,
+    mutation: ref("MutationMetadata"),
+  }),
+  UpdateNotificationPreferencesRequest: objectSchema([
+    "clientMutationId",
     "notifySpoonOnMyRecipe",
     "notifyForkOfMyRecipe",
     "notifyCookbookSaveOfMine",
     "notifyFellowChefOriginCook",
   ], {
+    clientMutationId: shortTextSchema,
     notifySpoonOnMyRecipe: { type: "boolean" },
     notifyForkOfMyRecipe: { type: "boolean" },
     notifyCookbookSaveOfMine: { type: "boolean" },
     notifyFellowChefOriginCook: { type: "boolean" },
   }),
-  UpdateNotificationPreferencesRequest: objectSchema([
-    "notifySpoonOnMyRecipe",
-    "notifyForkOfMyRecipe",
-    "notifyCookbookSaveOfMine",
-    "notifyFellowChefOriginCook",
-  ], {
-    notifySpoonOnMyRecipe: { type: "boolean" },
-    notifyForkOfMyRecipe: { type: "boolean" },
-    notifyCookbookSaveOfMine: { type: "boolean" },
-    notifyFellowChefOriginCook: { type: "boolean" },
+  ApnsDeviceRegistrationRequest: objectSchema(["clientMutationId", "deviceId", "platform", "environment", "token"], {
     clientMutationId: shortTextSchema,
+    deviceId: { type: "string", minLength: 1, maxLength: 160 },
+    platform: { type: "string", enum: ["ios", "ipados", "macos"] },
+    environment: { type: "string", enum: ["development", "production"] },
+    token: { type: "string", minLength: 1, maxLength: 4096, description: "Raw APNs token. Spoonjoy stores only a hash and returns only tokenPrefix." },
+    deviceName: nullableStringSchema,
+    appVersion: nullableStringSchema,
+  }),
+  ApnsDevice: objectSchema(["id", "deviceId", "platform", "environment", "tokenPrefix", "deviceName", "appVersion", "enabledAt", "revokedAt", "lastRegisteredAt", "createdAt", "updatedAt"], {
+    id: idSchema,
+    deviceId: idSchema,
+    platform: { type: "string", enum: ["ios", "ipados", "macos"] },
+    environment: { type: "string", enum: ["development", "production"] },
+    tokenPrefix: { type: "string", description: "First characters of the APNs token for diagnostics. The full token is never returned." },
+    deviceName: nullableStringSchema,
+    appVersion: nullableStringSchema,
+    enabledAt: dateTimeSchema,
+    revokedAt: nullableDateTimeSchema,
+    lastRegisteredAt: dateTimeSchema,
+    createdAt: dateTimeSchema,
+    updatedAt: dateTimeSchema,
+  }),
+  ApnsDeviceRegistrationData: objectSchema(["created", "device", "mutation"], {
+    created: { type: "boolean" },
+    device: ref("ApnsDevice"),
+    mutation: ref("MutationMetadata"),
+  }),
+  ApnsDeviceRevokeData: objectSchema(["revoked", "revokedCount", "device", "devices", "mutation"], {
+    revoked: { type: "boolean" },
+    revokedCount: { type: "integer", minimum: 0 },
+    device: ref("ApnsDevice"),
+    devices: arrayOf(ref("ApnsDevice")),
+    mutation: ref("MutationMetadata"),
   }),
   OAuthConnectionSummary: objectSchema(["id", "clientId", "clientName", "resource", "scopes", "createdAt", "refreshTokenCount", "accessTokenCount"], {
     id: { type: "string", pattern: "^conn_" },
@@ -746,6 +813,156 @@ const schemas = {
     recipes: arrayOf(ref("RecipeSummary")),
   }),
   RecipeDetailData: objectSchema(["recipe"], { recipe: ref("RecipeDetail") }),
+  RecipeIngredientInput: objectSchema(["quantity", "unit", "name"], {
+    quantity: { type: "number", minimum: 0.001, maximum: 99999 },
+    unit: { type: "string", minLength: 1, maxLength: 50 },
+    name: { type: "string", minLength: 1, maxLength: 100 },
+  }),
+  RecipeStepInput: objectSchema(["description"], {
+    stepTitle: { type: ["string", "null"], maxLength: 200 },
+    description: { type: "string", minLength: 1, maxLength: 5000 },
+    duration: { type: ["integer", "null"], minimum: 1 },
+    ingredients: arrayOf(ref("RecipeIngredientInput")),
+  }),
+  CreateRecipeRequest: objectSchema(["clientMutationId", "title"], {
+    clientMutationId: shortTextSchema,
+    title: { type: "string", minLength: 1, maxLength: 200 },
+    description: { type: ["string", "null"], maxLength: 2000 },
+    servings: { type: ["string", "null"], maxLength: 100 },
+    steps: arrayOf(ref("RecipeStepInput")),
+  }),
+  UpdateRecipeRequest: objectSchema(["clientMutationId"], {
+    clientMutationId: shortTextSchema,
+    title: { type: "string", minLength: 1, maxLength: 200 },
+    description: { type: ["string", "null"], maxLength: 2000 },
+    servings: { type: ["string", "null"], maxLength: 100 },
+  }),
+  DeleteRecipeRequest: objectSchema(["clientMutationId"], {
+    clientMutationId: shortTextSchema,
+  }),
+  ForkRecipeRequest: objectSchema(["clientMutationId"], {
+    clientMutationId: shortTextSchema,
+    title: { type: ["string", "null"], minLength: 1, maxLength: 200 },
+  }),
+  CreateRecipeStepRequest: objectSchema(["clientMutationId", "description"], {
+    clientMutationId: shortTextSchema,
+    stepNum: { type: "integer", minimum: 1, description: "Optional next step number assertion. Omit to append." },
+    stepTitle: { type: ["string", "null"], maxLength: 200 },
+    description: { type: "string", minLength: 1, maxLength: 5000 },
+    duration: { type: ["integer", "null"], minimum: 1 },
+    ingredients: arrayOf(ref("RecipeIngredientInput")),
+    outputStepNums: arrayOf({ type: "integer", minimum: 1 }),
+  }),
+  UpdateRecipeStepRequest: objectSchema(["clientMutationId"], {
+    clientMutationId: shortTextSchema,
+    stepTitle: { type: ["string", "null"], maxLength: 200 },
+    description: { type: "string", minLength: 1, maxLength: 5000 },
+    duration: { type: ["integer", "null"], minimum: 1 },
+    outputStepNums: arrayOf({ type: "integer", minimum: 1 }),
+  }),
+  DeleteRecipeStepRequest: objectSchema(["clientMutationId"], {
+    clientMutationId: shortTextSchema,
+  }),
+  CreateRecipeStepIngredientRequest: objectSchema(["clientMutationId", "quantity", "unit", "name"], {
+    clientMutationId: shortTextSchema,
+    quantity: { type: "number", minimum: 0.001, maximum: 99999 },
+    unit: { type: "string", minLength: 1, maxLength: 50 },
+    name: { type: "string", minLength: 1, maxLength: 100 },
+  }),
+  DeleteRecipeStepIngredientRequest: objectSchema(["clientMutationId"], {
+    clientMutationId: shortTextSchema,
+  }),
+  ReorderRecipeStepRequest: objectSchema(["clientMutationId", "stepId", "toStepNum"], {
+    clientMutationId: shortTextSchema,
+    stepId: idSchema,
+    toStepNum: { type: "integer", minimum: 1 },
+  }),
+  ReplaceRecipeStepOutputUsesRequest: objectSchema(["clientMutationId", "inputStepId", "outputStepNums"], {
+    clientMutationId: shortTextSchema,
+    inputStepId: idSchema,
+    outputStepNums: arrayOf({ type: "integer", minimum: 1 }),
+  }),
+  DeletedRecipeTombstone: objectSchema(["id", "deletedAt", "updatedAt"], {
+    id: idSchema,
+    deletedAt: dateTimeSchema,
+    updatedAt: dateTimeSchema,
+  }),
+  DeletedRecipeStepTombstone: objectSchema(["id"], {
+    id: idSchema,
+  }),
+  DeletedRecipeIngredientTombstone: objectSchema(["id"], {
+    id: idSchema,
+  }),
+  RecipeForkMetadata: objectSchema(["appliedTitle", "sourceChef", "sourceRecipeId", "titleWasSuffixed"], {
+    appliedTitle: { type: "string" },
+    sourceChef: ref("ChefSummary"),
+    sourceRecipeId: idSchema,
+    titleWasSuffixed: { type: "boolean" },
+  }),
+  CreateRecipeData: objectSchema(["created", "recipe", "mutation"], {
+    created: { type: "boolean" },
+    recipe: ref("RecipeDetail"),
+    mutation: ref("MutationMetadata"),
+  }),
+  UpdateRecipeData: objectSchema(["updated", "recipe", "mutation"], {
+    updated: { type: "boolean" },
+    recipe: ref("RecipeDetail"),
+    mutation: ref("MutationMetadata"),
+  }),
+  DeleteRecipeData: objectSchema(["deleted", "recipe", "mutation"], {
+    deleted: { type: "boolean" },
+    recipe: ref("DeletedRecipeTombstone"),
+    mutation: ref("MutationMetadata"),
+  }),
+  ForkRecipeData: objectSchema(["fork", "recipe", "mutation"], {
+    fork: ref("RecipeForkMetadata"),
+    recipe: ref("RecipeDetail"),
+    mutation: ref("MutationMetadata"),
+  }),
+  CreateRecipeStepData: objectSchema(["created", "step", "recipe", "mutation"], {
+    created: { type: "boolean" },
+    step: ref("RecipeStep"),
+    recipe: ref("RecipeDetail"),
+    mutation: ref("MutationMetadata"),
+  }),
+  UpdateRecipeStepData: objectSchema(["updated", "step", "recipe", "mutation"], {
+    updated: { type: "boolean" },
+    step: ref("RecipeStep"),
+    recipe: ref("RecipeDetail"),
+    mutation: ref("MutationMetadata"),
+  }),
+  DeleteRecipeStepData: objectSchema(["deleted", "step", "recipe", "mutation"], {
+    deleted: { type: "boolean" },
+    step: ref("DeletedRecipeStepTombstone"),
+    recipe: ref("RecipeDetail"),
+    mutation: ref("MutationMetadata"),
+  }),
+  CreateRecipeStepIngredientData: objectSchema(["created", "ingredient", "step", "recipe", "mutation"], {
+    created: { type: "boolean" },
+    ingredient: ref("RecipeIngredient"),
+    step: ref("RecipeStep"),
+    recipe: ref("RecipeDetail"),
+    mutation: ref("MutationMetadata"),
+  }),
+  DeleteRecipeStepIngredientData: objectSchema(["deleted", "ingredient", "step", "recipe", "mutation"], {
+    deleted: { type: "boolean" },
+    ingredient: ref("DeletedRecipeIngredientTombstone"),
+    step: ref("RecipeStep"),
+    recipe: ref("RecipeDetail"),
+    mutation: ref("MutationMetadata"),
+  }),
+  ReorderRecipeStepData: objectSchema(["reordered", "step", "recipe", "mutation"], {
+    reordered: { type: "boolean" },
+    step: ref("RecipeStep"),
+    recipe: ref("RecipeDetail"),
+    mutation: ref("MutationMetadata"),
+  }),
+  ReplaceRecipeStepOutputUsesData: objectSchema(["replaced", "step", "recipe", "mutation"], {
+    replaced: { type: "boolean" },
+    step: ref("RecipeStep"),
+    recipe: ref("RecipeDetail"),
+    mutation: ref("MutationMetadata"),
+  }),
   RecipeSpoonListData: objectSchema(["limit", "cursor", "nextCursor", "hasMore", "spoons"], {
     limit: { type: "integer" },
     cursor: nullableStringSchema,
@@ -887,6 +1104,17 @@ const schemas = {
   SearchEnvelope: successEnvelope(ref("SearchData")),
   RecipeListEnvelope: successEnvelope(ref("RecipeListData")),
   RecipeDetailEnvelope: successEnvelope(ref("RecipeDetailData")),
+  CreateRecipeEnvelope: successEnvelope(ref("CreateRecipeData")),
+  UpdateRecipeEnvelope: successEnvelope(ref("UpdateRecipeData")),
+  DeleteRecipeEnvelope: successEnvelope(ref("DeleteRecipeData")),
+  ForkRecipeEnvelope: successEnvelope(ref("ForkRecipeData")),
+  CreateRecipeStepEnvelope: successEnvelope(ref("CreateRecipeStepData")),
+  UpdateRecipeStepEnvelope: successEnvelope(ref("UpdateRecipeStepData")),
+  DeleteRecipeStepEnvelope: successEnvelope(ref("DeleteRecipeStepData")),
+  CreateRecipeStepIngredientEnvelope: successEnvelope(ref("CreateRecipeStepIngredientData")),
+  DeleteRecipeStepIngredientEnvelope: successEnvelope(ref("DeleteRecipeStepIngredientData")),
+  ReorderRecipeStepEnvelope: successEnvelope(ref("ReorderRecipeStepData")),
+  ReplaceRecipeStepOutputUsesEnvelope: successEnvelope(ref("ReplaceRecipeStepOutputUsesData")),
   RecipeSpoonListEnvelope: successEnvelope(ref("RecipeSpoonListData")),
   CreateRecipeSpoonEnvelope: successEnvelope(ref("RecipeSpoonMutationData")),
   UpdateRecipeSpoonEnvelope: successEnvelope(ref("RecipeSpoonMutationData")),
@@ -902,7 +1130,11 @@ const schemas = {
   CookbookRecipeMutationEnvelope: successEnvelope(ref("CookbookRecipeMutationData")),
   CookbookRecipeRemoveEnvelope: successEnvelope(ref("CookbookRecipeMutationData")),
   AccountProfileEnvelope: successEnvelope(ref("AccountProfile")),
+  AccountProfileMutationEnvelope: successEnvelope(ref("AccountProfileMutationData")),
   NotificationPreferencesEnvelope: successEnvelope(ref("NotificationPreferences")),
+  NotificationPreferencesMutationEnvelope: successEnvelope(ref("NotificationPreferencesMutationData")),
+  ApnsDeviceRegistrationEnvelope: successEnvelope(ref("ApnsDeviceRegistrationData")),
+  ApnsDeviceRevokeEnvelope: successEnvelope(ref("ApnsDeviceRevokeData")),
   OAuthConnectionListEnvelope: successEnvelope(ref("OAuthConnectionListData")),
   DisconnectOAuthConnectionEnvelope: successEnvelope(ref("DisconnectOAuthConnectionData")),
   TokenListEnvelope: successEnvelope(ref("TokenListData")),
@@ -922,8 +1154,11 @@ const pathParameters = {
   recipeId: { name: "recipeId", in: "path", required: true, description: "Recipe id to add to or remove from an owned cookbook.", schema: idSchema },
   coverId: { name: "coverId", in: "path", required: true, description: "Recipe cover candidate id from GET /api/v1/recipes/{id}/covers.", schema: idSchema },
   spoonId: { name: "spoonId", in: "path", required: true, description: "Recipe spoon id from a cover-management spoon image candidate.", schema: idSchema },
+  stepId: { name: "stepId", in: "path", required: true, description: "Recipe step id from the recipe detail response.", schema: idSchema },
+  ingredientId: { name: "ingredientId", in: "path", required: true, description: "Recipe step ingredient id from the recipe detail response.", schema: idSchema },
   itemId: { name: "itemId", in: "path", required: true, description: "Shopping-list item id from GET /api/v1/shopping-list or /sync.", schema: idSchema },
   credentialId: { name: "credentialId", in: "path", required: true, description: "Bearer credential id from GET /api/v1/tokens.", schema: idSchema },
+  deviceId: { name: "deviceId", in: "path", required: true, description: "Native APNs device id provided during registration.", schema: idSchema },
   connectionId: { name: "connectionId", in: "path", required: true, description: "Opaque OAuth app connection id from GET /api/v1/me/connections.", schema: { type: "string", pattern: "^conn_" } },
   requestIdHeader: {
     name: "X-Request-Id",
@@ -935,8 +1170,8 @@ const pathParameters = {
   clientMutationIdHeader: {
     name: "X-Client-Mutation-Id",
     in: "header",
-    required: true,
-    description: "Chef-wide idempotency key for this delete. Use the same value when retrying the exact same request after a timeout.",
+    required: false,
+    description: "Optional chef-wide idempotency key for this delete. Prefer the JSON body clientMutationId when possible, and use the same value when retrying the exact same request after a timeout.",
     schema: { type: "string", minLength: 1, maxLength: 160 },
   },
 };
@@ -949,7 +1184,14 @@ const queryParameters = {
   limit: { name: "limit", in: "query", required: false, description: "Page size from 1 to 50. Defaults to 20.", schema: { type: "integer", minimum: 1, maximum: 50, default: 20 } },
   offset: { name: "offset", in: "query", required: false, description: "Zero-based offset for owner cover-history pagination.", schema: { type: "integer", minimum: 0, default: 0 } },
   includeArchived: { name: "includeArchived", in: "query", required: false, description: "Include archived cover rows in owner cover history.", schema: { type: "boolean", default: false } },
+  clientMutationId: { name: "clientMutationId", in: "query", required: false, description: "Optional chef-wide idempotency key for DELETE retries when a client cannot send a JSON body.", schema: { type: "string", minLength: 1, maxLength: 160 } },
 };
+
+const deleteIdempotencyParameters = (...parameters: unknown[]) => [
+  ...parameters,
+  pathParameters.clientMutationIdHeader,
+  queryParameters.clientMutationId,
+];
 
 const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationConfig>>> = {
   "/api/v1": {
@@ -972,12 +1214,37 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
   },
   "/api/v1/recipes": {
     GET: { operationId: "getApiV1Recipes", tags: ["Recipes"], summary: "Search public recipes", auth: "optional", scopes: ["recipes:read"], success: { 200: "RecipeListEnvelope" }, errors: ["validation_error", "invalid_cursor", "invalid_token", "insufficient_scope", "method_not_allowed", "rate_limited", "internal_error"], parameters: [queryParameters.query, queryParameters.q, queryParameters.cursor, queryParameters.limit] },
+    POST: { operationId: "postApiV1Recipes", tags: ["Recipes"], summary: "Create a recipe", auth: "bearer", scopes: ["kitchen:write"], success: { 201: "CreateRecipeEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "CreateRecipeRequest" },
+  },
+  "/api/v1/recipes/{id}": {
+    GET: { operationId: "getApiV1Recipe", tags: ["Recipes"], summary: "Read one public recipe", auth: "optional", scopes: ["recipes:read"], success: { 200: "RecipeDetailEnvelope" }, errors: ["validation_error", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id] },
+    PATCH: { operationId: "patchApiV1Recipe", tags: ["Recipes"], summary: "Update a recipe", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "UpdateRecipeEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id], requestBody: "UpdateRecipeRequest" },
+    DELETE: { operationId: "deleteApiV1Recipe", tags: ["Recipes"], summary: "Delete a recipe", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "DeleteRecipeEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: deleteIdempotencyParameters(pathParameters.id), requestBody: "DeleteRecipeRequest", requestBodyRequired: false },
+  },
+  "/api/v1/recipes/{id}/fork": {
+    POST: { operationId: "postApiV1RecipeFork", tags: ["Recipes"], summary: "Fork a recipe", auth: "bearer", scopes: ["kitchen:write"], success: { 201: "ForkRecipeEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id], requestBody: "ForkRecipeRequest" },
   },
   "/api/v1/recipes/import": {
     POST: { operationId: "postApiV1RecipeImport", tags: ["Recipes"], summary: "Import a recipe from URL, video, text, or JSON-LD", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "RecipeImportEnvelope", 201: "RecipeImportEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "upstream_error", "upstream_timeout", "internal_error"], requestBody: "RecipeImportRequest" },
   },
-  "/api/v1/recipes/{id}": {
-    GET: { operationId: "getApiV1Recipe", tags: ["Recipes"], summary: "Read one public recipe", auth: "optional", scopes: ["recipes:read"], success: { 200: "RecipeDetailEnvelope" }, errors: ["validation_error", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id] },
+  "/api/v1/recipes/{id}/steps": {
+    POST: { operationId: "postApiV1RecipeSteps", tags: ["Recipe Steps"], summary: "Create a recipe step", auth: "bearer", scopes: ["kitchen:write"], success: { 201: "CreateRecipeStepEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id], requestBody: "CreateRecipeStepRequest" },
+  },
+  "/api/v1/recipes/{id}/steps/{stepId}": {
+    PATCH: { operationId: "patchApiV1RecipeStep", tags: ["Recipe Steps"], summary: "Update a recipe step", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "UpdateRecipeStepEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id, pathParameters.stepId], requestBody: "UpdateRecipeStepRequest" },
+    DELETE: { operationId: "deleteApiV1RecipeStep", tags: ["Recipe Steps"], summary: "Delete a recipe step", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "DeleteRecipeStepEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: deleteIdempotencyParameters(pathParameters.id, pathParameters.stepId), requestBody: "DeleteRecipeStepRequest", requestBodyRequired: false },
+  },
+  "/api/v1/recipes/{id}/steps/reorder": {
+    POST: { operationId: "postApiV1RecipeStepsReorder", tags: ["Recipe Steps"], summary: "Reorder recipe steps", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "ReorderRecipeStepEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id], requestBody: "ReorderRecipeStepRequest" },
+  },
+  "/api/v1/recipes/{id}/steps/{stepId}/ingredients": {
+    POST: { operationId: "postApiV1RecipeStepIngredients", tags: ["Recipe Steps"], summary: "Add a step ingredient", auth: "bearer", scopes: ["kitchen:write"], success: { 201: "CreateRecipeStepIngredientEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id, pathParameters.stepId], requestBody: "CreateRecipeStepIngredientRequest" },
+  },
+  "/api/v1/recipes/{id}/steps/{stepId}/ingredients/{ingredientId}": {
+    DELETE: { operationId: "deleteApiV1RecipeStepIngredient", tags: ["Recipe Steps"], summary: "Delete a step ingredient", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "DeleteRecipeStepIngredientEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: deleteIdempotencyParameters(pathParameters.id, pathParameters.stepId, pathParameters.ingredientId), requestBody: "DeleteRecipeStepIngredientRequest", requestBodyRequired: false },
+  },
+  "/api/v1/recipes/{id}/step-output-uses": {
+    PUT: { operationId: "putApiV1RecipeStepOutputUses", tags: ["Recipe Steps"], summary: "Replace step-output dependency uses", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "ReplaceRecipeStepOutputUsesEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id], requestBody: "ReplaceRecipeStepOutputUsesRequest" },
   },
   "/api/v1/recipes/{id}/spoons": {
     GET: { operationId: "getApiV1RecipeSpoons", tags: ["Recipe Spoons"], summary: "List recent public cook events for one recipe", auth: "optional", scopes: ["recipes:read"], success: { 200: "RecipeSpoonListEnvelope" }, errors: ["validation_error", "invalid_cursor", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id, queryParameters.cursor, queryParameters.limit] },
@@ -985,7 +1252,7 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
   },
   "/api/v1/recipes/{id}/spoons/{spoonId}": {
     PATCH: { operationId: "patchApiV1RecipeSpoon", tags: ["Recipe Spoons"], summary: "Update one owned recipe spoon cook event", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "UpdateRecipeSpoonEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id, pathParameters.spoonId], requestBody: "UpdateRecipeSpoonRequest" },
-    DELETE: { operationId: "deleteApiV1RecipeSpoon", tags: ["Recipe Spoons"], summary: "Soft-delete one owned recipe spoon cook event", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "DeleteRecipeSpoonEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id, pathParameters.spoonId], requestBody: "DeleteRecipeSpoonRequest" },
+    DELETE: { operationId: "deleteApiV1RecipeSpoon", tags: ["Recipe Spoons"], summary: "Soft-delete one owned recipe spoon cook event", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "DeleteRecipeSpoonEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: deleteIdempotencyParameters(pathParameters.id, pathParameters.spoonId), requestBody: "DeleteRecipeSpoonRequest", requestBodyRequired: false },
   },
   "/api/v1/recipes/{id}/covers": {
     GET: { operationId: "getApiV1RecipeCovers", tags: ["Recipe Covers"], summary: "List owner recipe cover candidates and spoon photo sources", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "RecipeCoverListEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id, queryParameters.includeArchived, queryParameters.limit, queryParameters.offset] },
@@ -993,7 +1260,7 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
   },
   "/api/v1/recipes/{id}/covers/{coverId}": {
     PATCH: { operationId: "patchApiV1RecipeCover", tags: ["Recipe Covers"], summary: "Set an existing cover variant active", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "RecipeCoverMutationEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id, pathParameters.coverId], requestBody: "SetRecipeCoverRequest" },
-    DELETE: { operationId: "deleteApiV1RecipeCover", tags: ["Recipe Covers"], summary: "Archive a recipe cover candidate", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "RecipeCoverMutationEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id, pathParameters.coverId], requestBody: "ArchiveRecipeCoverRequest" },
+    DELETE: { operationId: "deleteApiV1RecipeCover", tags: ["Recipe Covers"], summary: "Archive a recipe cover candidate", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "RecipeCoverMutationEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: deleteIdempotencyParameters(pathParameters.id, pathParameters.coverId), requestBody: "ArchiveRecipeCoverRequest", requestBodyRequired: false },
   },
   "/api/v1/recipes/{id}/covers/regenerate": {
     POST: { operationId: "postApiV1RecipeCoverRegenerate", tags: ["Recipe Covers"], summary: "Regenerate the editorial image for a cover", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "RecipeCoverMutationEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id], requestBody: "RegenerateRecipeCoverRequest" },
@@ -1008,23 +1275,29 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
   "/api/v1/cookbooks/{id}": {
     GET: { operationId: "getApiV1Cookbook", tags: ["Cookbooks"], summary: "Read one public cookbook", auth: "optional", scopes: ["cookbooks:read"], success: { 200: "CookbookDetailEnvelope" }, errors: ["validation_error", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id] },
     PATCH: { operationId: "patchApiV1Cookbook", tags: ["Cookbooks"], summary: "Rename an owned cookbook", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "UpdateCookbookEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id], requestBody: "UpdateCookbookRequest" },
-    DELETE: { operationId: "deleteApiV1Cookbook", tags: ["Cookbooks"], summary: "Delete an owned cookbook", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "DeleteCookbookEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id, pathParameters.clientMutationIdHeader], requestBody: "DeleteCookbookRequest" },
+    DELETE: { operationId: "deleteApiV1Cookbook", tags: ["Cookbooks"], summary: "Delete an owned cookbook", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "DeleteCookbookEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: deleteIdempotencyParameters(pathParameters.id), requestBody: "DeleteCookbookRequest", requestBodyRequired: false },
   },
   "/api/v1/cookbooks/{id}/recipes/{recipeId}": {
     POST: { operationId: "postApiV1CookbookRecipe", tags: ["Cookbooks"], summary: "Add a recipe to an owned cookbook", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "CookbookRecipeMutationEnvelope", 201: "CookbookRecipeMutationEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id, pathParameters.recipeId], requestBody: "CookbookRecipeMutationRequest" },
-    DELETE: { operationId: "deleteApiV1CookbookRecipe", tags: ["Cookbooks"], summary: "Remove a recipe from an owned cookbook", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "CookbookRecipeRemoveEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id, pathParameters.recipeId, pathParameters.clientMutationIdHeader], requestBody: "CookbookRecipeMutationRequest" },
+    DELETE: { operationId: "deleteApiV1CookbookRecipe", tags: ["Cookbooks"], summary: "Remove a recipe from an owned cookbook", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "CookbookRecipeRemoveEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: deleteIdempotencyParameters(pathParameters.id, pathParameters.recipeId), requestBody: "CookbookRecipeMutationRequest", requestBodyRequired: false },
   },
   "/api/v1/me": {
     GET: { operationId: "getApiV1Me", tags: ["Account"], summary: "Read the authenticated account profile", auth: "bearer", scopes: ["account:read"], success: { 200: "AccountProfileEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"] },
-    PATCH: { operationId: "patchApiV1Me", tags: ["Account"], summary: "Update the authenticated account email and username", auth: "bearer", scopes: ["account:write"], success: { 200: "AccountProfileEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "UpdateAccountProfileRequest" },
+    PATCH: { operationId: "patchApiV1Me", tags: ["Account"], summary: "Update the authenticated account email and username", auth: "bearer", scopes: ["account:write"], success: { 200: "AccountProfileMutationEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "UpdateAccountProfileRequest" },
   },
   "/api/v1/me/photo": {
-    POST: { operationId: "postApiV1MePhoto", tags: ["Account"], summary: "Upload the authenticated account profile photo", auth: "bearer", scopes: ["account:write"], success: { 200: "AccountProfileEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "ProfilePhotoUploadRequest", requestBodyContentType: "multipart/form-data" },
-    DELETE: { operationId: "deleteApiV1MePhoto", tags: ["Account"], summary: "Remove the authenticated account profile photo", auth: "bearer", scopes: ["account:write"], success: { 200: "AccountProfileEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"] },
+    POST: { operationId: "postApiV1MePhoto", tags: ["Account"], summary: "Upload the authenticated account profile photo", auth: "bearer", scopes: ["account:write"], success: { 200: "AccountProfileMutationEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "ProfilePhotoUploadRequest", requestBodyContentType: "multipart/form-data" },
+    DELETE: { operationId: "deleteApiV1MePhoto", tags: ["Account"], summary: "Remove the authenticated account profile photo", auth: "bearer", scopes: ["account:write"], success: { 200: "AccountProfileMutationEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: deleteIdempotencyParameters(), requestBody: "AccountDeleteMutationRequest", requestBodyRequired: false },
   },
   "/api/v1/me/notification-preferences": {
     GET: { operationId: "getApiV1MeNotificationPreferences", tags: ["Account"], summary: "Read account notification preferences", auth: "bearer", scopes: ["account:read"], success: { 200: "NotificationPreferencesEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "method_not_allowed", "rate_limited", "internal_error"] },
-    PATCH: { operationId: "patchApiV1MeNotificationPreferences", tags: ["Account"], summary: "Update account notification preferences", auth: "bearer", scopes: ["account:write"], success: { 200: "NotificationPreferencesEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "UpdateNotificationPreferencesRequest" },
+    PATCH: { operationId: "patchApiV1MeNotificationPreferences", tags: ["Account"], summary: "Update account notification preferences", auth: "bearer", scopes: ["account:write"], success: { 200: "NotificationPreferencesMutationEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "UpdateNotificationPreferencesRequest" },
+  },
+  "/api/v1/me/apns-devices": {
+    POST: { operationId: "postApiV1MeApnsDevices", tags: ["Account"], summary: "Register or refresh a native APNs device", auth: "bearer", scopes: ["account:write"], success: { 200: "ApnsDeviceRegistrationEnvelope", 201: "ApnsDeviceRegistrationEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "ApnsDeviceRegistrationRequest" },
+  },
+  "/api/v1/me/apns-devices/{deviceId}": {
+    DELETE: { operationId: "deleteApiV1MeApnsDevice", tags: ["Account"], summary: "Revoke native APNs registrations for one device", auth: "bearer", scopes: ["account:write"], success: { 200: "ApnsDeviceRevokeEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: deleteIdempotencyParameters(pathParameters.deviceId), requestBody: "AccountDeleteMutationRequest", requestBodyRequired: false },
   },
   "/api/v1/me/connections": {
     GET: { operationId: "getApiV1MeConnections", tags: ["Account"], summary: "List OAuth app connections for the authenticated account", auth: "bearer", scopes: ["tokens:read"], success: { 200: "OAuthConnectionListEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "method_not_allowed", "rate_limited", "internal_error"] },
@@ -1043,7 +1316,7 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
   },
   "/api/v1/shopping-list/items/{itemId}": {
     PATCH: { operationId: "patchApiV1ShoppingListItem", tags: ["Shopping List"], summary: "Set a shopping-list item checked state", auth: "bearer", scopes: ["shopping_list:write"], success: { 200: "UpdateShoppingItemEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.itemId], requestBody: "CheckShoppingItemRequest" },
-    DELETE: { operationId: "deleteApiV1ShoppingListItem", tags: ["Shopping List"], summary: "Remove a shopping-list item", auth: "bearer", scopes: ["shopping_list:write"], success: { 200: "DeleteShoppingItemEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.itemId, pathParameters.clientMutationIdHeader] },
+    DELETE: { operationId: "deleteApiV1ShoppingListItem", tags: ["Shopping List"], summary: "Remove a shopping-list item", auth: "bearer", scopes: ["shopping_list:write"], success: { 200: "DeleteShoppingItemEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: deleteIdempotencyParameters(pathParameters.itemId), requestBody: "DeleteShoppingItemRequest", requestBodyRequired: false },
   },
   "/api/v1/shopping-list/add-from-recipe": {
     POST: { operationId: "postApiV1ShoppingListAddFromRecipe", tags: ["Shopping List"], summary: "Add recipe ingredients to the shopping list", auth: "bearer", scopes: ["shopping_list:write"], success: { 200: "AddRecipeIngredientsToShoppingListEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "AddRecipeIngredientsToShoppingListRequest" },
@@ -1065,8 +1338,10 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
 
 const exampleTimestamp = "2026-06-01T00:00:00.000Z";
 const exampleChef = { id: "chef_1", username: "ari" };
+const exampleSourceChef = { id: "chef_source", username: "jules" };
 const examplePrincipal = { ...exampleChef, source: "bearer" };
 const exampleRecipeIngredient = { id: "ingredient_1", name: "pasta", quantity: 1, unit: "lb" };
+const exampleGarlicIngredient = { id: "ingredient_2", name: "garlic", quantity: 2, unit: "cloves" };
 const exampleRecipeStep = {
   id: "step_1",
   stepNum: 1,
@@ -1074,6 +1349,26 @@ const exampleRecipeStep = {
   description: "Boil pasta.",
   duration: null,
   ingredients: [exampleRecipeIngredient],
+  usingSteps: [],
+};
+const exampleRecipeStepOutputUse = {
+  id: "step_use_1",
+  inputStepNum: 2,
+  outputStepNum: 1,
+  outputOfStep: { stepNum: 1, stepTitle: null },
+};
+const exampleDependentRecipeStep = {
+  id: "step_2",
+  stepNum: 2,
+  stepTitle: "Sauce",
+  description: "Toss pasta with sauce.",
+  duration: 3,
+  ingredients: [],
+  usingSteps: [exampleRecipeStepOutputUse],
+};
+const exampleDependentRecipeStepWithGarlic = {
+  ...exampleDependentRecipeStep,
+  ingredients: [exampleGarlicIngredient],
 };
 const exampleCookbookLink = {
   id: "cookbook_1",
@@ -1105,8 +1400,46 @@ const exampleRecipeSummary = {
 };
 const exampleRecipeDetail = {
   ...exampleRecipeSummary,
-  steps: [exampleRecipeStep],
+  steps: [exampleRecipeStep, exampleDependentRecipeStep],
   cookbooks: [exampleCookbookLink],
+};
+const exampleRecipeDetailAfterStepDelete = {
+  ...exampleRecipeDetail,
+  steps: [exampleRecipeStep],
+};
+const exampleRecipeDetailWithGarlic = {
+  ...exampleRecipeDetail,
+  steps: [exampleRecipeStep, exampleDependentRecipeStepWithGarlic],
+};
+const exampleCreatedRecipeDetail = {
+  ...exampleRecipeDetail,
+  attribution: {
+    ...exampleRecipeDetail.attribution,
+    sourceUrl: null,
+    sourceHost: null,
+    sourceRecipe: null,
+  },
+};
+const exampleForkedRecipeDetail = {
+  ...exampleRecipeDetail,
+  id: "recipe_fork_1",
+  title: "Pasta (variation 2)",
+  href: "/recipes/recipe_fork_1",
+  canonicalUrl: "https://spoonjoy.app/recipes/recipe_fork_1",
+  attribution: {
+    creditText: "Pasta (variation 2) by ari on Spoonjoy",
+    canonicalUrl: "https://spoonjoy.app/recipes/recipe_fork_1",
+    sourceUrl: null,
+    sourceHost: null,
+    sourceRecipe: {
+      id: "recipe_source_1",
+      title: "Pasta",
+      chef: exampleSourceChef,
+      href: "/recipes/recipe_source_1",
+      canonicalUrl: "https://spoonjoy.app/recipes/recipe_source_1",
+      deleted: false,
+    },
+  },
 };
 const exampleRecipeCover = {
   id: "cover_1",
@@ -1141,6 +1474,17 @@ const exampleRecipeSpoon = {
   note: "Added more lemon.",
   nextTime: "Try a wider pan.",
   deletedAt: null,
+};
+const exampleDeletedRecipe = {
+  id: "recipe_1",
+  deletedAt: exampleTimestamp,
+  updatedAt: exampleTimestamp,
+};
+const exampleRecipeFork = {
+  appliedTitle: "Pasta (variation 2)",
+  sourceChef: exampleSourceChef,
+  sourceRecipeId: "recipe_source_1",
+  titleWasSuffixed: true,
 };
 const exampleCookbookSummary = {
   id: "cookbook_1",
@@ -1189,6 +1533,20 @@ const exampleNotificationPreferences = {
   notifyForkOfMyRecipe: true,
   notifyCookbookSaveOfMine: true,
   notifyFellowChefOriginCook: true,
+};
+const exampleApnsDevice = {
+  id: "npd_1",
+  deviceId: "ios-simulator-1",
+  platform: "ios",
+  environment: "development",
+  tokenPrefix: "apns-token-",
+  deviceName: "Ari's iPhone",
+  appVersion: "1.0.0",
+  enabledAt: exampleTimestamp,
+  revokedAt: null,
+  lastRegisteredAt: exampleTimestamp,
+  createdAt: exampleTimestamp,
+  updatedAt: exampleTimestamp,
 };
 const exampleOAuthConnection = {
   id: "conn_eyJjbGllbnRJZCI6ImNtXzEiLCJyZXNvdXJjZSI6bnVsbCwiY29ubmVjdGlvbktleSI6Im9jbl9leGFtcGxlIn0",
@@ -1330,6 +1688,98 @@ const responseExamples: Record<string, unknown> = {
     },
   },
   RecipeDetailEnvelope: { ok: true, requestId: "req_example", data: { recipe: exampleRecipeDetail } },
+  CreateRecipeEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: { created: true, recipe: exampleCreatedRecipeDetail, mutation: exampleMutation },
+  },
+  UpdateRecipeEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: { updated: true, recipe: exampleRecipeDetail, mutation: exampleMutation },
+  },
+  DeleteRecipeEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: { deleted: true, recipe: exampleDeletedRecipe, mutation: exampleMutation },
+  },
+  ForkRecipeEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: { fork: exampleRecipeFork, recipe: exampleForkedRecipeDetail, mutation: exampleMutation },
+  },
+  CreateRecipeStepEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      created: true,
+      step: exampleDependentRecipeStep,
+      recipe: exampleRecipeDetail,
+      mutation: exampleMutation,
+    },
+  },
+  UpdateRecipeStepEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      updated: true,
+      step: { ...exampleDependentRecipeStep, description: "Toss pasta with glossy sauce.", duration: null },
+      recipe: exampleRecipeDetail,
+      mutation: exampleMutation,
+    },
+  },
+  DeleteRecipeStepEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      deleted: true,
+      step: { id: "step_2" },
+      recipe: exampleRecipeDetailAfterStepDelete,
+      mutation: exampleMutation,
+    },
+  },
+  CreateRecipeStepIngredientEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      created: true,
+      ingredient: exampleGarlicIngredient,
+      step: exampleDependentRecipeStepWithGarlic,
+      recipe: exampleRecipeDetailWithGarlic,
+      mutation: exampleMutation,
+    },
+  },
+  DeleteRecipeStepIngredientEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      deleted: true,
+      ingredient: { id: "ingredient_2" },
+      step: exampleDependentRecipeStep,
+      recipe: exampleRecipeDetail,
+      mutation: exampleMutation,
+    },
+  },
+  ReorderRecipeStepEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      reordered: true,
+      step: exampleDependentRecipeStep,
+      recipe: exampleRecipeDetail,
+      mutation: exampleMutation,
+    },
+  },
+  ReplaceRecipeStepOutputUsesEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      replaced: true,
+      step: exampleDependentRecipeStep,
+      recipe: exampleRecipeDetail,
+      mutation: exampleMutation,
+    },
+  },
   RecipeSpoonListEnvelope: {
     ok: true,
     requestId: "req_example",
@@ -1469,7 +1919,43 @@ const responseExamples: Record<string, unknown> = {
     },
   },
   AccountProfileEnvelope: { ok: true, requestId: "req_example", data: exampleAccountProfile },
+  AccountProfileMutationEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      ...exampleAccountProfile,
+      mutation: { clientMutationId: "device-uuid-account-update", replayed: false },
+    },
+  },
   NotificationPreferencesEnvelope: { ok: true, requestId: "req_example", data: exampleNotificationPreferences },
+  NotificationPreferencesMutationEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      ...exampleNotificationPreferences,
+      mutation: { clientMutationId: "device-uuid-notification-preferences", replayed: false },
+    },
+  },
+  ApnsDeviceRegistrationEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      created: true,
+      device: exampleApnsDevice,
+      mutation: { clientMutationId: "device-uuid-apns-register", replayed: false },
+    },
+  },
+  ApnsDeviceRevokeEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      revoked: true,
+      revokedCount: 1,
+      device: { ...exampleApnsDevice, revokedAt: exampleTimestamp },
+      devices: [{ ...exampleApnsDevice, revokedAt: exampleTimestamp }],
+      mutation: { clientMutationId: "device-uuid-apns-revoke", replayed: false },
+    },
+  },
   OAuthConnectionListEnvelope: { ok: true, requestId: "req_example", data: { connections: [exampleOAuthConnection] } },
   DisconnectOAuthConnectionEnvelope: {
     ok: true,
@@ -1541,13 +2027,79 @@ const responseExamples: Record<string, unknown> = {
 };
 
 const requestExamples: Record<string, unknown> = {
-  UpdateAccountProfileRequest: { email: "ari@spoonjoy.app", username: "ari" },
-  ProfilePhotoUploadRequest: { photo: "(binary image file)" },
+  CreateRecipeRequest: {
+    clientMutationId: "device-uuid-recipe-create",
+    title: "Pasta",
+    description: "Weeknight pasta",
+    servings: "4",
+    steps: [
+      {
+        stepTitle: null,
+        description: "Boil pasta.",
+        duration: null,
+        ingredients: [{ quantity: 1, unit: "lb", name: "pasta" }],
+      },
+    ],
+  },
+  UpdateRecipeRequest: {
+    clientMutationId: "device-uuid-recipe-update",
+    title: "Better Pasta",
+    description: null,
+    servings: "6",
+  },
+  DeleteRecipeRequest: { clientMutationId: "device-uuid-recipe-delete" },
+  ForkRecipeRequest: { clientMutationId: "device-uuid-recipe-fork", title: "My Pasta" },
+  CreateRecipeStepRequest: {
+    clientMutationId: "step-device-uuid-1",
+    stepTitle: "Sauce",
+    description: "Toss pasta with sauce.",
+    duration: 3,
+    ingredients: [{ quantity: 2, unit: "cloves", name: "garlic" }],
+    outputStepNums: [1],
+  },
+  UpdateRecipeStepRequest: {
+    clientMutationId: "step-device-uuid-2",
+    stepTitle: null,
+    description: "Toss pasta with glossy sauce.",
+    duration: null,
+    outputStepNums: [1],
+  },
+  DeleteRecipeStepRequest: { clientMutationId: "step-device-uuid-3" },
+  CreateRecipeStepIngredientRequest: {
+    clientMutationId: "step-ingredient-device-uuid-1",
+    quantity: 2,
+    unit: "cloves",
+    name: "garlic",
+  },
+  DeleteRecipeStepIngredientRequest: { clientMutationId: "step-ingredient-device-uuid-2" },
+  ReorderRecipeStepRequest: {
+    clientMutationId: "step-reorder-device-uuid-1",
+    stepId: "step_2",
+    toStepNum: 2,
+  },
+  ReplaceRecipeStepOutputUsesRequest: {
+    clientMutationId: "step-output-device-uuid-1",
+    inputStepId: "step_2",
+    outputStepNums: [1],
+  },
+  UpdateAccountProfileRequest: { clientMutationId: "device-uuid-account-update", email: "ari@spoonjoy.app", username: "ari" },
+  ProfilePhotoUploadRequest: { clientMutationId: "device-uuid-profile-photo", photo: "(binary image file)" },
+  AccountDeleteMutationRequest: { clientMutationId: "device-uuid-account-delete" },
   UpdateNotificationPreferencesRequest: {
+    clientMutationId: "device-uuid-notification-preferences",
     notifySpoonOnMyRecipe: true,
     notifyForkOfMyRecipe: true,
     notifyCookbookSaveOfMine: false,
     notifyFellowChefOriginCook: true,
+  },
+  ApnsDeviceRegistrationRequest: {
+    clientMutationId: "device-uuid-apns-register",
+    deviceId: "ios-simulator-1",
+    platform: "ios",
+    environment: "development",
+    token: "apns-token-example-secret",
+    deviceName: "Ari's iPhone",
+    appVersion: "1.0.0",
   },
   CreateTokenRequest: { name: "Tiny client", scopes: ["recipes:read", "shopping_list:read", "shopping_list:write"] },
   CreateRecipeSpoonRequest: {
@@ -1598,14 +2150,42 @@ const requestExamples: Record<string, unknown> = {
   ClearShoppingListRequest: { clientMutationId: "device-uuid-5" },
 };
 
-function requestExampleFor(schemaName: string, path: ResourcePath): unknown {
+function requestExampleFor(schemaName: string, path: ResourcePath, method: HttpMethod): unknown {
   if (schemaName === "ClearShoppingListRequest" && path === "/api/v1/shopping-list/clear-completed") {
     return { clientMutationId: "device-uuid-clear-completed" };
   }
   if (schemaName === "ClearShoppingListRequest" && path === "/api/v1/shopping-list/clear-all") {
     return { clientMutationId: "device-uuid-clear-all" };
   }
+  if (schemaName === "CookbookRecipeMutationRequest" && method === "DELETE") {
+    return { clientMutationId: "device-uuid-cookbook-recipe-remove" };
+  }
+  if (schemaName === "AccountDeleteMutationRequest" && path === "/api/v1/me/photo") {
+    return { clientMutationId: "device-uuid-profile-photo-remove" };
+  }
+  if (schemaName === "AccountDeleteMutationRequest" && path === "/api/v1/me/apns-devices/{deviceId}") {
+    return { clientMutationId: "device-uuid-apns-revoke" };
+  }
   return requestExamples[schemaName];
+}
+
+function clientMutationIdFromRequestExample(example: unknown) {
+  return example && typeof example === "object" && !Array.isArray(example) &&
+    typeof (example as { clientMutationId?: unknown }).clientMutationId === "string"
+    ? (example as { clientMutationId: string }).clientMutationId
+    : null;
+}
+
+function responseExampleFor(schemaName: string, path: ResourcePath, method: HttpMethod, requestSchemaName?: string) {
+  const example = responseExamples[schemaName];
+  if (!requestSchemaName) return example;
+
+  const clientMutationId = clientMutationIdFromRequestExample(requestExampleFor(requestSchemaName, path, method));
+  if (!clientMutationId) return example;
+
+  const operationExample = JSON.parse(JSON.stringify(example)) as { data: { mutation: { clientMutationId: string } } };
+  operationExample.data.mutation.clientMutationId = clientMutationId;
+  return operationExample;
 }
 
 const errorMessages: Record<ApiV1ErrorCode, string> = {
@@ -1626,7 +2206,7 @@ const errorMessages: Record<ApiV1ErrorCode, string> = {
   internal_error: "Internal error",
 };
 
-function successResponse(schemaName: string, options: { publicCache?: boolean; noStore?: boolean }) {
+function successResponse(schemaName: string, options: { publicCache?: boolean; noStore?: boolean; example: unknown }) {
   const headers: Record<string, unknown> = {
     "X-Request-Id": {
       description: "Request identifier generated by Spoonjoy or echoed from the request.",
@@ -1656,7 +2236,7 @@ function successResponse(schemaName: string, options: { publicCache?: boolean; n
   return {
     description: "Success",
     headers,
-    content: jsonContent(ref(schemaName), responseExamples[schemaName]),
+    content: jsonContent(ref(schemaName), options.example),
   };
 }
 
@@ -1801,6 +2381,15 @@ function isIdempotentCookbookMutation(path: ResourcePath, method: HttpMethod) {
     path === "/api/v1/cookbooks/{id}/recipes/{recipeId}";
 }
 
+function isIdempotentAccountMutation(path: ResourcePath, method: HttpMethod) {
+  if (method !== "POST" && method !== "PATCH" && method !== "DELETE") return false;
+  return path === "/api/v1/me" ||
+    path === "/api/v1/me/photo" ||
+    path === "/api/v1/me/notification-preferences" ||
+    path === "/api/v1/me/apns-devices" ||
+    path === "/api/v1/me/apns-devices/{deviceId}";
+}
+
 function retryPolicyFor(path: ResourcePath, method: HttpMethod) {
   if (path === "/api/v1/tokens" && method === "POST") {
     return {
@@ -1814,10 +2403,19 @@ function retryPolicyFor(path: ResourcePath, method: HttpMethod) {
   if (
     isIdempotentShoppingListMutation(path, method) ||
     isIdempotentCoverMutation(path, method) ||
-    isIdempotentRecipeSpoonMutation(path, method) ||
-    isIdempotentRecipeImportMutation(path, method) ||
-    isIdempotentCookbookMutation(path, method)
-  ) {
+	    isIdempotentRecipeSpoonMutation(path, method) ||
+	    isIdempotentRecipeImportMutation(path, method) ||
+	    isIdempotentCookbookMutation(path, method) ||
+	    isIdempotentAccountMutation(path, method)
+	  ) {
+    return {
+      retryOn: ["network_timeout", "429", "5xx", "idempotency_in_progress"],
+      retryAfterHeader: "Retry-After",
+      preserveClientMutationId: true,
+      doNotRetryUnchanged: ["validation_error", "insufficient_scope", "idempotency_conflict"],
+    };
+  }
+  if (isMutation && path.startsWith("/api/v1/recipes")) {
     return {
       retryOn: ["network_timeout", "429", "5xx", "idempotency_in_progress"],
       retryAfterHeader: "Retry-After",
@@ -1869,6 +2467,77 @@ function cursorPolicyFor(path: ResourcePath) {
 }
 
 function idempotencyPolicyFor(path: ResourcePath, method: HttpMethod) {
+  if (path === "/api/v1/recipes" && method === "POST") {
+    return {
+      key: "clientMutationId",
+      location: "jsonBody",
+      retentionHours: 24,
+      replayStatus: [201],
+      conflictStatus: 409,
+      inProgressRetryAfterSeconds: 2,
+      retryBodyRule: "Persist and retry the same parsed JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts.",
+    };
+  }
+  if (path === "/api/v1/recipes/{id}" && method === "PATCH") {
+    return {
+      key: "clientMutationId",
+      location: "jsonBody",
+      retentionHours: 24,
+      replayStatus: [200],
+      conflictStatus: 409,
+      inProgressRetryAfterSeconds: 2,
+      retryBodyRule: "Persist and retry the same parsed JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts.",
+    };
+  }
+  if (path === "/api/v1/recipes/{id}" && method === "DELETE") {
+    return {
+      key: "clientMutationId",
+      location: "jsonBody, query, or X-Client-Mutation-Id",
+      retentionHours: 24,
+      replayStatus: [200],
+      conflictStatus: 409,
+      inProgressRetryAfterSeconds: 2,
+      retryBodyRule: "Persist and retry the same recipe delete path for this clientMutationId. Delete requests may put the idempotency key in the JSON body, query string, or X-Client-Mutation-Id header.",
+    };
+  }
+  if (path === "/api/v1/recipes/{id}/fork" && method === "POST") {
+    return {
+      key: "clientMutationId",
+      location: "jsonBody",
+      retentionHours: 24,
+      replayStatus: [201],
+      conflictStatus: 409,
+      inProgressRetryAfterSeconds: 2,
+      retryBodyRule: "Persist and retry the same parsed JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts.",
+    };
+  }
+  if (
+    (
+      path === "/api/v1/recipes/{id}/steps" ||
+      path === "/api/v1/recipes/{id}/steps/{stepId}" ||
+      path === "/api/v1/recipes/{id}/steps/reorder" ||
+      path === "/api/v1/recipes/{id}/steps/{stepId}/ingredients" ||
+      path === "/api/v1/recipes/{id}/steps/{stepId}/ingredients/{ingredientId}" ||
+      path === "/api/v1/recipes/{id}/step-output-uses"
+    ) &&
+    (method === "POST" || method === "PATCH" || method === "PUT" || method === "DELETE")
+  ) {
+    const acceptsDeleteFallback = method === "DELETE" && (
+      path === "/api/v1/recipes/{id}/steps/{stepId}" ||
+      path === "/api/v1/recipes/{id}/steps/{stepId}/ingredients/{ingredientId}"
+    );
+    return {
+      key: "clientMutationId",
+      location: acceptsDeleteFallback ? "jsonBody, query, or X-Client-Mutation-Id" : "jsonBody",
+      retentionHours: 24,
+      replayStatus: [method === "POST" && (path === "/api/v1/recipes/{id}/steps" || path === "/api/v1/recipes/{id}/steps/{stepId}/ingredients") ? 201 : 200],
+      conflictStatus: 409,
+      inProgressRetryAfterSeconds: 2,
+      retryBodyRule: acceptsDeleteFallback
+        ? "Persist and retry the same parsed JSON body for this clientMutationId, or the same X-Client-Mutation-Id header/query value when the DELETE body is omitted. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts."
+        : "Persist and retry the same parsed JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts.",
+    };
+  }
   if (isIdempotentRecipeImportMutation(path, method)) {
     return {
       key: "clientMutationId",
@@ -1893,6 +2562,27 @@ function idempotencyPolicyFor(path: ResourcePath, method: HttpMethod) {
       conflictStatus: 409,
       inProgressRetryAfterSeconds: 2,
       retryBodyRule: "Persist and retry the same cookbook mutation body and path for this clientMutationId. Delete requests may put the idempotency key in the JSON body, query string, or X-Client-Mutation-Id header.",
+    };
+  }
+  if (isIdempotentAccountMutation(path, method)) {
+    const isDelete = method === "DELETE";
+    const isPhotoUpload = path === "/api/v1/me/photo" && method === "POST";
+    return {
+      key: "clientMutationId",
+      location: isDelete
+        ? "jsonBody, query, or X-Client-Mutation-Id"
+        : isPhotoUpload
+          ? "multipartFormData"
+          : "jsonBody",
+      retentionHours: 24,
+      replayStatus: path === "/api/v1/me/apns-devices" && method === "POST" ? [200, 201] : [200],
+      conflictStatus: 409,
+      inProgressRetryAfterSeconds: 2,
+      retryBodyRule: isDelete
+        ? "Persist and retry the same account mutation path for this clientMutationId. Delete requests may put the idempotency key in the JSON body, query string, or X-Client-Mutation-Id header."
+        : isPhotoUpload
+          ? "Persist and retry the same multipart profile photo payload for this clientMutationId. The uploaded file digest, size, type, and field values define conflicts."
+          : "Persist and retry the same parsed account JSON body for this clientMutationId. Spoonjoy canonicalizes object key order and ignores whitespace, but method, path, and body values still define conflicts.",
     };
   }
   if (isIdempotentRecipeSpoonMutation(path, method)) {
@@ -1959,12 +2649,13 @@ function idempotencyPolicyFor(path: ResourcePath, method: HttpMethod) {
   }
   if (path === "/api/v1/shopping-list/items/{itemId}" && method === "DELETE") {
     return {
-      key: "X-Client-Mutation-Id",
-      location: "header",
+      key: "clientMutationId",
+      location: "jsonBody, query, or X-Client-Mutation-Id",
       retentionHours: 24,
       replayStatus: [200],
       conflictStatus: 409,
       inProgressRetryAfterSeconds: 2,
+      retryBodyRule: "Persist and retry the same delete target for this clientMutationId. Delete requests may put the idempotency key in the JSON body, query string, or X-Client-Mutation-Id header.",
     };
   }
   return null;
@@ -2004,6 +2695,13 @@ function operationExtensions(path: ResourcePath, method: HttpMethod) {
 const oauthRegisterExample = {
   client_name: "Grocery helper",
   redirect_uris: ["https://example.com/oauth/callback"],
+  token_endpoint_auth_method: "none",
+  grant_types: ["authorization_code", "refresh_token"],
+  response_types: ["code"],
+};
+const spoonjoyAppleOAuthRegisterExample = {
+  client_name: "Spoonjoy Apple",
+  redirect_uris: ["https://spoonjoy.app/oauth/callback"],
   token_endpoint_auth_method: "none",
   grant_types: ["authorization_code", "refresh_token"],
   response_types: ["code"],
@@ -2126,7 +2824,10 @@ function authOperationPaths() {
         security: [{}],
         requestBody: {
           required: true,
-          content: jsonContent(ref("OAuthRegisterRequest"), oauthRegisterExample),
+          content: jsonContentExamples(ref("OAuthRegisterRequest"), {
+            example: oauthRegisterExample,
+            spoonjoy_apple_native: spoonjoyAppleOAuthRegisterExample,
+          }),
         },
         responses: {
           201: { description: "Registered client", content: jsonContent(ref("OAuthRegisterResponse"), oauthRegisterResponseExample) },
@@ -2314,6 +3015,7 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
             path === "/api/v1/cookbooks/{id}"
           ),
           noStore: requirement.auth === "bearer",
+          example: responseExampleFor(schemaName, path, method, meta.requestBody),
         });
       }
       const errorScopes = isSearchOperation ? ["shopping_list:read"] : requirement.scopes;
@@ -2343,10 +3045,10 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
         ...(meta.requestBody
           ? {
               requestBody: {
-                required: true,
+                required: meta.requestBodyRequired ?? true,
                 content: meta.requestBodyContentType === "multipart/form-data"
-                  ? multipartContent(ref(meta.requestBody), requestExampleFor(meta.requestBody, path))
-                  : jsonContent(ref(meta.requestBody), requestExampleFor(meta.requestBody, path)),
+                  ? multipartContent(ref(meta.requestBody), requestExampleFor(meta.requestBody, path, method))
+                  : jsonContent(ref(meta.requestBody), requestExampleFor(meta.requestBody, path, method)),
               },
             }
           : {}),
@@ -2547,6 +3249,31 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
     ],
     "x-client-scenarios": [
       {
+        id: "spoonjoy-apple-native-dogfood",
+        title: "Spoonjoy Apple native dogfood",
+        eyebrow: "iOS + macOS",
+        audience: "Use this shape for Spoonjoy's first-party native app and any Apple client that needs exact OAuth, offline cache, and sync behavior.",
+        notes: [
+          "Register the HTTPS universal-link callback https://spoonjoy.app/oauth/callback and enable the Associated Domains entitlement applinks:spoonjoy.app; the custom URL scheme is for app navigation only, not OAuth.",
+          "Persist client_id, access_token, and rotating refresh_token in Keychain; clear state and code_verifier after successful token exchange.",
+          "Replace the stored refresh token atomically after every refresh and use single-flight refresh before retrying REST API v1 requests.",
+          "Decode Spoonjoy REST envelopes for /api/v1 resources and keep OAuth token/revoke responses on their OAuth protocol shape.",
+          "Apply the Offline Product Contract: cache account/environment/schema/freshness/source metadata, preserve server revision markers, queue only safe product writes with stable clientMutationId, and keep secrets out of general cache storage.",
+        ],
+        sample: [
+          "POST /oauth/register",
+          "{\"client_name\":\"Spoonjoy Apple\",\"redirect_uris\":[\"https://spoonjoy.app/oauth/callback\"],\"token_endpoint_auth_method\":\"none\"}",
+          "",
+          "Associated Domains: applinks:spoonjoy.app",
+          "ASWebAuthenticationSession.Callback.https(host: \"spoonjoy.app\", path: \"/oauth/callback\")",
+          "Store client_id/access_token/refresh_token in Keychain; clear state/code_verifier after token exchange.",
+          "",
+          "GET /api/v1/shopping-list/sync?limit=50",
+          "Authorization: Bearer sj_...",
+          "# Decode { ok, requestId, data } and apply items plus tombstones before saving nextCursor.",
+        ].join("\n"),
+      },
+      {
         id: "cloudflare-worker-sync",
         title: "Cloudflare Worker sync bridge",
         eyebrow: "Serverless",
@@ -2732,11 +3459,11 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
     "x-current-capabilities": {
       available: [
         "public recipe and cookbook reads",
-        "authenticated recipe import from URL, video URL, text, or JSON-LD",
+        "Authenticated recipe create, update, delete, fork, step editing, and import from URL, video URL, text, or JSON-LD",
         "public recipe spoon history plus authenticated recipe spoon create, update, and delete",
         "Owner-scoped recipe cover candidate management",
         "owner-scoped shopping-list read, sync, item writes, recipe adds, and clear actions",
-        "native account profile, profile-photo, notification-preference, token, and OAuth app connection settings",
+        "native account profile, profile-photo, notification-preference, APNs device, token, and OAuth app connection settings",
         "session-created and bearer-created API tokens",
         "OAuth/PKCE delegated access",
         "delegated agent/device approval links",
@@ -2744,7 +3471,7 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
         "cursor-paginated public recipe and cookbook lists",
       ],
       notYetAvailable: [
-        "General recipe create, edit, delete, or export endpoints beyond recipe import and owner cover management",
+        "Recipe export endpoints beyond the current create, edit, delete, fork, import, step, spoon, and cover surfaces",
         "Private recipe-library endpoints",
         "Inventory or pantry stock APIs",
         "Meal plan or \"today's recipes\" APIs",

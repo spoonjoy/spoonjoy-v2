@@ -69,6 +69,7 @@ export default [
   route("health", "routes/health.ts"),
   route("oauth/register", "routes/oauth.register.ts"),
   route("oauth/authorize", "routes/oauth.authorize.tsx"),
+  route("oauth/callback", "routes/oauth.callback.tsx"),
   route("oauth/token", "routes/oauth.token.ts"),
   route("oauth/revoke", "routes/oauth.revoke.ts"),
   route(".well-known/oauth-authorization-server", "routes/well-known.oauth-authorization-server.ts"),

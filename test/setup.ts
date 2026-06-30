@@ -150,6 +150,7 @@ beforeAll(async () => {
   // and by running `pnpm prisma:push` locally (see README / DEPLOY.md).
   await db.notificationPreference.deleteMany({});
   await db.notificationEvent.deleteMany({});
+  await db.nativePushDevice.deleteMany({});
   await db.pushSubscription.deleteMany({});
   await db.shoppingListItem.deleteMany({});
   await db.shoppingList.deleteMany({});
@@ -158,12 +159,20 @@ beforeAll(async () => {
   await db.recipeStep.deleteMany({});
   await db.recipeInCookbook.deleteMany({});
   await db.cookbook.deleteMany({});
+  await db.recipe.updateMany({ data: { activeCoverId: null, sourceRecipeId: null } });
+  await db.recipeCover.deleteMany({});
+  await db.recipeSpoon.deleteMany({});
   await db.recipe.deleteMany({});
   await db.ingredientRef.deleteMany({});
   await db.unit.deleteMany({});
   await db.agentConnectionRequest.deleteMany({});
+  await db.apiMutationTombstone.deleteMany({});
   await db.apiIdempotencyKey.deleteMany({});
   await db.apiCredential.deleteMany({});
+  await db.imageGenLedger.deleteMany({});
+  await db.oAuthAuthCode.deleteMany({});
+  await db.oAuthRefreshToken.deleteMany({});
+  await db.oAuthClient.deleteMany({});
   await db.userCredential.deleteMany({});
   await db.oAuth.deleteMany({});
   await db.user.deleteMany({});

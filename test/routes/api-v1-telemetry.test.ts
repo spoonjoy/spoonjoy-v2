@@ -64,7 +64,7 @@ function apiRequest(url: string, requestId: string, headers: Record<string, stri
 }
 
 function apiJsonRequest(
-  method: "POST" | "PATCH" | "DELETE",
+  method: "POST" | "PATCH" | "PUT" | "DELETE",
   path: string,
   requestId: string,
   headers: Record<string, string>,
@@ -504,6 +504,96 @@ describe("API v1 mutation and validation telemetry", () => {
         request.bodyText,
       ],
     });
+  });
+
+  it("captures recipe write operation names on authentication failures", async () => {
+    const fixture = await createRecipeFixture(db);
+
+    for (const [method, path, routeTemplate, requestId, operation, body] of [
+      ["POST", "recipes", "/api/v1/recipes", "req_recipe_create_auth_operation", "recipes.create", {
+        clientMutationId: "telemetry-create",
+        title: "Telemetry Create",
+      }],
+      ["PATCH", `recipes/${fixture.recipe.id}`, "/api/v1/recipes/{id}", "req_recipe_update_auth_operation", "recipes.update", {
+        clientMutationId: "telemetry-update",
+        title: "Telemetry Update",
+      }],
+      ["DELETE", `recipes/${fixture.recipe.id}`, "/api/v1/recipes/{id}", "req_recipe_delete_auth_operation", "recipes.delete", {
+        clientMutationId: "telemetry-delete",
+      }],
+      ["POST", `recipes/${fixture.recipe.id}/fork`, "/api/v1/recipes/{id}/fork", "req_recipe_fork_auth_operation", "recipes.fork", {
+        clientMutationId: "telemetry-fork",
+      }],
+    ] as const) {
+      const request = apiJsonRequest(method, path, requestId, {}, body);
+      const response = await action(routeArgs(request.request, path).args);
+
+      expect(response.status).toBe(401);
+      expectApiV1ErrorEvent({
+        routeTemplate,
+        requestId,
+        status: 401,
+        errorCode: "authentication_required",
+        authMode: "anonymous",
+        operation,
+        privacyClass: "private",
+        forbidden: [request.bodyText, fixture.recipe.title],
+      });
+    }
+  });
+
+  it("captures recipe step operation names on authentication failures", async () => {
+    const fixture = await createRecipeFixture(db);
+    const stepId = "telemetry-step";
+    const ingredientId = "telemetry-ingredient";
+
+    for (const [method, path, routeTemplate, requestId, operation, body] of [
+      ["POST", `recipes/${fixture.recipe.id}/steps`, "/api/v1/recipes/{id}/steps", "req_step_create_auth_operation", "recipes.steps.create", {
+        clientMutationId: "telemetry-step-create",
+        description: "Telemetry step create",
+      }],
+      ["PATCH", `recipes/${fixture.recipe.id}/steps/${stepId}`, "/api/v1/recipes/{id}/steps/{stepId}", "req_step_update_auth_operation", "recipes.steps.update", {
+        clientMutationId: "telemetry-step-update",
+        description: "Telemetry step update",
+      }],
+      ["DELETE", `recipes/${fixture.recipe.id}/steps/${stepId}`, "/api/v1/recipes/{id}/steps/{stepId}", "req_step_delete_auth_operation", "recipes.steps.delete", {
+        clientMutationId: "telemetry-step-delete",
+      }],
+      ["POST", `recipes/${fixture.recipe.id}/steps/reorder`, "/api/v1/recipes/{id}/steps/reorder", "req_step_reorder_auth_operation", "recipes.steps.reorder", {
+        clientMutationId: "telemetry-step-reorder",
+        stepId,
+        toStepNum: 2,
+      }],
+      ["POST", `recipes/${fixture.recipe.id}/steps/${stepId}/ingredients`, "/api/v1/recipes/{id}/steps/{stepId}/ingredients", "req_step_ingredient_create_auth_operation", "recipes.steps.ingredients.create", {
+        clientMutationId: "telemetry-step-ingredient-create",
+        quantity: 1,
+        unit: "cup",
+        name: "salt",
+      }],
+      ["DELETE", `recipes/${fixture.recipe.id}/steps/${stepId}/ingredients/${ingredientId}`, "/api/v1/recipes/{id}/steps/{stepId}/ingredients/{ingredientId}", "req_step_ingredient_delete_auth_operation", "recipes.steps.ingredients.delete", {
+        clientMutationId: "telemetry-step-ingredient-delete",
+      }],
+      ["PUT", `recipes/${fixture.recipe.id}/step-output-uses`, "/api/v1/recipes/{id}/step-output-uses", "req_step_output_uses_auth_operation", "recipes.steps.output-uses.replace", {
+        clientMutationId: "telemetry-step-output-uses",
+        inputStepId: stepId,
+        outputStepNums: [1],
+      }],
+    ] as const) {
+      const request = apiJsonRequest(method, path, requestId, {}, body);
+      const response = await action(routeArgs(request.request, path).args);
+
+      expect(response.status).toBe(401);
+      expectApiV1ErrorEvent({
+        routeTemplate,
+        requestId,
+        status: 401,
+        errorCode: "authentication_required",
+        authMode: "anonymous",
+        operation,
+        privacyClass: "private",
+        forbidden: [request.bodyText, fixture.recipe.title, stepId, ingredientId],
+      });
+    }
   });
 
   it("captures shopping-list item create, check, and delete operations without body values", async () => {
@@ -1146,6 +1236,7 @@ describe("API v1 mutation and validation telemetry", () => {
     const nextEmail = faker.internet.email();
     const nextUsername = `telemetry_${faker.string.alphanumeric(8)}`;
     const updateProfile = apiJsonRequest("PATCH", "me", "req_account_operation_update", { Cookie: cookie }, {
+      clientMutationId: "telemetry-account-update",
       email: nextEmail,
       username: nextUsername,
     });
@@ -1155,10 +1246,11 @@ describe("API v1 mutation and validation telemetry", () => {
       requestId: "req_account_operation_update",
       operation: "account.update",
       status: 200,
-      forbidden: [nextEmail, nextUsername, updateProfile.bodyText, cookie],
+      forbidden: ["telemetry-account-update", nextEmail, nextUsername, updateProfile.bodyText, cookie],
     });
 
     const photoForm = new UndiciFormData();
+    photoForm.set("clientMutationId", "telemetry-account-photo-upload");
     const uploadPhoto = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/me/photo", {
       method: "POST",
       headers: {
@@ -1177,17 +1269,19 @@ describe("API v1 mutation and validation telemetry", () => {
       requestId: "req_account_operation_photo_upload",
       operation: "account.photo.upload",
       status: 400,
-      forbidden: [cookie],
+      forbidden: ["telemetry-account-photo-upload", cookie],
     });
 
-    const removePhoto = apiJsonRequest("DELETE", "me/photo", "req_account_operation_photo_remove", { Cookie: cookie }, {});
+    const removePhoto = apiJsonRequest("DELETE", "me/photo", "req_account_operation_photo_remove", { Cookie: cookie }, {
+      clientMutationId: "telemetry-account-photo-remove",
+    });
     expect((await action(routeArgs(removePhoto.request, "me/photo").args)).status).toBe(200);
     expectAccountOperation({
       routeTemplate: "/api/v1/me/photo",
       requestId: "req_account_operation_photo_remove",
       operation: "account.photo.remove",
       status: 200,
-      forbidden: [removePhoto.bodyText, cookie],
+      forbidden: ["telemetry-account-photo-remove", removePhoto.bodyText, cookie],
     });
 
     const readNotifications = await loader(routeArgs(apiRequest(
@@ -1210,6 +1304,7 @@ describe("API v1 mutation and validation telemetry", () => {
       "req_account_operation_notifications_update",
       { Cookie: cookie },
       {
+        clientMutationId: "telemetry-account-notifications-update",
         notifySpoonOnMyRecipe: true,
         notifyForkOfMyRecipe: false,
         notifyCookbookSaveOfMine: true,
@@ -1222,7 +1317,83 @@ describe("API v1 mutation and validation telemetry", () => {
       requestId: "req_account_operation_notifications_update",
       operation: "account.notification-preferences.update",
       status: 200,
-      forbidden: [updateNotifications.bodyText, cookie],
+      forbidden: ["telemetry-account-notifications-update", updateNotifications.bodyText, cookie],
+    });
+
+    const invalidProfileUpdate = apiJsonRequest("PATCH", "me", "req_account_operation_update_invalid", { Cookie: cookie }, {
+      username: "",
+    });
+    expect((await action(routeArgs(invalidProfileUpdate.request, "me").args)).status).toBe(400);
+    expectAccountOperation({
+      routeTemplate: "/api/v1/me",
+      requestId: "req_account_operation_update_invalid",
+      operation: "account.update",
+      status: 400,
+      forbidden: [invalidProfileUpdate.bodyText, cookie],
+    });
+
+    const invalidPhotoRemove = apiJsonRequest("DELETE", "me/photo", "req_account_operation_photo_remove_invalid", { Cookie: cookie }, {
+      clientMutationId: "telemetry-account-photo-remove-invalid",
+      unexpected: "private-photo-control",
+    });
+    expect((await action(routeArgs(invalidPhotoRemove.request, "me/photo").args)).status).toBe(400);
+    expectAccountOperation({
+      routeTemplate: "/api/v1/me/photo",
+      requestId: "req_account_operation_photo_remove_invalid",
+      operation: "account.photo.remove",
+      status: 400,
+      forbidden: ["telemetry-account-photo-remove-invalid", "private-photo-control", invalidPhotoRemove.bodyText, cookie],
+    });
+
+    const invalidNotifications = apiJsonRequest(
+      "PATCH",
+      "me/notification-preferences",
+      "req_account_operation_notifications_update_invalid",
+      { Cookie: cookie },
+      {
+        clientMutationId: "telemetry-account-notifications-invalid",
+        unexpected: "private-notification-control",
+      },
+    );
+    expect((await action(routeArgs(invalidNotifications.request, "me/notification-preferences").args)).status).toBe(400);
+    expectAccountOperation({
+      routeTemplate: "/api/v1/me/notification-preferences",
+      requestId: "req_account_operation_notifications_update_invalid",
+      operation: "account.notification-preferences.update",
+      status: 400,
+      forbidden: ["telemetry-account-notifications-invalid", "private-notification-control", invalidNotifications.bodyText, cookie],
+    });
+
+    const invalidApnsRegister = apiJsonRequest("POST", "me/apns-devices", "req_account_operation_apns_register_invalid", { Cookie: cookie }, {
+      clientMutationId: "telemetry-account-apns-invalid",
+      deviceId: "telemetry-device",
+      platform: "ios",
+      environment: "development",
+      token: "t".repeat(4097),
+    });
+    expect((await action(routeArgs(invalidApnsRegister.request, "me/apns-devices").args)).status).toBe(400);
+    expectAccountOperation({
+      routeTemplate: "/api/v1/me/apns-devices",
+      requestId: "req_account_operation_apns_register_invalid",
+      operation: "account.apns.register",
+      status: 400,
+      forbidden: ["telemetry-account-apns-invalid", "telemetry-device", invalidApnsRegister.bodyText, cookie],
+    });
+
+    const missingApnsRevoke = apiJsonRequest(
+      "DELETE",
+      "me/apns-devices/telemetry-device-missing",
+      "req_account_operation_apns_revoke_missing",
+      { Cookie: cookie },
+      { clientMutationId: "telemetry-account-apns-revoke-missing" },
+    );
+    expect((await action(routeArgs(missingApnsRevoke.request, "me/apns-devices/telemetry-device-missing").args)).status).toBe(404);
+    expectAccountOperation({
+      routeTemplate: "/api/v1/me/apns-devices/{deviceId}",
+      requestId: "req_account_operation_apns_revoke_missing",
+      operation: "account.apns.revoke",
+      status: 404,
+      forbidden: ["telemetry-account-apns-revoke-missing", "telemetry-device-missing", missingApnsRevoke.bodyText, cookie],
     });
 
     const listConnections = await loader(routeArgs(apiRequest("http://localhost/api/v1/me/connections", "req_account_operation_connections_list", {

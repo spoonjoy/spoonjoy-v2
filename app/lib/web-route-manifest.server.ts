@@ -106,6 +106,7 @@ export const WEB_ROUTE_MANIFEST = [
   route("routes/health.ts", "/health", "platform-asset"),
   route("routes/oauth.register.ts", "/oauth/register", "api-or-oauth"),
   route("routes/oauth.authorize.tsx", "/oauth/authorize", "secure-web-handoff"),
+  route("routes/oauth.callback.tsx", "/oauth/callback", "secure-web-handoff", { universalLink: true }),
   route("routes/oauth.token.ts", "/oauth/token", "api-or-oauth"),
   route("routes/oauth.revoke.ts", "/oauth/revoke", "api-or-oauth"),
   route("routes/well-known.oauth-authorization-server.ts", "/.well-known/oauth-authorization-server", "api-or-oauth"),
@@ -128,6 +129,8 @@ export const APPLE_APP_LINK_COMPONENTS = [
   { "/": "/search", "?": { "*": "*" } },
   { "/": "/recipes/new" },
   { "/": "/account/settings" },
+  { "/": "/oauth/callback" },
+  { "/": "/oauth/callback", "?": { "*": "*" } },
 ] as const satisfies readonly AppleAppLinkComponent[];
 
 export function appleTeamID(env: Pick<Env, "APPLE_TEAM_ID"> | null | undefined) {

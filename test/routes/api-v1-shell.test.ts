@@ -23,6 +23,14 @@ function routeArgs(request: Request, splat: string) {
   return { request, params: { "*": splat }, context: { cloudflare: { env: null } } } as any;
 }
 
+function unsupportedMethodRequest(path: string, method: string, headers: HeadersInit): Request {
+  return {
+    method,
+    url: `http://localhost/api/v1/${path}`,
+    headers: new Headers(headers),
+  } as unknown as Request;
+}
+
 async function readJson(response: Response) {
   return await response.json() as any;
 }
@@ -32,7 +40,7 @@ function expectV1Headers(response: Response, requestId: string) {
   expect(response.headers.get("X-Request-Id")).toBe(requestId);
   expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
   expect(response.headers.get("Access-Control-Allow-Headers")).toBe("Authorization, Content-Type, X-Request-Id, X-Client-Mutation-Id");
-  expect(response.headers.get("Access-Control-Allow-Methods")).toBe("GET, POST, PATCH, DELETE, OPTIONS");
+  expect(response.headers.get("Access-Control-Allow-Methods")).toBe("GET, POST, PATCH, PUT, DELETE, OPTIONS");
   expect(response.headers.get("Access-Control-Expose-Headers")).toContain("X-Request-Id");
 }
 
@@ -310,7 +318,7 @@ describe("/api/v1 shell", () => {
     expect(response.headers.get("X-Request-Id")).toBe("req_options");
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
     expect(response.headers.get("Access-Control-Allow-Headers")).toBe("Authorization, Content-Type, X-Request-Id, X-Client-Mutation-Id");
-    expect(response.headers.get("Access-Control-Allow-Methods")).toBe("GET, POST, PATCH, DELETE, OPTIONS");
+    expect(response.headers.get("Access-Control-Allow-Methods")).toBe("GET, POST, PATCH, PUT, DELETE, OPTIONS");
     expect(response.headers.get("Access-Control-Expose-Headers")).toBe("X-Request-Id, Retry-After");
     expect(response.headers.has("Content-Type")).toBe(false);
     expect(await response.text()).toBe("");
@@ -367,21 +375,32 @@ describe("/api/v1 shell", () => {
       method: "PUT",
       headers: { "X-Request-Id": "req_put_unknown" },
     }) as unknown as Request, "nope"));
-    expect(unsupportedUnknownPath.status).toBe(405);
+    expect(unsupportedUnknownPath.status).toBe(404);
     await expect(readJson(unsupportedUnknownPath)).resolves.toMatchObject({
       ok: false,
       requestId: "req_put_unknown",
+      error: { code: "not_found", status: 404 },
+    });
+
+    const unsupportedVerb = await action(routeArgs(unsupportedMethodRequest("nope", "TRACE", {
+      "X-Request-Id": "req_trace_unknown",
+    }), "nope"));
+    expect(unsupportedVerb.status).toBe(405);
+    expectV1Headers(unsupportedVerb, "req_trace_unknown");
+    await expect(readJson(unsupportedVerb)).resolves.toMatchObject({
+      ok: false,
+      requestId: "req_trace_unknown",
       error: { code: "method_not_allowed", status: 405 },
     });
 
     const unsupportedKnownPath = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/recipes", {
-      method: "POST",
-      headers: { "X-Request-Id": "req_post_recipes" },
+      method: "DELETE",
+      headers: { "X-Request-Id": "req_delete_recipes" },
     }) as unknown as Request, "recipes"));
     expect(unsupportedKnownPath.status).toBe(405);
     await expect(readJson(unsupportedKnownPath)).resolves.toMatchObject({
       ok: false,
-      requestId: "req_post_recipes",
+      requestId: "req_delete_recipes",
       error: { code: "method_not_allowed", status: 405 },
     });
 
