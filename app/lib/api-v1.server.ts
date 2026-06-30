@@ -5043,29 +5043,9 @@ async function handleRecipeStepReorder(args: ApiV1RouteArgs, requestId: string, 
   const origin = publicContentOrigin(args);
 
   return await runIdempotentApiV1Mutation(args, requestId, principal, body, parsed.data.clientMutationId, "recipes.steps.reorder", async (db, reservation) => {
-    const reordered = recipeStepResultOrThrow(await reorderNativeRecipeStep(db, principal.id, recipeId, parsed.data));
-    await db.apiMutationTombstone.upsert({
-      where: {
-        idempotencyKeyId_resourceType_resourceId: {
-          idempotencyKeyId: reservation.id,
-          resourceType: "recipe_step_reorder",
-          resourceId: parsed.data.stepId,
-        },
-      },
-      update: {
-        operation: "recipes.steps.reorder",
-        parentResourceId: recipeId,
-        payload: JSON.stringify({ recipeId, stepId: parsed.data.stepId, toStepNum: parsed.data.toStepNum, reordered: reordered.data.reordered }),
-      },
-      create: {
-        idempotencyKeyId: reservation.id,
-        operation: "recipes.steps.reorder",
-        resourceType: "recipe_step_reorder",
-        resourceId: parsed.data.stepId,
-        parentResourceId: recipeId,
-        payload: JSON.stringify({ recipeId, stepId: parsed.data.stepId, toStepNum: parsed.data.toStepNum, reordered: reordered.data.reordered }),
-      },
-    });
+    const reordered = recipeStepResultOrThrow(await reorderNativeRecipeStep(db, principal.id, recipeId, parsed.data, {
+      tombstone: { idempotencyKeyId: reservation.id, operation: "recipes.steps.reorder" },
+    }));
     const { recipe, step } = await serializedRecipeStepOrThrow(db, reordered.data.recipeId, reordered.data.stepId, origin);
     return {
       status: reordered.status,

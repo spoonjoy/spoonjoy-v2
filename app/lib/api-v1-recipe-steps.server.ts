@@ -85,6 +85,13 @@ interface NativeRecipeStepIngredientDeleteOptions {
   };
 }
 
+interface NativeRecipeStepReorderOptions {
+  tombstone?: {
+    idempotencyKeyId: string;
+    operation: string;
+  };
+}
+
 function success<T>(data: T, status = 200): ApiV1RecipeStepResult<T> {
   return { ok: true, status, data };
 }
@@ -545,7 +552,7 @@ function createIngredientOp(
   });
 }
 
-function createDeleteTombstoneOp(
+function createMutationTombstoneOp(
   db: Database,
   input: {
     idempotencyKeyId: string;
@@ -822,7 +829,7 @@ export async function deleteNativeRecipeStep(
 
   const ops: Prisma.PrismaPromise<unknown>[] = [];
   if (options.tombstone) {
-    ops.push(createDeleteTombstoneOp(db, {
+    ops.push(createMutationTombstoneOp(db, {
       ...options.tombstone,
       resourceType: "recipe_step",
       resourceId: stepId,
@@ -891,7 +898,7 @@ export async function deleteNativeRecipeStepIngredient(
 
   const ops: Prisma.PrismaPromise<unknown>[] = [];
   if (options.tombstone) {
-    ops.push(createDeleteTombstoneOp(db, {
+    ops.push(createMutationTombstoneOp(db, {
       ...options.tombstone,
       resourceType: "recipe_step_ingredient",
       resourceId: ingredient.id,
@@ -935,6 +942,7 @@ export async function reorderNativeRecipeStep(
   chefId: string,
   recipeId: string,
   input: NativeRecipeStepReorderInput,
+  options: NativeRecipeStepReorderOptions = {},
 ): Promise<ApiV1RecipeStepResult<{ recipeId: string; stepId: string; reordered: boolean }>> {
   const recipe = await loadOwnedRecipe(db, chefId, recipeId);
   if (!recipe.ok) return recipe;
@@ -962,6 +970,15 @@ export async function reorderNativeRecipeStep(
   }
 
   if (currentIndex === targetIndex) {
+    if (options.tombstone) {
+      await db.$transaction([createMutationTombstoneOp(db, {
+        ...options.tombstone,
+        resourceType: "recipe_step_reorder",
+        resourceId: input.stepId,
+        parentResourceId: recipeId,
+        payload: { recipeId, stepId: input.stepId, toStepNum: input.toStepNum, reordered: false },
+      })]);
+    }
     return success({ recipeId, stepId: input.stepId, reordered: false });
   }
 
@@ -985,6 +1002,15 @@ export async function reorderNativeRecipeStep(
         data: { stepNum: index + 1 },
       }),
     );
+  }
+  if (options.tombstone) {
+    ops.push(createMutationTombstoneOp(db, {
+      ...options.tombstone,
+      resourceType: "recipe_step_reorder",
+      resourceId: input.stepId,
+      parentResourceId: recipeId,
+      payload: { recipeId, stepId: input.stepId, toStepNum: input.toStepNum, reordered: true },
+    }));
   }
   await db.$transaction(ops);
 

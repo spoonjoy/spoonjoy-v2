@@ -686,6 +686,137 @@ describe("API v1 recipe step helper contracts", () => {
   });
 
   it("batches reorder renumbering in one transaction", async () => {
+    const tombstoneOp = { op: "reorder-tombstone" };
+    const transaction = vi.fn().mockResolvedValue([]);
+    const update = vi.fn((args) => ({ op: "update-step", args }));
+    const upsert = vi.fn().mockReturnValue(tombstoneOp);
+    const dbMock = {
+      recipe: {
+        findUnique: vi.fn().mockResolvedValue({ id: "recipe_1", chefId: "chef_1", deletedAt: null }),
+      },
+      recipeStep: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "step_2",
+          recipeId: "recipe_1",
+          stepNum: 2,
+          stepTitle: "Second",
+          description: "Second.",
+          duration: null,
+        }),
+        findMany: vi.fn().mockResolvedValue([
+          { id: "step_1", stepNum: 1 },
+          { id: "step_2", stepNum: 2 },
+        ]),
+        update,
+      },
+      stepOutputUse: {
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+      apiMutationTombstone: {
+        upsert,
+      },
+      $transaction: transaction,
+    } as unknown as LocalDb;
+
+    expectOk(await reorderNativeRecipeStep(dbMock, "chef_1", "recipe_1", {
+      clientMutationId: "reorder-transaction",
+      stepId: "step_2",
+      toStepNum: 1,
+    }, {
+      tombstone: { idempotencyKeyId: "idem_1", operation: "recipes.steps.reorder" },
+    }));
+    expect(update).toHaveBeenCalledTimes(4);
+    expect(update).toHaveBeenNthCalledWith(1, {
+      where: { id: "step_2" },
+      data: { stepNum: -1 },
+    });
+    expect(update).toHaveBeenNthCalledWith(2, {
+      where: { id: "step_1" },
+      data: { stepNum: -2 },
+    });
+    expect(update).toHaveBeenNthCalledWith(3, {
+      where: { id: "step_2" },
+      data: { stepNum: 1 },
+    });
+    expect(update).toHaveBeenNthCalledWith(4, {
+      where: { id: "step_1" },
+      data: { stepNum: 2 },
+    });
+    expect(upsert).toHaveBeenCalledWith({
+      where: {
+        idempotencyKeyId_resourceType_resourceId: {
+          idempotencyKeyId: "idem_1",
+          resourceType: "recipe_step_reorder",
+          resourceId: "step_2",
+        },
+      },
+      update: {
+        operation: "recipes.steps.reorder",
+        parentResourceId: "recipe_1",
+        payload: JSON.stringify({ recipeId: "recipe_1", stepId: "step_2", toStepNum: 1, reordered: true }),
+      },
+      create: {
+        idempotencyKeyId: "idem_1",
+        operation: "recipes.steps.reorder",
+        resourceType: "recipe_step_reorder",
+        resourceId: "step_2",
+        parentResourceId: "recipe_1",
+        payload: JSON.stringify({ recipeId: "recipe_1", stepId: "step_2", toStepNum: 1, reordered: true }),
+      },
+    });
+    expect(transaction).toHaveBeenCalledWith([...update.mock.results.map((result) => result.value), tombstoneOp]);
+  });
+
+  it("records no-op reorder tombstones before returning", async () => {
+    const tombstoneOp = { op: "reorder-no-op-tombstone" };
+    const transaction = vi.fn().mockResolvedValue([]);
+    const upsert = vi.fn().mockReturnValue(tombstoneOp);
+    const dbMock = {
+      recipe: {
+        findUnique: vi.fn().mockResolvedValue({ id: "recipe_1", chefId: "chef_1", deletedAt: null }),
+      },
+      recipeStep: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "step_2",
+          recipeId: "recipe_1",
+          stepNum: 2,
+          stepTitle: "Second",
+          description: "Second.",
+          duration: null,
+        }),
+        findMany: vi.fn().mockResolvedValue([
+          { id: "step_1", stepNum: 1 },
+          { id: "step_2", stepNum: 2 },
+        ]),
+      },
+      stepOutputUse: {
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+      apiMutationTombstone: {
+        upsert,
+      },
+      $transaction: transaction,
+    } as unknown as LocalDb;
+
+    const result = expectOk(await reorderNativeRecipeStep(dbMock, "chef_1", "recipe_1", {
+      clientMutationId: "reorder-no-op-transaction",
+      stepId: "step_2",
+      toStepNum: 2,
+    }, {
+      tombstone: { idempotencyKeyId: "idem_noop", operation: "recipes.steps.reorder" },
+    }));
+
+    expect(result.data.reordered).toBe(false);
+    expect(upsert).toHaveBeenCalledWith(expect.objectContaining({
+      create: expect.objectContaining({
+        idempotencyKeyId: "idem_noop",
+        payload: JSON.stringify({ recipeId: "recipe_1", stepId: "step_2", toStepNum: 2, reordered: false }),
+      }),
+    }));
+    expect(transaction).toHaveBeenCalledWith([tombstoneOp]);
+  });
+
+  it("still supports reorder helpers without route tombstones", async () => {
     const transaction = vi.fn().mockResolvedValue([]);
     const update = vi.fn((args) => ({ op: "update-step", args }));
     const dbMock = {
@@ -713,29 +844,15 @@ describe("API v1 recipe step helper contracts", () => {
       $transaction: transaction,
     } as unknown as LocalDb;
 
-    expectOk(await reorderNativeRecipeStep(dbMock, "chef_1", "recipe_1", {
-      clientMutationId: "reorder-transaction",
+    const result = expectOk(await reorderNativeRecipeStep(dbMock, "chef_1", "recipe_1", {
+      clientMutationId: "reorder-without-tombstone",
       stepId: "step_2",
       toStepNum: 1,
     }));
+
+    expect(result.data.reordered).toBe(true);
     expect(update).toHaveBeenCalledTimes(4);
-    expect(update).toHaveBeenNthCalledWith(1, {
-      where: { id: "step_2" },
-      data: { stepNum: -1 },
-    });
-    expect(update).toHaveBeenNthCalledWith(2, {
-      where: { id: "step_1" },
-      data: { stepNum: -2 },
-    });
-    expect(update).toHaveBeenNthCalledWith(3, {
-      where: { id: "step_2" },
-      data: { stepNum: 1 },
-    });
-    expect(update).toHaveBeenNthCalledWith(4, {
-      where: { id: "step_1" },
-      data: { stepNum: 2 },
-    });
-    expect(transaction).toHaveBeenCalledWith(update.mock.results.map((result) => result.value));
+    expect(transaction).toHaveBeenCalledWith(update.mock.results.map((candidate) => candidate.value));
   });
 
   it("batches output-use replacement in one transaction", async () => {
