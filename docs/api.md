@@ -748,7 +748,7 @@ curl -fsS -X DELETE 'https://spoonjoy.app/api/v1/me/photo' \
 
 ### DELETE idempotency
 
-X-Client-Mutation-Id is recommended for DELETE retries because many intermediaries and SDKs treat DELETE bodies inconsistently. API v1 also accepts JSON body clientMutationId where the endpoint declares a delete body, and shopping-list item DELETE accepts query string clientMutationId for clients that cannot send custom headers. Reuse the same id only with the same method, path, and body shape; conflicts return `409 idempotency_conflict`.
+X-Client-Mutation-Id is recommended for DELETE retries because many intermediaries and SDKs treat DELETE bodies inconsistently. API v1 also accepts JSON body `clientMutationId` where the endpoint declares a delete body, and idempotent DELETE endpoints accept query string `clientMutationId` for clients that cannot send custom headers. Reuse the same id only with the same method, path, and body shape; conflicts return `409 idempotency_conflict`.
 
 ```bash
 curl -fsS -X DELETE 'https://spoonjoy.app/api/v1/shopping-list/items/item_123' \

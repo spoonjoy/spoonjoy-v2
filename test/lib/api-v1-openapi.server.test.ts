@@ -93,6 +93,8 @@ function expectFlexibleDeleteContract(document: any, path: string, requestSchema
     key: "clientMutationId",
     location: "jsonBody, query, or X-Client-Mutation-Id",
   });
+  expect(deleteOperation.responses["400"].content["application/json"].examples.invalid_json.value.error.code)
+    .toBe("invalid_json");
 }
 
 function dedupeSecurity(security: Array<Record<string, unknown>>) {
