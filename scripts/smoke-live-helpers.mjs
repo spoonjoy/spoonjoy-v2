@@ -3,7 +3,9 @@ import { execFileSync } from "node:child_process";
 import {
   DEFAULT_PRODUCTION_BASE_URL,
   PRODUCTION_BASE_URLS,
+  PRODUCTION_D1_DATABASE_NAME,
   QA_BASE_URL,
+  QA_D1_DATABASE_NAME,
   QA_R2_BUCKET,
   arg,
   resolveScriptTarget,
@@ -13,7 +15,9 @@ import {
 export {
   DEFAULT_PRODUCTION_BASE_URL,
   PRODUCTION_BASE_URLS,
+  PRODUCTION_D1_DATABASE_NAME,
   QA_BASE_URL,
+  QA_D1_DATABASE_NAME,
   QA_R2_BUCKET,
   arg,
   usesLocalD1,
@@ -52,21 +56,32 @@ export function parseSmokeArgs(argv = process.argv.slice(2), env = process.env) 
   };
 }
 
-function d1TargetArgs(targetEnv) {
-  if (targetEnv === "local") return resolveScriptTarget({ argv: ["--base-url", "http://localhost"], defaultBaseUrl: "http://localhost" }).d1Args;
-  if (targetEnv === "qa") return resolveScriptTarget({ argv: ["--target-env", "qa", "--base-url", QA_BASE_URL] }).d1Args;
-  if (targetEnv === "production") return resolveScriptTarget({ argv: ["--target-env", "production", "--base-url", DEFAULT_PRODUCTION_BASE_URL] }).d1Args;
+function d1ExecuteTarget(targetEnv) {
+  if (targetEnv === "local") {
+    return {
+      database: "DB",
+      args: resolveScriptTarget({ argv: ["--base-url", "http://localhost"], defaultBaseUrl: "http://localhost" }).d1Args,
+    };
+  }
+  if (targetEnv === "qa") {
+    return { database: QA_D1_DATABASE_NAME, args: ["--remote"] };
+  }
+  if (targetEnv === "production") {
+    return { database: PRODUCTION_D1_DATABASE_NAME, args: ["--remote"] };
+  }
   throw new Error("D1 smoke operation requires targetEnv local, qa, or production.");
 }
 
 export function buildCleanupD1Args(email, { targetEnv }) {
   const command = `DELETE FROM "User" WHERE email = ${sqlString(email)};`;
-  return ["exec", "wrangler", "d1", "execute", "DB", ...d1TargetArgs(targetEnv), "--command", command];
+  const target = d1ExecuteTarget(targetEnv);
+  return ["exec", "wrangler", "d1", "execute", target.database, ...target.args, "--command", command];
 }
 
 export function buildUserCountD1Args(email, { targetEnv }) {
   const command = `SELECT COUNT(*) AS count FROM "User" WHERE email = ${sqlString(email)};`;
-  return ["exec", "wrangler", "d1", "execute", "DB", ...d1TargetArgs(targetEnv), "--command", command];
+  const target = d1ExecuteTarget(targetEnv);
+  return ["exec", "wrangler", "d1", "execute", target.database, ...target.args, "--command", command];
 }
 
 export function buildQaR2GetArgs(key) {
