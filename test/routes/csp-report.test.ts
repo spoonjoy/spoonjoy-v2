@@ -257,7 +257,7 @@ describe("POST /csp-report", () => {
     expect(captureEvent).not.toHaveBeenCalled();
   });
 
-  it("returns 204 and captures nothing when the top-level body is an array", async () => {
+  it("returns 204 and captures nothing for an empty Reporting API array", async () => {
     const { args } = routeArgs(reportRequest("[]"));
     const response = await action(args);
     expect(response.status).toBe(204);
@@ -287,6 +287,84 @@ describe("POST /csp-report", () => {
 
   it("returns 204 and captures nothing when csp-report is null", async () => {
     const { args } = routeArgs(reportRequest(JSON.stringify({ "csp-report": null })));
+    const response = await action(args);
+    expect(response.status).toBe(204);
+    expect(captureEvent).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /csp-report — modern Reporting API (report-to) array body", () => {
+  it("captures the first csp-violation, mapping camelCase fields + sanitizing the URL", async () => {
+    const { args, waitUntil } = routeArgs(
+      reportRequest(
+        JSON.stringify([
+          {
+            type: "csp-violation",
+            body: {
+              blockedURL: "https://evil.example/inject.js",
+              effectiveDirective: "script-src-elem",
+              violatedDirective: "script-src-elem",
+              documentURL: "https://spoonjoy.app/recipes/42?token=secret#frag",
+              disposition: "report",
+            },
+          },
+        ]),
+        { "Content-Type": "application/reports+json" },
+      ),
+    );
+
+    const response = await action(args);
+    expect(response.status).toBe(204);
+    expect(captureEvent).toHaveBeenCalledOnce();
+    expect(lastCaptureInput()).toEqual({
+      event: "spoonjoy.csp_violation",
+      distinctId: "anon",
+      properties: {
+        blockedUri: "https://evil.example/inject.js",
+        effectiveDirective: "script-src-elem",
+        violatedDirective: "script-src-elem",
+        documentUri: "https://spoonjoy.app/recipes/42",
+        disposition: "report",
+      },
+    });
+    expect(waitUntil).toHaveBeenCalledOnce();
+
+    const serialized = JSON.stringify(lastCaptureInput());
+    expect(serialized).not.toContain("token=secret");
+    expect(serialized).not.toContain("frag");
+  });
+
+  it("skips non-object and non-violation entries to find the first csp-violation", async () => {
+    const { args } = routeArgs(
+      reportRequest(
+        JSON.stringify([
+          "not-an-object",
+          { type: "deprecation" },
+          { type: "csp-violation", body: { effectiveDirective: "img-src" } },
+        ]),
+      ),
+    );
+    const response = await action(args);
+    expect(response.status).toBe(204);
+    expect(captureEvent).toHaveBeenCalledOnce();
+    expect(lastCaptureInput()).toMatchObject({
+      properties: { effectiveDirective: "img-src" },
+    });
+  });
+
+  it("captures nothing when no array entry is a csp-violation", async () => {
+    const { args } = routeArgs(
+      reportRequest(JSON.stringify([{ type: "deprecation" }, "noise"])),
+    );
+    const response = await action(args);
+    expect(response.status).toBe(204);
+    expect(captureEvent).not.toHaveBeenCalled();
+  });
+
+  it("captures nothing when the csp-violation body is not an object", async () => {
+    const { args } = routeArgs(
+      reportRequest(JSON.stringify([{ type: "csp-violation", body: null }])),
+    );
     const response = await action(args);
     expect(response.status).toBe(204);
     expect(captureEvent).not.toHaveBeenCalled();

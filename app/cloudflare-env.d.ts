@@ -96,6 +96,12 @@ declare module "react-router" {
       env?: Env | null;
       ctx?: ExecutionContext;
     };
+    /**
+     * Per-request CSP nonce, generated in `workers/app.ts`. Used for the
+     * report-only CSP `script-src` AND the SSR inline `<script>` nonces (read in
+     * `entry.server.tsx`, provided via `NonceContext`).
+     */
+    nonce?: string;
   }
 }
 

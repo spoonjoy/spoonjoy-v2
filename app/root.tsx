@@ -13,10 +13,11 @@ import {
   Link as RouterLink,
   useLocation,
 } from "react-router";
-import { useEffect } from "react";
+import { useContext, useEffect } from "react";
 import { usePostHog } from "@posthog/react";
 import * as Headless from "@headlessui/react";
 import { getUserId } from "~/lib/session.server";
+import { NonceContext } from "~/lib/nonce";
 import { getConfiguredOAuthProviders, type OAuthProvider } from "~/lib/env.server";
 import { getOAuthEnv } from "~/lib/oauth-route.server";
 import { toAnalyticsPageUrl } from "~/lib/analytics";
@@ -236,6 +237,9 @@ function RouteTransitionIndicator() {
  * App, not here.
  */
 export function Layout({ children }: { children: React.ReactNode }) {
+  // Per-request CSP nonce (server-provided via NonceContext in entry.server).
+  // Applied to every inline <script> below so script-src can drop 'unsafe-inline'.
+  const nonce = useContext(NonceContext);
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -248,6 +252,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
         {/* Prevent flash of wrong theme */}
         <script
+          nonce={nonce}
           dangerouslySetInnerHTML={{
             __html: `
               (function() {
@@ -266,8 +271,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <a className="sj-skip-link" href="#main">Skip to main content</a>
           {children}
         </ThemeProvider>
-        <ScrollRestoration />
-        <Scripts />
+        <ScrollRestoration nonce={nonce} />
+        <Scripts nonce={nonce} />
       </body>
     </html>
   );
