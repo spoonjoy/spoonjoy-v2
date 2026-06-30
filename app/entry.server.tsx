@@ -11,6 +11,7 @@ import {
   captureException,
   resolvePostHogServerConfig,
 } from "~/lib/analytics-server";
+import { NonceContext } from "~/lib/nonce";
 
 export default async function handleRequest(
   request: Request,
@@ -26,8 +27,17 @@ export default async function handleRequest(
   const postHogConfig = env ? resolvePostHogServerConfig(env) : { enabled: false as const, reason: "missing-key" as const };
   const requestUrl = new URL(request.url);
 
+  const nonce = loadContext.nonce ?? "";
   const body = await renderToReadableStream(
-    <ServerRouter context={routerContext} url={request.url} />,
+    // `nonce` must go BOTH to NonceContext (theme-flash <script>, <Scripts>,
+    // <ScrollRestoration> in root.tsx) AND to ServerRouter itself — React
+    // Router's internal StreamTransfer emits its own inline hydration scripts
+    // (window.__reactRouterContext…) that are nonced ONLY via this prop, not
+    // via context. Omitting it leaves those scripts un-nonced → they'd be
+    // blocked on every page once the CSP flips from report-only to enforce.
+    <NonceContext.Provider value={nonce}>
+      <ServerRouter context={routerContext} url={request.url} nonce={nonce} />
+    </NonceContext.Provider>,
     {
       onError(error: unknown) {
         responseStatusCode = 500;

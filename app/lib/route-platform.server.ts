@@ -12,6 +12,16 @@ export function getIngredientParserEnv(context: AppLoadContext): IngredientParse
 
   return {
     OPENAI_API_KEY: env?.OPENAI_API_KEY ?? process.env.OPENAI_API_KEY,
+    // Gemini fallback provider — parseIngredients falls back to Gemini when a
+    // retryable OpenAI call fails. These MUST stay wired here: the fallback is
+    // gated on a truthy googleApiKey, so omitting GOOGLE_API_KEY silently makes
+    // the fallback dead on every interactive parse surface (the exact outage
+    // this is meant to cover). GEMINI_TEXT_* are optional overrides (defaults
+    // apply when unset).
+    GOOGLE_API_KEY: env?.GOOGLE_API_KEY ?? process.env.GOOGLE_API_KEY,
+    GEMINI_TEXT_MODEL: env?.GEMINI_TEXT_MODEL ?? process.env.GEMINI_TEXT_MODEL,
+    GEMINI_TEXT_TIMEOUT_MS:
+      env?.GEMINI_TEXT_TIMEOUT_MS ?? process.env.GEMINI_TEXT_TIMEOUT_MS,
     INGREDIENT_PARSE_PROVIDER:
       env?.INGREDIENT_PARSE_PROVIDER ?? process.env.INGREDIENT_PARSE_PROVIDER,
     INGREDIENT_PARSE_MODEL:

@@ -63,6 +63,8 @@ declare global {
     GEMINI_API_KEY?: string;
     GEMINI_IMAGE_MODEL?: string;
     GEMINI_IMAGE_TIMEOUT_MS?: string;
+    GEMINI_TEXT_MODEL?: string;
+    GEMINI_TEXT_TIMEOUT_MS?: string;
     IMAGE_PROVIDER_PRIMARY?: string;
     IMAGE_PROVIDER_FALLBACKS?: string;
     INGREDIENT_PARSE_PROVIDER?: string;
@@ -94,6 +96,12 @@ declare module "react-router" {
       env?: Env | null;
       ctx?: ExecutionContext;
     };
+    /**
+     * Per-request CSP nonce, generated in `workers/app.ts`. Used for the
+     * report-only CSP `script-src` AND the SSR inline `<script>` nonces (read in
+     * `entry.server.tsx`, provided via `NonceContext`).
+     */
+    nonce?: string;
   }
 }
 

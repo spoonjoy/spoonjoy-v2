@@ -4,6 +4,7 @@ import {
   DEFAULT_INGREDIENT_PARSE_MODEL,
   DEFAULT_INGREDIENT_PARSE_PROVIDER,
   DEFAULT_INGREDIENT_PARSE_TIMEOUT_MS,
+  isRetryableForFallback,
   parseIngredients,
   ParsedIngredientSchema,
   ParsedIngredientsResponseSchema,
@@ -11,6 +12,10 @@ import {
   resolveIngredientParserConfig,
   type ParsedIngredient,
 } from '~/lib/ingredient-parse.server'
+import {
+  DEFAULT_GEMINI_TEXT_MODEL,
+  DEFAULT_GEMINI_TEXT_TIMEOUT_MS,
+} from '~/lib/gemini-text.server'
 
 /**
  * Tests for OpenAI ingredient parsing integration using gpt-4o-mini with structured outputs.
@@ -210,6 +215,9 @@ describe('Ingredient Parsing', () => {
         model: DEFAULT_INGREDIENT_PARSE_MODEL,
         timeoutMs: DEFAULT_INGREDIENT_PARSE_TIMEOUT_MS,
         maxRetries: DEFAULT_INGREDIENT_PARSE_MAX_RETRIES,
+        googleApiKey: '',
+        geminiModel: DEFAULT_GEMINI_TEXT_MODEL,
+        geminiTimeoutMs: DEFAULT_GEMINI_TEXT_TIMEOUT_MS,
       })
     })
 
@@ -236,6 +244,9 @@ describe('Ingredient Parsing', () => {
         model: 'gpt-5.5',
         timeoutMs: 12000,
         maxRetries: 3,
+        googleApiKey: '',
+        geminiModel: DEFAULT_GEMINI_TEXT_MODEL,
+        geminiTimeoutMs: DEFAULT_GEMINI_TEXT_TIMEOUT_MS,
       })
     })
 
@@ -271,6 +282,74 @@ describe('Ingredient Parsing', () => {
           INGREDIENT_PARSE_PROVIDER: 'anthropic',
         })
       ).toThrow(IngredientParseError)
+    })
+
+    it('resolves the Gemini fallback controls from env', () => {
+      expect(
+        resolveIngredientParserConfig({
+          GOOGLE_API_KEY: ' google-key ',
+          GEMINI_TEXT_MODEL: ' gemini-2.5-pro ',
+          GEMINI_TEXT_TIMEOUT_MS: '15000',
+        })
+      ).toMatchObject({
+        googleApiKey: 'google-key',
+        geminiModel: 'gemini-2.5-pro',
+        geminiTimeoutMs: 15000,
+      })
+    })
+
+    it('falls back to Gemini defaults for blank/invalid fallback controls', () => {
+      expect(
+        resolveIngredientParserConfig({
+          GOOGLE_API_KEY: '   ',
+          GEMINI_TEXT_MODEL: '   ',
+          GEMINI_TEXT_TIMEOUT_MS: '0',
+        })
+      ).toMatchObject({
+        googleApiKey: '',
+        geminiModel: DEFAULT_GEMINI_TEXT_MODEL,
+        geminiTimeoutMs: DEFAULT_GEMINI_TEXT_TIMEOUT_MS,
+      })
+    })
+  })
+
+  describe('isRetryableForFallback', () => {
+    function errorWithStatus(status: number): IngredientParseError {
+      return new IngredientParseError('mapped', Object.assign(new Error('x'), { status }))
+    }
+
+    it('retries on rate-limit (429), request-timeout (408), and 5xx statuses', () => {
+      expect(isRetryableForFallback(errorWithStatus(429))).toBe(true)
+      expect(isRetryableForFallback(errorWithStatus(408))).toBe(true)
+      expect(isRetryableForFallback(errorWithStatus(500))).toBe(true)
+      expect(isRetryableForFallback(errorWithStatus(503))).toBe(true)
+    })
+
+    it('does NOT retry on auth statuses (401/403) or other 4xx', () => {
+      expect(isRetryableForFallback(errorWithStatus(401))).toBe(false)
+      expect(isRetryableForFallback(errorWithStatus(403))).toBe(false)
+      expect(isRetryableForFallback(errorWithStatus(404))).toBe(false)
+    })
+
+    it('retries statusless transport failures named in the message', () => {
+      expect(isRetryableForFallback(new IngredientParseError('Request timeout'))).toBe(true)
+      expect(isRetryableForFallback(new IngredientParseError('timed out while waiting'))).toBe(true)
+      expect(isRetryableForFallback(new IngredientParseError('connection refused'))).toBe(true)
+      expect(isRetryableForFallback(new IngredientParseError('network is down'))).toBe(true)
+      expect(
+        isRetryableForFallback(
+          new IngredientParseError('OpenAI request timeout or temporary service failure')
+        )
+      ).toBe(true)
+    })
+
+    it('does NOT retry statusless generic/parse failures', () => {
+      expect(isRetryableForFallback(new IngredientParseError('Failed to parse ingredients'))).toBe(
+        false
+      )
+      expect(
+        isRetryableForFallback(new IngredientParseError('OpenAI refused to parse this ingredient text'))
+      ).toBe(false)
     })
   })
 
@@ -1414,6 +1493,260 @@ describe('Ingredient Parsing', () => {
           })
         )
       })
+    })
+  })
+
+  describe('Gemini fallback', () => {
+    const POSTHOG_CONFIG = {
+      enabled: true as const,
+      key: 'ph_test',
+      host: 'https://posthog.example',
+    }
+
+    const GEMINI_INGREDIENTS = [{ quantity: 3, unit: 'whole', ingredientName: 'eggs' }]
+
+    /** A 200 response whose Gemini candidate text is `text`. */
+    function geminiOk(text: string): Response {
+      return new Response(
+        JSON.stringify({ candidates: [{ content: { parts: [{ text }] } }] }),
+        { status: 200, headers: { 'content-type': 'application/json' } }
+      )
+    }
+
+    /** Reject the OpenAI call with an Error carrying an HTTP `status`. */
+    function openAIRejectsWithStatus(status: number) {
+      mockCreate.mockRejectedValueOnce(Object.assign(new Error('boom'), { status }))
+    }
+
+    /**
+     * Drive a full fallback: OpenAI fails, Gemini's HTTP fetch resolves to
+     * `geminiResponse`. Returns the stubbed global fetch (which the Gemini
+     * adapter uses when no fetchImpl is injected) plus the PostHog analytics
+     * fetch so callers can assert on emitted telemetry.
+     */
+    function wireFallback(geminiResponse: Response | Promise<Response>) {
+      const analyticsFetch = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }))
+      const geminiFetch = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValue(geminiResponse as Response)
+      return { analyticsFetch, geminiFetch }
+    }
+
+    const FALLBACK_ENV = {
+      OPENAI_API_KEY: 'test-openai-api-key',
+      GOOGLE_API_KEY: 'test-google-api-key',
+    }
+
+    it('falls back to Gemini when OpenAI returns a 429 and returns the Gemini result', async () => {
+      openAIRejectsWithStatus(429)
+      const { analyticsFetch, geminiFetch } = wireFallback(
+        geminiOk(JSON.stringify({ ingredients: GEMINI_INGREDIENTS }))
+      )
+
+      try {
+        const result = await parseIngredients('3 eggs', FALLBACK_ENV, {
+          postHogConfig: POSTHOG_CONFIG,
+          fetchImpl: analyticsFetch as unknown as typeof fetch,
+          distinctId: 'chef_9',
+        })
+
+        expect(result).toEqual(GEMINI_INGREDIENTS)
+        // The OpenAI client was constructed/called once; Gemini's HTTP fetch fired once.
+        expect(mockCreate).toHaveBeenCalledTimes(1)
+        expect(geminiFetch).toHaveBeenCalledTimes(1)
+        const [geminiUrl, geminiInit] = geminiFetch.mock.calls[0]
+        expect(String(geminiUrl)).toContain(
+          `/models/${DEFAULT_GEMINI_TEXT_MODEL}:generateContent`
+        )
+        expect((geminiInit as RequestInit).method).toBe('POST')
+
+        // Telemetry: an OpenAI failure THEN a Gemini success, both for ingredient_parse.
+        const events = analyticsFetch.mock.calls.map((call) => {
+          const body = JSON.parse((call[1] as RequestInit).body as string)
+          return { event: body.event, provider: body.properties.provider }
+        })
+        expect(events).toEqual([
+          { event: 'spoonjoy.llm_call.failed', provider: 'openai' },
+          { event: 'spoonjoy.llm_call.succeeded', provider: 'gemini' },
+        ])
+      } finally {
+        geminiFetch.mockRestore()
+      }
+    })
+
+    it('throws the ORIGINAL mapped OpenAI error when the Gemini fallback also fails', async () => {
+      // OpenAI 500 -> retryable; Gemini returns a non-2xx so the fallback throws.
+      openAIRejectsWithStatus(500)
+      const { analyticsFetch, geminiFetch } = wireFallback(
+        new Response(JSON.stringify({ error: { message: 'nope', status: 'UNAVAILABLE' } }), {
+          status: 503,
+          headers: { 'content-type': 'application/json' },
+        })
+      )
+
+      try {
+        await parseIngredients('3 eggs', FALLBACK_ENV, {
+          postHogConfig: POSTHOG_CONFIG,
+          fetchImpl: analyticsFetch as unknown as typeof fetch,
+        }).then(
+          () => expect.fail('Should have thrown'),
+          (error: unknown) => {
+            // The surfaced error is the ORIGINAL OpenAI failure, not the Gemini one.
+            const parseError = error as IngredientParseError
+            expect(parseError).toBeInstanceOf(IngredientParseError)
+            expect(parseError.message).toBe('OpenAI request timeout or temporary service failure')
+            expect(parseError.status).toBe(500)
+          }
+        )
+
+        // Two failures captured: openai then gemini. No success.
+        const events = analyticsFetch.mock.calls.map((call) => {
+          const body = JSON.parse((call[1] as RequestInit).body as string)
+          return { event: body.event, provider: body.properties.provider }
+        })
+        expect(events).toEqual([
+          { event: 'spoonjoy.llm_call.failed', provider: 'openai' },
+          { event: 'spoonjoy.llm_call.failed', provider: 'gemini' },
+        ])
+      } finally {
+        geminiFetch.mockRestore()
+      }
+    })
+
+    it('wraps a non-IngredientParseError Gemini failure as "Gemini fallback failed"', async () => {
+      // OpenAI 429 -> retryable; the Gemini HTTP fetch throws a transport error,
+      // which the adapter surfaces as a GeminiTextError (already an Error, not an
+      // IngredientParseError) -> wrapped into "Gemini fallback failed" telemetry.
+      openAIRejectsWithStatus(429)
+      const analyticsFetch = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }))
+      const geminiFetch = vi
+        .spyOn(globalThis, 'fetch')
+        .mockRejectedValue(new Error('socket hang up'))
+
+      try {
+        await expect(
+          parseIngredients('3 eggs', FALLBACK_ENV, {
+            postHogConfig: POSTHOG_CONFIG,
+            fetchImpl: analyticsFetch as unknown as typeof fetch,
+          })
+        ).rejects.toThrow(IngredientParseError)
+
+        const failureBodies = analyticsFetch.mock.calls
+          .map((call) => JSON.parse((call[1] as RequestInit).body as string))
+          .filter((body) => body.event === 'spoonjoy.llm_call.failed')
+        const geminiFailure = failureBodies.find((body) => body.properties.provider === 'gemini')
+        expect(geminiFailure?.properties.errorMessage).toBe('Gemini fallback failed')
+      } finally {
+        geminiFetch.mockRestore()
+      }
+    })
+
+    it('does NOT fall back on a 401 auth error (and never calls Gemini)', async () => {
+      openAIRejectsWithStatus(401)
+      const geminiFetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(geminiOk('{}'))
+
+      try {
+        await expect(parseIngredients('3 eggs', FALLBACK_ENV)).rejects.toThrow(
+          IngredientParseError
+        )
+        expect(geminiFetch).not.toHaveBeenCalled()
+      } finally {
+        geminiFetch.mockRestore()
+      }
+    })
+
+    it('does NOT fall back when GOOGLE_API_KEY is absent, even on a retryable 429', async () => {
+      openAIRejectsWithStatus(429)
+      const geminiFetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(geminiOk('{}'))
+
+      try {
+        await expect(
+          // No GOOGLE_API_KEY -> fallback is disabled.
+          parseIngredients('3 eggs', { OPENAI_API_KEY: 'test-openai-api-key' })
+        ).rejects.toThrow(IngredientParseError)
+        expect(geminiFetch).not.toHaveBeenCalled()
+      } finally {
+        geminiFetch.mockRestore()
+      }
+    })
+
+    it('throws "Invalid JSON in Gemini response" when Gemini returns non-JSON text', async () => {
+      openAIRejectsWithStatus(429)
+      const { analyticsFetch, geminiFetch } = wireFallback(geminiOk('this is not json'))
+
+      try {
+        await parseIngredients('3 eggs', FALLBACK_ENV, {
+          postHogConfig: POSTHOG_CONFIG,
+          fetchImpl: analyticsFetch as unknown as typeof fetch,
+        }).then(
+          () => expect.fail('Should have thrown'),
+          () => {
+            /* original OpenAI error is rethrown; asserted elsewhere */
+          }
+        )
+
+        const geminiFailure = analyticsFetch.mock.calls
+          .map((call) => JSON.parse((call[1] as RequestInit).body as string))
+          .find(
+            (body) =>
+              body.event === 'spoonjoy.llm_call.failed' && body.properties.provider === 'gemini'
+          )
+        expect(geminiFailure?.properties.errorMessage).toBe('Invalid JSON in Gemini response')
+      } finally {
+        geminiFetch.mockRestore()
+      }
+    })
+
+    it('throws a schema-mismatch error when Gemini JSON does not match the ingredient schema', async () => {
+      openAIRejectsWithStatus(429)
+      const { analyticsFetch, geminiFetch } = wireFallback(
+        geminiOk(JSON.stringify({ ingredients: [{ quantity: -1, unit: '', ingredientName: '' }] }))
+      )
+
+      try {
+        await parseIngredients('3 eggs', FALLBACK_ENV, {
+          postHogConfig: POSTHOG_CONFIG,
+          fetchImpl: analyticsFetch as unknown as typeof fetch,
+        }).then(
+          () => expect.fail('Should have thrown'),
+          () => {
+            /* original OpenAI error is rethrown */
+          }
+        )
+
+        const geminiFailure = analyticsFetch.mock.calls
+          .map((call) => JSON.parse((call[1] as RequestInit).body as string))
+          .find(
+            (body) =>
+              body.event === 'spoonjoy.llm_call.failed' && body.properties.provider === 'gemini'
+          )
+        expect(geminiFailure?.properties.errorMessage).toBe(
+          'Gemini response does not match expected schema'
+        )
+      } finally {
+        geminiFetch.mockRestore()
+      }
+    })
+
+    it('passes the configured Gemini model and timeout through to the adapter', async () => {
+      openAIRejectsWithStatus(429)
+      const geminiFetch = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValue(geminiOk(JSON.stringify({ ingredients: GEMINI_INGREDIENTS })))
+
+      try {
+        const result = await parseIngredients('3 eggs', {
+          ...FALLBACK_ENV,
+          GEMINI_TEXT_MODEL: 'gemini-2.5-pro',
+          GEMINI_TEXT_TIMEOUT_MS: String(DEFAULT_GEMINI_TEXT_TIMEOUT_MS),
+        })
+
+        expect(result).toEqual(GEMINI_INGREDIENTS)
+        const [geminiUrl] = geminiFetch.mock.calls[0]
+        expect(String(geminiUrl)).toContain('/models/gemini-2.5-pro:generateContent')
+      } finally {
+        geminiFetch.mockRestore()
+      }
     })
   })
 })
