@@ -117,6 +117,12 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
       "Sole catch is in resolveApiPrincipal: it swallows an expected 401 (ApiAuthError) only for public bootstrap ops and rethrows any other auth error so protected ops fail closed; the surfaced error is captured at the api.$.ts / http-mcp.server.ts route boundary. No transport catch exists.",
   },
   {
+    file: "app/lib/api-v1-recipe-writes.server.ts",
+    category: "expected-4xx",
+    reason:
+      "Sole catch maps known fork domain errors (missing source recipe or exhausted title choices) to typed API v1 4xx results; unexpected fork failures rethrow to the instrumented api-v1.server route boundary.",
+  },
+  {
     file: "app/lib/shopping-list.server.ts",
     category: "expected-4xx",
     reason:

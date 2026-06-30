@@ -154,6 +154,16 @@ source_test_mappings = [
     "artifacts" => ["web/unit-1a-contract-red.log", "web/unit-1b-contract-green.log", "web/unit-4c-recipe-writes-vitest.log"]
   },
   {
+    "source" => "app/lib/api-v1-recipe-writes.server.ts",
+    "tests" => ["test/lib/api-v1-recipe-writes.server.test.ts", "test/routes/api-v1-recipe-writes.test.ts"],
+    "artifacts" => ["web/unit-4a-recipe-writes-red.log", "web/unit-4b-recipe-writes-green.log", "web/unit-4c-recipe-writes-vitest.log"]
+  },
+  {
+    "source" => "app/lib/api-v1-recipe-steps.server.ts",
+    "tests" => ["test/lib/api-v1-recipe-steps.server.test.ts", "test/routes/api-v1-recipe-steps.test.ts"],
+    "artifacts" => ["web/unit-5a-recipe-steps-red.log", "web/unit-5b-recipe-steps-green.log", "web/unit-5c-recipe-steps-vitest.log"]
+  },
+  {
     "source" => "app/routes/api.v1.$.ts",
     "tests" => [
       "test/routes/api-v1-recipes.test.ts",
@@ -187,6 +197,11 @@ source_test_mappings = [
     "source" => "app/lib/spoonjoy-api-request.server.ts",
     "tests" => ["test/lib/spoonjoy-api-request.server.test.ts"],
     "artifacts" => ["web/unit-1a-contract-red.log", "web/unit-1b-contract-green.log", "web/unit-1c-contract-vitest.log"]
+  },
+  {
+    "source" => "app/lib/recipe-fork.server.ts",
+    "tests" => ["test/lib/recipe-fork.server.test.ts", "test/routes/api-v1-recipe-writes.test.ts"],
+    "artifacts" => ["web/unit-4a-recipe-writes-red.log", "web/unit-4b-recipe-writes-green.log", "web/unit-4c-recipe-writes-vitest.log"]
   },
   {
     "source" => "app/lib/account-settings.server.ts",
@@ -227,6 +242,16 @@ source_test_mappings = [
     "source" => "app/routes/well-known.apple-app-site-association.ts",
     "tests" => ["test/routes/aasa-contract.test.ts"],
     "artifacts" => ["web/unit-20a-aasa-red.log", "web/unit-20b-aasa-green.log", "web/unit-20c-aasa-green.log"]
+  },
+  {
+    "source" => "app/lib/security-headers.server.ts",
+    "tests" => ["test/lib/security-headers.server.test.ts"],
+    "artifacts" => ["web/unit-25c-web-final-green-coverage.log"]
+  },
+  {
+    "source" => "app/routes/oauth.callback.tsx",
+    "tests" => ["test/routes/oauth-callback.test.tsx", "test/routes/aasa-contract.test.ts"],
+    "artifacts" => ["web/unit-20c-aasa-green.log", "web/unit-25c-web-final-green-coverage.log"]
   },
   {
     "source" => "app/routes/developers.tsx",

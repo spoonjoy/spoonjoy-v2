@@ -416,7 +416,7 @@ describe("API v1 native account settings", () => {
 	      clientMutationId: "cm_me_apns_invalid",
 	      deviceId: "device-main",
       platform: "watchos",
-      environment: "development",
+      environment: "staging",
       token: "",
       unexpected: true,
     });
@@ -427,10 +427,23 @@ describe("API v1 native account settings", () => {
       details: {
         fieldErrors: {
           platform: "platform must be ios, ipados, or macos",
+          environment: "environment must be development or production",
           token: "token must be a nonblank string",
           unexpected: "Unknown field",
         },
       },
+    });
+
+    const missingRevoke = await apiDelete("me/apns-devices/device-missing", {
+      ...auth,
+      "X-Client-Mutation-Id": "cm_me_apns_revoke_missing",
+    }, "req_me_apns_revoke_missing");
+    expect(missingRevoke.status).toBe(404);
+    expectEnvelopeHeaders(missingRevoke, "req_me_apns_revoke_missing");
+    await expect(readJson(missingRevoke)).resolves.toMatchObject({
+      ok: false,
+      requestId: "req_me_apns_revoke_missing",
+      error: { code: "not_found", status: 404 },
     });
   });
 

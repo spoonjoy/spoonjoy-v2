@@ -666,7 +666,7 @@ export default function DeveloperPlayground() {
   const params = paramsByOperation[selected.id]!;
   const bodyText = bodiesByOperation[selected.id]!;
   const multipartFiles = multipartFilesByOperation[selected.id] ?? {};
-  const multipartValues = multipartValuesByOperation[selected.id] ?? {};
+  const multipartValues = multipartValuesByOperation[selected.id]!;
   const path = useMemo(() => playgroundPath(selected, params), [selected, params]);
   /* istanbul ignore next -- @preserve SSR fallback for non-interactive rendering; playground tests run with a browser-like window. */
   const curlBaseUrl = typeof window === "undefined" ? "https://spoonjoy.app" : window.location.origin;
@@ -802,7 +802,7 @@ export default function DeveloperPlayground() {
     setMultipartValuesByOperation((current) => ({
       ...current,
       [selected.id]: {
-        ...(current[selected.id] ?? {}),
+        ...current[selected.id]!,
         [name]: value,
       },
     }));
@@ -820,8 +820,10 @@ export default function DeveloperPlayground() {
   async function sendRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (validationErrors.length) return;
+    const multipartFilePresent = Object.values(multipartFiles).some(Boolean);
+    const multipartTextPresent = Object.values(multipartValues).some((value) => value.trim());
     const multipartBodyPresent = selected.requestBody?.contentType === "multipart/form-data"
-      ? Object.values(multipartFiles).some(Boolean) || Object.values(multipartValues).some((value) => value.trim())
+      ? multipartFilePresent || multipartTextPresent
       : false;
     capturePlaygroundTelemetry("spoonjoy.developer.playground.request_submitted", {
       request_body_present: Boolean((bodyText.trim() || multipartBodyPresent) && selected.method !== "GET"),
@@ -1339,7 +1341,7 @@ export default function DeveloperPlayground() {
                             <input
                               id={fieldId}
                               type="file"
-                              accept={field.accept || undefined}
+                              accept={field.accept}
                               required={field.required}
                               aria-required={field.required}
                               aria-describedby={hintId}
@@ -1350,7 +1352,7 @@ export default function DeveloperPlayground() {
                             <input
                               id={fieldId}
                               type="text"
-                              value={multipartValues[field.name] ?? ""}
+                              value={multipartValues[field.name]!}
                               required={field.required}
                               aria-required={field.required}
                               aria-describedby={hintId}

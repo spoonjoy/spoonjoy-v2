@@ -1236,6 +1236,7 @@ describe("API v1 mutation and validation telemetry", () => {
     const nextEmail = faker.internet.email();
     const nextUsername = `telemetry_${faker.string.alphanumeric(8)}`;
     const updateProfile = apiJsonRequest("PATCH", "me", "req_account_operation_update", { Cookie: cookie }, {
+      clientMutationId: "telemetry-account-update",
       email: nextEmail,
       username: nextUsername,
     });
@@ -1245,10 +1246,11 @@ describe("API v1 mutation and validation telemetry", () => {
       requestId: "req_account_operation_update",
       operation: "account.update",
       status: 200,
-      forbidden: [nextEmail, nextUsername, updateProfile.bodyText, cookie],
+      forbidden: ["telemetry-account-update", nextEmail, nextUsername, updateProfile.bodyText, cookie],
     });
 
     const photoForm = new UndiciFormData();
+    photoForm.set("clientMutationId", "telemetry-account-photo-upload");
     const uploadPhoto = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/me/photo", {
       method: "POST",
       headers: {
@@ -1267,17 +1269,19 @@ describe("API v1 mutation and validation telemetry", () => {
       requestId: "req_account_operation_photo_upload",
       operation: "account.photo.upload",
       status: 400,
-      forbidden: [cookie],
+      forbidden: ["telemetry-account-photo-upload", cookie],
     });
 
-    const removePhoto = apiJsonRequest("DELETE", "me/photo", "req_account_operation_photo_remove", { Cookie: cookie }, {});
+    const removePhoto = apiJsonRequest("DELETE", "me/photo", "req_account_operation_photo_remove", { Cookie: cookie }, {
+      clientMutationId: "telemetry-account-photo-remove",
+    });
     expect((await action(routeArgs(removePhoto.request, "me/photo").args)).status).toBe(200);
     expectAccountOperation({
       routeTemplate: "/api/v1/me/photo",
       requestId: "req_account_operation_photo_remove",
       operation: "account.photo.remove",
       status: 200,
-      forbidden: [removePhoto.bodyText, cookie],
+      forbidden: ["telemetry-account-photo-remove", removePhoto.bodyText, cookie],
     });
 
     const readNotifications = await loader(routeArgs(apiRequest(
@@ -1300,6 +1304,7 @@ describe("API v1 mutation and validation telemetry", () => {
       "req_account_operation_notifications_update",
       { Cookie: cookie },
       {
+        clientMutationId: "telemetry-account-notifications-update",
         notifySpoonOnMyRecipe: true,
         notifyForkOfMyRecipe: false,
         notifyCookbookSaveOfMine: true,
@@ -1312,7 +1317,83 @@ describe("API v1 mutation and validation telemetry", () => {
       requestId: "req_account_operation_notifications_update",
       operation: "account.notification-preferences.update",
       status: 200,
-      forbidden: [updateNotifications.bodyText, cookie],
+      forbidden: ["telemetry-account-notifications-update", updateNotifications.bodyText, cookie],
+    });
+
+    const invalidProfileUpdate = apiJsonRequest("PATCH", "me", "req_account_operation_update_invalid", { Cookie: cookie }, {
+      username: "",
+    });
+    expect((await action(routeArgs(invalidProfileUpdate.request, "me").args)).status).toBe(400);
+    expectAccountOperation({
+      routeTemplate: "/api/v1/me",
+      requestId: "req_account_operation_update_invalid",
+      operation: "account.update",
+      status: 400,
+      forbidden: [invalidProfileUpdate.bodyText, cookie],
+    });
+
+    const invalidPhotoRemove = apiJsonRequest("DELETE", "me/photo", "req_account_operation_photo_remove_invalid", { Cookie: cookie }, {
+      clientMutationId: "telemetry-account-photo-remove-invalid",
+      unexpected: "private-photo-control",
+    });
+    expect((await action(routeArgs(invalidPhotoRemove.request, "me/photo").args)).status).toBe(400);
+    expectAccountOperation({
+      routeTemplate: "/api/v1/me/photo",
+      requestId: "req_account_operation_photo_remove_invalid",
+      operation: "account.photo.remove",
+      status: 400,
+      forbidden: ["telemetry-account-photo-remove-invalid", "private-photo-control", invalidPhotoRemove.bodyText, cookie],
+    });
+
+    const invalidNotifications = apiJsonRequest(
+      "PATCH",
+      "me/notification-preferences",
+      "req_account_operation_notifications_update_invalid",
+      { Cookie: cookie },
+      {
+        clientMutationId: "telemetry-account-notifications-invalid",
+        unexpected: "private-notification-control",
+      },
+    );
+    expect((await action(routeArgs(invalidNotifications.request, "me/notification-preferences").args)).status).toBe(400);
+    expectAccountOperation({
+      routeTemplate: "/api/v1/me/notification-preferences",
+      requestId: "req_account_operation_notifications_update_invalid",
+      operation: "account.notification-preferences.update",
+      status: 400,
+      forbidden: ["telemetry-account-notifications-invalid", "private-notification-control", invalidNotifications.bodyText, cookie],
+    });
+
+    const invalidApnsRegister = apiJsonRequest("POST", "me/apns-devices", "req_account_operation_apns_register_invalid", { Cookie: cookie }, {
+      clientMutationId: "telemetry-account-apns-invalid",
+      deviceId: "telemetry-device",
+      platform: "ios",
+      environment: "development",
+      token: "t".repeat(4097),
+    });
+    expect((await action(routeArgs(invalidApnsRegister.request, "me/apns-devices").args)).status).toBe(400);
+    expectAccountOperation({
+      routeTemplate: "/api/v1/me/apns-devices",
+      requestId: "req_account_operation_apns_register_invalid",
+      operation: "account.apns.register",
+      status: 400,
+      forbidden: ["telemetry-account-apns-invalid", "telemetry-device", invalidApnsRegister.bodyText, cookie],
+    });
+
+    const missingApnsRevoke = apiJsonRequest(
+      "DELETE",
+      "me/apns-devices/telemetry-device-missing",
+      "req_account_operation_apns_revoke_missing",
+      { Cookie: cookie },
+      { clientMutationId: "telemetry-account-apns-revoke-missing" },
+    );
+    expect((await action(routeArgs(missingApnsRevoke.request, "me/apns-devices/telemetry-device-missing").args)).status).toBe(404);
+    expectAccountOperation({
+      routeTemplate: "/api/v1/me/apns-devices/{deviceId}",
+      requestId: "req_account_operation_apns_revoke_missing",
+      operation: "account.apns.revoke",
+      status: 404,
+      forbidden: ["telemetry-account-apns-revoke-missing", "telemetry-device-missing", missingApnsRevoke.bodyText, cookie],
     });
 
     const listConnections = await loader(routeArgs(apiRequest("http://localhost/api/v1/me/connections", "req_account_operation_connections_list", {

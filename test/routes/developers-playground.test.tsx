@@ -750,6 +750,8 @@ describe("/developers/playground", () => {
     expect(photoInput).toHaveAccessibleDescription("multipart required - (binary image file)");
 	    expect(screen.getAllByText("Select photo before sending.").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Send Request" })).toBeDisabled();
+    fireEvent.change(photoInput, { target: { files: [] } });
+    expect(screen.getByRole("button", { name: "Send Request" })).toBeDisabled();
 
     const riskCheckbox = screen.getByLabelText(/I understand this request can change real Spoonjoy data/i);
     fireEvent.click(riskCheckbox);
@@ -795,6 +797,7 @@ describe("/developers/playground", () => {
         requestBody: {
           ...uploadPhoto.requestBody!,
           required: false,
+          example: "{}",
           fields: [{
             name: "photo",
             label: "Photo",
@@ -818,9 +821,66 @@ describe("/developers/playground", () => {
     expect(optionalInput).not.toBeRequired();
     expect(optionalInput).toHaveAttribute("aria-required", "false");
     expect(optionalInput).toHaveAccessibleDescription("multipart optional");
+    expect(optionalInput).toHaveValue("");
 
-    fireEvent.change(optionalInput, { target: { files: null } });
+    fireEvent.change(optionalInput, { target: { value: "optional text value" } });
+    expect(optionalInput).toHaveValue("optional text value");
     expect(screen.queryByText("Select photo before sending.")).not.toBeInTheDocument();
+  });
+
+  it("sends text-only multipart operations and reports body-present telemetry", async () => {
+    const uploadPhoto = API_V1_PLAYGROUND_MANIFEST.operations.find((operation) => operation.id === "POST /api/v1/me/photo")!;
+    const textOnlyMultipartManifest = {
+      ...API_V1_PLAYGROUND_MANIFEST,
+      operations: [{
+        ...uploadPhoto,
+        id: "POST /api/v1/me/photo-text-only",
+        operationId: "postApiV1MePhotoTextOnly",
+        label: "Submit a text-only multipart body",
+        path: "/api/v1/me/photo-text-only",
+        auth: "optional",
+        credentialModes: ["anonymous"],
+        risk: "safe",
+        requestBody: {
+          ...uploadPhoto.requestBody!,
+          fields: [{
+            name: "clientMutationId",
+            label: "Client Mutation Id",
+            required: true,
+            accept: "",
+            description: "text-only-mutation",
+          }],
+          example: "{\"clientMutationId\":\"text-only-mutation\"}",
+        },
+      }],
+    };
+    const fetchMock = vi.fn(async () => mockApiResponse({ ok: true }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await renderPlayground({
+      manifest: textOnlyMultipartManifest,
+      canonicalUrl: "https://spoonjoy.app/api/playground",
+      ogImageUrl: "https://spoonjoy.app/og/pages/api-playground.png",
+      viewer: { isAuthenticated: false },
+    } as PlaygroundLoaderData);
+
+    expect(await screen.findByLabelText(/Client Mutation Id/)).toHaveValue("text-only-mutation");
+    posthogCapture.mockClear();
+    fireEvent.submit(screen.getByRole("button", { name: "Send Request" }).closest("form")!);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const options = fetchMock.mock.calls[0][1] as RequestInit;
+    expect([...(options.body as FormData).entries()]).toEqual([
+      ["clientMutationId", "text-only-mutation"],
+    ]);
+    expect(posthogCapture).toHaveBeenCalledWith(
+      "spoonjoy.developer.playground.request_submitted",
+      expect.objectContaining({
+        operation_id: "POST /api/v1/me/photo-text-only",
+        request_body_present: true,
+        validation_error_count: 0,
+      }),
+    );
   });
 
   it("blocks blank bearer mode before sending private requests", async () => {
@@ -980,6 +1040,45 @@ describe("/developers/playground", () => {
     };
     expect(curlFor("/api/v1/me/photo", multipartWithoutFields, "session", "")).toContain("body.append(\"file\", fileInput.files[0]);");
     expect(curlFor("/api/v1/me/photo", multipartWithoutFields, "bearer", "")).toContain("-F 'file=@profile.jpg;type=application/octet-stream'");
+    const multipartArrayExample = {
+      ...uploadPhoto,
+      requestBody: { ...uploadPhoto.requestBody!, example: "[]" },
+    };
+    expect(curlFor("/api/v1/me/photo", multipartArrayExample, "bearer", ""))
+      .toContain("-F 'clientMutationId=REPLACE_clientMutationId'");
+    const multipartMissingTextValue = {
+      ...uploadPhoto,
+      requestBody: { ...uploadPhoto.requestBody!, example: "{}" },
+    };
+    expect(curlFor("/api/v1/me/photo", multipartMissingTextValue, "session", ""))
+      .toContain("body.append(\"clientMutationId\", \"REPLACE_clientMutationId\");");
+    const multipartWithInvalidExample = {
+      ...uploadPhoto,
+      requestBody: { ...uploadPhoto.requestBody!, example: "{not json" },
+    };
+    expect(curlFor("/api/v1/me/photo", multipartWithInvalidExample, "session", ""))
+      .toContain("body.append(\"clientMutationId\", \"REPLACE_clientMutationId\");");
+    expect(curlFor("/api/v1/me/photo", multipartWithInvalidExample, "bearer", ""))
+      .toContain("-F 'clientMutationId=REPLACE_clientMutationId'");
+    const optionalMultipartText = {
+      ...uploadPhoto,
+      requestBody: {
+        ...uploadPhoto.requestBody!,
+        fields: [{ name: "caption", label: "Caption", required: false, accept: "", description: "" }],
+        example: "{}",
+      },
+    };
+    expect(curlFor("/api/v1/me/photo", optionalMultipartText, "bearer", "")).not.toContain("-F 'caption=");
+    const multipartEmptyAcceptFile = {
+      ...uploadPhoto,
+      requestBody: {
+        ...uploadPhoto.requestBody!,
+        fields: [{ name: "photo", label: "Photo", required: true, accept: ",", description: "" }],
+        example: "{}",
+      },
+    };
+    expect(curlFor("/api/v1/me/photo", multipartEmptyAcceptFile, "bearer", ""))
+      .toContain("-F 'photo=@profile.jpg;type=application/octet-stream'");
     expect(curlFor("/oauth/authorize?client_id=cm_1", authorize, "anonymous", "")).toContain(
       "open 'https://spoonjoy.app/oauth/authorize?client_id=cm_1'",
     );

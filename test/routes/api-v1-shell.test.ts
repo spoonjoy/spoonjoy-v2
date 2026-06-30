@@ -23,6 +23,14 @@ function routeArgs(request: Request, splat: string) {
   return { request, params: { "*": splat }, context: { cloudflare: { env: null } } } as any;
 }
 
+function unsupportedMethodRequest(path: string, method: string, headers: HeadersInit): Request {
+  return {
+    method,
+    url: `http://localhost/api/v1/${path}`,
+    headers: new Headers(headers),
+  } as unknown as Request;
+}
+
 async function readJson(response: Response) {
   return await response.json() as any;
 }
@@ -372,6 +380,17 @@ describe("/api/v1 shell", () => {
       ok: false,
       requestId: "req_put_unknown",
       error: { code: "not_found", status: 404 },
+    });
+
+    const unsupportedVerb = await action(routeArgs(unsupportedMethodRequest("nope", "TRACE", {
+      "X-Request-Id": "req_trace_unknown",
+    }), "nope"));
+    expect(unsupportedVerb.status).toBe(405);
+    expectV1Headers(unsupportedVerb, "req_trace_unknown");
+    await expect(readJson(unsupportedVerb)).resolves.toMatchObject({
+      ok: false,
+      requestId: "req_trace_unknown",
+      error: { code: "method_not_allowed", status: 405 },
     });
 
     const unsupportedKnownPath = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/recipes", {
