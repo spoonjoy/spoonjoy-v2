@@ -63,6 +63,8 @@ declare global {
     GEMINI_API_KEY?: string;
     GEMINI_IMAGE_MODEL?: string;
     GEMINI_IMAGE_TIMEOUT_MS?: string;
+    GEMINI_TEXT_MODEL?: string;
+    GEMINI_TEXT_TIMEOUT_MS?: string;
     IMAGE_PROVIDER_PRIMARY?: string;
     IMAGE_PROVIDER_FALLBACKS?: string;
     INGREDIENT_PARSE_PROVIDER?: string;

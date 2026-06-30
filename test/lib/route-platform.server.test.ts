@@ -20,6 +20,9 @@ describe("route-platform.server", () => {
 
   afterEach(() => {
     delete process.env.OPENAI_API_KEY;
+    delete process.env.GOOGLE_API_KEY;
+    delete process.env.GEMINI_TEXT_MODEL;
+    delete process.env.GEMINI_TEXT_TIMEOUT_MS;
     delete process.env.INGREDIENT_PARSE_PROVIDER;
     delete process.env.INGREDIENT_PARSE_MODEL;
     delete process.env.INGREDIENT_PARSE_TIMEOUT_MS;
@@ -50,6 +53,9 @@ describe("route-platform.server", () => {
         cloudflare: {
           env: {
             OPENAI_API_KEY: "cf-key",
+            GOOGLE_API_KEY: "cf-google",
+            GEMINI_TEXT_MODEL: "cf-gemini-model",
+            GEMINI_TEXT_TIMEOUT_MS: "5000",
             INGREDIENT_PARSE_PROVIDER: "openai",
             INGREDIENT_PARSE_MODEL: "cf-model",
             INGREDIENT_PARSE_TIMEOUT_MS: "9000",
@@ -62,6 +68,11 @@ describe("route-platform.server", () => {
       })
     ).toEqual({
       OPENAI_API_KEY: "cf-key",
+      // Gemini fallback keys MUST flow through (else the fallback is dead on
+      // the interactive parse surfaces).
+      GOOGLE_API_KEY: "cf-google",
+      GEMINI_TEXT_MODEL: "cf-gemini-model",
+      GEMINI_TEXT_TIMEOUT_MS: "5000",
       INGREDIENT_PARSE_PROVIDER: "openai",
       INGREDIENT_PARSE_MODEL: "cf-model",
       INGREDIENT_PARSE_TIMEOUT_MS: "9000",
@@ -74,6 +85,9 @@ describe("route-platform.server", () => {
 
   it("falls back to process env for ingredient parser values outside Cloudflare", () => {
     process.env.OPENAI_API_KEY = "process-key";
+    process.env.GOOGLE_API_KEY = "process-google";
+    process.env.GEMINI_TEXT_MODEL = "process-gemini-model";
+    process.env.GEMINI_TEXT_TIMEOUT_MS = "6000";
     process.env.INGREDIENT_PARSE_PROVIDER = "openai";
     process.env.INGREDIENT_PARSE_MODEL = "process-model";
     process.env.INGREDIENT_PARSE_TIMEOUT_MS = "7000";
@@ -84,6 +98,9 @@ describe("route-platform.server", () => {
 
     expect(getIngredientParserEnv({ cloudflare: { env: null } })).toEqual({
       OPENAI_API_KEY: "process-key",
+      GOOGLE_API_KEY: "process-google",
+      GEMINI_TEXT_MODEL: "process-gemini-model",
+      GEMINI_TEXT_TIMEOUT_MS: "6000",
       INGREDIENT_PARSE_PROVIDER: "openai",
       INGREDIENT_PARSE_MODEL: "process-model",
       INGREDIENT_PARSE_TIMEOUT_MS: "7000",
