@@ -3,6 +3,19 @@ import { PrismaClient } from "@prisma/client";
 
 const SALT_ROUNDS = 10;
 
+// A pre-computed bcrypt hash (cost factor 10, matching SALT_ROUNDS) of an
+// arbitrary throwaway sentinel — NOT a real credential. Used as a decoy in
+// authenticateUser: when no account matches the email (or the matched account
+// has no password, e.g. an OAuth-only user) we still run a bcrypt comparison
+// against this hash, so authentication takes ~the same time whether or not the
+// account exists. That closes a timing side-channel an attacker could otherwise
+// use to enumerate registered emails by measuring login latency (a fast reject
+// ⇒ no such user; a slow reject ⇒ user exists, wrong password). Keep the cost
+// factor in sync with SALT_ROUNDS so the decoy comparison costs the same as a
+// real one.
+const DECOY_PASSWORD_HASH =
+  "$2b$10$C1PTchFvumkBU2.pJKCp1.tuWM.G5WH2tmIs.Cs1tSK4eYCyDQ0oi";
+
 // Hash password with bcrypt
 export async function hashPassword(password: string): Promise<{ hashedPassword: string; salt: string }> {
   const salt = await bcrypt.genSalt(SALT_ROUNDS);
@@ -52,12 +65,21 @@ export async function authenticateUser(
     },
   });
 
-  if (!user || !user.hashedPassword) {
-    return null;
-  }
+  // Always run a bcrypt comparison — against the stored hash when the account
+  // exists with a password, otherwise against DECOY_PASSWORD_HASH — so the
+  // dominant cost (a ~70ms bcrypt compare) is paid whether or not the email is
+  // registered (anti-enumeration). This equalizes the bcrypt window, not the
+  // whole request: the preceding findUnique still differs slightly for a hit vs
+  // a miss, but that delta is negligible next to bcrypt.
+  const isValid = await verifyPassword(
+    password,
+    user?.hashedPassword ?? DECOY_PASSWORD_HASH
+  );
 
-  const isValid = await verifyPassword(password, user.hashedPassword);
-  if (!isValid) {
+  // When user / hashedPassword is absent, `isValid` was computed against the
+  // decoy and is intentionally ignored: the first two operands short-circuit to
+  // null, so a decoy match can never authenticate a non-existent account.
+  if (!user || !user.hashedPassword || !isValid) {
     return null;
   }
 
