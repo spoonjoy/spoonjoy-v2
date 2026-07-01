@@ -99,6 +99,7 @@ describe("API v1 public cookbook reads", () => {
   });
 
   afterEach(async () => {
+    vi.useRealTimers();
     await cleanupDatabase();
   });
 
@@ -707,6 +708,8 @@ describe("API v1 public cookbook reads", () => {
       recipeToAdd.id,
     ]);
 
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-07-01T15:00:00.000Z"));
     const duplicate = await action(routeArgs(jsonRequest(`http://localhost/api/v1/cookbooks/${fixture.cookbook.id}/recipes/${recipeToAdd.id}`, "POST", ownerToken.token, "req_cookbook_recipe_add_duplicate", {
       clientMutationId: "cm_cookbook_recipe_add_duplicate",
     }), `cookbooks/${fixture.cookbook.id}/recipes/${recipeToAdd.id}`));
@@ -718,7 +721,9 @@ describe("API v1 public cookbook reads", () => {
       cookbook: { id: fixture.cookbook.id, recipeCount: 2 },
       mutation: { clientMutationId: "cm_cookbook_recipe_add_duplicate", replayed: false },
     });
+    expect(duplicatePayload.data.cookbook.updatedAt).toBe("2026-07-01T15:00:00.000Z");
 
+    vi.setSystemTime(new Date("2026-07-01T15:01:00.000Z"));
     const removed = await action(routeArgs(jsonRequest(`http://localhost/api/v1/cookbooks/${fixture.cookbook.id}/recipes/${recipeToAdd.id}`, "DELETE", ownerToken.token, "req_cookbook_recipe_remove", {
       clientMutationId: "cm_cookbook_recipe_remove",
     }), `cookbooks/${fixture.cookbook.id}/recipes/${recipeToAdd.id}`));
@@ -731,7 +736,9 @@ describe("API v1 public cookbook reads", () => {
       cookbook: { id: fixture.cookbook.id, recipeCount: 1 },
       mutation: { clientMutationId: "cm_cookbook_recipe_remove", replayed: false },
     });
+    expect(removedPayload.data.cookbook.updatedAt).toBe("2026-07-01T15:01:00.000Z");
 
+    vi.setSystemTime(new Date("2026-07-01T15:02:00.000Z"));
     const removeAgain = await action(routeArgs(jsonRequest(`http://localhost/api/v1/cookbooks/${fixture.cookbook.id}/recipes/${recipeToAdd.id}`, "DELETE", ownerToken.token, "req_cookbook_recipe_remove_again", {
       clientMutationId: "cm_cookbook_recipe_remove_again",
     }), `cookbooks/${fixture.cookbook.id}/recipes/${recipeToAdd.id}`));
@@ -743,6 +750,7 @@ describe("API v1 public cookbook reads", () => {
       cookbook: { id: fixture.cookbook.id, recipeCount: 1 },
       mutation: { clientMutationId: "cm_cookbook_recipe_remove_again", replayed: false },
     });
+    expect(removeAgainPayload.data.cookbook.updatedAt).toBe("2026-07-01T15:02:00.000Z");
 
     await db.recipeInCookbook.create({
       data: { cookbookId: fixture.cookbook.id, recipeId: recipeToAdd.id, addedById: fixture.chef.id },
@@ -787,11 +795,11 @@ describe("API v1 public cookbook reads", () => {
       },
     });
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    const originalCreate = db.recipeInCookbook.create;
+    const originalTransaction = db.$transaction;
 
     try {
-      const createSpy = vi.fn().mockRejectedValueOnce(new Error("membership storage unavailable"));
-      db.recipeInCookbook.create = createSpy as unknown as typeof db.recipeInCookbook.create;
+      const transactionSpy = vi.fn().mockRejectedValueOnce(new Error("membership storage unavailable"));
+      db.$transaction = transactionSpy as unknown as typeof db.$transaction;
       const response = await action(routeArgs(jsonRequest(`http://localhost/api/v1/cookbooks/${fixture.cookbook.id}/recipes/${recipeToAdd.id}`, "POST", token.token, "req_cookbook_recipe_add_fault", {
         clientMutationId: "cm_cookbook_recipe_add_fault",
       }), `cookbooks/${fixture.cookbook.id}/recipes/${recipeToAdd.id}`));
@@ -801,9 +809,9 @@ describe("API v1 public cookbook reads", () => {
         requestId: "req_cookbook_recipe_add_fault",
         error: { code: "internal_error", status: 500 },
       });
-      expect(createSpy).toHaveBeenCalledOnce();
+      expect(transactionSpy).toHaveBeenCalledOnce();
     } finally {
-      db.recipeInCookbook.create = originalCreate;
+      db.$transaction = originalTransaction;
       errorSpy.mockRestore();
     }
   });

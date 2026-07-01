@@ -169,13 +169,15 @@ describe("/developers route", () => {
     expect(screen.getByRole("heading", { name: "Personal token: signed-in chef creates one" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Delegated token: OAuth/PKCE" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Delegated token: approval link" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "No password-token API" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "First-party native token: Spoonjoy Apple app sign-in" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "No third-party password-token API" })).toBeInTheDocument();
     expect(screen.getByText(/password, passkey, or any configured Google, GitHub, or Apple provider/i)).toBeInTheDocument();
     expect(screen.getByText(/existing bearer credential with tokens:write/i)).toBeInTheDocument();
     expect(screen.getByText(/Those provider buttons are Spoonjoy sign-in methods/i)).toBeInTheDocument();
     expect(screen.getByText(/The client never handles the chef's password/i)).toBeInTheDocument();
     expect(screen.getByText(/Spoonjoy does not support an OAuth password grant/i)).toBeInTheDocument();
-    expect(screen.getByText(/Email\/password login creates a session cookie, not an API token/i)).toBeInTheDocument();
+    expect(screen.getByText(/Browser email\/password login creates a session cookie, not an API token/i)).toBeInTheDocument();
+    expect(screen.getByText(/only password-to-token exception is Spoonjoy's own native Apple app endpoint/i)).toBeInTheDocument();
     expect(screen.getAllByText(/grant_type=password/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Response: \{ "ok": true, "data": \{ "token": "sj_\.\.\."/i)).toBeInTheDocument();
     expect(screen.getAllByText(/POST \/api\/tools\/start_agent_connection/i).length).toBeGreaterThan(0);

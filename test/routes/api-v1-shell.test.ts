@@ -10,10 +10,11 @@ import {
   apiV1WaitUntilFor,
   apiV1ErrorResponse,
   handleApiV1Request,
-  normalizeApiV1AuthError,
-  normalizeApiV1InternalError,
-  parseApiV1JsonBody,
-} from "~/lib/api-v1.server";
+	  normalizeApiV1AuthError,
+	  normalizeApiV1InternalError,
+	  parseApiV1JsonBody,
+	  retryAfterSecondsFromError,
+	} from "~/lib/api-v1.server";
 import { API_V1_DISCOVERY_DATA, API_V1_ERROR_STATUS } from "~/lib/api-v1-contract.server";
 import { getLocalDb } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
@@ -509,14 +510,15 @@ describe("/api/v1 shell", () => {
       status: 403,
       message: "Missing scope",
     });
-    expect(normalizeApiV1AuthError(new ApiAuthError("Authentication required", 401))).toMatchObject({
-      code: "authentication_required",
-      status: 401,
-      message: "Authentication required",
-    });
-    expect(normalizeApiV1InternalError(new Error("Exploded"))).toMatchObject({
-      code: "internal_error",
-      status: 500,
+	    expect(normalizeApiV1AuthError(new ApiAuthError("Authentication required", 401))).toMatchObject({
+	      code: "authentication_required",
+	      status: 401,
+	      message: "Authentication required",
+	    });
+	    expect(retryAfterSecondsFromError(new ApiV1Error("rate_limited", "Slow down."))).toBe(60);
+	    expect(normalizeApiV1InternalError(new Error("Exploded"))).toMatchObject({
+	      code: "internal_error",
+	      status: 500,
       message: "Internal error",
     });
     expect(normalizeApiV1InternalError("surprise")).toMatchObject({

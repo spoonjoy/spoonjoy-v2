@@ -96,7 +96,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   // Create session and redirect
-  return createUserSession(user.id, redirectTo, context.cloudflare?.env);
+  return createUserSession(user.id, redirectTo, context.cloudflare?.env, request);
 }
 
 export default function Login() {

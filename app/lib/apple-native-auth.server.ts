@@ -1,8 +1,9 @@
 import type { PrismaClient as PrismaClientType } from "@prisma/client";
+import { normalizeCredentialScopes } from "~/lib/api-auth.server";
 import { handleAppleOAuthCallback } from "~/lib/apple-oauth-callback.server";
 import type { AppleUser } from "~/lib/apple-oauth.server";
 import type { AppleNativeAuthConfig } from "~/lib/env.server";
-import { issueConnectorTokens, normalizeScope, type IssuedConnectorTokens } from "~/lib/oauth-server.server";
+import { issueConnectorTokens, type IssuedConnectorTokens } from "~/lib/oauth-server.server";
 
 type Database = PrismaClientType;
 
@@ -11,14 +12,16 @@ const APPLE_JWKS_URL = "https://appleid.apple.com/auth/keys";
 
 export const NATIVE_APPLE_CLIENT_ID = "spoonjoy-apple-native";
 export const NATIVE_APPLE_CLIENT_NAME = "Spoonjoy Apple";
-export const NATIVE_APPLE_TOKEN_SCOPE = normalizeScope([
+const NATIVE_APPLE_TOKEN_SCOPES = [
   "kitchen:read",
   "kitchen:write",
   "shopping_list:read",
   "shopping_list:write",
   "account:read",
   "account:write",
-].join(" "));
+] as const;
+normalizeCredentialScopes([...NATIVE_APPLE_TOKEN_SCOPES]);
+export const NATIVE_APPLE_TOKEN_SCOPE = NATIVE_APPLE_TOKEN_SCOPES.join(" ");
 
 interface AppleJwtHeader {
   alg?: string;

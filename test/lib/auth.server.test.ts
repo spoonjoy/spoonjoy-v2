@@ -6,6 +6,7 @@ import {
   verifyPassword,
   createUser,
   authenticateUser,
+  authenticateUserByEmailOrUsername,
   getUserById,
   emailExists,
   usernameExists,
@@ -140,7 +141,7 @@ describe("auth.server", () => {
       await db.user.create({
         data: { email: email.toLowerCase(), username },
       });
-      const compareSpy = vi.spyOn(bcrypt, "compare");
+      const compareSpy = vi.spyOn(bcrypt, "compareSync");
 
       const user = await authenticateUser(db, email, "anyPassword");
 
@@ -154,7 +155,7 @@ describe("auth.server", () => {
     });
 
     it("runs a bcrypt comparison even for an unknown email (constant-time, prevents user enumeration)", async () => {
-      const compareSpy = vi.spyOn(bcrypt, "compare");
+      const compareSpy = vi.spyOn(bcrypt, "compareSync");
 
       const user = await authenticateUser(
         db,
@@ -167,6 +168,50 @@ describe("auth.server", () => {
       // doesn't reveal whether the email is registered — and against the cost-10
       // decoy hash. Pinning the cost factor here means a future change that drops
       // the constant-time property fails this test instead of passing silently.
+      expect(compareSpy).toHaveBeenCalledTimes(1);
+      expect(compareSpy).toHaveBeenCalledWith("anyPassword", expect.stringMatching(/^\$2[ab]\$10\$/));
+
+      compareSpy.mockRestore();
+    });
+  });
+
+  describe("authenticateUserByEmailOrUsername", () => {
+    it("returns a user for a valid username/password pair", async () => {
+      const email = faker.internet.email();
+      const username = `chef_${faker.string.alphanumeric(8)}`;
+      const password = "testPassword123";
+
+      await createUser(db, email, username, password);
+
+      const user = await authenticateUserByEmailOrUsername(db, username, password);
+
+      expect(user).toMatchObject({
+        email: email.toLowerCase(),
+        username,
+      });
+    });
+
+    it("returns a user for a valid case-insensitive email/password pair", async () => {
+      const email = "NativeChef@Example.com";
+      const username = `chef_${faker.string.alphanumeric(8)}`;
+      const password = "testPassword123";
+
+      await createUser(db, email, username, password);
+
+      const user = await authenticateUserByEmailOrUsername(db, "NATIVECHEF@EXAMPLE.COM", password);
+
+      expect(user).toMatchObject({
+        email: "nativechef@example.com",
+        username,
+      });
+    });
+
+    it("runs a bcrypt comparison for unknown username/email identifiers", async () => {
+      const compareSpy = vi.spyOn(bcrypt, "compareSync");
+
+      const user = await authenticateUserByEmailOrUsername(db, "missing_native_chef", "anyPassword");
+
+      expect(user).toBeNull();
       expect(compareSpy).toHaveBeenCalledTimes(1);
       expect(compareSpy).toHaveBeenCalledWith("anyPassword", expect.stringMatching(/^\$2[ab]\$10\$/));
 

@@ -5,6 +5,7 @@ export const API_V1_RESOURCES = [
   { name: "openapi-sdk", path: "/api/v1/openapi.sdk.json", methods: ["GET"], auth: "optional", scopes: [] },
   { name: "openapi-connector", path: "/api/v1/openapi.connector.json", methods: ["GET"], auth: "optional", scopes: [] },
   { name: "auth-apple-native", path: "/api/v1/auth/apple/native", methods: ["POST"], auth: "optional", scopes: [] },
+  { name: "auth-password-native", path: "/api/v1/auth/password/native", methods: ["POST"], auth: "optional", scopes: [] },
   { name: "search", path: "/api/v1/search", methods: ["GET"], auth: "optional", scopes: [] },
   { name: "recipes", path: "/api/v1/recipes", methods: ["GET"], auth: "optional", scopes: ["recipes:read"] },
   { name: "recipe-create", path: "/api/v1/recipes", methods: ["POST"], auth: "bearer", scopes: ["kitchen:write"] },
@@ -31,6 +32,7 @@ export const API_V1_RESOURCES = [
   { name: "cookbook-mutate", path: "/api/v1/cookbooks/{id}", methods: ["PATCH", "DELETE"], auth: "bearer", scopes: ["kitchen:write"] },
   { name: "cookbook-recipes", path: "/api/v1/cookbooks/{id}/recipes/{recipeId}", methods: ["POST", "DELETE"], auth: "bearer", scopes: ["kitchen:write"] },
   { name: "me", path: "/api/v1/me", methods: ["GET", "PATCH"], auth: "bearer", scopes: ["account:read", "account:write"] },
+  { name: "me-sync", path: "/api/v1/me/sync", methods: ["GET"], auth: "bearer", scopes: ["account:read", "kitchen:read"] },
   { name: "me-photo", path: "/api/v1/me/photo", methods: ["POST", "DELETE"], auth: "bearer", scopes: ["account:write"] },
   { name: "me-notification-preferences", path: "/api/v1/me/notification-preferences", methods: ["GET", "PATCH"], auth: "bearer", scopes: ["account:read", "account:write"] },
   { name: "me-apns-devices", path: "/api/v1/me/apns-devices", methods: ["POST"], auth: "bearer", scopes: ["account:write"] },
@@ -55,6 +57,7 @@ export const API_V1_SCOPE_REQUIREMENTS = [
   { path: "/api/v1/openapi.sdk.json", method: "GET", auth: "optional", scopes: [] },
   { path: "/api/v1/openapi.connector.json", method: "GET", auth: "optional", scopes: [] },
   { path: "/api/v1/auth/apple/native", method: "POST", auth: "optional", scopes: [] },
+  { path: "/api/v1/auth/password/native", method: "POST", auth: "optional", scopes: [] },
   { path: "/api/v1/search", method: "GET", auth: "optional", scopes: [] },
   { path: "/api/v1/recipes", method: "GET", auth: "optional", scopes: ["recipes:read"] },
   { path: "/api/v1/recipes", method: "POST", auth: "bearer", scopes: ["kitchen:write"] },
@@ -89,6 +92,7 @@ export const API_V1_SCOPE_REQUIREMENTS = [
   { path: "/api/v1/cookbooks/{id}/recipes/{recipeId}", method: "DELETE", auth: "bearer", scopes: ["kitchen:write"] },
   { path: "/api/v1/me", method: "GET", auth: "bearer", scopes: ["account:read"] },
   { path: "/api/v1/me", method: "PATCH", auth: "bearer", scopes: ["account:write"] },
+  { path: "/api/v1/me/sync", method: "GET", auth: "bearer", scopes: ["account:read", "kitchen:read"] },
   { path: "/api/v1/me/photo", method: "POST", auth: "bearer", scopes: ["account:write"] },
   { path: "/api/v1/me/photo", method: "DELETE", auth: "bearer", scopes: ["account:write"] },
   { path: "/api/v1/me/notification-preferences", method: "GET", auth: "bearer", scopes: ["account:read"] },
@@ -150,6 +154,11 @@ export const API_V1_DISCOVERY_DATA = {
     session: {
       tokenUrl: "/api/v1/tokens",
       note: "Same-origin Spoonjoy browser sessions can create personal bearer credentials.",
+    },
+    native: {
+      appleSignInUrl: "/api/v1/auth/apple/native",
+      passwordSignInUrl: "/api/v1/auth/password/native",
+      note: "First-party Spoonjoy Apple apps can exchange native Apple credentials or Spoonjoy username/password credentials for the app's rotating token session. Third-party clients must use OAuth/PKCE or delegated approval instead.",
     },
     bearer: {
       header: "Authorization: Bearer sj_...",

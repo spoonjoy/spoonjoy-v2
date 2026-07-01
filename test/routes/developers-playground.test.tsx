@@ -163,6 +163,7 @@ describe("/developers/playground", () => {
     expect(data.manifest.operations.find((operation) => operation.id === "POST /api/v1/recipes/import")?.profiles).toEqual(["full", "connector", "sdk"]);
     expect(data.manifest.operations.find((operation) => operation.id === "POST /api/v1/cookbooks")?.profiles).toEqual(["full", "connector", "sdk"]);
     expect(data.manifest.operations.find((operation) => operation.id === "POST /api/v1/cookbooks/{id}/recipes/{recipeId}")?.profiles).toEqual(["full", "connector", "sdk"]);
+    expect(data.manifest.operations.find((operation) => operation.id === "GET /api/v1/me/sync")?.profiles).toEqual(["full", "sdk"]);
     expect(data.manifest.operations.find((operation) => operation.id === "GET /api/v1/recipes/{id}/spoons")?.profiles).toEqual(["full", "sdk"]);
     expect(data.manifest.operations.find((operation) => operation.id === "POST /api/v1/recipes/{id}/spoons")?.profiles).toEqual(["full", "sdk"]);
     expect(data.manifest.operations.find((operation) => operation.id === "GET /api/v1/recipes/{id}/covers")?.profiles).toEqual(["full", "sdk"]);
@@ -176,7 +177,7 @@ describe("/developers/playground", () => {
         { name: "photo", required: true, accept: "image/jpeg,image/png,image/gif,image/webp" },
       ],
     });
-    expect(data.manifest.operations.length).toBe(66);
+    expect(data.manifest.operations.length).toBe(68);
   });
 
   it("uses the configured public origin for playground OG URLs", async () => {

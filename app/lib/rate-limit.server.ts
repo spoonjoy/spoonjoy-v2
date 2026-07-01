@@ -27,7 +27,7 @@ import {
 } from "~/lib/analytics-server";
 
 export interface RateLimiterBinding {
-  limit(input: { key: string }): Promise<{ success: boolean }>;
+  limit(input: { key: string }): Promise<{ success: boolean; reset?: number }>;
 }
 
 export interface RateLimitContext {
@@ -57,7 +57,8 @@ export interface RateLimitResult {
   scope: RateLimitScope;
 }
 
-const DEFAULT_RETRY_AFTER_SECONDS = 60;
+export const DEFAULT_RETRY_AFTER_SECONDS = 60;
+const LIMITER_TIMEOUT_MS = 750;
 
 const BEARER_PREFIX_REGEX = /^Bearer\s+(.+)$/i;
 
@@ -95,9 +96,17 @@ async function safeLimit(
   key: string,
   scope: Exclude<RateLimitScope, "skip">,
   ctx: RateLimitContext,
-): Promise<{ success: boolean } | typeof LIMITER_ERRORED> {
+): Promise<{ success: boolean; reset?: number } | typeof LIMITER_ERRORED> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
   try {
-    return await limiter.limit({ key });
+    return await Promise.race([
+      limiter.limit({ key }),
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(new Error(`Rate limiter timed out after ${LIMITER_TIMEOUT_MS}ms.`));
+        }, LIMITER_TIMEOUT_MS);
+      }),
+    ]);
   } catch (error) {
     const config = ctx.postHogConfig;
     if (config?.enabled) {
@@ -116,6 +125,10 @@ async function safeLimit(
       });
     }
     return LIMITER_ERRORED;
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
   }
 }
 
@@ -145,7 +158,7 @@ export async function enforceRateLimit(
     if (!ipResult.success) {
       return {
         allowed: false,
-        retryAfterSeconds: DEFAULT_RETRY_AFTER_SECONDS,
+        retryAfterSeconds: retryAfterSecondsForLimitResult(ipResult),
         scope: "ip",
       };
     }
@@ -166,12 +179,19 @@ export async function enforceRateLimit(
     }
     return {
       allowed: tokenResult.success,
-      retryAfterSeconds: tokenResult.success ? 0 : DEFAULT_RETRY_AFTER_SECONDS,
+      retryAfterSeconds: tokenResult.success ? 0 : retryAfterSecondsForLimitResult(tokenResult),
       scope: "token",
     };
   }
 
   return { allowed: true, retryAfterSeconds: 0, scope: "skip" };
+}
+
+function retryAfterSecondsForLimitResult(result: { reset?: number }): number {
+  if (typeof result.reset === "number" && Number.isFinite(result.reset) && result.reset > 0) {
+    return Math.ceil(result.reset);
+  }
+  return DEFAULT_RETRY_AFTER_SECONDS;
 }
 
 /**
@@ -188,8 +208,10 @@ export async function enforceAuthRateLimit(
   ipLimiter: RateLimiterBinding | undefined,
   postHogConfig?: PostHogServerConfig,
 ): Promise<RateLimitResult> {
+  const forwardedFor = request.headers.get("X-Forwarded-For")?.split(",")[0]?.trim() || null;
+  const fallbackIp = request.headers.get("CF-Connecting-IP") ?? forwardedFor ?? `unknown:${new URL(request.url).host}`;
   return enforceRateLimit({
-    ip: request.headers.get("CF-Connecting-IP"),
+    ip: fallbackIp,
     ipLimiter,
     postHogConfig,
   });

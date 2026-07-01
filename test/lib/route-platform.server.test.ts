@@ -30,6 +30,7 @@ describe("route-platform.server", () => {
     delete process.env.POSTHOG_KEY;
     delete process.env.POSTHOG_HOST;
     delete process.env.POSTHOG_DISABLED;
+    delete process.env.SPOONJOY_FORCE_SQLITE_LOCAL_DB;
   });
 
   it("returns the Cloudflare env from route context", () => {
@@ -114,6 +115,18 @@ describe("route-platform.server", () => {
   it("uses the Cloudflare D1 binding when present", async () => {
     const d1 = {} as D1Database;
     const prisma = { source: "cloudflare" };
+    mocks.getDb.mockResolvedValue(prisma);
+
+    await expect(getRequestDb({ cloudflare: { env: { DB: d1 } } })).resolves.toBe(prisma);
+    expect(mocks.getDb).toHaveBeenCalledWith({ DB: d1 });
+    expect(mocks.getLocalDb).not.toHaveBeenCalled();
+  });
+
+  it("uses the Cloudflare D1 binding even when native dogfood forces SQLite in the process env", async () => {
+    const d1 = {} as D1Database;
+    const prisma = { source: "cloudflare" };
+    process.env.SPOONJOY_FORCE_SQLITE_LOCAL_DB = "1";
+    process.env.SPOONJOY_NATIVE_DOGFOOD_API = "1";
     mocks.getDb.mockResolvedValue(prisma);
 
     await expect(getRequestDb({ cloudflare: { env: { DB: d1 } } })).resolves.toBe(prisma);

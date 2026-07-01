@@ -259,25 +259,114 @@ describe("handleRecipeDetailAction cover generation actions", () => {
     });
     await Promise.all(captured);
   });
+
+  it("touches containing cookbooks when explicitly setting a recipe to no cover", async () => {
+    const chef = await makeUser();
+    const recipe = await db.recipe.create({
+      data: { title: "Coverless Cookbook Sync", chefId: chef.id },
+    });
+    const cover = await db.recipeCover.create({
+      data: {
+        recipeId: recipe.id,
+        imageUrl: "/photos/covers/coverless-sync.jpg",
+        sourceType: "chef-upload",
+        status: "ready",
+      },
+    });
+    const cookbook = await db.cookbook.create({ data: { title: "Cover Sync Box", authorId: chef.id } });
+    await db.recipeInCookbook.create({
+      data: {
+        cookbookId: cookbook.id,
+        recipeId: recipe.id,
+        addedById: chef.id,
+      },
+    });
+    await db.recipe.update({
+      where: { id: recipe.id },
+      data: {
+        activeCoverId: cover.id,
+        activeCoverVariant: "image",
+        coverMode: "manual",
+      },
+    });
+    const oldUpdatedAt = new Date("2000-01-01T00:00:00.000Z");
+    await db.cookbook.update({
+      where: { id: cookbook.id },
+      data: { updatedAt: oldUpdatedAt },
+    });
+
+    const formData = new UndiciFormData();
+    formData.append("intent", "setRecipeNoCover");
+    formData.append("confirmNoCover", "true");
+
+    await expect(handleRecipeDetailAction({
+      request: await makeAuthedPostRequest(chef.id, recipe.id, formData) as unknown as Request,
+      params: { id: recipe.id },
+      context: { cloudflare: { env: null } } as any,
+    })).resolves.toMatchObject({ success: true, intent: "setRecipeNoCover" });
+
+    await expect(db.recipe.findUniqueOrThrow({
+      where: { id: recipe.id },
+      select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
+    })).resolves.toEqual({
+      activeCoverId: null,
+      activeCoverVariant: null,
+      coverMode: "none",
+    });
+    const touchedCookbook = await db.cookbook.findUniqueOrThrow({
+      where: { id: cookbook.id },
+      select: { updatedAt: true },
+    });
+    expect(touchedCookbook.updatedAt.getTime()).toBeGreaterThan(oldUpdatedAt.getTime());
+  });
 });
 
 describe("handleRecipeDetailAction addToCookbook error surfacing", () => {
   beforeEach(async () => { await cleanupDatabase(); });
   afterEach(async () => { await cleanupDatabase(); });
 
+  it("touches cookbook freshness when removing a missing recipe relation", async () => {
+    const chef = await makeUser();
+    const recipe = await db.recipe.create({ data: { title: "Greens", chefId: chef.id } });
+    const cookbook = await db.cookbook.create({ data: { title: "Box", authorId: chef.id } });
+    const oldUpdatedAt = new Date("2000-01-01T00:00:00.000Z");
+    await db.cookbook.update({
+      where: { id: cookbook.id },
+      data: { updatedAt: oldUpdatedAt },
+    });
+
+    const formData = new UndiciFormData();
+    formData.append("intent", "removeFromCookbook");
+    formData.append("cookbookId", cookbook.id);
+    const request = await makeAuthedPostRequest(chef.id, recipe.id, formData) as unknown as Request;
+
+    await expect(handleRecipeDetailAction({
+      request,
+      params: { id: recipe.id },
+      context: { cloudflare: { env: null } } as any,
+    })).resolves.toEqual({ success: true });
+
+    const touchedCookbook = await db.cookbook.findUniqueOrThrow({
+      where: { id: cookbook.id },
+      select: { updatedAt: true },
+    });
+    expect(touchedCookbook.updatedAt.getTime()).toBeGreaterThan(oldUpdatedAt.getTime());
+  });
+
   it("re-throws non-P2002 errors instead of returning success (audit-fix regression)", async () => {
     // The old catch swallowed every error as { success: true }, hiding real
     // failures behind a "saved" UI. The fix narrows to P2002 only and
-    // re-throws everything else. Mocking a non-P2002 reject is the only way
-    // to exercise that branch from a deterministic test.
+    // re-throws everything else. Mocking the transactional write is the only
+    // deterministic way to exercise that branch now that membership creation
+    // and native sync invalidation commit together.
     const chef = await makeUser();
     const recipe = await db.recipe.create({ data: { title: "Greens", chefId: chef.id } });
     const cookbook = await db.cookbook.create({ data: { title: "Box", authorId: chef.id } });
 
-    const originalCreate = db.recipeInCookbook.create;
-    db.recipeInCookbook.create = vi
+    const originalTransaction = db.$transaction;
+    db.$transaction = vi
       .fn()
-      .mockRejectedValue(Object.assign(new Error("Database error"), { code: "P2003" }));
+      .mockRejectedValue(Object.assign(new Error("Database error"), { code: "P2003" })) as unknown as typeof db.$transaction;
 
     try {
       const formData = new UndiciFormData();
@@ -304,7 +393,7 @@ describe("handleRecipeDetailAction addToCookbook error surfacing", () => {
         }),
       ).rejects.toMatchObject({ message: "Database error", code: "P2003" });
     } finally {
-      db.recipeInCookbook.create = originalCreate;
+      db.$transaction = originalTransaction;
     }
   });
 });

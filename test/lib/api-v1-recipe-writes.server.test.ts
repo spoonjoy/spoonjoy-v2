@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { faker } from "@faker-js/faker";
 import {
   createNativeRecipe,
@@ -211,6 +211,17 @@ describe("API v1 recipe write helpers", () => {
     const chef = await createUser(db);
     const other = await createUser(db);
     const recipe = await createRecipe(db, chef.id, "Patch Helper");
+    const cookbook = await db.cookbook.create({
+      data: { title: "Patch Helper Cookbook", authorId: chef.id },
+    });
+    await db.recipeInCookbook.create({
+      data: { recipeId: recipe.id, cookbookId: cookbook.id, addedById: chef.id },
+    });
+    const oldCookbookUpdatedAt = new Date("2000-01-01T00:00:00.000Z");
+    await db.cookbook.update({
+      where: { id: cookbook.id },
+      data: { updatedAt: oldCookbookUpdatedAt },
+    });
     const deleted = await createRecipe(db, chef.id, "Patch Deleted Helper");
     await db.recipe.update({ where: { id: deleted.id }, data: { deletedAt: new Date() } });
     await createRecipe(db, chef.id, "Patch Duplicate Helper");
@@ -230,6 +241,11 @@ describe("API v1 recipe write helpers", () => {
       fields: { title: "Patch Changed", description: null, servings: "6" },
     }));
     expect(updated.data).toEqual({ recipeId: recipe.id, updated: true });
+    const touchedCookbook = await db.cookbook.findUniqueOrThrow({
+      where: { id: cookbook.id },
+      select: { updatedAt: true },
+    });
+    expect(touchedCookbook.updatedAt.getTime()).toBeGreaterThan(oldCookbookUpdatedAt.getTime());
   });
 
   it("deletes recipes across ownership, tombstone, missing, and success paths", async () => {
@@ -244,6 +260,80 @@ describe("API v1 recipe write helpers", () => {
     expectFailure(await deleteNativeRecipe(db, other.id, recipe.id), "insufficient_scope");
     const result = expectOk(await deleteNativeRecipe(db, chef.id, recipe.id));
     expect(result.data.recipe).toMatchObject({ id: recipe.id, deletedAt: expect.any(Date), updatedAt: expect.any(Date) });
+    await expect(db.nativeSyncTombstone.findUniqueOrThrow({
+      where: {
+        accountId_resourceType_resourceId: {
+          accountId: chef.id,
+          resourceType: "recipe",
+          resourceId: recipe.id,
+        },
+      },
+    })).resolves.toMatchObject({
+      accountId: chef.id,
+      resourceType: "recipe",
+      resourceId: recipe.id,
+      title: "Delete Helper",
+      deletedAt: result.data.recipe.deletedAt,
+      updatedAt: result.data.recipe.updatedAt,
+    });
+  });
+
+  it("batches recipe delete tombstones with the delete write", async () => {
+    const recipeUpdate = vi.fn(async () => ({
+      id: "recipe_1",
+      title: "Atomic Delete",
+      deletedAt: new Date("2026-07-01T10:00:00.000Z"),
+      updatedAt: new Date("2026-07-01T10:00:00.000Z"),
+    }));
+    const cookbookUpdateMany = vi.fn(async () => ({ count: 1 }));
+    const tombstoneUpsert = vi.fn(async () => ({}));
+    const dbMock = {
+      recipe: {
+        findUnique: vi.fn(async () => ({ id: "recipe_1", chefId: "chef_1", title: "Atomic Delete", deletedAt: null })),
+        update: recipeUpdate,
+      },
+      cookbook: {
+        updateMany: cookbookUpdateMany,
+      },
+      nativeSyncTombstone: {
+        upsert: tombstoneUpsert,
+      },
+      $transaction: vi.fn(async (ops: Array<Promise<unknown>>) => await Promise.all(ops)),
+    } as unknown as LocalDb;
+
+    const result = expectOk(await deleteNativeRecipe(dbMock, "chef_1", "recipe_1"));
+
+    expect(result.data.recipe).toMatchObject({ id: "recipe_1", title: "Atomic Delete" });
+    expect(recipeUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: "recipe_1" },
+      data: { deletedAt: expect.any(Date), updatedAt: expect.any(Date) },
+    }));
+    expect(cookbookUpdateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { recipes: { some: { recipeId: "recipe_1" } } },
+    }));
+    expect(tombstoneUpsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        accountId_resourceType_resourceId: {
+          accountId: "chef_1",
+          resourceType: "recipe",
+          resourceId: "recipe_1",
+        },
+      },
+      create: expect.objectContaining({
+        accountId: "chef_1",
+        resourceType: "recipe",
+        resourceId: "recipe_1",
+        title: "Atomic Delete",
+      }),
+      update: expect.objectContaining({
+        title: "Atomic Delete",
+      }),
+    }));
+    expect(dbMock.$transaction).toHaveBeenCalledWith([
+      expect.any(Promise),
+      expect.any(Promise),
+      expect.any(Promise),
+    ]);
   });
 
   it("forks recipes through helper success, source-missing, and title-exhaustion paths", async () => {

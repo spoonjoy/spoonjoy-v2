@@ -43,7 +43,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     const redirectTo = sanitizeSessionRedirect(
       typeof body.redirectTo === "string" ? body.redirectTo : "/",
     );
-    const cookie = await createUserSessionCookie(result.userId, env);
+    const cookie = await createUserSessionCookie(result.userId, env, request);
     return new Response(JSON.stringify({ verified: true, redirectTo }), {
       status: 200,
       headers: {

@@ -180,6 +180,14 @@ describe("API authentication helpers", () => {
 
   it("handles absent users and owner authorization checks", async () => {
     await expect(authenticateApiRequest(db, new UndiciRequest("http://localhost/api"))).resolves.toBeNull();
+    await expect(authenticateApiRequest(db, new UndiciRequest("http://localhost/api", {
+      headers: { Cookie: "__session=not-a-valid-signed-session" },
+    }))).resolves.toBeNull();
+    await expect(authenticateApiRequest(
+      db,
+      new UndiciRequest("http://localhost/api"),
+      { NODE_ENV: "production" },
+    )).resolves.toBeNull();
     await expect(principalFromUserId(db, "missing-user")).resolves.toBeNull();
     await expect(principalFromUserEmail(db, "missing@example.com")).resolves.toBeNull();
 

@@ -653,6 +653,7 @@ describe("scheduleSpoonCoverStylization", () => {
         updateMany: vi.fn().mockRejectedValueOnce("db write failed"),
         findFirst: vi.fn().mockResolvedValue(null),
       },
+      $transaction: vi.fn(async (callback: (tx: never) => Promise<unknown>) => callback(fakeDb as never)),
     };
 
     await scheduleSpoonCoverStylization({
@@ -745,23 +746,27 @@ describe("scheduleSpoonCoverStylization", () => {
       data: { status: "processing", generationStatus: "processing" },
     });
     let completedCompetingCover = false;
-    const raceDb = db.$extends({
-      query: {
-        recipe: {
-          async updateMany({ args, query }) {
-            if (!completedCompetingCover && args.where?.id === recipeId) {
-              completedCompetingCover = true;
-              await db.recipeCover.update({
-                where: { id: competingCover.id },
-                data: {
-                  status: "ready",
-                  generationStatus: "succeeded",
-                },
-              });
-            }
-            return query(args);
+    const raceDb = new Proxy(db, {
+      get(target, prop, receiver) {
+        if (prop !== "recipe") return Reflect.get(target, prop, receiver);
+        return new Proxy(target.recipe, {
+          get(recipeTarget, recipeProp, recipeReceiver) {
+            if (recipeProp !== "updateMany") return Reflect.get(recipeTarget, recipeProp, recipeReceiver);
+            return async (args: Parameters<typeof target.recipe.updateMany>[0]) => {
+              if (!completedCompetingCover && args.where?.id === recipeId) {
+                completedCompetingCover = true;
+                await target.recipeCover.update({
+                  where: { id: competingCover.id },
+                  data: {
+                    status: "ready",
+                    generationStatus: "succeeded",
+                  },
+                });
+              }
+              return target.recipe.updateMany(args);
+            };
           },
-        },
+        });
       },
     });
 

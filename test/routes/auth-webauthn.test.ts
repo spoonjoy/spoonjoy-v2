@@ -34,6 +34,10 @@ function routeArgs(request: Request) {
   return { request, params: {}, context: { cloudflare: { env: null } } } as never;
 }
 
+function routeArgsWithEnv(request: Request, env: Record<string, unknown>) {
+  return { request, params: {}, context: { cloudflare: { env } } } as never;
+}
+
 function routeArgsRateLimited(request: Request) {
   return {
     request,
@@ -264,6 +268,27 @@ describe("WebAuthn routes", () => {
       expect(res.status).toBe(200);
       expect(res.headers.get("Set-Cookie") ?? "").toContain("__session=");
       await expect(res.json()).resolves.toMatchObject({ verified: true, redirectTo: "/recipes" });
+    });
+
+    it("uses the request-aware local session fallback for explicitly local production-shaped passkey sign-in", async () => {
+      const user = await db.user.create({
+        data: { ...createTestUser(), email: "passkey-local-login@example.com", webAuthnChallenge: "ac" },
+      });
+      await db.userCredential.create({ data: { id: "vc-local", userId: user.id, publicKey: new Uint8Array([1]), counter: 1n } });
+      vi.mocked(verifyAuthentication).mockResolvedValue({ verified: true, authenticationInfo: { newCounter: 2 } } as never);
+
+      const res = await authenticateVerify(routeArgsWithEnv(jsonRequest(
+        "http://localhost:5173/auth/webauthn/authenticate/verify",
+        { email: user.email, response: { id: "vc-local" }, redirectTo: "/recipes" },
+      ), {
+        NODE_ENV: "production",
+        SPOONJOY_BASE_URL: "http://localhost:5173",
+      }));
+      const setCookie = res.headers.get("Set-Cookie") ?? "";
+
+      expect(res.status).toBe(200);
+      expect(setCookie).toContain("__session=");
+      expect(setCookie).not.toContain("Secure");
     });
 
     it("falls back to the root redirect when no redirect is posted", async () => {

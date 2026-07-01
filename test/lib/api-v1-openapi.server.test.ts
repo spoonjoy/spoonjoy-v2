@@ -19,6 +19,7 @@ const OPERATION_SCOPES = {
   "GET /api/v1/openapi.sdk.json": [],
   "GET /api/v1/openapi.connector.json": [],
   "POST /api/v1/auth/apple/native": [],
+  "POST /api/v1/auth/password/native": [],
   "GET /api/v1/search": [],
   "GET /api/v1/recipes": ["recipes:read"],
   "POST /api/v1/recipes": ["kitchen:write"],
@@ -53,6 +54,7 @@ const OPERATION_SCOPES = {
   "DELETE /api/v1/cookbooks/{id}/recipes/{recipeId}": ["kitchen:write"],
   "GET /api/v1/me": ["account:read"],
   "PATCH /api/v1/me": ["account:write"],
+  "GET /api/v1/me/sync": ["account:read", "kitchen:read"],
   "POST /api/v1/me/photo": ["account:write"],
   "DELETE /api/v1/me/photo": ["account:write"],
   "GET /api/v1/me/notification-preferences": ["account:read"],
@@ -194,6 +196,13 @@ describe("API v1 OpenAPI document", () => {
       "no-code-connector",
       "public-data-export",
     ]);
+    const nativeDogfoodScenario = document["x-client-scenarios"].find((scenario: { id: string }) => (
+      scenario.id === "spoonjoy-apple-native-dogfood"
+    ));
+    expect(nativeDogfoodScenario.sample).toContain("POST /api/v1/auth/password/native");
+    expect(nativeDogfoodScenario.sample).toContain("GET /api/v1/me/sync?limit=50");
+    expect(nativeDogfoodScenario.sample).not.toContain("POST /oauth/register");
+    expect(nativeDogfoodScenario.sample).not.toContain("/api/v1/shopping-list/sync");
   });
 
   it("declares paths, auth, scopes, parameters, examples, and error responses for every resource", () => {

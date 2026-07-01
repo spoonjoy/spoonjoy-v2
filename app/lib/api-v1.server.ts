@@ -76,9 +76,18 @@ import {
   handleNativeAppleSignIn,
   NativeAppleAuthError,
 } from "~/lib/apple-native-auth.server";
+import {
+  handleNativePasswordSignIn,
+  NativePasswordAuthError,
+} from "~/lib/native-password-auth.server";
 import { notifyForkOfMyRecipe } from "~/lib/notification-triggers.server";
-import { enforceRateLimit } from "~/lib/rate-limit.server";
+import { DEFAULT_RETRY_AFTER_SECONDS, enforceAuthRateLimit, enforceRateLimit } from "~/lib/rate-limit.server";
 import { getRequestDb } from "~/lib/route-platform.server";
+import {
+  nativeSyncDeletedKind,
+  nativeSyncTombstoneUpsertOperation,
+  recordNativeSyncTombstone,
+} from "~/lib/native-sync-invalidation.server";
 import {
   API_V1_DISCOVERY_DATA,
   API_V1_ERROR_STATUS,
@@ -96,6 +105,7 @@ import { IMAGE_MAX_FILE_SIZE, PROFILE_IMAGE_TYPES } from "~/lib/recipe-image";
 import { listUserPasskeys } from "~/lib/webauthn-route.server";
 import {
   archiveRecipeCover,
+  clearActiveRecipeCover,
   createCover,
   getRecipeCoverDisplay,
   getRecipeCoverProvenanceLabel,
@@ -203,10 +213,22 @@ export function apiV1Headers(requestId: string, json = true): Headers {
   return headers;
 }
 
-function apiV1PrivateHeaders(requestId: string, json = true): Headers {
-  const headers = apiV1Headers(requestId, json);
+function apiV1PrivateHeaders(requestId: string): Headers {
+  const headers = apiV1Headers(requestId);
   headers.set("Cache-Control", "private, no-store");
   headers.set("Pragma", "no-cache");
+  return headers;
+}
+
+function apiV1SamePartyPrivateHeaders(requestId: string, json = true): Headers {
+  const headers = new Headers({
+    "X-Request-Id": requestId,
+    "Cache-Control": "private, no-store",
+    Pragma: "no-cache",
+  });
+  if (json) {
+    headers.set("Content-Type", "application/json; charset=utf-8");
+  }
   return headers;
 }
 
@@ -226,6 +248,17 @@ function apiV1PrivateSuccess(requestId: string, data: unknown, status = 200, ext
   if (extraHeaders) {
     new Headers(extraHeaders).forEach((value, key) => headers.set(key, value));
   }
+  return Response.json({ ok: true, requestId, data }, { status, headers });
+}
+
+function apiV1SamePartyPrivateSuccess(
+  requestId: string,
+  data: unknown,
+  status: number,
+  extraHeaders: HeadersInit,
+): Response {
+  const headers = apiV1SamePartyPrivateHeaders(requestId);
+  new Headers(extraHeaders).forEach((value, key) => headers.set(key, value));
   return Response.json({ ok: true, requestId, data }, { status, headers });
 }
 
@@ -270,7 +303,61 @@ export function apiV1ErrorResponse(requestId: string, error: ApiV1Error): Respon
   });
 }
 
-async function enforceApiV1RateLimit(args: ApiV1RouteArgs, requestId: string): Promise<Response | null> {
+function apiV1SamePartyErrorResponse(requestId: string, error: ApiV1Error): Response {
+  const body: {
+    ok: false;
+    requestId: string;
+    error: { code: ApiV1ErrorCode; message: string; status: number; details?: unknown };
+  } = {
+    ok: false,
+    requestId,
+    error: {
+      code: error.code,
+      message: error.message,
+      status: error.status,
+    },
+  };
+  if (error.details !== undefined) {
+    body.error.details = error.details;
+  }
+  const headers = apiV1SamePartyPrivateHeaders(requestId);
+  if (error.code === "rate_limited") {
+    headers.set("Retry-After", String(retryAfterSecondsFromError(error)));
+  }
+  if (
+    error.code === "method_not_allowed" &&
+    error.details &&
+    typeof error.details === "object" &&
+    !Array.isArray(error.details) &&
+    typeof (error.details as { allow?: unknown }).allow === "string"
+  ) {
+    headers.set("Allow", (error.details as { allow: string }).allow);
+  }
+  return Response.json(body, {
+    status: error.status,
+    headers,
+  });
+}
+
+export function retryAfterSecondsFromError(error: ApiV1Error): number {
+  if (
+    error.details &&
+    typeof error.details === "object" &&
+    !Array.isArray(error.details) &&
+    typeof (error.details as { retryAfterSeconds?: unknown }).retryAfterSeconds === "number" &&
+    Number.isFinite((error.details as { retryAfterSeconds: number }).retryAfterSeconds) &&
+    (error.details as { retryAfterSeconds: number }).retryAfterSeconds > 0
+  ) {
+    return Math.ceil((error.details as { retryAfterSeconds: number }).retryAfterSeconds);
+  }
+  return DEFAULT_RETRY_AFTER_SECONDS;
+}
+
+async function enforceApiV1RateLimit(
+  args: ApiV1RouteArgs,
+  requestId: string,
+  options: { samePartyError: boolean },
+): Promise<Response | null> {
   const env = args.context.cloudflare?.env;
   const rateLimit = await enforceRateLimit({
     authorization: args.request.headers.get("Authorization"),
@@ -280,7 +367,7 @@ async function enforceApiV1RateLimit(args: ApiV1RouteArgs, requestId: string): P
   });
   if (rateLimit.allowed) return null;
 
-  const response = apiV1ErrorResponse(
+  const response = (options.samePartyError ? apiV1SamePartyErrorResponse : apiV1ErrorResponse)(
     requestId,
     new ApiV1Error("rate_limited", "Too many requests. Try again later.", {
       retryAfterSeconds: rateLimit.retryAfterSeconds,
@@ -367,6 +454,8 @@ function apiV1OperationFor(method: string, path: string): string | undefined {
       return "openapi.connector.read";
     case "POST auth-apple-native":
       return "auth.apple.native.sign-in";
+    case "POST auth-password-native":
+      return "auth.password.native.sign-in";
     case "GET search":
       return "search.read";
     case "GET recipes":
@@ -843,6 +932,65 @@ function publicOrigin(args: ApiV1RouteArgs): string {
 function publicContentOrigin(args: ApiV1RouteArgs): string {
   const configured = args.context.cloudflare?.env?.SPOONJOY_BASE_URL;
   return new URL(configured || "https://spoonjoy.app").origin;
+}
+
+function nativeSyncEnvironment(args: ApiV1RouteArgs): "local" | "preview" | "production" {
+  const env = args.context.cloudflare?.env as ({
+    NODE_ENV?: unknown;
+    SPOONJOY_ALLOW_INSECURE_LOCAL_SESSIONS?: unknown;
+    SPOONJOY_NATIVE_ENVIRONMENT?: unknown;
+    SPOONJOY_BASE_URL?: string;
+  } | undefined);
+  const configured = env?.SPOONJOY_NATIVE_ENVIRONMENT;
+  if (configured === "local" || configured === "preview" || configured === "production") {
+    return configured;
+  }
+
+  const configuredBaseUrl = env?.SPOONJOY_BASE_URL;
+  if (isLocalhostUrl(configuredBaseUrl)) {
+    return "local";
+  }
+
+  const requestUrl = new URL(args.request.url);
+  if (
+    !isProductionEnv(env?.NODE_ENV) &&
+    configuredBaseUrl === undefined &&
+    isLocalhostHostname(requestUrl.hostname)
+  ) {
+    return "local";
+  }
+
+  if (isEnabledEnvFlag(env?.SPOONJOY_ALLOW_INSECURE_LOCAL_SESSIONS) && isLocalhostHostname(requestUrl.hostname)) {
+    return "local";
+  }
+
+  const host = normalizedHost(new URL(configuredBaseUrl || args.request.url).hostname);
+  if (host === "spoonjoy.app" || host === "www.spoonjoy.app") {
+    return "production";
+  }
+  return "preview";
+}
+
+function normalizedHost(hostname: string): string {
+  const lowercased = hostname.toLowerCase();
+  return lowercased.startsWith("[") && lowercased.endsWith("]") ? lowercased.slice(1, -1) : lowercased;
+}
+
+function isLocalhostHostname(hostname: string): boolean {
+  const host = normalizedHost(hostname);
+  return host === "localhost" || host.endsWith(".localhost") || host === "127.0.0.1" || host === "::1";
+}
+
+function isLocalhostUrl(value: string | undefined): boolean {
+  return Boolean(value && URL.canParse(value) && isLocalhostHostname(new URL(value).hostname));
+}
+
+function isEnabledEnvFlag(value: unknown): boolean {
+  return typeof value === "string" && /^(1|true|yes)$/i.test(value.trim());
+}
+
+function isProductionEnv(value: unknown): boolean {
+  return value === "production" || process.env.NODE_ENV === "production";
 }
 
 function canonicalUrl(origin: string, href: string): string {
@@ -2146,22 +2294,7 @@ async function handleRecipeCoverSetNoCover(args: ApiV1RouteArgs, requestId: stri
     const origin = publicContentOrigin(args);
     const recipe = await loadOwnedCoverRecipe(db, principal, recipeId);
     const previousActiveCover = await activeFullCoverPayload(db, recipe, origin);
-    const nextRecipe = await db.recipe.update({
-      where: { id: recipe.id },
-      data: {
-        activeCoverId: null,
-        activeCoverVariant: null,
-        coverMode: "none",
-      },
-      select: {
-        id: true,
-        title: true,
-        chefId: true,
-        activeCoverId: true,
-        activeCoverVariant: true,
-        coverMode: true,
-      },
-    });
+    const nextRecipe = await clearActiveRecipeCover(db, recipe.id);
     return {
       status: 200,
       data: {
@@ -2646,7 +2779,18 @@ async function handleCookbookDelete(args: ApiV1RouteArgs, requestId: string, pri
 
   return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, clientMutationId, "cookbooks.delete", async (db) => {
     const cookbook = await loadOwnedCookbookById(db, principal, id);
-    await db.cookbook.delete({ where: { id } });
+    const deletedAt = new Date();
+    await db.$transaction([
+      nativeSyncTombstoneUpsertOperation(db, {
+        accountId: principal.id,
+        resourceType: "cookbook",
+        resourceId: cookbook.id,
+        title: cookbook.title,
+        deletedAt,
+        updatedAt: deletedAt,
+      }),
+      db.cookbook.delete({ where: { id } }),
+    ]);
     return {
       status: 200,
       data: {
@@ -2682,12 +2826,22 @@ async function handleCookbookRecipeAdd(
 
     let added = true;
     try {
-      await db.recipeInCookbook.create({
-        data: { cookbookId, recipeId, addedById: principal.id },
+      await db.$transaction(async (tx) => {
+        await tx.recipeInCookbook.create({
+          data: { cookbookId, recipeId, addedById: principal.id },
+        });
+        await tx.cookbook.update({
+          where: { id: cookbookId },
+          data: { updatedAt: new Date() },
+        });
       });
     } catch (error) {
       if (isPrismaErrorCode(error, "P2002")) {
         added = false;
+        await db.cookbook.update({
+          where: { id: cookbookId },
+          data: { updatedAt: new Date() },
+        });
       } else {
         throw error;
       }
@@ -2725,8 +2879,16 @@ async function handleCookbookRecipeRemove(
 
   return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, clientMutationId, "cookbooks.recipes.remove", async (db) => {
     await loadOwnedCookbookById(db, principal, cookbookId);
-    const result = await db.recipeInCookbook.deleteMany({
-      where: { cookbookId, recipeId },
+    const updatedAt = new Date();
+    const result = await db.$transaction(async (tx) => {
+      const deleted = await tx.recipeInCookbook.deleteMany({
+        where: { cookbookId, recipeId },
+      });
+      await tx.cookbook.update({
+        where: { id: cookbookId },
+        data: { updatedAt },
+      });
+      return deleted;
     });
     const cookbook = await loadExistingCookbookById(db, cookbookId);
     return {
@@ -2741,14 +2903,19 @@ async function handleCookbookRecipeRemove(
   });
 }
 
-async function loadShoppingListForUser(db: ApiV1WriteDb, userId: string) {
+async function loadShoppingListForUser(
+  db: ApiV1WriteDb,
+  userId: string,
+  itemWhere: Prisma.ShoppingListItemWhereInput = {},
+) {
   const include = {
     author: { select: { id: true, username: true } },
     items: {
+      where: itemWhere,
       include: { unit: true, ingredientRef: true },
       orderBy: [{ sortIndex: "asc" as const }, { updatedAt: "asc" as const }, { id: "asc" as const }],
     },
-  };
+  } satisfies Prisma.ShoppingListInclude;
   const existing = await db.shoppingList.findUnique({
     where: { authorId: userId },
     include,
@@ -2826,6 +2993,26 @@ async function nextShoppingSortIndex(db: ApiV1WriteDb, shoppingListId: string) {
 }
 
 type SyncCursor = { updatedAt: Date; id: string | null; raw: string };
+type NativeSyncEntryKind = "profile" | "recipe" | "cookbook" | "shoppingItem";
+type NativeSyncEntryAction = "upsert" | "delete";
+
+interface NativeSyncTombstonePayload {
+  resourceType: NativeSyncEntryKind;
+  resourceId: string;
+  parentResourceId: string | null;
+  title: string | null;
+  deletedAt: string;
+  updatedAt: string;
+}
+
+interface NativeSyncEntry {
+  action: NativeSyncEntryAction;
+  kind: NativeSyncEntryKind;
+  resourceId: string;
+  updatedAt: string;
+  payload?: unknown;
+  tombstone?: NativeSyncTombstonePayload;
+}
 
 function base64UrlEncodeText(value: string): string {
   return btoa(value).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
@@ -2838,6 +3025,10 @@ function base64UrlDecodeText(value: string): string {
 
 function syncCursorForItem(item: Pick<ShoppingItemRow, "id" | "updatedAt">): string {
   return `v1.${base64UrlEncodeText(JSON.stringify({ updatedAt: item.updatedAt.toISOString(), id: item.id }))}`;
+}
+
+function nativeSyncCursorForEntry(entry: Pick<NativeSyncEntry, "resourceId" | "updatedAt" | "kind">): string {
+  return `v1.${base64UrlEncodeText(JSON.stringify({ updatedAt: entry.updatedAt, id: `${entry.kind}:${entry.resourceId}` }))}`;
 }
 
 function syncCursorForDate(date: Date): string {
@@ -2907,6 +3098,198 @@ async function handleShoppingListSync(args: ApiV1RouteArgs, requestId: string, p
 
   return apiV1PrivateSuccess(requestId, {
     items: items.map(shoppingItem),
+    nextCursor,
+    hasMore,
+  });
+}
+
+function profileSyncPayload(origin: string, user: {
+  id: string;
+  email: string;
+  username: string;
+  photoUrl: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}) {
+  return {
+    id: user.id,
+    email: user.email,
+    username: user.username,
+    photoUrl: privateAccountPhotoUrl(origin, user.photoUrl),
+    joinedLabel: "Joined Spoonjoy",
+    createdAt: user.createdAt.toISOString(),
+    updatedAt: user.updatedAt.toISOString(),
+  };
+}
+
+function nativeSyncEntrySort(a: NativeSyncEntry, b: NativeSyncEntry) {
+  const updatedAt = new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
+  if (updatedAt !== 0) return updatedAt;
+  const kind = a.kind.localeCompare(b.kind);
+  if (kind !== 0) return kind;
+  return a.resourceId.localeCompare(b.resourceId);
+}
+
+function nativeSyncEntryAfterCursor(entry: NativeSyncEntry, cursor: SyncCursor | null) {
+  if (cursor === null) return true;
+  const updatedAt = new Date(entry.updatedAt).getTime();
+  const cursorUpdatedAt = cursor.updatedAt.getTime();
+  if (updatedAt > cursorUpdatedAt) return true;
+  return cursor.id !== null && updatedAt === cursorUpdatedAt && `${entry.kind}:${entry.resourceId}` > cursor.id;
+}
+
+function nativeSyncUpdatedAtWhere(cursor: SyncCursor | null) {
+  return cursor ? { updatedAt: { gte: cursor.updatedAt } } : {};
+}
+
+async function handleNativeAccountSync(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
+  const db = await getRequestDb(args.context);
+  const url = new URL(args.request.url);
+  const cursor = parseSyncCursor(url);
+  const limit = parseShoppingSyncLimit(url);
+  const origin = publicContentOrigin(args);
+  const environment = nativeSyncEnvironment(args);
+  const generatedAt = new Date().toISOString();
+
+  const user = await db.user.findUnique({
+    where: { id: principal.id },
+    select: { id: true, email: true, username: true, photoUrl: true, createdAt: true, updatedAt: true },
+  });
+  /* istanbul ignore if -- @preserve bearer/session auth already resolved the user; this keeps sync honest if the row disappears mid-request. */
+  if (!user) {
+    throw new ApiV1Error("not_found", "Account not found");
+  }
+
+  const recipeRefs = await db.recipe.findMany({
+    where: { chefId: principal.id, deletedAt: null, ...nativeSyncUpdatedAtWhere(cursor) },
+    select: { id: true, updatedAt: true },
+    orderBy: [{ updatedAt: "asc" }, { id: "asc" }],
+  });
+  const cookbookRefs = await db.cookbook.findMany({
+    where: { authorId: principal.id, ...nativeSyncUpdatedAtWhere(cursor) },
+    select: { id: true, updatedAt: true },
+    orderBy: [{ updatedAt: "asc" }, { id: "asc" }],
+  });
+  const tombstoneRefs = await db.nativeSyncTombstone.findMany({
+    where: { accountId: principal.id, ...nativeSyncUpdatedAtWhere(cursor) },
+    select: {
+      resourceType: true,
+      resourceId: true,
+      parentResourceId: true,
+      title: true,
+      deletedAt: true,
+      updatedAt: true,
+    },
+    orderBy: [{ updatedAt: "asc" }, { resourceType: "asc" }, { resourceId: "asc" }],
+  });
+  const shoppingList = await loadShoppingListForUser(db, principal.id, nativeSyncUpdatedAtWhere(cursor));
+
+  const profileEntry: NativeSyncEntry = {
+    action: "upsert",
+    kind: "profile",
+    resourceId: user.id,
+    updatedAt: user.updatedAt.toISOString(),
+    payload: profileSyncPayload(origin, user),
+  };
+  const recipeEntries = recipeRefs.map((recipe): NativeSyncEntry => ({
+    action: "upsert",
+    kind: "recipe",
+    resourceId: recipe.id,
+    updatedAt: recipe.updatedAt.toISOString(),
+  }));
+  const cookbookEntries = cookbookRefs.map((cookbook): NativeSyncEntry => ({
+    action: "upsert",
+    kind: "cookbook",
+    resourceId: cookbook.id,
+    updatedAt: cookbook.updatedAt.toISOString(),
+  }));
+  const tombstoneEntries = tombstoneRefs.flatMap((tombstone): NativeSyncEntry[] => {
+    const kind = nativeSyncDeletedKind(tombstone.resourceType);
+    if (!kind) return [];
+    const updatedAt = tombstone.updatedAt.toISOString();
+    return [{
+      action: "delete",
+      kind,
+      resourceId: tombstone.resourceId,
+      updatedAt,
+      tombstone: {
+        resourceType: kind,
+        resourceId: tombstone.resourceId,
+        parentResourceId: tombstone.parentResourceId,
+        title: tombstone.title,
+        deletedAt: tombstone.deletedAt.toISOString(),
+        updatedAt,
+      },
+    }];
+  });
+  const shoppingEntries = shoppingList.items.map((item): NativeSyncEntry => {
+      const updatedAt = item.updatedAt.toISOString();
+      if (item.deletedAt) {
+        return {
+          action: "delete",
+          kind: "shoppingItem",
+          resourceId: item.id,
+          updatedAt,
+          tombstone: {
+            resourceType: "shoppingItem",
+            resourceId: item.id,
+            parentResourceId: shoppingList.id,
+            title: item.ingredientRef.name,
+            deletedAt: item.deletedAt.toISOString(),
+            updatedAt,
+          },
+        };
+      }
+      return {
+        action: "upsert",
+        kind: "shoppingItem",
+        resourceId: item.id,
+        updatedAt,
+        payload: shoppingItem(item),
+      };
+    });
+  const entries = [
+    profileEntry,
+    ...recipeEntries,
+    ...cookbookEntries,
+    ...tombstoneEntries,
+    ...shoppingEntries,
+  ].sort(nativeSyncEntrySort);
+
+  const matchingEntries = entries.filter((entry) => nativeSyncEntryAfterCursor(entry, cursor));
+  const pageRefs = matchingEntries.slice(0, limit);
+  const hasMore = matchingEntries.length > limit;
+  const pageEntries = await Promise.all(pageRefs.map(async (entry): Promise<NativeSyncEntry | null> => {
+    if (entry.action === "upsert" && entry.kind === "recipe") {
+      const recipe = await loadRecipeById(db, entry.resourceId);
+      return recipe ? { ...entry, payload: recipeDetail(recipe, origin) } : null;
+    }
+    if (entry.action === "upsert" && entry.kind === "cookbook") {
+      const cookbook = await loadCookbookById(db, entry.resourceId);
+      return cookbook ? { ...entry, payload: cookbookDetail(cookbook, origin) } : null;
+    }
+    return entry;
+  }));
+  const visiblePageEntries = pageEntries.filter((entry): entry is NativeSyncEntry => entry !== null);
+  let nextCursor: string;
+  if (pageRefs.length > 0) {
+    nextCursor = nativeSyncCursorForEntry(pageRefs[pageRefs.length - 1]!);
+  } else {
+    // The profile entry is always present on an uncursored native account sync,
+    // so an empty page only occurs when the caller asks past the latest entry.
+    nextCursor = cursor!.raw;
+  }
+
+  return apiV1PrivateSuccess(requestId, {
+    freshness: {
+      accountId: principal.id,
+      environment,
+      schemaVersion: 1,
+      sourceEndpoint: "/api/v1/me/sync",
+      generatedAt,
+      lastValidatedAt: generatedAt,
+    },
+    entries: visiblePageEntries,
     nextCursor,
     hasMore,
   });
@@ -4438,7 +4821,7 @@ async function recoverNativeRecipeDelete(
 ): Promise<ApiV1IdempotentMutationResult | null> {
   const recipe = await db.recipe.findUnique({
     where: { id: input.recipeId },
-    select: { id: true, chefId: true, deletedAt: true, updatedAt: true },
+    select: { id: true, chefId: true, title: true, deletedAt: true, updatedAt: true },
   });
   if (!recipe || recipe.chefId !== input.principalId || !recipe.deletedAt) return null;
   if (
@@ -4447,6 +4830,14 @@ async function recoverNativeRecipeDelete(
   ) {
     return null;
   }
+  await recordNativeSyncTombstone(db, {
+    accountId: input.principalId,
+    resourceType: "recipe",
+    resourceId: recipe.id,
+    title: recipe.title,
+    deletedAt: recipe.deletedAt,
+    updatedAt: recipe.updatedAt,
+  });
   return {
     status: 200,
     data: {
@@ -5185,7 +5576,7 @@ function optionalNativeAppleText(body: Record<string, unknown>, field: string, m
   return trimmed;
 }
 
-function nativeAppleTokenPayload(tokens: Awaited<ReturnType<typeof handleNativeAppleSignIn>>["tokens"]) {
+function nativeSignInTokenPayload(tokens: Awaited<ReturnType<typeof handleNativeAppleSignIn>>["tokens"]) {
   return {
     access_token: tokens.accessToken,
     refresh_token: tokens.refreshToken,
@@ -5196,6 +5587,21 @@ function nativeAppleTokenPayload(tokens: Awaited<ReturnType<typeof handleNativeA
 }
 
 async function handleNativeAppleSignInRequest(args: ApiV1RouteArgs, requestId: string) {
+  const authRateLimit = await enforceAuthRateLimit(args.request, args.context.cloudflare?.env?.AUTH_IP_RATE_LIMITER);
+  if (!authRateLimit.allowed) {
+    const response = apiV1SamePartyErrorResponse(
+      requestId,
+      new ApiV1Error("rate_limited", "Too many requests. Try again later.", {
+        retryAfterSeconds: authRateLimit.retryAfterSeconds,
+        scope: authRateLimit.scope,
+      }),
+    );
+    return withApiV1Telemetry(response, {
+      errorCode: "rate_limited",
+      rateLimitScope: authRateLimit.scope,
+    });
+  }
+
   const body = await parseApiV1JsonBody(args.request);
   assertKnownFields(body, ["identityToken", "rawNonce", "email", "fullName"]);
   const identityToken = nonblankString(body.identityToken, "identityToken", 8192);
@@ -5211,10 +5617,10 @@ async function handleNativeAppleSignInRequest(args: ApiV1RouteArgs, requestId: s
       getAppleNativeAuthConfig((args.context.cloudflare?.env ?? {}) as OAuthEnv),
     );
     return withApiV1Telemetry(
-      apiV1PrivateSuccess(requestId, {
+      apiV1SamePartyPrivateSuccess(requestId, {
         action: result.action,
         userId: result.userId,
-        ...nativeAppleTokenPayload(result.tokens),
+        ...nativeSignInTokenPayload(result.tokens),
       }, 201, TOKEN_RESPONSE_HEADERS),
       { idempotencyOutcome: "none" },
     );
@@ -5228,6 +5634,54 @@ async function handleNativeAppleSignInRequest(args: ApiV1RouteArgs, requestId: s
     }
     throw error;
   }
+}
+
+async function handleNativePasswordSignInRequest(args: ApiV1RouteArgs, requestId: string) {
+  const authRateLimit = await enforceAuthRateLimit(args.request, args.context.cloudflare?.env?.AUTH_IP_RATE_LIMITER);
+  if (!authRateLimit.allowed) {
+    const response = apiV1SamePartyErrorResponse(
+      requestId,
+      new ApiV1Error("rate_limited", "Too many requests. Try again later.", {
+        retryAfterSeconds: authRateLimit.retryAfterSeconds,
+        scope: authRateLimit.scope,
+      }),
+    );
+    return withApiV1Telemetry(response, {
+      errorCode: "rate_limited",
+      rateLimitScope: authRateLimit.scope,
+    });
+  }
+
+  const body = await parseApiV1JsonBody(args.request);
+  assertKnownFields(body, ["emailOrUsername", "password"]);
+  const emailOrUsername = nonblankString(body.emailOrUsername, "emailOrUsername", 320);
+  const password = nonblankString(body.password, "password", 1024);
+  const db = await getRequestDb(args.context);
+
+  try {
+    const result = await handleNativePasswordSignIn(
+      db,
+      { emailOrUsername, password },
+    );
+    return withApiV1Telemetry(
+      apiV1SamePartyPrivateSuccess(requestId, {
+        action: result.action,
+        userId: result.userId,
+        ...nativeSignInTokenPayload(result.tokens),
+      }, 201, TOKEN_RESPONSE_HEADERS),
+      { idempotencyOutcome: "none" },
+    );
+  } catch (error) {
+    if (error instanceof NativePasswordAuthError) {
+      const code = error.status === 401 ? "invalid_token" : "validation_error";
+      throw new ApiV1Error(code, error.message, { providerCode: error.code });
+    }
+    throw error;
+  }
+}
+
+function isNativeAuthPath(path: string): boolean {
+  return path === "auth/apple/native" || path === "auth/password/native";
 }
 
 async function handleTokenList(args: ApiV1RouteArgs, requestId: string, authenticated: ApiPrincipal) {
@@ -5301,11 +5755,15 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
   };
 
   try {
+    if ((path === "auth/apple/native" || path === "auth/password/native") && args.request.method === "OPTIONS") {
+      return new Response(null, { status: 204, headers: apiV1SamePartyPrivateHeaders(requestId, false) });
+    }
+
     if (args.request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: apiV1Headers(requestId, false) });
     }
 
-    const throttled = await enforceApiV1RateLimit(args, requestId);
+    const throttled = await enforceApiV1RateLimit(args, requestId, { samePartyError: isNativeAuthPath(path) });
     if (throttled) {
       return observeApiV1Response(args, { requestId, path, response: throttled, startedAt });
     }
@@ -5366,6 +5824,15 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
 
     if (args.request.method === "POST" && path === "auth/apple/native") {
       const response = await handleNativeAppleSignInRequest(args, requestId);
+      return observeApiV1Response(args, { requestId, path, response, startedAt });
+    }
+
+    if (path === "auth/password/native" && args.request.method !== "POST") {
+      throw new ApiV1Error("method_not_allowed", "Method not allowed", { allow: "POST" });
+    }
+
+    if (args.request.method === "POST" && path === "auth/password/native") {
+      const response = await handleNativePasswordSignInRequest(args, requestId);
       return observeApiV1Response(args, { requestId, path, response, startedAt });
     }
 
@@ -5572,6 +6039,12 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
       return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
     }
 
+    if (args.request.method === "GET" && path === "me/sync") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleNativeAccountSync(args, requestId, principal);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
     if (args.request.method === "PATCH" && path === "me") {
       const principal = await authorize(path) as ApiPrincipal;
       const response = await handleAccountUpdate(args, requestId, principal);
@@ -5708,7 +6181,9 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
     throw new ApiV1Error("not_found", `Unknown Spoonjoy API v1 endpoint: /api/v1/${path}`);
   } catch (error) {
     if (error instanceof ApiV1Error) {
-      const response = apiV1ErrorResponse(requestId, error);
+      const response = isNativeAuthPath(path)
+        ? apiV1SamePartyErrorResponse(requestId, error)
+        : apiV1ErrorResponse(requestId, error);
       return observeApiV1Response(args, {
         requestId,
         path,
@@ -5722,7 +6197,9 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
     logApiV1InternalError(args, requestId, error);
     captureApiV1InternalException(args, error);
     const internalError = normalizeApiV1InternalError(error);
-    const response = apiV1ErrorResponse(requestId, internalError);
+    const response = isNativeAuthPath(path)
+      ? apiV1SamePartyErrorResponse(requestId, internalError)
+      : apiV1ErrorResponse(requestId, internalError);
     return observeApiV1Response(args, {
       requestId,
       path,

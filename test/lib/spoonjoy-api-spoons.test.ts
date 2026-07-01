@@ -1856,11 +1856,8 @@ describe("spoonjoy-api spoon operations", () => {
 
       const apiErrorDb = {
         ...db,
-        recipe: {
-          ...db.recipe,
-          update: async () => {
-            throw new ApiAuthError("custom lifecycle failure", 418);
-          },
+        $transaction: async () => {
+          throw new ApiAuthError("custom lifecycle failure", 418);
         },
       } as unknown as Database;
       await expect(callSpoonjoyApiOperation(
@@ -1879,11 +1876,8 @@ describe("spoonjoy-api spoon operations", () => {
 
       const rawErrorDb = {
         ...db,
-        recipe: {
-          ...db.recipe,
-          update: async () => {
-            throw "raw lifecycle failure";
-          },
+        $transaction: async () => {
+          throw "raw lifecycle failure";
         },
       } as unknown as Database;
       await expect(callSpoonjoyApiOperation(

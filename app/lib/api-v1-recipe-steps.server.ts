@@ -108,6 +108,13 @@ function fieldFailure<T>(field: string, message: string): ApiV1RecipeStepResult<
   return failure("validation_error", "Invalid recipe step fields", { fieldErrors: { [field]: message } });
 }
 
+function touchRecipeOp(db: Database, recipeId: string): Prisma.PrismaPromise<unknown> {
+  return db.recipe.update({
+    where: { id: recipeId },
+    data: { updatedAt: new Date() },
+  });
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Object.prototype.toString.call(value) === "[object Object]";
 }
@@ -732,6 +739,7 @@ export async function createNativeRecipeStep(
     }),
     ...createStepOutputUseOps(db, recipeId, stepNum, input.outputStepNums),
     ...input.ingredients.map((ingredient) => createIngredientOp(db, recipeId, stepNum, ingredient)),
+    touchRecipeOp(db, recipeId),
   ];
 
   await db.$transaction(ops);
@@ -798,6 +806,7 @@ export async function updateNativeRecipeStep(
   }
 
   if (ops.length > 0) {
+    ops.push(touchRecipeOp(db, recipeId));
     await db.$transaction(ops);
   }
 
@@ -838,6 +847,7 @@ export async function deleteNativeRecipeStep(
     }));
   }
   ops.push(db.recipeStep.delete({ where: { id: stepId } }));
+  ops.push(touchRecipeOp(db, recipeId));
   await db.$transaction(ops);
 
   return success({ recipeId, step: { id: stepId, stepNum: step.data.stepNum } });
@@ -865,7 +875,10 @@ export async function createNativeRecipeStepIngredient(
   if (ingredientConflict) return ingredientConflict;
 
   const ingredientId = options.ingredientId ?? crypto.randomUUID();
-  await db.$transaction([createIngredientOp(db, recipeId, step.data.stepNum, input, ingredientId)]);
+  await db.$transaction([
+    createIngredientOp(db, recipeId, step.data.stepNum, input, ingredientId),
+    touchRecipeOp(db, recipeId),
+  ]);
 
   return success({ recipeId, stepId, ingredientId }, 201);
 }
@@ -907,6 +920,7 @@ export async function deleteNativeRecipeStepIngredient(
     }));
   }
   ops.push(db.ingredient.delete({ where: { id: ingredient.id } }));
+  ops.push(touchRecipeOp(db, recipeId));
   await db.$transaction(ops);
 
   return success({ recipeId, stepId, ingredient: { id: ingredient.id } });
@@ -1012,6 +1026,7 @@ export async function reorderNativeRecipeStep(
       payload: { recipeId, stepId: input.stepId, toStepNum: input.toStepNum, reordered: true },
     }));
   }
+  ops.push(touchRecipeOp(db, recipeId));
   await db.$transaction(ops);
 
   return success({ recipeId, stepId: input.stepId, reordered: true });
@@ -1046,7 +1061,10 @@ export async function replaceNativeRecipeStepOutputUses(
   );
   if (contentError) return contentError;
 
-  await db.$transaction(replaceStepOutputUseOps(db, recipeId, step.data.stepNum, input.outputStepNums));
+  await db.$transaction([
+    ...replaceStepOutputUseOps(db, recipeId, step.data.stepNum, input.outputStepNums),
+    touchRecipeOp(db, recipeId),
+  ]);
 
   return success({ recipeId, stepId: input.inputStepId, replaced: true });
 }

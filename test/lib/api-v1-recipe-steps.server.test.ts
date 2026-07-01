@@ -424,17 +424,20 @@ describe("API v1 recipe step helper contracts", () => {
     expect(result.details).toMatchObject({ dependentStepNums: [2] });
   });
 
-  it("supports successful step deletes with and without route idempotency tombstones", async () => {
-    const fixture = await createRecipeWithSteps(db, [1]);
-    expectOk(await deleteNativeRecipeStep(db, fixture.chef.id, fixture.recipe.id, fixture.steps[0].id));
+	  it("supports successful step deletes with and without route idempotency tombstones", async () => {
+	    const fixture = await createRecipeWithSteps(db, [1]);
+	    expectOk(await deleteNativeRecipeStep(db, fixture.chef.id, fixture.recipe.id, fixture.steps[0].id));
 
-    const tombstoneOp = { op: "tombstone" };
-    const deleteOp = { op: "delete-step" };
-    const transaction = vi.fn().mockResolvedValue([tombstoneOp, deleteOp]);
-    const tombstoneDb = {
-      recipe: {
-        findUnique: vi.fn().mockResolvedValue({ id: "recipe_1", chefId: "chef_1", deletedAt: null }),
-      },
+	    const tombstoneOp = { op: "tombstone" };
+	    const deleteOp = { op: "delete-step" };
+	    const touchRecipeOp = { op: "touch-recipe" };
+	    const touchRecipe = vi.fn().mockReturnValue(touchRecipeOp);
+	    const transaction = vi.fn().mockResolvedValue([tombstoneOp, deleteOp, touchRecipeOp]);
+	    const tombstoneDb = {
+	      recipe: {
+	        findUnique: vi.fn().mockResolvedValue({ id: "recipe_1", chefId: "chef_1", deletedAt: null }),
+	        update: touchRecipe,
+	      },
       recipeStep: {
         findUnique: vi.fn().mockResolvedValue({
           id: "step_1",
@@ -483,20 +486,27 @@ describe("API v1 recipe step helper contracts", () => {
         payload: JSON.stringify({ recipeId: "recipe_1", stepNum: 1 }),
       },
     });
-    expect(transaction).toHaveBeenCalledWith([tombstoneOp, deleteOp]);
-  });
+	    expect(touchRecipe).toHaveBeenCalledWith({
+	      where: { id: "recipe_1" },
+	      data: { updatedAt: expect.any(Date) },
+	    });
+	    expect(transaction).toHaveBeenCalledWith([tombstoneOp, deleteOp, touchRecipeOp]);
+	  });
 
-  it("batches step create graph writes in one D1-compatible transaction", async () => {
-    const stepOp = { op: "create-step" };
-    const outputOp = { op: "create-output-use" };
-    const ingredientOp = { op: "create-ingredient" };
-    const unitUpsert = vi.fn();
-    const ingredientRefUpsert = vi.fn();
-    const transaction = vi.fn().mockResolvedValue([stepOp, outputOp, ingredientOp]);
-    const dbMock = {
-      recipe: {
-        findUnique: vi.fn().mockResolvedValue({ id: "recipe_1", chefId: "chef_1", deletedAt: null }),
-      },
+	  it("batches step create graph writes in one D1-compatible transaction", async () => {
+	    const stepOp = { op: "create-step" };
+	    const outputOp = { op: "create-output-use" };
+	    const ingredientOp = { op: "create-ingredient" };
+	    const touchRecipeOp = { op: "touch-recipe" };
+	    const touchRecipe = vi.fn().mockReturnValue(touchRecipeOp);
+	    const unitUpsert = vi.fn();
+	    const ingredientRefUpsert = vi.fn();
+	    const transaction = vi.fn().mockResolvedValue([stepOp, outputOp, ingredientOp, touchRecipeOp]);
+	    const dbMock = {
+	      recipe: {
+	        findUnique: vi.fn().mockResolvedValue({ id: "recipe_1", chefId: "chef_1", deletedAt: null }),
+	        update: touchRecipe,
+	      },
       recipeStep: {
         findFirst: vi.fn().mockResolvedValue({ stepNum: 1 }),
         findMany: vi.fn().mockResolvedValue([{ stepNum: 1 }]),
@@ -563,16 +573,23 @@ describe("API v1 recipe step helper contracts", () => {
         },
       },
     });
-    expect(transaction).toHaveBeenCalledWith([stepOp, outputOp, ingredientOp]);
-  });
+	    expect(touchRecipe).toHaveBeenCalledWith({
+	      where: { id: "recipe_1" },
+	      data: { updatedAt: expect.any(Date) },
+	    });
+	    expect(transaction).toHaveBeenCalledWith([stepOp, outputOp, ingredientOp, touchRecipeOp]);
+	  });
 
-  it("batches step ingredient creation with reference connect-or-create in one transaction", async () => {
-    const ingredientOp = { op: "create-ingredient" };
-    const transaction = vi.fn().mockResolvedValue([ingredientOp]);
-    const dbMock = {
-      recipe: {
-        findUnique: vi.fn().mockResolvedValue({ id: "recipe_1", chefId: "chef_1", deletedAt: null }),
-      },
+	  it("batches step ingredient creation with reference connect-or-create in one transaction", async () => {
+	    const ingredientOp = { op: "create-ingredient" };
+	    const touchRecipeOp = { op: "touch-recipe" };
+	    const touchRecipe = vi.fn().mockReturnValue(touchRecipeOp);
+	    const transaction = vi.fn().mockResolvedValue([ingredientOp, touchRecipeOp]);
+	    const dbMock = {
+	      recipe: {
+	        findUnique: vi.fn().mockResolvedValue({ id: "recipe_1", chefId: "chef_1", deletedAt: null }),
+	        update: touchRecipe,
+	      },
       recipeStep: {
         findUnique: vi.fn().mockResolvedValue({
           id: "step_2",
@@ -626,22 +643,29 @@ describe("API v1 recipe step helper contracts", () => {
         },
       },
     });
-    expect(transaction).toHaveBeenCalledWith([ingredientOp]);
-  });
+	    expect(touchRecipe).toHaveBeenCalledWith({
+	      where: { id: "recipe_1" },
+	      data: { updatedAt: expect.any(Date) },
+	    });
+	    expect(transaction).toHaveBeenCalledWith([ingredientOp, touchRecipeOp]);
+	  });
 
-  it("batches patch field and output-use replacement writes without a restore pass", async () => {
-    const transactionFailure = new Error("transaction failed");
-    const updateOp = { op: "update-step" };
-    const deleteOp = { op: "delete-output-uses" };
-    const createOp = { op: "create-output-uses" };
-    const update = vi.fn().mockReturnValue(updateOp);
-    const deleteMany = vi.fn().mockReturnValue(deleteOp);
-    const createMany = vi.fn().mockReturnValue(createOp);
-    const transaction = vi.fn().mockRejectedValue(transactionFailure);
-    const dbMock = {
-      recipe: {
-        findUnique: vi.fn().mockResolvedValue({ id: "recipe_1", chefId: "chef_1", deletedAt: null }),
-      },
+	  it("batches patch field and output-use replacement writes without a restore pass", async () => {
+	    const transactionFailure = new Error("transaction failed");
+	    const updateOp = { op: "update-step" };
+	    const deleteOp = { op: "delete-output-uses" };
+	    const createOp = { op: "create-output-uses" };
+	    const touchRecipeOp = { op: "touch-recipe" };
+	    const update = vi.fn().mockReturnValue(updateOp);
+	    const touchRecipe = vi.fn().mockReturnValue(touchRecipeOp);
+	    const deleteMany = vi.fn().mockReturnValue(deleteOp);
+	    const createMany = vi.fn().mockReturnValue(createOp);
+	    const transaction = vi.fn().mockRejectedValue(transactionFailure);
+	    const dbMock = {
+	      recipe: {
+	        findUnique: vi.fn().mockResolvedValue({ id: "recipe_1", chefId: "chef_1", deletedAt: null }),
+	        update: touchRecipe,
+	      },
       recipeStep: {
         findUnique: vi.fn().mockResolvedValue({
           id: "step_2",
@@ -679,21 +703,28 @@ describe("API v1 recipe step helper contracts", () => {
       data: { description: "Atomic replacement." },
     });
     expect(deleteMany).toHaveBeenCalledTimes(1);
-    expect(createMany).toHaveBeenCalledWith({
-      data: [{ recipeId: "recipe_1", inputStepNum: 2, outputStepNum: 1 }],
-    });
-    expect(transaction).toHaveBeenCalledWith([updateOp, deleteOp, createOp]);
-  });
+	    expect(createMany).toHaveBeenCalledWith({
+	      data: [{ recipeId: "recipe_1", inputStepNum: 2, outputStepNum: 1 }],
+	    });
+	    expect(touchRecipe).toHaveBeenCalledWith({
+	      where: { id: "recipe_1" },
+	      data: { updatedAt: expect.any(Date) },
+	    });
+	    expect(transaction).toHaveBeenCalledWith([updateOp, deleteOp, createOp, touchRecipeOp]);
+	  });
 
-  it("batches reorder renumbering in one transaction", async () => {
-    const tombstoneOp = { op: "reorder-tombstone" };
-    const transaction = vi.fn().mockResolvedValue([]);
-    const update = vi.fn((args) => ({ op: "update-step", args }));
-    const upsert = vi.fn().mockReturnValue(tombstoneOp);
-    const dbMock = {
-      recipe: {
-        findUnique: vi.fn().mockResolvedValue({ id: "recipe_1", chefId: "chef_1", deletedAt: null }),
-      },
+	  it("batches reorder renumbering in one transaction", async () => {
+	    const tombstoneOp = { op: "reorder-tombstone" };
+	    const touchRecipeOp = { op: "touch-recipe" };
+	    const transaction = vi.fn().mockResolvedValue([]);
+	    const update = vi.fn((args) => ({ op: "update-step", args }));
+	    const touchRecipe = vi.fn().mockReturnValue(touchRecipeOp);
+	    const upsert = vi.fn().mockReturnValue(tombstoneOp);
+	    const dbMock = {
+	      recipe: {
+	        findUnique: vi.fn().mockResolvedValue({ id: "recipe_1", chefId: "chef_1", deletedAt: null }),
+	        update: touchRecipe,
+	      },
       recipeStep: {
         findUnique: vi.fn().mockResolvedValue({
           id: "step_2",
@@ -764,8 +795,12 @@ describe("API v1 recipe step helper contracts", () => {
         payload: JSON.stringify({ recipeId: "recipe_1", stepId: "step_2", toStepNum: 1, reordered: true }),
       },
     });
-    expect(transaction).toHaveBeenCalledWith([...update.mock.results.map((result) => result.value), tombstoneOp]);
-  });
+	    expect(touchRecipe).toHaveBeenCalledWith({
+	      where: { id: "recipe_1" },
+	      data: { updatedAt: expect.any(Date) },
+	    });
+	    expect(transaction).toHaveBeenCalledWith([...update.mock.results.map((result) => result.value), tombstoneOp, touchRecipeOp]);
+	  });
 
   it("records no-op reorder tombstones before returning", async () => {
     const tombstoneOp = { op: "reorder-no-op-tombstone" };
@@ -816,13 +851,16 @@ describe("API v1 recipe step helper contracts", () => {
     expect(transaction).toHaveBeenCalledWith([tombstoneOp]);
   });
 
-  it("still supports reorder helpers without route tombstones", async () => {
-    const transaction = vi.fn().mockResolvedValue([]);
-    const update = vi.fn((args) => ({ op: "update-step", args }));
-    const dbMock = {
-      recipe: {
-        findUnique: vi.fn().mockResolvedValue({ id: "recipe_1", chefId: "chef_1", deletedAt: null }),
-      },
+	  it("still supports reorder helpers without route tombstones", async () => {
+	    const touchRecipeOp = { op: "touch-recipe" };
+	    const transaction = vi.fn().mockResolvedValue([]);
+	    const update = vi.fn((args) => ({ op: "update-step", args }));
+	    const touchRecipe = vi.fn().mockReturnValue(touchRecipeOp);
+	    const dbMock = {
+	      recipe: {
+	        findUnique: vi.fn().mockResolvedValue({ id: "recipe_1", chefId: "chef_1", deletedAt: null }),
+	        update: touchRecipe,
+	      },
       recipeStep: {
         findUnique: vi.fn().mockResolvedValue({
           id: "step_2",
@@ -850,21 +888,28 @@ describe("API v1 recipe step helper contracts", () => {
       toStepNum: 1,
     }));
 
-    expect(result.data.reordered).toBe(true);
-    expect(update).toHaveBeenCalledTimes(4);
-    expect(transaction).toHaveBeenCalledWith(update.mock.results.map((candidate) => candidate.value));
-  });
+	    expect(result.data.reordered).toBe(true);
+	    expect(update).toHaveBeenCalledTimes(4);
+	    expect(touchRecipe).toHaveBeenCalledWith({
+	      where: { id: "recipe_1" },
+	      data: { updatedAt: expect.any(Date) },
+	    });
+	    expect(transaction).toHaveBeenCalledWith([...update.mock.results.map((candidate) => candidate.value), touchRecipeOp]);
+	  });
 
-  it("batches output-use replacement in one transaction", async () => {
-    const deleteOp = { op: "delete-output-uses" };
-    const createOp = { op: "create-output-uses" };
-    const deleteMany = vi.fn().mockReturnValue(deleteOp);
-    const createMany = vi.fn().mockReturnValue(createOp);
-    const transaction = vi.fn().mockResolvedValue([]);
-    const dbMock = {
-      recipe: {
-        findUnique: vi.fn().mockResolvedValue({ id: "recipe_1", chefId: "chef_1", deletedAt: null }),
-      },
+	  it("batches output-use replacement in one transaction", async () => {
+	    const deleteOp = { op: "delete-output-uses" };
+	    const createOp = { op: "create-output-uses" };
+	    const touchRecipeOp = { op: "touch-recipe" };
+	    const deleteMany = vi.fn().mockReturnValue(deleteOp);
+	    const createMany = vi.fn().mockReturnValue(createOp);
+	    const touchRecipe = vi.fn().mockReturnValue(touchRecipeOp);
+	    const transaction = vi.fn().mockResolvedValue([]);
+	    const dbMock = {
+	      recipe: {
+	        findUnique: vi.fn().mockResolvedValue({ id: "recipe_1", chefId: "chef_1", deletedAt: null }),
+	        update: touchRecipe,
+	      },
       recipeStep: {
         findUnique: vi.fn().mockResolvedValue({
           id: "step_2",
@@ -893,9 +938,13 @@ describe("API v1 recipe step helper contracts", () => {
       outputStepNums: [1],
     }));
     expect(deleteMany).toHaveBeenCalledTimes(1);
-    expect(createMany).toHaveBeenCalledWith({
-      data: [{ recipeId: "recipe_1", inputStepNum: 2, outputStepNum: 1 }],
-    });
-    expect(transaction).toHaveBeenCalledWith([deleteOp, createOp]);
-  });
+	    expect(createMany).toHaveBeenCalledWith({
+	      data: [{ recipeId: "recipe_1", inputStepNum: 2, outputStepNum: 1 }],
+	    });
+	    expect(touchRecipe).toHaveBeenCalledWith({
+	      where: { id: "recipe_1" },
+	      data: { updatedAt: expect.any(Date) },
+	    });
+	    expect(transaction).toHaveBeenCalledWith([deleteOp, createOp, touchRecipeOp]);
+	  });
 });

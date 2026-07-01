@@ -151,8 +151,8 @@ External clients that run outside the Spoonjoy browser session use bearer creden
 
 Supported entry points:
 
-- Native account settings: `GET /api/v1/me`, `PATCH /api/v1/me`, `POST /api/v1/me/photo`, `DELETE /api/v1/me/photo`, `GET /api/v1/me/notification-preferences`, `PATCH /api/v1/me/notification-preferences`, `POST /api/v1/me/apns-devices`, `DELETE /api/v1/me/apns-devices/{deviceId}`, `GET /api/v1/me/connections`, and `DELETE /api/v1/me/connections/{connectionId}`
-- Native Apple app sign-in: `POST /api/v1/auth/apple/native`
+- Native account settings and bootstrap sync: `GET /api/v1/me`, `GET /api/v1/me/sync`, `PATCH /api/v1/me`, `POST /api/v1/me/photo`, `DELETE /api/v1/me/photo`, `GET /api/v1/me/notification-preferences`, `PATCH /api/v1/me/notification-preferences`, `POST /api/v1/me/apns-devices`, `DELETE /api/v1/me/apns-devices/{deviceId}`, `GET /api/v1/me/connections`, and `DELETE /api/v1/me/connections/{connectionId}`
+- Native Apple app sign-in: `POST /api/v1/auth/apple/native` and `POST /api/v1/auth/password/native`
 - Bearer credentials: `GET /api/v1/tokens`, `POST /api/v1/tokens`, and `DELETE /api/v1/tokens/{credentialId}`
 - OAuth/DCR clients: `POST /oauth/register`, `GET /oauth/authorize`, `POST /oauth/token`, and `POST /oauth/revoke`
 - Delegated agent connection: `POST /api/tools/start_agent_connection` and `POST /api/tools/poll_agent_connection`
@@ -226,6 +226,40 @@ The token response contains `access_token: "sj_..."`, `token_type: "Bearer"`, `e
 
 Registration can validate optional `scope` metadata, but it does not grant or remember that scope. Always send the requested scope on `/oauth/authorize`. Blank OAuth authorize scope defaults to kitchen:read.
 
+### First-party native token: Spoonjoy Apple app sign-in
+
+Spoonjoy's own native Apple app can exchange either a native Sign in with Apple credential or a Spoonjoy username/password credential for the app's rotating token session. This is a first-party app bootstrap path, not OAuth `grant_type=password`, and native clients must never persist the password after the request completes.
+
+```http
+POST /api/v1/auth/password/native
+Content-Type: application/json
+
+{
+  "emailOrUsername": "ari@spoonjoy.app",
+  "password": "correct horse battery staple"
+}
+```
+
+Response:
+
+```json
+{
+  "ok": true,
+  "requestId": "req_...",
+  "data": {
+    "action": "user_logged_in",
+    "userId": "chef_...",
+    "access_token": "sj_...",
+    "refresh_token": "ort_...",
+    "token_type": "Bearer",
+    "expires_in": 900,
+    "scope": "kitchen:read kitchen:write shopping_list:read shopping_list:write account:read account:write"
+  }
+}
+```
+
+The password endpoint is online-only, rate limited with Spoonjoy's dedicated auth limiter, returns no session cookie, and intentionally does not publish wildcard browser CORS headers. Local and production native clients use the returned access token for API calls, store the rotating refresh token in Keychain, and refresh through the existing OAuth refresh-token path.
+
 ### Delegated token: approval link
 
 For agents, CLIs, appliances, or devices that cannot run a browser-based OAuth callback, use the delegated approval link. Call `POST /api/tools/start_agent_connection`, show the returned `authorizationUrl` and `userCode` to the chef, then poll `POST /api/tools/poll_agent_connection` with the returned `deviceCode` no faster than the returned `interval`.
@@ -242,13 +276,13 @@ POST /api/tools/poll_agent_connection -> status: pending | approved | denied | e
 Approved response -> token: sj_... + credential metadata, including scopes and expiresAt
 ```
 
-### No password-token API
+### No third-party password-token API
 
-Spoonjoy does not support an OAuth password grant or API endpoint where a third-party client trades a chef's password for a token. Email/password login creates a session cookie, not an API token. Clients should use OAuth/PKCE or delegated approval so Spoonjoy, not the client, handles password, passkey, and provider login.
+Spoonjoy does not support an OAuth password grant or third-party API endpoint where an external client trades a chef's password for a token. Browser email/password login creates a session cookie, not an API token. External clients should use OAuth/PKCE or delegated approval so Spoonjoy, not the client, handles password, passkey, and provider login. The only password-to-token exception is Spoonjoy's own native Apple app endpoint described above.
 
 ```text
 Do not implement: grant_type=password
-Use instead: OAuth/PKCE or delegated approval link
+Use instead for third parties: OAuth/PKCE or delegated approval link
 ```
 
 ## Auth Implementation
@@ -435,6 +469,8 @@ API v1 is rate limited by IP and credential before authentication work. Anonymou
 | `GET` | `/api/v1/openapi.json` | Optional | none |
 | `GET` | `/api/v1/openapi.sdk.json` | Optional | none |
 | `GET` | `/api/v1/openapi.connector.json` | Optional | none |
+| `POST` | `/api/v1/auth/apple/native` | Spoonjoy Apple app only | none |
+| `POST` | `/api/v1/auth/password/native` | Spoonjoy Apple app only | none |
 | `GET` | `/api/v1/search` | Optional | `shopping_list:read` only for private shopping-list results |
 | `GET` | `/api/v1/recipes` | Optional | `recipes:read` when authenticated |
 | `POST` | `/api/v1/recipes` | Authenticated chef | `kitchen:write` |
@@ -468,6 +504,7 @@ API v1 is rate limited by IP and credential before authentication work. Anonymou
 | `POST` | `/api/v1/cookbooks/{id}/recipes/{recipeId}` | Authenticated chef | `kitchen:write` |
 | `DELETE` | `/api/v1/cookbooks/{id}/recipes/{recipeId}` | Authenticated chef | `kitchen:write` |
 | `GET` | `/api/v1/me` | Authenticated chef | `account:read` |
+| `GET` | `/api/v1/me/sync` | Authenticated chef | `account:read kitchen:read` |
 | `PATCH` | `/api/v1/me` | Authenticated chef | `account:write` |
 | `POST` | `/api/v1/me/photo` | Authenticated chef | `account:write` |
 | `DELETE` | `/api/v1/me/photo` | Authenticated chef | `account:write` |
@@ -491,17 +528,21 @@ API v1 is rate limited by IP and credential before authentication work. Anonymou
 
 ## Sync And Mutations
 
+### Bootstrap the native offline cache
+
+`GET /api/v1/me/sync?cursor=...&limit=20` is the first-party native Apple bootstrap feed. It returns account freshness metadata plus cursor-ordered entries for the signed-in chef's profile, owned recipes, owned cookbooks, and shopping-list items. Entries are typed by `kind`, use `action: "upsert"` or `action: "delete"`, and deletion entries include tombstones so the native offline cache can remove stale private rows. Store `data.nextCursor` only after applying every entry in that page inside the account/environment/schema cache boundary.
+
 `GET /api/v1/shopping-list/sync?cursor=...&limit=20` returns owner-scoped shopping-list changes after the supplied cursor. New clients should treat cursors as opaque strings and pass back the returned `nextCursor` unchanged; old ISO timestamp cursors are still accepted as a bootstrap convenience. Sync responses include active rows and tombstone records so offline or tiny-device clients can remove locally cached items after server-side deletion.
 
 Store the returned `nextCursor` for a page only after applying every item in that response durably. Use `limit` from 1 to 50 for small payloads; `hasMore: true` means continue immediately with that checkpoint to drain the backlog. It is okay for crash-prone clients to checkpoint after each fully applied page, as long as local apply is idempotent and no cursor is persisted before all rows in that page are durable. Poll conservatively because webhooks, REST Hooks, SSE, and event subscriptions are not in v1 yet.
 
 Idempotent owner mutations use `clientMutationId`. This applies to profile display-field updates, profile photo upload/remove, notification preference updates, APNs device registration/revocation after a system token exists, recipe create/update/delete/fork/import, recipe step and ingredient edits, cookbook writes, shopping-list writes, recipe spoon writes, and recipe-cover writes. The idempotency key is scoped to the chef, retained for 24 hours, and bound to method, path, and a canonicalized parsed JSON body; multipart profile-photo uploads are bound to the mutation id plus uploaded file digest, size, type, and field values. Persist the same request values for each mutation id before sending it; whitespace and object key order are ignored, while changed method, path, or body values return a conflict. A write retried after an OAuth access-token refresh still replays instead of duplicating because both credentials resolve to the same chef. Reusing the same mutation id with the same completed request body returns the recorded response with `mutation.replayed: true`; a concurrent retry can return `409 idempotency_in_progress` with `Retry-After: 2` and `error.details.retryAfterSeconds`. Wait at least that long, then retry the same request. Reusing a mutation id with a different method, path, or body returns `409 idempotency_conflict`.
 
-Mutation responses return the changed item or changed items plus mutation metadata, not the entire shopping list. Fetch `/api/v1/shopping-list` or `/api/v1/shopping-list/sync` when you need the current list view.
+Mutation responses return the changed item or changed items plus mutation metadata, not the entire shopping list. Fetch `/api/v1/me/sync`, `/api/v1/shopping-list`, or `/api/v1/shopping-list/sync` when you need current private read state.
 
 Retry network timeouts, `429`, and `5xx` responses with the same mutation id. Refresh or reconnect on `401`. Do not retry validation, scope, or idempotency-conflict errors unchanged.
 
-Recipe and cookbook list endpoints are public catalog search endpoints today. They accept `limit`, `cursor`, and `query`/`q`; when both query aliases are supplied, `query` wins. Responses include `cursor`, `nextCursor`, and `hasMore`, plus `coverImageUrl` on recipe summaries and `coverImageUrls` on cookbook summaries. They do not yet provide full owner export or deleted recipe/cookbook tombstones. Use shopping-list sync for incremental owner data until export APIs exist.
+Recipe and cookbook list endpoints are public catalog search endpoints today. They accept `limit`, `cursor`, and `query`/`q`; when both query aliases are supplied, `query` wins. Responses include `cursor`, `nextCursor`, and `hasMore`, plus `coverImageUrl` on recipe summaries and `coverImageUrls` on cookbook summaries. They do not provide private owner export or public deletion tombstones. Use first-party `/api/v1/me/sync` for native owner data, including owned recipe/cookbook delete tombstones.
 
 Cookbook write endpoints are owner-scoped native and automation surfaces. `POST /api/v1/cookbooks` creates an owned cookbook from `title`. `PATCH /api/v1/cookbooks/{id}` renames an owned cookbook. `DELETE /api/v1/cookbooks/{id}` deletes only the cookbook and its recipe links, never the recipes themselves. `POST /api/v1/cookbooks/{id}/recipes/{recipeId}` adds an active recipe to an owned cookbook and returns `added: false` as a successful no-op when the recipe is already present. `DELETE /api/v1/cookbooks/{id}/recipes/{recipeId}` removes the link and returns `removed: false` when the link is already absent. Delete endpoints accept `clientMutationId` in the JSON body, query string, or `X-Client-Mutation-Id` header.
 
@@ -690,46 +731,54 @@ POST /oauth/revoke
 token=ort_...&client_id=cm_client_id_from_register&token_type_hint=refresh_token
 ```
 
-### Native iOS OAuth quickstart
+### Native Apple app quickstart
 
-Spoonjoy Apple native dogfood quickstart: register an OAuth client once per app install or app environment, then persist client_id in Keychain. Do not register on every launch; public registration is rate limited and redirect URIs are exact-match. If you ship separate development, staging, and production callbacks, register separate clients and store the matching `client_id` with that environment.
+Spoonjoy Apple native dogfood quickstart: use the first-party native auth APIs, not an OAuth web bounce. Local dogfood drives `POST /api/v1/auth/password/native`; production-shaped Sign in with Apple drives `POST /api/v1/auth/apple/native`. Both return Spoonjoy app tokens for the signed-in chef without setting a session cookie or publishing broad browser CORS.
 
-Use `ASWebAuthenticationSession.Callback.https(host: "spoonjoy.app", path: "/oauth/callback")` with the production redirect `https://spoonjoy.app/oauth/callback`, plus the Associated Domains entitlement `applinks:spoonjoy.app`. The custom URL scheme is for app navigation only, not OAuth. Localhost/127.0.0.1 loopback is development-only. Native clients persist access_token and refresh_token in Keychain, keep `code_verifier` and `state` only until the callback is exchanged, and clear state and code_verifier after a successful token exchange. Native clients must replace the stored refresh token atomically every time refresh succeeds, use single-flight refresh so concurrent `401` responses do not replay an old refresh token, and decode Spoonjoy REST envelopes before mutating cache state.
+For unsigned local Apple dogfood, run the first-party verifier API with `pnpm native:dogfood:api` against a disposable SQLite database and set `SPOONJOY_FORCE_SQLITE_LOCAL_DB=1`. The Apple repo verifier passes `SPOONJOY_WEB_REPO` or `--web-repo`, clones the prepared local test DB, seeds a disposable username/password account, proves bad credentials return `401`, then drives the Swift native password client through the real `/api/v1/auth/password/native` and `/api/v1/me/sync` dispatcher path. This harness calls the same `/api/v1` dispatcher and native auth/sync helpers as production, but avoids the React Router/Cloudflare local dev runtime path where DB-backed Prisma requests can hang before the native app receives a response.
+
+Enable the Associated Domains entitlement `applinks:spoonjoy.app` so `spoonjoy.app` recipe, cookbook, search, and account links open in the app and route to the correct native surface. The custom `spoonjoy://` URL scheme is for app navigation/deep links only. Native clients persist access_token and refresh_token in Keychain, never persist the password, replace the stored refresh token atomically every time refresh succeeds, use single-flight refresh so concurrent `401` responses do not replay an old refresh token, and decode Spoonjoy REST envelopes before mutating cache state.
 
 ```swift
-let redirectURI = URL(string: "https://spoonjoy.app/oauth/callback")!
-let callback = ASWebAuthenticationSession.Callback.https(host: "spoonjoy.app", path: "/oauth/callback")
-
-struct OAuthTokenResponse: Decodable {
-  let access_token: String
-  let refresh_token: String
-  let expires_in: Int
+struct NativeTokenSet: Decodable {
+  let accessToken: String
+  let refreshToken: String
+  let expiresIn: Int
+  let tokenType: String
 }
 
-func tokenRequestBody(code: String, verifier: String, clientId: String, redirectURI: String) -> Data {
-  var form = URLComponents()
-  form.queryItems = [
-    URLQueryItem(name: "grant_type", value: "authorization_code"),
-    URLQueryItem(name: "client_id", value: clientId),
-    URLQueryItem(name: "redirect_uri", value: redirectURI),
-    URLQueryItem(name: "code", value: code),
-    URLQueryItem(name: "code_verifier", value: verifier),
-  ]
-  return Data((form.percentEncodedQuery ?? "").utf8)
-}
-
-func exchangeCode(code: String, verifier: String, clientId: String, redirectURI: String) async throws -> OAuthTokenResponse {
-  var request = URLRequest(url: URL(string: "https://spoonjoy.app/oauth/token")!)
-  request.httpMethod = "POST"
-  request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-  request.httpBody = tokenRequestBody(code: code, verifier: verifier, clientId: clientId, redirectURI: redirectURI)
-  let (data, _) = try await URLSession.shared.data(for: request)
-  return try JSONDecoder().decode(OAuthTokenResponse.self, from: data)
-}
-
-struct SyncEnvelope: Decodable {
+struct NativeSignInEnvelope: Decodable {
   struct DataBody: Decodable {
-    let items: [ShoppingItem]
+    let action: String
+    let userId: String
+    let tokens: NativeTokenSet
+  }
+  let ok: Bool
+  let requestId: String
+  let data: DataBody
+}
+
+func signIn(emailOrUsername: String, password: String) async throws -> NativeTokenSet {
+  var request = URLRequest(url: URL(string: "https://spoonjoy.app/api/v1/auth/password/native")!)
+  request.httpMethod = "POST"
+  request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+  request.httpBody = try JSONEncoder().encode([
+    "emailOrUsername": emailOrUsername,
+    "password": password,
+  ])
+  let (data, _) = try await URLSession.shared.data(for: request)
+  return try JSONDecoder().decode(NativeSignInEnvelope.self, from: data).data.tokens
+}
+
+struct NativeSyncEnvelope: Decodable {
+  struct Entry: Decodable {
+    let action: String
+    let kind: String
+    let resourceId: String
+    let updatedAt: String
+  }
+  struct DataBody: Decodable {
+    let entries: [Entry]
     let nextCursor: String?
     let hasMore: Bool
   }
@@ -738,17 +787,17 @@ struct SyncEnvelope: Decodable {
   let data: DataBody
 }
 
-func syncShoppingList(accessToken: String, cursor: String?) async throws -> String? {
-  var components = URLComponents(string: "https://spoonjoy.app/api/v1/shopping-list/sync")!
+func syncNativeAccount(accessToken: String, cursor: String?) async throws -> String? {
+  var components = URLComponents(string: "https://spoonjoy.app/api/v1/me/sync")!
   components.queryItems = [URLQueryItem(name: "limit", value: "50")]
   if let cursor { components.queryItems?.append(URLQueryItem(name: "cursor", value: cursor)) }
   var request = URLRequest(url: components.url!)
   request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
   let (data, _) = try await URLSession.shared.data(for: request)
   // Decode Spoonjoy REST envelopes before mutating cache state.
-  let page = try JSONDecoder().decode(SyncEnvelope.self, from: data)
-  applyItemsAndTombstones(page.data.items)
-  return page.data.hasMore ? try await syncShoppingList(accessToken: accessToken, cursor: page.data.nextCursor) : page.data.nextCursor
+  let page = try JSONDecoder().decode(NativeSyncEnvelope.self, from: data)
+  applyProfileRecipesCookbooksShoppingItemsAndTombstones(page.data.entries)
+  return page.data.hasMore ? try await syncNativeAccount(accessToken: accessToken, cursor: page.data.nextCursor) : page.data.nextCursor
 }
 ```
 
@@ -1039,11 +1088,11 @@ snapshot_resource recipes recipes recipes.ndjson
 snapshot_resource cookbooks cookbooks cookbooks.ndjson
 ```
 
-Use shopping-list sync when you need owner-scoped incremental data. Full account export, recipe/cookbook update feeds, and recipe/cookbook deletion tombstones are not in API v1 yet.
+Use `/api/v1/me/sync` when you need first-party native owner bootstrap data across profile, recipes, cookbooks, shopping-list items, and owned recipe/cookbook deletion tombstones. Use shopping-list sync when you only need owner-scoped shopping-list deltas.
 
 Public data is still chef-controlled content. API availability is not a copyright, trademark, photo, or commercial-republishing license. Preserve `attribution.creditText` and `attribution.canonicalUrl`, link back to Spoonjoy, comply with Spoonjoy terms and the source owner's rights, and do not assume full recipe/photo republication is allowed just because JSON is readable. Keep authenticated shopping-list/OAuth data out of any public catalog cache, and remove or hide mirrored public content when a later fetch returns `404 not_found`.
 
-Cookbook endpoints in API v1 expose public cookbook pages and their currently public, non-deleted recipe entries. They are not private library exports and do not provide cookbook deletion tombstones. When a recipe fork points back to a source recipe that has since been deleted, `attribution.sourceRecipe.deleted` is true and title/chef/link fields are redacted.
+Public cookbook endpoints in API v1 expose public cookbook pages and their currently public, non-deleted recipe entries. They are not private library exports and do not provide public cookbook deletion tombstones. First-party native owner sync receives owned cookbook delete tombstones through `/api/v1/me/sync`. When a recipe fork points back to a source recipe that has since been deleted, `attribution.sourceRecipe.deleted` is true and title/chef/link fields are redacted.
 
 ### REST-powered embeds only
 

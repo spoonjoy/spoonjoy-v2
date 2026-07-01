@@ -7,6 +7,8 @@ export interface SessionEnv {
   SESSION_SECRET?: string;
   // NODE_ENV is read so production fails closed when SESSION_SECRET is absent.
   NODE_ENV?: string;
+  SPOONJOY_BASE_URL?: string;
+  SPOONJOY_ALLOW_INSECURE_LOCAL_SESSIONS?: string;
 }
 
 const storageCache = new Map<string, ReturnType<typeof createSessionStorageForSecret>>();
@@ -22,7 +24,47 @@ function isProduction(env?: SessionEnv | null): boolean {
   return env?.NODE_ENV === "production" || process.env.NODE_ENV === "production";
 }
 
-function resolveSessionSecret(env?: SessionEnv | null): string {
+function normalizedHostname(hostname: string): string {
+  const lowercased = hostname.toLowerCase();
+  return lowercased.startsWith("[") && lowercased.endsWith("]") ? lowercased.slice(1, -1) : lowercased;
+}
+
+function isLocalhostHostname(hostname: string): boolean {
+  const normalized = normalizedHostname(hostname);
+  return normalized === "localhost" || normalized.endsWith(".localhost") || normalized === "127.0.0.1" || normalized === "::1";
+}
+
+function isLocalhostURL(value: string | undefined): boolean {
+  return Boolean(value && URL.canParse(value) && isLocalhostHostname(new URL(value).hostname));
+}
+
+function isLocalhostRequest(request?: Request | null): boolean {
+  return Boolean(request && isLocalhostURL(request.url));
+}
+
+function isEnabledEnvFlag(value: unknown): boolean {
+  return typeof value === "string" && /^(1|true|yes)$/i.test(value.trim());
+}
+
+function allowsInsecureLocalSessions(env?: SessionEnv | null, request?: Request | null): boolean {
+  if (!isLocalhostRequest(request)) return false;
+  return (
+    isLocalhostURL(env?.SPOONJOY_BASE_URL) ||
+    isLocalhostURL(process.env.SPOONJOY_BASE_URL) ||
+    isEnabledEnvFlag(env?.SPOONJOY_ALLOW_INSECURE_LOCAL_SESSIONS) ||
+    isEnabledEnvFlag(process.env.SPOONJOY_ALLOW_INSECURE_LOCAL_SESSIONS)
+  );
+}
+
+function shouldUseSecureSessionCookie(env?: SessionEnv | null, request?: Request | null): boolean {
+  return isProduction(env) && !allowsInsecureLocalSessions(env, request);
+}
+
+function sessionCacheKey(secret: string, secure: boolean): string {
+  return `${secure ? "secure" : "local"}:${secret}`;
+}
+
+function resolveSessionSecret(env?: SessionEnv | null, request?: Request | null): string {
   if (env?.SESSION_SECRET) {
     return env.SESSION_SECRET;
   }
@@ -31,7 +73,7 @@ function resolveSessionSecret(env?: SessionEnv | null): string {
     return process.env.SESSION_SECRET;
   }
 
-  if (isProduction(env)) {
+  if (isProduction(env) && !allowsInsecureLocalSessions(env, request)) {
     throw new Error("SESSION_SECRET is required when NODE_ENV=production.");
   }
 
@@ -54,14 +96,14 @@ export function sanitizeSessionRedirect(
   return redirectTo;
 }
 
-function createSessionStorageForSecret(secret: string) {
+function createSessionStorageForSecret(secret: string, secure: boolean) {
   return createCookieSessionStorage({
     cookie: createCookie("__session", {
       secrets: [secret],
       sameSite: "lax",
       path: "/",
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure,
       maxAge: 60 * 60 * 24 * 30, // 30 days
     }),
   });
@@ -80,13 +122,15 @@ function createOAuthSessionStorageForSecret(secret: string) {
   });
 }
 
-function sessionStorageForEnv(env?: SessionEnv | null) {
-  const secret = resolveSessionSecret(env);
-  const cached = storageCache.get(secret);
+function sessionStorageForEnv(env?: SessionEnv | null, request?: Request | null) {
+  const secret = resolveSessionSecret(env, request);
+  const secure = shouldUseSecureSessionCookie(env, request);
+  const key = sessionCacheKey(secret, secure);
+  const cached = storageCache.get(key);
   if (cached) return cached;
 
-  const storage = createSessionStorageForSecret(secret);
-  storageCache.set(secret, storage);
+  const storage = createSessionStorageForSecret(secret, secure);
+  storageCache.set(key, storage);
   return storage;
 }
 
@@ -116,7 +160,7 @@ export const oauthSessionStorage = lazyCookieSessionStorage(() => oauthSessionSt
 // Helper to get session from request
 export async function getSession(request: Request, env?: SessionEnv | null) {
   const cookie = request.headers.get("Cookie");
-  return sessionStorageForEnv(env).getSession(cookie);
+  return sessionStorageForEnv(env, request).getSession(cookie);
 }
 
 // Helper to get user ID from session
@@ -151,9 +195,10 @@ export async function requireUserId(
 // to a non-redirect response (e.g. a JSON passkey-login response).
 export async function createUserSessionCookie(
   userId: string,
-  env?: SessionEnv | null
+  env?: SessionEnv | null,
+  request?: Request | null
 ): Promise<string> {
-  const storage = sessionStorageForEnv(env);
+  const storage = sessionStorageForEnv(env, request);
   const session = await storage.getSession();
   session.set("userId", userId);
   return storage.commitSession(session);
@@ -163,12 +208,13 @@ export async function createUserSessionCookie(
 export async function createUserSession(
   userId: string,
   redirectTo: string,
-  env?: SessionEnv | null
+  env?: SessionEnv | null,
+  request?: Request | null
 ) {
   return new Response(null, {
     status: 302,
     headers: {
-      "Set-Cookie": await createUserSessionCookie(userId, env),
+      "Set-Cookie": await createUserSessionCookie(userId, env, request),
       Location: sanitizeSessionRedirect(redirectTo),
     },
   });
@@ -181,7 +227,7 @@ export async function destroyUserSession(
   redirectTo: string = "/",
   env?: SessionEnv | null
 ) {
-  const storage = sessionStorageForEnv(env);
+  const storage = sessionStorageForEnv(env, request);
   const session = await getSession(request, env);
 
   return new Response(null, {

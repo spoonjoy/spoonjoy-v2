@@ -20,6 +20,10 @@ import {
   type ImageGenerationSkipReason,
   type ImageGenerationSourceType,
 } from "~/lib/image-gen-telemetry.server";
+import {
+  touchNativeSyncCookbooksForRecipeOperation,
+  touchNativeSyncRecipeOperation,
+} from "~/lib/native-sync-invalidation.server";
 import { createOpenAIClient } from "~/lib/openai-client.server";
 import type { PostHogServerConfig, PostHogServerEnv } from "~/lib/analytics-server";
 
@@ -226,6 +230,7 @@ async function currentCoverForLifecycle(input: ScheduleSpoonStylizationInput) {
 }
 
 async function markStylizationProcessing(input: ScheduleSpoonStylizationInput): Promise<boolean> {
+  const updatedAt = new Date();
   const result = await input.db.recipeCover.updateMany({
     where: {
       id: input.coverId,
@@ -241,6 +246,12 @@ async function markStylizationProcessing(input: ScheduleSpoonStylizationInput): 
       styleVersion: STYLIZATION_STYLE_VERSION,
     },
   });
+  if (result.count > 0) {
+    await input.db.$transaction([
+      touchNativeSyncRecipeOperation(input.db, input.recipeId, updatedAt),
+      touchNativeSyncCookbooksForRecipeOperation(input.db, input.recipeId, updatedAt),
+    ]);
+  }
   return result.count > 0;
 }
 
@@ -248,6 +259,7 @@ async function markStylizationSucceeded(
   input: ScheduleSpoonStylizationInput,
   stylizedImageUrl: string,
 ): Promise<boolean> {
+  const updatedAt = new Date();
   const result = await input.db.recipeCover.updateMany({
     where: {
       id: input.coverId,
@@ -264,6 +276,12 @@ async function markStylizationSucceeded(
       styleVersion: STYLIZATION_STYLE_VERSION,
     },
   });
+  if (result.count > 0) {
+    await input.db.$transaction([
+      touchNativeSyncRecipeOperation(input.db, input.recipeId, updatedAt),
+      touchNativeSyncCookbooksForRecipeOperation(input.db, input.recipeId, updatedAt),
+    ]);
+  }
   return result.count > 0;
 }
 
@@ -277,6 +295,7 @@ async function markStylizationFailed(
   const wasRequested = cover.status === "processing" || cover.generationStatus === "processing";
   if (!options.force && !wasRequested) return;
 
+  const updatedAt = new Date();
   await input.db.recipeCover.update({
     where: { id: cover.id },
     data: {
@@ -287,6 +306,10 @@ async function markStylizationFailed(
       styleVersion: STYLIZATION_STYLE_VERSION,
     },
   });
+  await input.db.$transaction([
+    touchNativeSyncRecipeOperation(input.db, input.recipeId, updatedAt),
+    touchNativeSyncCookbooksForRecipeOperation(input.db, input.recipeId, updatedAt),
+  ]);
 }
 
 function failureReasonFor(error: unknown): string {
@@ -396,7 +419,8 @@ async function autoActivateStylizedCoverIfSafe(input: ScheduleSpoonStylizationIn
     ],
   };
 
-  await input.db.recipe.updateMany({
+  const updatedAt = new Date();
+  const result = await input.db.recipe.updateMany({
     where: {
       id: input.recipeId,
       coverMode: "auto",
@@ -406,25 +430,34 @@ async function autoActivateStylizedCoverIfSafe(input: ScheduleSpoonStylizationIn
     data: {
       activeCoverId: input.coverId,
       activeCoverVariant: "stylized",
+      updatedAt,
     },
   });
+  if (result.count > 0) {
+    await touchNativeSyncCookbooksForRecipeOperation(input.db, input.recipeId, updatedAt);
+  }
 }
 
 async function activateStylizedCoverIfStillRequested(input: ScheduleSpoonStylizationInput): Promise<void> {
   if (!input.activateWhenReady || !input.activationGuard) return;
-  await input.db.recipe.updateMany({
+  const updatedAt = new Date();
+  const result = await input.db.recipe.updateMany({
     where: {
       id: input.recipeId,
-      activeCoverId: input.activationGuard.activeCoverId,
-      activeCoverVariant: input.activationGuard.activeCoverVariant,
-      coverMode: input.activationGuard.coverMode,
+      activeCoverId: input.activationGuard?.activeCoverId,
+      activeCoverVariant: input.activationGuard?.activeCoverVariant,
+      coverMode: input.activationGuard?.coverMode,
     },
     data: {
       activeCoverId: input.coverId,
       activeCoverVariant: "stylized",
       coverMode: "manual",
+      updatedAt,
     },
   });
+  if (result.count > 0) {
+    await touchNativeSyncCookbooksForRecipeOperation(input.db, input.recipeId, updatedAt);
+  }
 }
 
 async function captureGenerationException(

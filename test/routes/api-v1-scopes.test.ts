@@ -141,6 +141,7 @@ describe("API v1 complete scope matrix", () => {
     expect(resolveApiV1ScopeRequirement("GET", "cookbooks/cookbook_1")).toEqual({ auth: "optional", scopes: ["cookbooks:read"] });
     expect(resolveApiV1ScopeRequirement("GET", "me")).toEqual({ auth: "bearer", scopes: ["account:read"] });
     expect(resolveApiV1ScopeRequirement("PATCH", "me")).toEqual({ auth: "bearer", scopes: ["account:write"] });
+    expect(resolveApiV1ScopeRequirement("GET", "me/sync")).toEqual({ auth: "bearer", scopes: ["account:read", "kitchen:read"] });
     expect(resolveApiV1ScopeRequirement("POST", "me/photo")).toEqual({ auth: "bearer", scopes: ["account:write"] });
     expect(resolveApiV1ScopeRequirement("DELETE", "me/photo")).toEqual({ auth: "bearer", scopes: ["account:write"] });
     expect(resolveApiV1ScopeRequirement("GET", "me/notification-preferences")).toEqual({ auth: "bearer", scopes: ["account:read"] });

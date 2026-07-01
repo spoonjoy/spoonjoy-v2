@@ -99,13 +99,13 @@ async function expectNativeAppleVerificationError(
   )).rejects.toMatchObject({ code: providerCode });
 }
 
-function routeArgs(request: Request, splat = "auth/apple/native") {
+function routeArgs(request: Request, splat = "auth/apple/native", env: Record<string, unknown> = {}) {
   return {
     request,
     params: { "*": splat },
     context: {
       cloudflare: {
-        env: { APPLE_NATIVE_CLIENT_IDS: APPLE_NATIVE_CLIENT_IDS.join(",") },
+        env: { APPLE_NATIVE_CLIENT_IDS: APPLE_NATIVE_CLIENT_IDS.join(","), ...env },
       },
     },
   } as any;
@@ -140,6 +140,7 @@ describe("native Sign in with Apple API", () => {
 
     expect(response.status).toBe(201);
     expect(response.headers.get("Cache-Control")).toContain("no-store");
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBeNull();
     expect(json.data).toMatchObject({
       action: "user_created",
       token_type: "Bearer",
@@ -168,6 +169,80 @@ describe("native Sign in with Apple API", () => {
     expect(loginJson.data).toMatchObject({ action: "user_logged_in" });
   });
 
+  it("does not publish permissive browser CORS preflight headers for the native Apple token surface", async () => {
+    const response = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/auth/apple/native", {
+      method: "OPTIONS",
+      headers: {
+        Origin: "https://evil.example",
+        "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "Content-Type",
+      },
+    }) as unknown as Request));
+
+    expect(response.status).toBe(204);
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBeNull();
+    expect(response.headers.get("Access-Control-Allow-Headers")).toBeNull();
+  });
+
+  it("rate-limits native Apple sign-in before provider token exchange", async () => {
+    const rateLimiter = {
+      limit: vi.fn().mockResolvedValue({ success: false, reset: 42 }),
+    };
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("provider fetch should not happen"));
+
+    const response = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/auth/apple/native", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Request-Id": "req_native_apple_limited" },
+      body: JSON.stringify({
+        identityToken: "would.not.verify",
+        rawNonce: "nonce",
+      }),
+    }) as unknown as Request, "auth/apple/native", { AUTH_IP_RATE_LIMITER: rateLimiter }));
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get("Retry-After")).toBe("42");
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBeNull();
+    expect(json.error).toMatchObject({
+      code: "rate_limited",
+      details: { retryAfterSeconds: 42, scope: "ip" },
+    });
+    expect(rateLimiter.limit).toHaveBeenCalledWith({ key: "ip:unknown:localhost" });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("keeps native Apple sign-in same-party when the global API limiter rejects before auth", async () => {
+    const globalRateLimiter = {
+      limit: vi.fn().mockResolvedValue({ success: false, reset: 23 }),
+    };
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("provider fetch should not happen"));
+
+    const response = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/auth/apple/native", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Request-Id": "req_native_apple_global_limited",
+        "CF-Connecting-IP": "203.0.113.23",
+      },
+      body: JSON.stringify({
+        identityToken: "would.not.verify",
+        rawNonce: "nonce",
+      }),
+    }) as unknown as Request, "auth/apple/native", { API_IP_RATE_LIMITER: globalRateLimiter }));
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get("Retry-After")).toBe("23");
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBeNull();
+    expect(response.headers.get("Access-Control-Allow-Headers")).toBeNull();
+    expect(json.error).toMatchObject({
+      code: "rate_limited",
+      details: { retryAfterSeconds: 23, scope: "ip" },
+    });
+    expect(globalRateLimiter.limit).toHaveBeenCalledWith({ key: "ip:203.0.113.23" });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it("accepts the macOS native Apple identity-token audience", async () => {
     const fixture = await nativeAppleTokenFixture({ aud: APPLE_NATIVE_MACOS_CLIENT_ID });
     const claims = await verifyNativeAppleIdentityToken(
@@ -194,6 +269,7 @@ describe("native Sign in with Apple API", () => {
     const json = await response.json() as any;
 
     expect(response.status).toBe(401);
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBeNull();
     expect(json.error).toMatchObject({
       code: "invalid_token",
       details: { providerCode: "invalid_audience" },
@@ -221,6 +297,7 @@ describe("native Sign in with Apple API", () => {
     const configJson = await configResponse.json() as any;
 
     expect(configResponse.status).toBe(400);
+    expect(configResponse.headers.get("Access-Control-Allow-Origin")).toBeNull();
     expect(configJson.error).toMatchObject({
       code: "validation_error",
       details: { providerCode: "apple_native_unconfigured" },
@@ -251,6 +328,7 @@ describe("native Sign in with Apple API", () => {
   it("lets unexpected native Apple exchange errors bubble to the API error boundary", async () => {
     const fixture = await nativeAppleTokenFixture();
     vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network unavailable"));
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const response = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/auth/apple/native", {
       method: "POST",
@@ -260,7 +338,9 @@ describe("native Sign in with Apple API", () => {
     const json = await response.json() as any;
 
     expect(response.status).toBe(500);
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBeNull();
     expect(json.error.code).toBe("internal_error");
+    expect(consoleErrorSpy).toHaveBeenCalledWith("[api-v1] internal_error", expect.any(Object));
   });
 
   it("rejects malformed and unsupported native Apple identity tokens", async () => {

@@ -36,7 +36,7 @@ describe("session.server", () => {
     it("fails closed when SESSION_SECRET is missing while env.NODE_ENV is production", async () => {
       delete process.env.SESSION_SECRET;
       _resetSessionWarningLatchForTests();
-      const request = new Request("http://localhost/", { method: "GET" }) as unknown as globalThis.Request;
+      const request = new Request("https://spoonjoy.app/", { method: "GET" }) as unknown as globalThis.Request;
       await expect(getUserId(request, { NODE_ENV: "production" })).rejects.toThrow(/SESSION_SECRET is required/);
     });
 
@@ -45,11 +45,136 @@ describe("session.server", () => {
       _resetSessionWarningLatchForTests();
       vi.stubEnv("NODE_ENV", "production");
       try {
-        const request = new Request("http://localhost/", { method: "GET" }) as unknown as globalThis.Request;
+        const request = new Request("https://spoonjoy.app/", { method: "GET" }) as unknown as globalThis.Request;
         await expect(getUserId(request, null)).rejects.toThrow(/SESSION_SECRET is required/);
       } finally {
         vi.unstubAllEnvs();
       }
+    });
+
+    it("does not let a spoofed localhost request host bypass the production session secret requirement", async () => {
+      delete process.env.SESSION_SECRET;
+      vi.stubEnv("NODE_ENV", "production");
+      try {
+        const request = new Request("http://localhost:5173/", { method: "GET" }) as unknown as globalThis.Request;
+
+        await expect(getUserId(request, { NODE_ENV: "production" })).rejects.toThrow(/SESSION_SECRET is required/);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
+    it("allows explicitly local production-shaped workers to use the dev secret without secure cookies", async () => {
+      delete process.env.SESSION_SECRET;
+      vi.stubEnv("NODE_ENV", "production");
+      try {
+        const request = new Request("http://localhost:5173/", { method: "GET" }) as unknown as globalThis.Request;
+
+        await expect(getUserId(request, {
+          NODE_ENV: "production",
+          SPOONJOY_BASE_URL: "http://localhost:5173",
+        })).resolves.toBeNull();
+
+        const response = await createUserSession("local-dogfood-user-id", "/recipes", {
+          NODE_ENV: "production",
+          SPOONJOY_BASE_URL: "http://localhost:5173",
+        }, request);
+        const setCookie = response.headers.get("Set-Cookie") ?? "";
+        expect(setCookie).toContain("__session=");
+        expect(setCookie).not.toContain("Secure");
+
+        const signedInRequest = new Request("http://localhost:5173/recipes", {
+          headers: { Cookie: cookieHeader(setCookie) },
+        }) as unknown as globalThis.Request;
+        await expect(getUserId(signedInRequest, {
+          NODE_ENV: "production",
+          SPOONJOY_BASE_URL: "http://localhost:5173",
+        })).resolves.toBe("local-dogfood-user-id");
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
+    it("recognizes explicitly local IPv6 loopback workers", async () => {
+      delete process.env.SESSION_SECRET;
+      vi.stubEnv("NODE_ENV", "production");
+      try {
+        const request = new Request("http://[::1]:5173/", { method: "GET" }) as unknown as globalThis.Request;
+
+        const response = await createUserSession("local-ipv6-dogfood-user-id", "/recipes", {
+          NODE_ENV: "production",
+          SPOONJOY_BASE_URL: "http://[::1]:5173",
+        }, request);
+        const setCookie = response.headers.get("Set-Cookie") ?? "";
+        expect(setCookie).toContain("__session=");
+        expect(setCookie).not.toContain("Secure");
+
+        const signedInRequest = new Request("http://[::1]:5173/recipes", {
+          headers: { Cookie: cookieHeader(setCookie) },
+        }) as unknown as globalThis.Request;
+        await expect(getUserId(signedInRequest, {
+          NODE_ENV: "production",
+          SPOONJOY_BASE_URL: "http://[::1]:5173",
+        })).resolves.toBe("local-ipv6-dogfood-user-id");
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
+    it("allows explicitly flagged local production-shaped workers without a local base URL", async () => {
+      delete process.env.SESSION_SECRET;
+      vi.stubEnv("NODE_ENV", "production");
+      vi.stubEnv("SPOONJOY_BASE_URL", "https://spoonjoy.app");
+      try {
+        const request = new Request("http://localhost:5173/", { method: "GET" }) as unknown as globalThis.Request;
+
+        const response = await createUserSession("local-flag-dogfood-user-id", "/recipes", {
+          NODE_ENV: "production",
+          SPOONJOY_ALLOW_INSECURE_LOCAL_SESSIONS: " yes ",
+        }, request);
+        const setCookie = response.headers.get("Set-Cookie") ?? "";
+        expect(setCookie).toContain("__session=");
+        expect(setCookie).not.toContain("Secure");
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
+    it("ignores disabled local session flags", async () => {
+      delete process.env.SESSION_SECRET;
+      vi.stubEnv("NODE_ENV", "production");
+      vi.stubEnv("SPOONJOY_BASE_URL", "https://spoonjoy.app");
+      vi.stubEnv("SPOONJOY_ALLOW_INSECURE_LOCAL_SESSIONS", "no");
+      try {
+        const request = new Request("http://localhost:5173/", { method: "GET" }) as unknown as globalThis.Request;
+
+        await expect(getUserId(request, {
+          NODE_ENV: "production",
+          SPOONJOY_ALLOW_INSECURE_LOCAL_SESSIONS: "no",
+        })).rejects.toThrow(/SESSION_SECRET is required/);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
+    it("uses secure runtime session cookies when production has a real secret", async () => {
+      const request = new Request("https://spoonjoy.app/", { method: "GET" }) as unknown as globalThis.Request;
+
+      const response = await createUserSession("secure-production-user-id", "/recipes", {
+        NODE_ENV: "production",
+        SESSION_SECRET: "production-runtime-secret",
+      }, request);
+      const setCookie = response.headers.get("Set-Cookie") ?? "";
+      expect(setCookie).toContain("__session=");
+      expect(setCookie).toContain("Secure");
+
+      const signedInRequest = new Request("https://spoonjoy.app/recipes", {
+        headers: { Cookie: cookieHeader(setCookie) },
+      }) as unknown as globalThis.Request;
+      await expect(getUserId(signedInRequest, {
+        NODE_ENV: "production",
+        SESSION_SECRET: "production-runtime-secret",
+      })).resolves.toBe("secure-production-user-id");
     });
 
     it("does not resolve default session storage during production module import", async () => {
@@ -59,7 +184,7 @@ describe("session.server", () => {
       try {
         const module = await import("~/lib/session.server");
         expect(module.sessionStorage).toBeDefined();
-        const request = new Request("http://localhost/", { method: "GET" }) as unknown as globalThis.Request;
+        const request = new Request("https://spoonjoy.app/", { method: "GET" }) as unknown as globalThis.Request;
         await expect(module.getUserId(request, { NODE_ENV: "production" })).rejects.toThrow(/SESSION_SECRET is required/);
       } finally {
         vi.unstubAllEnvs();

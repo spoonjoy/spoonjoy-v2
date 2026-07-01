@@ -1,4 +1,8 @@
 import type { PrismaClient, RecipeCover } from "@prisma/client";
+import {
+  touchNativeSyncCookbooksForRecipe,
+  touchNativeSyncCookbooksForRecipeOperation,
+} from "~/lib/native-sync-invalidation.server";
 
 export type RecipeCoverSourceType = "ai-placeholder" | "import" | "chef-upload" | "spoon";
 export type RecipeCoverVariant = "image" | "stylized";
@@ -220,14 +224,40 @@ export async function setActiveRecipeCover(
   assertActivatableCover(cover);
   assertVariantAvailable(cover, input.variant);
 
-  return db.recipe.update({
-    where: { id: input.recipeId },
-    data: {
-      activeCoverId: cover.id,
-      activeCoverVariant: input.variant,
-      coverMode: "manual",
-    },
-  });
+  const updatedAt = new Date();
+  const [recipe] = await db.$transaction([
+    db.recipe.update({
+      where: { id: input.recipeId },
+      data: {
+        activeCoverId: cover.id,
+        activeCoverVariant: input.variant,
+        coverMode: "manual",
+        updatedAt,
+      },
+    }),
+    touchNativeSyncCookbooksForRecipeOperation(db, input.recipeId, updatedAt),
+  ]);
+  return recipe;
+}
+
+export async function clearActiveRecipeCover(
+  db: PrismaClient,
+  recipeId: string,
+) {
+  const updatedAt = new Date();
+  const [recipe] = await db.$transaction([
+    db.recipe.update({
+      where: { id: recipeId },
+      data: {
+        activeCoverId: null,
+        activeCoverVariant: null,
+        coverMode: "none",
+        updatedAt,
+      },
+    }),
+    touchNativeSyncCookbooksForRecipeOperation(db, recipeId, updatedAt),
+  ]);
+  return recipe;
 }
 
 export async function archiveRecipeCover(
@@ -252,14 +282,7 @@ export async function archiveRecipeCover(
 
   let nextRecipe = recipe;
   if (isActiveCover && input.confirmNoCover) {
-    nextRecipe = await db.recipe.update({
-      where: { id: input.recipeId },
-      data: {
-        activeCoverId: null,
-        activeCoverVariant: null,
-        coverMode: "none",
-      },
-    });
+    nextRecipe = await clearActiveRecipeCover(db, input.recipeId);
   } else if (isActiveCover && input.replacementCoverId) {
     if (!input.replacementVariant) {
       throw new Error("Replacement variant is required");
@@ -275,6 +298,9 @@ export async function archiveRecipeCover(
     where: { id: cover.id },
     data: { status: "archived", archivedAt: new Date() },
   });
+  if (isActiveCover) {
+    await touchNativeSyncCookbooksForRecipe(db, input.recipeId);
+  }
   return { archivedCover, recipe: nextRecipe };
 }
 
