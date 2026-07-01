@@ -176,7 +176,7 @@ describe("/developers/playground", () => {
         { name: "photo", required: true, accept: "image/jpeg,image/png,image/gif,image/webp" },
       ],
     });
-    expect(data.manifest.operations.length).toBe(65);
+    expect(data.manifest.operations.length).toBe(66);
   });
 
   it("uses the configured public origin for playground OG URLs", async () => {
@@ -192,6 +192,7 @@ describe("/developers/playground", () => {
   it("groups generated operations by OpenAPI tag", () => {
     expect(playgroundOperationGroups().map((group) => group.tag)).toEqual([
       "Discovery",
+      "Auth",
       "Search",
       "Recipes",
       "Recipe Steps",

@@ -25,6 +25,7 @@ Available now:
 - Owner-scoped recipe cover candidate management for the authenticated chef's recipes
 - Owner-scoped shopping-list read, sync, add, recipe-add, check, clear, and remove
 - Native account profile, profile-photo, notification-preference, APNs device, token, and OAuth app connection settings
+- Native Apple app sign-in token exchange
 - Session-created and bearer-created API tokens
 - OAuth/PKCE delegated access
 - Delegated agent/device approval links
@@ -151,6 +152,7 @@ External clients that run outside the Spoonjoy browser session use bearer creden
 Supported entry points:
 
 - Native account settings: `GET /api/v1/me`, `PATCH /api/v1/me`, `POST /api/v1/me/photo`, `DELETE /api/v1/me/photo`, `GET /api/v1/me/notification-preferences`, `PATCH /api/v1/me/notification-preferences`, `POST /api/v1/me/apns-devices`, `DELETE /api/v1/me/apns-devices/{deviceId}`, `GET /api/v1/me/connections`, and `DELETE /api/v1/me/connections/{connectionId}`
+- Native Apple app sign-in: `POST /api/v1/auth/apple/native`
 - Bearer credentials: `GET /api/v1/tokens`, `POST /api/v1/tokens`, and `DELETE /api/v1/tokens/{credentialId}`
 - OAuth/DCR clients: `POST /oauth/register`, `GET /oauth/authorize`, `POST /oauth/token`, and `POST /oauth/revoke`
 - Delegated agent connection: `POST /api/tools/start_agent_connection` and `POST /api/tools/poll_agent_connection`
