@@ -169,7 +169,7 @@ export async function handleAppleCallback(request: Request, context: AppLoadCont
     return redirectWithCapturedOAuthError(telemetry, request, "apple", failureRedirect, callbackResult.error, "link_account", env);
   }
 
-  const response = await createUserSession(callbackResult.userId, callbackResult.redirectTo, env);
+  const response = await createUserSession(callbackResult.userId, callbackResult.redirectTo, env, request);
   response.headers.append("Set-Cookie", await destroyOAuthStartSession(request, env));
   return response;
 }
@@ -245,7 +245,7 @@ export async function handleGitHubCallback(request: Request, context: AppLoadCon
     return redirectWithCapturedOAuthError(telemetry, request, "github", failureRedirect, callbackResult.error, "link_account", env);
   }
 
-  const response = await createUserSession(callbackResult.userId, callbackResult.redirectTo, env);
+  const response = await createUserSession(callbackResult.userId, callbackResult.redirectTo, env, request);
   response.headers.append("Set-Cookie", await destroyOAuthStartSession(request, env));
   return response;
 }
@@ -326,7 +326,7 @@ export async function handleGoogleCallback(request: Request, context: AppLoadCon
     return redirectWithCapturedOAuthError(telemetry, request, "google", failureRedirect, callbackResult.error, "link_account", env);
   }
 
-  const response = await createUserSession(callbackResult.userId, callbackResult.redirectTo, env);
+  const response = await createUserSession(callbackResult.userId, callbackResult.redirectTo, env, request);
   response.headers.append("Set-Cookie", await destroyOAuthStartSession(request, env));
   return response;
 }

@@ -909,6 +909,10 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
     describe("delete intent", () => {
       it("should delete step and redirect to recipe edit", async () => {
         const request = await createFormRequest({ intent: "delete" }, testUserId);
+        await db.recipe.update({
+          where: { id: recipeId },
+          data: { updatedAt: new Date("2000-01-01T00:00:00.000Z") },
+        });
 
         const response = await action({
           request,
@@ -923,6 +927,8 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
         // Verify step was deleted
         const deletedStep = await db.recipeStep.findUnique({ where: { id: stepId } });
         expect(deletedStep).toBeNull();
+        const touchedRecipe = await db.recipe.findUnique({ where: { id: recipeId }, select: { updatedAt: true } });
+        expect(touchedRecipe!.updatedAt.getTime()).toBeGreaterThan(new Date("2000-01-01T00:00:00.000Z").getTime());
       });
 
       it("should return error when step cannot be deleted due to dependencies", async () => {
@@ -1034,6 +1040,10 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
           step2.id,
           [1] // usesSteps
         );
+        await db.recipe.update({
+          where: { id: recipeId },
+          data: { updatedAt: new Date("2000-01-01T00:00:00.000Z") },
+        });
 
         const response = await action({
           request,
@@ -1050,6 +1060,8 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
         });
         expect(stepOutputUses).toHaveLength(1);
         expect(stepOutputUses[0].outputStepNum).toBe(1);
+        const touchedRecipe = await db.recipe.findUnique({ where: { id: recipeId }, select: { updatedAt: true } });
+        expect(touchedRecipe!.updatedAt.getTime()).toBeGreaterThan(new Date("2000-01-01T00:00:00.000Z").getTime());
       });
 
       it("should create multiple step output uses when updating step", async () => {
@@ -1539,6 +1551,10 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
           },
           testUserId
         );
+        await db.recipe.update({
+          where: { id: recipeId },
+          data: { updatedAt: new Date("2000-01-01T00:00:00.000Z") },
+        });
 
         const response = await action({
           request,
@@ -1558,6 +1574,8 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
         expect(ingredients[0].quantity).toBe(3);
         expect(ingredients[0].unitId).toBe(existingUnit.id);
         expect(ingredients[0].ingredientRefId).toBe(existingIngredientRef.id);
+        const touchedRecipe = await db.recipe.findUnique({ where: { id: recipeId }, select: { updatedAt: true } });
+        expect(touchedRecipe!.updatedAt.getTime()).toBeGreaterThan(new Date("2000-01-01T00:00:00.000Z").getTime());
       });
 
       it("should create new unit and ingredientRef if they do not exist", async () => {
@@ -2134,6 +2152,10 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
           },
           testUserId
         );
+        await db.recipe.update({
+          where: { id: recipeId },
+          data: { updatedAt: new Date("2000-01-01T00:00:00.000Z") },
+        });
 
         const response = await action({
           request,
@@ -2147,6 +2169,57 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
         // Verify ingredient was deleted
         const deletedIngredient = await db.ingredient.findUnique({ where: { id: ingredient.id } });
         expect(deletedIngredient).toBeNull();
+        const touchedRecipe = await db.recipe.findUnique({ where: { id: recipeId }, select: { updatedAt: true } });
+        expect(touchedRecipe!.updatedAt.getTime()).toBeGreaterThan(new Date("2000-01-01T00:00:00.000Z").getTime());
+      });
+
+      it("should not touch recipe freshness when ingredient is not on this step", async () => {
+        const otherStep = await db.recipeStep.create({
+          data: {
+            recipeId,
+            stepNum: 2,
+            description: "Other step description",
+            stepTitle: "Other Step",
+          },
+        });
+        const unit = await db.unit.create({ data: { name: "cup_" + faker.string.alphanumeric(6) } });
+        const ingredientRef = await db.ingredientRef.create({ data: { name: "salt_" + faker.string.alphanumeric(6) } });
+        const otherStepIngredient = await db.ingredient.create({
+          data: {
+            recipeId,
+            stepNum: otherStep.stepNum,
+            quantity: 1,
+            unitId: unit.id,
+            ingredientRefId: ingredientRef.id,
+          },
+        });
+        const oldUpdatedAt = new Date("2000-01-01T00:00:00.000Z");
+        await db.recipe.update({
+          where: { id: recipeId },
+          data: { updatedAt: oldUpdatedAt },
+        });
+
+        const request = await createFormRequest(
+          {
+            intent: "deleteIngredient",
+            ingredientId: otherStepIngredient.id,
+          },
+          testUserId
+        );
+
+        const response = await action({
+          request,
+          context: { cloudflare: { env: null } },
+          params: { id: recipeId, stepId },
+        } as any);
+
+        const { data } = extractResponseData(response);
+        expect(data.success).toBe(true);
+
+        const preservedIngredient = await db.ingredient.findUnique({ where: { id: otherStepIngredient.id } });
+        expect(preservedIngredient).not.toBeNull();
+        const untouchedRecipe = await db.recipe.findUnique({ where: { id: recipeId }, select: { updatedAt: true } });
+        expect(untouchedRecipe!.updatedAt.toISOString()).toBe(oldUpdatedAt.toISOString());
       });
 
       it("should do nothing if ingredientId is not provided", async () => {

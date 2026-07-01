@@ -389,6 +389,21 @@ describe("Recipes $id Edit Route", () => {
     });
 
     it("should successfully update recipe and redirect", async () => {
+      const cookbook = await db.cookbook.create({
+        data: { title: "Metadata Edit Sync Box", authorId: testUserId },
+      });
+      await db.recipeInCookbook.create({
+        data: {
+          cookbookId: cookbook.id,
+          recipeId,
+          addedById: testUserId,
+        },
+      });
+      const oldCookbookUpdatedAt = new Date("2000-01-01T00:00:00.000Z");
+      await db.cookbook.update({
+        where: { id: cookbook.id },
+        data: { updatedAt: oldCookbookUpdatedAt },
+      });
       const request = await createFormRequest(
         {
           title: "Updated Title",
@@ -413,6 +428,11 @@ describe("Recipes $id Edit Route", () => {
       expect(recipe?.title).toBe("Updated Title");
       expect(recipe?.description).toBe("Updated Description");
       expect(recipe?.servings).toBe("6");
+      const touchedCookbook = await db.cookbook.findUniqueOrThrow({
+        where: { id: cookbook.id },
+        select: { updatedAt: true },
+      });
+      expect(touchedCookbook.updatedAt.getTime()).toBeGreaterThan(oldCookbookUpdatedAt.getTime());
     });
 
     it("should allow saving a recipe without changing its own active title", async () => {
@@ -497,6 +517,10 @@ describe("Recipes $id Edit Route", () => {
           description: "Step 2",
         },
       });
+      await db.recipe.update({
+        where: { id: recipeId },
+        data: { updatedAt: new Date("2000-01-01T00:00:00.000Z") },
+      });
 
       const request = await createFormRequest(
         {
@@ -521,6 +545,8 @@ describe("Recipes $id Edit Route", () => {
       const updatedStep2 = await db.recipeStep.findUnique({ where: { id: step2.id } });
       expect(updatedStep1?.stepNum).toBe(2);
       expect(updatedStep2?.stepNum).toBe(1);
+      const touchedRecipe = await db.recipe.findUnique({ where: { id: recipeId }, select: { updatedAt: true } });
+      expect(touchedRecipe!.updatedAt.getTime()).toBeGreaterThan(new Date("2000-01-01T00:00:00.000Z").getTime());
     });
 
     it("should handle reorderStep intent - move step down", async () => {
@@ -736,6 +762,10 @@ describe("Recipes $id Edit Route", () => {
           description: "Step to delete",
         },
       });
+      await db.recipe.update({
+        where: { id: recipeId },
+        data: { updatedAt: new Date("2000-01-01T00:00:00.000Z") },
+      });
 
       const request = await createFormRequest(
         {
@@ -756,6 +786,8 @@ describe("Recipes $id Edit Route", () => {
 
       const deletedStep = await db.recipeStep.findUnique({ where: { id: step.id } });
       expect(deletedStep).toBeNull();
+      const touchedRecipe = await db.recipe.findUnique({ where: { id: recipeId }, select: { updatedAt: true } });
+      expect(touchedRecipe!.updatedAt.getTime()).toBeGreaterThan(new Date("2000-01-01T00:00:00.000Z").getTime());
     });
 
     it("should return step deletion error when dependent steps exist", async () => {
@@ -917,9 +949,8 @@ describe("Recipes $id Edit Route", () => {
     });
 
     it("should return generic error for database errors", async () => {
-      // Mock db.recipe.update to throw a generic error
-      const originalUpdate = db.recipe.update;
-      db.recipe.update = vi.fn().mockRejectedValue(new Error("Database connection failed"));
+      const originalTransaction = db.$transaction;
+      db.$transaction = vi.fn().mockRejectedValue(new Error("Database connection failed"));
 
       try {
         const request = await createFormRequest({ title: "Updated Title" }, testUserId);
@@ -934,8 +965,7 @@ describe("Recipes $id Edit Route", () => {
         expect(status).toBe(500);
         expect(data.errors.general).toBe("Failed to update recipe. Please try again.");
       } finally {
-        // Restore original function
-        db.recipe.update = originalUpdate;
+        db.$transaction = originalTransaction;
       }
     });
 
@@ -954,10 +984,10 @@ describe("Recipes $id Edit Route", () => {
       const waitUntil = vi.fn((p: Promise<unknown>) => {
         scheduled.push(p);
       });
-      const originalUpdate = db.recipe.update;
+      const originalTransaction = db.$transaction;
       // Fail the update AFTER the replacement image has landed in R2 so the
       // orphan-cleanup path runs.
-      db.recipe.update = vi.fn().mockRejectedValue(new Error("Database connection failed"));
+      db.$transaction = vi.fn().mockRejectedValue(new Error("Database connection failed"));
 
       try {
         const formData = new UndiciFormData();
@@ -988,7 +1018,7 @@ describe("Recipes $id Edit Route", () => {
         expect(exceptionMessages).toContain("R2 delete unavailable");
         expect(phCalls.some((c) => c.event === "spoonjoy.storage.orphan_cleanup_failed")).toBe(true);
       } finally {
-        db.recipe.update = originalUpdate;
+        db.$transaction = originalTransaction;
         fetchMock.mockRestore();
       }
     });
@@ -999,8 +1029,8 @@ describe("Recipes $id Edit Route", () => {
         phCalls.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
         return new Response(null, { status: 200 });
       });
-      const originalUpdate = db.recipe.update;
-      db.recipe.update = vi.fn().mockRejectedValue(new Error("Database connection failed"));
+      const originalTransaction = db.$transaction;
+      db.$transaction = vi.fn().mockRejectedValue(new Error("Database connection failed"));
 
       try {
         const request = await createFormRequest({ title: "No WaitUntil Update" }, testUserId);
@@ -1018,7 +1048,7 @@ describe("Recipes $id Edit Route", () => {
         await new Promise((resolve) => setTimeout(resolve, 0));
         expect(phCalls.some((c) => c.event === "$exception")).toBe(true);
       } finally {
-        db.recipe.update = originalUpdate;
+        db.$transaction = originalTransaction;
         fetchMock.mockRestore();
       }
     });
@@ -1033,6 +1063,21 @@ describe("Recipes $id Edit Route", () => {
         },
       });
       await activateRecipeCoverForTest(recipeId, oldCover.id);
+      const cookbook = await db.cookbook.create({
+        data: { title: "Clear Image Sync Box", authorId: testUserId },
+      });
+      await db.recipeInCookbook.create({
+        data: {
+          cookbookId: cookbook.id,
+          recipeId,
+          addedById: testUserId,
+        },
+      });
+      const oldUpdatedAt = new Date("2000-01-01T00:00:00.000Z");
+      await db.cookbook.update({
+        where: { id: cookbook.id },
+        data: { updatedAt: oldUpdatedAt },
+      });
 
       const request = await createFormRequest(
         {
@@ -1061,6 +1106,11 @@ describe("Recipes $id Edit Route", () => {
         activeCoverVariant: null,
         coverMode: "none",
       });
+      const touchedCookbook = await db.cookbook.findUniqueOrThrow({
+        where: { id: cookbook.id },
+        select: { updatedAt: true },
+      });
+      expect(touchedCookbook.updatedAt.getTime()).toBeGreaterThan(oldUpdatedAt.getTime());
       await expect(db.recipeCover.count({ where: { recipeId } })).resolves.toBe(1);
     });
 
@@ -1610,8 +1660,8 @@ describe("Recipes $id Edit Route", () => {
         put: vi.fn().mockResolvedValue(undefined),
         delete: vi.fn().mockResolvedValue(undefined),
       };
-      const originalUpdate = db.recipe.update;
-      db.recipe.update = vi.fn().mockRejectedValue(new Error("Database connection failed"));
+      const originalTransaction = db.$transaction;
+      db.$transaction = vi.fn().mockRejectedValue(new Error("Database connection failed"));
 
       try {
         const formData = new UndiciFormData();
@@ -1632,7 +1682,7 @@ describe("Recipes $id Edit Route", () => {
         const uploadedKey = mockR2Bucket.put.mock.calls[0][0];
         expect(mockR2Bucket.delete).toHaveBeenCalledWith(uploadedKey);
       } finally {
-        db.recipe.update = originalUpdate;
+        db.$transaction = originalTransaction;
       }
     });
 

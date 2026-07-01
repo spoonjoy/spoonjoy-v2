@@ -141,7 +141,7 @@ describe("auth.server", () => {
       await db.user.create({
         data: { email: email.toLowerCase(), username },
       });
-      const compareSpy = vi.spyOn(bcrypt, "compare");
+      const compareSpy = vi.spyOn(bcrypt, "compareSync");
 
       const user = await authenticateUser(db, email, "anyPassword");
 
@@ -155,7 +155,7 @@ describe("auth.server", () => {
     });
 
     it("runs a bcrypt comparison even for an unknown email (constant-time, prevents user enumeration)", async () => {
-      const compareSpy = vi.spyOn(bcrypt, "compare");
+      const compareSpy = vi.spyOn(bcrypt, "compareSync");
 
       const user = await authenticateUser(
         db,
@@ -207,7 +207,7 @@ describe("auth.server", () => {
     });
 
     it("runs a bcrypt comparison for unknown username/email identifiers", async () => {
-      const compareSpy = vi.spyOn(bcrypt, "compare");
+      const compareSpy = vi.spyOn(bcrypt, "compareSync");
 
       const user = await authenticateUserByEmailOrUsername(db, "missing_native_chef", "anyPassword");
 

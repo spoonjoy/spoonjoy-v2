@@ -182,6 +182,12 @@ const externalGuideSteps = [
     sample: "Playground auth: Session\nGenerated operation: POST /api/v1/tokens\nUse the returned sj_... secret only in an external client or Bearer-mode test.",
   },
   {
+    title: "Bootstrap the native offline cache",
+    scope: "Requires account:read kitchen:read",
+    body: "First-party Spoonjoy Apple clients use GET /api/v1/me/sync as the cursor sync feed that restores the signed-in chef's profile, owned recipes, owned cookbooks, and shopping-list item tombstones into the native account/environment/schema cache boundary. Store nextCursor only after applying the whole page.",
+    sample: "curl -fsS 'https://spoonjoy.app/api/v1/me/sync?limit=20' \\\n  -H 'Authorization: Bearer sj_first_party_native_token'",
+  },
+  {
     title: "Sync a private shopping list",
     scope: "Requires shopping_list:read",
     body: "Use GET /api/v1/shopping-list/sync with an opaque cursor to fetch active rows and deletion records for removed rows. Omit cursor on the first request, then store nextCursor only after your client applies the whole response.",
@@ -223,6 +229,7 @@ const externalGuideSteps = [
     body: "Native clients can read and update the signed-in chef's profile, profile photo, notification preferences, APNs device registrations, token metadata, and OAuth app connections through API v1. Profile, notification, and APNs settings use explicit account scopes; token and OAuth connection administration uses tokens scopes and returns generation-aware opaque connection ids for disconnects.",
     sample: [
       "GET /api/v1/me",
+      "GET /api/v1/me/sync",
       "PATCH /api/v1/me",
       "POST /api/v1/me/photo",
       "DELETE /api/v1/me/photo",
@@ -310,22 +317,32 @@ const guideSteps = [
 ] as const;
 
 const nativeDogfoodChecklist = [
-  "Use https://spoonjoy.app/oauth/callback as the production OAuth redirect and enable applinks:spoonjoy.app on the Apple targets.",
-  "Use ASWebAuthenticationSession.Callback.https(host: \"spoonjoy.app\", path: \"/oauth/callback\"); the custom URL scheme is for app navigation only, not OAuth.",
-  "Register once per app/environment, then persist client_id in Keychain and persist access_token and refresh_token in Keychain.",
-  "clear state and code_verifier after a successful token exchange, replace the stored refresh token atomically, and run single-flight refresh when concurrent requests hit 401.",
+  "For unsigned local dogfood, run pnpm native:dogfood:api with DATABASE_URL and SPOONJOY_FORCE_SQLITE_LOCAL_DB=1 so DB-backed native auth/sync use the same API dispatcher without the Cloudflare local dev Prisma hang.",
+  "From the Apple repo, pass SPOONJOY_WEB_REPO or --web-repo to scripts/verify-native-password-dogfood.sh; it clones the prepared local test DB, seeds a disposable username/password account, proves bad credentials return 401, then drives /api/v1/auth/password/native and /api/v1/me/sync from the Swift client.",
+  "Spoonjoy Apple sign-in is first-party native auth, not an OAuth web bounce: local dogfood uses /api/v1/auth/password/native and production-shaped Apple identity tokens use /api/v1/auth/apple/native.",
+  "Enable applinks:spoonjoy.app on the Apple targets so spoonjoy.app links route into the correct native surface; spoonjoy:// is for app navigation and deep links.",
+  "Native clients persist access_token and refresh_token in Keychain, never persist the password, replace the stored refresh token atomically, and run single-flight refresh when concurrent requests hit 401.",
   "decode Spoonjoy REST envelopes for /api/v1 resources: ok, requestId, data on success and ok, requestId, error on failure.",
 ] as const;
 
 const nativeDogfoodSample = [
-  "POST /oauth/register",
-  "{ \"client_name\": \"Spoonjoy Apple\", \"redirect_uris\": [\"https://spoonjoy.app/oauth/callback\"], \"token_endpoint_auth_method\": \"none\" }",
+  "DATABASE_URL=file:./prisma/native-dogfood.db SPOONJOY_FORCE_SQLITE_LOCAL_DB=1 pnpm native:dogfood:api --port 5179",
   "",
-  "GET /oauth/authorize?client_id=cm_client_id_from_register&redirect_uri=https%3A%2F%2Fspoonjoy.app%2Foauth%2Fcallback&response_type=code&scope=account%3Aread+account%3Awrite+kitchen%3Aread+kitchen%3Awrite+shopping_list%3Aread+shopping_list%3Awrite&state=...&code_challenge=...&code_challenge_method=S256",
+  "SPOONJOY_WEB_REPO=/path/to/spoonjoy-v2 ./scripts/verify-native-password-dogfood.sh --web-repo /path/to/spoonjoy-v2",
   "",
-  "ASWebAuthenticationSession.Callback.https(host: \"spoonjoy.app\", path: \"/oauth/callback\")",
+  "SPOONJOY_API_BASE_URL=http://127.0.0.1:5179 SPOONJOY_NATIVE_DOGFOOD_PASSWORD_FILE=/tmp/native-password.txt ./scripts/dogfood-native-password-auth.sh",
+  "",
+  "POST /api/v1/auth/password/native",
+  "{ \"emailOrUsername\": \"codex-native@example.test\", \"password\": \"<ephemeral dogfood password>\" }",
+  "",
+  "POST /api/v1/auth/apple/native",
+  "{ \"identityToken\": \"apple.jwt\", \"rawNonce\": \"nonce\" }",
+  "",
   "Associated Domains: applinks:spoonjoy.app",
-  "custom URL scheme is for app navigation only, not OAuth",
+  "URL scheme: spoonjoy://recipes/{id}, spoonjoy://cookbooks/{id}, spoonjoy://search",
+  "",
+  "GET /api/v1/me/sync?limit=50",
+  "Authorization: Bearer sj_...",
 ].join("\n");
 
 const offlineProductContractRows = [
@@ -586,7 +603,7 @@ export default function Developers() {
               {currentCapabilities.notYetAvailable.map((item) => <li key={item}>- {item}</li>)}
             </ul>
             <Text className="mt-3">
-              Corporate tenant/admin APIs, inventory, meal plans, full exports, canonical unit conversion, webhooks, REST Hooks, batch mutations, and recipe export endpoints are future API surface, not hidden current endpoints.
+              Corporate tenant/admin APIs, inventory, meal plans, full exports, canonical unit conversion, webhooks, REST Hooks, batch mutations, and recipe export endpoints are not in API v1 yet; they are future API surface, not hidden current endpoints.
             </Text>
             <Text className="mt-3">
               Delegated approval helper endpoints under /api/tools/* are part of the current public connection flow. Other legacy app-only /api/* routes are not the external contract.
@@ -898,10 +915,10 @@ export default function Developers() {
       <SectionShell title="Sync And Safety">
         <Text className="mb-5">
           Recipe and cookbook lists are public catalog search endpoints today. The query parameter wins when both query and q are supplied;
-          lists include cursor, nextCursor, hasMore, cover images, canonicalUrl, and attribution fields. Owner export and deleted recipe tombstones are not in API v1 yet.
+          lists include cursor, nextCursor, hasMore, cover images, canonicalUrl, and attribution fields. Native owner sync lives at /api/v1/me/sync and includes owned recipe/cookbook delete tombstones.
         </Text>
         <Text className="mb-5">
-          Recipe import is an authenticated native app and automation surface at /api/v1/recipes/import. Shopping-list cursor sync is the current incremental owner-data path. Store nextCursor after applying each batch and retry mutations with stable clientMutationId values.
+          Recipe import is an authenticated native app and automation surface at /api/v1/recipes/import. Store nextCursor after applying each native sync or shopping-list sync batch and retry mutations with stable clientMutationId values.
         </Text>
         <Text className="mb-5">
           Recipe ingredient quantities, units, servings, temperatures, and timers are original author data in API v1. Units are free-form display strings,

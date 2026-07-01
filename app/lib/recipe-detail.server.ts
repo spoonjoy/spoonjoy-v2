@@ -31,6 +31,11 @@ import { absoluteUrlFromRequest, recipeOgPath } from "~/lib/og-image.server";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 import { buildRecipeJsonLd } from "~/lib/recipe-structured-data.server";
 import {
+  nativeSyncTombstoneUpsertOperation,
+  touchNativeSyncCookbookOperation,
+  touchNativeSyncRecipeAndContainingCookbooks,
+} from "~/lib/native-sync-invalidation.server";
+import {
   resolvePostHogServerConfig,
   type PostHogServerEnv,
 } from "~/lib/analytics-server";
@@ -556,18 +561,21 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
     if (!title) {
       throw new Response("Title is required", { status: 400 });
     }
-    const newCookbook = await database.cookbook.create({
-      data: {
-        title,
-        authorId: userId,
-      },
-    });
-    await database.recipeInCookbook.create({
-      data: {
-        cookbookId: newCookbook.id,
-        recipeId: id,
-        addedById: userId,
-      },
+    const newCookbook = await database.$transaction(async (tx) => {
+      const created = await tx.cookbook.create({
+        data: {
+          title,
+          authorId: userId,
+        },
+      });
+      await tx.recipeInCookbook.create({
+        data: {
+          cookbookId: created.id,
+          recipeId: id,
+          addedById: userId,
+        },
+      });
+      return created;
     });
     return { success: true, newCookbook: { id: newCookbook.id, title: newCookbook.title } };
   }
@@ -584,8 +592,11 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
       }
 
       if (intent === "removeFromCookbook") {
-        await database.recipeInCookbook.deleteMany({
-          where: { cookbookId, recipeId: id },
+        await database.$transaction(async (tx) => {
+          await tx.recipeInCookbook.deleteMany({
+            where: { cookbookId, recipeId: id },
+          });
+          await touchNativeSyncCookbookOperation(tx, cookbookId);
         });
         return { success: true };
       }
@@ -593,12 +604,15 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
       await assertActiveRecipe(database, id);
 
       try {
-        await database.recipeInCookbook.create({
-          data: {
-            cookbookId,
-            recipeId: id,
-            addedById: userId,
-          },
+        await database.$transaction(async (tx) => {
+          await tx.recipeInCookbook.create({
+            data: {
+              cookbookId,
+              recipeId: id,
+              addedById: userId,
+            },
+          });
+          await touchNativeSyncCookbookOperation(tx, cookbookId);
         });
         return { success: true };
       } catch (error: any) {
@@ -606,6 +620,7 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
         // idempotent success. Anything else is a real failure and must surface;
         // swallowing it silently let "saved" UIs hide actual data loss.
         if (error?.code === "P2002") {
+          await touchNativeSyncCookbookOperation(database, cookbookId);
           return { success: true };
         }
         throw error;
@@ -654,13 +669,18 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
     if (formData.get("confirmNoCover") !== "true") {
       throw new Response("confirmNoCover is required", { status: 400 });
     }
-    await database.recipe.update({
-      where: { id },
-      data: {
-        activeCoverId: null,
-        activeCoverVariant: null,
-        coverMode: "none",
-      },
+    const updatedAt = new Date();
+    await database.$transaction(async (tx) => {
+      await tx.recipe.update({
+        where: { id },
+        data: {
+          activeCoverId: null,
+          activeCoverVariant: null,
+          coverMode: "none",
+          updatedAt,
+        },
+      });
+      await touchNativeSyncRecipeAndContainingCookbooks(tx, id, updatedAt);
     });
     return { success: true, intent: "setRecipeNoCover" };
   }
@@ -806,10 +826,21 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
   }
 
   if (intent === "delete") {
-    await database.recipe.update({
-      where: { id },
-      data: { deletedAt: new Date() },
-    });
+    const deletedAt = new Date();
+    await database.$transaction([
+      database.recipe.update({
+        where: { id },
+        data: { deletedAt, updatedAt: deletedAt },
+      }),
+      nativeSyncTombstoneUpsertOperation(database, {
+        accountId: userId,
+        resourceType: "recipe",
+        resourceId: id,
+        title: recipe.title,
+        deletedAt,
+        updatedAt: deletedAt,
+      }),
+    ]);
 
     return redirect("/recipes");
   }

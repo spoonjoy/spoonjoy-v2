@@ -375,6 +375,21 @@ describe("API v1 recipe write mutations", () => {
   it("updates owned recipe metadata and rejects duplicate or cross-owner updates", async () => {
     const fixture = await createRecipeWriteFixture(db);
     const recipe = await createRecipeGraph(db, fixture.chef.id, { title: "Before API Update" });
+    const cookbook = await db.cookbook.create({
+      data: { title: `Patch Sync ${faker.string.alphanumeric(6)}`, authorId: fixture.chef.id },
+    });
+    await db.recipeInCookbook.create({
+      data: {
+        cookbookId: cookbook.id,
+        recipeId: recipe.id,
+        addedById: fixture.chef.id,
+      },
+    });
+    const oldCookbookUpdatedAt = new Date("2000-01-01T00:00:00.000Z");
+    await db.cookbook.update({
+      where: { id: cookbook.id },
+      data: { updatedAt: oldCookbookUpdatedAt },
+    });
     await db.recipe.create({
       data: {
         ...createTestRecipe(fixture.chef.id),
@@ -427,6 +442,11 @@ describe("API v1 recipe write mutations", () => {
       servings: "6",
       steps: expect.any(Array),
     });
+    const touchedCookbook = await db.cookbook.findUniqueOrThrow({
+      where: { id: cookbook.id },
+      select: { updatedAt: true },
+    });
+    expect(touchedCookbook.updatedAt.getTime()).toBeGreaterThan(oldCookbookUpdatedAt.getTime());
 
     const updateReplay = await action(routeArgs(
       mutationRequest("PATCH", `recipes/${recipe.id}`, fixture.writer.token, "req_recipe_patch_replay", updateBody),
@@ -468,6 +488,21 @@ describe("API v1 recipe write mutations", () => {
     const fixture = await createRecipeWriteFixture(db);
     const recipe = await createRecipeGraph(db, fixture.chef.id, { title: "Delete Through API" });
     const otherRecipe = await createRecipeGraph(db, fixture.chef.id, { title: "Delete Cross Owner" });
+    const cookbook = await db.cookbook.create({
+      data: { title: `Delete Sync ${faker.string.alphanumeric(6)}`, authorId: fixture.chef.id },
+    });
+    await db.recipeInCookbook.create({
+      data: {
+        cookbookId: cookbook.id,
+        recipeId: recipe.id,
+        addedById: fixture.chef.id,
+      },
+    });
+    const oldCookbookUpdatedAt = new Date("2000-01-01T00:00:00.000Z");
+    await db.cookbook.update({
+      where: { id: cookbook.id },
+      data: { updatedAt: oldCookbookUpdatedAt },
+    });
     const body = { clientMutationId: "recipe-delete-owned" };
 
     const crossOwner = await action(routeArgs(
@@ -500,6 +535,27 @@ describe("API v1 recipe write mutations", () => {
     });
     await expect(db.recipe.findUniqueOrThrow({ where: { id: recipe.id } }))
       .resolves.toMatchObject({ deletedAt: expect.any(Date) });
+    await expect(db.nativeSyncTombstone.findUniqueOrThrow({
+      where: {
+        accountId_resourceType_resourceId: {
+          accountId: fixture.chef.id,
+          resourceType: "recipe",
+          resourceId: recipe.id,
+        },
+      },
+    })).resolves.toMatchObject({
+      accountId: fixture.chef.id,
+      resourceType: "recipe",
+      resourceId: recipe.id,
+      title: recipe.title,
+      deletedAt: new Date(firstPayload.data.recipe.deletedAt),
+      updatedAt: new Date(firstPayload.data.recipe.updatedAt),
+    });
+    const touchedCookbook = await db.cookbook.findUniqueOrThrow({
+      where: { id: cookbook.id },
+      select: { updatedAt: true },
+    });
+    expect(touchedCookbook.updatedAt.getTime()).toBeGreaterThan(oldCookbookUpdatedAt.getTime());
 
     const replay = await action(routeArgs(
       mutationRequest("DELETE", `recipes/${recipe.id}`, fixture.writer.token, "req_recipe_delete_replay", body),

@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 import {
   resolveScriptTarget,
@@ -156,5 +158,17 @@ describe("script target resolver", () => {
       "R2 target: QA R2 spoonjoy-photos-qa (--remote)",
       "Destructive scope: QA disposable test data only",
     ]);
+  });
+
+  it("keeps native dogfood API seeding on a password-file path before env fallback", () => {
+    const source = readFileSync(resolve(__dirname, "..", "..", "scripts/native-dogfood-api-server.ts"), "utf8");
+    const passwordFileIndex = source.indexOf("SPOONJOY_NATIVE_DOGFOOD_PASSWORD_FILE");
+    const passwordEnvIndex = source.indexOf("process.env.SPOONJOY_NATIVE_DOGFOOD_PASSWORD;");
+
+    expect(passwordFileIndex).toBeGreaterThanOrEqual(0);
+    expect(passwordEnvIndex).toBeGreaterThanOrEqual(0);
+    expect(passwordFileIndex).toBeLessThan(passwordEnvIndex);
+    expect(source).toContain("readFileSync(passwordFile");
+    expect(source).not.toContain("correctHorseBatteryStaple");
   });
 });

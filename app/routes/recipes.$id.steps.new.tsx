@@ -24,6 +24,7 @@ import {
 } from "~/lib/validation";
 import { createStepOutputUses } from "~/lib/step-output-use-mutations.server";
 import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
+import { touchNativeSyncRecipe } from "~/lib/native-sync-invalidation.server";
 import {
   parseIngredients,
   IngredientParseError,
@@ -236,6 +237,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         description: description.trim(),
       },
     });
+    await touchNativeSyncRecipe(database, id);
 
     if (usesSteps.length > 0) {
       await createStepOutputUses(database, id, nextStepNum, usesSteps);
@@ -290,6 +292,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       });
     }
 
+    await touchNativeSyncRecipe(database, id);
     return redirect(`/recipes/${id}/steps/${step.id}/edit?created=1`);
   } catch (error) {
     // Validation + duplicate checks happened above and surface as 400s; reaching

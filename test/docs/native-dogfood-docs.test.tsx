@@ -56,13 +56,18 @@ const apiDocs = readProjectFile("docs/api.md");
 
 const NATIVE_QUICKSTART_MARKERS = [
   "Spoonjoy Apple native dogfood quickstart",
-  "https://spoonjoy.app/oauth/callback",
+  "pnpm native:dogfood:api",
+  "SPOONJOY_FORCE_SQLITE_LOCAL_DB=1",
+  "SPOONJOY_WEB_REPO",
+  "/api/v1/auth/password/native",
+  "/api/v1/auth/apple/native",
+  "/api/v1/me/sync",
+  "bad credentials return",
   "applinks:spoonjoy.app",
-  "ASWebAuthenticationSession.Callback.https(host: \"spoonjoy.app\", path: \"/oauth/callback\")",
-  "custom URL scheme is for app navigation only, not OAuth",
-  "persist client_id in Keychain",
+  "spoonjoy://",
+  "not an OAuth web bounce",
   "persist access_token and refresh_token in Keychain",
-  "clear state and code_verifier after a successful token exchange",
+  "never persist the password",
   "replace the stored refresh token atomically",
   "single-flight refresh",
   "decode Spoonjoy REST envelopes",
@@ -90,18 +95,27 @@ const OFFLINE_PRODUCT_CONTRACT_MARKERS = [
 ] as const;
 
 describe("native Apple dogfood API docs", () => {
-  it("documents the real Spoonjoy Apple OAuth quickstart instead of generic example.com callbacks", () => {
-    const nativeSection = markdownSection(apiDocs, "### Native iOS OAuth quickstart");
+  it("documents the real Spoonjoy Apple native quickstart instead of web-bounced sign-in", () => {
+    const nativeSection = markdownSection(apiDocs, "### Native Apple app quickstart");
     const nativeMobileSection = markdownSection(apiDocs, "### Native mobile OAuth");
 
     expectContainsAll(apiDocs, NATIVE_QUICKSTART_MARKERS);
     expectContainsAll(nativeSection, [
-      "https://spoonjoy.app/oauth/callback",
+      "pnpm native:dogfood:api",
+      "SPOONJOY_WEB_REPO",
+      "/api/v1/auth/password/native",
+      "/api/v1/auth/apple/native",
+      "/api/v1/me/sync",
       "applinks:spoonjoy.app",
-      "persist client_id in Keychain",
-      "clear state and code_verifier after a successful token exchange",
+      "not an OAuth web bounce",
+      "never persist the password",
     ]);
-    expectOmitsAll(nativeSection, ["https://example.com/spoonjoy/oauth/callback"]);
+    expectOmitsAll(nativeSection, [
+      "POST /oauth/register",
+      "client_id",
+      "code_verifier",
+      "https://example.com/spoonjoy/oauth/callback",
+    ]);
     expectContainsAll(nativeMobileSection, [
       "https://spoonjoy.app/oauth/callback",
       "redirect_uri=https%3A%2F%2Fspoonjoy.app%2Foauth%2Fcallback",
@@ -169,12 +183,20 @@ describe("native Apple dogfood API docs", () => {
       scenario.id === "spoonjoy-apple-native-dogfood"
     ));
     expect(nativeScenario).toBeDefined();
-    expect(nativeScenario?.sample).toContain("https://spoonjoy.app/oauth/callback");
+    expect(nativeScenario?.sample).toContain("/api/v1/auth/password/native");
+    expect(nativeScenario?.sample).toContain("/api/v1/me/sync");
+    expect(nativeScenario?.sample).not.toContain("POST /oauth/register");
+    expect(nativeScenario?.sample).not.toContain("/api/v1/shopping-list/sync");
     expect(nativeScenario?.notes.join("\n")).toContain("Keychain");
     expect(nativeScenario?.notes.join("\n")).toContain("Offline Product Contract");
 
-    const registerOperation = API_V1_PLAYGROUND_MANIFEST.operations.find((operation) => operation.id === "POST /oauth/register");
-    expect(JSON.stringify(registerOperation?.requestBody?.examples)).toContain("https://spoonjoy.app/oauth/callback");
+    const passwordOperation = API_V1_PLAYGROUND_MANIFEST.operations.find((operation) => operation.id === "POST /api/v1/auth/password/native");
+    expect(JSON.stringify(passwordOperation?.requestBody?.examples)).toContain("emailOrUsername");
+    const accountSyncOperation = API_V1_PLAYGROUND_MANIFEST.operations.find((operation) => operation.id === "GET /api/v1/me/sync");
+    expect(accountSyncOperation?.params).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "cursor" }),
+      expect.objectContaining({ name: "limit" }),
+    ]));
 
     expectFlexiblePlaygroundDelete("DELETE /api/v1/shopping-list/items/{itemId}");
     expectFlexiblePlaygroundDelete("DELETE /api/v1/recipes/{id}/spoons/{spoonId}");

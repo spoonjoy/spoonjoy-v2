@@ -1,7 +1,11 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { shouldLogRollupBuildMessage, shouldLogViteBuildErrorMessage } from "../scripts/build-output-hygiene";
+import {
+  filterViteBuildErrorOutput,
+  shouldLogRollupBuildMessage,
+  shouldLogViteBuildErrorMessage,
+} from "../scripts/build-output-hygiene";
 
 async function findSourceFiles(rootDir: string): Promise<string[]> {
   const entries = await readdir(rootDir, { withFileTypes: true });
@@ -39,6 +43,22 @@ describe("build output hygiene", () => {
     })).toBe(false);
     expect(shouldLogRollupBuildMessage("warn", {
       code: "EMPTY_BUNDLE",
+      message: 'Generated an empty chunk: "sitemap.xml".',
+    })).toBe(false);
+    expect(shouldLogRollupBuildMessage("warn", {
+      code: "EMPTY_BUNDLE",
+      message: 'Generated an empty chunk: "robots.txt".',
+    })).toBe(false);
+    expect(shouldLogRollupBuildMessage("warn", {
+      code: "EMPTY_BUNDLE",
+      message: 'Generated an empty chunk: "csp-report".',
+    })).toBe(false);
+    expect(shouldLogRollupBuildMessage("warn", {
+      code: "EMPTY_BUNDLE",
+      message: 'Generated an empty chunk: "well-known.apple-app-site-association".',
+    })).toBe(false);
+    expect(shouldLogRollupBuildMessage("warn", {
+      code: "EMPTY_BUNDLE",
       message: 'Generated an empty chunk: "accidental-client-entry".',
       names: ["accidental-client-entry"],
     })).toBe(true);
@@ -69,6 +89,18 @@ describe("build output hygiene", () => {
     expect(shouldLogViteBuildErrorMessage("\u001b[31m✘ [ERROR] The build was canceled\u001b[39m")).toBe(false);
     expect(shouldLogViteBuildErrorMessage("✘ [ERROR] Could not resolve ./missing")).toBe(true);
     expect(shouldLogViteBuildErrorMessage("The build was canceled while compiling app code")).toBe(true);
+  });
+
+  it("filters benign Vite cancellation output while preserving surrounding build output", () => {
+    expect(filterViteBuildErrorOutput([
+      "rendering chunks...",
+      "✘ [ERROR] The build was canceled",
+      "computing gzip size...",
+      "",
+    ].join("\n"))).toBe("rendering chunks...\ncomputing gzip size...\n");
+    expect(filterViteBuildErrorOutput("✘ [ERROR] Could not resolve ./missing\n")).toBe(
+      "✘ [ERROR] Could not resolve ./missing\n"
+    );
   });
 
   it("keeps inert client directives out of local app source", async () => {

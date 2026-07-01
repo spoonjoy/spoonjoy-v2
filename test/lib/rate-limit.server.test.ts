@@ -19,6 +19,20 @@ function throwingLimiter(error: unknown = new Error("limiter backend down")): Ra
   return { limit: vi.fn().mockRejectedValue(error) };
 }
 
+function syncThrowingLimiter(error: unknown = new Error("limiter binding crashed synchronously")): RateLimiterBinding & {
+  limit: ReturnType<typeof vi.fn>;
+} {
+  return {
+    limit: vi.fn(() => {
+      throw error;
+    }),
+  };
+}
+
+function hangingLimiter(): RateLimiterBinding & { limit: ReturnType<typeof vi.fn> } {
+  return { limit: vi.fn(() => new Promise<{ success: boolean }>(() => {})) };
+}
+
 const POSTHOG_ENABLED: PostHogServerConfig = {
   enabled: true,
   key: "ph_test",
@@ -267,6 +281,29 @@ describe("enforceAuthRateLimit", () => {
     expect(result.scope).toBe("ip");
   });
 
+  it("uses X-Forwarded-For when Cloudflare has not supplied a connecting IP", async () => {
+    const ipLimiter = mockLimiter(false);
+    const request = new Request("https://spoonjoy.app/api/v1/auth/password/native", {
+      method: "POST",
+      headers: { "X-Forwarded-For": "198.51.100.7, 10.0.0.2" },
+    });
+
+    const result = await enforceAuthRateLimit(request, ipLimiter);
+
+    expect(result).toEqual({ allowed: false, retryAfterSeconds: 60, scope: "ip" });
+    expect(ipLimiter.limit).toHaveBeenCalledWith({ key: "ip:198.51.100.7" });
+  });
+
+  it("uses a shared unknown-host bucket instead of skipping when proxy headers are absent", async () => {
+    const ipLimiter = mockLimiter(false);
+    const request = new Request("http://127.0.0.1:6622/api/v1/auth/password/native", { method: "POST" });
+
+    const result = await enforceAuthRateLimit(request, ipLimiter);
+
+    expect(result).toEqual({ allowed: false, retryAfterSeconds: 60, scope: "ip" });
+    expect(ipLimiter.limit).toHaveBeenCalledWith({ key: "ip:unknown:127.0.0.1:6622" });
+  });
+
   it("fails open (skip) when no limiter binding is configured", async () => {
     const result = await enforceAuthRateLimit(requestWithIp("203.0.113.4"), undefined);
     expect(result).toEqual({ allowed: true, retryAfterSeconds: 0, scope: "skip" });
@@ -364,6 +401,33 @@ describe("enforceRateLimit — fail-open + backend-error capture (L6)", () => {
     expect(tokenLimiter.limit).toHaveBeenCalledTimes(1);
   });
 
+  it("fails OPEN when a limiter never resolves", async () => {
+    vi.useFakeTimers();
+    try {
+      const ipLimiter = hangingLimiter();
+      const pending = enforceRateLimit({
+        ip: "1.2.3.4",
+        ipLimiter,
+        postHogConfig: POSTHOG_ENABLED,
+      });
+
+      await vi.advanceTimersByTimeAsync(751);
+
+      await expect(pending).resolves.toEqual({
+        allowed: true,
+        retryAfterSeconds: 0,
+        scope: "skip",
+      });
+      expect(ipLimiter.limit).toHaveBeenCalledTimes(1);
+      const backendError = postHogBodies(phFetch).find(
+        (b) => b.event === "spoonjoy.ratelimit.backend_error",
+      );
+      expect(backendError!.properties.scope).toBe("ip");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("fails open silently (no capture) when the limiter throws and no postHogConfig is set", async () => {
     const result = await enforceRateLimit({
       ip: "1.2.3.4",
@@ -372,6 +436,16 @@ describe("enforceRateLimit — fail-open + backend-error capture (L6)", () => {
     });
     expect(result).toEqual({ allowed: true, retryAfterSeconds: 0, scope: "skip" });
     expect(phFetch).not.toHaveBeenCalled();
+  });
+
+  it("fails open when a limiter throws synchronously before the timeout is scheduled", async () => {
+    const result = await enforceRateLimit({
+      ip: "1.2.3.4",
+      ipLimiter: syncThrowingLimiter(),
+      postHogConfig: { enabled: false, reason: "sync-crash" },
+    });
+
+    expect(result).toEqual({ allowed: true, retryAfterSeconds: 0, scope: "skip" });
   });
 
   it("does not capture when the limiter throws but postHogConfig is disabled", async () => {

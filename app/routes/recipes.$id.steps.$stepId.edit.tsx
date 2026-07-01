@@ -19,6 +19,7 @@ import {
   deleteExistingStepOutputUses,
   createStepOutputUses,
 } from "~/lib/step-output-use-mutations.server";
+import { touchNativeSyncRecipe, touchNativeSyncRecipeOperation } from "~/lib/native-sync-invalidation.server";
 import { validateStepDeletion } from "~/lib/step-deletion-validation.server";
 import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
 import {
@@ -190,9 +191,12 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       );
     }
 
-    await database.recipeStep.delete({
-      where: { id: stepId },
-    });
+    await database.$transaction([
+      database.recipeStep.delete({
+        where: { id: stepId },
+      }),
+      touchNativeSyncRecipeOperation(database, id),
+    ]);
     return redirect(`/recipes/${id}/edit`);
   }
 
@@ -268,15 +272,18 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     }
 
     // Create ingredient
-    await database.ingredient.create({
-      data: {
-        recipeId: id,
-        stepNum: (await database.recipeStep.findUnique({ where: { id: stepId }, select: { stepNum: true } }))!.stepNum,
-        quantity,
-        unitId: unit.id,
-        ingredientRefId: ingredientRef.id,
-      },
-    });
+    await database.$transaction([
+      database.ingredient.create({
+        data: {
+          recipeId: id,
+          stepNum: step.stepNum,
+          quantity,
+          unitId: unit.id,
+          ingredientRefId: ingredientRef.id,
+        },
+      }),
+      touchNativeSyncRecipeOperation(database, id),
+    ]);
 
     return data({ success: true });
   }
@@ -285,9 +292,16 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   if (intent === "deleteIngredient") {
     const ingredientId = formData.get("ingredientId")?.toString();
     if (ingredientId) {
-      await database.ingredient.delete({
-        where: { id: ingredientId },
+      const deleted = await database.ingredient.deleteMany({
+        where: {
+          id: ingredientId,
+          recipeId: id,
+          stepNum: step.stepNum,
+        },
       });
+      if (deleted.count > 0) {
+        await touchNativeSyncRecipe(database, id);
+      }
       return data({ success: true });
     }
   }
@@ -355,6 +369,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     if (usesSteps.length > 0) {
       await createStepOutputUses(database, id, step.stepNum, usesSteps);
     }
+    await touchNativeSyncRecipe(database, id);
 
     return redirect(`/recipes/${id}/edit`);
   } catch (error) {

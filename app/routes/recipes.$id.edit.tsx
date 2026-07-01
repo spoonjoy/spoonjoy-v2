@@ -25,6 +25,10 @@ import { FOOD_IMAGE_ACCEPT, RECIPE_IMAGE_SIZE_MESSAGE, RECIPE_IMAGE_TYPE_MESSAGE
 import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
 import { createCover, getRecipeCoverImageUrl, setActiveRecipeCover } from "~/lib/recipe-cover.server";
 import { scheduleSpoonCoverStylization } from "~/lib/spoon-cover-stylization.server";
+import {
+  touchNativeSyncRecipeAndContainingCookbooks,
+  touchNativeSyncRecipeOperation,
+} from "~/lib/native-sync-invalidation.server";
 import { Button } from "~/components/ui/button";
 import { Dialog, DialogActions, DialogDescription, DialogTitle } from "~/components/ui/dialog";
 import { useEffect, useRef, useState } from "react";
@@ -153,20 +157,21 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         if (targetStep) {
           const tempStepNum = -1;
 
-          await database.recipeStep.update({
-            where: { id: stepId },
-            data: { stepNum: tempStepNum },
-          });
-
-          await database.recipeStep.update({
-            where: { id: targetStep.id },
-            data: { stepNum: step.stepNum },
-          });
-
-          await database.recipeStep.update({
-            where: { id: stepId },
-            data: { stepNum: targetStepNum },
-          });
+          await database.$transaction([
+            database.recipeStep.update({
+              where: { id: stepId },
+              data: { stepNum: tempStepNum },
+            }),
+            database.recipeStep.update({
+              where: { id: targetStep.id },
+              data: { stepNum: step.stepNum },
+            }),
+            database.recipeStep.update({
+              where: { id: stepId },
+              data: { stepNum: targetStepNum },
+            }),
+            touchNativeSyncRecipeOperation(database, id),
+          ]);
 
           return data({ success: true });
         }
@@ -199,9 +204,12 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       );
     }
 
-    await database.recipeStep.delete({
-      where: { id: stepId },
-    });
+    await database.$transaction([
+      database.recipeStep.delete({
+        where: { id: stepId },
+      }),
+      touchNativeSyncRecipeOperation(database, id),
+    ]);
 
     return data({ success: true });
   }
@@ -284,9 +292,13 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   }
 
   try {
-    await database.recipe.update({
-      where: { id },
-      data: updateData,
+    const updatedAt = new Date();
+    await database.$transaction(async (tx) => {
+      await tx.recipe.update({
+        where: { id },
+        data: { ...updateData, updatedAt },
+      });
+      await touchNativeSyncRecipeAndContainingCookbooks(tx, id, updatedAt);
     });
 
     if (uploadedImageUrl) {
@@ -316,13 +328,18 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         sourceType: "chef-upload",
       });
     } else if (clearImage) {
-      await database.recipe.update({
-        where: { id },
-        data: {
-          activeCoverId: null,
-          activeCoverVariant: null,
-          coverMode: "none",
-        },
+      const updatedAt = new Date();
+      await database.$transaction(async (tx) => {
+        await tx.recipe.update({
+          where: { id },
+          data: {
+            activeCoverId: null,
+            activeCoverVariant: null,
+            coverMode: "none",
+            updatedAt,
+          },
+        });
+        await touchNativeSyncRecipeAndContainingCookbooks(tx, id, updatedAt);
       });
     }
 

@@ -20,6 +20,10 @@ import {
   validateTitle,
   validateUnitName,
 } from "~/lib/validation";
+import {
+  nativeSyncTombstoneUpsertOperation,
+  touchNativeSyncCookbooksForRecipeOperation,
+} from "~/lib/native-sync-invalidation.server";
 
 type Database = PrismaClientType;
 type MutableRecipeFields = {
@@ -369,9 +373,13 @@ export async function updateNativeRecipe(
 
   const updated = Object.keys(input.fields).length > 0;
   if (updated) {
-    await db.recipe.update({
-      where: { id: recipeId },
-      data: input.fields,
+    const updatedAt = new Date();
+    await db.$transaction(async (tx) => {
+      await tx.recipe.update({
+        where: { id: recipeId },
+        data: { ...input.fields, updatedAt },
+      });
+      await touchNativeSyncCookbooksForRecipeOperation(tx, recipeId, updatedAt);
     });
   }
 
@@ -382,7 +390,7 @@ export async function deleteNativeRecipe(
   db: Database,
   chefId: string,
   recipeId: string,
-): Promise<ApiV1RecipeWriteResult<{ recipe: { id: string; deletedAt: Date; updatedAt: Date } }>> {
+): Promise<ApiV1RecipeWriteResult<{ recipe: { id: string; title: string; deletedAt: Date; updatedAt: Date } }>> {
   const existing = await db.recipe.findUnique({
     where: { id: recipeId },
     select: { id: true, chefId: true, deletedAt: true },
@@ -394,13 +402,26 @@ export async function deleteNativeRecipe(
     return failure("insufficient_scope", "Recipe does not belong to the authenticated chef");
   }
 
-  const recipe = await db.recipe.update({
-    where: { id: recipeId },
-    data: { deletedAt: new Date() },
-    select: { id: true, deletedAt: true, updatedAt: true },
+  const deletedAt = new Date();
+  const recipe = await db.$transaction(async (tx) => {
+    const deleted = await tx.recipe.update({
+      where: { id: recipeId },
+      data: { deletedAt, updatedAt: deletedAt },
+      select: { id: true, title: true, deletedAt: true, updatedAt: true },
+    });
+    await touchNativeSyncCookbooksForRecipeOperation(tx, recipeId, deletedAt);
+    await nativeSyncTombstoneUpsertOperation(tx, {
+      accountId: chefId,
+      resourceType: "recipe",
+      resourceId: deleted.id,
+      title: deleted.title,
+      deletedAt,
+      updatedAt: deletedAt,
+    });
+    return deleted;
   });
 
-  return success({ recipe: { id: recipe.id, deletedAt: recipe.deletedAt!, updatedAt: recipe.updatedAt } });
+  return success({ recipe: { id: recipe.id, title: recipe.title, deletedAt: recipe.deletedAt!, updatedAt: recipe.updatedAt } });
 }
 
 export async function forkNativeRecipe(

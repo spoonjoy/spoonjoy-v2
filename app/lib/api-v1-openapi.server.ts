@@ -1094,6 +1094,54 @@ const schemas = {
     revoked: { type: "boolean" },
     credential: ref("CredentialMetadata"),
   }),
+  NativeProfileSnapshot: objectSchema(["id", "email", "username", "photoUrl", "joinedLabel", "createdAt", "updatedAt"], {
+    id: idSchema,
+    email: { type: "string", format: "email" },
+    username: { type: "string", minLength: 1 },
+    photoUrl: nullableStringSchema,
+    joinedLabel: { type: "string" },
+    createdAt: dateTimeSchema,
+    updatedAt: dateTimeSchema,
+  }),
+  NativeSyncFreshness: objectSchema(["accountId", "environment", "schemaVersion", "sourceEndpoint", "generatedAt", "lastValidatedAt"], {
+    accountId: idSchema,
+    environment: { type: "string", enum: ["local", "preview", "production"] },
+    schemaVersion: { type: "integer", minimum: 1 },
+    sourceEndpoint: { const: "/api/v1/me/sync" },
+    generatedAt: dateTimeSchema,
+    lastValidatedAt: dateTimeSchema,
+  }),
+  NativeSyncTombstone: objectSchema(["resourceType", "resourceId", "parentResourceId", "title", "deletedAt", "updatedAt"], {
+    resourceType: { type: "string", enum: ["recipe", "cookbook", "shoppingItem"] },
+    resourceId: idSchema,
+    parentResourceId: nullableStringSchema,
+    title: nullableStringSchema,
+    deletedAt: dateTimeSchema,
+    updatedAt: dateTimeSchema,
+  }),
+  NativeSyncEntry: objectSchema(["action", "kind", "resourceId", "updatedAt"], {
+    action: { type: "string", enum: ["upsert", "delete"] },
+    kind: { type: "string", enum: ["profile", "recipe", "cookbook", "shoppingItem"] },
+    resourceId: idSchema,
+    updatedAt: dateTimeSchema,
+    payload: {
+      oneOf: [
+        ref("NativeProfileSnapshot"),
+        ref("RecipeDetail"),
+        ref("CookbookDetail"),
+        ref("ShoppingItem"),
+        { type: "object", additionalProperties: true },
+        { type: "null" },
+      ],
+    },
+    tombstone: { oneOf: [ref("NativeSyncTombstone"), { type: "null" }] },
+  }),
+  NativeAccountSyncData: objectSchema(["freshness", "entries", "nextCursor", "hasMore"], {
+    freshness: ref("NativeSyncFreshness"),
+    entries: arrayOf(ref("NativeSyncEntry")),
+    nextCursor: nullableStringSchema,
+    hasMore: { type: "boolean" },
+  }),
   ShoppingListData: objectSchema(["shoppingList", "nextCursor"], {
     shoppingList: ref("ShoppingList"),
     nextCursor: {
@@ -1178,6 +1226,7 @@ const schemas = {
   TokenListEnvelope: successEnvelope(ref("TokenListData")),
   CreateTokenEnvelope: successEnvelope(ref("CreateTokenData")),
   RevokeTokenEnvelope: successEnvelope(ref("RevokeTokenData")),
+  NativeAccountSyncEnvelope: successEnvelope(ref("NativeAccountSyncData")),
   ShoppingListEnvelope: successEnvelope(ref("ShoppingListData")),
   ShoppingListSyncEnvelope: successEnvelope(ref("ShoppingListSyncData")),
   CreateShoppingItemEnvelope: successEnvelope(ref("CreateShoppingItemData")),
@@ -1328,6 +1377,9 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
   "/api/v1/me": {
     GET: { operationId: "getApiV1Me", tags: ["Account"], summary: "Read the authenticated account profile", auth: "bearer", scopes: ["account:read"], success: { 200: "AccountProfileEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"] },
     PATCH: { operationId: "patchApiV1Me", tags: ["Account"], summary: "Update the authenticated account email and username", auth: "bearer", scopes: ["account:write"], success: { 200: "AccountProfileMutationEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "UpdateAccountProfileRequest" },
+  },
+  "/api/v1/me/sync": {
+    GET: { operationId: "getApiV1MeSync", tags: ["Account"], summary: "Bootstrap native offline account data", auth: "bearer", scopes: ["account:read", "kitchen:read"], success: { 200: "NativeAccountSyncEnvelope" }, errors: ["invalid_cursor", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"], parameters: [queryParameters.cursor, queryParameters.limit] },
   },
   "/api/v1/me/photo": {
     POST: { operationId: "postApiV1MePhoto", tags: ["Account"], summary: "Upload the authenticated account profile photo", auth: "bearer", scopes: ["account:write"], success: { 200: "AccountProfileMutationEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "ProfilePhotoUploadRequest", requestBodyContentType: "multipart/form-data" },
@@ -1572,6 +1624,15 @@ const exampleAccountProfile = {
   oauthAccounts: [{ provider: "google", providerUsername: "ari@example.com" }],
   passkeys: [{ id: "pk_1", name: "Kitchen Mac", transports: "internal", createdAt: exampleTimestamp }],
 };
+const exampleNativeProfileSnapshot = {
+  id: "chef_1",
+  email: "ari@spoonjoy.app",
+  username: "ari",
+  photoUrl: "https://spoonjoy.app/photos/profiles/chef_1/avatar.jpg",
+  joinedLabel: "Joined Spoonjoy",
+  createdAt: exampleTimestamp,
+  updatedAt: exampleTimestamp,
+};
 const exampleNotificationPreferences = {
   notifySpoonOnMyRecipe: true,
   notifyForkOfMyRecipe: true,
@@ -1613,6 +1674,30 @@ const exampleShoppingItem = {
   categoryKey: null,
   iconKey: null,
   sortIndex: 0,
+  updatedAt: exampleTimestamp,
+};
+const exampleDeletedShoppingItemTombstone = {
+  resourceType: "shoppingItem",
+  resourceId: "item_removed",
+  parentResourceId: "shopping_list_1",
+  title: "flour",
+  deletedAt: exampleTimestamp,
+  updatedAt: exampleTimestamp,
+};
+const exampleDeletedRecipeTombstone = {
+  resourceType: "recipe",
+  resourceId: "recipe_removed",
+  parentResourceId: null,
+  title: "Pasta",
+  deletedAt: exampleTimestamp,
+  updatedAt: exampleTimestamp,
+};
+const exampleDeletedCookbookTombstone = {
+  resourceType: "cookbook",
+  resourceId: "cookbook_removed",
+  parentResourceId: null,
+  title: "Weeknights",
+  deletedAt: exampleTimestamp,
   updatedAt: exampleTimestamp,
 };
 const exampleSearchResults = [
@@ -2042,6 +2127,66 @@ const responseExamples: Record<string, unknown> = {
   TokenListEnvelope: { ok: true, requestId: "req_example", data: { tokens: [exampleCredential] } },
   CreateTokenEnvelope: { ok: true, requestId: "req_example", data: { token: "sj_secret", credential: exampleCredential } },
   RevokeTokenEnvelope: { ok: true, requestId: "req_example", data: { revoked: true, credential: { ...exampleCredential, revokedAt: exampleTimestamp } } },
+  NativeAccountSyncEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      freshness: {
+        accountId: "chef_1",
+        environment: "production",
+        schemaVersion: 1,
+        sourceEndpoint: "/api/v1/me/sync",
+        generatedAt: exampleTimestamp,
+        lastValidatedAt: exampleTimestamp,
+      },
+      entries: [
+        {
+          action: "upsert",
+          kind: "profile",
+          resourceId: "chef_1",
+          updatedAt: exampleTimestamp,
+          payload: exampleNativeProfileSnapshot,
+        },
+        {
+          action: "upsert",
+          kind: "recipe",
+          resourceId: "recipe_1",
+          updatedAt: exampleTimestamp,
+          payload: exampleRecipeDetail,
+        },
+        {
+          action: "upsert",
+          kind: "cookbook",
+          resourceId: "cookbook_1",
+          updatedAt: exampleTimestamp,
+          payload: exampleCookbookDetail,
+        },
+        {
+          action: "delete",
+          kind: "recipe",
+          resourceId: "recipe_removed",
+          updatedAt: exampleTimestamp,
+          tombstone: exampleDeletedRecipeTombstone,
+        },
+        {
+          action: "delete",
+          kind: "cookbook",
+          resourceId: "cookbook_removed",
+          updatedAt: exampleTimestamp,
+          tombstone: exampleDeletedCookbookTombstone,
+        },
+        {
+          action: "delete",
+          kind: "shoppingItem",
+          resourceId: "item_removed",
+          updatedAt: exampleTimestamp,
+          tombstone: exampleDeletedShoppingItemTombstone,
+        },
+      ],
+      nextCursor: "v1.eyJ1cGRhdGVkQXQiOiIyMDI2LTA2LTAxVDAwOjAwOjAwLjAwMFoiLCJpZCI6InNob3BwaW5nSXRlbTppdGVtX3JlbW92ZWQifQ",
+      hasMore: false,
+    },
+  },
   ShoppingListEnvelope: { ok: true, requestId: "req_example", data: { shoppingList: exampleShoppingList, nextCursor: exampleTimestamp } },
   ShoppingListSyncEnvelope: {
     ok: true,
@@ -2525,6 +2670,14 @@ function cursorPolicyFor(path: ResourcePath) {
       limit: { min: 1, max: 50, default: 20 },
       store: "Persist data.nextCursor for each page only after applying every returned item and tombstone durably. When hasMore is true, immediately continue from that checkpoint to drain the backlog.",
       tombstones: "Rows with deletedAt are removals.",
+    };
+  }
+  if (path === "/api/v1/me/sync") {
+    return {
+      cursor: "opaque",
+      limit: { min: 1, max: 50, default: 20 },
+      store: "Persist data.nextCursor only after applying every native sync entry, including tombstones, inside the account/environment/schema cache boundary.",
+      tombstones: "Delete entries include tombstones so native offline caches can remove stale private rows.",
     };
   }
   if (path === "/api/v1/recipes" || path === "/api/v1/cookbooks") {
@@ -3332,25 +3485,30 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
         id: "spoonjoy-apple-native-dogfood",
         title: "Spoonjoy Apple native dogfood",
         eyebrow: "iOS + macOS",
-        audience: "Use this shape for Spoonjoy's first-party native app and any Apple client that needs exact OAuth, offline cache, and sync behavior.",
+        audience: "Use this shape for Spoonjoy's first-party native app when validating native sign-in, offline cache bootstrap, and owner-scoped sync behavior.",
         notes: [
-          "Register the HTTPS universal-link callback https://spoonjoy.app/oauth/callback and enable the Associated Domains entitlement applinks:spoonjoy.app; the custom URL scheme is for app navigation only, not OAuth.",
-          "Persist client_id, access_token, and rotating refresh_token in Keychain; clear state and code_verifier after successful token exchange.",
+          "For unsigned local dogfood, run the Apple repo verifier with --web-repo; it starts pnpm native:dogfood:api against a disposable SQLite database, seeds a disposable username/password account, proves bad credentials return 401, then drives the Swift native client against the real API v1 dispatcher.",
+          "First-party native sign-in uses POST /api/v1/auth/password/native for local dogfood and POST /api/v1/auth/apple/native for production-shaped Apple identity tokens. Do not bounce the native app to the website for ordinary sign-in.",
+          "Enable Associated Domains with applinks:spoonjoy.app and keep the custom URL scheme for app navigation/deep links; neither is a replacement for the native auth API contract.",
+          "Persist access_token and rotating refresh_token in Keychain; never persist the password or stash auth tokens in the general offline cache.",
           "Replace the stored refresh token atomically after every refresh and use single-flight refresh before retrying REST API v1 requests.",
-          "Decode Spoonjoy REST envelopes for /api/v1 resources and keep OAuth token/revoke responses on their OAuth protocol shape.",
+          "Decode Spoonjoy REST envelopes for /api/v1 resources and treat /api/v1/me/sync as the first-party owner bootstrap feed.",
           "Apply the Offline Product Contract: cache account/environment/schema/freshness/source metadata, preserve server revision markers, queue only safe product writes with stable clientMutationId, and keep secrets out of general cache storage.",
         ],
         sample: [
-          "POST /oauth/register",
-          "{\"client_name\":\"Spoonjoy Apple\",\"redirect_uris\":[\"https://spoonjoy.app/oauth/callback\"],\"token_endpoint_auth_method\":\"none\"}",
+          "cd ../spoonjoy-apple",
+          "./scripts/verify-native-password-dogfood.sh --web-repo ../spoonjoy-v2 --api-port 5179",
+          "",
+          "POST /api/v1/auth/password/native",
+          "{\"emailOrUsername\":\"codex-native@example.test\",\"password\":\"<ephemeral dogfood password>\"}",
           "",
           "Associated Domains: applinks:spoonjoy.app",
-          "ASWebAuthenticationSession.Callback.https(host: \"spoonjoy.app\", path: \"/oauth/callback\")",
-          "Store client_id/access_token/refresh_token in Keychain; clear state/code_verifier after token exchange.",
+          "URL scheme: spoonjoy://recipes/{id}, spoonjoy://cookbooks/{id}, spoonjoy://search",
+          "Store access_token/refresh_token in Keychain; delete the file-backed dogfood vault before review.",
           "",
-          "GET /api/v1/shopping-list/sync?limit=50",
+          "GET /api/v1/me/sync?limit=50",
           "Authorization: Bearer sj_...",
-          "# Decode { ok, requestId, data } and apply items plus tombstones before saving nextCursor.",
+          "# Decode { ok, requestId, data } and apply profile, recipe, cookbook, shopping-list entries, and tombstones before saving nextCursor.",
         ].join("\n"),
       },
       {
@@ -3605,6 +3763,7 @@ const SDK_PATHS = new Set([
   "/api/v1/cookbooks/{id}",
   "/api/v1/cookbooks/{id}/recipes/{recipeId}",
   "/api/v1/me",
+  "/api/v1/me/sync",
   "/api/v1/me/photo",
   "/api/v1/me/notification-preferences",
   "/api/v1/me/connections",
@@ -3907,7 +4066,7 @@ export function buildApiV1ConnectorOpenApiDocument(options: BuildOpenApiOptions 
       ],
       unavailable: [
         "webhooks, REST Hooks, SSE, and event subscriptions",
-        "recipe/cookbook updatedAt export feeds and deletion tombstones",
+        "public recipe/cookbook updatedAt export feeds and public deletion tombstones",
         "recipe write/import/export endpoints",
       ],
     },

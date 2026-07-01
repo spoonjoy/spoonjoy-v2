@@ -307,6 +307,7 @@ describe("Cookbooks $id Route", () => {
     });
 
     it("should delete cookbook and redirect", async () => {
+      const existingCookbook = await db.cookbook.findUniqueOrThrow({ where: { id: cookbookId } });
       const request = await createFormRequest({ intent: "delete" }, testUserId);
 
       const response = await action({
@@ -322,6 +323,19 @@ describe("Cookbooks $id Route", () => {
       // Verify cookbook was deleted
       const cookbook = await db.cookbook.findUnique({ where: { id: cookbookId } });
       expect(cookbook).toBeNull();
+      await expect(db.nativeSyncTombstone.findUnique({
+        where: {
+          accountId_resourceType_resourceId: {
+            accountId: testUserId,
+            resourceType: "cookbook",
+            resourceId: cookbookId,
+          },
+        },
+      })).resolves.toEqual(expect.objectContaining({
+        title: existingCookbook.title,
+        deletedAt: expect.any(Date),
+        updatedAt: expect.any(Date),
+      }));
     });
 
     it("should add recipe to cookbook", async () => {
@@ -331,6 +345,10 @@ describe("Cookbooks $id Route", () => {
           title: "Test Recipe " + faker.string.alphanumeric(6),
           chefId: testUserId,
         },
+      });
+      await db.cookbook.update({
+        where: { id: cookbookId },
+        data: { updatedAt: new Date("2000-01-01T00:00:00.000Z") },
       });
 
       const request = await createFormRequest(
@@ -352,6 +370,8 @@ describe("Cookbooks $id Route", () => {
         where: { cookbookId, recipeId: recipe.id },
       });
       expect(recipeInCookbook).not.toBeNull();
+      const touchedCookbook = await db.cookbook.findUnique({ where: { id: cookbookId }, select: { updatedAt: true } });
+      expect(touchedCookbook!.updatedAt.getTime()).toBeGreaterThan(new Date("2000-01-01T00:00:00.000Z").getTime());
     });
 
     it("should reject direct attempts to add a soft-deleted recipe", async () => {
@@ -398,6 +418,10 @@ describe("Cookbooks $id Route", () => {
           addedById: testUserId,
         },
       });
+      await db.cookbook.update({
+        where: { id: cookbookId },
+        data: { updatedAt: new Date("2000-01-01T00:00:00.000Z") },
+      });
 
       const request = await createFormRequest(
         { intent: "removeRecipe", recipeInCookbookId: recipeInCookbook.id },
@@ -418,6 +442,8 @@ describe("Cookbooks $id Route", () => {
         where: { id: recipeInCookbook.id },
       });
       expect(removed).toBeNull();
+      const touchedCookbook = await db.cookbook.findUnique({ where: { id: cookbookId }, select: { updatedAt: true } });
+      expect(touchedCookbook!.updatedAt.getTime()).toBeGreaterThan(new Date("2000-01-01T00:00:00.000Z").getTime());
     });
 
     it("should throw 404 for non-existent cookbook in action", async () => {
@@ -682,9 +708,9 @@ describe("Cookbooks $id Route", () => {
         },
       });
 
-      // Mock db.recipeInCookbook.create to throw a non-P2002 error
-      const originalCreate = db.recipeInCookbook.create;
-      db.recipeInCookbook.create = vi.fn().mockRejectedValue({ code: "OTHER_ERROR", message: "Database error" });
+      // Mock the transactional membership write to throw a non-P2002 error.
+      const originalTransaction = db.$transaction;
+      db.$transaction = vi.fn().mockRejectedValue({ code: "OTHER_ERROR", message: "Database error" }) as unknown as typeof db.$transaction;
 
       try {
         const request = await createFormRequest(
@@ -700,7 +726,7 @@ describe("Cookbooks $id Route", () => {
           } as any)
         ).rejects.toMatchObject({ code: "OTHER_ERROR" });
       } finally {
-        db.recipeInCookbook.create = originalCreate;
+        db.$transaction = originalTransaction;
       }
     });
   });

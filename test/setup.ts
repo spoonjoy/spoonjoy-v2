@@ -166,6 +166,7 @@ beforeAll(async () => {
   await db.ingredientRef.deleteMany({});
   await db.unit.deleteMany({});
   await db.agentConnectionRequest.deleteMany({});
+  await db.nativeSyncTombstone.deleteMany({});
   await db.apiMutationTombstone.deleteMany({});
   await db.apiIdempotencyKey.deleteMany({});
   await db.apiCredential.deleteMany({});

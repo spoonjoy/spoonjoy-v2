@@ -643,6 +643,10 @@ describe("Recipes $id Steps New Route", () => {
         },
         testUserId
       );
+      await db.recipe.update({
+        where: { id: recipeId },
+        data: { updatedAt: new Date("2000-01-01T00:00:00.000Z") },
+      });
 
       const response = await action({
         request,
@@ -662,6 +666,8 @@ describe("Recipes $id Steps New Route", () => {
       expect(steps[0].stepTitle).toBe("Prep Work");
       expect(steps[0].description).toBe("Prepare all ingredients");
       expect(steps[0].stepNum).toBe(1);
+      const touchedRecipe = await db.recipe.findUnique({ where: { id: recipeId }, select: { updatedAt: true } });
+      expect(touchedRecipe!.updatedAt.getTime()).toBeGreaterThan(new Date("2000-01-01T00:00:00.000Z").getTime());
     });
 
     it("should reuse existing unit and ingredient refs when adding ingredients", async () => {

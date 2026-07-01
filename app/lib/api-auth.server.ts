@@ -257,6 +257,11 @@ export async function authenticateApiRequest(
     return authenticateApiToken(db, bearerToken);
   }
 
+  const cookie = request.headers.get("Cookie");
+  if (!/(^|;\s*)__session=/.test(cookie ?? "")) {
+    return null;
+  }
+
   const sessionUserId = await getUserId(request, env);
   return sessionUserId ? principalFromUserId(db, sessionUserId, "session") : null;
 }

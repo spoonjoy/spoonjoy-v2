@@ -19,6 +19,7 @@ const SERVER_ONLY_ROUTE_CHUNKS = new Set([
   "auth.webauthn.authenticate.verify",
   "auth.webauthn.register.options",
   "auth.webauthn.register.verify",
+  "csp-report",
   "health",
   "mcp",
   "oauth.register",
@@ -29,6 +30,9 @@ const SERVER_ONLY_ROUTE_CHUNKS = new Set([
   "og.recipes._id.png",
   "photos._",
   "recipes._id.fork",
+  "robots.txt",
+  "sitemap.xml",
+  "well-known.apple-app-site-association",
   "well-known.oauth-authorization-server",
   "well-known.oauth-protected-resource",
 ]);
@@ -54,4 +58,15 @@ function stripAnsi(value: string) {
 
 export function shouldLogViteBuildErrorMessage(message: string) {
   return stripAnsi(message).trim() !== "✘ [ERROR] The build was canceled";
+}
+
+export function filterViteBuildErrorOutput(output: string) {
+  const lines = output.match(/[^\r\n]*(?:\r?\n|$)/g) ?? [];
+  return lines
+    .filter((line) => {
+      if (line === "") return false;
+      const message = line.replace(/\r?\n$/, "");
+      return message === "" || shouldLogViteBuildErrorMessage(message);
+    })
+    .join("");
 }

@@ -47,6 +47,21 @@ export async function cleanupDatabase() {
   await db.$executeRawUnsafe('CREATE UNIQUE INDEX IF NOT EXISTS "ApiMutationTombstone_idempotencyKeyId_resourceType_resourceId_key" ON "ApiMutationTombstone"("idempotencyKeyId", "resourceType", "resourceId");');
   await db.$executeRawUnsafe('CREATE INDEX IF NOT EXISTS "ApiMutationTombstone_idempotencyKeyId_idx" ON "ApiMutationTombstone"("idempotencyKeyId");');
   await db.$executeRawUnsafe('CREATE INDEX IF NOT EXISTS "ApiMutationTombstone_resourceType_resourceId_idx" ON "ApiMutationTombstone"("resourceType", "resourceId");');
+  await db.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "NativeSyncTombstone" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "accountId" TEXT NOT NULL,
+    "resourceType" TEXT NOT NULL,
+    "resourceId" TEXT NOT NULL,
+    "parentResourceId" TEXT,
+    "title" TEXT,
+    "deletedAt" DATETIME NOT NULL,
+    "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "NativeSyncTombstone_accountId_fkey" FOREIGN KEY ("accountId") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+  );`);
+  await db.$executeRawUnsafe('CREATE UNIQUE INDEX IF NOT EXISTS "NativeSyncTombstone_accountId_resourceType_resourceId_key" ON "NativeSyncTombstone"("accountId", "resourceType", "resourceId");');
+  await db.$executeRawUnsafe('CREATE INDEX IF NOT EXISTS "NativeSyncTombstone_accountId_updatedAt_resourceId_idx" ON "NativeSyncTombstone"("accountId", "updatedAt", "resourceId");');
+  await db.$executeRawUnsafe('CREATE INDEX IF NOT EXISTS "NativeSyncTombstone_accountId_resourceType_updatedAt_idx" ON "NativeSyncTombstone"("accountId", "resourceType", "updatedAt");');
   await db.$executeRawUnsafe('DELETE FROM "SearchDocument";');
   await db.$executeRawUnsafe('DELETE FROM "SearchIndexMetadata";');
 
@@ -65,6 +80,7 @@ export async function cleanupDatabase() {
   await db.ingredientRef.deleteMany({});
   await db.unit.deleteMany({});
   await db.agentConnectionRequest.deleteMany({});
+  await db.nativeSyncTombstone.deleteMany({});
   await db.apiMutationTombstone.deleteMany({});
   await db.apiIdempotencyKey.deleteMany({});
   await db.apiCredential.deleteMany({});

@@ -77,6 +77,10 @@ import { CookbookPage, CookbookHeader, RuledEmptyState } from "~/components/cook
 import { CookbookCoverArt } from "~/components/cookbook/CookbookCoverArt";
 import { CoverProvenanceBadge } from "~/components/recipe/CoverProvenanceBadge";
 import { shareContent } from "~/components/navigation";
+import {
+  nativeSyncTombstoneUpsertOperation,
+  touchNativeSyncCookbookOperation,
+} from "~/lib/native-sync-invalidation.server";
 
 export function meta({ data }: Route.MetaArgs) {
   if (!data) {
@@ -228,7 +232,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   // Verify ownership
   const cookbook = await database.cookbook.findUnique({
     where: { id },
-    select: { authorId: true },
+    select: { authorId: true, title: true },
   });
 
   if (!cookbook) {
@@ -260,9 +264,20 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   }
 
   if (intent === "delete") {
-    await database.cookbook.delete({
-      where: { id },
-    });
+    const deletedAt = new Date();
+    await database.$transaction([
+      nativeSyncTombstoneUpsertOperation(database, {
+        accountId: userId,
+        resourceType: "cookbook",
+        resourceId: id,
+        title: cookbook.title,
+        deletedAt,
+        updatedAt: deletedAt,
+      }),
+      database.cookbook.delete({
+        where: { id },
+      }),
+    ]);
     return redirect("/cookbooks");
   }
 
@@ -278,12 +293,15 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       }
 
       try {
-        await database.recipeInCookbook.create({
-          data: {
-            cookbookId: id,
-            recipeId,
-            addedById: userId,
-          },
+        await database.$transaction(async (tx) => {
+          await tx.recipeInCookbook.create({
+            data: {
+              cookbookId: id,
+              recipeId,
+              addedById: userId,
+            },
+          });
+          await touchNativeSyncCookbookOperation(tx, id);
         });
 
         // Fire-and-forget: notify the recipe owner when someone else saved their recipe.
@@ -308,6 +326,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       } catch (error: any) {
         if (error.code === "P2002") {
           // Idempotent re-add — do NOT enqueue a second notification.
+          await touchNativeSyncCookbookOperation(database, id);
           return data({ success: true });
         }
         captureCookbookActionFailure(request, context, userId, "addRecipe", error);
@@ -319,11 +338,14 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   if (intent === "removeRecipe") {
     const recipeInCookbookId = formData.get("recipeInCookbookId")?.toString();
     if (recipeInCookbookId) {
-      await database.recipeInCookbook.deleteMany({
-        where: {
-          id: recipeInCookbookId,
-          cookbookId: id,
-        },
+      await database.$transaction(async (tx) => {
+        await tx.recipeInCookbook.deleteMany({
+          where: {
+            id: recipeInCookbookId,
+            cookbookId: id,
+          },
+        });
+        await touchNativeSyncCookbookOperation(tx, id);
       });
       return data({ success: true });
     }

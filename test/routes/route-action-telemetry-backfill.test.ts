@@ -441,7 +441,7 @@ describe("route-action telemetry backfill — unexpected-failure captures", () =
     it("captures + re-throws an unexpected addRecipe failure with intent=addRecipe when configured", async () => {
       const { userId, cookie, cookbookId } = await setupOwnedCookbook("cbadd");
       const recipe = await db.recipe.create({ data: { title: "Stew", chefId: userId } });
-      stubReject(db.recipeInCookbook, "create", new Error("add boom"));
+      stubReject(db, "$transaction", new Error("add boom"));
       const fd = new UndiciFormData();
       fd.append("intent", "addRecipe");
       fd.append("recipeId", recipe.id);

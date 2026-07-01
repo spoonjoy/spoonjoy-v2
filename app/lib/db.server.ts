@@ -20,6 +20,14 @@ async function loadWranglerPlatformProxy(): Promise<Pick<typeof import("wrangler
   return import(/* @vite-ignore */ moduleName);
 }
 
+export function shouldUseDirectLocalSqlite(): boolean {
+  const forced = process.env.SPOONJOY_FORCE_SQLITE_LOCAL_DB;
+  const dogfoodHarness = process.env.SPOONJOY_NATIVE_DOGFOOD_API;
+  const isTruthy = (value: string | undefined) =>
+    typeof value === "string" && /^(1|true|yes)$/i.test(value.trim());
+  return isTruthy(forced) && isTruthy(dogfoodHarness);
+}
+
 let localDbPromise: Promise<PrismaClientType> | null = null;
 export let db: PrismaClientType | null = null;
 
@@ -28,6 +36,10 @@ export async function getLocalDb(): Promise<PrismaClientType> {
   if (!localDbPromise) {
     localDbPromise = (async () => {
       if (process.env.VITEST) {
+        return createLocalSqliteDb();
+      }
+
+      if (shouldUseDirectLocalSqlite()) {
         return createLocalSqliteDb();
       }
 

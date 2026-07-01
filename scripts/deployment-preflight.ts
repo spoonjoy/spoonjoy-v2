@@ -113,8 +113,10 @@ const REQUIRED_SCRIPT_COVERAGE_INCLUDES = [
 ] as const;
 
 const REQUIRED_SCRIPT_TYPECHECK_INCLUDES = [
+  "scripts/build-output-hygiene.ts",
   "scripts/deployment-preflight.ts",
   "scripts/qa-preflight.ts",
+  "scripts/react-router-build.ts",
 ] as const;
 
 const REQUIRED_RATE_LIMIT_BINDINGS = [

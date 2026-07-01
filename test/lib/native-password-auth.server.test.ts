@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Request as UndiciRequest } from "undici";
 import { action } from "~/routes/api.v1.$";
-import { db } from "~/lib/db.server";
+import { db, getLocalDb } from "~/lib/db.server";
 import { createUser } from "~/lib/auth.server";
+import { NativePasswordAuthError } from "~/lib/native-password-auth.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 
 function routeArgs(request: Request, splat = "auth/password/native") {
@@ -33,6 +34,14 @@ describe("native username/password sign-in API", () => {
   afterEach(async () => {
     vi.restoreAllMocks();
     await cleanupDatabase();
+  });
+
+  it("defaults native password auth errors to validation status when no status is supplied", () => {
+    const error = new NativePasswordAuthError("invalid_payload", "Invalid native password payload.");
+
+    expect(error.name).toBe("NativePasswordAuthError");
+    expect(error.code).toBe("invalid_payload");
+    expect(error.status).toBe(400);
   });
 
   it("exchanges first-party native email/password credentials for Spoonjoy app tokens", async () => {
@@ -100,6 +109,54 @@ describe("native username/password sign-in API", () => {
     }
   });
 
+  it("lets unexpected native password exchange errors bubble to the API error boundary", async () => {
+    await createUser(db, "token-failure@example.com", "native_token_failure", "correctHorseBatteryStaple");
+    const localDb = await getLocalDb();
+    const originalUpsert = localDb.oAuthClient.upsert;
+    localDb.oAuthClient.upsert = vi.fn().mockRejectedValueOnce(new Error("token store unavailable")) as typeof localDb.oAuthClient.upsert;
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const response = await action(routeArgs(jsonRequest({
+        emailOrUsername: "native_token_failure",
+        password: "correctHorseBatteryStaple",
+      }, "req_native_password_unexpected")));
+      const json = await response.json() as any;
+
+      expect(response.status).toBe(500);
+      expect(json.error).toMatchObject({
+        code: "internal_error",
+        status: 500,
+      });
+      expect(consoleErrorSpy).toHaveBeenCalledWith("[api-v1] internal_error", expect.any(Object));
+    } finally {
+      localDb.oAuthClient.upsert = originalUpsert;
+    }
+  });
+
+  it("maps non-credential native password auth errors to validation errors", async () => {
+    await createUser(db, "validation-failure@example.com", "native_validation_failure", "correctHorseBatteryStaple");
+    const localDb = await getLocalDb();
+    const originalUpsert = localDb.oAuthClient.upsert;
+    localDb.oAuthClient.upsert = vi.fn().mockRejectedValueOnce(
+      new NativePasswordAuthError("native_validation_failure", "Native validation failed."),
+    ) as typeof localDb.oAuthClient.upsert;
+    try {
+      const response = await action(routeArgs(jsonRequest({
+        emailOrUsername: "native_validation_failure",
+        password: "correctHorseBatteryStaple",
+      }, "req_native_password_validation_error")));
+      const json = await response.json() as any;
+
+      expect(response.status).toBe(400);
+      expect(json.error).toMatchObject({
+        code: "validation_error",
+        details: { providerCode: "native_validation_failure" },
+      });
+    } finally {
+      localDb.oAuthClient.upsert = originalUpsert;
+    }
+  });
+
   it("validates native password payloads before credential exchange", async () => {
     for (const [body, fields] of [
       [{ password: "secret" }, ["emailOrUsername"]],
@@ -143,7 +200,7 @@ describe("native username/password sign-in API", () => {
         cloudflare: {
           env: {
             AUTH_IP_RATE_LIMITER: {
-              limit: vi.fn().mockResolvedValue({ success: false }),
+              limit: vi.fn().mockResolvedValue({ success: false, reset: 17 }),
             },
           },
         },
@@ -152,11 +209,42 @@ describe("native username/password sign-in API", () => {
     const rateLimitedJson = await rateLimitedResponse.json() as any;
 
     expect(rateLimitedResponse.status).toBe(429);
-    expect(rateLimitedResponse.headers.get("Retry-After")).toBe("60");
+    expect(rateLimitedResponse.headers.get("Retry-After")).toBe("17");
     expect(rateLimitedResponse.headers.get("Access-Control-Allow-Origin")).toBeNull();
     expect(rateLimitedJson.error).toMatchObject({
       code: "rate_limited",
-      details: { scope: "ip", retryAfterSeconds: 60 },
+      details: { scope: "ip", retryAfterSeconds: 17 },
+    });
+
+    const globalLimitedResponse = await action({
+      ...routeArgs(new UndiciRequest("http://localhost/api/v1/auth/password/native", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Request-Id": "req_native_password_global_limited",
+          "CF-Connecting-IP": "203.0.113.11",
+        },
+        body: JSON.stringify({ emailOrUsername: "chef@example.com", password: "secret" }),
+      }) as unknown as Request),
+      context: {
+        cloudflare: {
+          env: {
+            API_IP_RATE_LIMITER: {
+              limit: vi.fn().mockResolvedValue({ success: false, reset: 19 }),
+            },
+          },
+        },
+      },
+    } as any);
+    const globalLimitedJson = await globalLimitedResponse.json() as any;
+
+    expect(globalLimitedResponse.status).toBe(429);
+    expect(globalLimitedResponse.headers.get("Retry-After")).toBe("19");
+    expect(globalLimitedResponse.headers.get("Access-Control-Allow-Origin")).toBeNull();
+    expect(globalLimitedResponse.headers.get("Access-Control-Allow-Headers")).toBeNull();
+    expect(globalLimitedJson.error).toMatchObject({
+      code: "rate_limited",
+      details: { scope: "ip", retryAfterSeconds: 19 },
     });
   });
 
