@@ -748,35 +748,25 @@ describe("scheduleSpoonCoverStylization", () => {
     let completedCompetingCover = false;
     const raceDb = new Proxy(db, {
       get(target, prop, receiver) {
-        if (prop !== "$transaction") return Reflect.get(target, prop, receiver);
-        return async (callback: (tx: never) => Promise<unknown>) =>
-          target.$transaction(async (tx) => {
-            const recipeDelegate = new Proxy(tx.recipe, {
-              get(recipeTarget, recipeProp, recipeReceiver) {
-                if (recipeProp !== "updateMany") return Reflect.get(recipeTarget, recipeProp, recipeReceiver);
-                return async (args: Parameters<typeof tx.recipe.updateMany>[0]) => {
-                  if (!completedCompetingCover && args.where?.id === recipeId) {
-                    completedCompetingCover = true;
-                    await tx.recipeCover.update({
-                      where: { id: competingCover.id },
-                      data: {
-                        status: "ready",
-                        generationStatus: "succeeded",
-                      },
-                    });
-                  }
-                  return tx.recipe.updateMany(args);
-                };
-              },
-            });
-            const txWithRace = new Proxy(tx, {
-              get(txTarget, txProp, txReceiver) {
-                if (txProp === "recipe") return recipeDelegate;
-                return Reflect.get(txTarget, txProp, txReceiver);
-              },
-            });
-            return callback(txWithRace as never);
-          });
+        if (prop !== "recipe") return Reflect.get(target, prop, receiver);
+        return new Proxy(target.recipe, {
+          get(recipeTarget, recipeProp, recipeReceiver) {
+            if (recipeProp !== "updateMany") return Reflect.get(recipeTarget, recipeProp, recipeReceiver);
+            return async (args: Parameters<typeof target.recipe.updateMany>[0]) => {
+              if (!completedCompetingCover && args.where?.id === recipeId) {
+                completedCompetingCover = true;
+                await target.recipeCover.update({
+                  where: { id: competingCover.id },
+                  data: {
+                    status: "ready",
+                    generationStatus: "succeeded",
+                  },
+                });
+              }
+              return target.recipe.updateMany(args);
+            };
+          },
+        });
       },
     });
 

@@ -21,8 +21,8 @@ import {
   type ImageGenerationSourceType,
 } from "~/lib/image-gen-telemetry.server";
 import {
-  touchNativeSyncCookbooksForRecipe,
-  touchNativeSyncRecipeAndContainingCookbooks,
+  touchNativeSyncCookbooksForRecipeOperation,
+  touchNativeSyncRecipeOperation,
 } from "~/lib/native-sync-invalidation.server";
 import { createOpenAIClient } from "~/lib/openai-client.server";
 import type { PostHogServerConfig, PostHogServerEnv } from "~/lib/analytics-server";
@@ -231,27 +231,28 @@ async function currentCoverForLifecycle(input: ScheduleSpoonStylizationInput) {
 
 async function markStylizationProcessing(input: ScheduleSpoonStylizationInput): Promise<boolean> {
   const updatedAt = new Date();
-  return await input.db.$transaction(async (tx) => {
-    const result = await tx.recipeCover.updateMany({
-      where: {
-        id: input.coverId,
-        recipeId: input.recipeId,
-        status: { not: "archived" },
-        archivedAt: null,
-      },
-      data: {
-        status: "processing",
-        generationStatus: "processing",
-        failureReason: null,
-        promptVersion: STYLIZATION_PROMPT_VERSION,
-        styleVersion: STYLIZATION_STYLE_VERSION,
-      },
-    });
-    if (result.count > 0) {
-      await touchNativeSyncRecipeAndContainingCookbooks(tx, input.recipeId, updatedAt);
-    }
-    return result.count > 0;
+  const result = await input.db.recipeCover.updateMany({
+    where: {
+      id: input.coverId,
+      recipeId: input.recipeId,
+      status: { not: "archived" },
+      archivedAt: null,
+    },
+    data: {
+      status: "processing",
+      generationStatus: "processing",
+      failureReason: null,
+      promptVersion: STYLIZATION_PROMPT_VERSION,
+      styleVersion: STYLIZATION_STYLE_VERSION,
+    },
   });
+  if (result.count > 0) {
+    await input.db.$transaction([
+      touchNativeSyncRecipeOperation(input.db, input.recipeId, updatedAt),
+      touchNativeSyncCookbooksForRecipeOperation(input.db, input.recipeId, updatedAt),
+    ]);
+  }
+  return result.count > 0;
 }
 
 async function markStylizationSucceeded(
@@ -259,28 +260,29 @@ async function markStylizationSucceeded(
   stylizedImageUrl: string,
 ): Promise<boolean> {
   const updatedAt = new Date();
-  return await input.db.$transaction(async (tx) => {
-    const result = await tx.recipeCover.updateMany({
-      where: {
-        id: input.coverId,
-        recipeId: input.recipeId,
-        status: { not: "archived" },
-        archivedAt: null,
-      },
-      data: {
-        stylizedImageUrl,
-        status: "ready",
-        generationStatus: "succeeded",
-        failureReason: null,
-        promptVersion: STYLIZATION_PROMPT_VERSION,
-        styleVersion: STYLIZATION_STYLE_VERSION,
-      },
-    });
-    if (result.count > 0) {
-      await touchNativeSyncRecipeAndContainingCookbooks(tx, input.recipeId, updatedAt);
-    }
-    return result.count > 0;
+  const result = await input.db.recipeCover.updateMany({
+    where: {
+      id: input.coverId,
+      recipeId: input.recipeId,
+      status: { not: "archived" },
+      archivedAt: null,
+    },
+    data: {
+      stylizedImageUrl,
+      status: "ready",
+      generationStatus: "succeeded",
+      failureReason: null,
+      promptVersion: STYLIZATION_PROMPT_VERSION,
+      styleVersion: STYLIZATION_STYLE_VERSION,
+    },
   });
+  if (result.count > 0) {
+    await input.db.$transaction([
+      touchNativeSyncRecipeOperation(input.db, input.recipeId, updatedAt),
+      touchNativeSyncCookbooksForRecipeOperation(input.db, input.recipeId, updatedAt),
+    ]);
+  }
+  return result.count > 0;
 }
 
 async function markStylizationFailed(
@@ -294,19 +296,20 @@ async function markStylizationFailed(
   if (!options.force && !wasRequested) return;
 
   const updatedAt = new Date();
-  await input.db.$transaction(async (tx) => {
-    await tx.recipeCover.update({
-      where: { id: cover.id },
-      data: {
-        status: failureStatusFor(cover),
-        generationStatus: "failed",
-        failureReason,
-        promptVersion: STYLIZATION_PROMPT_VERSION,
-        styleVersion: STYLIZATION_STYLE_VERSION,
-      },
-    });
-    await touchNativeSyncRecipeAndContainingCookbooks(tx, input.recipeId, updatedAt);
+  await input.db.recipeCover.update({
+    where: { id: cover.id },
+    data: {
+      status: failureStatusFor(cover),
+      generationStatus: "failed",
+      failureReason,
+      promptVersion: STYLIZATION_PROMPT_VERSION,
+      styleVersion: STYLIZATION_STYLE_VERSION,
+    },
   });
+  await input.db.$transaction([
+    touchNativeSyncRecipeOperation(input.db, input.recipeId, updatedAt),
+    touchNativeSyncCookbooksForRecipeOperation(input.db, input.recipeId, updatedAt),
+  ]);
 }
 
 function failureReasonFor(error: unknown): string {
@@ -417,48 +420,44 @@ async function autoActivateStylizedCoverIfSafe(input: ScheduleSpoonStylizationIn
   };
 
   const updatedAt = new Date();
-  await input.db.$transaction(async (tx) => {
-    const result = await tx.recipe.updateMany({
-      where: {
-        id: input.recipeId,
-        coverMode: "auto",
-        activeCoverId: recipe.activeCoverId,
-        ...noRealActiveCover,
-      },
-      data: {
-        activeCoverId: input.coverId,
-        activeCoverVariant: "stylized",
-        updatedAt,
-      },
-    });
-    if (result.count > 0) {
-      await touchNativeSyncCookbooksForRecipe(tx, input.recipeId, updatedAt);
-    }
+  const result = await input.db.recipe.updateMany({
+    where: {
+      id: input.recipeId,
+      coverMode: "auto",
+      activeCoverId: recipe.activeCoverId,
+      ...noRealActiveCover,
+    },
+    data: {
+      activeCoverId: input.coverId,
+      activeCoverVariant: "stylized",
+      updatedAt,
+    },
   });
+  if (result.count > 0) {
+    await touchNativeSyncCookbooksForRecipeOperation(input.db, input.recipeId, updatedAt);
+  }
 }
 
 async function activateStylizedCoverIfStillRequested(input: ScheduleSpoonStylizationInput): Promise<void> {
   if (!input.activateWhenReady || !input.activationGuard) return;
   const updatedAt = new Date();
-  await input.db.$transaction(async (tx) => {
-    const result = await tx.recipe.updateMany({
-      where: {
-        id: input.recipeId,
-        activeCoverId: input.activationGuard?.activeCoverId,
-        activeCoverVariant: input.activationGuard?.activeCoverVariant,
-        coverMode: input.activationGuard?.coverMode,
-      },
-      data: {
-        activeCoverId: input.coverId,
-        activeCoverVariant: "stylized",
-        coverMode: "manual",
-        updatedAt,
-      },
-    });
-    if (result.count > 0) {
-      await touchNativeSyncCookbooksForRecipe(tx, input.recipeId, updatedAt);
-    }
+  const result = await input.db.recipe.updateMany({
+    where: {
+      id: input.recipeId,
+      activeCoverId: input.activationGuard?.activeCoverId,
+      activeCoverVariant: input.activationGuard?.activeCoverVariant,
+      coverMode: input.activationGuard?.coverMode,
+    },
+    data: {
+      activeCoverId: input.coverId,
+      activeCoverVariant: "stylized",
+      coverMode: "manual",
+      updatedAt,
+    },
   });
+  if (result.count > 0) {
+    await touchNativeSyncCookbooksForRecipeOperation(input.db, input.recipeId, updatedAt);
+  }
 }
 
 async function captureGenerationException(
