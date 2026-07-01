@@ -76,8 +76,12 @@ import {
   handleNativeAppleSignIn,
   NativeAppleAuthError,
 } from "~/lib/apple-native-auth.server";
+import {
+  handleNativePasswordSignIn,
+  NativePasswordAuthError,
+} from "~/lib/native-password-auth.server";
 import { notifyForkOfMyRecipe } from "~/lib/notification-triggers.server";
-import { enforceRateLimit } from "~/lib/rate-limit.server";
+import { enforceAuthRateLimit, enforceRateLimit } from "~/lib/rate-limit.server";
 import { getRequestDb } from "~/lib/route-platform.server";
 import {
   API_V1_DISCOVERY_DATA,
@@ -210,6 +214,18 @@ function apiV1PrivateHeaders(requestId: string, json = true): Headers {
   return headers;
 }
 
+function apiV1SamePartyPrivateHeaders(requestId: string, json = true): Headers {
+  const headers = new Headers({
+    "X-Request-Id": requestId,
+    "Cache-Control": "private, no-store",
+    Pragma: "no-cache",
+  });
+  if (json) {
+    headers.set("Content-Type", "application/json; charset=utf-8");
+  }
+  return headers;
+}
+
 export function apiV1Success(requestId: string, data: unknown, status = 200, extraHeaders?: HeadersInit): Response {
   const headers = apiV1Headers(requestId);
   if (extraHeaders) {
@@ -223,6 +239,14 @@ export function apiV1Success(requestId: string, data: unknown, status = 200, ext
 
 function apiV1PrivateSuccess(requestId: string, data: unknown, status = 200, extraHeaders?: HeadersInit): Response {
   const headers = apiV1PrivateHeaders(requestId);
+  if (extraHeaders) {
+    new Headers(extraHeaders).forEach((value, key) => headers.set(key, value));
+  }
+  return Response.json({ ok: true, requestId, data }, { status, headers });
+}
+
+function apiV1SamePartyPrivateSuccess(requestId: string, data: unknown, status = 200, extraHeaders?: HeadersInit): Response {
+  const headers = apiV1SamePartyPrivateHeaders(requestId);
   if (extraHeaders) {
     new Headers(extraHeaders).forEach((value, key) => headers.set(key, value));
   }
@@ -254,6 +278,45 @@ export function apiV1ErrorResponse(requestId: string, error: ApiV1Error): Respon
   const headers = apiV1PrivateHeaders(requestId);
   if (error.code === "idempotency_in_progress") {
     headers.set("Retry-After", String(IDEMPOTENCY_RETRY_AFTER_SECONDS));
+  }
+  if (
+    error.code === "method_not_allowed" &&
+    error.details &&
+    typeof error.details === "object" &&
+    !Array.isArray(error.details) &&
+    typeof (error.details as { allow?: unknown }).allow === "string"
+  ) {
+    headers.set("Allow", (error.details as { allow: string }).allow);
+  }
+  return Response.json(body, {
+    status: error.status,
+    headers,
+  });
+}
+
+function apiV1SamePartyErrorResponse(requestId: string, error: ApiV1Error): Response {
+  const body: {
+    ok: false;
+    requestId: string;
+    error: { code: ApiV1ErrorCode; message: string; status: number; details?: unknown };
+  } = {
+    ok: false,
+    requestId,
+    error: {
+      code: error.code,
+      message: error.message,
+      status: error.status,
+    },
+  };
+  if (error.details !== undefined) {
+    body.error.details = error.details;
+  }
+  const headers = apiV1SamePartyPrivateHeaders(requestId);
+  if (error.code === "rate_limited" && error.details && typeof error.details === "object") {
+    const retryAfterSeconds = (error.details as { retryAfterSeconds?: unknown }).retryAfterSeconds;
+    if (typeof retryAfterSeconds === "number") {
+      headers.set("Retry-After", String(retryAfterSeconds));
+    }
   }
   if (
     error.code === "method_not_allowed" &&
@@ -367,6 +430,8 @@ function apiV1OperationFor(method: string, path: string): string | undefined {
       return "openapi.connector.read";
     case "POST auth-apple-native":
       return "auth.apple.native.sign-in";
+    case "POST auth-password-native":
+      return "auth.password.native.sign-in";
     case "GET search":
       return "search.read";
     case "GET recipes":
@@ -5185,7 +5250,7 @@ function optionalNativeAppleText(body: Record<string, unknown>, field: string, m
   return trimmed;
 }
 
-function nativeAppleTokenPayload(tokens: Awaited<ReturnType<typeof handleNativeAppleSignIn>>["tokens"]) {
+function nativeSignInTokenPayload(tokens: Awaited<ReturnType<typeof handleNativeAppleSignIn>>["tokens"]) {
   return {
     access_token: tokens.accessToken,
     refresh_token: tokens.refreshToken,
@@ -5214,7 +5279,7 @@ async function handleNativeAppleSignInRequest(args: ApiV1RouteArgs, requestId: s
       apiV1PrivateSuccess(requestId, {
         action: result.action,
         userId: result.userId,
-        ...nativeAppleTokenPayload(result.tokens),
+        ...nativeSignInTokenPayload(result.tokens),
       }, 201, TOKEN_RESPONSE_HEADERS),
       { idempotencyOutcome: "none" },
     );
@@ -5225,6 +5290,50 @@ async function handleNativeAppleSignInRequest(args: ApiV1RouteArgs, requestId: s
     }
     if (error instanceof Error && error.message.startsWith("Missing required environment variable")) {
       throw new ApiV1Error("validation_error", "Native Apple sign-in is not configured", { providerCode: "apple_native_unconfigured" });
+    }
+    throw error;
+  }
+}
+
+async function handleNativePasswordSignInRequest(args: ApiV1RouteArgs, requestId: string) {
+  const authRateLimit = await enforceAuthRateLimit(args.request, args.context.cloudflare?.env?.AUTH_IP_RATE_LIMITER);
+  if (!authRateLimit.allowed) {
+    const response = apiV1SamePartyErrorResponse(
+      requestId,
+      new ApiV1Error("rate_limited", "Too many requests. Try again later.", {
+        retryAfterSeconds: authRateLimit.retryAfterSeconds,
+        scope: authRateLimit.scope,
+      }),
+    );
+    return withApiV1Telemetry(response, {
+      errorCode: "rate_limited",
+      rateLimitScope: authRateLimit.scope,
+    });
+  }
+
+  const body = await parseApiV1JsonBody(args.request);
+  assertKnownFields(body, ["emailOrUsername", "password"]);
+  const emailOrUsername = nonblankString(body.emailOrUsername, "emailOrUsername", 320);
+  const password = nonblankString(body.password, "password", 1024);
+  const db = await getRequestDb(args.context);
+
+  try {
+    const result = await handleNativePasswordSignIn(
+      db,
+      { emailOrUsername, password },
+    );
+    return withApiV1Telemetry(
+      apiV1SamePartyPrivateSuccess(requestId, {
+        action: result.action,
+        userId: result.userId,
+        ...nativeSignInTokenPayload(result.tokens),
+      }, 201, TOKEN_RESPONSE_HEADERS),
+      { idempotencyOutcome: "none" },
+    );
+  } catch (error) {
+    if (error instanceof NativePasswordAuthError) {
+      const code = error.status === 401 ? "invalid_token" : "validation_error";
+      throw new ApiV1Error(code, error.message, { providerCode: error.code });
     }
     throw error;
   }
@@ -5301,6 +5410,10 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
   };
 
   try {
+    if (path === "auth/password/native" && args.request.method === "OPTIONS") {
+      return new Response(null, { status: 204, headers: apiV1SamePartyPrivateHeaders(requestId, false) });
+    }
+
     if (args.request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: apiV1Headers(requestId, false) });
     }
@@ -5366,6 +5479,15 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
 
     if (args.request.method === "POST" && path === "auth/apple/native") {
       const response = await handleNativeAppleSignInRequest(args, requestId);
+      return observeApiV1Response(args, { requestId, path, response, startedAt });
+    }
+
+    if (path === "auth/password/native" && args.request.method !== "POST") {
+      throw new ApiV1Error("method_not_allowed", "Method not allowed", { allow: "POST" });
+    }
+
+    if (args.request.method === "POST" && path === "auth/password/native") {
+      const response = await handleNativePasswordSignInRequest(args, requestId);
       return observeApiV1Response(args, { requestId, path, response, startedAt });
     }
 
@@ -5708,7 +5830,9 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
     throw new ApiV1Error("not_found", `Unknown Spoonjoy API v1 endpoint: /api/v1/${path}`);
   } catch (error) {
     if (error instanceof ApiV1Error) {
-      const response = apiV1ErrorResponse(requestId, error);
+      const response = path === "auth/password/native"
+        ? apiV1SamePartyErrorResponse(requestId, error)
+        : apiV1ErrorResponse(requestId, error);
       return observeApiV1Response(args, {
         requestId,
         path,
@@ -5722,7 +5846,9 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
     logApiV1InternalError(args, requestId, error);
     captureApiV1InternalException(args, error);
     const internalError = normalizeApiV1InternalError(error);
-    const response = apiV1ErrorResponse(requestId, internalError);
+    const response = path === "auth/password/native"
+      ? apiV1SamePartyErrorResponse(requestId, internalError)
+      : apiV1ErrorResponse(requestId, internalError);
     return observeApiV1Response(args, {
       requestId,
       path,

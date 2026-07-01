@@ -49,27 +49,21 @@ export async function createUser(
   return { id: user.id, email: user.email, username: user.username };
 }
 
-// Authenticate user by email and password
-export async function authenticateUser(
-  db: PrismaClient,
-  email: string,
-  password: string
-) {
-  const user = await db.user.findUnique({
-    where: { email: email.toLowerCase() },
-    select: {
-      id: true,
-      email: true,
-      username: true,
-      hashedPassword: true,
-    },
-  });
+type AuthenticatedUser = {
+  id: string;
+  email: string;
+  username: string;
+};
 
+async function authenticatePasswordUser(
+  user: (AuthenticatedUser & { hashedPassword: string | null }) | null,
+  password: string
+): Promise<AuthenticatedUser | null> {
   // Always run a bcrypt comparison — against the stored hash when the account
   // exists with a password, otherwise against DECOY_PASSWORD_HASH — so the
   // dominant cost (a ~70ms bcrypt compare) is paid whether or not the email is
   // registered (anti-enumeration). This equalizes the bcrypt window, not the
-  // whole request: the preceding findUnique still differs slightly for a hit vs
+  // whole request: the preceding lookup still differs slightly for a hit vs
   // a miss, but that delta is negligible next to bcrypt.
   const isValid = await verifyPassword(
     password,
@@ -84,6 +78,55 @@ export async function authenticateUser(
   }
 
   return { id: user.id, email: user.email, username: user.username };
+}
+
+// Authenticate user by email and password
+export async function authenticateUser(
+  db: PrismaClient,
+  email: string,
+  password: string
+): Promise<AuthenticatedUser | null> {
+  const user = await db.user.findUnique({
+    where: { email: email.toLowerCase() },
+    select: {
+      id: true,
+      email: true,
+      username: true,
+      hashedPassword: true,
+    },
+  });
+
+  return authenticatePasswordUser(user, password);
+}
+
+// Authenticate first-party native app sign-in by email or exact username.
+export async function authenticateUserByEmailOrUsername(
+  db: PrismaClient,
+  emailOrUsername: string,
+  password: string
+): Promise<AuthenticatedUser | null> {
+  const identifier = emailOrUsername.trim();
+  const user = identifier.includes("@")
+    ? await db.user.findUnique({
+        where: { email: identifier.toLowerCase() },
+        select: {
+          id: true,
+          email: true,
+          username: true,
+          hashedPassword: true,
+        },
+      })
+    : await db.user.findUnique({
+        where: { username: identifier },
+        select: {
+          id: true,
+          email: true,
+          username: true,
+          hashedPassword: true,
+        },
+      });
+
+  return authenticatePasswordUser(user, password);
 }
 
 // Get user by ID

@@ -256,16 +256,22 @@ const tokenAcquisitionPaths = [
     sample: "POST /oauth/register -> client_id: cm_client_id_from_register\nGET /oauth/authorize?client_id=cm_client_id_from_register&redirect_uri=...&response_type=code&scope=shopping_list%3Aread+shopping_list%3Awrite&state=...&code_challenge=...&code_challenge_method=S256\nPOST /oauth/token -> access_token: sj_...\nPOST /oauth/revoke -> revoke refresh_token and matching live OAuth access credentials",
   },
   {
+    title: "First-party native token: Spoonjoy Apple app sign-in",
+    mode: "Native Apple",
+    body: "Spoonjoy's own native Apple app can exchange either a native Sign in with Apple credential or a Spoonjoy username/password credential for the app's rotating token session. This is a first-party app bootstrap path, not OAuth grant_type=password, and native clients must never persist the password after the request completes. The password endpoint is online-only, rate limited with Spoonjoy's dedicated auth limiter, returns no session cookie, and does not publish wildcard browser CORS headers.",
+    sample: 'POST /api/v1/auth/password/native\nContent-Type: application/json\nBody: { "emailOrUsername": "ari@spoonjoy.app", "password": "correct horse battery staple" }\nResponse: access_token sj_... + refresh_token ort_...',
+  },
+  {
     title: "Delegated token: approval link",
     mode: "Agent/device",
     body: "For clients that cannot run a browser-based OAuth callback, call POST /api/tools/start_agent_connection, show the authorizationUrl or stable verificationUri plus userCode to the chef, then poll POST /api/tools/poll_agent_connection no faster than the returned interval. Pass scopes for least privilege, such as shopping_list:read shopping_list:write; omitted scopes default to the same shopping-list read/write pair. The approval page also uses Spoonjoy's full login surface before issuing a one-time-display sj_... bearer token plus credential id. Personal and delegated bearer tokens do not expire unless expiresAt is non-null; rerun approval when a stored token returns 401 invalid_token. A device can revoke its own credential id with DELETE /api/v1/tokens/{credentialId}; revoking any other token requires tokens:write.",
     sample: "POST /api/tools/start_agent_connection -> verificationUri + verificationUriComplete + authorizationUrl + userCode + deviceCode + expiresIn: 600\nPOST /api/tools/poll_agent_connection -> status: pending | approved | denied | expired | claimed\nApproved response -> token: sj_... + credential metadata, including scopes and expiresAt",
   },
   {
-    title: "No password-token API",
+    title: "No third-party password-token API",
     mode: "Security",
-    body: "Spoonjoy does not support an OAuth password grant or API endpoint where a third-party client trades a chef's password for a token. Email/password login creates a session cookie, not an API token. Clients should use OAuth/PKCE or delegated approval so Spoonjoy, not the client, handles password, passkey, and provider login.",
-    sample: "Do not implement: grant_type=password\nUse instead: OAuth/PKCE or delegated approval link",
+    body: "Spoonjoy does not support an OAuth password grant or third-party API endpoint where a client trades a chef's password for a token. Browser email/password login creates a session cookie, not an API token. The only password-to-token exception is Spoonjoy's own native Apple app endpoint, which exists so the first-party app can sign in without shoving chefs through the website. Third-party clients should use OAuth/PKCE or delegated approval so Spoonjoy, not the client, handles password, passkey, and provider login.",
+    sample: "Do not implement: grant_type=password\nUse instead for third parties: OAuth/PKCE or delegated approval link",
   },
 ] as const;
 

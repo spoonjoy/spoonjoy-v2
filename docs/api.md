@@ -152,7 +152,7 @@ External clients that run outside the Spoonjoy browser session use bearer creden
 Supported entry points:
 
 - Native account settings: `GET /api/v1/me`, `PATCH /api/v1/me`, `POST /api/v1/me/photo`, `DELETE /api/v1/me/photo`, `GET /api/v1/me/notification-preferences`, `PATCH /api/v1/me/notification-preferences`, `POST /api/v1/me/apns-devices`, `DELETE /api/v1/me/apns-devices/{deviceId}`, `GET /api/v1/me/connections`, and `DELETE /api/v1/me/connections/{connectionId}`
-- Native Apple app sign-in: `POST /api/v1/auth/apple/native`
+- Native Apple app sign-in: `POST /api/v1/auth/apple/native` and `POST /api/v1/auth/password/native`
 - Bearer credentials: `GET /api/v1/tokens`, `POST /api/v1/tokens`, and `DELETE /api/v1/tokens/{credentialId}`
 - OAuth/DCR clients: `POST /oauth/register`, `GET /oauth/authorize`, `POST /oauth/token`, and `POST /oauth/revoke`
 - Delegated agent connection: `POST /api/tools/start_agent_connection` and `POST /api/tools/poll_agent_connection`
@@ -226,6 +226,40 @@ The token response contains `access_token: "sj_..."`, `token_type: "Bearer"`, `e
 
 Registration can validate optional `scope` metadata, but it does not grant or remember that scope. Always send the requested scope on `/oauth/authorize`. Blank OAuth authorize scope defaults to kitchen:read.
 
+### First-party native token: Spoonjoy Apple app sign-in
+
+Spoonjoy's own native Apple app can exchange either a native Sign in with Apple credential or a Spoonjoy username/password credential for the app's rotating token session. This is a first-party app bootstrap path, not OAuth `grant_type=password`, and native clients must never persist the password after the request completes.
+
+```http
+POST /api/v1/auth/password/native
+Content-Type: application/json
+
+{
+  "emailOrUsername": "ari@spoonjoy.app",
+  "password": "correct horse battery staple"
+}
+```
+
+Response:
+
+```json
+{
+  "ok": true,
+  "requestId": "req_...",
+  "data": {
+    "action": "user_logged_in",
+    "userId": "chef_...",
+    "access_token": "sj_...",
+    "refresh_token": "ort_...",
+    "token_type": "Bearer",
+    "expires_in": 900,
+    "scope": "kitchen:read kitchen:write shopping_list:read shopping_list:write account:read account:write"
+  }
+}
+```
+
+The password endpoint is online-only, rate limited with Spoonjoy's dedicated auth limiter, returns no session cookie, and intentionally does not publish wildcard browser CORS headers. Local and production native clients use the returned access token for API calls, store the rotating refresh token in Keychain, and refresh through the existing OAuth refresh-token path.
+
 ### Delegated token: approval link
 
 For agents, CLIs, appliances, or devices that cannot run a browser-based OAuth callback, use the delegated approval link. Call `POST /api/tools/start_agent_connection`, show the returned `authorizationUrl` and `userCode` to the chef, then poll `POST /api/tools/poll_agent_connection` with the returned `deviceCode` no faster than the returned `interval`.
@@ -242,13 +276,13 @@ POST /api/tools/poll_agent_connection -> status: pending | approved | denied | e
 Approved response -> token: sj_... + credential metadata, including scopes and expiresAt
 ```
 
-### No password-token API
+### No third-party password-token API
 
-Spoonjoy does not support an OAuth password grant or API endpoint where a third-party client trades a chef's password for a token. Email/password login creates a session cookie, not an API token. Clients should use OAuth/PKCE or delegated approval so Spoonjoy, not the client, handles password, passkey, and provider login.
+Spoonjoy does not support an OAuth password grant or third-party API endpoint where an external client trades a chef's password for a token. Browser email/password login creates a session cookie, not an API token. External clients should use OAuth/PKCE or delegated approval so Spoonjoy, not the client, handles password, passkey, and provider login. The only password-to-token exception is Spoonjoy's own native Apple app endpoint described above.
 
 ```text
 Do not implement: grant_type=password
-Use instead: OAuth/PKCE or delegated approval link
+Use instead for third parties: OAuth/PKCE or delegated approval link
 ```
 
 ## Auth Implementation

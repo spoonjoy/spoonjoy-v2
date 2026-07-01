@@ -40,6 +40,8 @@ describe("developer platform docs drift", () => {
 
   it("documents REST auth entry points for personal tokens, OAuth, delegated auth, and MCP", () => {
     expect(apiDocs).toContain(API_V1_DISCOVERY_DATA.auth.tokenUrl);
+    expect(apiDocs).toContain(API_V1_DISCOVERY_DATA.auth.native.appleSignInUrl);
+    expect(apiDocs).toContain(API_V1_DISCOVERY_DATA.auth.native.passwordSignInUrl);
     expect(apiDocs).toContain(API_V1_DISCOVERY_DATA.auth.oauth.register);
     expect(apiDocs).toContain(API_V1_DISCOVERY_DATA.auth.oauth.authorize);
     expect(apiDocs).toContain(API_V1_DISCOVERY_DATA.auth.oauth.token);

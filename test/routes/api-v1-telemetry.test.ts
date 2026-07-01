@@ -527,6 +527,27 @@ describe("API v1 mutation and validation telemetry", () => {
     });
   });
 
+  it("captures native password sign-in operation metadata without recording password material", async () => {
+    const request = apiJsonRequest("POST", "auth/password/native", "req_native_password_operation", {}, {
+      emailOrUsername: "native@example.com",
+      password: "do-not-log-me",
+    });
+
+    const response = await action(routeArgs(request.request, "auth/password/native").args);
+
+    expect(response.status).toBe(401);
+    expectApiV1ErrorEvent({
+      routeTemplate: "/api/v1/auth/password/native",
+      requestId: "req_native_password_operation",
+      operation: "auth.password.native.sign-in",
+      status: 401,
+      errorCode: "invalid_token",
+      authMode: "anonymous",
+      privacyClass: "public",
+      forbidden: [request.bodyText, "native@example.com", "do-not-log-me"],
+    });
+  });
+
   it("captures recipe write operation names on authentication failures", async () => {
     const fixture = await createRecipeFixture(db);
 

@@ -266,6 +266,10 @@ const schemas = {
     email: { type: ["string", "null"], maxLength: 320, description: "Apple email fallback from the native credential, used only when the verified token omits email." },
     fullName: { type: ["string", "null"], maxLength: 320, description: "Display name from the native Apple credential when Apple returns it on first sign-in." },
   }),
+  NativePasswordSignInRequest: objectSchema(["emailOrUsername", "password"], {
+    emailOrUsername: { type: "string", minLength: 1, maxLength: 320, description: "Spoonjoy account email address or exact username. This first-party native app endpoint is not OAuth grant_type=password." },
+    password: { type: "string", minLength: 1, maxLength: 1024, description: "Spoonjoy account password. Native clients must submit it only over HTTPS and must never persist it." },
+  }),
   NativeAppleSignInTokenData: objectSchema(["action", "userId", "access_token", "refresh_token", "token_type", "expires_in", "scope"], {
     action: { type: "string", enum: ["user_created", "user_logged_in"] },
     userId: idSchema,
@@ -279,6 +283,20 @@ const schemas = {
     ok: { const: true },
     requestId: idSchema,
     data: ref("NativeAppleSignInTokenData"),
+  }),
+  NativePasswordSignInTokenData: objectSchema(["action", "userId", "access_token", "refresh_token", "token_type", "expires_in", "scope"], {
+    action: { type: "string", enum: ["user_logged_in"] },
+    userId: idSchema,
+    access_token: { type: "string", pattern: "^sj_" },
+    refresh_token: { type: "string", pattern: "^ort_" },
+    token_type: { const: "Bearer" },
+    expires_in: { type: "integer", const: OAUTH_ACCESS_TOKEN_TTL_SECONDS },
+    scope: { type: "string" },
+  }),
+  NativePasswordSignInEnvelope: objectSchema(["ok", "requestId", "data"], {
+    ok: { const: true },
+    requestId: idSchema,
+    data: ref("NativePasswordSignInTokenData"),
   }),
   OAuthTokenResponse: objectSchema(["access_token", "refresh_token", "token_type", "expires_in", "scope"], {
     access_token: { type: "string", pattern: "^sj_" },
@@ -1232,6 +1250,9 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
   "/api/v1/auth/apple/native": {
     POST: { operationId: "postApiV1AuthAppleNative", tags: ["Auth"], summary: "Exchange a native Sign in with Apple credential for Spoonjoy app tokens", auth: "optional", scopes: [], success: { 201: "NativeAppleSignInEnvelope" }, errors: ["invalid_json", "validation_error", "invalid_token", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "NativeAppleSignInRequest" },
   },
+  "/api/v1/auth/password/native": {
+    POST: { operationId: "postApiV1AuthPasswordNative", tags: ["Auth"], summary: "Exchange first-party native Spoonjoy username/password credentials for app tokens", auth: "optional", scopes: [], success: { 201: "NativePasswordSignInEnvelope" }, errors: ["invalid_json", "validation_error", "invalid_token", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "NativePasswordSignInRequest" },
+  },
   "/api/v1/search": {
     GET: { operationId: "getApiV1Search", tags: ["Search"], summary: "Search recipes, cookbooks, chefs, and authorized private shopping-list items", auth: "optional", scopes: [], success: { 200: "SearchEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "method_not_allowed", "rate_limited", "internal_error"], parameters: [queryParameters.query, queryParameters.q, queryParameters.scope, queryParameters.limit] },
   },
@@ -2005,6 +2026,19 @@ const responseExamples: Record<string, unknown> = {
       scope: "kitchen:read kitchen:write shopping_list:read shopping_list:write account:read account:write",
     },
   },
+  NativePasswordSignInEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      action: "user_logged_in",
+      userId: "chef_1",
+      access_token: "sj_secret",
+      refresh_token: "ort_secret",
+      token_type: "Bearer",
+      expires_in: OAUTH_ACCESS_TOKEN_TTL_SECONDS,
+      scope: "kitchen:read kitchen:write shopping_list:read shopping_list:write account:read account:write",
+    },
+  },
   TokenListEnvelope: { ok: true, requestId: "req_example", data: { tokens: [exampleCredential] } },
   CreateTokenEnvelope: { ok: true, requestId: "req_example", data: { token: "sj_secret", credential: exampleCredential } },
   RevokeTokenEnvelope: { ok: true, requestId: "req_example", data: { revoked: true, credential: { ...exampleCredential, revokedAt: exampleTimestamp } } },
@@ -2142,6 +2176,10 @@ const requestExamples: Record<string, unknown> = {
     rawNonce: "native-nonce-uuid",
     email: "ari@spoonjoy.app",
     fullName: "Ari",
+  },
+  NativePasswordSignInRequest: {
+    emailOrUsername: "ari@spoonjoy.app",
+    password: "correct horse battery staple",
   },
   CreateTokenRequest: { name: "Tiny client", scopes: ["recipes:read", "shopping_list:read", "shopping_list:write"] },
   CreateRecipeSpoonRequest: {
