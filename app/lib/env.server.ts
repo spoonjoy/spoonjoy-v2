@@ -8,6 +8,7 @@
  * - Google OAuth: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
  * - GitHub OAuth: GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET
  * - Apple OAuth: APPLE_CLIENT_ID, APPLE_TEAM_ID, APPLE_KEY_ID, APPLE_PRIVATE_KEY
+ * - Native Apple Sign in: APPLE_NATIVE_CLIENT_IDS (or APPLE_NATIVE_CLIENT_ID)
  *
  * Set secrets in production via: wrangler secret put <SECRET_NAME>
  */
@@ -24,6 +25,10 @@ export interface AppleOAuthConfig {
   privateKey: string;
 }
 
+export interface AppleNativeAuthConfig {
+  clientIds: string[];
+}
+
 export interface GitHubOAuthConfig {
   clientId: string;
   clientSecret: string;
@@ -35,6 +40,8 @@ export interface OAuthEnv {
   GITHUB_CLIENT_ID?: string;
   GITHUB_CLIENT_SECRET?: string;
   APPLE_CLIENT_ID?: string;
+  APPLE_NATIVE_CLIENT_ID?: string;
+  APPLE_NATIVE_CLIENT_IDS?: string;
   APPLE_TEAM_ID?: string;
   APPLE_KEY_ID?: string;
   APPLE_PRIVATE_KEY?: string;
@@ -121,6 +128,28 @@ export function getAppleOAuthConfig(env: OAuthEnv): AppleOAuthConfig {
     keyId: requireEnvValue(env, "APPLE_KEY_ID"),
     privateKey: requireEnvValue(env, "APPLE_PRIVATE_KEY"),
   };
+}
+
+export function getAppleNativeAuthConfig(env: OAuthEnv): AppleNativeAuthConfig {
+  const configured =
+    normalizeEnvValue(env.APPLE_NATIVE_CLIENT_IDS) ??
+    normalizeEnvValue(env.APPLE_NATIVE_CLIENT_ID);
+  const fallback = normalizeEnvValue(env.APPLE_CLIENT_ID);
+  const rawClientIds = configured ?? fallback;
+  if (!rawClientIds) {
+    throw new Error("Missing required environment variable: APPLE_NATIVE_CLIENT_IDS");
+  }
+
+  const clientIds = Array.from(new Set(
+    rawClientIds
+      .split(",")
+      .map((clientId) => clientId.trim())
+      .filter(Boolean)
+  ));
+  if (clientIds.length === 0) {
+    throw new Error("Missing required environment variable: APPLE_NATIVE_CLIENT_IDS");
+  }
+  return { clientIds };
 }
 
 const ALL_OAUTH_ENV_VARS = [
