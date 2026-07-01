@@ -71,7 +71,11 @@ import {
   type NativeRecipeStepIngredientInput,
   type NativeRecipeStepIngredientCreateInput,
 } from "~/lib/api-v1-recipe-steps.server";
-import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
+import { getAppleNativeAuthConfig, getVapidConfig, type OAuthEnv, type VapidEnv } from "~/lib/env.server";
+import {
+  handleNativeAppleSignIn,
+  NativeAppleAuthError,
+} from "~/lib/apple-native-auth.server";
 import { notifyForkOfMyRecipe } from "~/lib/notification-triggers.server";
 import { enforceRateLimit } from "~/lib/rate-limit.server";
 import { getRequestDb } from "~/lib/route-platform.server";
@@ -361,6 +365,8 @@ function apiV1OperationFor(method: string, path: string): string | undefined {
       return "openapi.sdk.read";
     case "GET openapi-connector":
       return "openapi.connector.read";
+    case "POST auth-apple-native":
+      return "auth.apple.native.sign-in";
     case "GET search":
       return "search.read";
     case "GET recipes":
@@ -5165,6 +5171,65 @@ function assertBearerScopeSubset(principal: ApiPrincipal, storedScopes: string) 
   }
 }
 
+function optionalNativeAppleText(body: Record<string, unknown>, field: string, maxLength: number): string | null {
+  const value = body[field];
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string") {
+    throw new ApiV1Error("validation_error", `${field} must be a string`);
+  }
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (trimmed.length > maxLength) {
+    throw new ApiV1Error("validation_error", `${field} must be at most ${maxLength} characters`);
+  }
+  return trimmed;
+}
+
+function nativeAppleTokenPayload(tokens: Awaited<ReturnType<typeof handleNativeAppleSignIn>>["tokens"]) {
+  return {
+    access_token: tokens.accessToken,
+    refresh_token: tokens.refreshToken,
+    token_type: "Bearer",
+    expires_in: tokens.expiresIn,
+    scope: tokens.scope,
+  };
+}
+
+async function handleNativeAppleSignInRequest(args: ApiV1RouteArgs, requestId: string) {
+  const body = await parseApiV1JsonBody(args.request);
+  assertKnownFields(body, ["identityToken", "rawNonce", "email", "fullName"]);
+  const identityToken = nonblankString(body.identityToken, "identityToken", 8192);
+  const rawNonce = nonblankString(body.rawNonce, "rawNonce", 256);
+  const email = optionalNativeAppleText(body, "email", 320);
+  const fullName = optionalNativeAppleText(body, "fullName", 320);
+  const db = await getRequestDb(args.context);
+
+  try {
+    const result = await handleNativeAppleSignIn(
+      db,
+      { identityToken, rawNonce, email, fullName },
+      getAppleNativeAuthConfig((args.context.cloudflare?.env ?? {}) as OAuthEnv),
+    );
+    return withApiV1Telemetry(
+      apiV1PrivateSuccess(requestId, {
+        action: result.action,
+        userId: result.userId,
+        ...nativeAppleTokenPayload(result.tokens),
+      }, 201, TOKEN_RESPONSE_HEADERS),
+      { idempotencyOutcome: "none" },
+    );
+  } catch (error) {
+    if (error instanceof NativeAppleAuthError) {
+      const code = error.status === 401 ? "invalid_token" : "validation_error";
+      throw new ApiV1Error(code, error.message, { providerCode: error.code });
+    }
+    if (error instanceof Error && error.message.startsWith("Missing required environment variable")) {
+      throw new ApiV1Error("validation_error", "Native Apple sign-in is not configured", { providerCode: "apple_native_unconfigured" });
+    }
+    throw error;
+  }
+}
+
 async function handleTokenList(args: ApiV1RouteArgs, requestId: string, authenticated: ApiPrincipal) {
   const db = await getRequestDb(args.context);
   const credentials = await db.apiCredential.findMany({
@@ -5293,6 +5358,15 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
         headers: apiV1Headers(requestId),
       });
       return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (path === "auth/apple/native" && args.request.method !== "POST") {
+      throw new ApiV1Error("method_not_allowed", "Method not allowed", { allow: "POST" });
+    }
+
+    if (args.request.method === "POST" && path === "auth/apple/native") {
+      const response = await handleNativeAppleSignInRequest(args, requestId);
+      return observeApiV1Response(args, { requestId, path, response, startedAt });
     }
 
     if (args.request.method === "GET" && path === "search") {
