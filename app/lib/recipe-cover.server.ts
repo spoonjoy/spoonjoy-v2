@@ -1,5 +1,8 @@
 import type { PrismaClient, RecipeCover } from "@prisma/client";
-import { touchNativeSyncCookbooksForRecipe } from "~/lib/native-sync-invalidation.server";
+import {
+  touchNativeSyncCookbooksForRecipe,
+  touchNativeSyncCookbooksForRecipeOperation,
+} from "~/lib/native-sync-invalidation.server";
 
 export type RecipeCoverSourceType = "ai-placeholder" | "import" | "chef-upload" | "spoon";
 export type RecipeCoverVariant = "image" | "stylized";
@@ -222,8 +225,8 @@ export async function setActiveRecipeCover(
   assertVariantAvailable(cover, input.variant);
 
   const updatedAt = new Date();
-  return db.$transaction(async (tx) => {
-    const recipe = await tx.recipe.update({
+  const [recipe] = await db.$transaction([
+    db.recipe.update({
       where: { id: input.recipeId },
       data: {
         activeCoverId: cover.id,
@@ -231,10 +234,10 @@ export async function setActiveRecipeCover(
         coverMode: "manual",
         updatedAt,
       },
-    });
-    await touchNativeSyncCookbooksForRecipe(tx, input.recipeId, updatedAt);
-    return recipe;
-  });
+    }),
+    touchNativeSyncCookbooksForRecipeOperation(db, input.recipeId, updatedAt),
+  ]);
+  return recipe;
 }
 
 export async function clearActiveRecipeCover(
@@ -242,8 +245,8 @@ export async function clearActiveRecipeCover(
   recipeId: string,
 ) {
   const updatedAt = new Date();
-  return db.$transaction(async (tx) => {
-    const recipe = await tx.recipe.update({
+  const [recipe] = await db.$transaction([
+    db.recipe.update({
       where: { id: recipeId },
       data: {
         activeCoverId: null,
@@ -251,10 +254,10 @@ export async function clearActiveRecipeCover(
         coverMode: "none",
         updatedAt,
       },
-    });
-    await touchNativeSyncCookbooksForRecipe(tx, recipeId, updatedAt);
-    return recipe;
-  });
+    }),
+    touchNativeSyncCookbooksForRecipeOperation(db, recipeId, updatedAt),
+  ]);
+  return recipe;
 }
 
 export async function archiveRecipeCover(

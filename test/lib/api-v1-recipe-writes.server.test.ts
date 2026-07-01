@@ -278,41 +278,40 @@ describe("API v1 recipe write helpers", () => {
     });
   });
 
-  it("writes recipe delete tombstones through the same transaction client", async () => {
-    const outerRecipeUpdate = vi.fn();
-    const transactionRecipeUpdate = vi.fn(async () => ({
+  it("batches recipe delete tombstones with the delete write", async () => {
+    const recipeUpdate = vi.fn(async () => ({
       id: "recipe_1",
       title: "Atomic Delete",
       deletedAt: new Date("2026-07-01T10:00:00.000Z"),
       updatedAt: new Date("2026-07-01T10:00:00.000Z"),
     }));
-    const transactionCookbookUpdateMany = vi.fn(async () => ({ count: 1 }));
-    const transactionTombstoneUpsert = vi.fn(async () => ({}));
-    const transactionClient = {
-      recipe: { update: transactionRecipeUpdate },
-      cookbook: { updateMany: transactionCookbookUpdateMany },
-      nativeSyncTombstone: { upsert: transactionTombstoneUpsert },
-    };
+    const cookbookUpdateMany = vi.fn(async () => ({ count: 1 }));
+    const tombstoneUpsert = vi.fn(async () => ({}));
     const dbMock = {
       recipe: {
-        findUnique: vi.fn(async () => ({ id: "recipe_1", chefId: "chef_1", deletedAt: null })),
-        update: outerRecipeUpdate,
+        findUnique: vi.fn(async () => ({ id: "recipe_1", chefId: "chef_1", title: "Atomic Delete", deletedAt: null })),
+        update: recipeUpdate,
       },
-      $transaction: vi.fn(async (callback: (tx: typeof transactionClient) => unknown) => await callback(transactionClient)),
+      cookbook: {
+        updateMany: cookbookUpdateMany,
+      },
+      nativeSyncTombstone: {
+        upsert: tombstoneUpsert,
+      },
+      $transaction: vi.fn(async (ops: Array<Promise<unknown>>) => await Promise.all(ops)),
     } as unknown as LocalDb;
 
     const result = expectOk(await deleteNativeRecipe(dbMock, "chef_1", "recipe_1"));
 
     expect(result.data.recipe).toMatchObject({ id: "recipe_1", title: "Atomic Delete" });
-    expect(outerRecipeUpdate).not.toHaveBeenCalled();
-    expect(transactionRecipeUpdate).toHaveBeenCalledWith(expect.objectContaining({
+    expect(recipeUpdate).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: "recipe_1" },
       data: { deletedAt: expect.any(Date), updatedAt: expect.any(Date) },
     }));
-    expect(transactionCookbookUpdateMany).toHaveBeenCalledWith(expect.objectContaining({
+    expect(cookbookUpdateMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { recipes: { some: { recipeId: "recipe_1" } } },
     }));
-    expect(transactionTombstoneUpsert).toHaveBeenCalledWith(expect.objectContaining({
+    expect(tombstoneUpsert).toHaveBeenCalledWith(expect.objectContaining({
       where: {
         accountId_resourceType_resourceId: {
           accountId: "chef_1",
@@ -330,6 +329,11 @@ describe("API v1 recipe write helpers", () => {
         title: "Atomic Delete",
       }),
     }));
+    expect(dbMock.$transaction).toHaveBeenCalledWith([
+      expect.any(Promise),
+      expect.any(Promise),
+      expect.any(Promise),
+    ]);
   });
 
   it("forks recipes through helper success, source-missing, and title-exhaustion paths", async () => {

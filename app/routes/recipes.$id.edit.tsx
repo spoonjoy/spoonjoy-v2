@@ -26,7 +26,7 @@ import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.s
 import { createCover, getRecipeCoverImageUrl, setActiveRecipeCover } from "~/lib/recipe-cover.server";
 import { scheduleSpoonCoverStylization } from "~/lib/spoon-cover-stylization.server";
 import {
-  touchNativeSyncRecipeAndContainingCookbooks,
+  touchNativeSyncCookbooksForRecipeOperation,
   touchNativeSyncRecipeOperation,
 } from "~/lib/native-sync-invalidation.server";
 import { Button } from "~/components/ui/button";
@@ -293,13 +293,13 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 
   try {
     const updatedAt = new Date();
-    await database.$transaction(async (tx) => {
-      await tx.recipe.update({
+    await database.$transaction([
+      database.recipe.update({
         where: { id },
         data: { ...updateData, updatedAt },
-      });
-      await touchNativeSyncRecipeAndContainingCookbooks(tx, id, updatedAt);
-    });
+      }),
+      touchNativeSyncCookbooksForRecipeOperation(database, id, updatedAt),
+    ]);
 
     if (uploadedImageUrl) {
       const uploadedCover = await createCover(database, {
@@ -329,8 +329,8 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       });
     } else if (clearImage) {
       const updatedAt = new Date();
-      await database.$transaction(async (tx) => {
-        await tx.recipe.update({
+      await database.$transaction([
+        database.recipe.update({
           where: { id },
           data: {
             activeCoverId: null,
@@ -338,9 +338,9 @@ export async function action({ request, params, context }: Route.ActionArgs) {
             coverMode: "none",
             updatedAt,
           },
-        });
-        await touchNativeSyncRecipeAndContainingCookbooks(tx, id, updatedAt);
-      });
+        }),
+        touchNativeSyncCookbooksForRecipeOperation(database, id, updatedAt),
+      ]);
     }
 
     return redirect(`/recipes/${id}`);
