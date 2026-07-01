@@ -31,6 +31,7 @@ describe("production readiness helpers", () => {
       "GITHUB_CLIENT_ID",
       "GITHUB_CLIENT_SECRET",
       "APPLE_CLIENT_ID",
+      "APPLE_NATIVE_CLIENT_IDS",
       "APPLE_TEAM_ID",
       "APPLE_KEY_ID",
       "APPLE_PRIVATE_KEY",
@@ -69,7 +70,7 @@ describe("production readiness helpers", () => {
       },
       {
         name: "Apple OAuth",
-        secrets: ["APPLE_CLIENT_ID", "APPLE_TEAM_ID", "APPLE_KEY_ID", "APPLE_PRIVATE_KEY"],
+        secrets: ["APPLE_CLIENT_ID", "APPLE_NATIVE_CLIENT_IDS", "APPLE_TEAM_ID", "APPLE_KEY_ID", "APPLE_PRIVATE_KEY"],
       },
       {
         name: "OpenAI AI features",

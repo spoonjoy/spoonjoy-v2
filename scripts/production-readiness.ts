@@ -19,7 +19,7 @@ export const OPTIONAL_FEATURE_SECRET_GROUPS = [
   },
   {
     name: "Apple OAuth",
-    secrets: ["APPLE_CLIENT_ID", "APPLE_TEAM_ID", "APPLE_KEY_ID", "APPLE_PRIVATE_KEY"],
+    secrets: ["APPLE_CLIENT_ID", "APPLE_NATIVE_CLIENT_IDS", "APPLE_TEAM_ID", "APPLE_KEY_ID", "APPLE_PRIVATE_KEY"],
   },
   {
     name: "OpenAI AI features",

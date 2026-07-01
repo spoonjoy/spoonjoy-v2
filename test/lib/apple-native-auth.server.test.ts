@@ -8,7 +8,9 @@ import {
 } from "~/lib/apple-native-auth.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 
-const APPLE_NATIVE_CLIENT_ID = "app.spoonjoy.Spoonjoy";
+const APPLE_NATIVE_IOS_CLIENT_ID = "app.spoonjoy.Spoonjoy";
+const APPLE_NATIVE_MACOS_CLIENT_ID = "app.spoonjoy.Spoonjoy.mac";
+const APPLE_NATIVE_CLIENT_IDS = [APPLE_NATIVE_IOS_CLIENT_ID, APPLE_NATIVE_MACOS_CLIENT_ID];
 
 function base64Url(bytes: Uint8Array): string {
   const binary = Array.from(bytes, (byte) => String.fromCharCode(byte)).join("");
@@ -52,7 +54,7 @@ async function nativeAppleTokenFixture(
   const header = base64UrlJson({ alg: "RS256", kid, ...options.header });
   const payload = base64UrlJson({
     iss: "https://appleid.apple.com",
-    aud: APPLE_NATIVE_CLIENT_ID,
+    aud: APPLE_NATIVE_IOS_CLIENT_ID,
     exp: now + 300,
     iat: now,
     sub: "apple-user-123",
@@ -92,7 +94,7 @@ async function expectNativeAppleVerificationError(
       identityToken: options.identityToken ?? fixture.identityToken,
       rawNonce: options.rawNonce ?? fixture.rawNonce,
     },
-    { clientIds: [APPLE_NATIVE_CLIENT_ID] },
+    { clientIds: APPLE_NATIVE_CLIENT_IDS },
     { fetcher: options.fetcher ?? fetchAppleKeys(fixture.jwks), now: options.now },
   )).rejects.toMatchObject({ code: providerCode });
 }
@@ -103,7 +105,7 @@ function routeArgs(request: Request, splat = "auth/apple/native") {
     params: { "*": splat },
     context: {
       cloudflare: {
-        env: { APPLE_NATIVE_CLIENT_IDS: APPLE_NATIVE_CLIENT_ID },
+        env: { APPLE_NATIVE_CLIENT_IDS: APPLE_NATIVE_CLIENT_IDS.join(",") },
       },
     },
   } as any;
@@ -164,6 +166,18 @@ describe("native Sign in with Apple API", () => {
 
     expect(loginResponse.status).toBe(201);
     expect(loginJson.data).toMatchObject({ action: "user_logged_in" });
+  });
+
+  it("accepts the macOS native Apple identity-token audience", async () => {
+    const fixture = await nativeAppleTokenFixture({ aud: APPLE_NATIVE_MACOS_CLIENT_ID });
+    const claims = await verifyNativeAppleIdentityToken(
+      { identityToken: fixture.identityToken, rawNonce: fixture.rawNonce },
+      { clientIds: APPLE_NATIVE_CLIENT_IDS },
+      { fetcher: fetchAppleKeys(fixture.jwks) },
+    );
+
+    expect(claims.id).toBe("apple-user-123");
+    expect(claims.email).toBe("native-apple@example.com");
   });
 
   it("rejects Apple tokens minted for a different native client id", async () => {
@@ -324,7 +338,7 @@ describe("native Sign in with Apple API", () => {
 
   it("accepts array audiences, fallback email, and boolean Apple email flags", async () => {
     const fixture = await nativeAppleTokenFixture({
-      aud: ["other.client", APPLE_NATIVE_CLIENT_ID],
+      aud: ["other.client", APPLE_NATIVE_IOS_CLIENT_ID],
       email: undefined,
       email_verified: true,
       is_private_email: "true",
@@ -337,7 +351,7 @@ describe("native Sign in with Apple API", () => {
         email: "fallback@example.com",
         fullName: " Fallback Chef ",
       },
-      { clientIds: [APPLE_NATIVE_CLIENT_ID] },
+      { clientIds: APPLE_NATIVE_CLIENT_IDS },
       { fetcher: fetchAppleKeys(fixture.jwks) },
     );
 
@@ -358,7 +372,7 @@ describe("native Sign in with Apple API", () => {
         rawNonce: fixture.rawNonce,
         email: "fallback@example.com",
       },
-      { clientIds: [APPLE_NATIVE_CLIENT_ID] },
+      { clientIds: APPLE_NATIVE_CLIENT_IDS },
     )).resolves.toMatchObject({ email: "fallback@example.com" });
   });
 
