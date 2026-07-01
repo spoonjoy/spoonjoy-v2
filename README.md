@@ -196,6 +196,7 @@ pnpm exec prisma migrate diff --from-empty --to-schema-datamodel=./prisma/schema
    wrangler secret put GITHUB_CLIENT_ID
    wrangler secret put GITHUB_CLIENT_SECRET
    wrangler secret put APPLE_CLIENT_ID
+   wrangler secret put APPLE_NATIVE_CLIENT_IDS
    wrangler secret put APPLE_TEAM_ID
    wrangler secret put APPLE_KEY_ID
    wrangler secret put APPLE_PRIVATE_KEY
@@ -207,6 +208,7 @@ pnpm exec prisma migrate diff --from-empty --to-schema-datamodel=./prisma/schema
    ```
 
    Recipe image fallback is configured with `IMAGE_PROVIDER_PRIMARY`, `IMAGE_PROVIDER_FALLBACKS`, `GOOGLE_API_KEY` or `GEMINI_API_KEY`, `GEMINI_IMAGE_MODEL=gemini-3.1-flash-image`, and optionally `GEMINI_IMAGE_TIMEOUT_MS`.
+   Native Sign in with Apple uses `APPLE_NATIVE_CLIENT_IDS=app.spoonjoy.Spoonjoy,app.spoonjoy.Spoonjoy.mac` after the iOS and macOS App IDs are registered with Apple.
 
    Optional telemetry: set `POSTHOG_KEY` with `wrangler secret put POSTHOG_KEY` only when you want server lifecycle telemetry/error capture. Build-time client analytics also needs `VITE_POSTHOG_KEY`, `VITE_POSTHOG_HOST`, and optionally `VITE_POSTHOG_DISABLED` in the deploy build environment; do not set those with secret values in source files.
 

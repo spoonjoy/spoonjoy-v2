@@ -16,7 +16,7 @@ import {
  * providers (Apple, GitHub, and Google) are properly checked before use.
  *
  * Required environment variables:
- * - Apple OAuth: APPLE_CLIENT_ID, APPLE_TEAM_ID, APPLE_KEY_ID, APPLE_PRIVATE_KEY
+ * - Apple OAuth: APPLE_CLIENT_ID, APPLE_NATIVE_CLIENT_IDS, APPLE_TEAM_ID, APPLE_KEY_ID, APPLE_PRIVATE_KEY
  * - GitHub OAuth: GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET
  * - Google OAuth: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
  */
