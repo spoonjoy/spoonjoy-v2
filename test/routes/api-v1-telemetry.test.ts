@@ -506,6 +506,27 @@ describe("API v1 mutation and validation telemetry", () => {
     });
   });
 
+  it("captures native Apple sign-in operation metadata from the generic route mapper", async () => {
+    const request = apiJsonRequest("POST", "auth/apple/native", "req_native_apple_operation", {}, {
+      identityToken: "header.payload.signature",
+      rawNonce: "native-telemetry-nonce",
+    });
+
+    const response = await action(routeArgs(request.request, "auth/apple/native").args);
+
+    expect(response.status).toBe(400);
+    expectApiV1ErrorEvent({
+      routeTemplate: "/api/v1/auth/apple/native",
+      requestId: "req_native_apple_operation",
+      operation: "auth.apple.native.sign-in",
+      status: 400,
+      errorCode: "validation_error",
+      authMode: "anonymous",
+      privacyClass: "public",
+      forbidden: [request.bodyText, "native-telemetry-nonce"],
+    });
+  });
+
   it("captures recipe write operation names on authentication failures", async () => {
     const fixture = await createRecipeFixture(db);
 

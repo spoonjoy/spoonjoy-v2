@@ -3,6 +3,7 @@ import {
   getGoogleOAuthConfig,
   getAppleOAuthConfig,
   getGitHubOAuthConfig,
+  getAppleNativeAuthConfig,
   getConfiguredOAuthProviders,
   validateOAuthEnv,
   getVapidConfig,
@@ -290,6 +291,42 @@ describe('Environment Config Validation', () => {
       expect(() => getAppleOAuthConfig(env)).toThrow(
         'Missing required environment variable: APPLE_PRIVATE_KEY'
       )
+    })
+  })
+
+  describe('getAppleNativeAuthConfig', () => {
+    it('returns comma-separated native Apple client ids with duplicates removed', () => {
+      expect(getAppleNativeAuthConfig({
+        APPLE_NATIVE_CLIENT_IDS: ' app.one, app.two, app.one ,, ',
+        APPLE_CLIENT_ID: 'web.client',
+      })).toEqual({ clientIds: ['app.one', 'app.two'] })
+    })
+
+    it('falls back from plural to singular native Apple client id', () => {
+      expect(getAppleNativeAuthConfig({
+        APPLE_NATIVE_CLIENT_ID: '"app.single"',
+        APPLE_CLIENT_ID: 'web.client',
+      })).toEqual({ clientIds: ['app.single'] })
+    })
+
+    it('falls back to APPLE_CLIENT_ID for legacy Apple app setups', () => {
+      expect(getAppleNativeAuthConfig({
+        APPLE_CLIENT_ID: 'web.client',
+      })).toEqual({ clientIds: ['web.client'] })
+    })
+
+    it('throws when no native or fallback Apple client id is configured', () => {
+      expect(() => getAppleNativeAuthConfig({
+        APPLE_NATIVE_CLIENT_IDS: 'not configured',
+        APPLE_NATIVE_CLIENT_ID: '',
+        APPLE_CLIENT_ID: 'todo',
+      })).toThrow('Missing required environment variable: APPLE_NATIVE_CLIENT_IDS')
+    })
+
+    it('throws when the comma-separated native Apple client id list only contains blanks', () => {
+      expect(() => getAppleNativeAuthConfig({
+        APPLE_NATIVE_CLIENT_IDS: ' , ,, ',
+      })).toThrow('Missing required environment variable: APPLE_NATIVE_CLIENT_IDS')
     })
   })
 

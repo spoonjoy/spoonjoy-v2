@@ -5171,7 +5171,7 @@ function assertBearerScopeSubset(principal: ApiPrincipal, storedScopes: string) 
   }
 }
 
-function optionalNativeAppleText(body: Record<string, unknown>, field: string, maxLength = MAX_SHORT_TEXT_LENGTH): string | null {
+function optionalNativeAppleText(body: Record<string, unknown>, field: string, maxLength: number): string | null {
   const value = body[field];
   if (value === undefined || value === null) return null;
   if (typeof value !== "string") {
@@ -5216,11 +5216,11 @@ async function handleNativeAppleSignInRequest(args: ApiV1RouteArgs, requestId: s
         userId: result.userId,
         ...nativeAppleTokenPayload(result.tokens),
       }, 201, TOKEN_RESPONSE_HEADERS),
-      { idempotencyOutcome: "none", operation: "auth.apple.native.sign-in" },
+      { idempotencyOutcome: "none" },
     );
   } catch (error) {
     if (error instanceof NativeAppleAuthError) {
-      const code = error.status === 401 ? "invalid_token" : error.status === 409 ? "validation_error" : "validation_error";
+      const code = error.status === 401 ? "invalid_token" : "validation_error";
       throw new ApiV1Error(code, error.message, { providerCode: error.code });
     }
     if (error instanceof Error && error.message.startsWith("Missing required environment variable")) {
