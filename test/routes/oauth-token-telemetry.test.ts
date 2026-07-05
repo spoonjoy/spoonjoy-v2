@@ -109,6 +109,7 @@ function expectOAuthTokenEvent(input: {
   clientId?: string;
   scope?: string;
   resource?: string;
+  tokenLifetime?: "expiring" | "persistent";
   rateLimitScope?: string;
   forbidden?: readonly string[];
 }) {
@@ -137,6 +138,7 @@ function expectOAuthTokenEvent(input: {
       client_id: input.clientId,
       scope: input.scope,
       resource: input.resource,
+      token_lifetime: input.tokenLifetime,
       request_bytes: expect.any(Number),
       latency_ms: expect.any(Number),
     },
@@ -194,6 +196,7 @@ describe("OAuth token telemetry", () => {
       clientId: client.clientId,
       scope: "shopping_list:read shopping_list:write",
       resource: "https://spoonjoy.app/mcp",
+      tokenLifetime: "persistent",
       forbidden: [
         code,
         codeChallenge,
@@ -226,6 +229,7 @@ describe("OAuth token telemetry", () => {
       clientId: client.clientId,
       scope: "shopping_list:read shopping_list:write",
       resource: "https://spoonjoy.app/mcp",
+      tokenLifetime: "persistent",
       forbidden: [
         codeBody.refresh_token,
         refresh.bodyText,

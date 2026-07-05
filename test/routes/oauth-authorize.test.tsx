@@ -128,11 +128,11 @@ describe("oauth.authorize route", () => {
     const Stub = createTestRoutesStub([
       { path: "/oauth/authorize", Component: OAuthAuthorize, loader: () => view },
     ]);
-    render(<Stub initialEntries={["/oauth/authorize"]} />);
+    return render(<Stub initialEntries={["/oauth/authorize"]} />);
   }
 
-  it("renders the consent screen with scopes and Allow/Deny", async () => {
-    renderView({
+  it("renders a simple consent screen with scopes and working forms", async () => {
+    const rendered = renderView({
       kind: "consent",
       clientName: "Claude",
       scope: "kitchen:read kitchen:write",
@@ -147,12 +147,15 @@ describe("oauth.authorize route", () => {
         resource: "r",
       },
     });
-    expect(await screen.findByRole("heading", { name: /authorize claude/i })).toBeInTheDocument();
-    expect(screen.getByText(/view public recipes/i)).toBeInTheDocument();
-    expect(screen.getByText(/add, edit, and remove/i)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /connect claude to spoonjoy/i })).toBeInTheDocument();
+    expect(screen.getByText(/read recipes, cookbooks, and your shopping list/i)).toBeInTheDocument();
+    expect(screen.getByText(/add, edit, and remove kitchen data/i)).toBeInTheDocument();
+    expect(screen.getByText(/stays active until you disconnect/i)).toBeInTheDocument();
+    expect(screen.getByText(/connection details/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /allow access/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /deny/i })).toBeInTheDocument();
-    // Consent is only shown to a signed-in user, so the sidebar must not say "Sign in to…".
+    expect(rendered.container.querySelectorAll("form")).toHaveLength(2);
+    expect(screen.queryByText("Bring your kitchen with you.")).not.toBeInTheDocument();
     expect(screen.getByText("Kitchen connection")).toBeInTheDocument();
     expect(screen.queryByText("Kitchen sign-in")).not.toBeInTheDocument();
   });
@@ -173,7 +176,7 @@ describe("oauth.authorize route", () => {
         resource: "",
       },
     });
-    expect(await screen.findByRole("heading", { name: /authorize this app/i })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /connect this app to spoonjoy/i })).toBeInTheDocument();
     expect(screen.getByText(/kitchen:future/)).toBeInTheDocument();
   });
 
@@ -193,8 +196,8 @@ describe("oauth.authorize route", () => {
         resource: "",
       },
     });
-    expect(await screen.findByRole("heading", { name: /authorize tiny client/i })).toBeInTheDocument();
-    expect(screen.queryByText(/broad kitchen scopes/i)).not.toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /connect tiny client to spoonjoy/i })).toBeInTheDocument();
+    expect(screen.queryByText(/broad kitchen changes/i)).not.toBeInTheDocument();
   });
 
   it("renders the error view", async () => {

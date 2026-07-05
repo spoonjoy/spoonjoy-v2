@@ -46,6 +46,7 @@ function observeOAuthTokenResponse(
       client_id: telemetry.clientId,
       scope: telemetry.scope,
       resource: telemetry.resource,
+      token_lifetime: telemetry.tokenLifetime,
       request_bytes: requestContentBytes(args.request),
       origin_host: safeHeaderHost(args.request.headers.get("Origin")),
       referrer_host: safeHeaderHost(args.request.headers.get("Referer")),

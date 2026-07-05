@@ -7,10 +7,10 @@
  * (RFC 6749 + RFC 7636, S256 only), and scope handling. The HTTP routes layer
  * the OAuth wire format on top.
  *
- * Access tokens are expiring `ApiCredential`s minted at the token endpoint
- * (see `createApiCredential`). The endpoint also issues rotating
- * `refresh_token` values so OAuth clients can refresh without replaying the
- * authorization code.
+ * Access tokens are `ApiCredential`s minted at the token endpoint (see
+ * `createApiCredential`). Generic OAuth app credentials expire quickly and
+ * refresh through rotating `refresh_token` values; MCP-bound credentials stay
+ * valid until the user disconnects the connection.
  */
 
 import type { PrismaClient as PrismaClientType } from "@prisma/client";
@@ -35,10 +35,7 @@ export const DEFAULT_SCOPE = "kitchen:read";
 /** Authorization codes are single-use and expire fast (RFC 6749 §4.1.2). */
 const AUTH_CODE_TTL_SECONDS = 60;
 
-/**
- * OAuth access tokens are intentionally short-lived. Continuity comes from the
- * rotating refresh token; personal bearer tokens remain separate credentials.
- */
+/** Generic OAuth access tokens are short-lived. MCP credentials are durable. */
 export const OAUTH_ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
 
 /** OAuth 2.1 error, carrying an RFC 6749 error code for the wire response. */
@@ -260,7 +257,7 @@ export async function consumeAuthorizationCode(
 export interface IssuedConnectorTokens {
   accessToken: string;
   refreshToken: string;
-  expiresIn: number;
+  expiresIn: number | null;
   scope: string;
   resource: string | null;
 }
@@ -269,10 +266,19 @@ function oauthCredentialName(clientName: string | null | undefined): string {
   return `${clientName?.trim() || "OAuth client"} (OAuth)`;
 }
 
+function isMcpProtectedResource(resource: string | null | undefined): boolean {
+  if (!resource) return false;
+  try {
+    return new URL(resource).pathname === "/mcp";
+  } catch {
+    return false;
+  }
+}
+
 /**
- * Mint a fresh access token (a long-lived, expiring `ApiCredential`) plus a
- * refresh token bound to the same user/client/scope. Used by both the
- * authorization_code grant and refresh rotation.
+ * Mint a fresh access token plus a refresh token bound to the same
+ * user/client/scope. Used by both the authorization_code grant and refresh
+ * rotation.
  */
 export async function issueConnectorTokens(
   db: Database,
@@ -281,12 +287,14 @@ export async function issueConnectorTokens(
   const now = input.now ?? new Date();
   const client = await getOAuthClient(db, input.clientId);
   const connectionKey = input.connectionKey ?? randomToken("ocn_", 16);
+  const persistentAccessToken = isMcpProtectedResource(input.resource ?? null);
+  const expiresIn = persistentAccessToken ? null : OAUTH_ACCESS_TOKEN_TTL_SECONDS;
   const { token: accessToken } = await createApiCredential(
     db,
     input.userId,
     oauthCredentialName(client?.clientName),
     {
-      expiresAt: new Date(now.getTime() + OAUTH_ACCESS_TOKEN_TTL_SECONDS * 1000),
+      expiresAt: expiresIn === null ? null : new Date(now.getTime() + expiresIn * 1000),
       scopes: input.scope,
       oauthClientId: input.clientId,
       oauthResource: input.resource ?? null,
@@ -306,7 +314,7 @@ export async function issueConnectorTokens(
   return {
     accessToken,
     refreshToken,
-    expiresIn: OAUTH_ACCESS_TOKEN_TTL_SECONDS,
+    expiresIn,
     scope: input.scope,
     resource: input.resource ?? null,
   };

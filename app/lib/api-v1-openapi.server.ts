@@ -298,11 +298,15 @@ const schemas = {
     requestId: idSchema,
     data: ref("NativePasswordSignInTokenData"),
   }),
-  OAuthTokenResponse: objectSchema(["access_token", "refresh_token", "token_type", "expires_in", "scope"], {
+  OAuthTokenResponse: objectSchema(["access_token", "refresh_token", "token_type", "scope"], {
     access_token: { type: "string", pattern: "^sj_" },
     refresh_token: { type: "string", pattern: "^ort_" },
     token_type: { const: "Bearer" },
-    expires_in: { type: "integer", const: OAUTH_ACCESS_TOKEN_TTL_SECONDS },
+    expires_in: {
+      type: "integer",
+      const: OAUTH_ACCESS_TOKEN_TTL_SECONDS,
+      description: "Present for expiring non-MCP OAuth credentials. Omitted for MCP-bound connections that remain active until revocation.",
+    },
     scope: { type: "string" },
   }),
   OAuthErrorResponse: objectSchema(["error", "error_description"], {
@@ -3218,7 +3222,7 @@ function authOperationPaths() {
         },
         responses: {
           200: { description: "JSON-RPC response", content: jsonContent(ref("McpJsonRpcResponse"), mcpResponseExample) },
-          401: { description: "OAuth bearer challenge. See WWW-Authenticate and .well-known/oauth-protected-resource." },
+          401: { description: "OAuth bearer challenge. See WWW-Authenticate and .well-known/oauth-protected-resource/mcp." },
           429: oauthRateLimitResponse(),
         },
       },
@@ -3353,7 +3357,7 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
     },
     "x-oauth-discovery": {
       authorizationServerMetadataUrl: absoluteApiUrl(serverUrl, "/.well-known/oauth-authorization-server"),
-      protectedResourceMetadataUrl: absoluteApiUrl(serverUrl, "/.well-known/oauth-protected-resource"),
+      protectedResourceMetadataUrl: absoluteApiUrl(serverUrl, "/.well-known/oauth-protected-resource/mcp"),
       authorizationUrl: absoluteApiUrl(serverUrl, "/oauth/authorize"),
       tokenUrl: absoluteApiUrl(serverUrl, "/oauth/token"),
       refreshUrl: absoluteApiUrl(serverUrl, "/oauth/token"),
@@ -3464,10 +3468,10 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
         title: "Remote MCP client",
         eyebrow: "Assistant runtime",
         audience: "Use for MCP-capable clients that discover OAuth metadata, get a bearer token, then call the remote Spoonjoy MCP endpoint.",
-        endpoints: ["/mcp", "/.well-known/oauth-protected-resource", "/.well-known/oauth-authorization-server"],
+        endpoints: ["/mcp", "/.well-known/oauth-protected-resource/mcp", "/.well-known/oauth-protected-resource", "/.well-known/oauth-authorization-server"],
         scopes: ["kitchen:read", "kitchen:write"],
         notes: [
-          "POST /mcp challenges unauthenticated callers with OAuth protected-resource metadata.",
+          "POST /mcp challenges unauthenticated callers with path-specific OAuth protected-resource metadata.",
           "MCP delegated scopes use kitchen:read and kitchen:write.",
           "Token-management tools require personal tokens:read or tokens:write scopes; OAuth kitchen scopes do not grant them.",
           "The approved bearer token must be sent as Authorization: Bearer sj_...",

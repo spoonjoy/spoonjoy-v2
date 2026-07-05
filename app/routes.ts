@@ -74,6 +74,7 @@ export default [
   route("oauth/revoke", "routes/oauth.revoke.ts"),
   route(".well-known/oauth-authorization-server", "routes/well-known.oauth-authorization-server.ts"),
   route(".well-known/oauth-protected-resource", "routes/well-known.oauth-protected-resource.ts"),
+  route(".well-known/oauth-protected-resource/mcp", "routes/well-known.oauth-protected-resource.mcp.ts"),
   route(".well-known/apple-app-site-association", "routes/well-known.apple-app-site-association.ts"),
   route("photos/*", "routes/photos.$.tsx"),
   route(".well-known/appspecific/com.chrome.devtools.json", "routes/devtools-well-known.tsx"),

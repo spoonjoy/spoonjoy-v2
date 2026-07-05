@@ -12,7 +12,7 @@ Spoonjoy's public developer surface starts at `/api`, with compatibility aliases
 - No-code connector OpenAPI 3.0: `https://spoonjoy.app/api/v1/openapi.connector.json`
 - Remote MCP: `https://spoonjoy.app/mcp`
 - OAuth authorization-server metadata: `https://spoonjoy.app/.well-known/oauth-authorization-server`
-- OAuth protected-resource metadata: `https://spoonjoy.app/.well-known/oauth-protected-resource`
+- OAuth protected-resource metadata: `https://spoonjoy.app/.well-known/oauth-protected-resource/mcp`
 
 ## Current API Boundary
 
@@ -158,7 +158,7 @@ Supported entry points:
 - Delegated agent connection: `POST /api/tools/start_agent_connection` and `POST /api/tools/poll_agent_connection`
 - MCP clients: `POST /mcp`
 
-OAuth access tokens are short-lived Spoonjoy API credentials. OAuth token responses also include a rotating `refresh_token`; each refresh-token grant rotates the presented token and rejects replay. Native apps, browser extensions, and other OAuth clients disconnect by revoking their stored refresh token with `POST /oauth/revoke`.
+Generic OAuth access tokens are short-lived Spoonjoy API credentials. MCP-bound OAuth access tokens stay active until disconnect so remote assistants do not require surprise re-authorization. OAuth token responses also include a rotating `refresh_token`; each refresh-token grant rotates the presented token and rejects replay. Native apps, browser extensions, and other OAuth clients disconnect by revoking their stored refresh token with `POST /oauth/revoke`.
 
 Signed-in chefs can also open Account settings to see active personal/delegated bearer credentials and OAuth app connections, then revoke or disconnect them without seeing token secrets again.
 
@@ -222,7 +222,7 @@ Content-Type: application/x-www-form-urlencoded
 grant_type=authorization_code&client_id=...&redirect_uri=https%3A%2F%2Fexample.com%2Foauth%2Fcallback&code=...&code_verifier=...
 ```
 
-The token response contains `access_token: "sj_..."`, `token_type: "Bearer"`, `expires_in: 900`, `scope`, and a rotating `refresh_token`.
+For generic OAuth clients, the token response contains `access_token: "sj_..."`, `token_type: "Bearer"`, `expires_in: 900`, `scope`, and a rotating `refresh_token`. MCP-bound token responses omit `expires_in` because that access credential remains active until disconnect.
 
 Registration can validate optional `scope` metadata, but it does not grant or remember that scope. Always send the requested scope on `/oauth/authorize`. Blank OAuth authorize scope defaults to kitchen:read.
 
@@ -334,7 +334,7 @@ Content-Type: application/x-www-form-urlencoded
 grant_type=authorization_code&client_id=...&redirect_uri=https%3A%2F%2Fexample.com%2Foauth%2Fcallback&code=...&code_verifier=...
 ```
 
-The returned `access_token` is a normal `sj_...` Bearer credential that expires after 15 minutes (`expires_in: 900`). The returned refresh_token rotates on every refresh grant as an `ort_...` token, and a replayed refresh token is rejected. Refresh tokens are stored server-side only as hashes. Disconnect by revoking the stored refresh token with `POST /oauth/revoke`; Spoonjoy revokes live OAuth access credentials for that client/resource at the same time. OAuth never grants `tokens:read` or `tokens:write`; token management is for signed-in sessions or personal bearer credentials with explicit token scopes. OAuth kitchen scopes do not grant tokens:read or tokens:write.
+For generic OAuth clients, the returned `access_token` is a normal `sj_...` Bearer credential that expires after 15 minutes (`expires_in: 900`). For MCP-bound clients, the returned `access_token` is a durable `sj_...` Bearer credential and the token response omits `expires_in`; it remains active until the connection is disconnected. The returned refresh_token rotates on every refresh grant as an `ort_...` token, and a replayed refresh token is rejected. Refresh tokens are stored server-side only as hashes. Disconnect by revoking the stored refresh token with `POST /oauth/revoke`; Spoonjoy revokes live OAuth access credentials for that client/resource at the same time. OAuth never grants `tokens:read` or `tokens:write`; token management is for signed-in sessions or personal bearer credentials with explicit token scopes. OAuth kitchen scopes do not grant tokens:read or tokens:write.
 
 `client_id` is recommended on `/oauth/revoke` and Spoonjoy checks it when present. Possession of the refresh token is sufficient to revoke it, so a client can still disconnect if its local `client_id` storage was lost.
 
@@ -419,7 +419,7 @@ Authorization: Bearer sj_...
 { "jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {} }
 ```
 
-Unauthenticated `/mcp` calls challenge with OAuth protected-resource metadata. MCP delegated scopes use raw `kitchen:read` and `kitchen:write` for the full MCP kitchen tool surface: `kitchen:read` covers read tools, and `kitchen:write` unlocks write tools such as recipe/cookbook/spoon mutations plus shopping-list writes. Least-privilege shopping-list-only delegated tokens can use `shopping_list:read shopping_list:write`, but those tokens will not unlock recipe/cookbook/spoon MCP writes. Token-management MCP tools require personal `tokens:read` or `tokens:write` scopes; OAuth kitchen scopes do not grant token management.
+Unauthenticated `/mcp` calls challenge with OAuth protected-resource metadata at `/.well-known/oauth-protected-resource/mcp`. MCP delegated scopes use raw `kitchen:read` and `kitchen:write` for the full MCP kitchen tool surface: `kitchen:read` covers read tools, and `kitchen:write` unlocks write tools such as recipe/cookbook/spoon mutations plus shopping-list writes. Least-privilege shopping-list-only delegated tokens can use `shopping_list:read shopping_list:write`, but those tokens will not unlock recipe/cookbook/spoon MCP writes. Token-management MCP tools require personal `tokens:read` or `tokens:write` scopes; OAuth kitchen scopes do not grant token management.
 
 ## OAuth Scope Mapping
 

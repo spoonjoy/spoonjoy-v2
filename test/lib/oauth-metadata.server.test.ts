@@ -27,7 +27,7 @@ describe("oauth metadata builders", () => {
   it("derives endpoint URLs from the origin", () => {
     expect(mcpResourceUrl(ORIGIN)).toBe("https://spoonjoy.app/mcp");
     expect(protectedResourceMetadataUrl(ORIGIN)).toBe(
-      "https://spoonjoy.app/.well-known/oauth-protected-resource",
+      "https://spoonjoy.app/.well-known/oauth-protected-resource/mcp",
     );
   });
 

@@ -176,6 +176,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "audience": "Use for MCP-capable clients that discover OAuth metadata, get a bearer token, then call the remote Spoonjoy MCP endpoint.",
       "endpoints": [
         "/mcp",
+        "/.well-known/oauth-protected-resource/mcp",
         "/.well-known/oauth-protected-resource",
         "/.well-known/oauth-authorization-server"
       ],
@@ -184,7 +185,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "kitchen:write"
       ],
       "notes": [
-        "POST /mcp challenges unauthenticated callers with OAuth protected-resource metadata.",
+        "POST /mcp challenges unauthenticated callers with path-specific OAuth protected-resource metadata.",
         "MCP delegated scopes use kitchen:read and kitchen:write.",
         "Token-management tools require personal tokens:read or tokens:write scopes; OAuth kitchen scopes do not grant them.",
         "The approved bearer token must be sent as Authorization: Bearer sj_..."
@@ -12423,7 +12424,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         },
         {
           "status": "401",
-          "description": "OAuth bearer challenge. See WWW-Authenticate and .well-known/oauth-protected-resource."
+          "description": "OAuth bearer challenge. See WWW-Authenticate and .well-known/oauth-protected-resource/mcp."
         },
         {
           "status": "429",
