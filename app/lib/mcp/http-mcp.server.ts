@@ -34,6 +34,7 @@ import {
   type ApiPrincipal,
 } from "~/lib/api-auth.server";
 import { mcpResourceUrl, protectedResourceMetadataUrl, resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
+import { getOAuthClient, isClaudeMcpOAuthClient } from "~/lib/oauth-server.server";
 import {
   enforceRateLimit,
   rateLimitedResponse,
@@ -85,6 +86,7 @@ type McpTelemetryInput = {
   startedAt: number;
   principal?: ApiPrincipal | null;
   errorCode?: string;
+  legacyOAuthResourceAllowed?: boolean;
   resourceMetadataUrl?: string;
   jsonRpcMethod?: string;
   jsonRpcErrorCode?: number;
@@ -194,6 +196,7 @@ function observeMcpResponse(
       credential_id: principal?.credentialId,
       oauth_client_id: principal?.oauthClientId || undefined,
       oauth_resource: principal?.oauthClientId ? (principal.oauthResource ?? null) : undefined,
+      legacy_oauth_resource_allowed: input.legacyOAuthResourceAllowed || undefined,
       scopes: principal?.scopes,
       jsonrpc_method: input.jsonRpcMethod,
       jsonrpc_error_code: input.jsonRpcErrorCode,
@@ -209,6 +212,20 @@ function observeMcpResponse(
   }));
 
   return input.response;
+}
+
+async function mcpOAuthResourceAllowed(
+  db: PrismaClientType,
+  principal: ApiPrincipal,
+  expectedResource: string,
+): Promise<{ allowed: boolean; legacyAllowed: boolean }> {
+  if (!principal.oauthClientId) return { allowed: true, legacyAllowed: false };
+  if (principal.oauthResource === expectedResource) return { allowed: true, legacyAllowed: false };
+  if (principal.oauthResource) return { allowed: false, legacyAllowed: false };
+
+  const client = await getOAuthClient(db, principal.oauthClientId);
+  const legacyAllowed = isClaudeMcpOAuthClient(client);
+  return { allowed: legacyAllowed, legacyAllowed };
 }
 
 export async function handleMcpHttpRequest(params: HandleMcpHttpRequestParams): Promise<Response> {
@@ -262,7 +279,8 @@ export async function handleMcpHttpRequest(params: HandleMcpHttpRequestParams): 
     });
   }
   const expectedResource = mcpResourceUrl(resolveIssuerOrigin(request.url, cloudflareEnv?.SPOONJOY_BASE_URL));
-  if (principal.oauthClientId && principal.oauthResource !== expectedResource) {
+  const resourceAllowed = await mcpOAuthResourceAllowed(db, principal, expectedResource);
+  if (!resourceAllowed.allowed) {
     const response = jsonResponse(
       { error: "invalid_token", message: "OAuth access token is not audience-bound to this MCP resource." },
       403,
@@ -330,6 +348,7 @@ export async function handleMcpHttpRequest(params: HandleMcpHttpRequestParams): 
       response: new Response(null, { status: 202 }),
       startedAt,
       principal,
+      legacyOAuthResourceAllowed: resourceAllowed.legacyAllowed,
       ...jsonRpcTelemetry,
       notification: true,
     });
@@ -341,6 +360,7 @@ export async function handleMcpHttpRequest(params: HandleMcpHttpRequestParams): 
       response: httpResponse,
       startedAt,
       principal,
+      legacyOAuthResourceAllowed: resourceAllowed.legacyAllowed,
       ...jsonRpcTelemetry,
       errorCode: "jsonrpc_error",
       jsonRpcErrorCode: jsonRpcErrorCode(response),
@@ -350,6 +370,7 @@ export async function handleMcpHttpRequest(params: HandleMcpHttpRequestParams): 
     response: httpResponse,
     startedAt,
     principal,
+    legacyOAuthResourceAllowed: resourceAllowed.legacyAllowed,
     ...jsonRpcTelemetry,
   });
 }

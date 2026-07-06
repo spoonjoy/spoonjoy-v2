@@ -114,6 +114,13 @@ export interface RegisteredOAuthClient {
   redirectUris: string[];
 }
 
+export const CLAUDE_MCP_REDIRECT_URI = "https://claude.ai/api/mcp/auth_callback";
+
+export function isClaudeMcpOAuthClient(client: RegisteredOAuthClient | null | undefined): boolean {
+  return client?.clientName?.trim().toLowerCase() === "claude" &&
+    client.redirectUris.includes(CLAUDE_MCP_REDIRECT_URI);
+}
+
 /**
  * Dynamic Client Registration. Validates that at least one well-formed
  * redirect URI is supplied, then persists the client and returns its id.
@@ -364,7 +371,7 @@ export async function revokeConnectorRefreshToken(
  */
 export async function rotateConnectorTokens(
   db: Database,
-  input: { refreshToken: string; clientId: string; now?: Date },
+  input: { refreshToken: string; clientId: string; now?: Date; legacyMcpResource?: string | null },
 ): Promise<IssuedConnectorTokens> {
   const now = input.now ?? new Date();
   if (!input.refreshToken) throw new OAuthError("invalid_grant", "Missing refresh token");
@@ -387,11 +394,16 @@ export async function rotateConnectorTokens(
     throw new OAuthError("invalid_grant", "Refresh token already used");
   }
 
+  const client = await getOAuthClient(db, record.clientId);
+  const resource = !record.resource && input.legacyMcpResource && isClaudeMcpOAuthClient(client)
+    ? input.legacyMcpResource
+    : record.resource;
+
   return issueConnectorTokens(db, {
     userId: record.userId,
     clientId: record.clientId,
     scope: record.scope,
-    resource: record.resource,
+    resource,
     now,
     connectionKey: record.connectionKey ?? record.id,
   });
