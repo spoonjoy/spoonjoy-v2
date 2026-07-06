@@ -432,4 +432,32 @@ describe("OAuth authorize telemetry", () => {
     });
     expectCaptureScheduled(consumedBodyArgs);
   });
+
+  it("captures authorize telemetry when the configured issuer origin is malformed", async () => {
+    const args = routeArgs(new Request("https://spoonjoy.app/oauth/authorize?state=state_0123456789abcdef", {
+      headers: { "CF-Connecting-IP": "203.0.113.77" },
+    }), {
+      POSTHOG_KEY: "ph_test",
+      SPOONJOY_BASE_URL: "not a url",
+      API_IP_RATE_LIMITER: {
+        limit: async () => ({ success: false }),
+      },
+    });
+
+    await expect(loader(args)).rejects.toSatisfy((thrown: Response) => thrown.status === 429);
+    const event = expectOAuthAuthorizeEvent({
+      phase: "loader",
+      status: 429,
+      outcome: "rate_limited",
+      errorCode: "rate_limited",
+      stateClass: "present",
+      rateLimitScope: "ip",
+      forbidden: ["203.0.113.77", "not a url"],
+    });
+    expect(event.properties).toMatchObject({
+      request_host: "spoonjoy.app",
+      issuer_host: undefined,
+    });
+    expectCaptureScheduled(args);
+  });
 });
