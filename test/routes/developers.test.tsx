@@ -194,7 +194,9 @@ describe("/developers route", () => {
     expect(screen.getAllByText(/no client secret/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/kitchen:read/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/single-use 60-second code/i)).toBeInTheDocument();
-    expect(screen.getByText(/access_token lasts 15 minutes/i)).toBeInTheDocument();
+    expect(screen.getByText(/Generic OAuth access tokens last 15 minutes/i)).toBeInTheDocument();
+    expect(screen.getByText(/MCP-bound access tokens stay active until disconnect/i)).toBeInTheDocument();
+    expect(screen.getByText(/omit expires_in/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Content-Type: application\/x-www-form-urlencoded/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/refresh_token rotates/i)).toBeInTheDocument();
     expect(screen.getByText(/validation_error/i)).toBeInTheDocument();

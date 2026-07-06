@@ -38,6 +38,7 @@ describe("route shell coverage", () => {
   it("serves OAuth metadata route shells", async () => {
     const authorization = await import("~/routes/well-known.oauth-authorization-server");
     const protectedResource = await import("~/routes/well-known.oauth-protected-resource");
+    const mcpProtectedResource = await import("~/routes/well-known.oauth-protected-resource.mcp");
 
     const args = routeArgs(new Request("https://worker.example/.well-known/oauth-authorization-server"), {
       context: { cloudflare: { env: { SPOONJOY_BASE_URL: "https://spoonjoy.app" } } },
@@ -47,6 +48,10 @@ describe("route shell coverage", () => {
       token_endpoint: "https://spoonjoy.app/oauth/token",
     });
     await expect(protectedResource.loader(args).json()).resolves.toMatchObject({
+      resource: "https://spoonjoy.app/mcp",
+      authorization_servers: ["https://spoonjoy.app"],
+    });
+    await expect(mcpProtectedResource.loader(args).json()).resolves.toMatchObject({
       resource: "https://spoonjoy.app/mcp",
       authorization_servers: ["https://spoonjoy.app"],
     });

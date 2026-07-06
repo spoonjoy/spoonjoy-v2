@@ -250,10 +250,15 @@ describe("handleOAuthToken", () => {
     expect(typeof body.access_token).toBe("string");
     expect(typeof body.refresh_token).toBe("string");
     expect(body.token_type).toBe("Bearer");
-    expect(body.expires_in).toBeGreaterThan(0);
+    expect(body).not.toHaveProperty("expires_in");
     expect(body.scope).toBe("kitchen:read kitchen:write");
     await expect(db.apiCredential.findFirstOrThrow({ where: { userId } }))
-      .resolves.toMatchObject({ name: "OAuth client (OAuth)", oauthClientId: clientId, oauthResource: "https://spoonjoy.app/mcp" });
+      .resolves.toMatchObject({
+        name: "OAuth client (OAuth)",
+        oauthClientId: clientId,
+        oauthResource: "https://spoonjoy.app/mcp",
+        expiresAt: null,
+      });
     // the access token is a real ApiCredential, plus one refresh token
     expect(await db.apiCredential.count({ where: { userId } })).toBe(1);
     expect(await db.oAuthRefreshToken.count({ where: { userId } })).toBe(1);
@@ -275,9 +280,10 @@ describe("handleOAuthToken", () => {
       db, null,
     );
     expect(first.status).toBe(200);
-    const firstBody = await first.json() as { refresh_token: string };
+    const firstBody = await first.json() as { refresh_token: string; expires_in: number };
+    expect(firstBody.expires_in).toBeGreaterThan(0);
     await expect(db.apiCredential.findFirstOrThrow({ where: { userId } }))
-      .resolves.toMatchObject({ oauthClientId: clientId, oauthResource: null });
+      .resolves.toMatchObject({ oauthClientId: clientId, oauthResource: null, expiresAt: expect.any(Date) });
 
     const refresh = await handleOAuthToken(
       formPost("https://spoonjoy.app/oauth/token", {
@@ -287,7 +293,7 @@ describe("handleOAuthToken", () => {
     );
 
     expect(refresh.status).toBe(200);
-    await expect(refresh.json()).resolves.toMatchObject({ scope: "kitchen:read" });
+    await expect(refresh.json()).resolves.toMatchObject({ scope: "kitchen:read", expires_in: expect.any(Number) });
   });
 
   it("exchanges a refresh token for a rotated pair and rejects the old one", async () => {
@@ -309,6 +315,7 @@ describe("handleOAuthToken", () => {
     const body = await res.json() as Record<string, unknown>;
     expect(typeof body.access_token).toBe("string");
     expect(body.refresh_token).not.toBe(first.refresh_token); // rotated
+    expect(body).not.toHaveProperty("expires_in");
 
     const replay = await handleOAuthToken(
       formPost("https://spoonjoy.app/oauth/token", {

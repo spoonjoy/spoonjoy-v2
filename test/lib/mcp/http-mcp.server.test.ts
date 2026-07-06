@@ -187,7 +187,7 @@ describe("handleMcpHttpRequest", () => {
     });
     expect(response.status).toBe(401);
     expect(response.headers.get("WWW-Authenticate")).toContain(
-      'resource_metadata="https://spoonjoy.app/.well-known/oauth-protected-resource"',
+      'resource_metadata="https://spoonjoy.app/.well-known/oauth-protected-resource/mcp"',
     );
   });
 
@@ -218,7 +218,7 @@ describe("handleMcpHttpRequest", () => {
     });
     expect(response.status).toBe(401);
     expect(response.headers.get("WWW-Authenticate")).toContain(
-      'resource_metadata="https://spoonjoy.app/.well-known/oauth-protected-resource"',
+      'resource_metadata="https://spoonjoy.app/.well-known/oauth-protected-resource/mcp"',
     );
   });
 
@@ -392,11 +392,14 @@ describe("handleMcpHttpRequest", () => {
       waitUntil,
     });
     expect(unauthenticatedResponse.status).toBe(401);
-    expectMcpTelemetryEvent({
+    const unauthenticatedEvent = expectMcpTelemetryEvent({
       status: 401,
       errorCode: "authentication_required",
       authMode: "anonymous",
       forbidden: [bodySecret, "tools/call", "get_recipe"],
+    });
+    expect(unauthenticatedEvent!.properties).toMatchObject({
+      resource_metadata_url: "https://spoonjoy.app/.well-known/oauth-protected-resource/mcp",
     });
 
     const malformedToken = "sj_malformed_mcp_secret";

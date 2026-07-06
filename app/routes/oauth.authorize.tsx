@@ -1,4 +1,5 @@
 import type { Route } from "./+types/oauth.authorize";
+import type { ReactNode } from "react";
 import { Form, useLoaderData } from "react-router";
 import { getRequestDb } from "~/lib/route-platform.server";
 import {
@@ -18,7 +19,6 @@ import {
   safeHeaderHost,
   userAgentFamily,
 } from "~/lib/analytics-server";
-import { AuthLayout } from "~/components/ui/auth-layout";
 import { Heading } from "~/components/ui/heading";
 import { Button } from "~/components/ui/button";
 import { Text } from "~/components/ui/text";
@@ -159,25 +159,16 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 const SCOPE_LABELS: Record<string, string> = {
-  "account:read": "View your account profile and notification settings",
-  "account:write": "Update your account profile, profile photo, and notification settings",
-  "cookbooks:read": "View public cookbook data",
-  "kitchen:read": "View public recipes, cookbooks, and your shopping list",
-  "kitchen:write": "Add, edit, and remove Spoonjoy kitchen data through MCP tools and shopping-list operations",
-  "public:read": "View public Spoonjoy data",
-  "recipes:read": "View public recipe data",
-  "shopping_list:read": "View your shopping list",
-  "shopping_list:write": "Add, check, and remove items on your shopping list",
+  "account:read": "Read your profile and notification settings",
+  "account:write": "Update your profile, photo, and notification settings",
+  "cookbooks:read": "Read public cookbook data",
+  "kitchen:read": "Read recipes, cookbooks, and your shopping list",
+  "kitchen:write": "Add, edit, and remove kitchen data",
+  "public:read": "Read public Spoonjoy data",
+  "recipes:read": "Read public recipe data",
+  "shopping_list:read": "Read your shopping list",
+  "shopping_list:write": "Add, check, and remove shopping-list items",
 };
-
-// The consent screen is only ever reached by a signed-in user, so its marketing
-// column must not use the sign-in voice. The error view can render to anyone, so
-// keep this copy auth-state-neutral (no "you're signed in" claim).
-const CONNECTOR_AUTH_COPY = {
-  eyebrow: "Kitchen connection",
-  title: "Bring your kitchen with you.",
-  description: "Review what each app can access before you let it into your kitchen.",
-} as const;
 
 function HiddenParams({ params }: { params: AuthorizeRequestParams }) {
   return (
@@ -194,19 +185,35 @@ function HiddenParams({ params }: { params: AuthorizeRequestParams }) {
   );
 }
 
+function ConnectorConsentShell({ children }: { children: ReactNode }) {
+  return (
+    <main className="min-h-[calc(100svh-5rem)] px-5 py-8 sm:px-8 sm:py-10">
+      <section className="mx-auto w-full max-w-2xl">
+        {children}
+      </section>
+    </main>
+  );
+}
+
+function scopeItems(scope: string): string[] {
+  const scopes = scope.split(" ").filter(Boolean);
+  return Array.from(new Set(scopes.map((item) => SCOPE_LABELS[item] ?? item)));
+}
+
 export default function OAuthAuthorize() {
   const view = useLoaderData<AuthorizeView>();
 
   if (view.kind === "error") {
     return (
-      <AuthLayout {...CONNECTOR_AUTH_COPY}>
-        <div className="w-full max-w-sm">
-          <Heading>Connection problem</Heading>
-          <Text className="mt-4" role="alert">
-            {view.message}
-          </Text>
-        </div>
-      </AuthLayout>
+      <ConnectorConsentShell>
+        <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)]">
+          Kitchen connection
+        </p>
+        <Heading className="mt-3">Connection problem</Heading>
+        <Text className="mt-4" role="alert">
+          {view.message}
+        </Text>
+      </ConnectorConsentShell>
     );
   }
 
@@ -214,57 +221,72 @@ export default function OAuthAuthorize() {
   const redirectOrigin = new URL(view.params.redirectUri).origin;
   const resourceLabel = view.params.resource || "REST API";
   const broadScopes = view.scope.split(" ").filter((scope) => scope === "kitchen:read" || scope === "kitchen:write");
+  const accessItems = scopeItems(view.scope);
   return (
-    <AuthLayout {...CONNECTOR_AUTH_COPY}>
-      <div className="w-full max-w-sm">
-        <Heading>Authorize {appName}</Heading>
-        <Text className="mt-4">
-          {appName} is an unverified OAuth app name supplied by the developer. It wants to connect to your Spoonjoy kitchen and will be able to:
-        </Text>
-        <ul className="mt-4 space-y-2">
-          {view.scope.split(" ").map((scope) => (
-            <li key={scope} className="text-sm text-[var(--sj-ink)]">
-              • {SCOPE_LABELS[scope] ?? scope}
+    <ConnectorConsentShell>
+      <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)]">
+        Kitchen connection
+      </p>
+      <Heading className="mt-3">Connect {appName} to Spoonjoy</Heading>
+      <Text className="mt-4 text-base/7">
+        {appName} wants access to your Spoonjoy kitchen.
+      </Text>
+
+      <div className="mt-6 border-y border-[var(--sj-border)] py-5">
+        <h2 className="font-sj-ui text-sm font-semibold text-[var(--sj-ink)]">Access requested</h2>
+        <ul className="mt-3 space-y-2 text-sm/6 text-[var(--sj-ink)]">
+          {accessItems.map((item) => (
+            <li key={item} className="flex gap-2">
+              <span aria-hidden="true">-</span>
+              <span>{item}</span>
             </li>
           ))}
         </ul>
-        <dl className="mt-5 space-y-2 border-y border-[var(--sj-border)] py-4 text-sm text-[var(--sj-ink)]">
-          <div>
+      </div>
+
+      {broadScopes.length ? (
+        <Text className="mt-4" role="alert">
+          {appName} can make broad kitchen changes. Approve only if this is the connection you started.
+        </Text>
+      ) : null}
+      <Text className="mt-4">
+        This connection stays active until you disconnect it in Account settings or from {appName}.
+      </Text>
+
+      <details className="mt-5 border-y border-[var(--sj-border)] py-4 text-sm text-[var(--sj-ink)]">
+        <summary className="cursor-default font-sj-ui font-semibold text-[var(--sj-ink)]">
+          Connection details
+        </summary>
+        <dl className="mt-4 space-y-3">
+          <div className="grid gap-1 sm:grid-cols-[9rem_minmax(0,1fr)]">
             <dt className="font-semibold">Redirect origin</dt>
             <dd className="break-words">{redirectOrigin}</dd>
           </div>
-          <div>
+          <div className="grid gap-1 sm:grid-cols-[9rem_minmax(0,1fr)]">
             <dt className="font-semibold">Client id</dt>
             <dd className="break-all font-mono text-xs">{view.params.clientId}</dd>
           </div>
-          <div>
+          <div className="grid gap-1 sm:grid-cols-[9rem_minmax(0,1fr)]">
             <dt className="font-semibold">Resource</dt>
             <dd className="break-words">{resourceLabel}</dd>
           </div>
         </dl>
-        {broadScopes.length ? (
-          <Text className="mt-4" role="alert">
-            This request includes broad kitchen scopes. Approve only if you trust this app to act across Spoonjoy kitchen data.
-          </Text>
-        ) : null}
-        <Text className="mt-4">
-          Access tokens are short-lived; refresh tokens rotate and can be disconnected by revoking the app's refresh token.
-        </Text>
-        <div className="mt-6 flex flex-wrap gap-3">
-          <Form method="post">
-            <HiddenParams params={view.params} />
-            <Button type="submit" name="decision" value="approve">
-              Allow access
-            </Button>
-          </Form>
-          <Form method="post">
-            <HiddenParams params={view.params} />
-            <Button type="submit" name="decision" value="deny" plain>
-              Deny
-            </Button>
-          </Form>
-        </div>
+      </details>
+
+      <div className="mt-6 grid gap-3 sm:flex sm:flex-wrap">
+        <Form method="post">
+          <HiddenParams params={view.params} />
+          <Button className="w-full sm:w-auto" type="submit" name="decision" value="approve">
+            Allow access
+          </Button>
+        </Form>
+        <Form method="post">
+          <HiddenParams params={view.params} />
+          <Button className="w-full sm:w-auto" type="submit" name="decision" value="deny" plain>
+            Deny
+          </Button>
+        </Form>
       </div>
-    </AuthLayout>
+    </ConnectorConsentShell>
   );
 }

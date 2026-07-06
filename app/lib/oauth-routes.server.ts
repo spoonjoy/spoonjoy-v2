@@ -306,18 +306,26 @@ export async function handleOAuthRegister(request: Request, db: Database): Promi
 }
 
 function tokenResponse(tokens: IssuedConnectorTokens): Response {
-  return Response.json({
+  const payload: Record<string, string | number> = {
     access_token: tokens.accessToken,
     refresh_token: tokens.refreshToken,
     token_type: "Bearer",
-    expires_in: tokens.expiresIn,
     scope: tokens.scope,
-  }, {
+  };
+  if (tokens.expiresIn !== null) {
+    payload.expires_in = tokens.expiresIn;
+  }
+
+  return Response.json(payload, {
     headers: {
       "Cache-Control": "no-store",
       Pragma: "no-cache",
     },
   });
+}
+
+function tokenLifetime(tokens: IssuedConnectorTokens): "expiring" | "persistent" {
+  return tokens.expiresIn === null ? "persistent" : "expiring";
 }
 
 /**
@@ -365,21 +373,21 @@ export async function handleOAuthToken(
         redirectUri: field("redirect_uri"),
         codeVerifier: field("code_verifier"),
       });
+      const tokens = await issueConnectorTokens(db, {
+        userId: grant.userId,
+        clientId: field("client_id"),
+        scope: grant.scope,
+        resource: grant.resource,
+      });
       return withOAuthTokenTelemetry(
-        tokenResponse(
-          await issueConnectorTokens(db, {
-            userId: grant.userId,
-            clientId: field("client_id"),
-            scope: grant.scope,
-            resource: grant.resource,
-          }),
-        ),
+        tokenResponse(tokens),
         {
           outcome: "issued",
           grantType: "authorization_code",
           clientId,
           scope: grant.scope,
           resource: grant.resource ?? undefined,
+          tokenLifetime: tokenLifetime(tokens),
         },
       );
     }
@@ -397,6 +405,7 @@ export async function handleOAuthToken(
           clientId,
           scope: tokens.scope,
           resource: tokens.resource ?? undefined,
+          tokenLifetime: tokenLifetime(tokens),
         },
       );
     }
@@ -544,6 +553,7 @@ export interface OAuthTokenTelemetryMetadata {
   errorCode?: string;
   scope?: string;
   resource?: string;
+  tokenLifetime?: "expiring" | "persistent";
 }
 
 const oauthTokenTelemetrySymbol = Symbol("spoonjoy.oauth.token.telemetry");

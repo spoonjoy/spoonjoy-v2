@@ -4,8 +4,9 @@
  * - Authorization Server Metadata (RFC 8414) at
  *   `/.well-known/oauth-authorization-server`.
  * - Protected Resource Metadata (RFC 9728) at
- *   `/.well-known/oauth-protected-resource`, pointing the `/mcp` resource at
- *   this authorization server.
+ *   `/.well-known/oauth-protected-resource/mcp`, pointing the `/mcp`
+ *   resource at this authorization server. The root metadata path is still
+ *   served for older clients.
  *
  * The issuer must be the public host the client reached (spoonjoy.app), which
  * is NOT necessarily `request.url`: the public domain fronts the worker, so
@@ -31,7 +32,7 @@ export function mcpResourceUrl(origin: string): string {
 
 /** URL of the protected-resource metadata, for the `WWW-Authenticate` hint. */
 export function protectedResourceMetadataUrl(origin: string): string {
-  return `${origin}/.well-known/oauth-protected-resource`;
+  return `${origin}/.well-known/oauth-protected-resource/mcp`;
 }
 
 export function buildAuthorizationServerMetadata(origin: string): Record<string, unknown> {

@@ -14,8 +14,9 @@ collected at the bottom.
 ## Pre-submission checklist (verified live 2026-05-29)
 
 - [x] Remote MCP server reachable at `https://spoonjoy.app/mcp`
-- [x] Unauthenticated request returns `401` + `WWW-Authenticate: Bearer resource_metadata="https://spoonjoy.app/.well-known/oauth-protected-resource"`
-- [x] `GET /.well-known/oauth-protected-resource` → 200
+- [x] Unauthenticated request returns `401` + `WWW-Authenticate: Bearer resource_metadata="https://spoonjoy.app/.well-known/oauth-protected-resource/mcp"`
+- [x] `GET /.well-known/oauth-protected-resource/mcp` → 200
+- [x] `GET /.well-known/oauth-protected-resource` → 200 for compatibility
 - [x] `GET /.well-known/oauth-authorization-server` → 200, advertising `authorization_endpoint`, `token_endpoint`, and `registration_endpoint` (DCR)
 - [x] Every tool carries a `title` + `readOnlyHint`/`destructiveHint` (surfaced via `tools/list`)
 - [x] Public Privacy Policy + Terms of Service (linked from every auth/consent screen)

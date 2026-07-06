@@ -268,19 +268,37 @@ describe("connector token issuance + rotation", () => {
     await cleanupDatabase();
   });
 
-  it("issues an expiring access token plus a refresh token", async () => {
+  it("issues a persistent MCP access token plus a refresh token", async () => {
     const tokens = await issueConnectorTokens(db, { userId, clientId, scope: "kitchen:read", resource: "https://spoonjoy.app/mcp" });
     expect(tokens.accessToken).toMatch(/^/);
     expect(tokens.refreshToken).toMatch(/^ort_/);
-    expect(tokens.expiresIn).toBeGreaterThan(0);
+    expect(tokens.expiresIn).toBeNull();
     expect(tokens.scope).toBe("kitchen:read");
 
     const credential = await db.apiCredential.findFirst({ where: { userId } });
-    expect(credential?.expiresAt).toBeInstanceOf(Date);
+    expect(credential?.expiresAt).toBeNull();
     expect(credential?.scopes).toBe("kitchen:read");
     expect(credential?.oauthClientId).toBe(clientId);
     expect(credential?.oauthResource).toBe("https://spoonjoy.app/mcp");
     expect(await db.oAuthRefreshToken.count({ where: { userId, resource: "https://spoonjoy.app/mcp" } })).toBe(1);
+  });
+
+  it("keeps non-MCP OAuth access tokens expiring", async () => {
+    const tokens = await issueConnectorTokens(db, { userId, clientId, scope: "kitchen:read", resource: null });
+    expect(tokens.expiresIn).toBeGreaterThan(0);
+
+    const credential = await db.apiCredential.findFirst({ where: { userId } });
+    expect(credential?.expiresAt).toBeInstanceOf(Date);
+    expect(credential?.oauthResource).toBeNull();
+  });
+
+  it("does not grant durable access for malformed resource values", async () => {
+    const tokens = await issueConnectorTokens(db, { userId, clientId, scope: "kitchen:read", resource: "not a url" });
+    expect(tokens.expiresIn).toBeGreaterThan(0);
+
+    const credential = await db.apiCredential.findFirst({ where: { userId } });
+    expect(credential?.expiresAt).toBeInstanceOf(Date);
+    expect(credential?.oauthResource).toBe("not a url");
   });
 
   it("rotates a refresh token, revoking the old one", async () => {

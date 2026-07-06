@@ -35,6 +35,7 @@ const SERVER_ONLY_ROUTE_CHUNKS = new Set([
   "well-known.apple-app-site-association",
   "well-known.oauth-authorization-server",
   "well-known.oauth-protected-resource",
+  "well-known.oauth-protected-resource.mcp",
 ]);
 
 function emptyBundleChunkNames(log: { message?: string; names?: readonly string[] }) {

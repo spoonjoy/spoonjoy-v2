@@ -85,6 +85,7 @@ type McpTelemetryInput = {
   startedAt: number;
   principal?: ApiPrincipal | null;
   errorCode?: string;
+  resourceMetadataUrl?: string;
   jsonRpcMethod?: string;
   jsonRpcErrorCode?: number;
   notification?: boolean;
@@ -109,17 +110,25 @@ function authChallengeResponse(
   request: Request,
   cloudflareEnv: CloudflareEnvLike | null | undefined,
 ): Response {
-  const origin = resolveIssuerOrigin(request.url, cloudflareEnv?.SPOONJOY_BASE_URL);
+  const resourceMetadataUrl = authChallengeMetadataUrl(request, cloudflareEnv);
   return new Response(
     JSON.stringify({ error: "unauthorized", message: "Authentication required." }),
     {
       status: 401,
       headers: {
         "Content-Type": "application/json",
-        "WWW-Authenticate": `Bearer resource_metadata="${protectedResourceMetadataUrl(origin)}"`,
+        "WWW-Authenticate": `Bearer resource_metadata="${resourceMetadataUrl}"`,
       },
     },
   );
+}
+
+function authChallengeMetadataUrl(
+  request: Request,
+  cloudflareEnv: CloudflareEnvLike | null | undefined,
+): string {
+  const origin = resolveIssuerOrigin(request.url, cloudflareEnv?.SPOONJOY_BASE_URL);
+  return protectedResourceMetadataUrl(origin);
 }
 
 function mcpAuthMode(principal: ApiPrincipal | null): string {
@@ -179,6 +188,7 @@ function observeMcpResponse(
       method: request.method,
       status: input.response.status,
       error_code: input.errorCode,
+      resource_metadata_url: input.resourceMetadataUrl,
       auth_mode: mcpAuthMode(principal),
       principal_id: principal?.id,
       credential_id: principal?.credentialId,
@@ -238,6 +248,7 @@ export async function handleMcpHttpRequest(params: HandleMcpHttpRequestParams): 
         response,
         startedAt,
         errorCode: "authentication_required",
+        resourceMetadataUrl: authChallengeMetadataUrl(request, cloudflareEnv),
       });
     }
     principal = await authenticateApiToken(db, bearerToken);
@@ -247,6 +258,7 @@ export async function handleMcpHttpRequest(params: HandleMcpHttpRequestParams): 
       response,
       startedAt,
       errorCode: error instanceof ApiAuthError && error.status === 400 ? "malformed_authorization" : "invalid_token",
+      resourceMetadataUrl: authChallengeMetadataUrl(request, cloudflareEnv),
     });
   }
   const expectedResource = mcpResourceUrl(resolveIssuerOrigin(request.url, cloudflareEnv?.SPOONJOY_BASE_URL));

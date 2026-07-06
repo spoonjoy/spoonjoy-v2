@@ -111,6 +111,7 @@ export const WEB_ROUTE_MANIFEST = [
   route("routes/oauth.revoke.ts", "/oauth/revoke", "api-or-oauth"),
   route("routes/well-known.oauth-authorization-server.ts", "/.well-known/oauth-authorization-server", "api-or-oauth"),
   route("routes/well-known.oauth-protected-resource.ts", "/.well-known/oauth-protected-resource", "api-or-oauth"),
+  route("routes/well-known.oauth-protected-resource.mcp.ts", "/.well-known/oauth-protected-resource/mcp", "api-or-oauth"),
   route("routes/well-known.apple-app-site-association.ts", "/.well-known/apple-app-site-association", "platform-asset"),
   route("routes/photos.$.tsx", "/photos/*", "platform-asset"),
   route("routes/devtools-well-known.tsx", "/.well-known/appspecific/com.chrome.devtools.json", "platform-asset"),
