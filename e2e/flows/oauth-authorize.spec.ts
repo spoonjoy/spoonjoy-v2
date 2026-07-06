@@ -19,6 +19,7 @@ import { loginAsSeedUser } from '../support/auth';
  */
 
 const REDIRECT_URI = 'http://localhost:5173/oauth/e2e-callback';
+const MCP_RESOURCE = 'https://spoonjoy.app/mcp';
 const APPROVE_STATE = 'oauth-e2e-approve-state';
 const DENY_STATE = 'oauth-e2e-deny-state';
 
@@ -58,8 +59,106 @@ function authorizeUrl(opts: { clientId: string; codeChallenge: string; state: st
     code_challenge_method: 'S256',
     scope: 'kitchen:read',
     state: opts.state,
+    resource: MCP_RESOURCE,
   });
   return `/oauth/authorize?${params}`;
+}
+
+async function exchangeCodeForTokens(
+  request: APIRequestContext,
+  input: { clientId: string; code: string; verifier: string },
+): Promise<{ accessToken: string; refreshToken: string }> {
+  const res = await request.post('/oauth/token', {
+    form: {
+      grant_type: 'authorization_code',
+      client_id: input.clientId,
+      redirect_uri: REDIRECT_URI,
+      code: input.code,
+      code_verifier: input.verifier,
+    },
+  });
+  expect(res.status()).toBe(200);
+  const body = (await res.json()) as {
+    access_token: string;
+    refresh_token: string;
+    token_type: string;
+    scope: string;
+    expires_in?: number;
+  };
+  expect(body.token_type).toBe('Bearer');
+  expect(body.scope).toBe('kitchen:read');
+  expect(body.expires_in).toBeUndefined();
+  expect(body.access_token).toMatch(/^sj_/);
+  expect(body.refresh_token).toMatch(/^ort_/);
+  return { accessToken: body.access_token, refreshToken: body.refresh_token };
+}
+
+async function refreshTokens(
+  request: APIRequestContext,
+  input: { clientId: string; refreshToken: string },
+): Promise<{ accessToken: string; refreshToken: string }> {
+  const res = await request.post('/oauth/token', {
+    form: {
+      grant_type: 'refresh_token',
+      client_id: input.clientId,
+      refresh_token: input.refreshToken,
+    },
+  });
+  expect(res.status()).toBe(200);
+  const body = (await res.json()) as { access_token: string; refresh_token: string; expires_in?: number };
+  expect(body.expires_in).toBeUndefined();
+  expect(body.access_token).toMatch(/^sj_/);
+  expect(body.refresh_token).toMatch(/^ort_/);
+  expect(body.refresh_token).not.toBe(input.refreshToken);
+  return { accessToken: body.access_token, refreshToken: body.refresh_token };
+}
+
+async function expectRefreshReplayRejected(
+  request: APIRequestContext,
+  input: { clientId: string; refreshToken: string },
+): Promise<void> {
+  const res = await request.post('/oauth/token', {
+    form: {
+      grant_type: 'refresh_token',
+      client_id: input.clientId,
+      refresh_token: input.refreshToken,
+    },
+  });
+  expect(res.status()).toBe(400);
+  await expect(res.json()).resolves.toMatchObject({ error: 'invalid_grant' });
+}
+
+async function expectMcpReady(request: APIRequestContext, accessToken: string): Promise<void> {
+  const initialize = await request.post('/mcp', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    data: { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18' } },
+  });
+  expect(initialize.status()).toBe(200);
+  await expect(initialize.json()).resolves.toMatchObject({
+    result: { protocolVersion: '2025-06-18', serverInfo: { name: 'spoonjoy' } },
+  });
+
+  const tools = await request.post('/mcp', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    data: { jsonrpc: '2.0', id: 2, method: 'tools/list' },
+  });
+  expect(tools.status()).toBe(200);
+  const body = (await tools.json()) as { result: { tools: { name: string }[] } };
+  expect(body.result.tools.map((tool) => tool.name)).toEqual(expect.arrayContaining([
+    'search_spoonjoy',
+    'get_shopping_list',
+  ]));
+}
+
+async function expectConsentFitsDesktop(page: Page): Promise<void> {
+  const metrics = await page.evaluate(() => ({
+    height: document.documentElement.scrollHeight,
+    width: document.documentElement.scrollWidth,
+    viewportHeight: window.innerHeight,
+    viewportWidth: window.innerWidth,
+  }));
+  expect(metrics.width).toBeLessThanOrEqual(metrics.viewportWidth);
+  expect(metrics.height).toBeLessThanOrEqual(metrics.viewportHeight + 4);
 }
 
 /**
@@ -81,6 +180,7 @@ async function expectNativeSubmitForm(button: Locator): Promise<void> {
 
 test.describe('OAuth authorize + consent flow', () => {
   test('unauthenticated authorize gates to login, then consent grants a code', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
     const clientId = await registerClient(page.request);
     const verifier = randomVerifier();
     const challenge = await pkceChallenge(verifier);
@@ -102,13 +202,24 @@ test.describe('OAuth authorize + consent flow', () => {
     const allow = page.getByRole('button', { name: /allow access/i });
     await expect(allow).toBeVisible();
     await expectNativeSubmitForm(allow);
+    await expectConsentFitsDesktop(page);
 
     // Approve → redirected back to the registered redirect_uri with code + state.
     const callback = waitForCallbackNavigation(page);
     await allow.click();
     const result = await callback;
-    expect(result.searchParams.get('code')).toBeTruthy();
+    const code = result.searchParams.get('code');
+    expect(code).toBeTruthy();
     expect(result.searchParams.get('state')).toBe(APPROVE_STATE);
+
+    // The browser code is useful only if the token and MCP resource contract
+    // also holds. This catches audience binding, durable MCP access-token
+    // lifetime, refresh rotation, and the MCP initialize/tools-list shape.
+    const first = await exchangeCodeForTokens(page.request, { clientId, code: code!, verifier });
+    await expectMcpReady(page.request, first.accessToken);
+    const rotated = await refreshTokens(page.request, { clientId, refreshToken: first.refreshToken });
+    await expectRefreshReplayRejected(page.request, { clientId, refreshToken: first.refreshToken });
+    await expectMcpReady(page.request, rotated.accessToken);
   });
 
   test('denying consent redirects back with access_denied', async ({ page }) => {

@@ -2,12 +2,19 @@ import { describe, expect, it } from "vitest";
 
 import * as smokeHelpers from "../../scripts/smoke-live-helpers.mjs";
 import {
+  buildD1CommandArgs,
+  buildMcpCanaryCleanupD1Args,
+  buildMcpCanaryConnectionResourceD1Args,
+  buildMcpCanaryLegacyRefreshInsertD1Args,
+  buildMcpCanaryUserLookupD1Args,
   buildQaR2DeleteArgs,
   buildQaR2GetArgs,
   buildCleanupD1Args,
   buildUserCountD1Args,
   isQaR2ObjectMissingError,
   parseD1CountOutput,
+  parseD1RowsOutput,
+  parseMcpCanaryArgs,
   parseSmokeArgs,
   readGitMetadata,
   shouldRunAppleOAuthCheck,
@@ -77,6 +84,82 @@ describe("smoke-live helpers", () => {
     ]);
   });
 
+  it("builds generic D1 command args for the target environment", () => {
+    expect(buildD1CommandArgs("SELECT 1;", { targetEnv: "production" })).toEqual([
+      "exec",
+      "wrangler",
+      "d1",
+      "execute",
+      "spoonjoy",
+      "--remote",
+      "--command",
+      "SELECT 1;",
+    ]);
+  });
+
+  it("builds MCP canary D1 lookup, legacy insert, resource query, and cleanup args", () => {
+    expect(buildMcpCanaryUserLookupD1Args("canary.o'hara@example.com", { targetEnv: "production" })).toEqual([
+      "exec",
+      "wrangler",
+      "d1",
+      "execute",
+      "spoonjoy",
+      "--remote",
+      "--command",
+      `SELECT id FROM "User" WHERE email = 'canary.o''hara@example.com' LIMIT 1;`,
+    ]);
+
+    expect(buildMcpCanaryLegacyRefreshInsertD1Args({
+      id: "mcp_canary_1",
+      tokenHash: "abc123",
+      userId: "user_1",
+      clientId: "client_1",
+      scope: "kitchen:read kitchen:write",
+      connectionKey: "connection_1",
+    }, { targetEnv: "qa" })).toEqual([
+      "exec",
+      "wrangler",
+      "d1",
+      "execute",
+      "spoonjoy-qa",
+      "--remote",
+      "--command",
+      [
+        `INSERT INTO "OAuthRefreshToken" (id, tokenHash, userId, clientId, scope, resource, connectionKey, revokedAt, createdAt)`,
+        `VALUES ('mcp_canary_1', 'abc123', 'user_1', 'client_1', 'kitchen:read kitchen:write', NULL, 'connection_1', NULL, CURRENT_TIMESTAMP);`,
+      ].join(" "),
+    ]);
+
+    expect(buildMcpCanaryConnectionResourceD1Args({
+      userId: "user_1",
+      clientId: "client_1",
+      connectionKey: "connection_1",
+    }, { targetEnv: "production" }).at(-1)).toBe([
+      `SELECT resource FROM "OAuthRefreshToken"`,
+      `WHERE userId = 'user_1' AND clientId = 'client_1' AND connectionKey = 'connection_1' AND revokedAt IS NULL`,
+      `ORDER BY createdAt DESC LIMIT 1;`,
+    ].join(" "));
+
+    expect(buildMcpCanaryCleanupD1Args({
+      email: "canary@example.com",
+      clientId: "client_1",
+      connectionKey: "connection_1",
+    }, { targetEnv: "production" }).at(-1)).toBe([
+      `DELETE FROM "OAuthRefreshToken" WHERE connectionKey = 'connection_1';`,
+      `DELETE FROM "OAuthClient" WHERE id = 'client_1';`,
+      `DELETE FROM "User" WHERE email = 'canary@example.com';`,
+    ].join(" "));
+
+    expect(buildMcpCanaryCleanupD1Args({
+      email: "canary@example.com",
+      clientId: null,
+      connectionKey: "connection_1",
+    }, { targetEnv: "production" }).at(-1)).toBe([
+      `DELETE FROM "OAuthRefreshToken" WHERE connectionKey = 'connection_1';`,
+      `DELETE FROM "User" WHERE email = 'canary@example.com';`,
+    ].join(" "));
+  });
+
   it("only runs the production Apple OAuth guard for production smoke", () => {
     expect(shouldRunAppleOAuthCheck("production")).toBe(true);
     expect(shouldRunAppleOAuthCheck("qa")).toBe(false);
@@ -130,6 +213,29 @@ describe("smoke-live helpers", () => {
       baseUrl: "https://spoonjoy-v2-qa.mendelow-studio.workers.dev",
       outDir: "qa-live-smoke-artifacts",
       shouldCleanup: false,
+    });
+  });
+
+  it("parses MCP canary args with live-smoke target safeguards", () => {
+    expect(parseMcpCanaryArgs([
+      "--target-env",
+      "production",
+      "--base-url",
+      "https://spoonjoy.app",
+      "--out",
+      "mcp-oauth-canary-artifacts",
+      "--keep-smoke-data",
+      "--skip-legacy-db-probe",
+    ])).toMatchObject({
+      targetEnv: "production",
+      baseUrl: "https://spoonjoy.app",
+      outDir: "mcp-oauth-canary-artifacts",
+      shouldCleanup: false,
+      includeLegacyDbProbe: false,
+    });
+    expect(parseMcpCanaryArgs(["--base-url", "http://localhost:5173"])).toMatchObject({
+      targetEnv: "local",
+      includeLegacyDbProbe: true,
     });
   });
 
@@ -263,6 +369,12 @@ describe("smoke-live helpers", () => {
     expect(parseD1CountOutput(JSON.stringify([{ results: [{ "count(*)": 4 }] }]))).toBe(4);
     expect(() => parseD1CountOutput("no json here")).toThrow(/JSON array/);
     expect(() => parseD1CountOutput(JSON.stringify([{ results: [{}] }]))).toThrow(/numeric count/);
+  });
+
+  it("parses D1 result rows and rejects malformed row output", () => {
+    expect(parseD1RowsOutput(JSON.stringify([{ results: [{ id: "user_1" }] }]))).toEqual([{ id: "user_1" }]);
+    expect(() => parseD1RowsOutput("no json here")).toThrow(/JSON array/);
+    expect(() => parseD1RowsOutput(JSON.stringify([{ result: [] }]))).toThrow(/results array/);
   });
 
   it("rejects unsupported target envs for D1 arg builders", () => {

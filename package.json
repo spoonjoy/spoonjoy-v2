@@ -42,6 +42,7 @@
     "smoke:live": "node scripts/smoke-live.mjs --target-env production --base-url https://spoonjoy-v2.mendelow-studio.workers.dev",
     "smoke:qa": "node scripts/smoke-live.mjs --target-env qa --base-url https://spoonjoy-v2-qa.mendelow-studio.workers.dev --out qa-live-smoke-artifacts",
     "smoke:qa:image-cover": "node scripts/smoke-live.mjs --target-env qa --base-url https://spoonjoy-v2-qa.mendelow-studio.workers.dev --out qa-image-cover-smoke-artifacts --include-image-cover-smoke",
+    "smoke:mcp:oauth": "node scripts/smoke-mcp-oauth-live.mjs --target-env production --base-url https://spoonjoy.app",
     "smoke:api": "node scripts/smoke-api-live.mjs --target-env production",
     "native:dogfood:api": "tsx scripts/native-dogfood-api-server.ts",
     "mcp:serve": "tsx scripts/spoonjoy-mcp-server.ts",

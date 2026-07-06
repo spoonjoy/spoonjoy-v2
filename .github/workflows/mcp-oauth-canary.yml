@@ -1,13 +1,12 @@
-name: Production Deploy
+name: MCP OAuth Canary
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
+  schedule:
+    - cron: "23 * * * *"
 
 concurrency:
-  group: production-deploy
+  group: mcp-oauth-canary
   cancel-in-progress: false
 
 env:
@@ -16,40 +15,54 @@ env:
   GIT_CONFIG_VALUE_0: main
 
 jobs:
-  deploy:
-    name: deploy
+  canary:
+    name: canary
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 25
 
     steps:
+      - name: Check GitHub Cloudflare credentials
+        id: cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping MCP OAuth canary because Cloudflare GitHub secrets are not configured."
+            exit 0
+          fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@v6
+        if: steps.cloudflare.outputs.ready == 'true'
 
       - name: Setup Node.js
+        if: steps.cloudflare.outputs.ready == 'true'
         uses: actions/setup-node@v6
         with:
           node-version: "22"
 
       - name: Activate pnpm
+        if: steps.cloudflare.outputs.ready == 'true'
         run: |
           corepack enable
           corepack prepare pnpm@10.28.1 --activate
 
       - name: Install dependencies
+        if: steps.cloudflare.outputs.ready == 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Generate Prisma client
+        if: steps.cloudflare.outputs.ready == 'true'
         run: pnpm prisma:generate
 
-      - name: Deploy to Cloudflare Workers
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: pnpm run deploy:auto
-
       - name: Install Playwright Chromium
+        if: steps.cloudflare.outputs.ready == 'true'
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Run MCP OAuth canary
+        if: steps.cloudflare.outputs.ready == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -57,7 +70,7 @@ jobs:
         run: pnpm run smoke:mcp:oauth -- --out mcp-oauth-canary-artifacts
 
       - name: Upload MCP OAuth canary artifacts
-        if: always()
+        if: always() && steps.cloudflare.outputs.ready == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: mcp-oauth-canary-artifacts
