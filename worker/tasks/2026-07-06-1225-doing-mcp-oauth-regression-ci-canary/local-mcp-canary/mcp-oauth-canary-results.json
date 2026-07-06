@@ -1,0 +1,76 @@
+{
+  "baseUrl": "http://localhost:5173",
+  "generatedAt": "2026-07-06T19:43:41.565Z",
+  "targetEnv": "local",
+  "environment": {
+    "targetEnv": "local",
+    "baseUrl": "http://localhost:5173",
+    "d1Target": "local D1 (--local)",
+    "r2Target": "local photos binding",
+    "destructiveScope": "local disposable test data only"
+  },
+  "git": {
+    "branch": "worker/mcp-regression-ci-canary",
+    "commit": "49534952b59d"
+  },
+  "email": "codex-mcp-canary-mr9mogl9@example.com",
+  "username": "codex_mcp_mr9mogl9",
+  "redirectUri": "https://claude.ai/api/mcp/auth_callback",
+  "resource": "https://spoonjoy.app/mcp",
+  "screenshots": [
+    "worker/tasks/2026-07-06-1225-doing-mcp-oauth-regression-ci-canary/local-mcp-canary/00-after-signup.png",
+    "worker/tasks/2026-07-06-1225-doing-mcp-oauth-regression-ci-canary/local-mcp-canary/01-consent-desktop.png"
+  ],
+  "checks": [
+    {
+      "name": "signup disposable user",
+      "elapsedMs": 1637
+    },
+    {
+      "name": "protected-resource metadata",
+      "elapsedMs": 322
+    },
+    {
+      "name": "dynamic client registration",
+      "elapsedMs": 16
+    },
+    {
+      "name": "authorize consent UI and approve redirect",
+      "elapsedMs": 891
+    },
+    {
+      "name": "authorization_code token exchange",
+      "elapsedMs": 31
+    },
+    {
+      "name": "mcp initialize and tools/list with issued access token",
+      "elapsedMs": 39
+    },
+    {
+      "name": "refresh rotation and replay rejection",
+      "elapsedMs": 37
+    },
+    {
+      "name": "mcp initialize and tools/list with refreshed access token",
+      "elapsedMs": 51
+    },
+    {
+      "name": "legacy Claude refresh token promotion",
+      "elapsedMs": 3300
+    }
+  ],
+  "cleanup": {
+    "target": "local D1",
+    "remaining": 0,
+    "stdout": "\n ⛅️ wrangler 4.90.0 (update available 4.107.0)\n──────────────────────────────────────────────\nResource location: local \n\nUse --remote if you want to access the remote instance.\n\n🌀 Executing on local database DB (32cb0e04-c45b-4cd2-a798-556556ae288d) from .wrangler/state/v3/d1:\n🌀 To execute on your remote database, add a --remote flag to your wrangler command.\n🚣 3 commands executed successfully.\n[\n  {\n    \"results\": [],\n    \"success\": true,\n    \"meta\": {\n      \"duration\": 0\n    }\n  },\n  {\n    \"results\": [],\n    \"success\": true,\n    \"meta\": {\n      \"duration\": 1\n    }\n  },\n  {\n    \"results\": [],\n    \"success\": true,\n    \"meta\": {\n      \"duration\": 3\n    }\n  }\n]\n",
+    "stderr": ""
+  },
+  "legacyProbe": {
+    "userId": "cmr9mohx00006u70oyt7b6u4m",
+    "connectionKey": "mcp_canary_connection_mr9mogl9",
+    "insertedRefreshId": "mcp_canary_mr9mogl9",
+    "resource": "https://spoonjoy.app/mcp",
+    "promotedResource": "https://spoonjoy.app/mcp"
+  },
+  "clientId": "cmr9moilo0007u70ohq51cd2o"
+}

@@ -33,7 +33,25 @@ describe("UI audit tooling", () => {
     expect(existsSync("scripts/inventory-ui.mjs")).toBe(true);
     expect(existsSync("scripts/crawl-ui.mjs")).toBe(true);
     expect(existsSync("scripts/smoke-live.mjs")).toBe(true);
+    expect(existsSync("scripts/smoke-mcp-oauth-live.mjs")).toBe(true);
     expect(existsSync("scripts/cleanup-local-qa-data.mjs")).toBe(true);
+  });
+
+  it("keeps MCP OAuth canary package and workflow wiring in place", () => {
+    const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as {
+      scripts?: Record<string, string>;
+    };
+    const productionDeploy = readFileSync(".github/workflows/production-deploy.yml", "utf8");
+    const canaryWorkflow = readFileSync(".github/workflows/mcp-oauth-canary.yml", "utf8");
+
+    expect(packageJson.scripts?.["smoke:mcp:oauth"]).toBe(
+      "node scripts/smoke-mcp-oauth-live.mjs --target-env production --base-url https://spoonjoy.app",
+    );
+    expect(productionDeploy).toContain("pnpm run smoke:mcp:oauth -- --out mcp-oauth-canary-artifacts");
+    expect(productionDeploy).toContain("path: mcp-oauth-canary-artifacts/");
+    expect(canaryWorkflow).toContain("schedule:");
+    expect(canaryWorkflow).toContain("pnpm run smoke:mcp:oauth -- --out mcp-oauth-canary-artifacts");
+    expect(canaryWorkflow).toContain("path: mcp-oauth-canary-artifacts/");
   });
 
   it("documents repo-local UI audit commands instead of local skill paths", () => {
