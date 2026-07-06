@@ -196,7 +196,11 @@ describe("API v1 native account sync", () => {
         action: "upsert",
         kind: "cookbook",
         resourceId: cookbook.id,
-        payload: expect.objectContaining({ title: cookbook.title }),
+        payload: expect.objectContaining({
+          title: cookbook.title,
+          recipeCount: 1,
+          recipes: [],
+        }),
       }),
       expect.objectContaining({
         action: "upsert",
@@ -217,6 +221,54 @@ describe("API v1 native account sync", () => {
         }),
       }),
     ]));
+  });
+
+  it("keeps dense cookbook sync payloads summary-only", async () => {
+    const user = await createUser(db, "dense-sync@example.com", `dense_sync_${faker.string.alphanumeric(8)}`, "correctHorseBatteryStaple");
+    const cookbook = await db.cookbook.create({
+      data: {
+        title: `Dense Native Sync Cookbook ${faker.string.alphanumeric(8)}`,
+        authorId: user.id,
+        updatedAt: new Date("2026-06-01T11:00:00.000Z"),
+      },
+    });
+    for (let index = 0; index < 13; index += 1) {
+      const recipe = await db.recipe.create({
+        data: {
+          ...createTestRecipe(user.id),
+          title: `Dense Native Sync Recipe ${index} ${faker.string.alphanumeric(8)}`,
+          updatedAt: new Date(`2026-06-01T11:${String(index + 1).padStart(2, "0")}:00.000Z`),
+        },
+      });
+      await db.recipeInCookbook.create({
+        data: { recipeId: recipe.id, cookbookId: cookbook.id, addedById: user.id },
+      });
+    }
+    const credential = await createApiCredential(db, user.id, "Dense native sync reader", {
+      scopes: ["account:read", "kitchen:read"],
+    });
+
+    const response = await loader(routeArgs(syncRequest(credential.token, "req_dense_native_sync", "?limit=50"), "me/sync", {
+      NODE_ENV: "production",
+      SPOONJOY_BASE_URL: "https://spoonjoy.app",
+    }));
+    const payload = await readJson(response);
+    const cookbookEntry = payload.data.entries.find((entry: { kind: string }) => entry.kind === "cookbook");
+
+    expect(response.status).toBe(200);
+    expect(cookbookEntry).toMatchObject({
+      action: "upsert",
+      resourceId: cookbook.id,
+      payload: {
+        id: cookbook.id,
+        title: cookbook.title,
+        recipeCount: 13,
+        coverImageUrls: expect.any(Array),
+        recipes: [],
+      },
+    });
+    expect(cookbookEntry.payload.coverImageUrls.length).toBeLessThanOrEqual(4);
+    expect(JSON.stringify(cookbookEntry.payload).length).toBeLessThan(2_000);
   });
 
   it("returns durable recipe and cookbook delete tombstones for native offline caches", async () => {
@@ -439,7 +491,7 @@ describe("API v1 native account sync", () => {
         updatedAt: "2026-06-01T13:10:00.000Z",
         payload: expect.objectContaining({
           recipeCount: 1,
-          recipes: [expect.objectContaining({ id: recipe.id })],
+          recipes: [],
         }),
       }),
     ]));
@@ -619,10 +671,7 @@ describe("API v1 native account sync", () => {
         updatedAt: "2026-06-01T14:10:00.000Z",
         payload: expect.objectContaining({
           coverImageUrls: [expect.stringMatching(expectedCoverUrl)],
-          recipes: [expect.objectContaining({
-            id: recipe.id,
-            coverImageUrl: expect.stringMatching(expectedCoverUrl),
-          })],
+          recipes: [],
         }),
       }),
     ]));

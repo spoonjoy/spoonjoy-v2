@@ -2163,7 +2163,7 @@ const responseExamples: Record<string, unknown> = {
           kind: "cookbook",
           resourceId: "cookbook_1",
           updatedAt: exampleTimestamp,
-          payload: exampleCookbookDetail,
+          payload: { ...exampleCookbookSummary, recipes: [] },
         },
         {
           action: "delete",
