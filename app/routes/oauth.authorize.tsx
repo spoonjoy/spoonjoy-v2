@@ -1,6 +1,6 @@
 import type { Route } from "./+types/oauth.authorize";
 import type { ReactNode } from "react";
-import { Form, useLoaderData } from "react-router";
+import { useLoaderData } from "react-router";
 import { getRequestDb } from "~/lib/route-platform.server";
 import {
   handleOAuthAuthorizeAction,
@@ -274,18 +274,18 @@ export default function OAuthAuthorize() {
       </details>
 
       <div className="mt-6 grid gap-3 sm:flex sm:flex-wrap">
-        <Form method="post">
+        <form method="post">
           <HiddenParams params={view.params} />
           <Button className="w-full sm:w-auto" type="submit" name="decision" value="approve">
             Allow access
           </Button>
-        </Form>
-        <Form method="post">
+        </form>
+        <form method="post">
           <HiddenParams params={view.params} />
           <Button className="w-full sm:w-auto" type="submit" name="decision" value="deny" plain>
             Deny
           </Button>
-        </Form>
+        </form>
       </div>
     </ConnectorConsentShell>
   );

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import type { APIRequestContext, Page } from '@playwright/test';
+import type { APIRequestContext, Locator, Page } from '@playwright/test';
 import { loginAsSeedUser } from '../support/auth';
 
 /**
@@ -63,18 +63,20 @@ function authorizeUrl(opts: { clientId: string; codeChallenge: string; state: st
 }
 
 /**
- * Stub the registered redirect_uri so the OAuth callback never triggers a real
- * navigation/load. Resolves with the exact callback URL once the server
- * redirects the browser there.
+ * Resolves with the exact callback URL once the native form POST redirects the
+ * browser to the registered redirect_uri. The callback path can render a local
+ * 404; the URL is the OAuth contract under test.
  */
-function captureCallback(page: Page): Promise<URL> {
-  return new Promise<URL>((resolve) => {
-    void page.route(`${REDIRECT_URI}*`, async (route) => {
-      const callbackUrl = new URL(route.request().url());
-      await route.fulfill({ status: 200, contentType: 'text/html', body: 'ok' });
-      resolve(callbackUrl);
-    });
-  });
+async function waitForCallbackNavigation(page: Page): Promise<URL> {
+  await page.waitForURL((url) => url.href.startsWith(REDIRECT_URI), { timeout: 15_000 });
+  return new URL(page.url());
+}
+
+async function expectNativeSubmitForm(button: Locator): Promise<void> {
+  const form = button.locator('xpath=ancestor::form[1]');
+  await expect(form).toHaveCount(1);
+  await expect(form).toHaveAttribute('method', 'post');
+  await expect(form).not.toHaveAttribute('data-discover', /.*/);
 }
 
 test.describe('OAuth authorize + consent flow', () => {
@@ -99,9 +101,10 @@ test.describe('OAuth authorize + consent flow', () => {
     await expect(page.getByText(/this connection stays active until you disconnect it/i)).toBeVisible();
     const allow = page.getByRole('button', { name: /allow access/i });
     await expect(allow).toBeVisible();
+    await expectNativeSubmitForm(allow);
 
     // Approve → redirected back to the registered redirect_uri with code + state.
-    const callback = captureCallback(page);
+    const callback = waitForCallbackNavigation(page);
     await allow.click();
     const result = await callback;
     expect(result.searchParams.get('code')).toBeTruthy();
@@ -122,8 +125,9 @@ test.describe('OAuth authorize + consent flow', () => {
     const deny = page.getByRole('button', { name: /^deny$/i });
     await expect(deny).toBeVisible();
     expect(new URL(page.url()).pathname).toBe('/oauth/authorize');
+    await expectNativeSubmitForm(deny);
 
-    const callback = captureCallback(page);
+    const callback = waitForCallbackNavigation(page);
     await deny.click();
     const result = await callback;
     expect(result.searchParams.get('error')).toBe('access_denied');
