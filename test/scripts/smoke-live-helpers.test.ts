@@ -5,18 +5,28 @@ import {
   buildD1CommandArgs,
   buildMcpCanaryCleanupD1Args,
   buildMcpCanaryConnectionResourceD1Args,
+  buildMcpCanaryIssueBody,
   buildMcpCanaryLegacyRefreshInsertD1Args,
+  buildMcpCanaryStepSummary,
   buildMcpCanaryUserLookupD1Args,
+  buildMcpOAuthAuditSummary,
+  buildMcpOAuthInvariantAuditD1Args,
   buildQaR2DeleteArgs,
   buildQaR2GetArgs,
   buildCleanupD1Args,
   buildUserCountD1Args,
+  decideMcpCanaryIssueAction,
+  findMcpCanarySecretLeaks,
   isQaR2ObjectMissingError,
+  mcpOAuthAuditHasFailures,
+  normalizeMcpOAuthAuditRows,
   parseD1CountOutput,
   parseD1RowsOutput,
   parseMcpCanaryArgs,
+  parseMcpOAuthAuditArgs,
   parseSmokeArgs,
   readGitMetadata,
+  redactMcpCanaryText,
   shouldRunAppleOAuthCheck,
   usesLocalD1,
 } from "../../scripts/smoke-live-helpers.mjs";
@@ -263,6 +273,91 @@ describe("smoke-live helpers", () => {
     }
   });
 
+  it("redacts MCP canary artifacts and detects leaked OAuth secrets", () => {
+    const leaked = [
+      "Authorization: Bearer sj_abcdefghijklmnopqrstuvwxyz0123456789",
+      "refresh=ort_abcdefghijklmnopqrstuvwxyz0123456789",
+      "callback?code=oac_abcdefghijklmnopqrstuvwxyz0123456789&state=ok",
+      "client_secret=something",
+    ].join("\n");
+
+    expect(redactMcpCanaryText(leaked)).toBe([
+      "Authorization: Bearer [REDACTED]",
+      "refresh=[REDACTED]",
+      "callback?code=[REDACTED]&state=ok",
+      "client_secret=[REDACTED]",
+    ].join("\n"));
+    expect(findMcpCanarySecretLeaks(leaked).map((leak) => leak.kind)).toEqual([
+      "bearer_authorization",
+      "spoonjoy_access_token",
+      "oauth_refresh_token",
+      "oauth_authorization_code",
+      "callback_code_query",
+      "client_secret",
+    ]);
+    expect(findMcpCanarySecretLeaks(redactMcpCanaryText(leaked))).toEqual([]);
+  });
+
+  it("renders MCP canary step summaries without secrets", () => {
+    const summary = buildMcpCanaryStepSummary({
+      report: {
+        targetEnv: "production",
+        baseUrl: "https://spoonjoy.app",
+        resource: "https://spoonjoy.app/mcp",
+        generatedAt: "2026-07-06T20:16:18.000Z",
+        checks: [
+          { name: "authorization_code token exchange", elapsedMs: 123 },
+          { name: "mcp initialize and tools/list with issued access token", elapsedMs: 456 },
+        ],
+        cleanup: { target: "production D1", remaining: 0 },
+        legacyProbe: { promotedResource: "https://spoonjoy.app/mcp" },
+        failure: { message: "bad token sj_abcdefghijklmnopqrstuvwxyz0123456789" },
+      },
+      status: "failure",
+      workflowRunUrl: "https://github.com/spoonjoy/spoonjoy-v2/actions/runs/1",
+      artifactUrl: "https://github.com/spoonjoy/spoonjoy-v2/actions/runs/1/artifacts/2",
+    });
+
+    expect(summary).toContain("# MCP OAuth Canary");
+    expect(summary).toContain("| authorization_code token exchange | 123 |");
+    expect(summary).toContain("legacy Claude refresh promotion");
+    expect(summary).toContain("[workflow run](https://github.com/spoonjoy/spoonjoy-v2/actions/runs/1)");
+    expect(summary).toContain("[REDACTED]");
+    expect(summary).not.toContain("sj_abcdefghijklmnopqrstuvwxyz0123456789");
+  });
+
+  it("decides MCP canary issue actions for failures and recoveries", () => {
+    expect(decideMcpCanaryIssueAction({ status: "failure", openIssueNumber: null })).toEqual({ action: "create" });
+    expect(decideMcpCanaryIssueAction({ status: "failure", openIssueNumber: 12 })).toEqual({ action: "comment", issueNumber: 12 });
+    expect(decideMcpCanaryIssueAction({ status: "success", openIssueNumber: 12 })).toEqual({ action: "close", issueNumber: 12 });
+    expect(decideMcpCanaryIssueAction({ status: "success", openIssueNumber: null })).toEqual({ action: "none" });
+  });
+
+  it("renders MCP canary issue bodies with safe diagnostics", () => {
+    const body = buildMcpCanaryIssueBody({
+      report: {
+        targetEnv: "production",
+        baseUrl: "https://spoonjoy.app",
+        resource: "https://spoonjoy.app/mcp",
+        git: { branch: "main", commit: "abc123" },
+        cleanup: { error: "cleanup failed" },
+        checks: [{ name: "signup disposable user", elapsedMs: 10 }],
+        failure: { message: "Authorization: Bearer sj_abcdefghijklmnopqrstuvwxyz0123456789" },
+      },
+      status: "failure",
+      workflowRunUrl: "https://github.com/spoonjoy/spoonjoy-v2/actions/runs/1",
+      artifactUrl: "https://github.com/spoonjoy/spoonjoy-v2/actions/runs/1/artifacts/2",
+    });
+
+    expect(body).toContain("## Current Status");
+    expect(body).toContain("production");
+    expect(body).toContain("cleanup failed");
+    expect(body).toContain("abc123");
+    expect(body).toContain("[artifact](https://github.com/spoonjoy/spoonjoy-v2/actions/runs/1/artifacts/2)");
+    expect(body).not.toContain("sj_abcdefghijklmnopqrstuvwxyz0123456789");
+    expect(body).toContain("[REDACTED]");
+  });
+
   it("parses the QA-only image-cover smoke flag", () => {
     expect(
       parseSmokeArgs([
@@ -399,6 +494,69 @@ describe("smoke-live helpers", () => {
     expect(parseD1RowsOutput(JSON.stringify([{ results: [{ id: "user_1" }] }]))).toEqual([{ id: "user_1" }]);
     expect(() => parseD1RowsOutput("no json here")).toThrow(/JSON array/);
     expect(() => parseD1RowsOutput(JSON.stringify([{ result: [] }]))).toThrow(/results array/);
+  });
+
+  it("parses MCP OAuth audit args with production safeguards", () => {
+    expect(parseMcpOAuthAuditArgs(["--target-env", "production", "--base-url", "https://spoonjoy.app", "--out", "audit-out"])).toMatchObject({
+      targetEnv: "production",
+      baseUrl: "https://spoonjoy.app",
+      outDir: "audit-out",
+    });
+    expect(parseMcpOAuthAuditArgs(["--base-url", "http://localhost:5173"])).toMatchObject({
+      targetEnv: "local",
+      baseUrl: "http://localhost:5173",
+    });
+  });
+
+  it("builds a readonly MCP OAuth invariant audit D1 command", () => {
+    const args = buildMcpOAuthInvariantAuditD1Args({ targetEnv: "production" });
+
+    expect(args.slice(0, 6)).toEqual(["exec", "wrangler", "d1", "execute", "spoonjoy", "--remote"]);
+    const command = args.at(-1) ?? "";
+    expect(command).toContain("active_refresh_missing_resource");
+    expect(command).toContain("duplicate_active_connection_keys");
+    expect(command).toContain("access_refresh_resource_mismatch");
+    expect(command).toContain("canary_user_residue");
+    expect(command).toContain("canary_refresh_residue");
+    expect(command).toContain("claude_redirect_client_count");
+    expect(command).toContain("SELECT");
+    expect(command).not.toMatch(/\b(?:DELETE|UPDATE|INSERT|DROP|ALTER)\b/i);
+  });
+
+  it("normalizes MCP OAuth invariant rows and detects failures", () => {
+    const normalized = normalizeMcpOAuthAuditRows([
+      { invariant: "active_refresh_missing_resource", count: "0" },
+      { invariant: "duplicate_active_connection_keys", count: 2 },
+      { invariant: "claude_redirect_client_count", count: "3" },
+    ]);
+
+    expect(normalized).toEqual([
+      { invariant: "active_refresh_missing_resource", count: 0, status: "pass" },
+      { invariant: "duplicate_active_connection_keys", count: 2, status: "fail" },
+      { invariant: "claude_redirect_client_count", count: 3, status: "info" },
+    ]);
+    expect(mcpOAuthAuditHasFailures(normalized)).toBe(true);
+    expect(mcpOAuthAuditHasFailures([{ invariant: "claude_redirect_client_count", count: 3, status: "info" }])).toBe(false);
+    expect(() => normalizeMcpOAuthAuditRows([{ invariant: "bad", count: "nope" }])).toThrow(/numeric count/);
+  });
+
+  it("renders MCP OAuth audit summaries", () => {
+    const summary = buildMcpOAuthAuditSummary({
+      targetEnv: "production",
+      baseUrl: "https://spoonjoy.app",
+      generatedAt: "2026-07-06T21:00:00.000Z",
+      rows: [
+        { invariant: "active_refresh_missing_resource", count: 0, status: "pass" },
+        { invariant: "duplicate_active_connection_keys", count: 1, status: "fail" },
+        { invariant: "claude_redirect_client_count", count: 4, status: "info" },
+      ],
+      workflowRunUrl: "https://github.com/spoonjoy/spoonjoy-v2/actions/runs/3",
+    });
+
+    expect(summary).toContain("# MCP OAuth D1 Audit");
+    expect(summary).toContain("| active_refresh_missing_resource | 0 | pass |");
+    expect(summary).toContain("| duplicate_active_connection_keys | 1 | fail |");
+    expect(summary).toContain("[workflow run](https://github.com/spoonjoy/spoonjoy-v2/actions/runs/3)");
   });
 
   it("rejects unsupported target envs for D1 arg builders", () => {

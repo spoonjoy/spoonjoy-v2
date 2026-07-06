@@ -72,6 +72,20 @@ export function parseMcpCanaryArgs(argv = process.argv.slice(2), env = process.e
   };
 }
 
+export function parseMcpOAuthAuditArgs(argv = process.argv.slice(2), env = process.env) {
+  const target = resolveScriptTarget({
+    argv,
+    env,
+    defaultBaseUrl: env.SPOONJOY_MCP_AUDIT_BASE_URL ?? "https://spoonjoy.app",
+  });
+  return {
+    baseUrl: target.baseUrl,
+    outDir: arg(argv, "--out", "mcp-oauth-d1-audit-artifacts"),
+    targetEnv: target.targetEnv,
+    target,
+  };
+}
+
 function d1ExecuteTarget(targetEnv) {
   if (targetEnv === "local") {
     return {
@@ -131,6 +145,19 @@ export function buildMcpCanaryCleanupD1Args(input, { targetEnv }) {
   }
   commands.push(`DELETE FROM "User" WHERE email = ${sqlString(input.email)};`);
   return buildD1CommandArgs(commands.join(" "), { targetEnv });
+}
+
+export function buildMcpOAuthInvariantAuditD1Args({ targetEnv }) {
+  return buildD1CommandArgs([
+    `WITH audit(invariant, count) AS (VALUES`,
+    `('active_refresh_missing_resource', (SELECT COUNT(*) FROM "OAuthRefreshToken" WHERE revokedAt IS NULL AND clientId IS NOT NULL AND resource IS NULL)),`,
+    `('duplicate_active_connection_keys', (SELECT COUNT(*) FROM (SELECT connectionKey FROM "OAuthRefreshToken" WHERE revokedAt IS NULL AND connectionKey IS NOT NULL GROUP BY connectionKey HAVING COUNT(*) > 1))),`,
+    `('access_refresh_resource_mismatch', (SELECT COUNT(*) FROM "ApiCredential" ac JOIN "OAuthRefreshToken" rt ON ac.userId = rt.userId AND ac.oauthClientId = rt.clientId WHERE ac.revokedAt IS NULL AND rt.revokedAt IS NULL AND COALESCE(ac.oauthResource, '') != COALESCE(rt.resource, ''))),`,
+    `('canary_user_residue', (SELECT COUNT(*) FROM "User" WHERE email LIKE 'codex-mcp-canary-%@example.com')),`,
+    `('canary_refresh_residue', (SELECT COUNT(*) FROM "OAuthRefreshToken" WHERE connectionKey LIKE 'mcp_canary_connection_%')),`,
+    `('claude_redirect_client_count', (SELECT COUNT(*) FROM "OAuthClient" WHERE clientName = 'Claude' AND redirectUris LIKE '%https://claude.ai/api/mcp/auth_callback%'))`,
+    `) SELECT invariant, count FROM audit;`,
+  ].join(" "), { targetEnv });
 }
 
 export function buildQaR2GetArgs(key) {
@@ -198,6 +225,172 @@ export function readGitMetadata(runCommand = execFileSync) {
     branch: read(["rev-parse", "--abbrev-ref", "HEAD"]),
     commit: read(["rev-parse", "--short=12", "HEAD"]),
   };
+}
+
+export const MCP_CANARY_ISSUE_TITLE = "MCP OAuth canary failing";
+export const MCP_CANARY_ISSUE_LABEL = "mcp-oauth-canary";
+
+const MCP_CANARY_SECRET_PATTERNS = [
+  {
+    kind: "bearer_authorization",
+    pattern: /Authorization:\s*Bearer\s+[A-Za-z0-9._~-]+/gi,
+    replacement: "Authorization: Bearer [REDACTED]",
+  },
+  {
+    kind: "spoonjoy_access_token",
+    pattern: /\bsj_[A-Za-z0-9_-]{20,}\b/g,
+    replacement: "[REDACTED]",
+  },
+  {
+    kind: "oauth_refresh_token",
+    pattern: /\bort_[A-Za-z0-9_-]{20,}\b/g,
+    replacement: "[REDACTED]",
+  },
+  {
+    kind: "oauth_authorization_code",
+    pattern: /\boac_[A-Za-z0-9_-]{20,}\b/g,
+    replacement: "[REDACTED]",
+  },
+  {
+    kind: "callback_code_query",
+    pattern: /([?&]code=)(?!\[REDACTED\])[^&\s]+/gi,
+    replacement: "$1[REDACTED]",
+  },
+  {
+    kind: "client_secret",
+    pattern: /(client_secret=)(?!\[REDACTED\])[^&\s]+/gi,
+    replacement: "$1[REDACTED]",
+  },
+];
+
+export function redactMcpCanaryText(value) {
+  return MCP_CANARY_SECRET_PATTERNS.reduce(
+    (text, rule) => text.replace(rule.pattern, rule.replacement),
+    String(value),
+  );
+}
+
+export function findMcpCanarySecretLeaks(value) {
+  const text = String(value);
+  return MCP_CANARY_SECRET_PATTERNS.flatMap((rule) =>
+    [...text.matchAll(rule.pattern)].map((match) => ({ kind: rule.kind, match: match[0] })),
+  );
+}
+
+function markdownValue(value) {
+  return redactMcpCanaryText(value === undefined || value === null || value === "" ? "n/a" : String(value));
+}
+
+function workflowLink(url) {
+  return url ? `[workflow run](${url})` : "n/a";
+}
+
+function artifactLink(url) {
+  return url ? `[artifact](${url})` : "n/a";
+}
+
+function checkRows(report) {
+  const checks = Array.isArray(report.checks) ? report.checks : [];
+  return checks.map((check) => `| ${markdownValue(check.name)} | ${markdownValue(check.elapsedMs)} |`);
+}
+
+export function buildMcpCanaryStepSummary({ report, status, workflowRunUrl, artifactUrl }) {
+  const cleanup = report.cleanup ?? {};
+  const failure = report.failure?.message ?? "";
+  const rows = checkRows(report);
+  return redactMcpCanaryText([
+    "# MCP OAuth Canary",
+    "",
+    `Status: **${markdownValue(status)}**`,
+    `Target: ${markdownValue(report.targetEnv)} (${markdownValue(report.baseUrl)})`,
+    `Resource: ${markdownValue(report.resource)}`,
+    `Generated: ${markdownValue(report.generatedAt)}`,
+    `Run: ${workflowLink(workflowRunUrl)}`,
+    `Artifact: ${artifactLink(artifactUrl)}`,
+    "",
+    "## Checks",
+    "| Check | Elapsed ms |",
+    "| --- | ---: |",
+    ...rows,
+    "",
+    "## Cleanup",
+    `Target: ${markdownValue(cleanup.target)}`,
+    `Remaining disposable users: ${markdownValue(cleanup.remaining)}`,
+    `Error: ${markdownValue(cleanup.error)}`,
+    "",
+    "## Legacy Probe",
+    `legacy Claude refresh promotion: ${markdownValue(report.legacyProbe?.promotedResource ?? report.legacyProbe?.reason ?? "n/a")}`,
+    "",
+    "## Failure",
+    markdownValue(failure),
+    "",
+  ].join("\n"));
+}
+
+export function buildMcpCanaryIssueBody({ report, status, workflowRunUrl, artifactUrl }) {
+  const failure = report.failure?.message ?? "n/a";
+  const cleanup = report.cleanup ?? {};
+  return redactMcpCanaryText([
+    "## Current Status",
+    `Status: **${markdownValue(status)}**`,
+    `Target: ${markdownValue(report.targetEnv)} (${markdownValue(report.baseUrl)})`,
+    `Resource: ${markdownValue(report.resource)}`,
+    `Commit: ${markdownValue(report.git?.commit)}`,
+    `Run: ${workflowLink(workflowRunUrl)}`,
+    `Artifact: ${artifactLink(artifactUrl)}`,
+    "",
+    "## Failure",
+    markdownValue(failure),
+    "",
+    "## Cleanup",
+    `Remaining disposable users: ${markdownValue(cleanup.remaining)}`,
+    `Cleanup error: ${markdownValue(cleanup.error)}`,
+    "",
+    "## Completed Checks",
+    "| Check | Elapsed ms |",
+    "| --- | ---: |",
+    ...checkRows(report),
+    "",
+  ].join("\n"));
+}
+
+export function decideMcpCanaryIssueAction({ status, openIssueNumber }) {
+  if (status === "failure" && openIssueNumber) return { action: "comment", issueNumber: openIssueNumber };
+  if (status === "failure") return { action: "create" };
+  if (status === "success" && openIssueNumber) return { action: "close", issueNumber: openIssueNumber };
+  return { action: "none" };
+}
+
+const MCP_OAUTH_AUDIT_INFO_INVARIANTS = new Set(["claude_redirect_client_count"]);
+
+export function normalizeMcpOAuthAuditRows(rows) {
+  return rows.map((row) => {
+    const count = typeof row.count === "number" ? row.count : (/^\d+$/.test(String(row.count)) ? Number(row.count) : Number.NaN);
+    if (!Number.isFinite(count)) {
+      throw new Error(`MCP OAuth audit invariant ${row.invariant} did not include a numeric count.`);
+    }
+    const status = MCP_OAUTH_AUDIT_INFO_INVARIANTS.has(row.invariant) ? "info" : (count === 0 ? "pass" : "fail");
+    return { invariant: row.invariant, count, status };
+  });
+}
+
+export function mcpOAuthAuditHasFailures(rows) {
+  return rows.some((row) => row.status === "fail");
+}
+
+export function buildMcpOAuthAuditSummary({ targetEnv, baseUrl, generatedAt, rows, workflowRunUrl }) {
+  return [
+    "# MCP OAuth D1 Audit",
+    "",
+    `Target: ${targetEnv} (${baseUrl})`,
+    `Generated: ${generatedAt}`,
+    `Run: ${workflowLink(workflowRunUrl)}`,
+    "",
+    "| Invariant | Count | Status |",
+    "| --- | ---: | --- |",
+    ...rows.map((row) => `| ${row.invariant} | ${row.count} | ${row.status} |`),
+    "",
+  ].join("\n");
 }
 
 function environmentReport(target) {
