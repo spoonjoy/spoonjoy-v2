@@ -1,6 +1,6 @@
 # Planning: MCP OAuth Full-Moon Hardening
 
-**Status**: approved
+**Status**: complete
 **Created**: 2026-07-06 14:09
 
 ## Goal
@@ -27,16 +27,16 @@ Make MCP/OAuth regressions impossible to miss, easy to diagnose, and hard to rei
 - Destructive production cleanup outside exact canary disposable state.
 
 ## Completion Criteria
-- [ ] Canary workflows write useful GitHub step summaries.
-- [ ] Canary failures open/update a canonical GitHub issue and recovery closes/comments on it.
-- [ ] Canary artifacts are redaction-checked for OAuth tokens, codes, bearer headers, and raw callback query leaks.
-- [ ] A readonly MCP/OAuth D1 invariant audit runs locally and in scheduled/manual GitHub Actions.
-- [ ] Ops docs cover canary triage, support refs, D1 audit interpretation, and real-Claude manual smoke.
-- [ ] Repo hygiene tests pin the new workflow/script/doc wiring.
-- [ ] 100% test coverage on all new code
-- [ ] All tests pass
-- [ ] No warnings
-- [ ] If UI/rendering/layout changed: `visual-qa-dogfood` evidence captured, absurdity ledger closed, and automated visual metrics still pass
+- [x] Canary workflows write useful GitHub step summaries.
+- [x] Canary failures open/update a canonical GitHub issue and recovery closes/comments on it.
+- [x] Canary artifacts are redaction-checked for OAuth tokens, codes, bearer headers, and raw callback query leaks.
+- [x] A readonly MCP/OAuth D1 invariant audit runs locally and in scheduled/manual GitHub Actions.
+- [x] Ops docs cover canary triage, support refs, D1 audit interpretation, and real-Claude manual smoke.
+- [x] Repo hygiene tests pin the new workflow/script/doc wiring.
+- [x] 100% test coverage on all new code
+- [x] All tests pass
+- [x] No warnings
+- [x] If UI/rendering/layout changed: `visual-qa-dogfood` evidence captured, absurdity ledger closed, and automated visual metrics still pass
 
 ## Code Coverage Requirements
 **MANDATORY: 100% coverage on all new code.**
@@ -71,3 +71,4 @@ The baseline canary already verifies consent, authorization-code exchange, refre
 
 ## Progress Log
 - 2026-07-06 14:09 Created and approved from explicit user mandate.
+- 2026-07-06 14:37 Implementation completed and local validation passed; see doing doc for command evidence.

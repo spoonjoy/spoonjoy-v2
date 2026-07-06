@@ -358,6 +358,48 @@ describe("smoke-live helpers", () => {
     expect(body).toContain("[REDACTED]");
   });
 
+  it("renders MCP canary fallback summaries when optional artifact data is missing", () => {
+    const summary = buildMcpCanaryStepSummary({
+      report: {
+        targetEnv: "production",
+        baseUrl: null,
+        resource: "",
+        generatedAt: undefined,
+        checks: null,
+        legacyProbe: { reason: "disabled" },
+      },
+      status: "success",
+      workflowRunUrl: "",
+      artifactUrl: "",
+    });
+    const noLegacySummary = buildMcpCanaryStepSummary({
+      report: { targetEnv: "production", baseUrl: "https://spoonjoy.app", resource: "https://spoonjoy.app/mcp", generatedAt: "now" },
+      status: "success",
+      workflowRunUrl: "",
+      artifactUrl: "",
+    });
+    const issue = buildMcpCanaryIssueBody({
+      report: {
+        targetEnv: "production",
+        baseUrl: "https://spoonjoy.app",
+        resource: "https://spoonjoy.app/mcp",
+        checks: null,
+      },
+      status: "success",
+      workflowRunUrl: "",
+      artifactUrl: "",
+    });
+
+    expect(summary).toContain("Run: n/a");
+    expect(summary).toContain("Artifact: n/a");
+    expect(summary).toContain("legacy Claude refresh promotion: disabled");
+    expect(summary).toContain("Target: production (n/a)");
+    expect(noLegacySummary).toContain("legacy Claude refresh promotion: n/a");
+    expect(issue).toContain("Commit: n/a");
+    expect(issue).toContain("Cleanup error: n/a");
+    expect(issue).toContain("## Failure\nn/a");
+  });
+
   it("parses the QA-only image-cover smoke flag", () => {
     expect(
       parseSmokeArgs([
@@ -506,6 +548,28 @@ describe("smoke-live helpers", () => {
       targetEnv: "local",
       baseUrl: "http://localhost:5173",
     });
+  });
+
+  it("uses process defaults for omitted MCP OAuth audit args", () => {
+    const originalArgv = process.argv;
+    const originalBaseUrl = process.env.SPOONJOY_MCP_AUDIT_BASE_URL;
+    process.argv = [originalArgv[0] ?? "node", "audit-mcp-oauth-d1.mjs"];
+    process.env.SPOONJOY_MCP_AUDIT_BASE_URL = "http://localhost:5173";
+
+    try {
+      expect(parseMcpOAuthAuditArgs()).toMatchObject({
+        targetEnv: "local",
+        baseUrl: "http://localhost:5173",
+        outDir: "mcp-oauth-d1-audit-artifacts",
+      });
+    } finally {
+      process.argv = originalArgv;
+      if (originalBaseUrl === undefined) {
+        delete process.env.SPOONJOY_MCP_AUDIT_BASE_URL;
+      } else {
+        process.env.SPOONJOY_MCP_AUDIT_BASE_URL = originalBaseUrl;
+      }
+    }
   });
 
   it("builds a readonly MCP OAuth invariant audit D1 command", () => {
