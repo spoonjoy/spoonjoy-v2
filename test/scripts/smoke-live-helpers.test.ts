@@ -583,8 +583,13 @@ describe("smoke-live helpers", () => {
     expect(command).toContain("canary_user_residue");
     expect(command).toContain("canary_refresh_residue");
     expect(command).toContain("claude_redirect_client_count");
+    expect(command).toContain(`oc_missing.clientName = 'Claude'`);
+    expect(command).toContain("https://claude.ai/api/mcp/auth_callback");
+    expect(command).toContain(`datetime(ac.expiresAt) > datetime('now')`);
+    expect(command).toContain("NOT EXISTS");
     expect(command).toContain("SELECT");
     expect(command).not.toMatch(/\b(?:DELETE|UPDATE|INSERT|DROP|ALTER)\b/i);
+    expect(command).not.toContain("clientId IS NOT NULL AND resource IS NULL");
   });
 
   it("normalizes MCP OAuth invariant rows and detects failures", () => {
