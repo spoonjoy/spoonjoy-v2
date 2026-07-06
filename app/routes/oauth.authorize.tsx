@@ -19,6 +19,7 @@ import {
   safeHeaderHost,
   userAgentFamily,
 } from "~/lib/analytics-server";
+import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 import { Heading } from "~/components/ui/heading";
 import { Button } from "~/components/ui/button";
 import { Text } from "~/components/ui/text";
@@ -38,6 +39,14 @@ async function checkAuthorizeRateLimit(request: Request, env: { API_IP_RATE_LIMI
     };
   }
   return null;
+}
+
+function safeIssuerHost(request: Request, baseUrl: string | null | undefined): string | undefined {
+  try {
+    return safeHeaderHost(resolveIssuerOrigin(request.url, baseUrl));
+  } catch {
+    return undefined;
+  }
 }
 
 function observeOAuthAuthorizeResult(
@@ -76,6 +85,8 @@ function observeOAuthAuthorizeResult(
       scope: telemetry.scope,
       resource: telemetry.resource,
       request_bytes: requestContentBytes(args.request),
+      request_host: safeHeaderHost(args.request.url),
+      issuer_host: safeIssuerHost(args.request, env.SPOONJOY_BASE_URL),
       origin_host: safeHeaderHost(args.request.headers.get("Origin")),
       referrer_host: safeHeaderHost(args.request.headers.get("Referer")),
       user_agent_family: userAgentFamily(args.request.headers.get("User-Agent")),

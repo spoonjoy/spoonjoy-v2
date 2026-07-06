@@ -104,11 +104,33 @@ async function readLimitedFormBody(request: Request): Promise<URLSearchParams> {
   return new URLSearchParams(await readLimitedBodyText(request, MAX_OAUTH_FORM_BODY_BYTES));
 }
 
-function crossOriginConsentResponse(request: Request): Response | null {
+function normalizedHostname(hostname: string): string {
+  const lowercased = hostname.toLowerCase();
+  return lowercased.startsWith("[") && lowercased.endsWith("]") ? lowercased.slice(1, -1) : lowercased;
+}
+
+function isLocalhostHostname(hostname: string): boolean {
+  const normalized = normalizedHostname(hostname);
+  return normalized === "localhost" ||
+    normalized.endsWith(".localhost") ||
+    normalized === "127.0.0.1" ||
+    normalized === "::1";
+}
+
+function trustedConsentOrigins(request: Request, env: OAuthEnv | null | undefined): Set<string> {
+  const requestUrl = new URL(request.url);
+  const origins = new Set([resolveIssuerOrigin(request.url, env?.SPOONJOY_BASE_URL)]);
+  if (isLocalhostHostname(requestUrl.hostname)) {
+    origins.add(requestUrl.origin);
+  }
+  return origins;
+}
+
+function crossOriginConsentResponse(request: Request, env: OAuthEnv | null | undefined): Response | null {
   const origin = request.headers.get("Origin");
   if (!origin) return null;
   try {
-    if (new URL(origin).origin === new URL(request.url).origin) return null;
+    if (trustedConsentOrigins(request, env).has(new URL(origin).origin)) return null;
   } catch {
     // Treat malformed Origin as hostile instead of guessing.
   }
@@ -809,7 +831,7 @@ export async function handleOAuthAuthorizeAction(
   db: Database,
   env: OAuthEnv | null | undefined,
 ): Promise<Response> {
-  const crossOrigin = crossOriginConsentResponse(request);
+  const crossOrigin = crossOriginConsentResponse(request, env);
   if (crossOrigin) {
     return withOAuthAuthorizeTelemetry(crossOrigin, {
       outcome: "error",

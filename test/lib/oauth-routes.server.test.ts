@@ -609,6 +609,85 @@ describe("handleOAuthAuthorizeAction", () => {
     expect(res.headers.get("Location")).toContain("error=invalid_scope");
   });
 
+  it("allows public-origin consent POSTs when the worker request URL is internal", async () => {
+    const cookie = await authedCookie(userId);
+    const headers = new Headers();
+    headers.set("Cookie", cookie);
+    headers.set("Origin", "https://spoonjoy.app");
+    const res = await handleOAuthAuthorizeAction(
+      new Request("https://spoonjoy-v2.workers.dev/oauth/authorize", {
+        method: "POST",
+        headers,
+        body: new URLSearchParams(await fields({ scope: "kitchen:admin" })),
+      }),
+      db,
+      { SPOONJOY_BASE_URL: "https://spoonjoy.app" },
+    );
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get("Location")).toContain("error=invalid_scope");
+  });
+
+  it("allows localhost consent POSTs in local dev even when a public issuer is configured", async () => {
+    const cookie = await authedCookie(userId);
+    const headers = new Headers();
+    headers.set("Cookie", cookie);
+    headers.set("Origin", "http://localhost:5173");
+    const res = await handleOAuthAuthorizeAction(
+      new Request("http://localhost:5173/oauth/authorize", {
+        method: "POST",
+        headers,
+        body: new URLSearchParams(await fields({ scope: "kitchen:admin", resource: "" })),
+      }),
+      db,
+      { SPOONJOY_BASE_URL: "https://spoonjoy.app" },
+    );
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get("Location")).toContain("error=invalid_scope");
+  });
+
+  it("allows bracketed IPv6 localhost consent POSTs in local dev", async () => {
+    const cookie = await authedCookie(userId);
+    const headers = new Headers();
+    headers.set("Cookie", cookie);
+    headers.set("Origin", "http://[::1]:5173");
+    const res = await handleOAuthAuthorizeAction(
+      new Request("http://[::1]:5173/oauth/authorize", {
+        method: "POST",
+        headers,
+        body: new URLSearchParams(await fields({ scope: "kitchen:admin", resource: "" })),
+      }),
+      db,
+      { SPOONJOY_BASE_URL: "https://spoonjoy.app" },
+    );
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get("Location")).toContain("error=invalid_scope");
+  });
+
+  it("rejects internal-origin consent POSTs when a public issuer is configured", async () => {
+    const cookie = await authedCookie(userId);
+    const headers = new Headers();
+    headers.set("Cookie", cookie);
+    headers.set("Origin", "https://spoonjoy-v2.workers.dev");
+    const res = await handleOAuthAuthorizeAction(
+      new Request("https://spoonjoy-v2.workers.dev/oauth/authorize", {
+        method: "POST",
+        headers,
+        body: new URLSearchParams(await fields()),
+      }),
+      db,
+      { SPOONJOY_BASE_URL: "https://spoonjoy.app" },
+    );
+
+    expect(res.status).toBe(403);
+    await expect(res.json()).resolves.toMatchObject({
+      error: "invalid_request",
+      error_description: "OAuth consent must be submitted from Spoonjoy.",
+    });
+  });
+
   it("redirects back with invalid_scope on a bad scope", async () => {
     const cookie = await authedCookie(userId);
     const res = await handleOAuthAuthorizeAction(
