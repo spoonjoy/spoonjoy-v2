@@ -2540,6 +2540,13 @@ function cookbookDetail(cookbook: CookbookRow, origin: string) {
   };
 }
 
+function nativeAccountSyncCookbookPayload(cookbook: CookbookRow, origin: string) {
+  return {
+    ...cookbookSummary(cookbook, origin),
+    recipes: [],
+  };
+}
+
 async function loadCookbookById(db: Awaited<ReturnType<typeof getRequestDb>>, id: string) {
   return db.cookbook.findUnique({
     where: { id },
@@ -3266,7 +3273,7 @@ async function handleNativeAccountSync(args: ApiV1RouteArgs, requestId: string, 
     }
     if (entry.action === "upsert" && entry.kind === "cookbook") {
       const cookbook = await loadCookbookById(db, entry.resourceId);
-      return cookbook ? { ...entry, payload: cookbookDetail(cookbook, origin) } : null;
+      return cookbook ? { ...entry, payload: nativeAccountSyncCookbookPayload(cookbook, origin) } : null;
     }
     return entry;
   }));
