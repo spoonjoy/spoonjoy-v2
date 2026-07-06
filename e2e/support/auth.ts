@@ -23,6 +23,8 @@ export async function submitPasswordLogin(page: Page, emailAddress: string, pass
     await loginButton.click();
     await page.waitForTimeout(150);
 
+    if (new URL(page.url()).pathname !== '/login') return;
+
     const emailVisible = await emailInput.isVisible().catch(() => false);
     if (!emailVisible) return;
 
