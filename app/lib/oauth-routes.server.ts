@@ -418,6 +418,7 @@ export async function handleOAuthToken(
       const tokens = await rotateConnectorTokens(db, {
         refreshToken: field("refresh_token"),
         clientId: field("client_id"),
+        legacyMcpResource: mcpResourceUrl(resolveIssuerOrigin(request.url, env?.SPOONJOY_BASE_URL)),
       });
       return withOAuthTokenTelemetry(
         tokenResponse(tokens),

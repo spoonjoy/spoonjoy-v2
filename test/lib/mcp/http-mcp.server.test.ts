@@ -11,6 +11,7 @@ vi.mock("~/lib/analytics-server", async (importOriginal) => ({
 import { handleMcpHttpRequest, jsonRpcErrorCode, mcpJsonRpcTelemetry } from "~/lib/mcp/http-mcp.server";
 import { captureEvent, captureException } from "~/lib/analytics-server";
 import { createApiCredential } from "~/lib/api-auth.server";
+import { CLAUDE_MCP_REDIRECT_URI } from "~/lib/oauth-server.server";
 import { getLocalDb } from "~/lib/db.server";
 import { cleanupDatabase } from "../../helpers/cleanup";
 
@@ -280,6 +281,32 @@ describe("handleMcpHttpRequest", () => {
       error: "invalid_token",
       message: "OAuth access token is not audience-bound to this MCP resource.",
     });
+  });
+
+  it("allows legacy Claude MCP OAuth tokens that predate resource binding", async () => {
+    const legacyClientId = "legacy_claude_mcp_client";
+    await db.oAuthClient.create({
+      data: {
+        id: legacyClientId,
+        clientName: "Claude",
+        redirectUris: CLAUDE_MCP_REDIRECT_URI,
+      },
+    });
+    const user = await db.user.create({ data: { email: uniqueEmail("legacy-claude"), username: faker.internet.username() } });
+    const created = await createApiCredential(db, user.id, "legacy Claude MCP token", {
+      scopes: ["kitchen:read", "kitchen:write"],
+      oauthClientId: legacyClientId,
+      oauthResource: null,
+    });
+
+    const response = await handleMcpHttpRequest({
+      request: rpcRequest(init(7, "tools/list"), bearer(created.token)),
+      db,
+    });
+
+    expect(response.status).toBe(200);
+    const body = await response.json() as { result: { tools: { name: string }[] } };
+    expect(body.result.tools.map((tool) => tool.name)).toContain("get_shopping_list");
   });
 
   it("returns a JSON-RPC parse error for an invalid (authenticated) body", async () => {

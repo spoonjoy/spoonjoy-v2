@@ -7,7 +7,7 @@ import {
   handleOAuthToken,
   loadOAuthAuthorize,
 } from "~/lib/oauth-routes.server";
-import { createAuthorizationCode, registerOAuthClient } from "~/lib/oauth-server.server";
+import { CLAUDE_MCP_REDIRECT_URI, createAuthorizationCode, registerOAuthClient } from "~/lib/oauth-server.server";
 import { getLocalDb } from "~/lib/db.server";
 import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
@@ -294,6 +294,59 @@ describe("handleOAuthToken", () => {
 
     expect(refresh.status).toBe(200);
     await expect(refresh.json()).resolves.toMatchObject({ scope: "kitchen:read", expires_in: expect.any(Number) });
+  });
+
+  it("promotes legacy Claude MCP refresh tokens to the protected resource", async () => {
+    const claudeClient = await registerOAuthClient(db, {
+      clientName: "Claude",
+      redirectUris: [CLAUDE_MCP_REDIRECT_URI],
+    });
+    const code = await createAuthorizationCode(db, {
+      clientId: claudeClient.clientId,
+      userId,
+      redirectUri: CLAUDE_MCP_REDIRECT_URI,
+      codeChallenge: await challengeFor(VERIFIER),
+      scope: "kitchen:read kitchen:write",
+      resource: null,
+    });
+    const first = await handleOAuthToken(
+      formPost("https://spoonjoy.app/oauth/token", {
+        grant_type: "authorization_code",
+        code,
+        client_id: claudeClient.clientId,
+        redirect_uri: CLAUDE_MCP_REDIRECT_URI,
+        code_verifier: VERIFIER,
+      }),
+      db,
+      { SPOONJOY_BASE_URL: "https://spoonjoy.app" },
+    );
+    expect(first.status).toBe(200);
+    const firstBody = await first.json() as { refresh_token: string; expires_in: number };
+    expect(firstBody.expires_in).toBeGreaterThan(0);
+
+    const refresh = await handleOAuthToken(
+      formPost("https://spoonjoy.app/oauth/token", {
+        grant_type: "refresh_token",
+        refresh_token: firstBody.refresh_token,
+        client_id: claudeClient.clientId,
+      }),
+      db,
+      { SPOONJOY_BASE_URL: "https://spoonjoy.app" },
+    );
+
+    expect(refresh.status).toBe(200);
+    const refreshBody = await refresh.json() as Record<string, unknown>;
+    expect(refreshBody).not.toHaveProperty("expires_in");
+    await expect(db.apiCredential.findFirstOrThrow({
+      where: { userId, oauthClientId: claudeClient.clientId },
+      orderBy: { createdAt: "desc" },
+    })).resolves.toMatchObject({
+      oauthResource: "https://spoonjoy.app/mcp",
+      expiresAt: null,
+    });
+    await expect(db.oAuthRefreshToken.findFirstOrThrow({
+      where: { userId, clientId: claudeClient.clientId, revokedAt: null },
+    })).resolves.toMatchObject({ resource: "https://spoonjoy.app/mcp" });
   });
 
   it("exchanges a refresh token for a rotated pair and rejects the old one", async () => {
