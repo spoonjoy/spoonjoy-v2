@@ -34,6 +34,8 @@ describe("UI audit tooling", () => {
     expect(existsSync("scripts/crawl-ui.mjs")).toBe(true);
     expect(existsSync("scripts/smoke-live.mjs")).toBe(true);
     expect(existsSync("scripts/smoke-mcp-oauth-live.mjs")).toBe(true);
+    expect(existsSync("scripts/report-mcp-oauth-canary.mjs")).toBe(true);
+    expect(existsSync("scripts/audit-mcp-oauth-d1.mjs")).toBe(true);
     expect(existsSync("scripts/cleanup-local-qa-data.mjs")).toBe(true);
   });
 
@@ -43,15 +45,37 @@ describe("UI audit tooling", () => {
     };
     const productionDeploy = readFileSync(".github/workflows/production-deploy.yml", "utf8");
     const canaryWorkflow = readFileSync(".github/workflows/mcp-oauth-canary.yml", "utf8");
+    const auditWorkflow = readFileSync(".github/workflows/mcp-oauth-d1-audit.yml", "utf8");
 
     expect(packageJson.scripts?.["smoke:mcp:oauth"]).toBe(
       "node scripts/smoke-mcp-oauth-live.mjs --target-env production --base-url https://spoonjoy.app",
     );
+    expect(packageJson.scripts?.["audit:mcp:oauth"]).toBe(
+      "node scripts/audit-mcp-oauth-d1.mjs --target-env production --base-url https://spoonjoy.app",
+    );
     expect(productionDeploy).toContain("pnpm run smoke:mcp:oauth -- --out mcp-oauth-canary-artifacts");
+    expect(productionDeploy).toContain("node scripts/report-mcp-oauth-canary.mjs");
+    expect(productionDeploy).toContain("issues: write");
     expect(productionDeploy).toContain("path: mcp-oauth-canary-artifacts/");
     expect(canaryWorkflow).toContain("schedule:");
     expect(canaryWorkflow).toContain("pnpm run smoke:mcp:oauth -- --out mcp-oauth-canary-artifacts");
+    expect(canaryWorkflow).toContain("--manage-issue");
+    expect(canaryWorkflow).toContain("issues: write");
     expect(canaryWorkflow).toContain("path: mcp-oauth-canary-artifacts/");
+    expect(auditWorkflow).toContain("schedule:");
+    expect(auditWorkflow).toContain("pnpm run audit:mcp:oauth -- --out mcp-oauth-d1-audit-artifacts");
+    expect(auditWorkflow).toContain("path: mcp-oauth-d1-audit-artifacts/");
+  });
+
+  it("documents MCP OAuth operations and real-Claude verification", () => {
+    const ops = readFileSync("docs/mcp-oauth-ops.md", "utf8");
+
+    expect(ops).toContain("MCP OAuth Operations");
+    expect(ops).toContain("MCP OAuth canary failing");
+    expect(ops).toContain("ofid_");
+    expect(ops).toContain("mcp-oauth-d1-audit-results.json");
+    expect(ops).toContain("Real-Claude Manual Smoke");
+    expect(ops).toContain("PostHog");
   });
 
   it("documents repo-local UI audit commands instead of local skill paths", () => {

@@ -1,0 +1,48 @@
+{
+  "baseUrl": "http://localhost:5173",
+  "generatedAt": "2026-07-06T21:18:54.778Z",
+  "targetEnv": "local",
+  "environment": {
+    "targetEnv": "local",
+    "baseUrl": "http://localhost:5173",
+    "d1Target": "local D1 (--local)",
+    "destructiveScope": "local disposable test data only"
+  },
+  "git": {
+    "branch": "worker/mcp-full-moon-hardening",
+    "commit": "320e82a8d3fa"
+  },
+  "rows": [
+    {
+      "invariant": "active_refresh_missing_resource",
+      "count": 0,
+      "status": "pass"
+    },
+    {
+      "invariant": "duplicate_active_connection_keys",
+      "count": 0,
+      "status": "pass"
+    },
+    {
+      "invariant": "access_refresh_resource_mismatch",
+      "count": 0,
+      "status": "pass"
+    },
+    {
+      "invariant": "canary_user_residue",
+      "count": 0,
+      "status": "pass"
+    },
+    {
+      "invariant": "canary_refresh_residue",
+      "count": 0,
+      "status": "pass"
+    },
+    {
+      "invariant": "claude_redirect_client_count",
+      "count": 0,
+      "status": "info"
+    }
+  ],
+  "stderr": ""
+}
