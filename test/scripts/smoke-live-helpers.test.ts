@@ -239,6 +239,30 @@ describe("smoke-live helpers", () => {
     });
   });
 
+  it("uses process defaults for omitted MCP canary args", () => {
+    const originalArgv = process.argv;
+    const originalBaseUrl = process.env.SPOONJOY_MCP_CANARY_BASE_URL;
+    process.argv = [originalArgv[0] ?? "node", "smoke-mcp-oauth-live.mjs"];
+    process.env.SPOONJOY_MCP_CANARY_BASE_URL = "http://localhost:5173";
+
+    try {
+      expect(parseMcpCanaryArgs()).toMatchObject({
+        targetEnv: "local",
+        baseUrl: "http://localhost:5173",
+        outDir: "mcp-oauth-canary-artifacts",
+        shouldCleanup: true,
+        includeLegacyDbProbe: true,
+      });
+    } finally {
+      process.argv = originalArgv;
+      if (originalBaseUrl === undefined) {
+        delete process.env.SPOONJOY_MCP_CANARY_BASE_URL;
+      } else {
+        process.env.SPOONJOY_MCP_CANARY_BASE_URL = originalBaseUrl;
+      }
+    }
+  });
+
   it("parses the QA-only image-cover smoke flag", () => {
     expect(
       parseSmokeArgs([
