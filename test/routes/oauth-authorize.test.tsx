@@ -154,7 +154,10 @@ describe("oauth.authorize route", () => {
     expect(screen.getByText(/connection details/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /allow access/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /deny/i })).toBeInTheDocument();
-    expect(rendered.container.querySelectorAll("form")).toHaveLength(2);
+    const forms = Array.from(rendered.container.querySelectorAll("form"));
+    expect(forms).toHaveLength(2);
+    expect(forms.every((form) => form.getAttribute("method") === "post")).toBe(true);
+    expect(forms.every((form) => !form.hasAttribute("data-discover"))).toBe(true);
     expect(screen.queryByText("Bring your kitchen with you.")).not.toBeInTheDocument();
     expect(screen.getByText("Kitchen connection")).toBeInTheDocument();
     expect(screen.queryByText("Kitchen sign-in")).not.toBeInTheDocument();
