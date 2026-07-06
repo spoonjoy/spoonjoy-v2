@@ -150,9 +150,9 @@ export function buildMcpCanaryCleanupD1Args(input, { targetEnv }) {
 export function buildMcpOAuthInvariantAuditD1Args({ targetEnv }) {
   return buildD1CommandArgs([
     `WITH audit(invariant, count) AS (VALUES`,
-    `('active_refresh_missing_resource', (SELECT COUNT(*) FROM "OAuthRefreshToken" WHERE revokedAt IS NULL AND clientId IS NOT NULL AND resource IS NULL)),`,
+    `('active_refresh_missing_resource', (SELECT COUNT(*) FROM "OAuthRefreshToken" rt_missing JOIN "OAuthClient" oc_missing ON oc_missing.id = rt_missing.clientId WHERE rt_missing.revokedAt IS NULL AND rt_missing.resource IS NULL AND oc_missing.clientName = 'Claude' AND oc_missing.redirectUris LIKE '%https://claude.ai/api/mcp/auth_callback%')),`,
     `('duplicate_active_connection_keys', (SELECT COUNT(*) FROM (SELECT connectionKey FROM "OAuthRefreshToken" WHERE revokedAt IS NULL AND connectionKey IS NOT NULL GROUP BY connectionKey HAVING COUNT(*) > 1))),`,
-    `('access_refresh_resource_mismatch', (SELECT COUNT(*) FROM "ApiCredential" ac JOIN "OAuthRefreshToken" rt ON ac.userId = rt.userId AND ac.oauthClientId = rt.clientId WHERE ac.revokedAt IS NULL AND rt.revokedAt IS NULL AND COALESCE(ac.oauthResource, '') != COALESCE(rt.resource, ''))),`,
+    `('access_refresh_resource_mismatch', (SELECT COUNT(*) FROM "ApiCredential" ac WHERE ac.revokedAt IS NULL AND ac.oauthClientId IS NOT NULL AND (ac.expiresAt IS NULL OR datetime(ac.expiresAt) > datetime('now')) AND NOT EXISTS (SELECT 1 FROM "OAuthRefreshToken" rt WHERE rt.userId = ac.userId AND rt.clientId = ac.oauthClientId AND rt.revokedAt IS NULL AND COALESCE(rt.resource, '') = COALESCE(ac.oauthResource, '')))),`,
     `('canary_user_residue', (SELECT COUNT(*) FROM "User" WHERE email LIKE 'codex-mcp-canary-%@example.com')),`,
     `('canary_refresh_residue', (SELECT COUNT(*) FROM "OAuthRefreshToken" WHERE connectionKey LIKE 'mcp_canary_connection_%')),`,
     `('claude_redirect_client_count', (SELECT COUNT(*) FROM "OAuthClient" WHERE clientName = 'Claude' AND redirectUris LIKE '%https://claude.ai/api/mcp/auth_callback%'))`,

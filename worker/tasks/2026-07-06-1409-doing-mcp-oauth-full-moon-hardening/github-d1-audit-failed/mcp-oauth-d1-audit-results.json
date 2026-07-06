@@ -1,0 +1,48 @@
+{
+  "baseUrl": "https://spoonjoy.app",
+  "generatedAt": "2026-07-06T22:20:15.476Z",
+  "targetEnv": "production",
+  "environment": {
+    "targetEnv": "production",
+    "baseUrl": "https://spoonjoy.app",
+    "d1Target": "production D1 spoonjoy (--remote)",
+    "destructiveScope": "production read-only by default; exact smoke cleanup only"
+  },
+  "git": {
+    "branch": "main",
+    "commit": "767848af88d6"
+  },
+  "rows": [
+    {
+      "invariant": "active_refresh_missing_resource",
+      "count": 1,
+      "status": "fail"
+    },
+    {
+      "invariant": "duplicate_active_connection_keys",
+      "count": 0,
+      "status": "pass"
+    },
+    {
+      "invariant": "access_refresh_resource_mismatch",
+      "count": 35,
+      "status": "fail"
+    },
+    {
+      "invariant": "canary_user_residue",
+      "count": 0,
+      "status": "pass"
+    },
+    {
+      "invariant": "canary_refresh_residue",
+      "count": 0,
+      "status": "pass"
+    },
+    {
+      "invariant": "claude_redirect_client_count",
+      "count": 11,
+      "status": "info"
+    }
+  ],
+  "stderr": ""
+}

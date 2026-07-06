@@ -49,9 +49,9 @@ Claude may show support references such as `ofid_...` when connector authorizati
 
 `mcp-oauth-d1-audit-results.json` contains normalized invariant rows:
 
-- `active_refresh_missing_resource`: active OAuth refresh tokens without a resource. These should be promoted by refresh or investigated as legacy residue.
+- `active_refresh_missing_resource`: active Claude MCP refresh tokens without the MCP resource. Non-MCP OAuth clients, such as native app flows, can legitimately have `resource = NULL`.
 - `duplicate_active_connection_keys`: more than one active refresh token for a connection key. Refresh rotation should leave only one active row.
-- `access_refresh_resource_mismatch`: active OAuth access credentials whose resource disagrees with active refresh-token resource.
+- `access_refresh_resource_mismatch`: live OAuth access credentials with no active refresh token for the same user/client/resource. Expired access credentials are ignored.
 - `canary_user_residue`: disposable canary users left behind.
 - `canary_refresh_residue`: disposable canary refresh-token rows left behind.
 - `claude_redirect_client_count`: informational count of registered Claude redirect clients.

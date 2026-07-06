@@ -117,3 +117,4 @@ Make MCP/OAuth regressions impossible to miss, easy to diagnose, and hard to rei
   - `pnpm run typecheck`
   - `pnpm run build`
   - `pnpm run test:coverage` (344 files, 6711 tests, 100% statements/branches/functions/lines)
+- 2026-07-06 15:24 Post-merge manual GitHub D1 audit surfaced false positives: non-MCP Apple/native refresh tokens legitimately have `resource = NULL`, and expired OAuth access credentials were counted as live because ISO timestamps require SQLite `datetime(...)` comparison. Refined the audit SQL, reran focused tests, and confirmed the production D1 audit now passes with all enforced invariants at 0.
