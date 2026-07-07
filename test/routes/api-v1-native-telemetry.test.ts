@@ -41,6 +41,14 @@ function routeArgsWithoutWaitUntil(
   } as const;
 }
 
+function routeArgsWithoutEnv(request: Request, splat: string) {
+  return {
+    request,
+    params: { "*": splat },
+    context: {},
+  } as const;
+}
+
 function nativeTelemetryRequest(token: string | null, requestId: string, body: Record<string, unknown>) {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -161,6 +169,27 @@ describe("API v1 native telemetry", () => {
       distinctId: user.id,
       properties: { native_event: "sync_failed", server_request_id: "req_native_telemetry_inline" },
     });
+  });
+
+  it("accepts diagnostics without analytics environment", async () => {
+    const user = await db.user.create({ data: createTestUser() });
+    const credential = await createApiCredential(db, user.id, "Native telemetry", {
+      scopes: ["account:read"],
+    });
+    const request = nativeTelemetryRequest(credential.token, "req_native_telemetry_no_env", {
+      event: "bootstrap_failed",
+      stage: "launch",
+    });
+
+    const response = await action(routeArgsWithoutEnv(request, "native/telemetry") as any);
+
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      requestId: "req_native_telemetry_no_env",
+      data: { accepted: true },
+    });
+    expect(nativeTelemetryCaptures()).toHaveLength(0);
   });
 
   it("rejects unknown diagnostic fields instead of recording raw app text", async () => {
