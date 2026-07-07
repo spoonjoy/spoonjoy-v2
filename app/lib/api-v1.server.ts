@@ -174,6 +174,22 @@ interface ApiV1TelemetryMetadata {
   rateLimitScope?: "ip" | "skip" | "token";
 }
 
+type NativeTelemetryEventName =
+  | "bootstrap_failed"
+  | "bootstrap_offline"
+  | "settings_refresh_failed"
+  | "sync_failed";
+
+const NATIVE_TELEMETRY_EVENTS = new Set<NativeTelemetryEventName>([
+  "bootstrap_failed",
+  "bootstrap_offline",
+  "settings_refresh_failed",
+  "sync_failed",
+]);
+
+const NATIVE_TELEMETRY_ENVIRONMENTS = new Set(["local", "preview", "production"]);
+const NATIVE_TELEMETRY_PLATFORMS = new Set(["ios", "macos"]);
+
 export class ApiV1Error extends Error {
   code: ApiV1ErrorCode;
   status: number;
@@ -456,6 +472,8 @@ function apiV1OperationFor(method: string, path: string): string | undefined {
       return "auth.apple.native.sign-in";
     case "POST auth-password-native":
       return "auth.password.native.sign-in";
+    case "POST native-telemetry":
+      return "native.telemetry.capture";
     case "GET search":
       return "search.read";
     case "GET recipes":
@@ -5687,6 +5705,122 @@ async function handleNativePasswordSignInRequest(args: ApiV1RouteArgs, requestId
   }
 }
 
+async function handleNativeTelemetryRequest(args: ApiV1RouteArgs, requestId: string, authenticated: ApiPrincipal) {
+  const body = await parseApiV1JsonBody(args.request);
+  assertKnownFields(body, [
+    "event",
+    "stage",
+    "environment",
+    "platform",
+    "appVersion",
+    "buildNumber",
+    "route",
+    "errorType",
+    "requestId",
+    "status",
+    "apiCode",
+    "retry",
+    "accountBound",
+    "hasRenderableCacheContent",
+    "recipes",
+    "cookbooks",
+    "shoppingItems",
+    "queuedMutations",
+  ]);
+
+  const nativeEvent = nativeTelemetryEvent(body.event);
+  const environment = nativeTelemetryEnvironment(body.environment, args);
+  const platform = optionalNativeTelemetryEnum(body.platform, "platform", NATIVE_TELEMETRY_PLATFORMS);
+  const payload = {
+    native_event: nativeEvent,
+    stage: optionalNullableString(body.stage, "stage", 80),
+    environment,
+    platform,
+    app_version: optionalNullableString(body.appVersion, "appVersion", 40),
+    build_number: optionalNullableString(body.buildNumber, "buildNumber", 40),
+    route: optionalNullableString(body.route, "route", 80),
+    error_type: optionalNullableString(body.errorType, "errorType", 80),
+    native_request_id: optionalNullableString(body.requestId, "requestId", 160),
+    http_status: optionalNativeTelemetryInteger(body.status, "status", 100, 599),
+    api_error_code: optionalNullableString(body.apiCode, "apiCode", 80),
+    retry: optionalNullableString(body.retry, "retry", 80),
+    account_bound: optionalNativeTelemetryBoolean(body.accountBound, "accountBound"),
+    has_renderable_cache_content: optionalNativeTelemetryBoolean(body.hasRenderableCacheContent, "hasRenderableCacheContent"),
+    recipe_count: optionalNativeTelemetryInteger(body.recipes, "recipes", 0, 100_000),
+    cookbook_count: optionalNativeTelemetryInteger(body.cookbooks, "cookbooks", 0, 100_000),
+    shopping_item_count: optionalNativeTelemetryInteger(body.shoppingItems, "shoppingItems", 0, 100_000),
+    queued_mutation_count: optionalNativeTelemetryInteger(body.queuedMutations, "queuedMutations", 0, 100_000),
+    server_request_id: requestId,
+  };
+
+  const env = args.context.cloudflare?.env as PostHogServerEnv | undefined;
+  if (env) {
+    const task = captureEvent(resolvePostHogServerConfig(env), {
+      event: "spoonjoy.native.telemetry",
+      distinctId: authenticated.id,
+      properties: payload,
+    });
+    const waitUntil = apiV1WaitUntilFor(args);
+    if (waitUntil) {
+      waitUntil(task);
+    } else {
+      await task;
+    }
+  }
+
+  return withApiV1Telemetry(
+    apiV1PrivateSuccess(requestId, { accepted: true }, 202),
+    { operation: "native.telemetry.capture", idempotencyOutcome: "none" },
+  );
+}
+
+function nativeTelemetryEvent(value: unknown): NativeTelemetryEventName {
+  const event = nonblankString(value, "event", 80);
+  if (!NATIVE_TELEMETRY_EVENTS.has(event as NativeTelemetryEventName)) {
+    throw new ApiV1Error("validation_error", "event is not a supported native telemetry event");
+  }
+  return event as NativeTelemetryEventName;
+}
+
+function nativeTelemetryEnvironment(value: unknown, args: ApiV1RouteArgs): "local" | "preview" | "production" {
+  if (value === undefined || value === null) return nativeSyncEnvironment(args);
+  const environment = nonblankString(value, "environment", 40);
+  if (!NATIVE_TELEMETRY_ENVIRONMENTS.has(environment)) {
+    throw new ApiV1Error("validation_error", "environment must be local, preview, or production");
+  }
+  return environment as "local" | "preview" | "production";
+}
+
+function optionalNativeTelemetryEnum(value: unknown, field: string, allowed: ReadonlySet<string>): string | null {
+  if (value === undefined || value === null || value === "") return null;
+  const normalized = nonblankString(value, field, 40).toLowerCase();
+  if (!allowed.has(normalized)) {
+    throw new ApiV1Error("validation_error", `${field} is not supported`);
+  }
+  return normalized;
+}
+
+function optionalNativeTelemetryInteger(
+  value: unknown,
+  field: string,
+  minimum: number,
+  maximum: number,
+): number | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "number" || !Number.isInteger(value) || value < minimum || value > maximum) {
+    throw new ApiV1Error("validation_error", `${field} must be an integer between ${minimum} and ${maximum}`);
+  }
+  return value;
+}
+
+function optionalNativeTelemetryBoolean(value: unknown, field: string): boolean | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "boolean") {
+    throw new ApiV1Error("validation_error", `${field} must be a boolean`);
+  }
+  return value;
+}
+
 function isNativeAuthPath(path: string): boolean {
   return path === "auth/apple/native" || path === "auth/password/native";
 }
@@ -5841,6 +5975,16 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
     if (args.request.method === "POST" && path === "auth/password/native") {
       const response = await handleNativePasswordSignInRequest(args, requestId);
       return observeApiV1Response(args, { requestId, path, response, startedAt });
+    }
+
+    if (path === "native/telemetry" && args.request.method !== "POST") {
+      throw new ApiV1Error("method_not_allowed", "Method not allowed", { allow: "POST" });
+    }
+
+    if (args.request.method === "POST" && path === "native/telemetry") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleNativeTelemetryRequest(args, requestId, principal);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
     }
 
     if (args.request.method === "GET" && path === "search") {
