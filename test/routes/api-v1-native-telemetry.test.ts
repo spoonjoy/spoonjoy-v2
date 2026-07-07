@@ -204,6 +204,42 @@ describe("API v1 native telemetry", () => {
     expect(nativeTelemetryCaptures()).toHaveLength(0);
   });
 
+  it("rejects unsupported event environment and enum diagnostics", async () => {
+    const user = await db.user.create({ data: createTestUser() });
+    const credential = await createApiCredential(db, user.id, "Native telemetry", {
+      scopes: ["account:read"],
+    });
+
+    const invalidEvent = await action(routeArgs(nativeTelemetryRequest(credential.token, "req_native_telemetry_bad_event", {
+      event: "raw_error_message",
+      stage: "settings",
+    }), "native/telemetry").args);
+    const invalidEnvironment = await action(routeArgs(nativeTelemetryRequest(credential.token, "req_native_telemetry_bad_env", {
+      event: "settings_refresh_failed",
+      stage: "settings",
+      environment: "staging",
+    }), "native/telemetry").args);
+    const invalidPlatform = await action(routeArgs(nativeTelemetryRequest(credential.token, "req_native_telemetry_bad_platform", {
+      event: "settings_refresh_failed",
+      stage: "settings",
+      platform: "watchos",
+    }), "native/telemetry").args);
+
+    expect(invalidEvent.status).toBe(400);
+    await expect(invalidEvent.json()).resolves.toMatchObject({
+      error: { code: "validation_error", message: "event is not a supported native telemetry event" },
+    });
+    expect(invalidEnvironment.status).toBe(400);
+    await expect(invalidEnvironment.json()).resolves.toMatchObject({
+      error: { code: "validation_error", message: "environment must be local, preview, or production" },
+    });
+    expect(invalidPlatform.status).toBe(400);
+    await expect(invalidPlatform.json()).resolves.toMatchObject({
+      error: { code: "validation_error", message: "platform is not supported" },
+    });
+    expect(nativeTelemetryCaptures()).toHaveLength(0);
+  });
+
   it("rejects non POST telemetry requests", async () => {
     const request = new UndiciRequest("http://localhost/api/v1/native/telemetry", {
       method: "GET",
