@@ -471,6 +471,7 @@ API v1 is rate limited by IP and credential before authentication work. Anonymou
 | `GET` | `/api/v1/openapi.connector.json` | Optional | none |
 | `POST` | `/api/v1/auth/apple/native` | Spoonjoy Apple app only | none |
 | `POST` | `/api/v1/auth/password/native` | Spoonjoy Apple app only | none |
+| `POST` | `/api/v1/native/telemetry` | Authenticated chef | `account:read` |
 | `GET` | `/api/v1/search` | Optional | `shopping_list:read` only for private shopping-list results |
 | `GET` | `/api/v1/recipes` | Optional | `recipes:read` when authenticated |
 | `POST` | `/api/v1/recipes` | Authenticated chef | `kitchen:write` |

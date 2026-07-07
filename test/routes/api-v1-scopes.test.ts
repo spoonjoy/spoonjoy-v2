@@ -112,6 +112,7 @@ describe("API v1 complete scope matrix", () => {
     expect(resolveApiV1ScopeRequirement("GET", "health")).toEqual({ auth: "optional", scopes: [] });
     expect(resolveApiV1ScopeRequirement("GET", "openapi.json")).toEqual({ auth: "optional", scopes: [] });
     expect(resolveApiV1ScopeRequirement("GET", "openapi.sdk.json")).toEqual({ auth: "optional", scopes: [] });
+    expect(resolveApiV1ScopeRequirement("POST", "native/telemetry")).toEqual({ auth: "bearer", scopes: ["account:read"] });
     expect(resolveApiV1ScopeRequirement("GET", "search")).toEqual({ auth: "optional", scopes: [] });
     expect(resolveApiV1ScopeRequirement("GET", "recipes")).toEqual({ auth: "optional", scopes: ["recipes:read"] });
     expect(resolveApiV1ScopeRequirement("POST", "recipes")).toEqual({ auth: "bearer", scopes: ["kitchen:write"] });
