@@ -149,6 +149,77 @@ describe("API v1 native telemetry", () => {
     expect(JSON.stringify(vi.mocked(captureEvent).mock.calls)).not.toContain("secret kitchen name");
   });
 
+  it("accepts minimal diagnostics without optional counts or booleans", async () => {
+    const user = await db.user.create({ data: createTestUser() });
+    const credential = await createApiCredential(db, user.id, "Native telemetry", {
+      scopes: ["account:read"],
+    });
+    const context = routeArgs(nativeTelemetryRequest(credential.token, "req_native_telemetry_minimal", {
+      event: "bootstrap_offline",
+      stage: "launch",
+    }), "native/telemetry");
+
+    const response = await action(context.args);
+
+    expect(response.status).toBe(202);
+    const input = nativeTelemetryCaptures()[0];
+    expect(input.properties).toMatchObject({
+      native_event: "bootstrap_offline",
+      stage: "launch",
+      environment: "local",
+      platform: null,
+      http_status: null,
+      account_bound: null,
+      recipe_count: null,
+      queued_mutation_count: null,
+      server_request_id: "req_native_telemetry_minimal",
+    });
+  });
+
+  it("rejects malformed numeric and boolean diagnostics", async () => {
+    const user = await db.user.create({ data: createTestUser() });
+    const credential = await createApiCredential(db, user.id, "Native telemetry", {
+      scopes: ["account:read"],
+    });
+
+    const invalidStatus = await action(routeArgs(nativeTelemetryRequest(credential.token, "req_native_telemetry_bad_status", {
+      event: "settings_refresh_failed",
+      stage: "settings",
+      status: 99,
+    }), "native/telemetry").args);
+    const invalidBoolean = await action(routeArgs(nativeTelemetryRequest(credential.token, "req_native_telemetry_bad_bool", {
+      event: "settings_refresh_failed",
+      stage: "settings",
+      accountBound: "true",
+    }), "native/telemetry").args);
+
+    expect(invalidStatus.status).toBe(400);
+    await expect(invalidStatus.json()).resolves.toMatchObject({
+      error: { code: "validation_error", message: "status must be an integer between 100 and 599" },
+    });
+    expect(invalidBoolean.status).toBe(400);
+    await expect(invalidBoolean.json()).resolves.toMatchObject({
+      error: { code: "validation_error", message: "accountBound must be a boolean" },
+    });
+    expect(nativeTelemetryCaptures()).toHaveLength(0);
+  });
+
+  it("rejects non POST telemetry requests", async () => {
+    const request = new UndiciRequest("http://localhost/api/v1/native/telemetry", {
+      method: "GET",
+      headers: { "X-Request-Id": "req_native_telemetry_method" },
+    }) as unknown as Request;
+
+    const response = await action(routeArgs(request, "native/telemetry").args);
+
+    expect(response.status).toBe(405);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: false,
+      requestId: "req_native_telemetry_method",
+      error: { code: "method_not_allowed" },
+    });
+  });
+
   it("requires account read scope", async () => {
     const user = await db.user.create({ data: createTestUser() });
     const credential = await createApiCredential(db, user.id, "Kitchen-only client", {
