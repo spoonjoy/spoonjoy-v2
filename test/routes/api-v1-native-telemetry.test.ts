@@ -29,6 +29,18 @@ function routeArgs(request: Request, splat: string, env: Record<string, unknown>
   } as const;
 }
 
+function routeArgsWithoutWaitUntil(
+  request: Request,
+  splat: string,
+  env: Record<string, unknown> = { POSTHOG_KEY: "ph_test" },
+) {
+  return {
+    request,
+    params: { "*": splat },
+    context: { cloudflare: { env } },
+  } as const;
+}
+
 function nativeTelemetryRequest(token: string | null, requestId: string, body: Record<string, unknown>) {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -129,6 +141,26 @@ describe("API v1 native telemetry", () => {
     });
     expect(JSON.stringify(vi.mocked(captureEvent).mock.calls)).not.toContain(credential.token);
     expect(JSON.stringify(vi.mocked(captureEvent).mock.calls)).not.toContain(credential.credential.tokenPrefix);
+  });
+
+  it("awaits capture inline when waitUntil is unavailable", async () => {
+    const user = await db.user.create({ data: createTestUser() });
+    const credential = await createApiCredential(db, user.id, "Native telemetry", {
+      scopes: ["account:read"],
+    });
+    const request = nativeTelemetryRequest(credential.token, "req_native_telemetry_inline", {
+      event: "sync_failed",
+      stage: "sync",
+    });
+
+    const response = await action(routeArgsWithoutWaitUntil(request, "native/telemetry") as any);
+
+    expect(response.status).toBe(202);
+    expect(nativeTelemetryCaptures()).toHaveLength(1);
+    expect(nativeTelemetryCaptures()[0]).toMatchObject({
+      distinctId: user.id,
+      properties: { native_event: "sync_failed", server_request_id: "req_native_telemetry_inline" },
+    });
   });
 
   it("rejects unknown diagnostic fields instead of recording raw app text", async () => {
