@@ -377,6 +377,27 @@ describe("API v1 public cookbook reads", () => {
       data: { cookbookId: fixture.cookbook.id, recipeId: noCoverRecipe.id, addedById: fixture.chef.id },
     });
 
+    const placeholderRecipe = await db.recipe.create({
+      data: {
+        ...createTestRecipe(fixture.chef.id),
+        title: `Api V1 Cookbook Placeholder Cover ${faker.string.alphanumeric(8)}`,
+        description: "A recipe whose active cover is only a generated placeholder",
+        servings: "4",
+      },
+    });
+    const placeholderCover = await db.recipeCover.create({
+      data: {
+        recipeId: placeholderRecipe.id,
+        imageUrl: "/photos/cookbooks/placeholder-cover.jpg",
+        sourceType: "ai-placeholder",
+        createdAt: new Date("2026-01-04T00:00:00.000Z"),
+      },
+    });
+    await activateRecipeCover(db, placeholderRecipe.id, placeholderCover.id, "image");
+    await db.recipeInCookbook.create({
+      data: { cookbookId: fixture.cookbook.id, recipeId: placeholderRecipe.id, addedById: fixture.chef.id },
+    });
+
     const response = await loader(routeArgs(new UndiciRequest(`http://localhost/api/v1/cookbooks/${fixture.cookbook.id}`, {
       headers: { "X-Request-Id": "req_cookbook_active_cover_detail" },
     }) as unknown as Request, `cookbooks/${fixture.cookbook.id}`));
@@ -393,6 +414,12 @@ describe("API v1 public cookbook reads", () => {
       coverVariant: "stylized",
     });
     expect(payload.data.cookbook.recipes.find((recipe: { id: string }) => recipe.id === noCoverRecipe.id)).toMatchObject({
+      coverImageUrl: null,
+      coverProvenanceLabel: null,
+      coverSourceType: null,
+      coverVariant: null,
+    });
+    expect(payload.data.cookbook.recipes.find((recipe: { id: string }) => recipe.id === placeholderRecipe.id)).toMatchObject({
       coverImageUrl: null,
       coverProvenanceLabel: null,
       coverSourceType: null,

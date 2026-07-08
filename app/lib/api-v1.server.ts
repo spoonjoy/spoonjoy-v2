@@ -1209,6 +1209,9 @@ function recipeCoverApiFields(recipe: RecipeCoverFieldsInput, origin: string) {
   const activeCover = getScopedActiveCover(recipe);
   const coverDisplay = getRecipeCoverDisplay(recipe, activeCover ? [activeCover] : []);
   if (!coverDisplay) return emptyRecipeCoverApiFields();
+  if (coverDisplay.sourceType === "ai-placeholder") {
+    return emptyRecipeCoverApiFields();
+  }
 
   const coverImageUrl = publicAssetUrl(origin, coverDisplay.displayUrl);
   if (!coverImageUrl) {
