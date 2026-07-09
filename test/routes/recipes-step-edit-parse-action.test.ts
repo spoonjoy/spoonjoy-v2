@@ -504,7 +504,8 @@ describe('recipes.$id.steps.$stepId.edit - parseIngredients action', () => {
       // Verify parseIngredients was called with centralized parser env
       expect(parseIngredients).toHaveBeenCalledWith(
         '2 cups flour',
-        expect.any(Object)
+        expect.any(Object),
+        { distinctId: testUser.id }
       )
     })
 
@@ -542,7 +543,8 @@ describe('recipes.$id.steps.$stepId.edit - parseIngredients action', () => {
         '2 cups flour',
         expect.objectContaining({
           OPENAI_API_KEY: 'cf-test-api-key',
-        })
+        }),
+        { distinctId: testUser.id }
       )
     })
   })
