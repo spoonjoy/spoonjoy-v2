@@ -48,7 +48,7 @@ async function signedAppleToken() {
   const header = base64UrlJson({ alg: "RS256", kid });
   const payload = base64UrlJson({
     iss: "https://appleid.apple.com",
-    aud: "app.spoonjoy.Spoonjoy",
+    aud: "app.spoonjoy",
     exp: now + 300,
     iat: now,
     sub: "apple-callback-failure-user",
@@ -85,7 +85,7 @@ describe("native Sign in with Apple callback failure handling", () => {
     await expect(handleNativeAppleSignIn(
       db,
       { identityToken: fixture.identityToken, rawNonce: fixture.rawNonce },
-      { clientIds: ["app.spoonjoy.Spoonjoy"] },
+      { clientIds: ["app.spoonjoy"] },
       { fetcher: fixture.fetcher },
     )).rejects.toMatchObject({
       code: "email_already_taken",
@@ -101,7 +101,7 @@ describe("native Sign in with Apple callback failure handling", () => {
     await expect(handleNativeAppleSignIn(
       dbMock(),
       { identityToken: fixture.identityToken, rawNonce: fixture.rawNonce },
-      { clientIds: ["app.spoonjoy.Spoonjoy"] },
+      { clientIds: ["app.spoonjoy"] },
       { fetcher: fixture.fetcher },
     )).rejects.toMatchObject({
       code: "apple_sign_in_failed",
@@ -127,7 +127,7 @@ describe("native Sign in with Apple callback failure handling", () => {
     await expect(handleNativeAppleSignIn(
       dbMock(),
       { identityToken: fixture.identityToken, rawNonce: fixture.rawNonce },
-      { clientIds: ["app.spoonjoy.Spoonjoy"] },
+      { clientIds: ["app.spoonjoy"] },
       { fetcher: fixture.fetcher },
     )).resolves.toMatchObject({
       action: "user_logged_in",

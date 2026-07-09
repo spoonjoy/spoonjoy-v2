@@ -121,7 +121,7 @@ wrangler secret put VAPID_SUBJECT
 Notes:
 
 - `SESSION_SECRET` protects auth sessions and must be high entropy in production.
-- Google, GitHub, and Apple OAuth secrets are required for the corresponding OAuth login/account-linking provider. Native Sign in with Apple also needs `APPLE_NATIVE_CLIENT_IDS`, currently `app.spoonjoy.Spoonjoy,app.spoonjoy.Spoonjoy.mac`, so the backend accepts iOS and macOS identity-token audiences after the Apple App IDs are registered.
+- Google, GitHub, and Apple OAuth secrets are required for the corresponding OAuth login/account-linking provider. Native Sign in with Apple also needs `APPLE_NATIVE_CLIENT_IDS`, currently `app.spoonjoy,app.spoonjoy.mac,app.spoonjoy.Spoonjoy,app.spoonjoy.Spoonjoy.mac`, so the backend accepts iOS and macOS identity-token audiences after the Apple App IDs are registered. Keep the canonical bundle IDs first; the `.Spoonjoy` IDs are legacy internal-build aliases.
 - `OPENAI_API_KEY` enables ingredient parsing and the OpenAI recipe-image provider. Missing local keys fall back to deterministic parsing paths where supported, but production should set the secret before enabling AI-assisted flows.
 - `GOOGLE_API_KEY` or `GEMINI_API_KEY` enables Gemini recipe-image fallback. Prefer `GOOGLE_API_KEY` for production unless a provider-specific alias is needed.
 - `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` are required for `/api/push/public-key` and web-push subscription flows.
@@ -164,7 +164,7 @@ GOOGLE_CLIENT_SECRET=your-google-client-secret
 GITHUB_CLIENT_ID=your-github-client-id
 GITHUB_CLIENT_SECRET=your-github-client-secret
 APPLE_CLIENT_ID=your-apple-client-id
-APPLE_NATIVE_CLIENT_IDS=app.spoonjoy.Spoonjoy,app.spoonjoy.Spoonjoy.mac
+APPLE_NATIVE_CLIENT_IDS=app.spoonjoy,app.spoonjoy.mac,app.spoonjoy.Spoonjoy,app.spoonjoy.Spoonjoy.mac
 APPLE_TEAM_ID=your-apple-team-id
 APPLE_KEY_ID=your-apple-key-id
 APPLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----..."

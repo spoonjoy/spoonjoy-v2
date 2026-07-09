@@ -72,7 +72,12 @@ describe("route shell coverage", () => {
         apps: [],
         details: [
           {
-            appIDs: ["A1B2C3D4E5.app.spoonjoy.Spoonjoy", "A1B2C3D4E5.app.spoonjoy.Spoonjoy.mac"],
+            appIDs: [
+              "A1B2C3D4E5.app.spoonjoy",
+              "A1B2C3D4E5.app.spoonjoy.mac",
+              "A1B2C3D4E5.app.spoonjoy.Spoonjoy",
+              "A1B2C3D4E5.app.spoonjoy.Spoonjoy.mac",
+            ],
             components: expect.arrayContaining([
               { "/": "/recipes/*" },
               { "/": "/cookbooks/*" },
@@ -87,6 +92,8 @@ describe("route shell coverage", () => {
 
     const configured = buildAppleAppSiteAssociation({ APPLE_TEAM_ID: "zyxwv98765" });
     expect(configured.applinks.details[0]?.appIDs).toEqual([
+      "ZYXWV98765.app.spoonjoy",
+      "ZYXWV98765.app.spoonjoy.mac",
       "ZYXWV98765.app.spoonjoy.Spoonjoy",
       "ZYXWV98765.app.spoonjoy.Spoonjoy.mac",
     ]);
