@@ -1,4 +1,9 @@
-export const APPLE_BUNDLE_IDS = ["app.spoonjoy.Spoonjoy", "app.spoonjoy.Spoonjoy.mac"] as const;
+export const APPLE_BUNDLE_IDS = [
+  "app.spoonjoy",
+  "app.spoonjoy.mac",
+  "app.spoonjoy.Spoonjoy",
+  "app.spoonjoy.Spoonjoy.mac",
+] as const;
 export const APPLE_TEAM_ID_PATTERN = /^[A-Z0-9]{10}$/;
 
 export type WebRouteCategory =

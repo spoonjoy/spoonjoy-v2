@@ -8,9 +8,16 @@ import {
 } from "~/lib/apple-native-auth.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 
-const APPLE_NATIVE_IOS_CLIENT_ID = "app.spoonjoy.Spoonjoy";
-const APPLE_NATIVE_MACOS_CLIENT_ID = "app.spoonjoy.Spoonjoy.mac";
-const APPLE_NATIVE_CLIENT_IDS = [APPLE_NATIVE_IOS_CLIENT_ID, APPLE_NATIVE_MACOS_CLIENT_ID];
+const APPLE_NATIVE_IOS_CLIENT_ID = "app.spoonjoy";
+const APPLE_NATIVE_MACOS_CLIENT_ID = "app.spoonjoy.mac";
+const LEGACY_APPLE_NATIVE_IOS_CLIENT_ID = "app.spoonjoy.Spoonjoy";
+const LEGACY_APPLE_NATIVE_MACOS_CLIENT_ID = "app.spoonjoy.Spoonjoy.mac";
+const APPLE_NATIVE_CLIENT_IDS = [
+  APPLE_NATIVE_IOS_CLIENT_ID,
+  APPLE_NATIVE_MACOS_CLIENT_ID,
+  LEGACY_APPLE_NATIVE_IOS_CLIENT_ID,
+  LEGACY_APPLE_NATIVE_MACOS_CLIENT_ID,
+];
 
 function base64Url(bytes: Uint8Array): string {
   const binary = Array.from(bytes, (byte) => String.fromCharCode(byte)).join("");
