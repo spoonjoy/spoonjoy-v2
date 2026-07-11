@@ -20,7 +20,7 @@ const OPERATION_SCOPES = {
   "GET /api/v1/openapi.connector.json": [],
   "POST /api/v1/auth/apple/native": [],
   "POST /api/v1/auth/password/native": [],
-  "POST /api/v1/native/telemetry": ["account:read"],
+  "POST /api/v1/native/telemetry": [],
   "GET /api/v1/search": [],
   "GET /api/v1/recipes": ["recipes:read"],
   "POST /api/v1/recipes": ["kitchen:write"],

@@ -151,6 +151,127 @@ describe("API v1 native telemetry", () => {
     expect(JSON.stringify(vi.mocked(captureEvent).mock.calls)).not.toContain(credential.credential.tokenPrefix);
   });
 
+  it("captures signed-out Apple auth telemetry without bearer tokens or secret material", async () => {
+    const body = {
+      event: "auth_flow_failed",
+      stage: "auth",
+      environment: "production",
+      platform: "ios",
+      appVersion: "1.0",
+      buildNumber: "42",
+      route: "kitchen",
+      errorType: "APITransportError",
+      requestId: "req_apple_exchange",
+      status: 401,
+      apiCode: "apple_identity_token_invalid",
+      retry: "do_not_retry",
+      accountBound: false,
+      authProvider: "apple",
+      authPhase: "backend_request_failed",
+      authOutcome: "failed",
+      authDiagnosticCode: "provider_invalid_identity_token",
+      authSessionState: "signed_out",
+      authCredentialPresent: true,
+      authIdentityTokenPresent: true,
+      authRawNoncePresent: true,
+      authEmailPresent: false,
+      authFullNamePresent: false,
+      authOAuthStatePresent: false,
+      authRedirectScheme: "https",
+      authRedirectHost: "spoonjoy.app",
+    };
+
+    const context = routeArgs(nativeTelemetryRequest(null, "req_native_auth_telemetry", body), "native/telemetry");
+    const response = await action(context.args);
+
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      requestId: "req_native_auth_telemetry",
+      data: { accepted: true },
+    });
+    expect(context.waitUntil).toHaveBeenCalledWith(expect.any(Promise));
+
+    const input = nativeTelemetryCaptures()[0];
+    expect(input).toMatchObject({
+      event: "spoonjoy.native.telemetry",
+      distinctId: "anonymous_native_app",
+      properties: {
+        native_event: "auth_flow_failed",
+        stage: "auth",
+        environment: "production",
+        platform: "ios",
+        app_version: "1.0",
+        build_number: "42",
+        route: "kitchen",
+        error_type: "APITransportError",
+        native_request_id: "req_apple_exchange",
+        http_status: 401,
+        api_error_code: "apple_identity_token_invalid",
+        retry: "do_not_retry",
+        account_bound: false,
+        auth_provider: "apple",
+        auth_phase: "backend_request_failed",
+        auth_outcome: "failed",
+        auth_diagnostic_code: "provider_invalid_identity_token",
+        auth_session_state: "signed_out",
+        auth_credential_present: true,
+        auth_identity_token_present: true,
+        auth_raw_nonce_present: true,
+        auth_email_present: false,
+        auth_full_name_present: false,
+        auth_oauth_state_present: false,
+        auth_redirect_scheme: "https",
+        auth_redirect_host: "spoonjoy.app",
+        server_request_id: "req_native_auth_telemetry",
+      },
+    });
+    const captureJson = JSON.stringify(vi.mocked(captureEvent).mock.calls);
+    expect(captureJson).not.toContain("identityToken");
+    expect(captureJson).not.toContain("rawNonce");
+    expect(captureJson).not.toContain("accessToken");
+    expect(captureJson).not.toContain("refreshToken");
+    expect(captureJson).not.toContain("password");
+  });
+
+  it("captures App Intent telemetry fields from optional native clients", async () => {
+    const context = routeArgs(nativeTelemetryRequest(null, "req_native_intent_telemetry", {
+      event: "app_intent_completed",
+      stage: "app_intent.OpenRecipeIntent.open-route",
+      environment: "production",
+      platform: "ios",
+      route: "recipe:recipe_123",
+      intentName: "OpenRecipeIntent",
+      intentActionKind: "open-route",
+      intentOutcome: "completed",
+      intentReturnsValue: false,
+      intentQueuedMutationId: "mutation_123",
+      intentQueuedMutationKind: "shopping-item-create",
+      intentOpensUrl: "spoonjoy://recipe/recipe_123",
+    }), "native/telemetry");
+
+    const response = await action(context.args);
+
+    expect(response.status).toBe(202);
+    const input = nativeTelemetryCaptures()[0];
+    expect(input).toMatchObject({
+      distinctId: "anonymous_native_app",
+      properties: {
+        native_event: "app_intent_completed",
+        stage: "app_intent.OpenRecipeIntent.open-route",
+        route: "recipe:recipe_123",
+        intent_name: "OpenRecipeIntent",
+        intent_action_kind: "open-route",
+        intent_outcome: "completed",
+        intent_returns_value: false,
+        intent_queued_mutation_id: "mutation_123",
+        intent_queued_mutation_kind: "shopping-item-create",
+        intent_opens_url: "spoonjoy://recipe/recipe_123",
+        server_request_id: "req_native_intent_telemetry",
+      },
+    });
+  });
+
   it("awaits capture inline when waitUntil is unavailable", async () => {
     const user = await db.user.create({ data: createTestUser() });
     const credential = await createApiCredential(db, user.id, "Native telemetry", {
@@ -317,7 +438,7 @@ describe("API v1 native telemetry", () => {
     });
   });
 
-  it("requires account read scope", async () => {
+  it("accepts lower-scope bearer clients because native telemetry is optional auth", async () => {
     const user = await db.user.create({ data: createTestUser() });
     const credential = await createApiCredential(db, user.id, "Kitchen-only client", {
       scopes: ["kitchen:read"],
@@ -329,12 +450,10 @@ describe("API v1 native telemetry", () => {
 
     const response = await action(routeArgs(request, "native/telemetry").args);
 
-    expect(response.status).toBe(403);
-    await expect(response.json()).resolves.toMatchObject({
-      ok: false,
-      requestId: "req_native_telemetry_scope",
-      error: { code: "insufficient_scope" },
+    expect(response.status).toBe(202);
+    expect(nativeTelemetryCaptures()[0]).toMatchObject({
+      distinctId: user.id,
+      properties: { native_event: "settings_refresh_failed", server_request_id: "req_native_telemetry_scope" },
     });
-    expect(nativeTelemetryCaptures()).toHaveLength(0);
   });
 });
