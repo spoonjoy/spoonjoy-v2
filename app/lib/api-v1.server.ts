@@ -177,12 +177,22 @@ interface ApiV1TelemetryMetadata {
 type NativeTelemetryEventName =
   | "bootstrap_failed"
   | "bootstrap_offline"
+  | "app_intent_completed"
+  | "app_intent_failed"
+  | "auth_flow_started"
+  | "auth_flow_completed"
+  | "auth_flow_failed"
   | "settings_refresh_failed"
   | "sync_failed";
 
 const NATIVE_TELEMETRY_EVENTS = new Set<NativeTelemetryEventName>([
   "bootstrap_failed",
   "bootstrap_offline",
+  "app_intent_completed",
+  "app_intent_failed",
+  "auth_flow_started",
+  "auth_flow_completed",
+  "auth_flow_failed",
   "settings_refresh_failed",
   "sync_failed",
 ]);
@@ -5705,7 +5715,7 @@ async function handleNativePasswordSignInRequest(args: ApiV1RouteArgs, requestId
   }
 }
 
-async function handleNativeTelemetryRequest(args: ApiV1RouteArgs, requestId: string, authenticated: ApiPrincipal) {
+async function handleNativeTelemetryRequest(args: ApiV1RouteArgs, requestId: string, authenticated: ApiPrincipal | null) {
   const body = await parseApiV1JsonBody(args.request);
   assertKnownFields(body, [
     "event",
@@ -5726,6 +5736,26 @@ async function handleNativeTelemetryRequest(args: ApiV1RouteArgs, requestId: str
     "cookbooks",
     "shoppingItems",
     "queuedMutations",
+    "intentName",
+    "intentActionKind",
+    "intentOutcome",
+    "intentReturnsValue",
+    "intentQueuedMutationId",
+    "intentQueuedMutationKind",
+    "intentOpensUrl",
+    "authProvider",
+    "authPhase",
+    "authOutcome",
+    "authDiagnosticCode",
+    "authSessionState",
+    "authCredentialPresent",
+    "authIdentityTokenPresent",
+    "authRawNoncePresent",
+    "authEmailPresent",
+    "authFullNamePresent",
+    "authOAuthStatePresent",
+    "authRedirectScheme",
+    "authRedirectHost",
   ]);
 
   const nativeEvent = nativeTelemetryEvent(body.event);
@@ -5750,6 +5780,26 @@ async function handleNativeTelemetryRequest(args: ApiV1RouteArgs, requestId: str
     cookbook_count: optionalNativeTelemetryInteger(body.cookbooks, "cookbooks", 0, 100_000),
     shopping_item_count: optionalNativeTelemetryInteger(body.shoppingItems, "shoppingItems", 0, 100_000),
     queued_mutation_count: optionalNativeTelemetryInteger(body.queuedMutations, "queuedMutations", 0, 100_000),
+    intent_name: optionalNullableString(body.intentName, "intentName", 120),
+    intent_action_kind: optionalNullableString(body.intentActionKind, "intentActionKind", 80),
+    intent_outcome: optionalNullableString(body.intentOutcome, "intentOutcome", 40),
+    intent_returns_value: optionalNativeTelemetryBoolean(body.intentReturnsValue, "intentReturnsValue"),
+    intent_queued_mutation_id: optionalNullableString(body.intentQueuedMutationId, "intentQueuedMutationId", 160),
+    intent_queued_mutation_kind: optionalNullableString(body.intentQueuedMutationKind, "intentQueuedMutationKind", 80),
+    intent_opens_url: optionalNullableString(body.intentOpensUrl, "intentOpensUrl", 320),
+    auth_provider: optionalNullableString(body.authProvider, "authProvider", 80),
+    auth_phase: optionalNullableString(body.authPhase, "authPhase", 120),
+    auth_outcome: optionalNullableString(body.authOutcome, "authOutcome", 40),
+    auth_diagnostic_code: optionalNullableString(body.authDiagnosticCode, "authDiagnosticCode", 120),
+    auth_session_state: optionalNullableString(body.authSessionState, "authSessionState", 80),
+    auth_credential_present: optionalNativeTelemetryBoolean(body.authCredentialPresent, "authCredentialPresent"),
+    auth_identity_token_present: optionalNativeTelemetryBoolean(body.authIdentityTokenPresent, "authIdentityTokenPresent"),
+    auth_raw_nonce_present: optionalNativeTelemetryBoolean(body.authRawNoncePresent, "authRawNoncePresent"),
+    auth_email_present: optionalNativeTelemetryBoolean(body.authEmailPresent, "authEmailPresent"),
+    auth_full_name_present: optionalNativeTelemetryBoolean(body.authFullNamePresent, "authFullNamePresent"),
+    auth_oauth_state_present: optionalNativeTelemetryBoolean(body.authOAuthStatePresent, "authOAuthStatePresent"),
+    auth_redirect_scheme: optionalNullableString(body.authRedirectScheme, "authRedirectScheme", 40),
+    auth_redirect_host: optionalNullableString(body.authRedirectHost, "authRedirectHost", 160),
     server_request_id: requestId,
   };
 
@@ -5757,7 +5807,7 @@ async function handleNativeTelemetryRequest(args: ApiV1RouteArgs, requestId: str
   if (env) {
     const task = captureEvent(resolvePostHogServerConfig(env), {
       event: "spoonjoy.native.telemetry",
-      distinctId: authenticated.id,
+      distinctId: authenticated?.id ?? "anonymous_native_app",
       properties: payload,
     });
     const waitUntil = apiV1WaitUntilFor(args);
@@ -5769,7 +5819,9 @@ async function handleNativeTelemetryRequest(args: ApiV1RouteArgs, requestId: str
   }
 
   return withApiV1Telemetry(
-    apiV1PrivateSuccess(requestId, { accepted: true }, 202),
+    authenticated
+      ? apiV1PrivateSuccess(requestId, { accepted: true }, 202)
+      : apiV1Success(requestId, { accepted: true }, 202),
     { operation: "native.telemetry.capture", idempotencyOutcome: "none" },
   );
 }
@@ -5982,7 +6034,7 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
     }
 
     if (args.request.method === "POST" && path === "native/telemetry") {
-      const principal = await authorize(path) as ApiPrincipal;
+      const principal = await authorize(path);
       const response = await handleNativeTelemetryRequest(args, requestId, principal);
       return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
     }
