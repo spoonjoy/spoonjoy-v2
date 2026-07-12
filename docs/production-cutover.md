@@ -54,11 +54,14 @@ The verified source report (preserved for historical reference):
 - v1 had no shopping-list rows to migrate.
 - Auth continuity: GitHub OAuth support preserved the two GitHub-only v1 users after `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` were set in Cloudflare.
 
+Follow-up image hosting cleanup: the imported `RecipeCover.imageUrl` values initially preserved v1 Cloudinary URLs. Run `pnpm run migrate:cloudinary-r2 -- --target-env production --dry-run` to audit and `pnpm run migrate:cloudinary-r2 -- --target-env production --apply` to copy those legacy cover assets into the production R2 bucket and patch both source and search-index references.
+
 Future fresh cutovers (e.g., a v3) should write a new importer rather than resurrecting the v1 scripts — the v1 schema is no longer authoritative.
 
 Pre-import data hygiene (still relevant for any future import-style operation):
 
-- Always export D1 first: `pnpm exec wrangler d1 export DB --remote --output /tmp/spoonjoy-d1-backups/pre-import-$(date -u +%Y%m%dT%H%M%SZ).sql --yes`.
+- Always export D1 first: `pnpm exec wrangler d1 export DB --remote --output /tmp/spoonjoy-d1-backups/pre-import-$(date -u +%Y%m%dT%H%M%SZ).sql`.
+- If Wrangler refuses export because the database contains FTS5 virtual tables, capture a D1 Time Travel bookmark and a targeted row-level rollback file before applying the mutation.
 - Run `PRAGMA foreign_key_check;` post-import; require zero rows.
 - Rebuild search with `rebuildSearchIndex(db)` after a bulk import.
 

@@ -96,6 +96,32 @@ Target mapping:
 
 The legacy `pnpm run cleanup:qa` script is a backwards-compatible local alias for `pnpm run cleanup:local`; it still passes `--target-env local`. Production broad cleanup is read-only and `--target-env production --apply` is refused. Production smoke cleanup must remain exact-run cleanup for the one `codex-smoke-` user created by that smoke run.
 
+## Legacy Cloudinary Asset Migration
+
+Spoonjoy v2 is hosted on Cloudflare Workers and stores new uploads in R2, but the May 2026 v1 import preserved legacy recipe-cover URLs. Those rows must not continue to point at Cloudinary because they consume the old account quota whenever recipes or search results render.
+
+Audit without changing data:
+
+```bash
+pnpm run migrate:cloudinary-r2 -- --target-env production --dry-run
+```
+
+Apply the migration:
+
+```bash
+pnpm run migrate:cloudinary-r2 -- --target-env production --apply
+```
+
+The command captures a Time Travel bookmark plus row-level rollback files under `/tmp/spoonjoy-d1-backups/`. It attempts a full D1 export too, but Wrangler cannot export D1 databases that contain FTS5 virtual tables, so the row-level rollback is the authoritative backup for this URL-only migration. The command downloads each unique `https://res.cloudinary.com/...` image once, uploads it to `spoonjoy-photos` under `legacy-cloudinary/`, and updates guarded references in `RecipeCover`, `SearchDocument`, `User`, and `RecipeSpoon`. It is dry-run by default, writes a JSON report under `cloudinary-r2-migration-artifacts/`, and only updates rows whose current URL still matches the old Cloudinary URL.
+
+If the asset-copy phase succeeds but the final D1 update fails, rerun with:
+
+```bash
+pnpm run migrate:cloudinary-r2 -- --target-env production --apply --resume-existing-r2
+```
+
+That mode probes R2 first and reuses existing `legacy-cloudinary/` objects before making any Cloudinary request.
+
 ## Required Secrets
 
 Set production secrets with `wrangler secret put`:
