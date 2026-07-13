@@ -1,6 +1,6 @@
 # Autopilot State
 
-Updated: 2026-07-13 14:07 America/Los_Angeles
+Updated: 2026-07-13 15:14 America/Los_Angeles
 Branch: post-merge `main` terminal state; the self-referential closure branch/PR used to land this line is excluded from stale-branch accounting.
 Objective: Record that the `SJ-044` cleanup-harness dogfood run is complete once this state lands on `main`, and leave the Spoonjoy autonomous queue in a truthful idle state.
 
@@ -10,9 +10,9 @@ Objective: Record that the `SJ-044` cleanup-harness dogfood run is complete once
 - Web worktree: `/Users/arimendelow/Projects/spoonjoy-v2-agent-kitchen-nav` on `agent/kitchen-nav-reorg`.
 - Native worktree: `/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav` on `agent/kitchen-nav-reorg`.
 - Planning doc: `agent/tasks/2026-07-13-1405-planning-kitchen-nav-reorg.md` (approved after sub-agent reviewer convergence).
-- Doing doc: `agent/tasks/2026-07-13-1405-doing-kitchen-nav-reorg.md` (drafting).
-- Current gate: doing doc review passes pending.
-- Next action: run mandatory Work Suite doing-doc passes, then execute with work-doer after convergence.
+- Doing doc: `agent/tasks/2026-07-13-1405-doing-kitchen-nav-reorg.md` (`READY_FOR_EXECUTION` after mandatory reviewer convergence).
+- Current gate: executing work-doer units directly with strict TDD.
+- Next action: complete Unit 0 setup/research artifacts, then write red web drawer tests for Unit 1a.
 
 ## Current Gate
 
