@@ -20,6 +20,8 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 - Native Apple compact navigation: iPhone tabs should be Kitchen, My Recipes, Saved, Cookbooks, and Shopping List; Search remains reachable through native search chrome/toolbars rather than occupying a tab.
 - Native Apple regular-width navigation: expose the same kitchen drawers in the sidebar, including Chefs and Search.
 - Native Apple saved-recipes surface derived from cookbook recipe membership, matching the web definition.
+- Native Apple route model for Saved Recipes and Chefs, plus compact auxiliary routing so toolbar Search still renders `SearchView` after the Search tab is removed.
+- Native Apple My Recipes must use current-chef owned cached/displayed recipes and must not refresh from the public recipe catalog for the personal drawer.
 - Native Apple copy updates for "My Recipes", "Saved Recipes", "Shopping List", "Chefs", and the honest editorial feature label.
 - Native Apple tab bar chrome iteration toward liquid-glass/material translucency using native UIKit/SwiftUI primitives.
 - Web/native design-language documentation updates for the finalized kitchen drawer model and mobile navigation posture.
@@ -48,8 +50,10 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 - [ ] Web mobile navigation labels use kitchen terms (`My Kitchen`, `My Recipes`, `Saved`, `Cookbooks`, `Shopping List`, `Chefs`, `Search`) and the dock is visually glass/material-like while preserving fixed bottom safe-area behavior at 320-390px and desktop-hidden behavior at `lg`.
 - [ ] Native compact iPhone `TabView` exposes exactly five tabs: `Kitchen`, `My Recipes`, `Saved`, `Cookbooks`, and `Shopping List`; `Search` is removed as a bottom tab and remains reachable via toolbar/menu/native `.searchable` path.
 - [ ] Native regular-width `NavigationSplitView` sidebar exposes `Kitchen`, `My Recipes`, `Saved Recipes`, `Cookbooks`, `Shopping List`, `Chefs`, `Kitchen Search`, `Imports`, and `Settings`.
-- [ ] Native My Recipes filters cached/displayed recipes to the current authenticated chef when `currentChefID` is known; signed-out or unavailable-current-chef fallback stays safe and non-crashing.
+- [ ] Native route model includes a first-class `chefs` section/route or an explicit `chefs` route alias to chef search/profile graph, and the sidebar Chefs destination is tested.
+- [ ] Native My Recipes filters cached/displayed recipes to the current authenticated chef when `currentChefID` is known, uses a snapshot/current-chef repository rather than the public live catalog for the personal drawer, and signed-out or unavailable-current-chef fallback stays safe and non-crashing.
 - [ ] Native Saved Recipes uses the same saved-through-cookbooks definition as web by deduping `contentState.cookbooks.flatMap(\\.recipes)` by recipe ID.
+- [ ] Native toolbar Search renders `SearchView` as an auxiliary compact route after removing the Search bottom tab, and route/section mapping tests prove `.search` no longer depends on a removed tab item.
 - [ ] Native tab bar/mobile navigation uses system material/translucent chrome (`UITabBarAppearance`/SwiftUI toolbar material) instead of the current opaque bone treatment, with tests proving translucency/material setup.
 - [ ] Web `docs/design-language.md` and native `docs/native-design-language.md` document the finalized drawer names, saved-recipes definition, search posture, and mobile navigation behavior.
 - [ ] Native screenshot validation runs against the highest available bootable iPhone simulator resolved by `.github/scripts/resolve-ios-simulator-destination.py` or a pinned `SPOONJOY_IOS_SIMULATOR_NAME`/`SPOONJOY_IOS_SIMULATOR_UDID`, records the resolved simulator name/UDID in artifacts or blocker logs, and runs macOS validation against `generic/platform=macOS`.
@@ -120,3 +124,4 @@ Native release submission is intentionally not part of this task because it can 
 - 2026-07-13 14:18 Addressed second reviewer finding: full native design-review schema, route evidence, blocker, and simulator/macOS validation targets
 - 2026-07-13 14:20 Planning approved after sub-agent reviewer convergence
 - 2026-07-13 14:41 Tightened native compact search affordance and exact route-matrix coverage
+- 2026-07-13 14:51 Added native scrutiny requirements for search auxiliary routing, current-chef My Recipes loading, and Chefs route/sidebar behavior
