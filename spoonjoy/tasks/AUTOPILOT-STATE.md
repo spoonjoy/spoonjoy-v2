@@ -9,10 +9,10 @@ Objective: Record that the `SJ-044` cleanup-harness dogfood run is complete once
 - Objective: Ship the kitchen information architecture/navigation reorg across web and Apple native surfaces, including improved mobile liquid-glass navigation.
 - Web worktree: `/Users/arimendelow/Projects/spoonjoy-v2-agent-kitchen-nav` on `agent/kitchen-nav-reorg`.
 - Native worktree: `/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav` on `agent/kitchen-nav-reorg`.
-- Planning doc: `agent/tasks/2026-07-13-1405-planning-kitchen-nav-reorg.md`.
+- Planning doc: `agent/tasks/2026-07-13-1405-planning-kitchen-nav-reorg.md` (approved after sub-agent reviewer convergence).
 - Doing doc: pending.
-- Current gate: planning reviewer gate pending after initial plan and tinfoil pass.
-- Next action: run sub-agent planning review, update plan if needed, convert to doing doc, then execute with work-doer.
+- Current gate: doing doc conversion/review pending.
+- Next action: create doing doc, run mandatory Work Suite review passes, then execute with work-doer.
 
 ## Current Gate
 
