@@ -88,6 +88,7 @@ export function OAuthError({ error, className }: OAuthErrorProps) {
   const messages: Record<string, string> = {
     account_exists: 'An account with this email already exists. Please log in to link your account.',
     email_required: 'An email address is required to create an account. Please allow email access and try again.',
+    email_unverified: 'Your OAuth provider must return a verified email address before Spoonjoy can use it for sign-in.',
     invalid_state: 'Your OAuth session expired or could not be verified. Please try again.',
     invalid_code: 'The OAuth provider did not return a usable authorization code. Please try again.',
     invalid_code_verifier: 'Your OAuth security verifier was missing. Please try again.',

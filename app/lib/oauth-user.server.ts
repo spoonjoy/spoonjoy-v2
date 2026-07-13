@@ -34,6 +34,11 @@ export interface LinkOAuthData {
   providerUsername: string;
 }
 
+export interface LinkOAuthByEmailData extends LinkOAuthData {
+  email: string;
+  emailVerified: boolean;
+}
+
 export interface LinkOAuthResult {
   success: boolean;
   oauthRecord?: {
@@ -41,6 +46,7 @@ export interface LinkOAuthResult {
     providerUserId: string;
     providerUsername: string;
   };
+  userId?: string;
   error?: string;
   message?: string;
 }
@@ -216,6 +222,49 @@ export async function findExistingOAuthAccount(
     provider: oauthRecord.provider,
     providerUserId: oauthRecord.providerUserId,
     providerUsername: oauthRecord.providerUsername,
+  };
+}
+
+/**
+ * Restore a missing OAuth row for an existing Spoonjoy account when a provider
+ * returns the same verified email. This covers migrated accounts whose provider
+ * identity did not make it into the OAuth table, while still relying on
+ * linkOAuthAccount for provider uniqueness checks.
+ */
+export async function linkOAuthAccountByVerifiedEmail(
+  db: PrismaClient,
+  oauthData: LinkOAuthByEmailData
+): Promise<LinkOAuthResult> {
+  if (!oauthData.emailVerified) {
+    return {
+      success: false,
+      error: "email_unverified",
+      message: "Your OAuth provider must return a verified email address.",
+    };
+  }
+
+  const normalizedEmail = oauthData.email.toLowerCase();
+  const existingUsers = await db.$queryRaw<Array<{ id: string }>>`
+    SELECT id FROM User WHERE LOWER(email) = ${normalizedEmail} LIMIT 1
+  `;
+
+  const existingUser = existingUsers[0];
+  if (!existingUser) {
+    return {
+      success: false,
+      error: "account_not_found",
+      message: "No account exists for this verified email address.",
+    };
+  }
+
+  const linkResult = await linkOAuthAccount(db, existingUser.id, oauthData);
+  if (!linkResult.success) {
+    return linkResult;
+  }
+
+  return {
+    ...linkResult,
+    userId: existingUser.id,
   };
 }
 

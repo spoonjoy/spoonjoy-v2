@@ -165,20 +165,31 @@ describe("github-oauth-callback.server", () => {
     expect(result.userId).toBeUndefined();
   });
 
-  it("returns account_exists when a new GitHub login collides by email", async () => {
+  it("restores a missing GitHub OAuth row when verified email matches an existing user", async () => {
     const existingUser = await db.user.create({
       data: { ...createTestUser(), email: "Existing@Example.com" },
     });
     testUserIds.push(existingUser.id);
 
-    const result = await runCallback(undefined, createMockGitHubUser({
+    const githubUser = createMockGitHubUser({
       email: "existing@example.com",
-    }));
+    });
+    const result = await runCallback(undefined, githubUser);
 
     expect(result).toMatchObject({
-      success: false,
-      error: "account_exists",
+      success: true,
+      userId: existingUser.id,
+      action: "account_linked",
       redirectTo: "/recipes",
+    });
+
+    const oauth = await db.oAuth.findUnique({
+      where: { userId_provider: { userId: existingUser.id, provider: "github" } },
+    });
+    expect(oauth).toMatchObject({
+      provider: "github",
+      providerUserId: githubUser.id,
+      providerUsername: githubUser.login,
     });
   });
 
