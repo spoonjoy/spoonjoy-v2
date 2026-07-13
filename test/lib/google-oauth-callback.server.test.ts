@@ -514,6 +514,41 @@ describe("google-oauth-callback.server", () => {
         expect(result.userId).toBe(existingUser.id);
       });
 
+      it("should propagate restore errors when the verified email user already has Google linked", async () => {
+        const existingUser = await db.user.create({
+          data: {
+            ...createTestUser(),
+            email: "linked-google@example.com",
+            OAuth: {
+              create: {
+                provider: "google",
+                providerUserId: "existing-google-id",
+                providerUsername: "Existing Google",
+              },
+            },
+          },
+        });
+        testUserIds.push(existingUser.id);
+
+        const result = await handleGoogleOAuthCallback({
+          db,
+          googleUser: createMockGoogleUser({
+            id: "new-google-id",
+            email: "linked-google@example.com",
+            name: "New Google",
+          }),
+          currentUserId: null,
+          redirectTo: null,
+        });
+
+        expect(result).toMatchObject({
+          success: false,
+          error: "provider_already_linked",
+          redirectTo: "/",
+        });
+        expect(result.userId).toBeUndefined();
+      });
+
       it("should reject unverified Google email before linking or creating", async () => {
         const mockGoogleUser = createMockGoogleUser({
           emailVerified: false,

@@ -193,6 +193,36 @@ describe("github-oauth-callback.server", () => {
     });
   });
 
+  it("propagates restore errors when the verified email user already has GitHub linked", async () => {
+    const existingUser = await db.user.create({
+      data: {
+        ...createTestUser(),
+        email: "linked-github@example.com",
+        OAuth: {
+          create: {
+            provider: "github",
+            providerUserId: "existing-github-id",
+            providerUsername: "existingchef",
+          },
+        },
+      },
+    });
+    testUserIds.push(existingUser.id);
+
+    const result = await runCallback(undefined, createMockGitHubUser({
+      id: "new-github-id",
+      email: "linked-github@example.com",
+      login: "newchef",
+    }));
+
+    expect(result).toMatchObject({
+      success: false,
+      error: "provider_already_linked",
+      redirectTo: "/recipes",
+    });
+    expect(result.userId).toBeUndefined();
+  });
+
   it("returns email_required for a new GitHub user with no verified email", async () => {
     const result = await runCallback(undefined, createMockGitHubUser({
       email: null,
