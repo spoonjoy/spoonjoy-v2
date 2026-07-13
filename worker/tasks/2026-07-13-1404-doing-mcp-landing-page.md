@@ -65,7 +65,7 @@ Make `https://spoonjoy.app/mcp` useful for humans by rendering a clear landing p
 **Output**: Working `/mcp` page and preserved MCP POST endpoint.
 **Acceptance**: Targeted tests pass without warnings.
 
-### ⬜ Unit 1c: MCP Landing Page — Coverage & Build
+### ✅ Unit 1c: MCP Landing Page — Coverage & Build
 **What**: Run targeted coverage for the modified route tests, then run build/typegen validation because the route module extension changes.
 **Output**: Test, coverage, and build logs in `./2026-07-13-1404-doing-mcp-landing-page/`.
 **Acceptance**: 100% coverage on new/modified route code, all targeted tests pass, `pnpm run build` passes with no warnings.
@@ -90,3 +90,4 @@ Make `https://spoonjoy.app/mcp` useful for humans by rendering a clear landing p
 - 2026-07-13 14:11 Unit 0 complete: recorded route, protocol, docs, registration, and test targets in `unit-0-research.md`
 - 2026-07-13 14:12 Unit 1a complete: added route data, rendered-page, and POST shell tests; red run saved to `unit-1a-red.log`
 - 2026-07-13 14:16 Unit 1b complete: implemented GET landing page, preserved POST MCP action, updated route registration/classification, and saved green targeted test output to `unit-1b-green.log`
+- 2026-07-13 14:48 Unit 1c complete: refreshed Browserslist data to clear stale warnings, verified full coverage at 100%, and ran production build with clean logs
