@@ -4,6 +4,7 @@ import { Plus } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Text } from "~/components/ui/text";
 import { CookbookHeader, CookbookPage, ObjectRow, RuledEmptyState } from "~/components/cookbook/page";
+import { getRecipeCoverDisplay } from "~/lib/recipe-cover.server";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
 import { DrawerSearch } from "./my-recipes";
@@ -15,7 +16,7 @@ function normalizedQuery(request: Request) {
 function matchesCookbookQuery(
   cookbook: {
     title: string;
-    recipes: Array<{ recipe: { title: string } }>;
+    searchableRecipeTitles: string[];
   },
   query: string,
 ) {
@@ -23,7 +24,7 @@ function matchesCookbookQuery(
   const needle = query.toLowerCase();
   return [
     cookbook.title,
-    ...cookbook.recipes.map((item) => item.recipe.title),
+    ...cookbook.searchableRecipeTitles,
   ].some((value) => value.toLowerCase().includes(needle));
 }
 
@@ -47,16 +48,61 @@ export async function loader({ request, context }: Route.LoaderArgs) {
             select: {
               id: true,
               title: true,
+              activeCoverId: true,
+              activeCoverVariant: true,
+              coverMode: true,
+              covers: {
+                orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+              },
             },
           },
         },
       },
     },
   });
+  const titlesByCookbookId = new Map<string, string[]>();
+
+  if (cookbooks.length > 0) {
+    const recipeTitleRows = await database.recipeInCookbook.findMany({
+      where: {
+        cookbookId: { in: cookbooks.map((cookbook) => cookbook.id) },
+        recipe: { deletedAt: null },
+      },
+      select: {
+        cookbookId: true,
+        recipe: {
+          select: { title: true },
+        },
+      },
+    });
+
+    for (const row of recipeTitleRows) {
+      const titles = titlesByCookbookId.get(row.cookbookId) ?? [];
+      titles.push(row.recipe.title);
+      titlesByCookbookId.set(row.cookbookId, titles);
+    }
+  }
+
+  const cookbooksWithPreview = cookbooks.map(({ recipes, ...cookbook }) => ({
+    ...cookbook,
+    searchableRecipeTitles: titlesByCookbookId.get(cookbook.id) ?? [],
+    recipes: recipes.map((item) => {
+      const coverDisplay = getRecipeCoverDisplay(item.recipe, item.recipe.covers);
+      return {
+        ...item,
+        recipe: {
+          id: item.recipe.id,
+          title: item.recipe.title,
+          coverImageUrl: coverDisplay?.displayUrl ?? null,
+          coverProvenanceLabel: coverDisplay?.provenanceLabel ?? null,
+        },
+      };
+    }),
+  }));
 
   return {
     query,
-    cookbooks: cookbooks.filter((cookbook) => matchesCookbookQuery(cookbook, query)),
+    cookbooks: cookbooksWithPreview.filter((cookbook) => matchesCookbookQuery(cookbook, query)),
   };
 }
 
@@ -88,6 +134,7 @@ export default function CookbooksIndexRedirect() {
               href={`/cookbooks/${cookbook.id}`}
               title={cookbook.title}
               subtitle={`${cookbook._count.recipes} ${cookbook._count.recipes === 1 ? "recipe" : "recipes"}`}
+              imageUrl={cookbook.recipes.find((item) => item.recipe.coverImageUrl)?.recipe.coverImageUrl ?? null}
             />
           ))}
         </section>

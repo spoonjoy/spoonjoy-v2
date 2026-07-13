@@ -64,9 +64,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   for (const membership of memberships) {
     const existing = byRecipeId.get(membership.recipeId);
     if (existing) {
-      if (!existing.savedCookbookTitles.includes(membership.cookbook.title)) {
-        existing.savedCookbookTitles.push(membership.cookbook.title);
-      }
+      existing.savedCookbookTitles.push(membership.cookbook.title);
       continue;
     }
 
@@ -114,7 +112,12 @@ export default function SavedRecipes() {
       ) : (
         <RuledEmptyState
           title={query ? "No matching saved recipes" : "No saved recipes yet"}
-          action={<Button href="/recipes">Explore Recipes</Button>}
+          action={(
+            <div className="flex flex-wrap gap-2">
+              <Button href="/recipes">Explore Recipes</Button>
+              <Button href="/cookbooks/new" plain>New Cookbook</Button>
+            </div>
+          )}
         >
           <Text>
             {query

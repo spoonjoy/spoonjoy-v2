@@ -1,0 +1,22 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2-agent-kitchen-nav
+
+ ✓ test/routes/saved-recipes.test.tsx (5 tests) 574ms
+ ✓ test/routes/chefs.test.tsx (3 tests) 427ms
+     ✓ returns fellow chefs, chefs using my recipes, and private chronological activity without shopping-list events  304ms
+ ✓ test/routes/cookbooks-index.test.tsx (5 tests) 394ms
+ ❯ test/routes/my-recipes.test.tsx (6 tests | 1 failed) 412ms
+     ✓ redirects unauthenticated cooks to login 10ms
+     ✓ shows only the signed-in chef's non-deleted recipes and supports local ingredient search 166ms
+     ✓ returns an empty drawer for a signed-in chef without recipes 75ms
+     ✓ keeps owned recipes in updated order when no drawer query is present 78ms
+     ✓ renders owned recipe rows and the create action 41ms
+     × renders the query-specific empty state and clear link 18ms
+ ✓ test/components/navigation/mobile-nav.test.tsx (20 tests) 142ms
+ ✓ test/root-navbar.test.tsx (4 tests) 89ms
+
+ Test Files  1 failed | 5 passed (6)
+      Tests  1 failed | 42 passed (43)
+   Start at  15:24:54
+   Duration  5.88s (transform 274ms, setup 346ms, import 1.93s, tests 2.04s, environment 906ms)
+

@@ -114,4 +114,51 @@ describe("Chefs drawer route", () => {
     ]);
     expect(result.activity.map((row: { kind: string }) => row.kind)).not.toContain("shopping-list");
   });
+
+  it("returns empty chef sections and excludes self activity", async () => {
+    const viewer = await createDrawerUser("chefs-empty");
+    const viewerRecipe = await createDrawerRecipe({
+      chefId: viewer.id,
+      title: "Own Toast",
+    });
+    const cookbook = await db.cookbook.create({
+      data: { title: "Own Shelf", authorId: viewer.id },
+    });
+
+    await db.recipeSpoon.create({
+      data: {
+        chefId: viewer.id,
+        recipeId: viewerRecipe.id,
+        cookedAt: new Date("2026-06-01T10:00:00Z"),
+      },
+    });
+    await db.recipe.create({
+      data: {
+        title: "Own Fork",
+        chefId: viewer.id,
+        sourceRecipeId: viewerRecipe.id,
+        createdAt: new Date("2026-06-02T10:00:00Z"),
+      },
+    });
+    await db.recipeInCookbook.create({
+      data: {
+        cookbookId: cookbook.id,
+        recipeId: viewerRecipe.id,
+        addedById: viewer.id,
+        createdAt: new Date("2026-06-03T10:00:00Z"),
+      },
+    });
+
+    const result = await loader({
+      request: new UndiciRequest("http://localhost:3000/chefs", {
+        headers: await sessionHeaders(viewer.id),
+      }),
+      context: { cloudflare: { env: null } },
+      params: {},
+    } as any);
+
+    expect(result.fellowChefs).toEqual({ rows: [], total: 0 });
+    expect(result.chefsUsingMyRecipes).toEqual({ rows: [], total: 0 });
+    expect(result.activity).toEqual([]);
+  });
 });
