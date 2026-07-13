@@ -96,7 +96,7 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 **Output**: Artifact notes under `./2026-07-13-1405-doing-kitchen-nav-reorg/unit-0/` covering repo status, relevant test targets, and any discovered shared-file constraints.
 **Acceptance**: `git status --short --branch` is captured for web and native worktrees; target files and commands are listed; no code files are edited in this unit.
 
-### ⬜ Unit 1a: Web Kitchen Drawers — Tests
+### ✅ Unit 1a: Web Kitchen Drawers — Tests
 **What**: Write failing tests for `/my-recipes`, `/saved-recipes`, `/cookbooks`, and `/chefs` loader/UI behavior in `test/routes/*`, including the exact Web Personal Drawers route/data contracts above, web Chefs tests for existing fellow-chef semantics, "Chefs Using My Recipes," private chronological ordering across spoon/fork/save activity, and exclusion of shopping-list events; plus navigation expectations in `test/root-navbar.test.tsx` or the existing root/mobile navigation tests.
 **Output**: Failing web tests in `test/routes/my-recipes.test.tsx`, `test/routes/saved-recipes.test.tsx`, updated `test/routes/cookbooks-index.test.tsx`, `test/routes/chefs.test.tsx`, and navigation tests; red-test logs saved under `./2026-07-13-1405-doing-kitchen-nav-reorg/unit-1a/`.
 **Acceptance**: Focused web tests fail red because routes, loader data, labels, redirect behavior, Chefs activity ordering, or shopping-list exclusion do not yet match the new drawer model.
@@ -226,3 +226,4 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 - 2026-07-13 15:08 Addressed final deception review: first-class native Chefs route, exact web drawer data contracts, owned native saved-recipes filtering, nil-current-chef fallback, and deploy sequencing
 - 2026-07-13 15:14 Doing doc reviewer chain converged clean; marked ready for execution
 - 2026-07-13 15:18 Unit 0 complete: captured clean web/native worktree state, target files, constraints, and validation commands
+- 2026-07-13 15:25 Unit 1a complete: added red web route/navigation tests for My Recipes, Saved Recipes, Cookbooks, Chefs, desktop nav, and mobile drawer labels
