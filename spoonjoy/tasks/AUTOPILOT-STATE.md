@@ -1,6 +1,6 @@
 # Autopilot State
 
-Updated: 2026-07-13 15:28 America/Los_Angeles
+Updated: 2026-07-13 15:31 America/Los_Angeles
 Branch: post-merge `main` terminal state; the self-referential closure branch/PR used to land this line is excluded from stale-branch accounting.
 Objective: Record that the `SJ-044` cleanup-harness dogfood run is complete once this state lands on `main`, and leave the Spoonjoy autonomous queue in a truthful idle state.
 
@@ -11,8 +11,8 @@ Objective: Record that the `SJ-044` cleanup-harness dogfood run is complete once
 - Native worktree: `/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav` on `agent/kitchen-nav-reorg`.
 - Planning doc: `agent/tasks/2026-07-13-1405-planning-kitchen-nav-reorg.md` (approved after sub-agent reviewer convergence).
 - Doing doc: `agent/tasks/2026-07-13-1405-doing-kitchen-nav-reorg.md` (`READY_FOR_EXECUTION` after mandatory reviewer convergence).
-- Current gate: Unit 1c complete; web kitchen drawers are implemented, reviewer findings are fixed, and focused drawer coverage/type/build checks are green.
-- Next action: start Unit 2a red tests for web `On the Counter`, global search reachability, drawer local-search posture, and mobile liquid-glass dock treatment.
+- Current gate: Unit 2a red tests complete; focused slice fails on stale `Latest from the kitchen` copy and the solid mobile dock surface.
+- Next action: implement Unit 2b by replacing home editorial copy with `On the Counter` and upgrading the mobile SpoonDock material/glass classes while preserving fixed safe-area behavior.
 
 ## Current Gate
 

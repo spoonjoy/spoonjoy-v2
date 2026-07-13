@@ -111,7 +111,7 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 **Output**: Covered helper/test updates plus coverage or focused-test logs under `./2026-07-13-1405-doing-kitchen-nav-reorg/unit-1c/`.
 **Acceptance**: Focused route/navigation tests pass with coverage for all new loader/helper branches; code remains aligned with existing React Router/Tailwind patterns.
 
-### ⬜ Unit 2a: Web Search, Editorial Module, And Mobile Glass — Tests
+### ✅ Unit 2a: Web Search, Editorial Module, And Mobile Glass — Tests
 **What**: Write failing tests for `On the Counter` copy/aria label in `app/routes/_index.tsx`, global search reachability, drawer local search/filter behavior, and `SpoonDock`/`MobileNav` glass classes and small-screen-safe labels.
 **Output**: Failing updates in index/search/drawer/mobile navigation tests and red logs under `./2026-07-13-1405-doing-kitchen-nav-reorg/unit-2a/`.
 **Acceptance**: Focused tests fail red on current `Latest from the kitchen`, old mobile labels, missing drawer search/filtering, or old dock surface.
@@ -229,3 +229,4 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 - 2026-07-13 15:08 Unit 1a complete: added red web route/navigation tests for My Recipes, Saved Recipes, Cookbooks, Chefs, desktop nav, and mobile drawer labels
 - 2026-07-13 15:15 Unit 1b complete: implemented web drawer routes, owned-cookbooks page, Chefs activity feed, and desktop/mobile navigation labels; focused tests, typecheck, and build passed
 - 2026-07-13 15:28 Unit 1c complete: addressed Unit 1b reviewer findings, added drawer edge/render coverage, fixed cookbook full-title search with preview covers, and verified focused tests, focused coverage, typecheck, build, and whitespace checks
+- 2026-07-13 15:31 Unit 2a complete: added red web tests for `On the Counter` and the mobile dock liquid-glass material; focused slice failed on the intended stale copy and solid dock surface
