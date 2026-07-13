@@ -429,7 +429,9 @@ describe("Kitchen Index Route", () => {
       expect(screen.queryByRole("button", { name: "Logout" })).not.toBeInTheDocument();
       expect(screen.queryByRole("link", { name: "New Recipe" })).not.toBeInTheDocument();
       expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
-      expect(screen.getByRole("region", { name: "Latest from the kitchen" })).toBeInTheDocument();
+      expect(screen.getByRole("region", { name: "On the Counter" })).toBeInTheDocument();
+      expect(screen.getByText("On the Counter")).toBeInTheDocument();
+      expect(screen.queryByText("Latest from the kitchen")).not.toBeInTheDocument();
       expect(screen.getByRole("complementary", { name: "Recipe index" })).toBeInTheDocument();
       expect(screen.getByRole("region", { name: "Cookbook shelf" })).toBeInTheDocument();
       expect(screen.getByText("3 recipes and 1 cookbook")).toBeInTheDocument();

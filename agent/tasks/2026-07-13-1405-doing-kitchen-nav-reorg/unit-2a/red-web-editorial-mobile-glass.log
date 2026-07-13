@@ -1,0 +1,51 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2-agent-kitchen-nav
+
+ ❯ test/routes/index.test.tsx (17 tests | 1 failed) 828ms
+       ✓ returns guest payload when no session and no requested kitchen 12ms
+       ✓ falls back to recipes tab for unknown tab query 102ms
+       ✓ returns owner kitchen with recipes and cookbooks 87ms
+       ✓ uses explicit active cover display data for kitchen recipes and cookbook previews 84ms
+       ✓ returns visitor kitchen by username in read-only framing 150ms
+       ✓ supports unauthenticated visitor kitchen by chefId 76ms
+       ✓ throws 404 when explicit chef target is not found 7ms
+       ✓ returns empty kitchen payload when session user no longer exists 7ms
+       ✓ returns kitchen metadata 6ms
+       ✓ returns the relative path when no browser origin exists 6ms
+       ✓ renders guest landing page with product framing and auth actions 42ms
+       × renders owner kitchen as a cookbook spread with settings and admin controls 46ms
+       ✓ renders owner empty states and recipe image fallback branches 17ms
+       ✓ renders recipe images when recipes have displayable image URLs 14ms
+       ✓ renders visitor kitchen with read-only controls hidden 13ms
+       ✓ renders recipes and cookbooks together instead of hiding content behind tabs 24ms
+       ✓ does not render tab navigation for visitor kitchens 12ms
+ ✓ test/routes/saved-recipes.test.tsx (6 tests) 505ms
+ ✓ test/routes/cookbooks-index.test.tsx (6 tests) 449ms
+ ✓ test/routes/my-recipes.test.tsx (6 tests) 439ms
+ ✓ test/components/navigation/mobile-nav.test.tsx (20 tests) 142ms
+ ❯ test/components/navigation/spoon-dock.test.tsx (19 tests | 1 failed) 55ms
+       ✓ renders as a navigation element 11ms
+       ✓ has aria-label for accessibility 2ms
+       ✓ supports custom aria-label 2ms
+       ✓ renders children 3ms
+       ✓ applies custom className 2ms
+       ✓ has fixed positioning at bottom 1ms
+       ✓ is horizontally centered with safe area insets 1ms
+       ✓ is a flex row that lets the growing zones center the primary by default 1ms
+       ✓ falls back to edge-to-edge distribution when not centered (full tool cluster) 1ms
+       ✓ keeps a minimum gap that compacts on narrow phones 1ms
+       ✓ centers items vertically 1ms
+       × uses a translucent liquid-glass material instead of a solid fill 3ms
+       ✓ has subtle border for glass edge 1ms
+       ✓ has safe-area-inset-bottom margin 0ms
+       ✓ is hidden on desktop (lg breakpoint and above) 1ms
+       ✓ has a max-width constraint 0ms
+       ✓ has a pill/rounded shape 0ms
+       ✓ has 68px height for thumbable controls 1ms
+       ✓ has z-50 to float above content 0ms
+
+ Test Files  2 failed | 4 passed (6)
+      Tests  2 failed | 72 passed (74)
+   Start at  15:31:17
+   Duration  6.21s (transform 252ms, setup 364ms, import 1.82s, tests 2.42s, environment 935ms)
+
