@@ -25,7 +25,7 @@ describe("production readiness helpers", () => {
     expect(result.intentionallyDisabledFeatureGroups).toEqual([]);
   });
 
-  it("passes intentionally disabled optional feature groups", () => {
+  it("reports missing Google OAuth when its production secrets are absent", () => {
     const result = evaluateSecretReadiness([
       ...REQUIRED_RUNTIME_SECRETS,
       "GITHUB_CLIENT_ID",
@@ -44,8 +44,8 @@ describe("production readiness helpers", () => {
       "Apple OAuth",
       "OpenAI AI features",
     ]);
-    expect(result.missingFeatureGroups).toEqual([]);
-    expect(result.intentionallyDisabledFeatureGroups).toEqual(["Google OAuth"]);
+    expect(result.missingFeatureGroups).toEqual(["Google OAuth"]);
+    expect(result.intentionallyDisabledFeatureGroups).toEqual([]);
   });
 
   it("reports missing required runtime secrets", () => {
@@ -77,7 +77,7 @@ describe("production readiness helpers", () => {
         secrets: ["OPENAI_API_KEY"],
       },
     ]);
-    expect(INTENTIONALLY_DISABLED_FEATURE_GROUPS).toEqual(["Google OAuth"]);
+    expect(INTENTIONALLY_DISABLED_FEATURE_GROUPS).toEqual([]);
   });
 
   it("detects the remote User.photoUrl column from pragma rows", () => {

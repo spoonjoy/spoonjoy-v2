@@ -132,10 +132,11 @@ wrangler secret put GOOGLE_CLIENT_SECRET
 **Google OAuth Setup:**
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
 2. Create a project (or select existing)
-3. Enable "Google+ API" or "Google Identity"
+3. Configure the OAuth consent screen for Spoonjoy
 4. Go to Credentials → Create Credentials → OAuth 2.0 Client ID
 5. Application type: Web application
-6. Add authorized redirect URI: `https://your-domain.com/auth/google/callback`
+6. Add authorized redirect URI: `https://spoonjoy.app/auth/google/callback`
+   - For QA, add `https://spoonjoy-v2-qa.mendelow-studio.workers.dev/auth/google/callback`
 7. Copy Client ID and Client Secret
 
 #### GitHub OAuth
