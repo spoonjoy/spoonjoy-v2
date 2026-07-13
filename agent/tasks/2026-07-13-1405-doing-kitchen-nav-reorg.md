@@ -101,7 +101,7 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 **Output**: Failing web tests in `test/routes/my-recipes.test.tsx`, `test/routes/saved-recipes.test.tsx`, updated `test/routes/cookbooks-index.test.tsx`, `test/routes/chefs.test.tsx`, and navigation tests; red-test logs saved under `./2026-07-13-1405-doing-kitchen-nav-reorg/unit-1a/`.
 **Acceptance**: Focused web tests fail red because routes, loader data, labels, redirect behavior, Chefs activity ordering, or shopping-list exclusion do not yet match the new drawer model.
 
-### ⬜ Unit 1b: Web Kitchen Drawers — Implementation
+### ✅ Unit 1b: Web Kitchen Drawers — Implementation
 **What**: Add route entries in `app/routes.ts`; implement `app/routes/my-recipes.tsx`, `app/routes/saved-recipes.tsx`, `app/routes/chefs.tsx`; replace `app/routes/cookbooks._index.tsx` redirect with owned-cookbooks UI; update `app/root.tsx` and `app/components/navigation/mobile-nav.tsx` labels/routes.
 **Output**: Web route/navigation source changes in `app/routes.ts`, `app/routes/my-recipes.tsx`, `app/routes/saved-recipes.tsx`, `app/routes/chefs.tsx`, `app/routes/cookbooks._index.tsx`, `app/root.tsx`, and `app/components/navigation/mobile-nav.tsx`; green focused-test logs saved under `./2026-07-13-1405-doing-kitchen-nav-reorg/unit-1b/`.
 **Acceptance**: Unit 1a focused tests pass green; `/recipes` remains broader Explore Recipes; no OAuth route/source files are modified.
@@ -227,3 +227,4 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 - 2026-07-13 15:14 Doing doc reviewer chain converged clean; marked ready for execution
 - 2026-07-13 15:18 Unit 0 complete: captured clean web/native worktree state, target files, constraints, and validation commands
 - 2026-07-13 15:25 Unit 1a complete: added red web route/navigation tests for My Recipes, Saved Recipes, Cookbooks, Chefs, desktop nav, and mobile drawer labels
+- 2026-07-13 15:38 Unit 1b complete: implemented web drawer routes, owned-cookbooks page, Chefs activity feed, and desktop/mobile navigation labels; focused tests, typecheck, and build passed
