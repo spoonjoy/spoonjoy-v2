@@ -35,9 +35,9 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 - [x] Native Saved Recipes uses the same saved-through-owned-cookbooks definition as web by filtering `contentState.cookbooks` to `cookbook.chef.id == currentChefID`, flattening `cookbook.recipes`, and deduping by recipe ID with deterministic first-seen cookbook/update ordering; when current chef is unavailable it renders empty/signed-out-safe state.
 - [x] Native toolbar Search renders `SearchView` as an auxiliary compact route after removing the Search bottom tab, and route/section mapping tests prove `.search` no longer depends on a removed tab item.
 - [x] Native tab bar/mobile navigation uses system material/translucent chrome (`UITabBarAppearance`/SwiftUI toolbar material) instead of the current opaque bone treatment, with tests proving translucency/material setup.
-- [ ] Web `docs/design-language.md` and native `docs/native-design-language.md` document the finalized drawer names, saved-recipes definition, search posture, and mobile navigation behavior.
+- [x] Web `docs/design-language.md` and native `docs/native-design-language.md` document the finalized drawer names, saved-recipes definition, search posture, and mobile navigation behavior.
 - [ ] Native screenshot validation runs against the highest available bootable iPhone simulator resolved by `.github/scripts/resolve-ios-simulator-destination.py` or a pinned `SPOONJOY_IOS_SIMULATOR_NAME`/`SPOONJOY_IOS_SIMULATOR_UDID`, records the resolved simulator name/UDID in artifacts or blocker logs, and runs macOS validation against `generic/platform=macOS`.
-- [ ] Native route-matrix validation covers exact routes `kitchen`, `recipes`, `saved-recipes`, `cookbooks`, `shopping-list`, `chefs`, and `search`; if the current screenshot harness lacks `saved-recipes` or `chefs`, this task adds that support before visual QA.
+- [x] Native route-matrix validation covers exact routes `kitchen`, `recipes`, `saved-recipes`, `cookbooks`, `shopping-list`, `chefs`, and `search`; if the current screenshot harness lacks `saved-recipes` or `chefs`, this task adds that support before visual QA.
 - [ ] Native `design-review.json` for successful captures is schema-valid under `scripts/validate-design-review.rb` and includes `mobileScreenshot`, `desktopScreenshot`, `dynamicType`, `voiceOverLabels`, `keyboardNavigation`, `reduceMotion`, `contrast`, `kitchenTableHierarchy`, `noOverlap`, `screenshotRoute`, route-specific signed-in proof fields, and iOS/macOS `accessibilityProofArtifacts`.
 - [ ] Native app-emitted accessibility proof uses `SPOONJOY_SCREENSHOT_ACCESSIBILITY_PROOF_PATH` or `SIMCTL_CHILD_SPOONJOY_SCREENSHOT_ACCESSIBILITY_PROOF_PATH`, includes `emittedBy: SpoonjoyApp`, expected bundle identifiers, `minimumTargetSize`, `textFits`, `noTinyClusters`, observed Dynamic Type and Reduce Motion values, route-specific `routeEvidence`, and `offlineIndicatorProof`.
 - [ ] Native `routeEvidence` names actual visible anchors for VoiceOver labels, keyboard navigation targets, Dynamic Type text styles, contrast pairs, hierarchy anchors, and layout guards for each changed route; route-agnostic boolean-only proof is not accepted.
@@ -156,17 +156,17 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 **Output**: Focused native test logs and any local refactor diff notes under `./2026-07-13-1405-doing-kitchen-nav-reorg/unit-4c/`.
 **Acceptance**: Focused native tests pass with warnings as errors and no route/tab source-contract holes.
 
-### ⬜ Unit 5a: Web/Native Design Docs And Screenshot Contract — Tests
+### ✅ Unit 5a: Web/Native Design Docs And Screenshot Contract — Tests
 **What**: Write failing source-contract tests for web `docs/design-language.md`, native `docs/native-design-language.md`, and exact native screenshot route/proof support for `saved-recipes` and `chefs` in `scripts/capture-native-screenshots.sh`, `scripts/capture-native-screenshot-matrix.sh`, and `Apps/Spoonjoy/Shared/Components/ScreenshotAccessibilityProofWriter.swift`.
 **Output**: Failing docs/harness source-contract tests and red logs under `./2026-07-13-1405-doing-kitchen-nav-reorg/unit-5a/`.
 **Acceptance**: Tests fail red until docs and harness/proof route anchors include the kitchen drawer model, saved-recipes definition, search posture, and mobile navigation behavior.
 
-### ⬜ Unit 5b: Web/Native Design Docs And Screenshot Contract — Implementation
+### ✅ Unit 5b: Web/Native Design Docs And Screenshot Contract — Implementation
 **What**: Update web/native design docs; update `scripts/capture-native-screenshots.sh`, `scripts/capture-native-screenshot-matrix.sh`, and `Apps/Spoonjoy/Shared/Components/ScreenshotAccessibilityProofWriter.swift` when Unit 5a red tests prove `saved-recipes` or `chefs` route/evidence support is missing.
 **Output**: Documentation and screenshot/proof harness source changes plus green source-contract logs under `./2026-07-13-1405-doing-kitchen-nav-reorg/unit-5b/`.
 **Acceptance**: Unit 5a tests pass; native design-review validator accepts successful captures or schema-valid blockers for the new/changed routes.
 
-### ⬜ Unit 5c: Web/Native Design Docs And Screenshot Contract — Coverage & Refactor
+### ✅ Unit 5c: Web/Native Design Docs And Screenshot Contract — Coverage & Refactor
 **What**: Run native screenshot-contract tests and documentation source-contract tests; refactor proof route evidence tables only to keep route-specific anchors maintainable.
 **Output**: Contract test logs and route-evidence refactor notes under `./2026-07-13-1405-doing-kitchen-nav-reorg/unit-5c/`.
 **Acceptance**: Contract tests pass and no route uses route-agnostic proof.
@@ -239,3 +239,6 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 - 2026-07-13 16:13 Unit 4a complete: updated native design-contract tests for five compact tabs, Chefs/Kitchen Search sidebar labels, Search through the More toolbar menu, compact auxiliary search, and translucent/material tab-bar chrome; red run failed on the intended stale chrome and Shopping label expectations
 - 2026-07-13 16:13 Unit 4b complete: implemented translucent UIKit tab-bar appearance using transparent background, system material blur, and glass bone tint while preserving the SwiftUI `.regularMaterial` tab-bar background; focused native design-contract tests passed
 - 2026-07-13 16:13 Unit 4c complete: reran focused native AppState, DeepLinkRouter, and NativeMobileDesignContract tests with warnings as errors; 45 tests passed
+- 2026-07-13 16:22 Unit 5a complete: added red web and native source-contract tests requiring design-language drawer docs plus saved-recipes/Chefs native screenshot route, proof-writer, and validator coverage
+- 2026-07-13 16:23 Unit 5b complete: documented the finalized web/native kitchen navigation model, replaced native stale `Latest from the kitchen` copy with `On the Counter`, added saved-recipes and Chefs screenshot matrix/capture/proof/validator support, and synced the native web-design source pin
+- 2026-07-13 16:23 Unit 5c complete: reran web design doc contract, native design-language checker, native navigation/documentation/source contracts, design accessibility checker, and kitchen surface checker; all focused checks passed
