@@ -53,7 +53,7 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 - [ ] Native tab bar/mobile navigation uses system material/translucent chrome (`UITabBarAppearance`/SwiftUI toolbar material) instead of the current opaque bone treatment, with tests proving translucency/material setup.
 - [ ] Web `docs/design-language.md` and native `docs/native-design-language.md` document the finalized drawer names, saved-recipes definition, search posture, and mobile navigation behavior.
 - [ ] Native screenshot validation runs against the highest available bootable iPhone simulator resolved by `.github/scripts/resolve-ios-simulator-destination.py` or a pinned `SPOONJOY_IOS_SIMULATOR_NAME`/`SPOONJOY_IOS_SIMULATOR_UDID`, records the resolved simulator name/UDID in artifacts or blocker logs, and runs macOS validation against `generic/platform=macOS`.
-- [ ] Native route-matrix validation covers at least `kitchen`, `recipes`, `saved-recipes`, `cookbooks`, `shopping-list`, and `search` or the nearest supported route variants needed to prove the new compact tabs, regular sidebar, and toolbar search path.
+- [ ] Native route-matrix validation covers exact routes `kitchen`, `recipes`, `saved-recipes`, `cookbooks`, `shopping-list`, and `search`; if the current screenshot harness lacks `saved-recipes`, this task adds that support before visual QA.
 - [ ] Native `design-review.json` for successful captures is schema-valid under `scripts/validate-design-review.rb` and includes `mobileScreenshot`, `desktopScreenshot`, `dynamicType`, `voiceOverLabels`, `keyboardNavigation`, `reduceMotion`, `contrast`, `kitchenTableHierarchy`, `noOverlap`, `screenshotRoute`, route-specific signed-in proof fields, and iOS/macOS `accessibilityProofArtifacts`.
 - [ ] Native app-emitted accessibility proof uses `SPOONJOY_SCREENSHOT_ACCESSIBILITY_PROOF_PATH` or `SIMCTL_CHILD_SPOONJOY_SCREENSHOT_ACCESSIBILITY_PROOF_PATH`, includes `emittedBy: SpoonjoyApp`, expected bundle identifiers, `minimumTargetSize`, `textFits`, `noTinyClusters`, observed Dynamic Type and Reduce Motion values, route-specific `routeEvidence`, and `offlineIndicatorProof`.
 - [ ] Native `routeEvidence` names actual visible anchors for VoiceOver labels, keyboard navigation targets, Dynamic Type text styles, contrast pairs, hierarchy anchors, and layout guards for each changed route; route-agnostic boolean-only proof is not accepted.
@@ -87,7 +87,7 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 - Add a private chronological chef activity view from recipe saves/spoons/forks around the user's kitchen; exclude shopping-list events.
 - Keep one global Kitchen Search with scope chips, plus scoped drawer search/filter inputs for high-frequency personal drawers.
 - Replace "Latest from the kitchen" with an honest editorial label such as "On the Counter" and deterministic selection from recently updated/displayable recipes.
-- On iPhone native, keep Search reachable through toolbar/native search rather than a bottom tab, so the five tabs map to kitchen drawers.
+- On iPhone native, remove Search from the bottom tab bar; keep Search reachable from the trailing compact toolbar menu item labeled `Search`, which opens the `.search(query:scope:)` route where native `.searchable` uses toolbar-principal placement and search scopes.
 - Use system material/translucency for native liquid glass rather than a custom tab replacement.
 
 ## Context / References
@@ -119,3 +119,4 @@ Native release submission is intentionally not part of this task because it can 
 - 2026-07-13 14:13 Addressed planning reviewer findings: concrete routes, native validation artifacts, and native release boundary
 - 2026-07-13 14:18 Addressed second reviewer finding: full native design-review schema, route evidence, blocker, and simulator/macOS validation targets
 - 2026-07-13 14:20 Planning approved after sub-agent reviewer convergence
+- 2026-07-13 14:41 Tightened native compact search affordance and exact route-matrix coverage

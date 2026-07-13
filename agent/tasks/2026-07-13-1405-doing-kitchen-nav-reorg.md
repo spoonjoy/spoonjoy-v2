@@ -28,14 +28,14 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 - [ ] Web global search remains at `/search` with existing scopes `all`, `recipes`, `cookbooks`, `chefs`, and `shopping-list`; personal drawer search/filter inputs do not create a second global-search semantics.
 - [ ] Web "Latest from the kitchen" copy is replaced with `On the Counter`, with deterministic selection from the current display recipe ordering and no false freshness claim.
 - [ ] Web mobile navigation labels use kitchen terms (`My Kitchen`, `My Recipes`, `Saved`, `Cookbooks`, `Shopping List`, `Chefs`, `Search`) and the dock is visually glass/material-like while preserving fixed bottom safe-area behavior at 320-390px and desktop-hidden behavior at `lg`.
-- [ ] Native compact iPhone `TabView` exposes exactly five tabs: `Kitchen`, `My Recipes`, `Saved`, `Cookbooks`, and `Shopping List`; `Search` is removed as a bottom tab and remains reachable via toolbar/menu/native `.searchable` path.
+- [ ] Native compact iPhone `TabView` exposes exactly five tabs: `Kitchen`, `My Recipes`, `Saved`, `Cookbooks`, and `Shopping List`; `Search` is removed as a bottom tab and remains reachable from the trailing toolbar menu item labeled `Search`, which opens the `.search(query:scope:)` route where `.searchable` uses toolbar-principal placement and search scopes.
 - [ ] Native regular-width `NavigationSplitView` sidebar exposes `Kitchen`, `My Recipes`, `Saved Recipes`, `Cookbooks`, `Shopping List`, `Chefs`, `Kitchen Search`, `Imports`, and `Settings`.
 - [ ] Native My Recipes filters cached/displayed recipes to the current authenticated chef when `currentChefID` is known; signed-out or unavailable-current-chef fallback stays safe and non-crashing.
 - [ ] Native Saved Recipes uses the same saved-through-cookbooks definition as web by deduping `contentState.cookbooks.flatMap(\\.recipes)` by recipe ID.
 - [ ] Native tab bar/mobile navigation uses system material/translucent chrome (`UITabBarAppearance`/SwiftUI toolbar material) instead of the current opaque bone treatment, with tests proving translucency/material setup.
 - [ ] Web `docs/design-language.md` and native `docs/native-design-language.md` document the finalized drawer names, saved-recipes definition, search posture, and mobile navigation behavior.
 - [ ] Native screenshot validation runs against the highest available bootable iPhone simulator resolved by `.github/scripts/resolve-ios-simulator-destination.py` or a pinned `SPOONJOY_IOS_SIMULATOR_NAME`/`SPOONJOY_IOS_SIMULATOR_UDID`, records the resolved simulator name/UDID in artifacts or blocker logs, and runs macOS validation against `generic/platform=macOS`.
-- [ ] Native route-matrix validation covers at least `kitchen`, `recipes`, `saved-recipes`, `cookbooks`, `shopping-list`, and `search` or the nearest supported route variants needed to prove the new compact tabs, regular sidebar, and toolbar search path.
+- [ ] Native route-matrix validation covers exact routes `kitchen`, `recipes`, `saved-recipes`, `cookbooks`, `shopping-list`, and `search`; if the current screenshot harness lacks `saved-recipes`, this task adds that support before visual QA.
 - [ ] Native `design-review.json` for successful captures is schema-valid under `scripts/validate-design-review.rb` and includes `mobileScreenshot`, `desktopScreenshot`, `dynamicType`, `voiceOverLabels`, `keyboardNavigation`, `reduceMotion`, `contrast`, `kitchenTableHierarchy`, `noOverlap`, `screenshotRoute`, route-specific signed-in proof fields, and iOS/macOS `accessibilityProofArtifacts`.
 - [ ] Native app-emitted accessibility proof uses `SPOONJOY_SCREENSHOT_ACCESSIBILITY_PROOF_PATH` or `SIMCTL_CHILD_SPOONJOY_SCREENSHOT_ACCESSIBILITY_PROOF_PATH`, includes `emittedBy: SpoonjoyApp`, expected bundle identifiers, `minimumTargetSize`, `textFits`, `noTinyClusters`, observed Dynamic Type and Reduce Motion values, route-specific `routeEvidence`, and `offlineIndicatorProof`.
 - [ ] Native `routeEvidence` names actual visible anchors for VoiceOver labels, keyboard navigation targets, Dynamic Type text styles, contrast pairs, hierarchy anchors, and layout guards for each changed route; route-agnostic boolean-only proof is not accepted.
@@ -122,12 +122,12 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 **Acceptance**: Focused Swift coverage for new route/view-model code is complete and tests stay green with warnings as errors.
 
 ### ⬜ Unit 4a: Native Navigation And Liquid Glass — Tests
-**What**: Update/add failing tests in `Tests/SpoonjoyCoreTests/NativeMobileDesignContractTests.swift`, `Tests/SpoonjoyCoreTests/KitchenRecipesStructureContractTests.swift`, and related source-contract tests for five compact tabs, regular sidebar labels, toolbar search access, `On the Counter`, and translucent/material tab bar appearance.
+**What**: Update/add failing tests in `Tests/SpoonjoyCoreTests/NativeMobileDesignContractTests.swift`, `Tests/SpoonjoyCoreTests/KitchenRecipesStructureContractTests.swift`, and related source-contract tests for five compact tabs, regular sidebar labels, the trailing compact toolbar `Search` menu item opening `.search(query:scope:)`, search-route `.searchable(... placement: .toolbarPrincipal ...)`, `On the Counter`, and translucent/material tab bar appearance.
 **Output**: Failing native source-contract tests and red logs under `./2026-07-13-1405-doing-kitchen-nav-reorg/unit-4a/`.
 **Acceptance**: Focused native design-contract tests fail red on current Search tab, opaque tab bar, old labels, and old editorial copy.
 
 ### ⬜ Unit 4b: Native Navigation And Liquid Glass — Implementation
-**What**: Update compact `TabView` and sidebar in `PlatformNavigationView.swift`; keep search available through toolbar/menu/native `.searchable`; update `Apps/Spoonjoy/iOS/SpoonjoyiOSApp.swift` to use translucent/material `UITabBarAppearance`; update native route titles and labels.
+**What**: Update compact `TabView` and sidebar in `PlatformNavigationView.swift`; keep search available through the existing trailing toolbar `Menu` item labeled `Search`, whose action calls `performSearch(search)` and navigates to the `.search(query:scope:)` route; keep `.searchable(text:isPresented:placement:.toolbarPrincipal,prompt:"Search Spoonjoy")` and `.searchScopes` active only on the compact search route; update `Apps/Spoonjoy/iOS/SpoonjoyiOSApp.swift` to use translucent/material `UITabBarAppearance`; update native route titles and labels.
 **Output**: Native navigation/chrome source changes and green focused native design-contract logs under `./2026-07-13-1405-doing-kitchen-nav-reorg/unit-4b/`.
 **Acceptance**: Unit 4a tests pass; bottom tabs are exactly Kitchen, My Recipes, Saved, Cookbooks, Shopping List; Search is reachable from toolbar/menu.
 
@@ -137,12 +137,12 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 **Acceptance**: Focused native tests pass with warnings as errors and no route/tab source-contract holes.
 
 ### ⬜ Unit 5a: Web/Native Design Docs And Screenshot Contract — Tests
-**What**: Write failing source-contract tests for web `docs/design-language.md`, native `docs/native-design-language.md`, and native screenshot route/proof support for `saved-recipes` if the existing harness lacks it.
+**What**: Write failing source-contract tests for web `docs/design-language.md`, native `docs/native-design-language.md`, and exact native screenshot route/proof support for `saved-recipes` in `scripts/capture-native-screenshots.sh`, `scripts/capture-native-screenshot-matrix.sh`, and `Apps/Spoonjoy/Shared/Components/ScreenshotAccessibilityProofWriter.swift`.
 **Output**: Failing docs/harness source-contract tests and red logs under `./2026-07-13-1405-doing-kitchen-nav-reorg/unit-5a/`.
 **Acceptance**: Tests fail red until docs and harness/proof route anchors include the kitchen drawer model, saved-recipes definition, search posture, and mobile navigation behavior.
 
 ### ⬜ Unit 5b: Web/Native Design Docs And Screenshot Contract — Implementation
-**What**: Update web/native design docs; update `scripts/capture-native-screenshots.sh`, `scripts/capture-native-screenshot-matrix.sh`, and `Apps/Spoonjoy/Shared/Components/ScreenshotAccessibilityProofWriter.swift` only if needed for `saved-recipes`/new route evidence and design-review validation.
+**What**: Update web/native design docs; update `scripts/capture-native-screenshots.sh`, `scripts/capture-native-screenshot-matrix.sh`, and `Apps/Spoonjoy/Shared/Components/ScreenshotAccessibilityProofWriter.swift` when Unit 5a red tests prove `saved-recipes` route/evidence support is missing.
 **Output**: Documentation and screenshot/proof harness source changes plus green source-contract logs under `./2026-07-13-1405-doing-kitchen-nav-reorg/unit-5b/`.
 **Acceptance**: Unit 5a tests pass; native design-review validator accepts successful captures or schema-valid blockers for the new/changed routes.
 
@@ -152,9 +152,9 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 **Acceptance**: Contract tests pass and no route uses route-agnostic proof.
 
 ### ⬜ Unit 6a: Cross-Surface Validation — Capture
-**What**: Run full or near-full validation suites before final visual QA: web `pnpm run typecheck`, `pnpm run test:coverage`, selected Playwright if available; native `swift test --disable-xctest --parallel -Xswiftc -warnings-as-errors`, `swift test --enable-code-coverage --disable-xctest --parallel -Xswiftc -warnings-as-errors`, coverage enforcement, Xcode builds/tests where local Xcode permits, and `scripts/verify-native-scenarios.sh --stage final`.
+**What**: Run these exact validation commands and save each log: web `pnpm run typecheck`, `pnpm run test:coverage`, `pnpm run build`, and `pnpm exec playwright test e2e/flows/spoondock-responsive.spec.ts`; native `swift test --disable-xctest --parallel -Xswiftc -warnings-as-errors`, `swift test --enable-code-coverage --disable-xctest --parallel -Xswiftc -warnings-as-errors`, `ruby scripts/enforce-swift-coverage.rb --coverage-json "$(swift test --show-codecov-path)" --minimum 100 --include 'Sources/SpoonjoyCore'`, `scripts/verify-native-scenarios.sh --stage final`, `xcodebuild test -project Spoonjoy.xcodeproj -scheme "Spoonjoy iOS" -configuration BootstrapDebug -destination "$(python3 .github/scripts/resolve-ios-simulator-destination.py)" CODE_SIGNING_ALLOWED=NO GCC_TREAT_WARNINGS_AS_ERRORS=YES`, and `xcodebuild test -project Spoonjoy.xcodeproj -scheme "Spoonjoy macOS" -configuration BootstrapDebug -destination 'generic/platform=macOS' CODE_SIGNING_ALLOWED=NO GCC_TREAT_WARNINGS_AS_ERRORS=YES`.
 **Output**: Raw validation logs, coverage paths, and any native blocker JSON paths under `./2026-07-13-1405-doing-kitchen-nav-reorg/unit-6a/`.
-**Acceptance**: Validation results are captured without making source changes in this unit; every failure is classified as implementation fix, test expectation fix, or true local capability blocker.
+**Acceptance**: Validation results are captured without making source changes in this unit; every failure is classified as implementation fix, test expectation fix, or true local capability blocker. A true local capability blocker requires exact command/output evidence, such as missing `pnpm`/Playwright browser install, failed `python3 .github/scripts/resolve-ios-simulator-destination.py`, missing `xcodebuild`, or Xcode/CoreSimulator platform failure; otherwise it is a fixable failure.
 
 ### ⬜ Unit 6b: Cross-Surface Validation — Targeted Fixes
 **What**: Address failures classified in Unit 6a with the smallest targeted test/code/doc changes, preserving TDD for any behavior bug and avoiding new unrelated scope.
@@ -162,12 +162,12 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 **Acceptance**: Each Unit 6a non-capability failure has a corresponding fix and focused green rerun, or a documented reason it was reclassified as a capability blocker.
 
 ### ⬜ Unit 6c: Cross-Surface Validation — Final Rerun
-**What**: Rerun the full/near-full validation suite after targeted fixes, including web typecheck/coverage and native Swift/Xcode/scenario commands available in this runtime.
+**What**: Rerun the exact Unit 6a command list after targeted fixes, except commands already classified with true local capability blocker artifacts are not re-run unless the blocker was repaired.
 **Output**: Final validation logs and coverage/blocker artifacts under `./2026-07-13-1405-doing-kitchen-nav-reorg/unit-6c/`.
 **Acceptance**: Required web/native validation passes with no warnings, except true local Xcode/simulator capability blockers are represented by schema-valid blocker artifacts.
 
 ### ⬜ Unit 6d: Cross-Surface Visual QA Dogfood
-**What**: Start web dev server and capture mobile/desktop screenshots for home, `/my-recipes`, `/saved-recipes`, `/cookbooks`, `/chefs`, `/search`, and mobile dock; run native screenshot matrix for changed routes with design-review validation or fail-closed blocker artifacts.
+**What**: Start web dev server with `pnpm run dev -- --host 127.0.0.1` on an available port and capture mobile `390x844` plus desktop `1440x1000` screenshots for `/`, `/my-recipes`, `/saved-recipes`, `/cookbooks`, `/chefs`, `/search`, and mobile dock states. Run native screenshot matrix with `SPOONJOY_SCREENSHOT_MATRIX_ROUTES=kitchen,recipes,saved-recipes,cookbooks,shopping-list,search scripts/capture-native-screenshot-matrix.sh --artifact-root ./2026-07-13-1405-doing-kitchen-nav-reorg/unit-6d/native --unit-slug kitchen-nav`.
 **Output**: Web screenshots, native route-matrix JSON, native `design-review.json` or `design-review-blocked.json`, and absurdity ledger under `./2026-07-13-1405-doing-kitchen-nav-reorg/unit-6d/`.
 **Acceptance**: Web screenshots show no overlapping text or broken nav; native `design-review.json` or `design-review-blocked.json` artifacts validate; absurdity ledger for this task is closed or blocked with evidence.
 
@@ -177,12 +177,12 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 **Acceptance**: Both worktrees have only intended changes committed or explicitly documented; no unrelated/OAuth changes are included.
 
 ### ⬜ Unit 6f: Push, PR, And Available Deploy
-**What**: Push web and native branches; create/update PRs where repo tooling supports it; run available web deployment/release steps if credentials/tooling allow; record any true credential/capability blockers.
+**What**: In the web worktree run `git push -u origin agent/kitchen-nav-reorg`, `gh pr create --fill --base main --head agent/kitchen-nav-reorg` or `gh pr view --json url,number,state`, and `pnpm run deploy`. In the native worktree run `git push -u origin agent/kitchen-nav-reorg` and `gh pr create --fill --base main --head agent/kitchen-nav-reorg` or `gh pr view --json url,number,state`. If a command fails because auth/remote/Cloudflare/GitHub credentials are unavailable, save exact output and classify it as a true credential/capability blocker; ordinary CI/build/test failures go back to Unit 6b.
 **Output**: Push logs, PR URLs/IDs, deploy logs or blocker notes under `./2026-07-13-1405-doing-kitchen-nav-reorg/unit-6f/`.
 **Acceptance**: Branches are pushed and PR/deploy status is recorded; any unavailable external operation is classified as a true credential/capability blocker with exact command/output.
 
 ### ⬜ Unit 6g: QA Cleanup And Slugger Notification
-**What**: Run local disposable QA cleanup checks where applicable and notify Slugger with `ouro msg --to slugger "Done: ..."` after implementation/shipping status is recorded.
+**What**: In the web worktree run `pnpm cleanup:qa`; inspect native artifacts for generated disposable data references; notify Slugger with `ouro msg --to slugger "Done: shipped kitchen navigation reorg across web and native surfaces"` after implementation/shipping status is recorded.
 **Output**: QA cleanup logs and Slugger notification output under `./2026-07-13-1405-doing-kitchen-nav-reorg/unit-6g/`.
 **Acceptance**: Cleanup checks report no Codex-created residue or document any true blockers; Slugger notification succeeds.
 
@@ -200,3 +200,4 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 - 2026-07-13 14:22 Created from planning doc
 - 2026-07-13 14:31 Addressed granularity review: added unit outputs and split validation/final shipping units
 - 2026-07-13 14:36 Added native Xcode project membership requirement for new Swift view files
+- 2026-07-13 14:44 Addressed ambiguity review: exact compact search affordance, route-matrix routes, validation commands, deploy commands, and blocker criteria
