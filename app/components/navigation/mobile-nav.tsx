@@ -280,7 +280,7 @@ export function MobileNav({ isAuthenticated = true }: MobileNavProps) {
     <>
       {isPantryOpen ? (
         <div
-          className="fixed bottom-[calc(max(1rem,env(safe-area-inset-bottom))+5.25rem)] left-[max(0.75rem,env(safe-area-inset-left))] right-[max(0.75rem,env(safe-area-inset-right))] z-50 mx-auto max-w-lg rounded-2xl border border-[var(--sj-photo-line)] bg-[color-mix(in_srgb,var(--sj-photo-charcoal)_72%,transparent)] p-2 shadow-[0_18px_60px_rgba(31,26,20,0.26),inset_0_1px_0_color-mix(in_srgb,var(--sj-on-photo)_22%,transparent)] backdrop-blur-2xl backdrop-saturate-150 supports-[backdrop-filter]:bg-[color-mix(in_srgb,var(--sj-photo-charcoal)_60%,transparent)] lg:hidden"
+          className="fixed bottom-[calc(max(1rem,env(safe-area-inset-bottom))+5.25rem)] left-[max(0.75rem,env(safe-area-inset-left))] right-[max(0.75rem,env(safe-area-inset-right))] z-50 mx-auto max-w-lg rounded-[var(--sj-radius-surface)] border border-[var(--sj-photo-line)] bg-[color-mix(in_srgb,var(--sj-photo-charcoal)_72%,transparent)] p-2 shadow-[0_18px_60px_rgba(31,26,20,0.26),inset_0_1px_0_color-mix(in_srgb,var(--sj-on-photo)_22%,transparent)] backdrop-blur-2xl backdrop-saturate-150 supports-[backdrop-filter]:bg-[color-mix(in_srgb,var(--sj-photo-charcoal)_60%,transparent)] lg:hidden"
           data-testid="mobile-pantry"
         >
           <div className="grid grid-cols-2 gap-1.5">
@@ -288,7 +288,7 @@ export function MobileNav({ isAuthenticated = true }: MobileNavProps) {
               <Link
                 key={href}
                 href={href}
-                className="flex min-h-12 items-center gap-2 rounded-xl px-3 py-2 font-sj-ui text-sm font-bold text-[var(--sj-on-photo)] no-underline transition active:scale-[0.98]"
+                className="flex min-h-12 items-center gap-2 rounded-[var(--sj-radius-control)] px-3 py-2 font-sj-ui text-sm font-bold text-[var(--sj-on-photo)] no-underline transition active:scale-[0.98]"
               >
                 <Icon className="h-4 w-4 shrink-0 text-[var(--sj-on-photo-soft)]" aria-hidden="true" />
                 <span className="min-w-0 truncate">{label}</span>
