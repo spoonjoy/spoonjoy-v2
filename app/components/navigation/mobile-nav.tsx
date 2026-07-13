@@ -2,11 +2,14 @@ import clsx from "clsx";
 import { useLocation } from "react-router";
 import {
   ArrowLeft,
+  BookOpen,
+  Bookmark,
   Home,
   Plus,
   Search,
   ShoppingBag,
   User,
+  Users,
 } from "lucide-react";
 import { SpoonDock } from "./spoon-dock";
 import { DockItem } from "./dock-item";
@@ -75,7 +78,6 @@ function rootConfig(pathname: string, search: string, isAuthenticated: boolean):
         id: "search-place",
         icon: Search,
         label: "Search",
-        sublabel: "index",
         onAction: "/search",
         active: true,
       },
@@ -93,8 +95,7 @@ function rootConfig(pathname: string, search: string, isAuthenticated: boolean):
       left: {
         id: "shopping-place",
         icon: ShoppingBag,
-        label: "List",
-        sublabel: "market",
+        label: "Shopping List",
         onAction: "/shopping-list",
         active: true,
       },
@@ -130,15 +131,68 @@ function rootConfig(pathname: string, search: string, isAuthenticated: boolean):
       variant: "root",
       left: {
         id: "cookbooks-place",
-        icon: Home,
-        label: "Shelf",
-        sublabel: "cookbooks",
+        icon: BookOpen,
+        label: "Cookbooks",
         onAction: "/cookbooks",
         active: true,
       },
       primary: { id: "new-cookbook", icon: Plus, label: "+", ariaLabel: "Create cookbook", onAction: "/cookbooks/new" },
       tools: [
         { id: "kitchen", icon: Home, label: "Kitchen", ariaLabel: "My Kitchen", onAction: "/" },
+        { id: "search", icon: Search, label: "Search", onAction: "/search" },
+      ],
+    };
+  }
+
+  if (pathname.startsWith("/my-recipes")) {
+    return {
+      variant: "root",
+      left: {
+        id: "my-recipes-place",
+        icon: BookOpen,
+        label: "My Recipes",
+        onAction: "/my-recipes",
+        active: true,
+      },
+      primary: { id: "new-recipe", icon: Plus, label: "+", ariaLabel: "Create recipe", onAction: "/recipes/new" },
+      tools: [
+        { id: "saved", icon: Bookmark, label: "Saved", onAction: "/saved-recipes" },
+        { id: "chefs", icon: Users, label: "Chefs", onAction: "/chefs" },
+      ],
+    };
+  }
+
+  if (pathname.startsWith("/saved-recipes")) {
+    return {
+      variant: "root",
+      left: {
+        id: "saved-recipes-place",
+        icon: Bookmark,
+        label: "Saved",
+        onAction: "/saved-recipes",
+        active: true,
+      },
+      primary: { id: "new-recipe", icon: Plus, label: "+", ariaLabel: "Create recipe", onAction: "/recipes/new" },
+      tools: [
+        { id: "my-recipes", icon: BookOpen, label: "My Recipes", onAction: "/my-recipes" },
+        { id: "chefs", icon: Users, label: "Chefs", onAction: "/chefs" },
+      ],
+    };
+  }
+
+  if (pathname.startsWith("/chefs")) {
+    return {
+      variant: "root",
+      left: {
+        id: "chefs-place",
+        icon: Users,
+        label: "Chefs",
+        onAction: "/chefs",
+        active: true,
+      },
+      primary: { id: "new-recipe", icon: Plus, label: "+", ariaLabel: "Create recipe", onAction: "/recipes/new" },
+      tools: [
+        { id: "my-recipes", icon: BookOpen, label: "My Recipes", onAction: "/my-recipes" },
         { id: "search", icon: Search, label: "Search", onAction: "/search" },
       ],
     };

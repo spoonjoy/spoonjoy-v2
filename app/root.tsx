@@ -59,11 +59,14 @@ export async function loader({ request, context }: Route.LoaderArgs) {
  * Determine which nav item is active based on current path
  */
 function getActiveNav(pathname: string): string | null {
-  if (pathname === "/" || pathname === "") return "home";
+  if (pathname === "/" || pathname === "") return "kitchen";
   if (pathname.startsWith("/search")) return "search";
-  if (pathname.startsWith("/recipes")) return "recipes";
+  if (pathname.startsWith("/my-recipes")) return "my-recipes";
+  if (pathname.startsWith("/saved-recipes")) return "saved-recipes";
   if (pathname.startsWith("/cookbooks")) return "cookbooks";
   if (pathname.startsWith("/shopping-list")) return "shopping";
+  if (pathname.startsWith("/chefs")) return "chefs";
+  if (pathname.startsWith("/recipes")) return "recipes";
   if (pathname.startsWith("/account")) return "account";
   return null;
 }
@@ -113,7 +116,7 @@ export function AppNavbar({
 
   return (
     <nav className="sj-desktop-nav" aria-label="Main navigation">
-      <RouterLink to="/" className="sj-desktop-brand" data-current={currentNav === "home"}>
+      <RouterLink to="/" className="sj-desktop-brand" data-current={currentNav === "kitchen"}>
         <SpoonjoyLogo
           width={42}
           height={26}
@@ -125,10 +128,13 @@ export function AppNavbar({
       {userId ? (
         <>
           <div className="sj-desktop-nav-center">
-            <RouterLink to="/search" className={navLinkClass} data-current={currentNav === "search"}>Search</RouterLink>
-            <RouterLink to="/recipes" className={navLinkClass} data-current={currentNav === "recipes"}>Recipes</RouterLink>
+            <RouterLink to="/" className={navLinkClass} data-current={currentNav === "kitchen"}>Kitchen</RouterLink>
+            <RouterLink to="/my-recipes" className={navLinkClass} data-current={currentNav === "my-recipes"}>My Recipes</RouterLink>
+            <RouterLink to="/saved-recipes" className={navLinkClass} data-current={currentNav === "saved-recipes"}>Saved</RouterLink>
             <RouterLink to="/cookbooks" className={navLinkClass} data-current={currentNav === "cookbooks"}>Cookbooks</RouterLink>
-            <RouterLink to="/shopping-list" className={navLinkClass} data-current={currentNav === "shopping"}>List</RouterLink>
+            <RouterLink to="/shopping-list" className={navLinkClass} data-current={currentNav === "shopping"}>Shopping List</RouterLink>
+            <RouterLink to="/chefs" className={navLinkClass} data-current={currentNav === "chefs"}>Chefs</RouterLink>
+            <RouterLink to="/search" className={navLinkClass} data-current={currentNav === "search"}>Kitchen Search</RouterLink>
           </div>
           <div className="sj-desktop-nav-actions">
             <ThemeToggle />

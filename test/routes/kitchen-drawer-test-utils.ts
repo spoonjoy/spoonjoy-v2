@@ -2,6 +2,7 @@ import { faker } from "@faker-js/faker";
 import { db } from "~/lib/db.server";
 import { createUser } from "~/lib/auth.server";
 import { sessionStorage } from "~/lib/session.server";
+import { getOrCreateIngredientRef } from "../utils";
 
 export async function createDrawerUser(label: string) {
   const suffix = `${label}-${faker.string.alphanumeric(8)}`.toLowerCase();
@@ -65,9 +66,7 @@ export async function addIngredientToRecipe(recipeId: string, ingredientName: st
   const unit = await db.unit.create({
     data: { name: `unit-${ingredientName}-${faker.string.alphanumeric(6)}` },
   });
-  const ingredientRef = await db.ingredientRef.create({
-    data: { name: ingredientName },
-  });
+  const ingredientRef = await getOrCreateIngredientRef(db, ingredientName);
   return db.ingredient.create({
     data: {
       recipeId,

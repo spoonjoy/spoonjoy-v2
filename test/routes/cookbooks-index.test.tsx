@@ -85,7 +85,7 @@ describe("Cookbooks drawer route", () => {
     });
   });
 
-  it("renders the owned cookbooks drawer", () => {
+  it("renders the owned cookbooks drawer", async () => {
     const Stub = createTestRoutesStub([
       {
         path: "/cookbooks",
@@ -105,7 +105,7 @@ describe("Cookbooks drawer route", () => {
     ]);
 
     render(<Stub initialEntries={["/cookbooks"]} />);
-    expect(screen.getByRole("heading", { name: /cookbooks/i })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /cookbooks/i })).toBeInTheDocument();
     expect(screen.getByText("Grandma Weeknight Book")).toBeInTheDocument();
   });
 });
