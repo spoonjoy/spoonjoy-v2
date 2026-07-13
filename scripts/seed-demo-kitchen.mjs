@@ -1,30 +1,65 @@
 #!/usr/bin/env node
 // Seed a demo Spoonjoy kitchen with sample recipes, a cookbook, and a shopping
-// list — for the working reviewer account that connector directories (Anthropic,
-// OpenAI) require. It calls the public REST API with a bearer token, so it works
-// against production without DB access.
+// list for QA/local reviewer rehearsals. This script intentionally refuses the
+// production Spoonjoy domain; production should never carry demo fixture data.
 //
 // Setup (Ari):
-//   1. Sign up the demo account (e.g. demo@spoonjoy.app) at https://spoonjoy.app/signup
+//   1. Sign up the demo account in QA or local dev.
 //   2. Create an API token in Account Settings (or via create_api_token)
-//   3. Run:  SPOONJOY_API_TOKEN=sj_... node scripts/seed-demo-kitchen.mjs
+//   3. Run:  SPOONJOY_API_TOKEN=sj_... node scripts/seed-demo-kitchen.mjs --target-env qa
 //
 // Options (env):
-//   SPOONJOY_API_TOKEN   required — bearer token for the demo account
-//   SPOONJOY_BASE_URL    optional — defaults to https://spoonjoy.app
+//   SPOONJOY_API_TOKEN   required - bearer token for the demo account
+//   SPOONJOY_BASE_URL    optional - overrides the QA/local default, except production
 
-const BASE_URL = (process.env.SPOONJOY_BASE_URL ?? "https://spoonjoy.app").replace(/\/$/, "");
-const TOKEN = process.env.SPOONJOY_API_TOKEN;
+export const DEMO_SEED_BASE_URLS = {
+  local: "http://localhost:5173",
+  qa: "https://spoonjoy-v2-qa.mendelow-studio.workers.dev",
+};
 
-if (!TOKEN) {
-  console.error("Missing SPOONJOY_API_TOKEN. See the header of this script for setup steps.");
-  process.exit(1);
+const ALLOWED_TARGET_ENVS = new Set(Object.keys(DEMO_SEED_BASE_URLS));
+const PRODUCTION_HOSTS = new Set(["spoonjoy.app", "www.spoonjoy.app"]);
+
+function normalizeBaseUrl(baseUrl) {
+  return baseUrl.replace(/\/$/, "");
 }
 
-async function callTool(operation, args = {}) {
-  const res = await fetch(`${BASE_URL}/api/tools/${operation}`, {
+export function isProductionBaseUrl(baseUrl) {
+  try {
+    return PRODUCTION_HOSTS.has(new URL(baseUrl).hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
+function readFlag(argv, flag) {
+  const index = argv.indexOf(flag);
+  return index === -1 ? undefined : argv[index + 1];
+}
+
+export function parseSeedDemoKitchenArgs(argv = process.argv.slice(2), env = process.env) {
+  const targetEnv = readFlag(argv, "--target-env");
+  if (!targetEnv || !ALLOWED_TARGET_ENVS.has(targetEnv)) {
+    throw new Error("seed-demo-kitchen requires `--target-env qa` or `--target-env local`.");
+  }
+
+  const baseUrl = normalizeBaseUrl(env.SPOONJOY_BASE_URL ?? DEMO_SEED_BASE_URLS[targetEnv]);
+  if (isProductionBaseUrl(baseUrl)) {
+    throw new Error("seed-demo-kitchen refuses production domains; use QA/local only.");
+  }
+
+  const token = env.SPOONJOY_API_TOKEN;
+  if (!token) {
+    throw new Error("Missing SPOONJOY_API_TOKEN. See the header of this script for setup steps.");
+  }
+
+  return { targetEnv, baseUrl, token };
+}
+
+async function callTool(options, operation, args = {}, fetchImpl = fetch) {
+  const res = await fetchImpl(`${options.baseUrl}/api/tools/${operation}`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" },
+    headers: { Authorization: `Bearer ${options.token}`, "Content-Type": "application/json" },
     body: JSON.stringify(args),
   });
   const payload = await res.json().catch(() => ({}));
@@ -37,13 +72,13 @@ async function callTool(operation, args = {}) {
 
 // Best-effort: a recipe whose title already exists will 400; treat that as
 // "already seeded" and keep going so the script is safe to re-run.
-async function seedRecipe(recipe) {
+async function seedRecipe(options, recipe, fetchImpl, io) {
   try {
-    const data = await callTool("create_recipe", recipe);
-    console.log(`  ✓ recipe: ${recipe.title}`);
+    const data = await callTool(options, "create_recipe", recipe, fetchImpl);
+    io.log(`  ✓ recipe: ${recipe.title}`);
     return data.recipe;
   } catch (error) {
-    console.log(`  • recipe skipped (${recipe.title}): ${error.message}`);
+    io.log(`  • recipe skipped (${recipe.title}): ${error.message}`);
     return null;
   }
 }
@@ -118,44 +153,48 @@ const RECIPES = [
   },
 ];
 
-async function main() {
-  console.log(`Seeding demo kitchen at ${BASE_URL} ...`);
+export async function main(argv = process.argv.slice(2), env = process.env, fetchImpl = fetch, io = console) {
+  const options = parseSeedDemoKitchenArgs(argv, env);
 
-  const status = await callTool("auth_status");
+  io.log(`Seeding demo kitchen at ${options.baseUrl} ...`);
+
+  const status = await callTool(options, "auth_status", {}, fetchImpl);
   if (!status.writable) {
     throw new Error("Token is not writable — check that SPOONJOY_API_TOKEN belongs to the demo account.");
   }
-  console.log(`Authenticated as ${status.principal?.email ?? status.defaultOwnerEmail ?? "demo account"}.`);
+  io.log(`Authenticated as ${status.principal?.email ?? status.defaultOwnerEmail ?? "demo account"}.`);
 
-  console.log("Recipes:");
+  io.log("Recipes:");
   const recipes = [];
   for (const recipe of RECIPES) {
-    const created = await seedRecipe(recipe);
+    const created = await seedRecipe(options, recipe, fetchImpl, io);
     if (created) recipes.push(created);
   }
 
-  console.log("Cookbook:");
-  const cookbook = await callTool("create_cookbook", { title: "Weeknight Favorites" });
-  console.log(`  ✓ cookbook: ${cookbook.cookbook.title}`);
+  io.log("Cookbook:");
+  const cookbook = await callTool(options, "create_cookbook", { title: "Weeknight Favorites" }, fetchImpl);
+  io.log(`  ✓ cookbook: ${cookbook.cookbook.title}`);
   for (const recipe of recipes) {
-    await callTool("add_recipe_to_cookbook", { cookbookId: cookbook.cookbook.id, recipeId: recipe.id });
-    console.log(`    ✓ added: ${recipe.title}`);
+    await callTool(options, "add_recipe_to_cookbook", { cookbookId: cookbook.cookbook.id, recipeId: recipe.id }, fetchImpl);
+    io.log(`    ✓ added: ${recipe.title}`);
   }
 
-  console.log("Shopping list:");
+  io.log("Shopping list:");
   for (const item of [
     { name: "olive oil", quantity: 1, unit: "bottle" },
     { name: "lemons", quantity: 4, unit: "whole" },
     { name: "chickpeas", quantity: 2, unit: "can" },
   ]) {
-    await callTool("add_shopping_list_item", item);
-    console.log(`  ✓ ${item.name}`);
+    await callTool(options, "add_shopping_list_item", item, fetchImpl);
+    io.log(`  ✓ ${item.name}`);
   }
 
-  console.log("\nDone. The demo kitchen is ready for reviewers.");
+  io.log("\nDone. The demo kitchen is ready for QA/local reviewers.");
 }
 
-main().catch((error) => {
-  console.error(`\nSeed failed: ${error.message}`);
-  process.exit(1);
-});
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().catch((error) => {
+    console.error(`\nSeed failed: ${error.message}`);
+    process.exit(1);
+  });
+}

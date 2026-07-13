@@ -101,8 +101,7 @@ Run after deploy and again after DNS switch:
 - `/login` renders and configured auth methods are accurate.
 - `/signup` renders and configured auth methods are accurate.
 - `/search?q=tomato&scope=all` returns results or an intentional empty state.
-- `/users/demo_chef/fellow-chefs` renders.
-- `/users/demo_chef/kitchen-visitors` renders.
+- A known real public profile renders, including its fellow-chefs and kitchen-visitors tabs.
 - Authenticated `/shopping-list` renders and checkoff works.
 - Authenticated recipe detail renders.
 - Cook mode opens, persists progress across reload, and timers work on timed steps.
