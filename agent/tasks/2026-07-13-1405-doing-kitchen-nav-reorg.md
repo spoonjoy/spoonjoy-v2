@@ -91,7 +91,7 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 
 **CRITICAL: Every unit header MUST start with status emoji (⬜ for new units).**
 
-### ⬜ Unit 0: Setup/Research
+### ✅ Unit 0: Setup/Research
 **What**: Reconfirm clean worktrees, inspect exact route/test files, and record validation commands for both repos before edits. Keep OAuth files out of the write set.
 **Output**: Artifact notes under `./2026-07-13-1405-doing-kitchen-nav-reorg/unit-0/` covering repo status, relevant test targets, and any discovered shared-file constraints.
 **Acceptance**: `git status --short --branch` is captured for web and native worktrees; target files and commands are listed; no code files are edited in this unit.
@@ -225,3 +225,4 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 - 2026-07-13 14:58 Addressed scrutiny round 2: native Chefs visual/proof coverage and explicit web Chefs activity edge tests
 - 2026-07-13 15:08 Addressed final deception review: first-class native Chefs route, exact web drawer data contracts, owned native saved-recipes filtering, nil-current-chef fallback, and deploy sequencing
 - 2026-07-13 15:14 Doing doc reviewer chain converged clean; marked ready for execution
+- 2026-07-13 15:18 Unit 0 complete: captured clean web/native worktree state, target files, constraints, and validation commands
