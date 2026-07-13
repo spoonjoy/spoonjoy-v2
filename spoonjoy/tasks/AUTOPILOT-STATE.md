@@ -11,8 +11,8 @@ Objective: Record that the `SJ-044` cleanup-harness dogfood run is complete once
 - Native worktree: `/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav` on `agent/kitchen-nav-reorg`.
 - Planning doc: `agent/tasks/2026-07-13-1405-planning-kitchen-nav-reorg.md` (approved after sub-agent reviewer convergence).
 - Doing doc: `agent/tasks/2026-07-13-1405-doing-kitchen-nav-reorg.md` (`READY_FOR_EXECUTION` after mandatory reviewer convergence).
-- Current gate: Unit 3a complete; native red tests now pin saved-recipes and chefs routes plus current-chef personal recipe catalogs.
-- Next action: implement Unit 3b native route model, personal recipe catalogs, and saved-recipes surface; also fold in Locke's web mobile-nav findings before final validation.
+- Current gate: Unit 3b complete; native `savedRecipes` and `chefs` routes, snapshot-only personal catalogs, deep links, manifests, and app-shell destinations are implemented and pushed in `6f6ee6df`.
+- Next action: execute Unit 3c/4 native coverage and mobile material source-contract tests, then fold in Locke's web mobile-nav findings before final validation.
 
 ## Current Gate
 
