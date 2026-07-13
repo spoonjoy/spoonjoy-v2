@@ -50,7 +50,7 @@ function shouldHideDock(pathname: string, isAuthenticated: boolean) {
   );
 }
 
-function rootConfig(pathname: string, search: string, isAuthenticated: boolean, openPantry?: () => void): DockConfig {
+function rootConfig(pathname: string, search: string, isAuthenticated: boolean, openPantry: () => void): DockConfig {
   if (!isAuthenticated) {
     return {
       variant: "root",
@@ -233,7 +233,7 @@ function rootConfig(pathname: string, search: string, isAuthenticated: boolean, 
     tools: [
       { id: "my-recipes", icon: BookOpen, label: "My Recipes", onAction: "/my-recipes" },
       { id: "shopping", icon: ShoppingBag, label: "Shopping list", onAction: "/shopping-list" },
-      { id: "pantry", icon: Menu, label: "Pantry", ariaLabel: "Open pantry navigation", onAction: openPantry ?? "/cookbooks" },
+      { id: "pantry", icon: Menu, label: "Pantry", ariaLabel: "Open pantry navigation", onAction: openPantry },
     ],
   };
 }
