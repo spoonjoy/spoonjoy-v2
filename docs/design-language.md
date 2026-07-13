@@ -97,10 +97,30 @@ New structure:
 - Full-width bone page with a thin cookbook index rail.
 - Header is a quiet masthead: avatar, kitchen name, counts, actions.
 - Main area is an asymmetric spread:
-  - left column: "Latest from the kitchen" lead recipe with large photo, title, note/provenance/action.
+  - left column: "On the Counter" lead recipe with large photo, title, note/provenance/action.
   - right column: compact recipe index with thumbnails, not cards.
   - lower band: cookbook shelf, where each cookbook looks like a cover/spine object.
 - Tabs should be replaced with an index switch or segmented text control only if the content genuinely needs hiding. Prefer showing recipes and cookbooks together because they are different objects, not mutually exclusive dashboards.
+
+### Main Kitchen Navigation
+
+Signed-in navigation must use plain kitchen words and stable routes:
+
+- `Kitchen` -> `/`
+- `My Recipes` -> `/my-recipes`
+- `Saved Recipes` -> `/saved-recipes`
+- `Cookbooks` -> `/cookbooks`
+- `Shopping List` -> `/shopping-list`
+- `Chefs` -> `/chefs`
+- `Kitchen Search` -> `/search`
+
+`/recipes` remains the broader `Explore Recipes` index, not the signed-in cook's authored drawer.
+
+Saved Recipes are recipes saved through cookbooks owned by the signed-in cook. That includes the cook's own recipes when they have saved them into one of their cookbooks. It does not mean every recipe the cook wrote.
+
+Global search stays at `/search` with scopes for all, recipes, cookbooks, chefs, and shopping list. The personal drawer filters are local filters for the current drawer; they do not create a second search system.
+
+The mobile dock stays small and glass/material-like: `My Kitchen`, create, `My Recipes`, `Shopping List`, and a `Pantry drawer` affordance. The Pantry drawer contains `My Recipes`, `Saved Recipes`, `Cookbooks`, `Shopping List`, `Chefs`, and `Kitchen Search`.
 
 ### Recipe Detail
 
