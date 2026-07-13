@@ -39,7 +39,7 @@ describe("/mcp route", () => {
       { title: "Spoonjoy MCP" },
       expect.objectContaining({
         name: "description",
-        content: expect.stringContaining("AI assistants"),
+        content: expect.stringContaining("agents"),
       }),
     ]));
   });

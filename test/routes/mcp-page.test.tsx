@@ -21,15 +21,25 @@ describe("/mcp landing page", () => {
     const pageText = document.body.textContent ?? "";
 
     expect(pageText).toContain("TL;DR");
-    expect(pageText).toContain("Authorize Spoonjoy once");
+    expect(pageText).toContain("Use the app for easy things");
+    expect(pageText).toContain("Use an agent through MCP");
+    expect(pageText).toContain("generative UI");
+    expect(pageText).toContain("Where MCP Fits");
+    expect(pageText).toContain("Use the app");
+    expect(pageText).toContain("Use an agent");
     expect(pageText).toContain("https://spoonjoy.app/mcp");
     expect(pageText).toContain("POST");
     expect(pageText).toContain("JSON-RPC");
     expect(pageText).toContain("Authorization: Bearer");
     expect(pageText).toContain("claude mcp add");
+    expect(pageText).toContain("Import through an agent");
+    expect(pageText).toContain("create_recipe");
     expect(pageText).toContain("recipes");
     expect(pageText).toContain("cookbooks");
     expect(pageText).toContain("shopping list");
+    const oldPersona = ["AI ass", "istant"].join("");
+    expect(pageText).not.toContain(oldPersona);
+    expect(pageText).not.toContain(`${oldPersona}s`);
     expect(pageText).toContain("no SSE");
     expect(pageText).toContain("no batching");
     expect(screen.getByRole("link", { name: /protected-resource metadata/i })).toHaveAttribute(

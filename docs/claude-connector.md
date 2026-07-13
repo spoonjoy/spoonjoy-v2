@@ -1,6 +1,6 @@
 # Spoonjoy Claude Connector
 
-Spoonjoy serves a remote [Model Context Protocol](https://modelcontextprotocol.io) endpoint so Claude can use your kitchen — recipes, cookbooks, shopping list, and search — as first-class tools.
+Spoonjoy serves a remote [Model Context Protocol](https://modelcontextprotocol.io) endpoint so agents can use your kitchen for work that is too detailed for ordinary app clicks: creating and revising recipes, importing from messy sources, organizing cookbooks, and making shopping-list changes.
 
 The connector is the **same tool surface** as the [Ouroboros stdio MCP integration](./ouroboros-mcp.md) and the [HTTP API](./api.md): all three route through one shared operation layer (`app/lib/spoonjoy-api.server.ts`). The connector just exposes it over MCP's Streamable-HTTP transport.
 
@@ -43,8 +43,11 @@ The access token is the same kind of bearer token used above, so it flows throug
 ## Install in Claude Code
 
 ```bash
-claude mcp add --transport http spoonjoy https://spoonjoy.app/mcp \
-  --header "Authorization: Bearer sj_your_token_here"
+TOKEN=sj_your_token_here
+claude mcp add --transport http \
+  spoonjoy \
+  https://spoonjoy.app/mcp \
+  --header "Authorization: Bearer $TOKEN"
 ```
 
 Then `claude mcp list` shows `spoonjoy`, and the Spoonjoy tools become available (`tools/list`). A quick check:
@@ -65,7 +68,7 @@ curl -s -X POST https://spoonjoy.app/mcp \
 
 ## Tools
 
-The connector exposes the same authenticated tools as the [Ouroboros stdio MCP integration](./ouroboros-mcp.md#tools) — health, search, recipe CRUD, cookbook organization, shopping-list management, and token lifecycle. Use `POST /api/tools/start_agent_connection` and `POST /api/tools/poll_agent_connection` before connecting to `/mcp`; unauthenticated `/mcp` calls are challenged.
+The connector exposes the same authenticated tools as the [Ouroboros stdio MCP integration](./ouroboros-mcp.md#tools) — health, search, recipe CRUD for authoring/import flows, cookbook organization, shopping-list management, and token lifecycle. Use `POST /api/tools/start_agent_connection` and `POST /api/tools/poll_agent_connection` before connecting to `/mcp`; unauthenticated `/mcp` calls are challenged.
 
 ## Security posture
 

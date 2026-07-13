@@ -6,14 +6,15 @@ import {
   Braces,
   Cable,
   ChefHat,
+  FilePen,
   KeyRound,
-  Search,
+  Import,
+  ListChecks,
   ShieldCheck,
-  ShoppingBasket,
+  Sparkles,
   Terminal,
 } from "lucide-react";
-import { getRequestDb } from "~/lib/route-platform.server";
-import { handleMcpHttpRequest } from "~/lib/mcp/http-mcp.server";
+import { handleMcpPostRouteRequest } from "~/lib/mcp/http-mcp-route.server";
 import { Badge } from "~/components/ui/badge";
 import { CookbookHeader, CookbookPage, CookbookSectionTitle } from "~/components/cookbook/page";
 
@@ -25,20 +26,7 @@ import { CookbookHeader, CookbookPage, CookbookSectionTitle } from "~/components
  * connector landing page below.
  */
 async function handleMcpPost({ request, context }: Route.ActionArgs) {
-  const cloudflare = context.cloudflare;
-  const ctx = cloudflare?.ctx;
-  const waitUntil = ctx?.waitUntil ? ctx.waitUntil.bind(ctx) : undefined;
-  const cfEnv = cloudflare?.env;
-  const db = await getRequestDb(context);
-
-  return handleMcpHttpRequest({
-    request,
-    db,
-    cloudflareEnv: cfEnv ?? null,
-    waitUntil,
-    tokenLimiter: cfEnv?.API_TOKEN_RATE_LIMITER,
-    ipLimiter: cfEnv?.API_IP_RATE_LIMITER,
-  });
+  return handleMcpPostRouteRequest(request, context);
 }
 
 type McpLandingData = {
@@ -59,7 +47,7 @@ export function meta({}: Route.MetaArgs) {
     { title: "Spoonjoy MCP" },
     {
       name: "description",
-      content: "Connect AI assistants to your Spoonjoy kitchen with the remote MCP endpoint for recipes, cookbooks, search, and shopping lists.",
+      content: "Connect agents to Spoonjoy for complex kitchen work: creating recipes, importing from messy sources, organizing cookbooks, and updating shopping lists.",
     },
   ];
 }
@@ -80,33 +68,54 @@ const protocolFacts = [
   ["Streaming", "no SSE, no batching"],
 ] as const;
 
-const capabilities = [
+const taskGradient = [
   {
-    title: "Find kitchen memory",
-    body: "Search public recipes plus your private kitchen data when your token has access.",
-    icon: Search,
-  },
-  {
-    title: "Work with recipes",
-    body: "Create, read, edit, fork, delete, spoon, and upload user-provided images through the shared Spoonjoy operation layer.",
+    label: "Easy",
+    title: "Use the app",
+    body: "Find, follow, spoon, and cook recipes directly in Spoonjoy. Browsing should stay fast, visual, and under your hands.",
     icon: ChefHat,
   },
   {
+    label: "Middle",
+    title: "Generative UI later",
+    body: "Planning, guided editing, and review will eventually want UI that forms around the task. That layer is not here yet.",
+    icon: Sparkles,
+  },
+  {
+    label: "Complex",
+    title: "Use an agent",
+    body: "Author or import recipes from messy sources, normalize ingredients and steps, reorganize cookbooks, and make scoped list changes.",
+    icon: FilePen,
+  },
+] as const;
+
+const capabilities = [
+  {
+    title: "Import through an agent",
+    body: "Let an agent read a source you provide, interpret the recipe, and call create_recipe with structured steps, ingredients, images, and source notes.",
+    icon: Import,
+  },
+  {
+    title: "Author real recipes",
+    body: "Draft, revise, fork, delete, spoon, and upload user-provided images through the same operation layer the app uses.",
+    icon: FilePen,
+  },
+  {
     title: "Organize cookbooks",
-    body: "List cookbooks, inspect cookbook contents, create collections, and add or remove recipes you own.",
+    body: "Create collections, inspect cookbook contents, and add or remove recipes when the organization work gets too fiddly for clicks.",
     icon: BookOpen,
   },
   {
     title: "Manage the shopping list",
-    body: "Read and update owner-scoped shopping list items from the assistant that you authorize.",
-    icon: ShoppingBasket,
+    body: "Turn meal decisions into owner-scoped shopping-list changes from the agent you authorize.",
+    icon: ListChecks,
   },
 ] as const;
 
 const setupSteps = [
   {
-    title: "Use OAuth when the client supports it",
-    body: "claude.ai, Claude Desktop, and similar clients that understand MCP protected-resource discovery, dynamic registration, and PKCE can discover Spoonjoy auth from the endpoint challenge, then send you through normal sign-in and consent.",
+    title: "Use OAuth when the agent supports it",
+    body: "claude.ai, Claude Desktop, and similar MCP clients can discover Spoonjoy auth from the endpoint challenge, then send you through normal sign-in and consent.",
     icon: ShieldCheck,
   },
   {
@@ -115,8 +124,8 @@ const setupSteps = [
     icon: Terminal,
   },
   {
-    title: "Keep scopes tight",
-    body: "Kitchen scopes unlock the recipe and cookbook tool surface. Shopping-list-only clients can use shopping-list scopes. Token lifecycle tools are available only to credentials with token scopes.",
+    title: "Give the agent the smallest useful scope",
+    body: "Kitchen scopes unlock recipe and cookbook writes. Shopping-list-only agents can use shopping-list scopes. Token lifecycle tools require token scopes.",
     icon: KeyRound,
   },
 ] as const;
@@ -184,18 +193,38 @@ export default function McpPage() {
           )}
         >
           <p>
-            Spoonjoy MCP lets AI assistants use your kitchen as tools: recipes, cookbooks, search, and your shopping list,
-            all scoped to the Spoonjoy account and permissions you authorize.
+            Spoonjoy MCP gives an authorized agent tools for kitchen work that is too detailed for ordinary app clicks:
+            creating recipes, importing from messy sources, reshaping cookbooks, and updating your shopping list.
           </p>
         </CookbookHeader>
 
         <section className="min-w-0 border-y border-[var(--sj-border-strong)] py-5" aria-labelledby="mcp-tldr">
           <p id="mcp-tldr" className="sj-eyebrow">TL;DR</p>
           <p className="mt-3 max-w-4xl text-xl/8 text-[var(--sj-ink)]">
-            Authorize Spoonjoy once, then your AI assistant can help with the kitchen you already keep here:
-            finding recipes, organizing cookbooks, and updating your shopping list. OAuth-capable clients can
-            guide you through sign-in and consent; Claude Code can connect with a Spoonjoy bearer token.
+            Use the app for easy things like finding and following recipes. Use an agent through MCP when the work
+            becomes multi-step: turn a page, photo, or notes into a structured Spoonjoy recipe, revise it, organize it,
+            and make the shopping-list changes around it. The middle eventually wants generative UI; for now, MCP is
+            the agent lane.
           </p>
+        </section>
+
+        <section>
+          <CookbookSectionTitle>Where MCP Fits</CookbookSectionTitle>
+          <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-3">
+            {taskGradient.map((item) => {
+              const Icon = item.icon;
+              return (
+                <article key={item.title} className="border-t border-[var(--sj-border-strong)] pt-5">
+                  <div className="flex items-center gap-3">
+                    <Icon className="size-5 text-[var(--sj-herb)]" aria-hidden="true" />
+                    <p className="sj-eyebrow">{item.label}</p>
+                  </div>
+                  <h2 className="font-sj-display mt-4 text-2xl/7 font-semibold text-[var(--sj-ink)]">{item.title}</h2>
+                  <p className="mt-2 text-sm/6 text-[var(--sj-ink-soft)]">{item.body}</p>
+                </article>
+              );
+            })}
+          </div>
         </section>
 
         <section className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[minmax(0,1fr)_24rem]">
@@ -209,7 +238,9 @@ export default function McpPage() {
               The browser page is the guide. The protocol call is authenticated POST JSON-RPC.
             </h2>
             <p className="mt-3 max-w-3xl text-base/7 text-[var(--sj-ink-soft)]">
-              Visiting this URL shows setup help. MCP clients send JSON-RPC to the same URL with{" "}
+              Visiting this URL shows setup help. MCP is not a better way to browse Spoonjoy; it is the bridge for
+              agent work where reading, transforming, and writing structured kitchen data belong together. MCP clients
+              send JSON-RPC to the same URL with{" "}
               <code className="font-sj-ui font-semibold text-[var(--sj-ink)]">POST</code>; every request, including{" "}
               <code className="font-sj-ui font-semibold text-[var(--sj-ink)]">initialize</code>, needs a valid bearer token
               or an OAuth access token bound to this resource.
@@ -241,7 +272,9 @@ export default function McpPage() {
             })}
           </div>
           <p className="mt-4 max-w-3xl text-sm/6 text-[var(--sj-ink-soft)]">
-            MCP deliberately excludes arbitrary URL import and AI cover generation. For broader REST and OpenAPI access, use the{" "}
+            MCP deliberately has no arbitrary URL import tool. For imports, let the agent read the source you provide and
+            create structured Spoonjoy data through <code className="font-sj-ui font-semibold text-[var(--sj-ink)]">create_recipe</code>.
+            AI cover generation also stays out of MCP. For broader REST and OpenAPI access, use the{" "}
             <a className="font-semibold text-[var(--sj-tomato)] underline-offset-4 hover:underline" href="/api">
               API guide
             </a>.
@@ -276,14 +309,14 @@ export default function McpPage() {
               After you create a Spoonjoy token, add the remote server with an explicit bearer header:
             </p>
             <CodeBlock>
-              {'claude mcp add --transport http spoonjoy https://spoonjoy.app/mcp \\\n  --header "Authorization: Bearer sj_your_token_here"'}
+              {'TOKEN=sj_your_token_here\nclaude mcp add --transport http \\\n  spoonjoy \\\n  https://spoonjoy.app/mcp \\\n  --header "Authorization: Bearer $TOKEN"'}
             </CodeBlock>
           </div>
 
           <aside className="border-y border-[var(--sj-border-strong)] py-6">
             <h2 className="font-sj-display text-2xl/7 font-semibold text-[var(--sj-ink)]">Auth Discovery</h2>
             <p className="mt-2 text-sm/6 text-[var(--sj-ink-soft)]">
-              OAuth-ready MCP clients learn where to authorize from Spoonjoy's protected-resource metadata.
+              OAuth-ready MCP agents learn where to authorize from Spoonjoy's protected-resource metadata.
             </p>
             <div className="mt-4 overflow-hidden border border-[var(--sj-border)] bg-[var(--sj-panel-solid)] p-3">
               <a

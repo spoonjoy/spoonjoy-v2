@@ -92,3 +92,6 @@ Make `https://spoonjoy.app/mcp` useful for humans by rendering a clear landing p
 - 2026-07-13 14:16 Unit 1b complete: implemented GET landing page, preserved POST MCP action, updated route registration/classification, and saved green targeted test output to `unit-1b-green.log`
 - 2026-07-13 14:48 Unit 1c complete: refreshed Browserslist data to clear stale warnings, verified full coverage at 100%, and ran production build with clean logs
 - 2026-07-13 14:59 Unit 1d complete: captured desktop/mobile screenshots, fixed mobile grid overflow, passed visual reviewer gate, reran targeted tests, full coverage, and build with clean logs
+- 2026-07-13 15:46 Post-review copy audit: revised `/mcp` around the app-to-agent gradient: app for easy finding/following, future generative UI for the middle, MCP-backed agents for complex authoring/importing/organization work.
+- 2026-07-13 15:50 Post-review route audit: found the UI route rename could stale the raw JSON-RPC response path for `POST /mcp`; added a shared MCP POST handler plus Worker and dev-server bypasses so the landing page stays GET-only and protocol calls remain raw JSON.
+- 2026-07-13 16:00 Post-review validation: focused route, worker, page, OAuth e2e, and visual QA checks pass; full coverage passed with 349 test files, 6,756 tests, and 100% statements/branches/functions/lines.
