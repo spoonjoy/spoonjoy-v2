@@ -121,7 +121,7 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 **Output**: Source changes in `_index`, drawer route components, `SpoonDock`, `MobileNav`, and Tailwind/CSS plus green focused-test logs under `./2026-07-13-1405-doing-kitchen-nav-reorg/unit-2b/`.
 **Acceptance**: Unit 2a tests pass; mobile dock stays fixed-bottom, safe-area-aware, `lg:hidden`, and usable at 320-390px.
 
-### ⬜ Unit 2c: Web Search, Editorial Module, And Mobile Glass — Coverage & Refactor
+### ✅ Unit 2c: Web Search, Editorial Module, And Mobile Glass — Coverage & Refactor
 **What**: Run focused web tests for index, search, navigation, and drawer routes; refactor only local UI duplication introduced by Units 1-2.
 **Output**: Focused test and coverage logs under `./2026-07-13-1405-doing-kitchen-nav-reorg/unit-2c/`, with any local refactor commits documented in the progress log.
 **Acceptance**: Focused web route/component tests are green, no warnings, and new helpers have branch/edge coverage.
@@ -231,3 +231,4 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 - 2026-07-13 15:28 Unit 1c complete: addressed Unit 1b reviewer findings, added drawer edge/render coverage, fixed cookbook full-title search with preview covers, and verified focused tests, focused coverage, typecheck, build, and whitespace checks
 - 2026-07-13 15:31 Unit 2a complete: added red web tests for `On the Counter` and the mobile dock liquid-glass material; focused slice failed on the intended stale copy and solid dock surface
 - 2026-07-13 15:33 Unit 2b complete: replaced the misleading home editorial copy with `On the Counter`, upgraded SpoonDock to a translucent material/glass shell, and verified focused tests, typecheck, and build
+- 2026-07-13 15:39 Unit 2c complete: tightened Chefs activity/render coverage, verified the focused web navigation/search/drawer slice, and captured threshold-neutral coverage with changed web files at 100%

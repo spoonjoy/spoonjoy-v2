@@ -185,8 +185,8 @@ async function chefActivity(database: Awaited<ReturnType<typeof getRequestDb>>, 
       };
     }),
     ...outboundForks.map((fork) => {
-      const sourceRecipe = fork.sourceRecipe;
-      const otherChef = sourceRecipe ? chefRef(sourceRecipe.chef) : viewer;
+      const sourceRecipe = fork.sourceRecipe!;
+      const otherChef = chefRef(sourceRecipe.chef);
       return {
         id: activityId("outbound", "fork", fork.id),
         sourceId: fork.id,
@@ -196,11 +196,9 @@ async function chefActivity(database: Awaited<ReturnType<typeof getRequestDb>>, 
         eventAt: fork.createdAt,
         actor: viewer,
         otherChef,
-        recipe: sourceRecipe ? { id: sourceRecipe.id, title: sourceRecipe.title } : null,
+        recipe: { id: sourceRecipe.id, title: sourceRecipe.title },
         cookbook: null,
-        label: sourceRecipe
-          ? `You forked ${sourceRecipe.title} from ${otherChef.username}.`
-          : "You forked a recipe.",
+        label: `You forked ${sourceRecipe.title} from ${otherChef.username}.`,
       };
     }),
     ...inboundForks.map((fork) => {
@@ -214,11 +212,9 @@ async function chefActivity(database: Awaited<ReturnType<typeof getRequestDb>>, 
         eventAt: fork.createdAt,
         actor,
         otherChef: actor,
-        recipe: fork.sourceRecipe ? { id: fork.sourceRecipe.id, title: fork.sourceRecipe.title } : null,
+        recipe: { id: fork.sourceRecipe!.id, title: fork.sourceRecipe!.title },
         cookbook: null,
-        label: fork.sourceRecipe
-          ? `${actor.username} forked your ${fork.sourceRecipe.title}.`
-          : `${actor.username} forked one of your recipes.`,
+        label: `${actor.username} forked your ${fork.sourceRecipe!.title}.`,
       };
     }),
     ...outboundSaves.map((save) => {
