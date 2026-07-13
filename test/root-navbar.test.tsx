@@ -59,4 +59,18 @@ describe("AppNavbar", () => {
     expect(loginButton).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Login" })).not.toBeInTheDocument();
   });
+
+  it("uses clear signed-in kitchen drawer navigation", () => {
+    renderNavbar("chef-1");
+
+    expect(screen.getByRole("link", { name: "Kitchen" })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("link", { name: "My Recipes" })).toHaveAttribute("href", "/my-recipes");
+    expect(screen.getByRole("link", { name: "Saved" })).toHaveAttribute("href", "/saved-recipes");
+    expect(screen.getByRole("link", { name: "Cookbooks" })).toHaveAttribute("href", "/cookbooks");
+    expect(screen.getByRole("link", { name: "Shopping List" })).toHaveAttribute("href", "/shopping-list");
+    expect(screen.getByRole("link", { name: "Chefs" })).toHaveAttribute("href", "/chefs");
+    expect(screen.getByRole("link", { name: "Kitchen Search" })).toHaveAttribute("href", "/search");
+    expect(screen.queryByRole("link", { name: "Recipes" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "List" })).not.toBeInTheDocument();
+  });
 });

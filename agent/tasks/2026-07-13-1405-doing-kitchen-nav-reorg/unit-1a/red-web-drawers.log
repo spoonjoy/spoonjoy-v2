@@ -1,0 +1,1351 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2-agent-kitchen-nav
+
+ ❯ test/components/navigation/mobile-nav.test.tsx (20 tests | 4 failed) 260ms
+     ✓ renders a mobile-only Spoonjoy dock 24ms
+     ✓ shows public place, login primary action, and search tool 8ms
+     ✓ does not render the floating dock on auth routes 1ms
+       ✓ renders the approved place / primary / tools structure 6ms
+       ✓ does not render the old dashboard navigation labels 4ms
+       ✓ marks the kitchen place active only on the home route 13ms
+       ✓ stays out of write-heavy recipe and cookbook forms while allowing recipe detail navigation 4ms
+       ✓ stays out of step writing screens 1ms
+       × turns search into the place slot on search routes 12ms
+       × turns shopping list into the place slot and exposes Add as the primary action 10ms
+       ✓ distributes edge-to-edge (not centered) when the tools cluster is full (3 tools) 7ms
+       ✓ provides explicit back navigation for profile-style screens 4ms
+       ✓ turns account settings into the place slot 3ms
+       × turns cookbooks into the cookbooks place slot 6ms
+       × exposes the personal recipe drawers and chefs in route-aware mobile places 8ms
+       ✓ renders default nav items when context has no actions 4ms
+       ✓ adapts legacy side actions into the new place / primary / tools model 4ms
+       ✓ calls function actions and preserves string actions as links 15ms
+       ✓ falls back to route-aware root config when context is cleared 5ms
+       ✓ renders the center slot even when a contextual caller has no actions 3ms
+ ❯ test/root-navbar.test.tsx (4 tests | 1 failed) 89ms
+     ✓ uses the real Spoonjoy mark for the desktop brand 33ms
+     ✓ keeps the unauthenticated desktop brand on the same real mark 12ms
+     ✓ offers login as a desktop menu instead of a page-only nav link 8ms
+     × uses clear signed-in kitchen drawer navigation 12ms
+ ❯ test/routes/cookbooks-index.test.tsx (3 tests | 2 failed) 241ms
+     ✓ redirects unauthenticated requests to login 14ms
+     × shows owned cookbooks instead of redirecting authenticated cooks to a kitchen tab 174ms
+     × renders the owned cookbooks drawer 29ms
+ ❯ test/routes/chefs.test.tsx (0 test)
+ ❯ test/routes/my-recipes.test.tsx (0 test)
+ ❯ test/routes/saved-recipes.test.tsx (0 test)
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/routes/chefs.test.tsx [ test/routes/chefs.test.tsx ]
+Error: Failed to resolve import "~/routes/chefs" from "test/routes/chefs.test.tsx". Does the file exist?
+  Plugin: vite:import-analysis
+  File: /Users/arimendelow/Projects/spoonjoy-v2-agent-kitchen-nav/test/routes/chefs.test.tsx:5:23
+  3  |  import { db } from "~/lib/db.server";
+  4  |  import { cleanupDatabase } from "../helpers/cleanup";
+  5  |  import { loader } from "~/routes/chefs";
+     |                          ^
+  6  |  import {
+  7  |    createDrawerRecipe,
+ ❯ TransformPluginContext._formatLog node_modules/.pnpm/vite@7.3.1_@types+node@22.19.21_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0/node_modules/vite/dist/node/chunks/config.js:28999:43
+ ❯ TransformPluginContext.error node_modules/.pnpm/vite@7.3.1_@types+node@22.19.21_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0/node_modules/vite/dist/node/chunks/config.js:28996:14
+ ❯ normalizeUrl node_modules/.pnpm/vite@7.3.1_@types+node@22.19.21_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0/node_modules/vite/dist/node/chunks/config.js:27119:18
+ ❯ node_modules/.pnpm/vite@7.3.1_@types+node@22.19.21_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0/node_modules/vite/dist/node/chunks/config.js:27177:32
+ ❯ TransformPluginContext.transform node_modules/.pnpm/vite@7.3.1_@types+node@22.19.21_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0/node_modules/vite/dist/node/chunks/config.js:27145:4
+ ❯ EnvironmentPluginContainer.transform node_modules/.pnpm/vite@7.3.1_@types+node@22.19.21_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0/node_modules/vite/dist/node/chunks/config.js:28797:14
+ ❯ loadAndTransform node_modules/.pnpm/vite@7.3.1_@types+node@22.19.21_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0/node_modules/vite/dist/node/chunks/config.js:22670:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/10]⎯
+
+ FAIL  test/routes/my-recipes.test.tsx [ test/routes/my-recipes.test.tsx ]
+Error: Failed to resolve import "~/routes/my-recipes" from "test/routes/my-recipes.test.tsx". Does the file exist?
+  Plugin: vite:import-analysis
+  File: /Users/arimendelow/Projects/spoonjoy-v2-agent-kitchen-nav/test/routes/my-recipes.test.tsx:4:23
+  2  |  import { Request as UndiciRequest } from "undici";
+  3  |  import { cleanupDatabase } from "../helpers/cleanup";
+  4  |  import { loader } from "~/routes/my-recipes";
+     |                          ^
+  5  |  import {
+  6  |    addIngredientToRecipe,
+ ❯ TransformPluginContext._formatLog node_modules/.pnpm/vite@7.3.1_@types+node@22.19.21_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0/node_modules/vite/dist/node/chunks/config.js:28999:43
+ ❯ TransformPluginContext.error node_modules/.pnpm/vite@7.3.1_@types+node@22.19.21_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0/node_modules/vite/dist/node/chunks/config.js:28996:14
+ ❯ normalizeUrl node_modules/.pnpm/vite@7.3.1_@types+node@22.19.21_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0/node_modules/vite/dist/node/chunks/config.js:27119:18
+ ❯ node_modules/.pnpm/vite@7.3.1_@types+node@22.19.21_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0/node_modules/vite/dist/node/chunks/config.js:27177:32
+ ❯ TransformPluginContext.transform node_modules/.pnpm/vite@7.3.1_@types+node@22.19.21_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0/node_modules/vite/dist/node/chunks/config.js:27145:4
+ ❯ EnvironmentPluginContainer.transform node_modules/.pnpm/vite@7.3.1_@types+node@22.19.21_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0/node_modules/vite/dist/node/chunks/config.js:28797:14
+ ❯ loadAndTransform node_modules/.pnpm/vite@7.3.1_@types+node@22.19.21_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0/node_modules/vite/dist/node/chunks/config.js:22670:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/10]⎯
+
+ FAIL  test/routes/saved-recipes.test.tsx [ test/routes/saved-recipes.test.tsx ]
+Error: Failed to resolve import "~/routes/saved-recipes" from "test/routes/saved-recipes.test.tsx". Does the file exist?
+  Plugin: vite:import-analysis
+  File: /Users/arimendelow/Projects/spoonjoy-v2-agent-kitchen-nav/test/routes/saved-recipes.test.tsx:5:23
+  3  |  import { db } from "~/lib/db.server";
+  4  |  import { cleanupDatabase } from "../helpers/cleanup";
+  5  |  import { loader } from "~/routes/saved-recipes";
+     |                          ^
+  6  |  import {
+  7  |    createDrawerRecipe,
+ ❯ TransformPluginContext._formatLog node_modules/.pnpm/vite@7.3.1_@types+node@22.19.21_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0/node_modules/vite/dist/node/chunks/config.js:28999:43
+ ❯ TransformPluginContext.error node_modules/.pnpm/vite@7.3.1_@types+node@22.19.21_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0/node_modules/vite/dist/node/chunks/config.js:28996:14
+ ❯ normalizeUrl node_modules/.pnpm/vite@7.3.1_@types+node@22.19.21_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0/node_modules/vite/dist/node/chunks/config.js:27119:18
+ ❯ node_modules/.pnpm/vite@7.3.1_@types+node@22.19.21_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0/node_modules/vite/dist/node/chunks/config.js:27177:32
+ ❯ TransformPluginContext.transform node_modules/.pnpm/vite@7.3.1_@types+node@22.19.21_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0/node_modules/vite/dist/node/chunks/config.js:27145:4
+ ❯ EnvironmentPluginContainer.transform node_modules/.pnpm/vite@7.3.1_@types+node@22.19.21_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0/node_modules/vite/dist/node/chunks/config.js:28797:14
+ ❯ loadAndTransform node_modules/.pnpm/vite@7.3.1_@types+node@22.19.21_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0/node_modules/vite/dist/node/chunks/config.js:22670:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/10]⎯
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/root-navbar.test.tsx > AppNavbar > uses clear signed-in kitchen drawer navigation
+TestingLibraryElementError: Unable to find an accessible element with the role "link" and name "Kitchen"
+
+Here are the accessible roles:
+
+  navigation:
+
+  Name "Main navigation":
+  [36m<nav[39m
+    [33maria-label[39m=[32m"Main navigation"[39m
+    [33mclass[39m=[32m"sj-desktop-nav"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  link:
+
+  Name "SPOONJOY":
+  [36m<a[39m
+    [33mclass[39m=[32m"sj-desktop-brand"[39m
+    [33mdata-current[39m=[32m"true"[39m
+    [33mdata-discover[39m=[32m"true"[39m
+    [33mhref[39m=[32m"/"[39m
+  [36m/>[39m
+
+  Name "Search":
+  [36m<a[39m
+    [33mclass[39m=[32m"sj-desktop-nav-link"[39m
+    [33mdata-current[39m=[32m"false"[39m
+    [33mdata-discover[39m=[32m"true"[39m
+    [33mhref[39m=[32m"/search"[39m
+  [36m/>[39m
+
+  Name "Recipes":
+  [36m<a[39m
+    [33mclass[39m=[32m"sj-desktop-nav-link"[39m
+    [33mdata-current[39m=[32m"false"[39m
+    [33mdata-discover[39m=[32m"true"[39m
+    [33mhref[39m=[32m"/recipes"[39m
+  [36m/>[39m
+
+  Name "Cookbooks":
+  [36m<a[39m
+    [33mclass[39m=[32m"sj-desktop-nav-link"[39m
+    [33mdata-current[39m=[32m"false"[39m
+    [33mdata-discover[39m=[32m"true"[39m
+    [33mhref[39m=[32m"/cookbooks"[39m
+  [36m/>[39m
+
+  Name "List":
+  [36m<a[39m
+    [33mclass[39m=[32m"sj-desktop-nav-link"[39m
+    [33mdata-current[39m=[32m"false"[39m
+    [33mdata-discover[39m=[32m"true"[39m
+    [33mhref[39m=[32m"/shopping-list"[39m
+  [36m/>[39m
+
+  Name "Account":
+  [36m<a[39m
+    [33mclass[39m=[32m"sj-desktop-nav-link"[39m
+    [33mdata-current[39m=[32m"false"[39m
+    [33mdata-discover[39m=[32m"true"[39m
+    [33mhref[39m=[32m"/account/settings"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  button:
+
+  Name "Switch theme to dark mode":
+  [36m<button[39m
+    [33maria-label[39m=[32m"Switch theme to dark mode"[39m
+    [33mclass[39m=[32m"relative flex min-h-11 min-w-11 items-center justify-center rounded-[var(--sj-radius-control)] p-2 text-[var(--sj-ink-soft)] hover:text-[var(--sj-tomato)] hover:bg-[var(--sj-flour)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--sj-brass)] transition-colors duration-200"[39m
+    [33mdata-headlessui-state[39m=[32m""[39m
+    [33mtitle[39m=[32m"Switch theme to dark mode"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "Log out":
+  [36m<button[39m
+    [33maria-label[39m=[32m"Log out"[39m
+    [33mclass[39m=[32m"sj-desktop-nav-link"[39m
+    [33mtype[39m=[32m"submit"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<nav[39m
+      [33maria-label[39m=[32m"Main navigation"[39m
+      [33mclass[39m=[32m"sj-desktop-nav"[39m
+    [36m>[39m
+      [36m<a[39m
+        [33mclass[39m=[32m"sj-desktop-brand"[39m
+        [33mdata-current[39m=[32m"true"[39m
+        [33mdata-discover[39m=[32m"true"[39m
+        [33mhref[39m=[32m"/"[39m
+      [36m>[39m
+        [36m<svg[39m
+          [33maria-hidden[39m=[32m"true"[39m
+          [33mclass[39m=[32m"shrink-0 fill-current! sj-desktop-brand-logo"[39m
+          [33mdata-slot[39m=[32m"icon"[39m
+          [33mheight[39m=[32m"26"[39m
+          [33mviewBox[39m=[32m"0 0 500 300"[39m
+          [33mwidth[39m=[32m"42"[39m
+          [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+        [36m>[39m
+          [36m<g[39m
+            [33mfill-rule[39m=[32m"evenodd"[39m
+            [33mstroke[39m=[32m"none"[39m
+            [33mstroke-width[39m=[32m"1"[39m
+          [36m>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M300 100h-62.135c-12.924.042-17.702 1.431-22.518 4.007-4.889 2.615-8.725 6.451-11.34 11.34-2.615 4.89-4.007 9.738-4.007 23.111V200h61.542c13.373 0 18.222-1.392 23.11-4.007 4.89-2.615 8.726-6.451 11.341-11.34 2.615-4.89 4.007-9.738 4.007-23.111V100zm100 84.625c0 40.119-4.177 54.666-12.021 69.333-7.844 14.667-19.354 26.177-34.02 34.021C339.29 295.823 324.743 300 284.624 300H38.458c-13.373 0-18.222-1.392-23.11-4.007-4.89-2.615-8.726-6.451-11.341-11.34-2.576-4.816-3.965-9.594-4.006-22.518L0 200h100v-84.625c0-40.119 4.177-54.666 12.021-69.333 7.844-14.667 19.354-26.177 34.02-34.021C160.71 4.177 175.257 0 215.376 0h246.167c13.373 0 18.222 1.392 23.11 4.007 4.89 2.615 8.726 6.451 11.341 11.34 2.615 4.89 4.007 9.738 4.007 23.111V100H400v84.625z"[39m
+            [36m/>[39m
+          [36m</g>[39m
+        [36m</svg>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"sj-desktop-brand-word"[39m
+        [36m>[39m
+          [0mSPOONJOY[0m
+        [36m</span>[39m
+      [36m</a>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"sj-desktop-nav-center"[39m
+      [36m>[39m
+        [36m<a[39m
+          [33mclass[39m=[32m"sj-desktop-nav-link"[39m
+          [33mdata-current[39m=[32m"false"[39m
+          [33mdata-discover[39m=[32m"true"[39m
+          [33mhref[39m=[32m"/search"[39m
+        [36m>[39m
+          [0mSearch[0m
+        [36m</a>[39m
+        [36m<a[39m
+          [33mclass[39m=[32m"sj-desktop-nav-link"[39m
+          [33mdata-current[39m=[32m"false"[39m
+          [33mdata-discover[39m=[32m"true"[39m
+          [33mhref[39m=[32m"/recipes"[39m
+        [36m>[39m
+          [0mRecipes[0m
+        [36m</a>[39m
+        [36m<a[39m
+          [33mclass[39m=[32m"sj-desktop-nav-link"[39m
+          [33mdata-current[39m=[32m"false"[39m
+          [33mdata-discover[39m=[32m"true"[39m
+          [33mhref[39m=[32m"/cookbooks"[39m
+        [36m>[39m
+          [0mCookbooks[0m
+        [36m</a>[39m
+        [36m<a[39m
+          [33mclass[39m=[32m"sj-desktop-nav-link"[39m
+          [33mdata-current[39m=[32m"false"[39m
+          [33mdata-discover[39m=[32m"true"[39m
+          [33mhref[39m=[32m"/shopping-list"[39m
+        [36m>[39m
+          [0mList[0m
+        [36m</a>[39m
+      [36m</div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"sj-desktop-nav-actions"[39m
+      [36m>[39m
+        [36m<button[39m
+          [33maria-label[39m=[32m"Switch theme to dark mode"[39m
+          [33mclass[39m=[32m"relative flex min-h-11 min-w-11 items-center justify-center rounded-[var(--sj-radius-control)] p-2 text-[var(--sj-ink-soft)] hover:text-[var(--sj-tomato)] hover:bg-[var(--sj-flour)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--sj-brass)] transition-colors duration-200"[39m
+          [33mdata-headlessui-state[39m=[32m""[39m
+          [33mtitle[39m=[32m"Switch theme to dark mode"[39m
+          [33mtype[39m=[32m"button"[39m
+        [36m>[39m
+          [36m<svg[39m
+            [33maria-hidden[39m=[32m"true"[39m
+            [33mclass[39m=[32m"lucide lucide-sun h-5 w-5"[39m
+            [33mfill[39m=[32m"none"[39m
+            [33mheight[39m=[32m"24"[39m
+            [33mstroke[39m=[32m"currentColor"[39m
+            [33mstroke-linecap[39m=[32m"round"[39m
+            [33mstroke-linejoin[39m=[32m"round"[39m
+            [33mstroke-width[39m=[32m"2"[39m
+            [33mviewBox[39m=[32m"0 0 24 24"[39m
+            [33mwidth[39m=[32m"24"[39m
+            [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+          [36m>[39m
+            [36m<circle[39m
+              [33mcx[39m=[32m"12"[39m
+              [33mcy[39m=[32m"12"[39m
+              [33mr[39m=[32m"4"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M12 2v2"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M12 20v2"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33md[39m=[32m"m4.93 4.93 1.41 1.41"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33md[39m=[32m"m17.66 17.66 1.41 1.41"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M2 12h2"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M20 12h2"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33md[39m=[32m"m6.34 17.66-1.41 1.41"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33md[39m=[32m"m19.07 4.93-1.41 1.41"[39m
+            [36m/>[39m
+          [36m</svg>[39m
+        [36m</button>[39m
+        [36m<a[39m
+          [33mclass[39m=[32m"sj-desktop-nav-link"[39m
+          [33mdata-current[39m=[32m"false"[39m
+          [33mdata-discover[39m=[32m"true"[39m
+          [33mhref[39m=[32m"/account/settings"[39m
+        [36m>[39m
+          [0mAccount[0m
+        [36m</a>[39m
+        [36m<form[39m
+          [33maction[39m=[32m"/logout"[39m
+          [33mclass[39m=[32m"m-0"[39m
+          [33mdata-discover[39m=[32m"true"[39m
+          [33mmethod[39m=[32m"post"[39m
+        [36m>[39m
+          [36m<button[39m
+            [33maria-label[39m=[32m"Log out"[39m
+            [33mclass[39m=[32m"sj-desktop-nav-link"[39m
+            [33mtype[39m=[32m"submit"[39m
+          [36m>[39m
+            [0mLogout[0m
+          [36m</button>[39m
+        [36m</form>[39m
+      [36m</div>[39m
+    [36m</nav>[39m
+  [36m</div>[39m
+[36m</body>[39m
+ ❯ Object.getElementError node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ test/root-navbar.test.tsx:66:19
+     64|     renderNavbar("chef-1");
+     65| 
+     66|     expect(screen.getByRole("link", { name: "Kitchen" })).toHaveAttrib…
+       |                   ^
+     67|     expect(screen.getByRole("link", { name: "My Recipes" })).toHaveAtt…
+     68|     expect(screen.getByRole("link", { name: "Saved" })).toHaveAttribut…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/10]⎯
+
+ FAIL  test/routes/cookbooks-index.test.tsx > Cookbooks drawer route > shows owned cookbooks instead of redirecting authenticated cooks to a kitchen tab
+{
+  body: null,
+  bodyUsed: false,
+  redirected: false,
+  type: 'basic',
+  url: '',
+  status: 302,
+  statusText: '',
+  ok: false,
+  headers: {
+    constructor: 'Function<Headers>',
+    append: 'Function<append>',
+    delete: 'Function<delete>',
+    get: 'Function<get>',
+    set: 'Function<set>',
+    getSetCookie: 'Function<getSetCookie>',
+    has: 'Function<has>',
+    forEach: 'Function<forEach>',
+    keys: 'Function<keys>',
+    values: 'Function<values>',
+    entries: 'Function<entries>'
+  },
+  constructor: 'Function<Response>',
+  arrayBuffer: 'Function<arrayBuffer>',
+  blob: 'Function<blob>',
+  buffer: 'Function<buffer>',
+  text: 'Function<text>',
+  json: 'Function<json>',
+  formData: 'Function<formData>',
+  clone: 'Function<clone>',
+  stacks: []
+}
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/10]⎯
+
+ FAIL  test/routes/cookbooks-index.test.tsx > Cookbooks drawer route > renders the owned cookbooks drawer
+TestingLibraryElementError: Unable to find an accessible element with the role "heading" and name `/cookbooks/i`
+
+There are no accessible roles. But there might be some inaccessible roles. If you wish to access them, then set the `hidden` option to `true`. Learn more about this here: https://testing-library.com/docs/dom-testing-library/api-queries#byrole
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div />[39m
+[36m</body>[39m
+ ❯ Object.getElementError node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ test/routes/cookbooks-index.test.tsx:108:19
+    106| 
+    107|     render(<Stub initialEntries={["/cookbooks"]} />);
+    108|     expect(screen.getByRole("heading", { name: /cookbooks/i })).toBeIn…
+       |                   ^
+    109|     expect(screen.getByText("Grandma Weeknight Book")).toBeInTheDocume…
+    110|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/10]⎯
+
+ FAIL  test/components/navigation/mobile-nav.test.tsx > MobileNav > route-aware docks > turns search into the place slot on search routes
+TestingLibraryElementError: Unable to find an accessible element with the role "link" and name `/^search$/i`
+
+Here are the accessible roles:
+
+  navigation:
+
+  Name "Spoonjoy navigation":
+  [36m<nav[39m
+    [33maria-label[39m=[32m"Spoonjoy navigation"[39m
+    [33mclass[39m=[32m"fixed bottom-0 left-[max(0.75rem,env(safe-area-inset-left))] right-[max(0.75rem,env(safe-area-inset-right))] mx-auto flex h-17 max-w-lg items-center gap-2 max-[389px]:gap-1 rounded-full border border-[var(--sj-photo-line)] bg-[var(--sj-photo-charcoal)] p-2 max-[389px]:p-1.5 text-[var(--sj-on-photo)] shadow-[var(--sj-shadow)] z-50 mb-[max(1rem,env(safe-area-inset-bottom))] lg:hidden"[39m
+    [33mrole[39m=[32m"navigation"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  link:
+
+  Name "Search index":
+  [36m<a[39m
+    [33maria-current[39m=[32m"page"[39m
+    [33mclass[39m=[32m"min-h-[50px] rounded-full border-0 no-underline transition duration-150 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-on-photo)] flex min-w-0 items-center gap-2 overflow-hidden bg-[color-mix(in_srgb,var(--sj-on-photo)_10%,transparent)] px-3 text-left max-[389px]:w-12 max-[389px]:justify-center max-[389px]:gap-0 max-[389px]:px-0 dock-item-active flex-1"[39m
+    [33mdata-discover[39m=[32m"true"[39m
+    [33mdata-headlessui-state[39m=[32m""[39m
+    [33mhref[39m=[32m"/search"[39m
+  [36m/>[39m
+
+  Name "Create recipe":
+  [36m<a[39m
+    [33maria-label[39m=[32m"Create recipe"[39m
+    [33mclass[39m=[32m"min-h-[50px] rounded-full border-0 no-underline transition duration-150 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-on-photo)] grid size-14 place-items-center max-[389px]:size-13 bg-[var(--sj-brass)] text-[var(--sj-on-photo)]"[39m
+    [33mdata-discover[39m=[32m"true"[39m
+    [33mdata-headlessui-state[39m=[32m""[39m
+    [33mhref[39m=[32m"/recipes/new"[39m
+  [36m/>[39m
+
+  Name "Kitchen":
+  [36m<a[39m
+    [33mclass[39m=[32m"min-h-[50px] rounded-full border-0 no-underline transition duration-150 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-on-photo)] grid w-[50px] place-items-center bg-[color-mix(in_srgb,var(--sj-on-photo)_10%,transparent)] max-[389px]:w-11 flex-1"[39m
+    [33mdata-discover[39m=[32m"true"[39m
+    [33mdata-headlessui-state[39m=[32m""[39m
+    [33mhref[39m=[32m"/"[39m
+  [36m/>[39m
+
+  Name "Shopping list":
+  [36m<a[39m
+    [33mclass[39m=[32m"min-h-[50px] rounded-full border-0 no-underline transition duration-150 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-on-photo)] grid w-[50px] place-items-center bg-[color-mix(in_srgb,var(--sj-on-photo)_10%,transparent)] max-[389px]:w-11 flex-1"[39m
+    [33mdata-discover[39m=[32m"true"[39m
+    [33mdata-headlessui-state[39m=[32m""[39m
+    [33mhref[39m=[32m"/shopping-list"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<nav[39m
+      [33maria-label[39m=[32m"Spoonjoy navigation"[39m
+      [33mclass[39m=[32m"fixed bottom-0 left-[max(0.75rem,env(safe-area-inset-left))] right-[max(0.75rem,env(safe-area-inset-right))] mx-auto flex h-17 max-w-lg items-center gap-2 max-[389px]:gap-1 rounded-full border border-[var(--sj-photo-line)] bg-[var(--sj-photo-charcoal)] p-2 max-[389px]:p-1.5 text-[var(--sj-on-photo)] shadow-[var(--sj-shadow)] z-50 mb-[max(1rem,env(safe-area-inset-bottom))] lg:hidden"[39m
+      [33mrole[39m=[32m"navigation"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"flex min-w-0 justify-start flex-1"[39m
+      [36m>[39m
+        [36m<a[39m
+          [33maria-current[39m=[32m"page"[39m
+          [33mclass[39m=[32m"min-h-[50px] rounded-full border-0 no-underline transition duration-150 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-on-photo)] flex min-w-0 items-center gap-2 overflow-hidden bg-[color-mix(in_srgb,var(--sj-on-photo)_10%,transparent)] px-3 text-left max-[389px]:w-12 max-[389px]:justify-center max-[389px]:gap-0 max-[389px]:px-0 dock-item-active flex-1"[39m
+          [33mdata-discover[39m=[32m"true"[39m
+          [33mdata-headlessui-state[39m=[32m""[39m
+          [33mhref[39m=[32m"/search"[39m
+        [36m>[39m
+          [36m<svg[39m
+            [33maria-hidden[39m=[32m"true"[39m
+            [33mclass[39m=[32m"lucide lucide-search shrink-0 h-5 w-5 text-[var(--sj-on-photo-soft)] text-[var(--sj-on-photo)]"[39m
+            [33mfill[39m=[32m"none"[39m
+            [33mheight[39m=[32m"24"[39m
+            [33mstroke[39m=[32m"currentColor"[39m
+            [33mstroke-linecap[39m=[32m"round"[39m
+            [33mstroke-linejoin[39m=[32m"round"[39m
+            [33mstroke-width[39m=[32m"2"[39m
+            [33mviewBox[39m=[32m"0 0 24 24"[39m
+            [33mwidth[39m=[32m"24"[39m
+            [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+          [36m>[39m
+            [36m<path[39m
+              [33md[39m=[32m"m21 21-4.34-4.34"[39m
+            [36m/>[39m
+            [36m<circle[39m
+              [33mcx[39m=[32m"11"[39m
+              [33mcy[39m=[32m"11"[39m
+              [33mr[39m=[32m"8"[39m
+            [36m/>[39m
+          [36m</svg>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"min-w-0 max-[389px]:sr-only"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"block truncate font-sj-ui text-sm font-bold leading-[1.05] text-[var(--sj-on-photo)]"[39m
+            [36m>[39m
+              [0mSearch[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"mt-1 block truncate font-sj-ui text-[0.62rem] font-bold uppercase leading-[1.05] tracking-[0.12em] text-[var(--sj-on-photo-soft)]"[39m
+            [36m>[39m
+              [0mindex[0m
+            [36m</span>[39m
+          [36m</span>[39m
+        [36m</a>[39m
+      [36m</div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"flex shrink-0 justify-center"[39m
+        [33mdata-testid[39m=[32m"dock-center"[39m
+      [36m>[39m
+        [36m<a[39m
+          [33maria-label[39m=[32m"Create recipe"[39m
+          [33mclass[39m=[32m"min-h-[50px] rounded-full border-0 no-underline transition duration-150 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-on-photo)] grid size-14 place-items-center max-[389px]:size-13 bg-[var(--sj-brass)] text-[var(--sj-on-photo)]"[39m
+          [33mdata-discover[39m=[32m"true"[39m
+          [33mdata-headlessui-state[39m=[32m""[39m
+          [33mhref[39m=[32m"/recipes/new"[39m
+        [36m>[39m
+          [36m<svg[39m
+            [33maria-hidden[39m=[32m"true"[39m
+            [33mclass[39m=[32m"lucide lucide-plus shrink-0 h-6 w-6 text-[var(--sj-on-photo)]"[39m
+            [33mfill[39m=[32m"none"[39m
+            [33mheight[39m=[32m"24"[39m
+            [33mstroke[39m=[32m"currentColor"[39m
+            [33mstroke-linecap[39m=[32m"round"[39m
+            [33mstroke-linejoin[39m=[32m"round"[39m
+            [33mstroke-width[39m=[32m"2"[39m
+            [33mviewBox[39m=[32m"0 0 24 24"[39m
+            [33mwidth[39m=[32m"24"[39m
+            [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+          [36m>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M5 12h14"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M12 5v14"[39m
+            [36m/>[39m
+          [36m</svg>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"sr-only"[39m
+          [36m>[39m
+            [0m+[0m
+          [36m</span>[39m
+        [36m</a>[39m
+      [36m</div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"flex justify-end gap-1 flex-1"[39m
+      [36m>[39m
+        [36m<a[39m
+          [33mclass[39m=[32m"min-h-[50px] rounded-full border-0 no-underline transition duration-150 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-on-photo)] grid w-[50px] place-items-center bg-[color-mix(in_srgb,var(--sj-on-photo)_10%,transparent)] max-[389px]:w-11 flex-1"[39m
+          [33mdata-discover[39m=[32m"true"[39m
+          [33mdata-headlessui-state[39m=[32m""[39m
+          [33mhref[39m=[32m"/"[39m
+        [36m>[39m
+          [36m<svg[39m
+            [33maria-hidden[39m=[32m"true"[39m
+            [33mclass[39m=[32m"lucide lucide-house shrink-0 h-5 w-5 text-[var(--sj-on-photo-soft)]"[39m
+            [33mfill[39m=[32m"none"[39m
+            [33mheight[39m=[32m"24"[39m
+            [33mstroke[39m=[32m"currentColor"[39m
+            [33mstroke-linecap[39m=[32m"round"[39m
+            [33mstroke-linejoin[39m=[32m"round"[39m
+            [33mstroke-width[39m=[32m"2"[39m
+            [33mviewBox[39m=[32m"0 0 24 24"[39m
+            [33mwidth[39m=[32m"24"[39m
+            [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+          [36m>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"[39m
+            [36m/>[39m
+          [36m</svg>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"sr-only"[39m
+          [36m>[39m
+            [0mKitchen[0m
+          [36m</span>[39m
+        [36m</a>[39m
+        [36m<a[39m
+          [33mclass[39m=[32m"min-h-[50px] rounded-full border-0 no-underline transition duration-150 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-on-photo)] grid w-[50px] place-items-center bg-[color-mix(in_srgb,var(--sj-on-photo)_10%,transparent)] max-[389px]:w-11 flex-1"[39m
+          [33mdata-discover[39m=[32m"true"[39m
+          [33mdata-headlessui-state[39m=[32m""[39m
+          [33mhref[39m=[32m"/shopping-list"[39m
+        [36m>[39m
+          [36m<svg[39m
+            [33maria-hidden[39m=[32m"true"[39m
+            [33mclass[39m=[32m"lucide lucide-shopping-bag shrink-0 h-5 w-5 text-[var(--sj-on-photo-soft)]"[39m
+            [33mfill[39m=[32m"none"[39m
+            [33mheight[39m=[32m"24"[39m
+            [33mstroke[39m=[32m"currentColor"[39m
+            [33mstroke-linecap[39m=[32m"round"[39m
+            [33mstroke-linejoin[39m=[32m"round"[39m
+            [33mstroke-width[39m=[32m"2"[39m
+            [33mviewBox[39m=[32m"0 0 24 24"[39m
+            [33mwidth[39m=[32m"24"[39m
+            [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+          [36m>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M16 10a4 4 0 0 1-8 0"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M3.103 6.034h17.794"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M3.4 5.467a2 2 0 0 0-.4 1.2V20a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6.667a2 2 0 0 0-.4-1.2l-2-2.667A2 2 0 0 0 17 2H7a2 2 0 0 0-1.6.8z"[39m
+            [36m/>[39m
+          [36m</svg>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"sr-only"[39m
+          [36m>[39m
+            [0mShopping list[0m
+          [36m</span>[39m
+        [36m</a>[39m
+      [36m</div>[39m
+    [36m</nav>[39m
+  [36m</div>[39m
+[36m</body>[39m
+ ❯ Object.getElementError node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ test/components/navigation/mobile-nav.test.tsx:182:21
+    180|       );
+    181| 
+    182|       expect(screen.getByRole("link", { name: /^search$/i })).toHaveAt…
+       |                     ^
+    183|       expect(screen.getByRole("link", { name: /kitchen/i })).toHaveAtt…
+    184|       expect(screen.getByRole("link", { name: /shopping list/i })).toH…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/10]⎯
+
+ FAIL  test/components/navigation/mobile-nav.test.tsx > MobileNav > route-aware docks > turns shopping list into the place slot and exposes Add as the primary action
+TestingLibraryElementError: Unable to find an accessible element with the role "link" and name `/shopping list/i`
+
+Here are the accessible roles:
+
+  navigation:
+
+  Name "Spoonjoy navigation":
+  [36m<nav[39m
+    [33maria-label[39m=[32m"Spoonjoy navigation"[39m
+    [33mclass[39m=[32m"fixed bottom-0 left-[max(0.75rem,env(safe-area-inset-left))] right-[max(0.75rem,env(safe-area-inset-right))] mx-auto flex h-17 max-w-lg items-center gap-2 max-[389px]:gap-1 rounded-full border border-[var(--sj-photo-line)] bg-[var(--sj-photo-charcoal)] p-2 max-[389px]:p-1.5 text-[var(--sj-on-photo)] shadow-[var(--sj-shadow)] z-50 mb-[max(1rem,env(safe-area-inset-bottom))] lg:hidden"[39m
+    [33mrole[39m=[32m"navigation"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  link:
+
+  Name "List market":
+  [36m<a[39m
+    [33maria-current[39m=[32m"page"[39m
+    [33mclass[39m=[32m"min-h-[50px] rounded-full border-0 no-underline transition duration-150 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-on-photo)] flex min-w-0 items-center gap-2 overflow-hidden bg-[color-mix(in_srgb,var(--sj-on-photo)_10%,transparent)] px-3 text-left max-[389px]:w-12 max-[389px]:justify-center max-[389px]:gap-0 max-[389px]:px-0 dock-item-active flex-1"[39m
+    [33mdata-discover[39m=[32m"true"[39m
+    [33mdata-headlessui-state[39m=[32m""[39m
+    [33mhref[39m=[32m"/shopping-list"[39m
+  [36m/>[39m
+
+  Name "Add":
+  [36m<a[39m
+    [33mclass[39m=[32m"min-h-[50px] rounded-full border-0 no-underline transition duration-150 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-on-photo)] grid size-14 place-items-center max-[389px]:size-13 bg-[var(--sj-brass)] text-[var(--sj-on-photo)]"[39m
+    [33mdata-discover[39m=[32m"true"[39m
+    [33mdata-headlessui-state[39m=[32m""[39m
+    [33mhref[39m=[32m"/shopping-list#add-item"[39m
+  [36m/>[39m
+
+  Name "Search":
+  [36m<a[39m
+    [33mclass[39m=[32m"min-h-[50px] rounded-full border-0 no-underline transition duration-150 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-on-photo)] grid w-[50px] place-items-center bg-[color-mix(in_srgb,var(--sj-on-photo)_10%,transparent)] max-[389px]:w-11 flex-1"[39m
+    [33mdata-discover[39m=[32m"true"[39m
+    [33mdata-headlessui-state[39m=[32m""[39m
+    [33mhref[39m=[32m"/search"[39m
+  [36m/>[39m
+
+  Name "Kitchen":
+  [36m<a[39m
+    [33mclass[39m=[32m"min-h-[50px] rounded-full border-0 no-underline transition duration-150 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-on-photo)] grid w-[50px] place-items-center bg-[color-mix(in_srgb,var(--sj-on-photo)_10%,transparent)] max-[389px]:w-11 flex-1"[39m
+    [33mdata-discover[39m=[32m"true"[39m
+    [33mdata-headlessui-state[39m=[32m""[39m
+    [33mhref[39m=[32m"/"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<nav[39m
+      [33maria-label[39m=[32m"Spoonjoy navigation"[39m
+      [33mclass[39m=[32m"fixed bottom-0 left-[max(0.75rem,env(safe-area-inset-left))] right-[max(0.75rem,env(safe-area-inset-right))] mx-auto flex h-17 max-w-lg items-center gap-2 max-[389px]:gap-1 rounded-full border border-[var(--sj-photo-line)] bg-[var(--sj-photo-charcoal)] p-2 max-[389px]:p-1.5 text-[var(--sj-on-photo)] shadow-[var(--sj-shadow)] z-50 mb-[max(1rem,env(safe-area-inset-bottom))] lg:hidden"[39m
+      [33mrole[39m=[32m"navigation"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"flex min-w-0 justify-start flex-1"[39m
+      [36m>[39m
+        [36m<a[39m
+          [33maria-current[39m=[32m"page"[39m
+          [33mclass[39m=[32m"min-h-[50px] rounded-full border-0 no-underline transition duration-150 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-on-photo)] flex min-w-0 items-center gap-2 overflow-hidden bg-[color-mix(in_srgb,var(--sj-on-photo)_10%,transparent)] px-3 text-left max-[389px]:w-12 max-[389px]:justify-center max-[389px]:gap-0 max-[389px]:px-0 dock-item-active flex-1"[39m
+          [33mdata-discover[39m=[32m"true"[39m
+          [33mdata-headlessui-state[39m=[32m""[39m
+          [33mhref[39m=[32m"/shopping-list"[39m
+        [36m>[39m
+          [36m<svg[39m
+            [33maria-hidden[39m=[32m"true"[39m
+            [33mclass[39m=[32m"lucide lucide-shopping-bag shrink-0 h-5 w-5 text-[var(--sj-on-photo-soft)] text-[var(--sj-on-photo)]"[39m
+            [33mfill[39m=[32m"none"[39m
+            [33mheight[39m=[32m"24"[39m
+            [33mstroke[39m=[32m"currentColor"[39m
+            [33mstroke-linecap[39m=[32m"round"[39m
+            [33mstroke-linejoin[39m=[32m"round"[39m
+            [33mstroke-width[39m=[32m"2"[39m
+            [33mviewBox[39m=[32m"0 0 24 24"[39m
+            [33mwidth[39m=[32m"24"[39m
+            [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+          [36m>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M16 10a4 4 0 0 1-8 0"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M3.103 6.034h17.794"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M3.4 5.467a2 2 0 0 0-.4 1.2V20a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6.667a2 2 0 0 0-.4-1.2l-2-2.667A2 2 0 0 0 17 2H7a2 2 0 0 0-1.6.8z"[39m
+            [36m/>[39m
+          [36m</svg>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"min-w-0 max-[389px]:sr-only"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"block truncate font-sj-ui text-sm font-bold leading-[1.05] text-[var(--sj-on-photo)]"[39m
+            [36m>[39m
+              [0mList[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"mt-1 block truncate font-sj-ui text-[0.62rem] font-bold uppercase leading-[1.05] tracking-[0.12em] text-[var(--sj-on-photo-soft)]"[39m
+            [36m>[39m
+              [0mmarket[0m
+            [36m</span>[39m
+          [36m</span>[39m
+        [36m</a>[39m
+      [36m</div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"flex shrink-0 justify-center"[39m
+        [33mdata-testid[39m=[32m"dock-center"[39m
+      [36m>[39m
+        [36m<a[39m
+          [33mclass[39m=[32m"min-h-[50px] rounded-full border-0 no-underline transition duration-150 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-on-photo)] grid size-14 place-items-center max-[389px]:size-13 bg-[var(--sj-brass)] text-[var(--sj-on-photo)]"[39m
+          [33mdata-discover[39m=[32m"true"[39m
+          [33mdata-headlessui-state[39m=[32m""[39m
+          [33mhref[39m=[32m"/shopping-list#add-item"[39m
+        [36m>[39m
+          [36m<svg[39m
+            [33maria-hidden[39m=[32m"true"[39m
+            [33mclass[39m=[32m"lucide lucide-plus shrink-0 h-6 w-6 text-[var(--sj-on-photo)]"[39m
+            [33mfill[39m=[32m"none"[39m
+            [33mheight[39m=[32m"24"[39m
+            [33mstroke[39m=[32m"currentColor"[39m
+            [33mstroke-linecap[39m=[32m"round"[39m
+            [33mstroke-linejoin[39m=[32m"round"[39m
+            [33mstroke-width[39m=[32m"2"[39m
+            [33mviewBox[39m=[32m"0 0 24 24"[39m
+            [33mwidth[39m=[32m"24"[39m
+            [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+          [36m>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M5 12h14"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M12 5v14"[39m
+            [36m/>[39m
+          [36m</svg>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"sr-only"[39m
+          [36m>[39m
+            [0mAdd[0m
+          [36m</span>[39m
+        [36m</a>[39m
+      [36m</div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"flex justify-end gap-1 flex-1"[39m
+      [36m>[39m
+        [36m<a[39m
+          [33mclass[39m=[32m"min-h-[50px] rounded-full border-0 no-underline transition duration-150 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-on-photo)] grid w-[50px] place-items-center bg-[color-mix(in_srgb,var(--sj-on-photo)_10%,transparent)] max-[389px]:w-11 flex-1"[39m
+          [33mdata-discover[39m=[32m"true"[39m
+          [33mdata-headlessui-state[39m=[32m""[39m
+          [33mhref[39m=[32m"/search"[39m
+        [36m>[39m
+          [36m<svg[39m
+            [33maria-hidden[39m=[32m"true"[39m
+            [33mclass[39m=[32m"lucide lucide-search shrink-0 h-5 w-5 text-[var(--sj-on-photo-soft)]"[39m
+            [33mfill[39m=[32m"none"[39m
+            [33mheight[39m=[32m"24"[39m
+            [33mstroke[39m=[32m"currentColor"[39m
+            [33mstroke-linecap[39m=[32m"round"[39m
+            [33mstroke-linejoin[39m=[32m"round"[39m
+            [33mstroke-width[39m=[32m"2"[39m
+            [33mviewBox[39m=[32m"0 0 24 24"[39m
+            [33mwidth[39m=[32m"24"[39m
+            [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+          [36m>[39m
+            [36m<path[39m
+              [33md[39m=[32m"m21 21-4.34-4.34"[39m
+            [36m/>[39m
+            [36m<circle[39m
+              [33mcx[39m=[32m"11"[39m
+              [33mcy[39m=[32m"11"[39m
+              [33mr[39m=[32m"8"[39m
+            [36m/>[39m
+          [36m</svg>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"sr-only"[39m
+          [36m>[39m
+            [0mSearch[0m
+          [36m</span>[39m
+        [36m</a>[39m
+        [36m<a[39m
+          [33mclass[39m=[32m"min-h-[50px] rounded-full border-0 no-underline transition duration-150 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-on-photo)] grid w-[50px] place-items-center bg-[color-mix(in_srgb,var(--sj-on-photo)_10%,transparent)] max-[389px]:w-11 flex-1"[39m
+          [33mdata-discover[39m=[32m"true"[39m
+          [33mdata-headlessui-state[39m=[32m""[39m
+          [33mhref[39m=[32m"/"[39m
+        [36m>[39m
+          [36m<svg[39m
+            [33maria-hidden[39m=[32m"true"[39m
+            [33mclass[39m=[32m"lucide lucide-house shrink-0 h-5 w-5 text-[var(--sj-on-photo-soft)]"[39m
+            [33mfill[39m=[32m"none"[39m
+            [33mheight[39m=[32m"24"[39m
+            [33mstroke[39m=[32m"currentColor"[39m
+            [33mstroke-linecap[39m=[32m"round"[39m
+            [33mstroke-linejoin[39m=[32m"round"[39m
+            [33mstroke-width[39m=[32m"2"[39m
+            [33mviewBox[39m=[32m"0 0 24 24"[39m
+            [33mwidth[39m=[32m"24"[39m
+            [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+          [36m>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"[39m
+            [36m/>[39m
+          [36m</svg>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"sr-only"[39m
+          [36m>[39m
+            [0mKitchen[0m
+          [36m</span>[39m
+        [36m</a>[39m
+      [36m</div>[39m
+    [36m</nav>[39m
+  [36m</div>[39m
+[36m</body>[39m
+ ❯ Object.getElementError node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ test/components/navigation/mobile-nav.test.tsx:194:21
+    192|       );
+    193| 
+    194|       expect(screen.getByRole("link", { name: /shopping list/i })).toH…
+       |                     ^
+    195|       expect(screen.getByTestId("dock-center")).toContainElement(scree…
+    196|       expect(screen.getByRole("link", { name: /add/i })).toHaveAttribu…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/10]⎯
+
+ FAIL  test/components/navigation/mobile-nav.test.tsx > MobileNav > route-aware docks > turns cookbooks into the cookbooks place slot
+TestingLibraryElementError: Unable to find an accessible element with the role "link" and name `/^cookbooks$/i`
+
+Here are the accessible roles:
+
+  navigation:
+
+  Name "Spoonjoy navigation":
+  [36m<nav[39m
+    [33maria-label[39m=[32m"Spoonjoy navigation"[39m
+    [33mclass[39m=[32m"fixed bottom-0 left-[max(0.75rem,env(safe-area-inset-left))] right-[max(0.75rem,env(safe-area-inset-right))] mx-auto flex h-17 max-w-lg items-center gap-2 max-[389px]:gap-1 rounded-full border border-[var(--sj-photo-line)] bg-[var(--sj-photo-charcoal)] p-2 max-[389px]:p-1.5 text-[var(--sj-on-photo)] shadow-[var(--sj-shadow)] z-50 mb-[max(1rem,env(safe-area-inset-bottom))] lg:hidden"[39m
+    [33mrole[39m=[32m"navigation"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  link:
+
+  Name "Shelf cookbooks":
+  [36m<a[39m
+    [33maria-current[39m=[32m"page"[39m
+    [33mclass[39m=[32m"min-h-[50px] rounded-full border-0 no-underline transition duration-150 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-on-photo)] flex min-w-0 items-center gap-2 overflow-hidden bg-[color-mix(in_srgb,var(--sj-on-photo)_10%,transparent)] px-3 text-left max-[389px]:w-12 max-[389px]:justify-center max-[389px]:gap-0 max-[389px]:px-0 dock-item-active flex-1"[39m
+    [33mdata-discover[39m=[32m"true"[39m
+    [33mdata-headlessui-state[39m=[32m""[39m
+    [33mhref[39m=[32m"/cookbooks"[39m
+  [36m/>[39m
+
+  Name "Create cookbook":
+  [36m<a[39m
+    [33maria-label[39m=[32m"Create cookbook"[39m
+    [33mclass[39m=[32m"min-h-[50px] rounded-full border-0 no-underline transition duration-150 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-on-photo)] grid size-14 place-items-center max-[389px]:size-13 bg-[var(--sj-brass)] text-[var(--sj-on-photo)]"[39m
+    [33mdata-discover[39m=[32m"true"[39m
+    [33mdata-headlessui-state[39m=[32m""[39m
+    [33mhref[39m=[32m"/cookbooks/new"[39m
+  [36m/>[39m
+
+  Name "My Kitchen":
+  [36m<a[39m
+    [33maria-label[39m=[32m"My Kitchen"[39m
+    [33mclass[39m=[32m"min-h-[50px] rounded-full border-0 no-underline transition duration-150 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-on-photo)] grid w-[50px] place-items-center bg-[color-mix(in_srgb,var(--sj-on-photo)_10%,transparent)] max-[389px]:w-11 flex-1"[39m
+    [33mdata-discover[39m=[32m"true"[39m
+    [33mdata-headlessui-state[39m=[32m""[39m
+    [33mhref[39m=[32m"/"[39m
+  [36m/>[39m
+
+  Name "Search":
+  [36m<a[39m
+    [33mclass[39m=[32m"min-h-[50px] rounded-full border-0 no-underline transition duration-150 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-on-photo)] grid w-[50px] place-items-center bg-[color-mix(in_srgb,var(--sj-on-photo)_10%,transparent)] max-[389px]:w-11 flex-1"[39m
+    [33mdata-discover[39m=[32m"true"[39m
+    [33mdata-headlessui-state[39m=[32m""[39m
+    [33mhref[39m=[32m"/search"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<nav[39m
+      [33maria-label[39m=[32m"Spoonjoy navigation"[39m
+      [33mclass[39m=[32m"fixed bottom-0 left-[max(0.75rem,env(safe-area-inset-left))] right-[max(0.75rem,env(safe-area-inset-right))] mx-auto flex h-17 max-w-lg items-center gap-2 max-[389px]:gap-1 rounded-full border border-[var(--sj-photo-line)] bg-[var(--sj-photo-charcoal)] p-2 max-[389px]:p-1.5 text-[var(--sj-on-photo)] shadow-[var(--sj-shadow)] z-50 mb-[max(1rem,env(safe-area-inset-bottom))] lg:hidden"[39m
+      [33mrole[39m=[32m"navigation"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"flex min-w-0 justify-start flex-1"[39m
+      [36m>[39m
+        [36m<a[39m
+          [33maria-current[39m=[32m"page"[39m
+          [33mclass[39m=[32m"min-h-[50px] rounded-full border-0 no-underline transition duration-150 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-on-photo)] flex min-w-0 items-center gap-2 overflow-hidden bg-[color-mix(in_srgb,var(--sj-on-photo)_10%,transparent)] px-3 text-left max-[389px]:w-12 max-[389px]:justify-center max-[389px]:gap-0 max-[389px]:px-0 dock-item-active flex-1"[39m
+          [33mdata-discover[39m=[32m"true"[39m
+          [33mdata-headlessui-state[39m=[32m""[39m
+          [33mhref[39m=[32m"/cookbooks"[39m
+        [36m>[39m
+          [36m<svg[39m
+            [33maria-hidden[39m=[32m"true"[39m
+            [33mclass[39m=[32m"lucide lucide-house shrink-0 h-5 w-5 text-[var(--sj-on-photo-soft)] text-[var(--sj-on-photo)]"[39m
+            [33mfill[39m=[32m"none"[39m
+            [33mheight[39m=[32m"24"[39m
+            [33mstroke[39m=[32m"currentColor"[39m
+            [33mstroke-linecap[39m=[32m"round"[39m
+            [33mstroke-linejoin[39m=[32m"round"[39m
+            [33mstroke-width[39m=[32m"2"[39m
+            [33mviewBox[39m=[32m"0 0 24 24"[39m
+            [33mwidth[39m=[32m"24"[39m
+            [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+          [36m>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"[39m
+            [36m/>[39m
+          [36m</svg>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"min-w-0 max-[389px]:sr-only"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"block truncate font-sj-ui text-sm font-bold leading-[1.05] text-[var(--sj-on-photo)]"[39m
+            [36m>[39m
+              [0mShelf[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"mt-1 block truncate font-sj-ui text-[0.62rem] font-bold uppercase leading-[1.05] tracking-[0.12em] text-[var(--sj-on-photo-soft)]"[39m
+            [36m>[39m
+              [0mcookbooks[0m
+            [36m</span>[39m
+          [36m</span>[39m
+        [36m</a>[39m
+      [36m</div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"flex shrink-0 justify-center"[39m
+        [33mdata-testid[39m=[32m"dock-center"[39m
+      [36m>[39m
+        [36m<a[39m
+          [33maria-label[39m=[32m"Create cookbook"[39m
+          [33mclass[39m=[32m"min-h-[50px] rounded-full border-0 no-underline transition duration-150 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-on-photo)] grid size-14 place-items-center max-[389px]:size-13 bg-[var(--sj-brass)] text-[var(--sj-on-photo)]"[39m
+          [33mdata-discover[39m=[32m"true"[39m
+          [33mdata-headlessui-state[39m=[32m""[39m
+          [33mhref[39m=[32m"/cookbooks/new"[39m
+        [36m>[39m
+          [36m<svg[39m
+            [33maria-hidden[39m=[32m"true"[39m
+            [33mclass[39m=[32m"lucide lucide-plus shrink-0 h-6 w-6 text-[var(--sj-on-photo)]"[39m
+            [33mfill[39m=[32m"none"[39m
+            [33mheight[39m=[32m"24"[39m
+            [33mstroke[39m=[32m"currentColor"[39m
+            [33mstroke-linecap[39m=[32m"round"[39m
+            [33mstroke-linejoin[39m=[32m"round"[39m
+            [33mstroke-width[39m=[32m"2"[39m
+            [33mviewBox[39m=[32m"0 0 24 24"[39m
+            [33mwidth[39m=[32m"24"[39m
+            [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+          [36m>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M5 12h14"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M12 5v14"[39m
+            [36m/>[39m
+          [36m</svg>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"sr-only"[39m
+          [36m>[39m
+            [0m+[0m
+          [36m</span>[39m
+        [36m</a>[39m
+      [36m</div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"flex justify-end gap-1 flex-1"[39m
+      [36m>[39m
+        [36m<a[39m
+          [33maria-label[39m=[32m"My Kitchen"[39m
+          [33mclass[39m=[32m"min-h-[50px] rounded-full border-0 no-underline transition duration-150 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-on-photo)] grid w-[50px] place-items-center bg-[color-mix(in_srgb,var(--sj-on-photo)_10%,transparent)] max-[389px]:w-11 flex-1"[39m
+          [33mdata-discover[39m=[32m"true"[39m
+          [33mdata-headlessui-state[39m=[32m""[39m
+          [33mhref[39m=[32m"/"[39m
+        [36m>[39m
+          [36m<svg[39m
+            [33maria-hidden[39m=[32m"true"[39m
+            [33mclass[39m=[32m"lucide lucide-house shrink-0 h-5 w-5 text-[var(--sj-on-photo-soft)]"[39m
+            [33mfill[39m=[32m"none"[39m
+            [33mheight[39m=[32m"24"[39m
+            [33mstroke[39m=[32m"currentColor"[39m
+            [33mstroke-linecap[39m=[32m"round"[39m
+            [33mstroke-linejoin[39m=[32m"round"[39m
+            [33mstroke-width[39m=[32m"2"[39m
+            [33mviewBox[39m=[32m"0 0 24 24"[39m
+            [33mwidth[39m=[32m"24"[39m
+            [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+          [36m>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"[39m
+            [36m/>[39m
+          [36m</svg>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"sr-only"[39m
+          [36m>[39m
+            [0mKitchen[0m
+          [36m</span>[39m
+        [36m</a>[39m
+        [36m<a[39m
+          [33mclass[39m=[32m"min-h-[50px] rounded-full border-0 no-underline transition duration-150 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-on-photo)] grid w-[50px] place-items-center bg-[color-mix(in_srgb,var(--sj-on-photo)_10%,transparent)] max-[389px]:w-11 flex-1"[39m
+          [33mdata-discover[39m=[32m"true"[39m
+          [33mdata-headlessui-state[39m=[32m""[39m
+          [33mhref[39m=[32m"/search"[39m
+        [36m>[39m
+          [36m<svg[39m
+            [33maria-hidden[39m=[32m"true"[39m
+            [33mclass[39m=[32m"lucide lucide-search shrink-0 h-5 w-5 text-[var(--sj-on-photo-soft)]"[39m
+            [33mfill[39m=[32m"none"[39m
+            [33mheight[39m=[32m"24"[39m
+            [33mstroke[39m=[32m"currentColor"[39m
+            [33mstroke-linecap[39m=[32m"round"[39m
+            [33mstroke-linejoin[39m=[32m"round"[39m
+            [33mstroke-width[39m=[32m"2"[39m
+            [33mviewBox[39m=[32m"0 0 24 24"[39m
+            [33mwidth[39m=[32m"24"[39m
+            [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+          [36m>[39m
+            [36m<path[39m
+              [33md[39m=[32m"m21 21-4.34-4.34"[39m
+            [36m/>[39m
+            [36m<circle[39m
+              [33mcx[39m=[32m"11"[39m
+              [33mcy[39m=[32m"11"[39m
+              [33mr[39m=[32m"8"[39m
+            [36m/>[39m
+          [36m</svg>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"sr-only"[39m
+          [36m>[39m
+            [0mSearch[0m
+          [36m</span>[39m
+        [36m</a>[39m
+      [36m</div>[39m
+    [36m</nav>[39m
+  [36m</div>[39m
+[36m</body>[39m
+ ❯ Object.getElementError node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ test/components/navigation/mobile-nav.test.tsx:248:21
+    246|       );
+    247| 
+    248|       expect(screen.getByRole("link", { name: /^cookbooks$/i })).toHav…
+       |                     ^
+    249|       expect(screen.getByRole("link", { name: /create cookbook/i })).t…
+    250|       expect(screen.getByRole("link", { name: /my kitchen/i })).toHave…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/10]⎯
+
+ FAIL  test/components/navigation/mobile-nav.test.tsx > MobileNav > route-aware docks > exposes the personal recipe drawers and chefs in route-aware mobile places
+TestingLibraryElementError: Unable to find an accessible element with the role "link" and name `/my recipes/i`
+
+Here are the accessible roles:
+
+  navigation:
+
+  Name "Spoonjoy navigation":
+  [36m<nav[39m
+    [33maria-label[39m=[32m"Spoonjoy navigation"[39m
+    [33mclass[39m=[32m"fixed bottom-0 left-[max(0.75rem,env(safe-area-inset-left))] right-[max(0.75rem,env(safe-area-inset-right))] mx-auto flex h-17 max-w-lg items-center gap-2 max-[389px]:gap-1 rounded-full border border-[var(--sj-photo-line)] bg-[var(--sj-photo-charcoal)] p-2 max-[389px]:p-1.5 text-[var(--sj-on-photo)] shadow-[var(--sj-shadow)] z-50 mb-[max(1rem,env(safe-area-inset-bottom))] lg:hidden"[39m
+    [33mrole[39m=[32m"navigation"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  link:
+
+  Name "My Kitchen":
+  [36m<a[39m
+    [33maria-label[39m=[32m"My Kitchen"[39m
+    [33mclass[39m=[32m"min-h-[50px] rounded-full border-0 no-underline transition duration-150 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-on-photo)] flex min-w-0 items-center gap-2 overflow-hidden bg-[color-mix(in_srgb,var(--sj-on-photo)_10%,transparent)] px-3 text-left max-[389px]:w-12 max-[389px]:justify-center max-[389px]:gap-0 max-[389px]:px-0 flex-1"[39m
+    [33mdata-discover[39m=[32m"true"[39m
+    [33mdata-headlessui-state[39m=[32m""[39m
+    [33mhref[39m=[32m"/"[39m
+  [36m/>[39m
+
+  Name "Create recipe":
+  [36m<a[39m
+    [33maria-label[39m=[32m"Create recipe"[39m
+    [33mclass[39m=[32m"min-h-[50px] rounded-full border-0 no-underline transition duration-150 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-on-photo)] grid size-14 place-items-center max-[389px]:size-13 bg-[var(--sj-brass)] text-[var(--sj-on-photo)]"[39m
+    [33mdata-discover[39m=[32m"true"[39m
+    [33mdata-headlessui-state[39m=[32m""[39m
+    [33mhref[39m=[32m"/recipes/new"[39m
+  [36m/>[39m
+
+  Name "Search":
+  [36m<a[39m
+    [33mclass[39m=[32m"min-h-[50px] rounded-full border-0 no-underline transition duration-150 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-on-photo)] grid w-[50px] place-items-center bg-[color-mix(in_srgb,var(--sj-on-photo)_10%,transparent)] max-[389px]:w-11 flex-1"[39m
+    [33mdata-discover[39m=[32m"true"[39m
+    [33mdata-headlessui-state[39m=[32m""[39m
+    [33mhref[39m=[32m"/search"[39m
+  [36m/>[39m
+
+  Name "Shopping list":
+  [36m<a[39m
+    [33mclass[39m=[32m"min-h-[50px] rounded-full border-0 no-underline transition duration-150 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-on-photo)] grid w-[50px] place-items-center bg-[color-mix(in_srgb,var(--sj-on-photo)_10%,transparent)] max-[389px]:w-11 flex-1"[39m
+    [33mdata-discover[39m=[32m"true"[39m
+    [33mdata-headlessui-state[39m=[32m""[39m
+    [33mhref[39m=[32m"/shopping-list"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<nav[39m
+      [33maria-label[39m=[32m"Spoonjoy navigation"[39m
+      [33mclass[39m=[32m"fixed bottom-0 left-[max(0.75rem,env(safe-area-inset-left))] right-[max(0.75rem,env(safe-area-inset-right))] mx-auto flex h-17 max-w-lg items-center gap-2 max-[389px]:gap-1 rounded-full border border-[var(--sj-photo-line)] bg-[var(--sj-photo-charcoal)] p-2 max-[389px]:p-1.5 text-[var(--sj-on-photo)] shadow-[var(--sj-shadow)] z-50 mb-[max(1rem,env(safe-area-inset-bottom))] lg:hidden"[39m
+      [33mrole[39m=[32m"navigation"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"flex min-w-0 justify-start flex-1"[39m
+      [36m>[39m
+        [36m<a[39m
+          [33maria-label[39m=[32m"My Kitchen"[39m
+          [33mclass[39m=[32m"min-h-[50px] rounded-full border-0 no-underline transition duration-150 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-on-photo)] flex min-w-0 items-center gap-2 overflow-hidden bg-[color-mix(in_srgb,var(--sj-on-photo)_10%,transparent)] px-3 text-left max-[389px]:w-12 max-[389px]:justify-center max-[389px]:gap-0 max-[389px]:px-0 flex-1"[39m
+          [33mdata-discover[39m=[32m"true"[39m
+          [33mdata-headlessui-state[39m=[32m""[39m
+          [33mhref[39m=[32m"/"[39m
+        [36m>[39m
+          [36m<svg[39m
+            [33maria-hidden[39m=[32m"true"[39m
+            [33mclass[39m=[32m"lucide lucide-house shrink-0 h-5 w-5 text-[var(--sj-on-photo-soft)]"[39m
+            [33mfill[39m=[32m"none"[39m
+            [33mheight[39m=[32m"24"[39m
+            [33mstroke[39m=[32m"currentColor"[39m
+            [33mstroke-linecap[39m=[32m"round"[39m
+            [33mstroke-linejoin[39m=[32m"round"[39m
+            [33mstroke-width[39m=[32m"2"[39m
+            [33mviewBox[39m=[32m"0 0 24 24"[39m
+            [33mwidth[39m=[32m"24"[39m
+            [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+          [36m>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"[39m
+            [36m/>[39m
+          [36m</svg>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"min-w-0 max-[389px]:sr-only"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"block truncate font-sj-ui text-sm font-bold leading-[1.05] text-[var(--sj-on-photo)]"[39m
+            [36m>[39m
+              [0mMy Kitchen[0m
+            [36m</span>[39m
+          [36m</span>[39m
+        [36m</a>[39m
+      [36m</div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"flex shrink-0 justify-center"[39m
+        [33mdata-testid[39m=[32m"dock-center"[39m
+      [36m>[39m
+        [36m<a[39m
+          [33maria-label[39m=[32m"Create recipe"[39m
+          [33mclass[39m=[32m"min-h-[50px] rounded-full border-0 no-underline transition duration-150 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-on-photo)] grid size-14 place-items-center max-[389px]:size-13 bg-[var(--sj-brass)] text-[var(--sj-on-photo)]"[39m
+          [33mdata-discover[39m=[32m"true"[39m
+          [33mdata-headlessui-state[39m=[32m""[39m
+          [33mhref[39m=[32m"/recipes/new"[39m
+        [36m>[39m
+          [36m<svg[39m
+            [33maria-hidden[39m=[32m"true"[39m
+            [33mclass[39m=[32m"lucide lucide-plus shrink-0 h-6 w-6 text-[var(--sj-on-photo)]"[39m
+            [33mfill[39m=[32m"none"[39m
+            [33mheight[39m=[32m"24"[39m
+            [33mstroke[39m=[32m"currentColor"[39m
+            [33mstroke-linecap[39m=[32m"round"[39m
+            [33mstroke-linejoin[39m=[32m"round"[39m
+            [33mstroke-width[39m=[32m"2"[39m
+            [33mviewBox[39m=[32m"0 0 24 24"[39m
+            [33mwidth[39m=[32m"24"[39m
+            [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+          [36m>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M5 12h14"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M12 5v14"[39m
+            [36m/>[39m
+          [36m</svg>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"sr-only"[39m
+          [36m>[39m
+            [0m+[0m
+          [36m</span>[39m
+        [36m</a>[39m
+      [36m</div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"flex justify-end gap-1 flex-1"[39m
+      [36m>[39m
+        [36m<a[39m
+          [33mclass[39m=[32m"min-h-[50px] rounded-full border-0 no-underline transition duration-150 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-on-photo)] grid w-[50px] place-items-center bg-[color-mix(in_srgb,var(--sj-on-photo)_10%,transparent)] max-[389px]:w-11 flex-1"[39m
+          [33mdata-discover[39m=[32m"true"[39m
+          [33mdata-headlessui-state[39m=[32m""[39m
+          [33mhref[39m=[32m"/search"[39m
+        [36m>[39m
+          [36m<svg[39m
+            [33maria-hidden[39m=[32m"true"[39m
+            [33mclass[39m=[32m"lucide lucide-search shrink-0 h-5 w-5 text-[var(--sj-on-photo-soft)]"[39m
+            [33mfill[39m=[32m"none"[39m
+            [33mheight[39m=[32m"24"[39m
+            [33mstroke[39m=[32m"currentColor"[39m
+            [33mstroke-linecap[39m=[32m"round"[39m
+            [33mstroke-linejoin[39m=[32m"round"[39m
+            [33mstroke-width[39m=[32m"2"[39m
+            [33mviewBox[39m=[32m"0 0 24 24"[39m
+            [33mwidth[39m=[32m"24"[39m
+            [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+          [36m>[39m
+            [36m<path[39m
+              [33md[39m=[32m"m21 21-4.34-4.34"[39m
+            [36m/>[39m
+            [36m<circle[39m
+              [33mcx[39m=[32m"11"[39m
+              [33mcy[39m=[32m"11"[39m
+              [33mr[39m=[32m"8"[39m
+            [36m/>[39m
+          [36m</svg>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"sr-only"[39m
+          [36m>[39m
+            [0mSearch[0m
+          [36m</span>[39m
+        [36m</a>[39m
+        [36m<a[39m
+          [33mclass[39m=[32m"min-h-[50px] rounded-full border-0 no-underline transition duration-150 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-on-photo)] grid w-[50px] place-items-center bg-[color-mix(in_srgb,var(--sj-on-photo)_10%,transparent)] max-[389px]:w-11 flex-1"[39m
+          [33mdata-discover[39m=[32m"true"[39m
+          [33mdata-headlessui-state[39m=[32m""[39m
+          [33mhref[39m=[32m"/shopping-list"[39m
+        [36m>[39m
+          [36m<svg[39m
+            [33maria-hidden[39m=[32m"true"[39m
+            [33mclass[39m=[32m"lucide lucide-shopping-bag shrink-0 h-5 w-5 text-[var(--sj-on-photo-soft)]"[39m
+            [33mfill[39m=[32m"none"[39m
+            [33mheight[39m=[32m"24"[39m
+            [33mstroke[39m=[32m"currentColor"[39m
+            [33mstroke-linecap[39m=[32m"round"[39m
+            [33mstroke-linejoin[39m=[32m"round"[39m
+            [33mstroke-width[39m=[32m"2"[39m
+            [33mviewBox[39m=[32m"0 0 24 24"[39m
+            [33mwidth[39m=[32m"24"[39m
+            [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+          [36m>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M16 10a4 4 0 0 1-8 0"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M3.103 6.034h17.794"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M3.4 5.467a2 2 0 0 0-.4 1.2V20a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6.667a2 2 0 0 0-.4-1.2l-2-2.667A2 2 0 0 0 17 2H7a2 2 0 0 0-1.6.8z"[39m
+            [36m/>[39m
+          [36m</svg>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"sr-only"[39m
+          [36m>[39m
+            [0mShopping list[0m
+          [36m</span>[39m
+        [36m</a>[39m
+      [36m</div>[39m
+    [36m</nav>[39m
+  [36m</div>[39m
+[36m</body>[39m
+ ❯ Object.getElementError node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ test/components/navigation/mobile-nav.test.tsx:260:21
+    258|       );
+    259| 
+    260|       expect(screen.getByRole("link", { name: /my recipes/i })).toHave…
+       |                     ^
+    261|       expect(screen.getByRole("link", { name: /saved/i })).toHaveAttri…
+    262|       expect(screen.getByRole("link", { name: /chefs/i })).toHaveAttri…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/10]⎯
+
+
+ Test Files  6 failed (6)
+      Tests  7 failed | 20 passed (27)
+   Start at  15:08:18
+   Duration  3.77s (transform 247ms, setup 377ms, import 1.10s, tests 590ms, environment 957ms)
+

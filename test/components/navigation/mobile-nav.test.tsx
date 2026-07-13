@@ -179,7 +179,7 @@ describe("MobileNav", () => {
         </MemoryRouter>,
       );
 
-      expect(screen.getByRole("link", { name: /search index/i })).toHaveAttribute("aria-current", "page");
+      expect(screen.getByRole("link", { name: /^search$/i })).toHaveAttribute("aria-current", "page");
       expect(screen.getByRole("link", { name: /kitchen/i })).toHaveAttribute("href", "/");
       expect(screen.getByRole("link", { name: /shopping list/i })).toHaveAttribute("href", "/shopping-list");
     });
@@ -191,7 +191,7 @@ describe("MobileNav", () => {
         </MemoryRouter>,
       );
 
-      expect(screen.getByRole("link", { name: /list market/i })).toHaveAttribute("aria-current", "page");
+      expect(screen.getByRole("link", { name: /shopping list/i })).toHaveAttribute("aria-current", "page");
       expect(screen.getByTestId("dock-center")).toContainElement(screen.getByRole("link", { name: /add/i }));
       expect(screen.getByRole("link", { name: /add/i })).toHaveAttribute("href", "/shopping-list#add-item");
     });
@@ -238,16 +238,48 @@ describe("MobileNav", () => {
       expect(screen.getByRole("link", { name: /kitchen/i })).toHaveAttribute("href", "/");
     });
 
-    it("turns cookbooks into the shelf place slot", () => {
+    it("turns cookbooks into the cookbooks place slot", () => {
       render(
         <MemoryRouter initialEntries={["/cookbooks"]}>
           <MobileNav />
         </MemoryRouter>,
       );
 
-      expect(screen.getByRole("link", { name: /shelf cookbooks/i })).toHaveAttribute("aria-current", "page");
+      expect(screen.getByRole("link", { name: /^cookbooks$/i })).toHaveAttribute("aria-current", "page");
       expect(screen.getByRole("link", { name: /create cookbook/i })).toHaveAttribute("href", "/cookbooks/new");
       expect(screen.getByRole("link", { name: /my kitchen/i })).toHaveAttribute("href", "/");
+    });
+
+    it("exposes the personal recipe drawers and chefs in route-aware mobile places", () => {
+      const { unmount } = render(
+        <MemoryRouter initialEntries={["/my-recipes"]}>
+          <MobileNav />
+        </MemoryRouter>,
+      );
+
+      expect(screen.getByRole("link", { name: /my recipes/i })).toHaveAttribute("aria-current", "page");
+      expect(screen.getByRole("link", { name: /saved/i })).toHaveAttribute("href", "/saved-recipes");
+      expect(screen.getByRole("link", { name: /chefs/i })).toHaveAttribute("href", "/chefs");
+      unmount();
+
+      const saved = render(
+        <MemoryRouter initialEntries={["/saved-recipes"]}>
+          <MobileNav />
+        </MemoryRouter>,
+      );
+
+      expect(screen.getByRole("link", { name: /^saved$/i })).toHaveAttribute("aria-current", "page");
+      expect(screen.getByRole("link", { name: /my recipes/i })).toHaveAttribute("href", "/my-recipes");
+      saved.unmount();
+
+      render(
+        <MemoryRouter initialEntries={["/chefs"]}>
+          <MobileNav />
+        </MemoryRouter>,
+      );
+
+      expect(screen.getByRole("link", { name: /^chefs$/i })).toHaveAttribute("aria-current", "page");
+      expect(screen.getByRole("link", { name: /search/i })).toHaveAttribute("href", "/search");
     });
   });
 
