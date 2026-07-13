@@ -112,7 +112,7 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 **Acceptance**: Focused Swift tests fail red against the current native route model and tab/sidebar definitions.
 
 ### ⬜ Unit 3b: Native Route Model And Saved Recipes — Implementation
-**What**: Update `Sources/SpoonjoyCore/AppState/AppRoute.swift`; add saved-recipes view model/surface code in `Sources/SpoonjoyCore/Features/RecipeCatalog` if needed; add `Apps/Spoonjoy/Shared/Views/SavedRecipesView.swift`; update `Apps/Spoonjoy/Shared/Views/RecipesView.swift` for "My Recipes" copy/filtering; wire destinations in `Apps/Spoonjoy/Shared/AppShell/PlatformNavigationView.swift`.
+**What**: Update `Sources/SpoonjoyCore/AppState/AppRoute.swift`; add saved-recipes view model/surface code in `Sources/SpoonjoyCore/Features/RecipeCatalog` if needed; add `Apps/Spoonjoy/Shared/Views/SavedRecipesView.swift`; register any new Swift view in both iOS and macOS sources in `Spoonjoy.xcodeproj/project.pbxproj`; update `Apps/Spoonjoy/Shared/Views/RecipesView.swift` for "My Recipes" copy/filtering; wire destinations in `Apps/Spoonjoy/Shared/AppShell/PlatformNavigationView.swift`.
 **Output**: Native route/model/view source changes and green focused Swift logs saved under `./2026-07-13-1405-doing-kitchen-nav-reorg/unit-3b/`.
 **Acceptance**: Unit 3a tests pass; saved recipes are deduped from cookbook membership; My Recipes is safe when `currentChefID` is nil.
 
@@ -199,3 +199,4 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 ## Progress Log
 - 2026-07-13 14:22 Created from planning doc
 - 2026-07-13 14:31 Addressed granularity review: added unit outputs and split validation/final shipping units
+- 2026-07-13 14:36 Added native Xcode project membership requirement for new Swift view files
