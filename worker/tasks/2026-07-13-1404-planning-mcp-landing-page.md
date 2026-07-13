@@ -51,7 +51,7 @@ Make `https://spoonjoy.app/mcp` useful for humans by rendering a clear landing p
 - Match existing Spoonjoy editorial developer-page styling and design tokens rather than introducing a new design system.
 
 ## Context / References
-- `app/routes/mcp.ts` currently routes both loader and action through the MCP handler; GET returns 405 today.
+- Before implementation, `app/routes/mcp.ts` routed both loader and action through the MCP handler; GET returned 405.
 - `app/lib/mcp/http-mcp.server.ts` owns MCP Streamable HTTP behavior.
 - `docs/claude-connector.md` explains current remote MCP endpoint, auth modes, and setup flows.
 - `server.json` advertises `https://spoonjoy.app/mcp`.
