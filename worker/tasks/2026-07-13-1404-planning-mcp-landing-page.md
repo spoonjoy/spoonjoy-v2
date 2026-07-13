@@ -1,6 +1,6 @@
 # Planning: MCP Landing Page
 
-**Status**: NEEDS_REVIEW
+**Status**: approved
 **Created**: 2026-07-13 14:04
 
 ## Goal
@@ -63,3 +63,4 @@ Keep the implementation mostly static and route-local. The page should be readab
 
 ## Progress Log
 - 2026-07-13 14:04 Created
+- 2026-07-13 14:04 Approved after cold planning review converged
