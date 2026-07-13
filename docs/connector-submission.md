@@ -30,9 +30,10 @@ collected at the bottom.
 
 - **Name:** Spoonjoy
 - **Tagline:** Your personal recipe kitchen.
-- **Short description:** Spoonjoy keeps the recipes you actually cook. Search and
-  open public recipes, save and fork them into your kitchen, build cookbooks,
-  log cooks, and manage a shopping list — now from your AI assistant.
+- **Short description:** Spoonjoy keeps the recipes you actually cook. Use the
+  app for fast finding and following; use an agent through MCP for complex
+  kitchen work like authoring recipes, importing from messy sources, organizing
+  cookbooks, and updating shopping lists.
 - **Categories:** Productivity / Lifestyle / Food & cooking
 - **Auth type:** OAuth 2.1 (authorization code + PKCE, dynamic client registration)
 - **Scopes:** `kitchen:read` (view recipes, cookbooks, shopping list),
@@ -52,7 +53,7 @@ Add recipe to shopping list, Create cookbook, Add recipe to cookbook,
 Add shopping-list item, Check shopping-list item, Log a cook, Update a cook.
 
 The connector has no outbound web access: it never server-fetches arbitrary
-URLs. To save a recipe from the web, the assistant reads the page itself and
+URLs. To save a recipe from the web, the agent reads the source itself and
 calls `Create recipe`. (The REST API still offers a server-side URL import that
 the Spoonjoy web app uses, but it is not exposed as an MCP tool.)
 

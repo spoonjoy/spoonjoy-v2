@@ -106,7 +106,7 @@ export const WEB_ROUTE_MANIFEST = [
   route("routes/api.push.preferences.ts", "/api/push/preferences", "api-or-oauth"),
   route("routes/api.v1.$.ts", "/api/v1/*", "api-or-oauth"),
   route("routes/api.$.ts", "/api/*", "api-or-oauth"),
-  route("routes/mcp.ts", "/mcp", "api-or-oauth"),
+  route("routes/mcp.tsx", "/mcp", "api-or-oauth"),
   route("routes/csp-report.ts", "/csp-report", "api-or-oauth"),
   route("routes/health.ts", "/health", "platform-asset"),
   route("routes/oauth.register.ts", "/oauth/register", "api-or-oauth"),

@@ -1,0 +1,42 @@
+{
+  "desktop": {
+    "innerWidth": 1440,
+    "docScrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "pageOverflow": false,
+    "localScrollableCodeBlocks": [
+      {
+        "text": "http://localhost:5173/mcp",
+        "scrollWidth": 954,
+        "clientWidth": 954,
+        "locallyScrollable": false
+      },
+      {
+        "text": "claude mcp add --transport http spoonjoy https://spoonjoy.app/mcp \\\n  --header \"",
+        "scrollWidth": 894,
+        "clientWidth": 894,
+        "locallyScrollable": false
+      }
+    ]
+  },
+  "mobile": {
+    "innerWidth": 390,
+    "docScrollWidth": 390,
+    "bodyScrollWidth": 390,
+    "pageOverflow": false,
+    "localScrollableCodeBlocks": [
+      {
+        "text": "http://localhost:5173/mcp",
+        "scrollWidth": 348,
+        "clientWidth": 348,
+        "locallyScrollable": false
+      },
+      {
+        "text": "claude mcp add --transport http spoonjoy https://spoonjoy.app/mcp \\\n  --header \"",
+        "scrollWidth": 597,
+        "clientWidth": 348,
+        "locallyScrollable": true
+      }
+    ]
+  }
+}

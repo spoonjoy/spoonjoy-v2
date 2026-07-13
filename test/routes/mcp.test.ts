@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Request as UndiciRequest } from "undici";
 import { faker } from "@faker-js/faker";
-import { action, loader } from "~/routes/mcp";
+import { action, loader, meta } from "~/routes/mcp";
 import { createApiCredential } from "~/lib/api-auth.server";
 import { getLocalDb } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
@@ -34,10 +34,22 @@ describe("/mcp route", () => {
     await cleanupDatabase();
   });
 
-  it("405s on GET via the loader", async () => {
+  it("exposes human-facing metadata", () => {
+    expect(meta({} as never)).toEqual(expect.arrayContaining([
+      { title: "Spoonjoy MCP" },
+      expect.objectContaining({
+        name: "description",
+        content: expect.stringContaining("agents"),
+      }),
+    ]));
+  });
+
+  it("returns landing-page data on GET via the loader", async () => {
     const request = new UndiciRequest("https://spoonjoy.app/mcp", { method: "GET" }) as unknown as Request;
-    const response = await loader(routeArgs(request));
-    expect(response.status).toBe(405);
+    await expect(loader(routeArgs(request))).resolves.toEqual({
+      endpoint: "https://spoonjoy.app/mcp",
+      protectedResourceMetadataUrl: "https://spoonjoy.app/.well-known/oauth-protected-resource/mcp",
+    });
   });
 
   it("challenges an unauthenticated request via the action", async () => {

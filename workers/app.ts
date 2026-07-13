@@ -1,5 +1,6 @@
 import { createRequestHandler } from "react-router";
 import { canonicalizeRequestUrlForHost } from "../app/lib/canonical-host.server";
+import { handleMcpPostRouteRequest } from "../app/lib/mcp/http-mcp-route.server";
 import { oauthCorsPreflightResponse } from "../app/lib/oauth-cors.server";
 import { generateNonce, withSecurityHeaders } from "../app/lib/security-headers.server";
 import {
@@ -32,6 +33,13 @@ export default {
     }
 
     try {
+      if (request.method === "POST" && new URL(request.url).pathname === "/mcp") {
+        const response = await handleMcpPostRouteRequest(request, {
+          cloudflare: { env, ctx },
+        });
+        return withSecurityHeaders(response);
+      }
+
       // One nonce per request: it must appear identically in the report-only
       // CSP header (below) and in the SSR shell's inline <script> nonces,
       // threaded via loadContext → entry.server → NonceContext.

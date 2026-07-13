@@ -1,7 +1,7 @@
 /**
  * HTTP handlers for the OAuth 2.1 authorization-server endpoints, kept in a
  * coverage-measured lib behind thin route shells (mirrors `http-mcp.server.ts`
- * under `mcp.ts`). The wire formats follow RFC 6749 / 7591 / 7636; the grant
+ * under `mcp.tsx`). The wire formats follow RFC 6749 / 7591 / 7636; the grant
  * logic lives in `oauth-server.server.ts`.
  *
  * The token endpoint validates the PKCE code grant or rotating `refresh_token`
