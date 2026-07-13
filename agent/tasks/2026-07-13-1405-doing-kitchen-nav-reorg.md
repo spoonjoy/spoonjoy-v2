@@ -26,8 +26,8 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 - [x] Web Cookbooks at `/cookbooks` is a real owned-cookbooks surface based on `Cookbook.authorId`, supports a local search/filter query, and no longer redirects authenticated users to `/?tab=cookbooks`.
 - [x] Web Chefs at `/chefs` includes existing fellow-chef semantics from `app/lib/fellow-chefs.server.ts`, a "Chefs Using My Recipes" section, and a private chronological activity section that excludes shopping-list events.
 - [x] Web global search remains at `/search` with existing scopes `all`, `recipes`, `cookbooks`, `chefs`, and `shopping-list`; personal drawer search/filter inputs do not create a second global-search semantics.
-- [ ] Web "Latest from the kitchen" copy is replaced with `On the Counter`, with deterministic selection from the current display recipe ordering and no false freshness claim.
-- [ ] Web mobile navigation labels use kitchen terms (`My Kitchen`, `My Recipes`, `Saved`, `Cookbooks`, `Shopping List`, `Chefs`, `Search`) and the dock is visually glass/material-like while preserving fixed bottom safe-area behavior at 320-390px and desktop-hidden behavior at `lg`.
+- [x] Web "Latest from the kitchen" copy is replaced with `On the Counter`, with deterministic selection from the current display recipe ordering and no false freshness claim.
+- [x] Web mobile navigation labels use kitchen terms (`My Kitchen`, `My Recipes`, `Saved`, `Cookbooks`, `Shopping List`, `Chefs`, `Search`) and the dock is visually glass/material-like while preserving fixed bottom safe-area behavior at 320-390px and desktop-hidden behavior at `lg`.
 - [ ] Native compact iPhone `TabView` exposes exactly five tabs: `Kitchen`, `My Recipes`, `Saved`, `Cookbooks`, and `Shopping List`; `Search` is removed as a bottom tab and remains reachable from the trailing toolbar menu item labeled `Search`, which opens the `.search(query:scope:)` route where `.searchable` uses toolbar-principal placement and search scopes.
 - [ ] Native regular-width `NavigationSplitView` sidebar exposes `Kitchen`, `My Recipes`, `Saved Recipes`, `Cookbooks`, `Shopping List`, `Chefs`, `Kitchen Search`, `Imports`, and `Settings`.
 - [ ] Native route model includes first-class `AppSection.chefs` and `AppRoute.chefs` with `stateIdentifier == "chefs"`; sidebar, title/back behavior, destination content, route-matrix, and visual proof treat Chefs as its own route, not a search alias.
@@ -116,7 +116,7 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 **Output**: Failing updates in index/search/drawer/mobile navigation tests and red logs under `./2026-07-13-1405-doing-kitchen-nav-reorg/unit-2a/`.
 **Acceptance**: Focused tests fail red on current `Latest from the kitchen`, old mobile labels, missing drawer search/filtering, or old dock surface.
 
-### ⬜ Unit 2b: Web Search, Editorial Module, And Mobile Glass — Implementation
+### ✅ Unit 2b: Web Search, Editorial Module, And Mobile Glass — Implementation
 **What**: Replace misleading editorial copy in `app/routes/_index.tsx`; preserve deterministic featured recipe selection; add scoped filter/search inputs to personal drawers; update `app/components/navigation/spoon-dock.tsx` and CSS in `app/styles/tailwind.css` for progressive glass/material treatment with safe fallback.
 **Output**: Source changes in `_index`, drawer route components, `SpoonDock`, `MobileNav`, and Tailwind/CSS plus green focused-test logs under `./2026-07-13-1405-doing-kitchen-nav-reorg/unit-2b/`.
 **Acceptance**: Unit 2a tests pass; mobile dock stays fixed-bottom, safe-area-aware, `lg:hidden`, and usable at 320-390px.
@@ -230,3 +230,4 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 - 2026-07-13 15:15 Unit 1b complete: implemented web drawer routes, owned-cookbooks page, Chefs activity feed, and desktop/mobile navigation labels; focused tests, typecheck, and build passed
 - 2026-07-13 15:28 Unit 1c complete: addressed Unit 1b reviewer findings, added drawer edge/render coverage, fixed cookbook full-title search with preview covers, and verified focused tests, focused coverage, typecheck, build, and whitespace checks
 - 2026-07-13 15:31 Unit 2a complete: added red web tests for `On the Counter` and the mobile dock liquid-glass material; focused slice failed on the intended stale copy and solid dock surface
+- 2026-07-13 15:33 Unit 2b complete: replaced the misleading home editorial copy with `On the Counter`, upgraded SpoonDock to a translucent material/glass shell, and verified focused tests, typecheck, and build
