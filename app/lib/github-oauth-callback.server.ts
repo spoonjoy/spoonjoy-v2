@@ -8,6 +8,7 @@ import {
   createOAuthUser,
   findExistingOAuthAccount,
   linkOAuthAccount,
+  linkOAuthAccountByVerifiedEmail,
 } from "./oauth-user.server";
 
 export interface GitHubOAuthCallbackParams {
@@ -69,6 +70,34 @@ export async function handleGitHubOAuthCallback(
       action: "user_logged_in",
       redirectTo,
     };
+  }
+
+  if (githubUser.email && githubUser.emailVerified) {
+    const restoredLink = await linkOAuthAccountByVerifiedEmail(db, {
+      provider: "github",
+      providerUserId: githubUser.id,
+      providerUsername: githubUser.login,
+      email: githubUser.email,
+      emailVerified: githubUser.emailVerified,
+    });
+
+    if (restoredLink.success && restoredLink.userId) {
+      return {
+        success: true,
+        userId: restoredLink.userId,
+        action: "account_linked",
+        redirectTo,
+      };
+    }
+
+    if (restoredLink.error !== "account_not_found") {
+      return {
+        success: false,
+        error: restoredLink.error,
+        message: restoredLink.message,
+        redirectTo,
+      };
+    }
   }
 
   const createResult = await createOAuthUser(db, {

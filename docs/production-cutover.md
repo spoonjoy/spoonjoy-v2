@@ -34,13 +34,14 @@ Required runtime secrets:
 
 Feature secrets:
 
+- Google OAuth: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
 - GitHub OAuth: `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`
 - Apple OAuth: `APPLE_CLIENT_ID`, `APPLE_NATIVE_CLIENT_IDS`, `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY`
 - AI features: `OPENAI_API_KEY`
 
 If a feature secret group is missing, either set it before cutover or confirm the UI does not advertise that feature. OAuth buttons are environment-aware in v2 and should only show configured providers.
 
-Google OAuth is intentionally disabled for the v1-to-v2 cutover: the Render v1 environment marks it `not yet enabled`, and the migrated v1 OAuth rows contain only Apple and GitHub accounts. Re-enable it only after creating real Google OAuth credentials and adding `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
+Google OAuth uses the production redirect URI `https://spoonjoy.app/auth/google/callback`. It will remain hidden from `/login`, `/signup`, and account-linking surfaces until both Google secrets are present in Cloudflare.
 
 ## Data Migration
 
@@ -54,11 +55,14 @@ The verified source report (preserved for historical reference):
 - v1 had no shopping-list rows to migrate.
 - Auth continuity: GitHub OAuth support preserved the two GitHub-only v1 users after `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` were set in Cloudflare.
 
+Follow-up image hosting cleanup: the imported `RecipeCover.imageUrl` values initially preserved v1 Cloudinary URLs. Run `pnpm run migrate:cloudinary-r2 -- --target-env production --dry-run` to audit and `pnpm run migrate:cloudinary-r2 -- --target-env production --apply` to copy those legacy cover assets into the production R2 bucket and patch both source and search-index references.
+
 Future fresh cutovers (e.g., a v3) should write a new importer rather than resurrecting the v1 scripts — the v1 schema is no longer authoritative.
 
 Pre-import data hygiene (still relevant for any future import-style operation):
 
-- Always export D1 first: `pnpm exec wrangler d1 export DB --remote --output /tmp/spoonjoy-d1-backups/pre-import-$(date -u +%Y%m%dT%H%M%SZ).sql --yes`.
+- Always export D1 first: `pnpm exec wrangler d1 export DB --remote --output /tmp/spoonjoy-d1-backups/pre-import-$(date -u +%Y%m%dT%H%M%SZ).sql`.
+- If Wrangler refuses export because the database contains FTS5 virtual tables, capture a D1 Time Travel bookmark and a targeted row-level rollback file before applying the mutation.
 - Run `PRAGMA foreign_key_check;` post-import; require zero rows.
 - Rebuild search with `rebuildSearchIndex(db)` after a bulk import.
 
@@ -98,8 +102,7 @@ Run after deploy and again after DNS switch:
 - `/login` renders and configured auth methods are accurate.
 - `/signup` renders and configured auth methods are accurate.
 - `/search?q=tomato&scope=all` returns results or an intentional empty state.
-- `/users/demo_chef/fellow-chefs` renders.
-- `/users/demo_chef/kitchen-visitors` renders.
+- A known real public profile renders, including its fellow-chefs and kitchen-visitors tabs.
 - Authenticated `/shopping-list` renders and checkoff works.
 - Authenticated recipe detail renders.
 - Cook mode opens, persists progress across reload, and timers work on timed steps.

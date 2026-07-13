@@ -14,6 +14,7 @@ import {
   createOAuthUser,
   findExistingOAuthAccount,
   linkOAuthAccount,
+  linkOAuthAccountByVerifiedEmail,
 } from "./oauth-user.server";
 
 /**
@@ -61,7 +62,7 @@ export interface GoogleOAuthCallbackResult {
  * Flow:
  * 1. If user is logged in (currentUserId): Link Google account to existing user
  * 2. If Google account exists in DB: Log in returning user
- * 3. If email exists in DB: Error (user should log in to link)
+ * 3. If verified email exists in DB: Restore the missing Google OAuth link
  * 4. Otherwise: Create new user
  *
  * @param params - Callback parameters
@@ -116,19 +117,39 @@ export async function handleGoogleOAuthCallback(
     };
   }
 
-  // Flow 3: Check if email exists (case-insensitive)
-  // Use raw SQL for case-insensitive email comparison in SQLite
-  const normalizedEmail = googleUser.email.toLowerCase();
-  const existingUsersByEmail = await db.$queryRaw<Array<{ id: string }>>`
-    SELECT id FROM User WHERE LOWER(email) = ${normalizedEmail}
-  `;
-
-  if (existingUsersByEmail.length > 0) {
+  if (!googleUser.emailVerified) {
     return {
       success: false,
-      error: "account_exists",
-      message:
-        "An account with this email already exists. Please log in to link your Google account.",
+      error: "email_unverified",
+      message: "Google must return a verified email address before Spoonjoy can use it for sign-in.",
+      redirectTo: defaultRedirect,
+    };
+  }
+
+  // Flow 3: Restore a missing OAuth row for a migrated/existing account when
+  // Google returns the same verified email and no other user owns this Google id.
+  const restoredLink = await linkOAuthAccountByVerifiedEmail(db, {
+    provider: "google",
+    providerUserId: googleUser.id,
+    providerUsername: googleUser.name ?? googleUser.email,
+    email: googleUser.email,
+    emailVerified: googleUser.emailVerified,
+  });
+
+  if (restoredLink.success && restoredLink.userId) {
+    return {
+      success: true,
+      userId: restoredLink.userId,
+      action: "account_linked",
+      redirectTo: defaultRedirect,
+    };
+  }
+
+  if (restoredLink.error !== "account_not_found") {
+    return {
+      success: false,
+      error: restoredLink.error,
+      message: restoredLink.message,
       redirectTo: defaultRedirect,
     };
   }
