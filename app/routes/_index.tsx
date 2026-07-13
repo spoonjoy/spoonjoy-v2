@@ -393,7 +393,7 @@ function RecipeLead({
   const servingsLabel = formatServingsLabel(recipe.servings);
 
   return (
-    <section aria-label="Latest from the kitchen" className="mb-16 border-b border-[var(--sj-border-strong)] pb-8 lg:mb-0">
+    <section aria-label="On the Counter" className="mb-16 border-b border-[var(--sj-border-strong)] pb-8 lg:mb-0">
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.04fr)_minmax(15.625rem,0.46fr)] lg:items-end">
         <Link
           href={`/recipes/${recipe.id}`}
@@ -412,7 +412,7 @@ function RecipeLead({
         </Link>
 
         <div className="border-l border-[var(--sj-border)] pl-5">
-          <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.22em] text-[var(--sj-brass)]">Latest from the kitchen</p>
+          <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.22em] text-[var(--sj-brass)]">On the Counter</p>
           <Link href={`/recipes/${recipe.id}`} className="block min-h-11 no-underline">
             <Heading level={2} className="mt-3 text-4xl/10 hover:text-[var(--sj-tomato)] sm:mt-5 sm:text-6xl/14">{recipe.title}</Heading>
           </Link>
