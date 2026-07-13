@@ -126,7 +126,7 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 **Output**: Focused test and coverage logs under `./2026-07-13-1405-doing-kitchen-nav-reorg/unit-2c/`, with any local refactor commits documented in the progress log.
 **Acceptance**: Focused web route/component tests are green, no warnings, and new helpers have branch/edge coverage.
 
-### ⬜ Unit 3a: Native Route Model And Saved Recipes — Tests
+### ✅ Unit 3a: Native Route Model And Saved Recipes — Tests
 **What**: Write failing Swift tests for `AppRoute.savedRecipes`, `AppSection.savedRecipes`, first-class `AppRoute.chefs` and `AppSection.chefs`, state identifier round-trip (`saved-recipes`, `chefs`), current-chef filtering for My Recipes, proof that My Recipes uses a snapshot/current-chef repository instead of `LiveRecipeCatalogRepository`, nil-current-chef My Recipes empty state with no public recipes, saved-recipes dedupe from owned `Cookbook.recipes` only, foreign-cookbook exclusion, nil-current-chef Saved Recipes empty state, and sidebar/compact tab source contracts.
 **Output**: Failing Swift tests in `Tests/SpoonjoyCoreTests/AppStateTests.swift`, recipe-catalog/view-model tests, and/or native design contract tests; red logs saved under `./2026-07-13-1405-doing-kitchen-nav-reorg/unit-3a/`.
 **Acceptance**: Focused Swift tests fail red against the current native route model and tab/sidebar definitions.
@@ -232,3 +232,4 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 - 2026-07-13 15:31 Unit 2a complete: added red web tests for `On the Counter` and the mobile dock liquid-glass material; focused slice failed on the intended stale copy and solid dock surface
 - 2026-07-13 15:33 Unit 2b complete: replaced the misleading home editorial copy with `On the Counter`, upgraded SpoonDock to a translucent material/glass shell, and verified focused tests, typecheck, and build
 - 2026-07-13 15:39 Unit 2c complete: tightened Chefs activity/render coverage, verified the focused web navigation/search/drawer slice, and captured threshold-neutral coverage with changed web files at 100%
+- 2026-07-13 15:45 Unit 3a complete: added native red tests for saved-recipes and chefs routes plus current-chef My Recipes and owned-cookbook Saved Recipes catalog derivation; focused Swift test failed on the intended missing route/catalog symbols

@@ -1,6 +1,6 @@
 # Autopilot State
 
-Updated: 2026-07-13 15:39 America/Los_Angeles
+Updated: 2026-07-13 15:45 America/Los_Angeles
 Branch: post-merge `main` terminal state; the self-referential closure branch/PR used to land this line is excluded from stale-branch accounting.
 Objective: Record that the `SJ-044` cleanup-harness dogfood run is complete once this state lands on `main`, and leave the Spoonjoy autonomous queue in a truthful idle state.
 
@@ -11,8 +11,8 @@ Objective: Record that the `SJ-044` cleanup-harness dogfood run is complete once
 - Native worktree: `/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav` on `agent/kitchen-nav-reorg`.
 - Planning doc: `agent/tasks/2026-07-13-1405-planning-kitchen-nav-reorg.md` (approved after sub-agent reviewer convergence).
 - Doing doc: `agent/tasks/2026-07-13-1405-doing-kitchen-nav-reorg.md` (`READY_FOR_EXECUTION` after mandatory reviewer convergence).
-- Current gate: Unit 2c complete; web navigation/search/drawer focused tests are green and changed web files are at 100% in threshold-neutral focused coverage.
-- Next action: start Unit 3a native route-model and saved-recipes red tests.
+- Current gate: Unit 3a complete; native red tests now pin saved-recipes and chefs routes plus current-chef personal recipe catalogs.
+- Next action: implement Unit 3b native route model, personal recipe catalogs, and saved-recipes surface; also fold in Locke's web mobile-nav findings before final validation.
 
 ## Current Gate
 
