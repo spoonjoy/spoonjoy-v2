@@ -24,7 +24,8 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 - Native Apple tab bar chrome iteration toward liquid-glass/material translucency using native UIKit/SwiftUI primitives.
 - Web/native design-language documentation updates for the finalized kitchen drawer model and mobile navigation posture.
 - Tests for changed web loaders/routes/navigation and native routing/navigation/design contracts.
-- Visual QA evidence for changed web and native UI surfaces.
+- Web visual QA evidence for the signed-in home and new/changed drawer routes at mobile and desktop widths.
+- Native visual QA evidence following `/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/docs/native-design-language.md`, including `design-review.json` or fail-closed `design-review-blocked.json`, route screenshots, and app-emitted accessibility proof artifacts when the harness can run.
 
 ### Out of Scope
 - OAuth/auth flow changes; another agent is working there.
@@ -32,21 +33,26 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 - Public social feeds or shopping-list activity events.
 - New privacy model, notification settings, or chef-relationship semantics beyond the existing fellow-chef/kitchen-visitor definitions.
 - Production data migrations unless implementation discovers an unavoidable schema gap.
+- App Store/TestFlight submission or external native release operations; local implementation, validation, branch push/PR, and web deploy/release through available repo tooling are in scope.
 
 ## Completion Criteria
-- [ ] Signed-in web users have clear top-level access to My Kitchen, My Recipes, Saved Recipes, Cookbooks, Shopping List, Chefs, and Kitchen Search.
-- [ ] Web My Recipes shows recipes authored by the current user.
-- [ ] Web Saved Recipes shows deduped recipes saved through the current user's cookbooks, including recipes written by the user when saved in a cookbook.
-- [ ] Web Cookbooks is a real owned-cookbooks surface rather than a redirect back to a confusing tab.
-- [ ] Web Chefs includes existing fellow-chef semantics plus a chronological private activity view that excludes shopping-list events.
-- [ ] Web search is reachable globally and personal drawers expose scoped search/filtering without fragmenting search semantics.
-- [ ] Web "Latest from the kitchen" copy is replaced with an honest editorial module label and deterministic selection.
-- [ ] Web mobile navigation uses kitchen-focused labels and a stable liquid-glass-style treatment across small screens.
-- [ ] Native iPhone navigation uses Kitchen, My Recipes, Saved, Cookbooks, and Shopping List tabs, with Search reachable through toolbar/native search.
-- [ ] Native regular-width navigation exposes the full kitchen drawer set, including Chefs and Search.
-- [ ] Native saved-recipes surface uses the same saved-through-cookbooks definition as web.
-- [ ] Native tab bar/mobile navigation uses material/translucent system chrome instead of the current opaque bone treatment.
-- [ ] Web/native docs reflect the finalized drawer names, saved-recipes definition, search posture, and mobile navigation behavior.
+- [ ] Signed-in web desktop navigation exposes exact labels/routes: `Kitchen` -> `/`, `My Recipes` -> `/my-recipes`, `Saved` or `Saved Recipes` -> `/saved-recipes`, `Cookbooks` -> `/cookbooks`, `Shopping List` -> `/shopping-list`, `Chefs` -> `/chefs`, and `Kitchen Search` -> `/search`.
+- [ ] Web keeps `/recipes` as `Explore Recipes` / broader all-recipes browsing and does not reuse that label for the current user's authored recipes.
+- [ ] Web My Recipes at `/my-recipes` shows recipes authored by the current user through `Recipe.chefId`, supports a local search/filter query, and provides a create-recipe action.
+- [ ] Web Saved Recipes at `/saved-recipes` shows deduped recipes saved through cookbooks owned by the current user through `RecipeInCookbook` plus `Cookbook.authorId`, including the user's own recipes when saved in a cookbook, and supports a local search/filter query.
+- [ ] Web Cookbooks at `/cookbooks` is a real owned-cookbooks surface based on `Cookbook.authorId`, supports a local search/filter query, and no longer redirects authenticated users to `/?tab=cookbooks`.
+- [ ] Web Chefs at `/chefs` includes existing fellow-chef semantics from `app/lib/fellow-chefs.server.ts`, a "Chefs Using My Recipes" section, and a private chronological activity section that excludes shopping-list events.
+- [ ] Web global search remains at `/search` with existing scopes `all`, `recipes`, `cookbooks`, `chefs`, and `shopping-list`; personal drawer search/filter inputs do not create a second global-search semantics.
+- [ ] Web "Latest from the kitchen" copy is replaced with `On the Counter`, with deterministic selection from the current display recipe ordering and no false freshness claim.
+- [ ] Web mobile navigation labels use kitchen terms (`My Kitchen`, `My Recipes`, `Saved`, `Cookbooks`, `Shopping List`, `Chefs`, `Search`) and the dock is visually glass/material-like while preserving fixed bottom safe-area behavior at 320-390px and desktop-hidden behavior at `lg`.
+- [ ] Native compact iPhone `TabView` exposes exactly five tabs: `Kitchen`, `My Recipes`, `Saved`, `Cookbooks`, and `Shopping List`; `Search` is removed as a bottom tab and remains reachable via toolbar/menu/native `.searchable` path.
+- [ ] Native regular-width `NavigationSplitView` sidebar exposes `Kitchen`, `My Recipes`, `Saved Recipes`, `Cookbooks`, `Shopping List`, `Chefs`, `Kitchen Search`, `Imports`, and `Settings`.
+- [ ] Native My Recipes filters cached/displayed recipes to the current authenticated chef when `currentChefID` is known; signed-out or unavailable-current-chef fallback stays safe and non-crashing.
+- [ ] Native Saved Recipes uses the same saved-through-cookbooks definition as web by deduping `contentState.cookbooks.flatMap(\\.recipes)` by recipe ID.
+- [ ] Native tab bar/mobile navigation uses system material/translucent chrome (`UITabBarAppearance`/SwiftUI toolbar material) instead of the current opaque bone treatment, with tests proving translucency/material setup.
+- [ ] Web `docs/design-language.md` and native `docs/native-design-language.md` document the finalized drawer names, saved-recipes definition, search posture, and mobile navigation behavior.
+- [ ] Native visual validation produces `design-review.json` with mobile/desktop screenshot booleans and app-emitted accessibility proof artifacts for changed navigation/search routes, or `design-review-blocked.json` if local runtime blockers prevent screenshots.
+- [ ] Web visual validation captures mobile and desktop evidence for the home, personal drawers, search access, and mobile dock; any absurdity ledger entries for this task are closed or explicitly blocked with evidence.
 - [ ] No OAuth files or behavior are edited except incidental imports/tests required by navigation compilation.
 - [ ] 100% test coverage on all new code
 - [ ] All tests pass
@@ -61,11 +67,12 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 - Edge cases: null, empty, boundary values
 
 ## Open Questions
-- [ ] Native App Store/TestFlight shipping may require credentials or an external release pipeline unavailable in this runtime; if so, complete local implementation, tests, branch push/PR, and record the release blocker as the only non-local step.
+- None
 
 ## Decisions Made
 - Use "My Kitchen" as the signed-in home/root concept, not as a peer tab.
 - Use clear drawer labels over cute labels: My Recipes, Saved Recipes, Cookbooks, Shopping List, Chefs, Kitchen Search.
+- Preserve `/recipes` as the broader Explore Recipes/all-recipes route while separating current-user authored recipes into `/my-recipes`.
 - Define Saved Recipes as recipes in any cookbook owned by the current user, deduped by recipe ID; do not add a separate saved/bookmark model.
 - Define My Recipes as recipes authored by the current user through `Recipe.chefId`.
 - Define Cookbooks as cookbooks authored by the current user through `Cookbook.authorId`.
@@ -85,6 +92,7 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 - Web mobile dock: `/Users/arimendelow/Projects/spoonjoy-v2-agent-kitchen-nav/app/components/navigation/mobile-nav.tsx` and `/Users/arimendelow/Projects/spoonjoy-v2-agent-kitchen-nav/app/components/navigation/spoon-dock.tsx`.
 - Web desktop navigation: `/Users/arimendelow/Projects/spoonjoy-v2-agent-kitchen-nav/app/root.tsx`.
 - Web search: `/Users/arimendelow/Projects/spoonjoy-v2-agent-kitchen-nav/app/routes/search.tsx` and `/Users/arimendelow/Projects/spoonjoy-v2-agent-kitchen-nav/app/lib/search.server.ts`.
+- Web design language: `/Users/arimendelow/Projects/spoonjoy-v2-agent-kitchen-nav/docs/design-language.md`.
 - Native route model: `/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Sources/SpoonjoyCore/AppState/AppRoute.swift`.
 - Native navigation shell: `/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Apps/Spoonjoy/Shared/AppShell/PlatformNavigationView.swift`.
 - Native iOS chrome setup: `/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Apps/Spoonjoy/iOS/SpoonjoyiOSApp.swift`.
@@ -93,8 +101,10 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 
 ## Notes
 The task intentionally favors obvious kitchen organization over creative naming. The implementation should avoid OAuth/auth churn and should preserve existing public recipe/cookbook URLs.
+Native release submission is intentionally not part of this task because it can require human credentials and external Apple state; shipping here means committed, validated, pushed/PR-ready code plus web deployment through available repo tooling.
 
 ## Progress Log
 - 2026-07-13 14:05 Created
 - 2026-07-13 14:07 Created initial planning doc
 - 2026-07-13 14:07 Tinfoil hat pass: added explicit documentation alignment coverage
+- 2026-07-13 14:13 Addressed planning reviewer findings: concrete routes, native validation artifacts, and native release boundary
