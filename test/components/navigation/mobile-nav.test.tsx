@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { ArrowLeft, Edit, Share2 } from "lucide-react";
@@ -55,12 +55,36 @@ describe("MobileNav", () => {
       expect(screen.getByTestId("dock-center")).toContainElement(
         screen.getByRole("link", { name: /create recipe/i }),
       );
-      expect(screen.getByRole("link", { name: /search/i })).toHaveAttribute("href", "/search");
+      expect(screen.getByRole("link", { name: /my recipes/i })).toHaveAttribute("href", "/my-recipes");
       expect(screen.getByRole("link", { name: /shopping list/i })).toHaveAttribute("href", "/shopping-list");
+      expect(screen.getByRole("button", { name: /open pantry navigation/i })).toBeInTheDocument();
       expect(screen.queryByRole("link", { name: /settings/i })).not.toBeInTheDocument();
     });
 
-    it("does not render the old dashboard navigation labels", () => {
+    it("opens a glass pantry drawer with every main kitchen destination", async () => {
+      const user = userEvent.setup();
+
+      render(
+        <MemoryRouter initialEntries={["/"]}>
+          <MobileNav />
+        </MemoryRouter>,
+      );
+
+      expect(screen.queryByTestId("mobile-pantry")).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: /open pantry navigation/i }));
+
+      const pantry = screen.getByTestId("mobile-pantry");
+      expect(pantry).toHaveClass("backdrop-blur-2xl");
+      expect(within(pantry).getByRole("link", { name: "My Recipes" })).toHaveAttribute("href", "/my-recipes");
+      expect(within(pantry).getByRole("link", { name: "Saved Recipes" })).toHaveAttribute("href", "/saved-recipes");
+      expect(within(pantry).getByRole("link", { name: "Cookbooks" })).toHaveAttribute("href", "/cookbooks");
+      expect(within(pantry).getByRole("link", { name: "Shopping List" })).toHaveAttribute("href", "/shopping-list");
+      expect(within(pantry).getByRole("link", { name: "Chefs" })).toHaveAttribute("href", "/chefs");
+      expect(within(pantry).getByRole("link", { name: "Kitchen Search" })).toHaveAttribute("href", "/search");
+    });
+
+    it("does not render the old dashboard navigation labels before the pantry is opened", () => {
       render(
         <MemoryRouter initialEntries={["/"]}>
           <MobileNav />
@@ -68,7 +92,6 @@ describe("MobileNav", () => {
       );
 
       expect(screen.queryByText("Recipes")).not.toBeInTheDocument();
-      expect(screen.queryByText("Cookbooks")).not.toBeInTheDocument();
       expect(screen.queryByText("Profile")).not.toBeInTheDocument();
     });
 
@@ -294,6 +317,7 @@ describe("MobileNav", () => {
       );
 
       expect(screen.getByRole("link", { name: /create recipe/i })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /my recipes/i })).toBeInTheDocument();
       expect(screen.getByRole("link", { name: /shopping list/i })).toBeInTheDocument();
     });
 
