@@ -55,7 +55,7 @@ Make `https://spoonjoy.app/mcp` useful for humans by rendering a clear landing p
 **Output**: Execution context recorded in this doing doc and artifacts directory created.
 **Acceptance**: Existing route files and docs are read; copy caveats from review are reflected in Unit 1b.
 
-### ⬜ Unit 1a: MCP Landing Page — Tests
+### ✅ Unit 1a: MCP Landing Page — Tests
 **What**: Update tests before implementation. `test/routes/mcp.test.ts` must render the default route component and assert durable human-facing content: heading, `/mcp`, `POST`, `Authorization: Bearer`, `/.well-known/oauth-protected-resource/mcp`, and setup guidance. Preserve existing POST action auth/tool tests. Update `test/routes/route-shell-coverage.test.ts` so MCP shell plumbing is still exercised through `action` with a POST Workers context instead of a GET 405.
 **Output**: Failing tests that describe the new GET page and preserved POST shell behavior.
 **Acceptance**: Targeted test run fails for the expected missing page/component assertions before implementation.
@@ -88,3 +88,4 @@ Make `https://spoonjoy.app/mcp` useful for humans by rendering a clear landing p
 ## Progress Log
 - 2026-07-13 14:09 Created from planning doc
 - 2026-07-13 14:11 Unit 0 complete: recorded route, protocol, docs, registration, and test targets in `unit-0-research.md`
+- 2026-07-13 14:12 Unit 1a complete: added route data, rendered-page, and POST shell tests; red run saved to `unit-1a-red.log`

@@ -336,14 +336,19 @@ describe("route shell coverage", () => {
   });
 
   it("binds waitUntil in the MCP route shell when a Workers context exists", async () => {
-    const { loader } = await import("~/routes/mcp");
+    const { action } = await import("~/routes/mcp");
     const waitUntil = vi.fn();
-    const response = await loader(routeArgs(
-      new Request("https://spoonjoy.app/mcp", { method: "GET" }),
-      { context: { cloudflare: { env: null, ctx: { waitUntil } } } },
+    const response = await action(routeArgs(
+      new Request("https://spoonjoy.app/mcp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize" }),
+      }),
+      { context: { cloudflare: { env: { POSTHOG_KEY: "ph_test" }, ctx: { waitUntil } } } },
     ));
 
-    expect(response.status).toBe(405);
+    expect(response.status).toBe(401);
+    expect(waitUntil).toHaveBeenCalledTimes(1);
   });
 
   it("maps legacy REST operation not-found errors to 404", async () => {
