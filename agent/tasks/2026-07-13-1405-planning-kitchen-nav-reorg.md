@@ -50,9 +50,9 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 - [ ] Web mobile navigation labels use kitchen terms (`My Kitchen`, `My Recipes`, `Saved`, `Cookbooks`, `Shopping List`, `Chefs`, `Search`) and the dock is visually glass/material-like while preserving fixed bottom safe-area behavior at 320-390px and desktop-hidden behavior at `lg`.
 - [ ] Native compact iPhone `TabView` exposes exactly five tabs: `Kitchen`, `My Recipes`, `Saved`, `Cookbooks`, and `Shopping List`; `Search` is removed as a bottom tab and remains reachable via toolbar/menu/native `.searchable` path.
 - [ ] Native regular-width `NavigationSplitView` sidebar exposes `Kitchen`, `My Recipes`, `Saved Recipes`, `Cookbooks`, `Shopping List`, `Chefs`, `Kitchen Search`, `Imports`, and `Settings`.
-- [ ] Native route model includes a first-class `chefs` section/route or an explicit `chefs` route alias to chef search/profile graph, and the sidebar Chefs destination is tested.
-- [ ] Native My Recipes filters cached/displayed recipes to the current authenticated chef when `currentChefID` is known, uses a snapshot/current-chef repository rather than the public live catalog for the personal drawer, and signed-out or unavailable-current-chef fallback stays safe and non-crashing.
-- [ ] Native Saved Recipes uses the same saved-through-cookbooks definition as web by deduping `contentState.cookbooks.flatMap(\\.recipes)` by recipe ID.
+- [ ] Native route model includes first-class `AppSection.chefs` and `AppRoute.chefs` with `stateIdentifier == "chefs"`; sidebar, title/back behavior, destination content, route-matrix, and visual proof treat Chefs as its own route, not a search alias.
+- [ ] Native My Recipes filters cached/displayed recipes to `contentState.authSessionState`'s current authenticated chef ID, uses a snapshot/current-chef repository rather than the public live catalog for the personal drawer, and when current chef is unavailable it renders an empty/signed-out-safe personal drawer with no public recipes and no `PublicCatalogRequests.listRecipes` call.
+- [ ] Native Saved Recipes uses the same saved-through-owned-cookbooks definition as web by filtering `contentState.cookbooks` to `cookbook.chef.id == currentChefID`, flattening `cookbook.recipes`, and deduping by recipe ID with deterministic first-seen cookbook/update ordering; when current chef is unavailable it renders empty/signed-out-safe state.
 - [ ] Native toolbar Search renders `SearchView` as an auxiliary compact route after removing the Search bottom tab, and route/section mapping tests prove `.search` no longer depends on a removed tab item.
 - [ ] Native tab bar/mobile navigation uses system material/translucent chrome (`UITabBarAppearance`/SwiftUI toolbar material) instead of the current opaque bone treatment, with tests proving translucency/material setup.
 - [ ] Web `docs/design-language.md` and native `docs/native-design-language.md` document the finalized drawer names, saved-recipes definition, search posture, and mobile navigation behavior.
@@ -88,11 +88,31 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 - Define My Recipes as recipes authored by the current user through `Recipe.chefId`.
 - Define Cookbooks as cookbooks authored by the current user through `Cookbook.authorId`.
 - Define Chefs from the existing fellow-chef and kitchen-visitor graph semantics in `app/lib/fellow-chefs.server.ts`.
-- Add a private chronological chef activity view from recipe saves/spoons/forks around the user's kitchen; exclude shopping-list events.
+- Add a private chronological chef activity view from recipe saves/spoons/forks around the user's kitchen; include both outbound activity by the viewer and inbound activity on the viewer's recipes, exclude self-events and shopping-list events, filter soft-deleted spoons/recipes, and sort by event timestamp descending with stable source/id tie-breakers.
 - Keep one global Kitchen Search with scope chips, plus scoped drawer search/filter inputs for high-frequency personal drawers.
 - Replace "Latest from the kitchen" with an honest editorial label such as "On the Counter" and deterministic selection from recently updated/displayable recipes.
 - On iPhone native, remove Search from the bottom tab bar; keep Search reachable from the trailing compact toolbar menu item labeled `Search`, which opens the `.search(query:scope:)` route where native `.searchable` uses toolbar-principal placement and search scopes.
 - Use system material/translucency for native liquid glass rather than a custom tab replacement.
+- Use first-class native Chefs navigation: `AppSection.chefs`, `AppRoute.chefs`, `stateIdentifier == "chefs"`, regular sidebar label `Chefs`, compact auxiliary/destination behavior as needed, and route-specific screenshot/accessibility proof.
+- Web production shipping means running the repo deploy script from the validated web commit after tests/build/visual QA, recording commit SHA plus deploy output/URL; if migrations are introduced, use the repo's migration-aware deploy path instead of the plain deploy script.
+
+## Route / Data Contracts
+
+### Web Personal Drawers
+- `/my-recipes`: require signed-in user via `requireUserId(request, "/login", env)`. Query `Recipe` where `chefId == userId` and `deletedAt == null`, ordered `updatedAt desc, id desc`; local `q` filters title, description, servings, and visible ingredient names when available; empty state points to `/recipes/new`.
+- `/saved-recipes`: require signed-in user. Query `RecipeInCookbook` joined through `Cookbook.authorId == userId` and `Recipe.deletedAt == null`, ordered by membership `updatedAt desc, id desc`; dedupe by `recipeId`, keeping the first membership in that ordering; local `q` filters recipe title, description, servings, recipe chef username, and owning cookbook title; empty state points to `/recipes` and `/cookbooks/new`.
+- `/cookbooks`: require signed-in user. Query `Cookbook` where `authorId == userId`, ordered `updatedAt desc, id desc`, include recipe counts and up to four newest non-deleted recipe covers; local `q` filters cookbook title and included recipe titles; replace the old authenticated redirect to `/?tab=cookbooks`.
+- `/chefs`: require signed-in user. Use `listFellowChefs(db, userId)` for outbound fellow chefs and `listKitchenVisitors(db, userId)` for inbound "Chefs Using My Recipes". Activity feed rows are private to the signed-in viewer and come only from:
+  - outbound spoon: viewer cooked another chef's non-deleted recipe, timestamp `RecipeSpoon.cookedAt`, actor viewer, subject recipe chef, kind `spooned`.
+  - outbound fork: viewer authored a non-deleted fork whose non-deleted `sourceRecipe` belongs to another chef, timestamp fork `Recipe.createdAt`, actor viewer, subject source chef, kind `forked`.
+  - outbound save: viewer added another chef's non-deleted recipe to any cookbook, timestamp `RecipeInCookbook.createdAt`, actor viewer, subject recipe chef, kind `saved`.
+  - inbound spoon/fork/save mirror rows where another chef performs the same actions against a non-deleted recipe owned by the viewer, actor other chef, subject viewer, direction `inbound`.
+  Exclude self-events, shopping-list tables, deleted spoons, deleted source/target recipes, and duplicate rows with the same source table/id. Sort `eventAt desc`, then `sourceKind asc`, then `sourceId desc`. Row payload must include `id`, `kind`, `direction`, `eventAt`, `actor`, `otherChef`, optional `recipe`, optional `cookbook`, and human label.
+
+### Native Personal Drawers
+- My Recipes derives `currentChefID` from existing `contentState.authSessionState`. It filters `contentState.recipes` to `recipe.chef.id == currentChefID`, builds a snapshot-only `RecipeCatalogRepository`, never wraps `LiveRecipeCatalogRepository`, and renders an empty/signed-out-safe state when `currentChefID` is nil.
+- Saved Recipes derives `currentChefID` the same way, filters `contentState.cookbooks` to `cookbook.chef.id == currentChefID`, flattens `cookbook.recipes`, dedupes by recipe ID preserving cookbook order then recipe order, and renders an empty/signed-out-safe state when `currentChefID` is nil.
+- Chefs is a native route, not a scoped search shortcut: add `AppSection.chefs`, `AppRoute.chefs`, `stateIdentifier == "chefs"`, title `Chefs`, regular sidebar destination, screenshot-route support, and route-specific accessibility proof anchors.
 
 ## Context / References
 - Web worktree: `/Users/arimendelow/Projects/spoonjoy-v2-agent-kitchen-nav` on branch `agent/kitchen-nav-reorg`.
@@ -126,3 +146,4 @@ Native release submission is intentionally not part of this task because it can 
 - 2026-07-13 14:41 Tightened native compact search affordance and exact route-matrix coverage
 - 2026-07-13 14:51 Added native scrutiny requirements for search auxiliary routing, current-chef My Recipes loading, and Chefs route/sidebar behavior
 - 2026-07-13 14:58 Added native Chefs route to visual/proof matrix after scrutiny review
+- 2026-07-13 15:08 Addressed final deception review with exact route/data contracts and deploy sequencing

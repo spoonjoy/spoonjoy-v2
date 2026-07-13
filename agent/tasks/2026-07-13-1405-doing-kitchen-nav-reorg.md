@@ -30,9 +30,9 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 - [ ] Web mobile navigation labels use kitchen terms (`My Kitchen`, `My Recipes`, `Saved`, `Cookbooks`, `Shopping List`, `Chefs`, `Search`) and the dock is visually glass/material-like while preserving fixed bottom safe-area behavior at 320-390px and desktop-hidden behavior at `lg`.
 - [ ] Native compact iPhone `TabView` exposes exactly five tabs: `Kitchen`, `My Recipes`, `Saved`, `Cookbooks`, and `Shopping List`; `Search` is removed as a bottom tab and remains reachable from the trailing toolbar menu item labeled `Search`, which opens the `.search(query:scope:)` route where `.searchable` uses toolbar-principal placement and search scopes.
 - [ ] Native regular-width `NavigationSplitView` sidebar exposes `Kitchen`, `My Recipes`, `Saved Recipes`, `Cookbooks`, `Shopping List`, `Chefs`, `Kitchen Search`, `Imports`, and `Settings`.
-- [ ] Native route model includes a first-class `chefs` section/route or an explicit `chefs` route alias to chef search/profile graph, and the sidebar Chefs destination is tested.
-- [ ] Native My Recipes filters cached/displayed recipes to the current authenticated chef when `currentChefID` is known, uses a snapshot/current-chef repository rather than the public live catalog for the personal drawer, and signed-out or unavailable-current-chef fallback stays safe and non-crashing.
-- [ ] Native Saved Recipes uses the same saved-through-cookbooks definition as web by deduping `contentState.cookbooks.flatMap(\\.recipes)` by recipe ID.
+- [ ] Native route model includes first-class `AppSection.chefs` and `AppRoute.chefs` with `stateIdentifier == "chefs"`; sidebar, title/back behavior, destination content, route-matrix, and visual proof treat Chefs as its own route, not a search alias.
+- [ ] Native My Recipes filters cached/displayed recipes to `contentState.authSessionState`'s current authenticated chef ID, uses a snapshot/current-chef repository rather than the public live catalog for the personal drawer, and when current chef is unavailable it renders an empty/signed-out-safe personal drawer with no public recipes and no `PublicCatalogRequests.listRecipes` call.
+- [ ] Native Saved Recipes uses the same saved-through-owned-cookbooks definition as web by filtering `contentState.cookbooks` to `cookbook.chef.id == currentChefID`, flattening `cookbook.recipes`, and deduping by recipe ID with deterministic first-seen cookbook/update ordering; when current chef is unavailable it renders empty/signed-out-safe state.
 - [ ] Native toolbar Search renders `SearchView` as an auxiliary compact route after removing the Search bottom tab, and route/section mapping tests prove `.search` no longer depends on a removed tab item.
 - [ ] Native tab bar/mobile navigation uses system material/translucent chrome (`UITabBarAppearance`/SwiftUI toolbar material) instead of the current opaque bone treatment, with tests proving translucency/material setup.
 - [ ] Web `docs/design-language.md` and native `docs/native-design-language.md` document the finalized drawer names, saved-recipes definition, search posture, and mobile navigation behavior.
@@ -66,6 +66,24 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 5. **Refactor**: Clean up, keep tests green
 6. **No skipping**: Never write implementation without failing test first
 
+## Route / Data Contracts
+
+### Web Personal Drawers
+- `/my-recipes`: require signed-in user via `requireUserId(request, "/login", env)`. Query `Recipe` where `chefId == userId` and `deletedAt == null`, ordered `updatedAt desc, id desc`; local `q` filters title, description, servings, and visible ingredient names when available; empty state points to `/recipes/new`.
+- `/saved-recipes`: require signed-in user. Query `RecipeInCookbook` joined through `Cookbook.authorId == userId` and `Recipe.deletedAt == null`, ordered by membership `updatedAt desc, id desc`; dedupe by `recipeId`, keeping the first membership in that ordering; local `q` filters recipe title, description, servings, recipe chef username, and owning cookbook title; empty state points to `/recipes` and `/cookbooks/new`.
+- `/cookbooks`: require signed-in user. Query `Cookbook` where `authorId == userId`, ordered `updatedAt desc, id desc`, include recipe counts and up to four newest non-deleted recipe covers; local `q` filters cookbook title and included recipe titles; replace the old authenticated redirect to `/?tab=cookbooks`.
+- `/chefs`: require signed-in user. Use `listFellowChefs(db, userId)` for outbound fellow chefs and `listKitchenVisitors(db, userId)` for inbound "Chefs Using My Recipes". Activity feed rows are private to the signed-in viewer and come only from:
+  - outbound spoon: viewer cooked another chef's non-deleted recipe, timestamp `RecipeSpoon.cookedAt`, actor viewer, subject recipe chef, kind `spooned`.
+  - outbound fork: viewer authored a non-deleted fork whose non-deleted `sourceRecipe` belongs to another chef, timestamp fork `Recipe.createdAt`, actor viewer, subject source chef, kind `forked`.
+  - outbound save: viewer added another chef's non-deleted recipe to any cookbook, timestamp `RecipeInCookbook.createdAt`, actor viewer, subject recipe chef, kind `saved`.
+  - inbound spoon/fork/save mirror rows where another chef performs the same actions against a non-deleted recipe owned by the viewer, actor other chef, subject viewer, direction `inbound`.
+  Exclude self-events, shopping-list tables, deleted spoons, deleted source/target recipes, and duplicate rows with the same source table/id. Sort `eventAt desc`, then `sourceKind asc`, then `sourceId desc`. Row payload must include `id`, `kind`, `direction`, `eventAt`, `actor`, `otherChef`, optional `recipe`, optional `cookbook`, and human label.
+
+### Native Personal Drawers
+- My Recipes derives `currentChefID` from existing `contentState.authSessionState`. It filters `contentState.recipes` to `recipe.chef.id == currentChefID`, builds a snapshot-only `RecipeCatalogRepository`, never wraps `LiveRecipeCatalogRepository`, and renders an empty/signed-out-safe state when `currentChefID` is nil.
+- Saved Recipes derives `currentChefID` the same way, filters `contentState.cookbooks` to `cookbook.chef.id == currentChefID`, flattens `cookbook.recipes`, dedupes by recipe ID preserving cookbook order then recipe order, and renders an empty/signed-out-safe state when `currentChefID` is nil.
+- Chefs is a native route, not a scoped search shortcut: add `AppSection.chefs`, `AppRoute.chefs`, `stateIdentifier == "chefs"`, title `Chefs`, regular sidebar destination, screenshot-route support, and route-specific accessibility proof anchors.
+
 ## Work Units
 
 ### Legend
@@ -79,7 +97,7 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 **Acceptance**: `git status --short --branch` is captured for web and native worktrees; target files and commands are listed; no code files are edited in this unit.
 
 ### ⬜ Unit 1a: Web Kitchen Drawers — Tests
-**What**: Write failing tests for `/my-recipes`, `/saved-recipes`, `/cookbooks`, and `/chefs` loader/UI behavior in `test/routes/*`, including web Chefs tests for existing fellow-chef semantics, "Chefs Using My Recipes," private chronological ordering across spoon/fork/save activity, and exclusion of shopping-list events; plus navigation expectations in `test/root-navbar.test.tsx` or the existing root/mobile navigation tests.
+**What**: Write failing tests for `/my-recipes`, `/saved-recipes`, `/cookbooks`, and `/chefs` loader/UI behavior in `test/routes/*`, including the exact Web Personal Drawers route/data contracts above, web Chefs tests for existing fellow-chef semantics, "Chefs Using My Recipes," private chronological ordering across spoon/fork/save activity, and exclusion of shopping-list events; plus navigation expectations in `test/root-navbar.test.tsx` or the existing root/mobile navigation tests.
 **Output**: Failing web tests in `test/routes/my-recipes.test.tsx`, `test/routes/saved-recipes.test.tsx`, updated `test/routes/cookbooks-index.test.tsx`, `test/routes/chefs.test.tsx`, and navigation tests; red-test logs saved under `./2026-07-13-1405-doing-kitchen-nav-reorg/unit-1a/`.
 **Acceptance**: Focused web tests fail red because routes, loader data, labels, redirect behavior, Chefs activity ordering, or shopping-list exclusion do not yet match the new drawer model.
 
@@ -109,17 +127,17 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 **Acceptance**: Focused web route/component tests are green, no warnings, and new helpers have branch/edge coverage.
 
 ### ⬜ Unit 3a: Native Route Model And Saved Recipes — Tests
-**What**: Write failing Swift tests for `AppRoute.savedRecipes`, `AppSection.savedRecipes`, `AppRoute.chefs` or the chosen explicit chefs alias, state identifier round-trip, current-chef filtering for My Recipes, proof that My Recipes uses a snapshot/current-chef repository instead of `LiveRecipeCatalogRepository`, saved-recipes dedupe from `Cookbook.recipes`, and sidebar/compact tab source contracts.
+**What**: Write failing Swift tests for `AppRoute.savedRecipes`, `AppSection.savedRecipes`, first-class `AppRoute.chefs` and `AppSection.chefs`, state identifier round-trip (`saved-recipes`, `chefs`), current-chef filtering for My Recipes, proof that My Recipes uses a snapshot/current-chef repository instead of `LiveRecipeCatalogRepository`, nil-current-chef My Recipes empty state with no public recipes, saved-recipes dedupe from owned `Cookbook.recipes` only, foreign-cookbook exclusion, nil-current-chef Saved Recipes empty state, and sidebar/compact tab source contracts.
 **Output**: Failing Swift tests in `Tests/SpoonjoyCoreTests/AppStateTests.swift`, recipe-catalog/view-model tests, and/or native design contract tests; red logs saved under `./2026-07-13-1405-doing-kitchen-nav-reorg/unit-3a/`.
 **Acceptance**: Focused Swift tests fail red against the current native route model and tab/sidebar definitions.
 
 ### ⬜ Unit 3b: Native Route Model And Saved Recipes — Implementation
-**What**: Update `Sources/SpoonjoyCore/AppState/AppRoute.swift` for `savedRecipes` and `chefs` or the chosen explicit chefs alias; add saved-recipes view model/surface code in `Sources/SpoonjoyCore/Features/RecipeCatalog`; add a current-chef-owned snapshot repository/view-model for My Recipes that does not call `PublicCatalogRequests.listRecipes`; add `Apps/Spoonjoy/Shared/Views/SavedRecipesView.swift`; register any new Swift view in both iOS and macOS sources in `Spoonjoy.xcodeproj/project.pbxproj`; update `Apps/Spoonjoy/Shared/Views/RecipesView.swift` for "My Recipes" copy/filtering; wire destinations in `Apps/Spoonjoy/Shared/AppShell/PlatformNavigationView.swift`.
+**What**: Update `Sources/SpoonjoyCore/AppState/AppRoute.swift` for first-class `savedRecipes` and `chefs`; add saved-recipes view model/surface code in `Sources/SpoonjoyCore/Features/RecipeCatalog`; add a current-chef-owned snapshot repository/view-model for My Recipes that does not call `PublicCatalogRequests.listRecipes`; add `Apps/Spoonjoy/Shared/Views/SavedRecipesView.swift`; register any new Swift view in both iOS and macOS sources in `Spoonjoy.xcodeproj/project.pbxproj`; update `Apps/Spoonjoy/Shared/Views/RecipesView.swift` for "My Recipes" copy/filtering; wire destinations in `Apps/Spoonjoy/Shared/AppShell/PlatformNavigationView.swift`.
 **Output**: Native route/model/view source changes and green focused Swift logs saved under `./2026-07-13-1405-doing-kitchen-nav-reorg/unit-3b/`.
-**Acceptance**: Unit 3a tests pass; saved recipes are deduped from cookbook membership; My Recipes is safe when `currentChefID` is nil.
+**Acceptance**: Unit 3a tests pass; saved recipes are deduped from owned cookbook membership only; My Recipes and Saved Recipes are empty/signed-out-safe when `currentChefID` is nil and never fall back to the public recipe catalog.
 
 ### ⬜ Unit 3c: Native Route Model And Saved Recipes — Coverage & Refactor
-**What**: Cover empty saved-recipes, duplicate recipes across cookbooks, signed-out/current-chef-unavailable fallback, first-class Chefs route parsing, and route parsing rejection of unsafe identifiers.
+**What**: Cover empty saved-recipes, duplicate recipes across owned cookbooks, foreign-cookbook exclusion, signed-out/current-chef-unavailable fallback, first-class Chefs route parsing, and route parsing rejection of unsafe identifiers.
 **Output**: Additional Swift tests and coverage/focused-test logs under `./2026-07-13-1405-doing-kitchen-nav-reorg/unit-3c/`.
 **Acceptance**: Focused Swift coverage for new route/view-model code is complete and tests stay green with warnings as errors.
 
@@ -129,7 +147,7 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 **Acceptance**: Focused native design-contract tests fail red on current Search tab, opaque tab bar, old labels, and old editorial copy.
 
 ### ⬜ Unit 4b: Native Navigation And Liquid Glass — Implementation
-**What**: Update compact `TabView` and sidebar in `PlatformNavigationView.swift`; remove `.search` from compact tab roots and make `.search` a compact auxiliary route rendered by `compactImmersiveRouteContent`/`destinationContent`; keep search available through the existing trailing toolbar `Menu` item labeled `Search`, whose action calls `performSearch(search)` and navigates to the `.search(query:scope:)` route; keep `.searchable(text:isPresented:placement:.toolbarPrincipal,prompt:"Search Spoonjoy")` and `.searchScopes` active only on the compact search route; wire Chefs sidebar to the `chefs` route/alias; update `Apps/Spoonjoy/iOS/SpoonjoyiOSApp.swift` to use translucent/material `UITabBarAppearance`; update native route titles and labels.
+**What**: Update compact `TabView` and sidebar in `PlatformNavigationView.swift`; remove `.search` from compact tab roots and make `.search` a compact auxiliary route rendered by `compactImmersiveRouteContent`/`destinationContent`; keep search available through the existing trailing toolbar `Menu` item labeled `Search`, whose action calls `performSearch(search)` and navigates to the `.search(query:scope:)` route; keep `.searchable(text:isPresented:placement:.toolbarPrincipal,prompt:"Search Spoonjoy")` and `.searchScopes` active only on the compact search route; wire Chefs sidebar to first-class `.chefs`; update `Apps/Spoonjoy/iOS/SpoonjoyiOSApp.swift` to use translucent/material `UITabBarAppearance`; update native route titles and labels.
 **Output**: Native navigation/chrome source changes and green focused native design-contract logs under `./2026-07-13-1405-doing-kitchen-nav-reorg/unit-4b/`.
 **Acceptance**: Unit 4a tests pass; bottom tabs are exactly Kitchen, My Recipes, Saved, Cookbooks, Shopping List; Search is reachable from toolbar/menu.
 
@@ -179,9 +197,9 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 **Acceptance**: Both worktrees have only intended changes committed or explicitly documented; no unrelated/OAuth changes are included.
 
 ### ⬜ Unit 6f: Push, PR, And Available Deploy
-**What**: In the web worktree run `git push -u origin agent/kitchen-nav-reorg`, `gh pr create --fill --base main --head agent/kitchen-nav-reorg` or `gh pr view --json url,number,state`, and `pnpm run deploy`. In the native worktree run `git push -u origin agent/kitchen-nav-reorg` and `gh pr create --fill --base main --head agent/kitchen-nav-reorg` or `gh pr view --json url,number,state`. If a command fails because auth/remote/Cloudflare/GitHub credentials are unavailable, save exact output and classify it as a true credential/capability blocker; ordinary CI/build/test failures go back to Unit 6b.
-**Output**: Push logs, PR URLs/IDs, deploy logs or blocker notes under `./2026-07-13-1405-doing-kitchen-nav-reorg/unit-6f/`.
-**Acceptance**: Branches are pushed and PR/deploy status is recorded; any unavailable external operation is classified as a true credential/capability blocker with exact command/output.
+**What**: In the web worktree run `git push -u origin agent/kitchen-nav-reorg`, `gh pr create --fill --base main --head agent/kitchen-nav-reorg` or `gh pr view --json url,number,state`, then deploy the already-validated web commit to the repo's production target with `pnpm run deploy` if no migrations were added or `pnpm run deploy:auto` if migrations were added. Record `git rev-parse HEAD` before deploy, deploy output, deployment URL or worker target printed by Wrangler, and one post-deploy smoke/readiness command if the deploy script exposes one without requiring new credentials. In the native worktree run `git push -u origin agent/kitchen-nav-reorg` and `gh pr create --fill --base main --head agent/kitchen-nav-reorg` or `gh pr view --json url,number,state`. If a command fails because auth/remote/Cloudflare/GitHub credentials are unavailable, save exact output and classify it as a true credential/capability blocker; ordinary CI/build/test/deploy preflight failures go back to Unit 6b.
+**Output**: Push logs, PR URLs/IDs, web commit SHA, deploy logs/URL or blocker notes under `./2026-07-13-1405-doing-kitchen-nav-reorg/unit-6f/`.
+**Acceptance**: Branches are pushed, PR/deploy status is recorded against the validated commit SHA, and any unavailable external operation is classified as a true credential/capability blocker with exact command/output.
 
 ### ⬜ Unit 6g: QA Cleanup And Slugger Notification
 **What**: In the web worktree run `pnpm cleanup:qa`; inspect native artifacts for generated disposable data references; notify Slugger with `ouro msg --to slugger "Done: shipped kitchen navigation reorg across web and native surfaces"` after implementation/shipping status is recorded.
@@ -205,3 +223,4 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 - 2026-07-13 14:44 Addressed ambiguity review: exact compact search affordance, route-matrix routes, validation commands, deploy commands, and blocker criteria
 - 2026-07-13 14:51 Addressed scrutiny omissions: compact search auxiliary routing, current-chef My Recipes repository, and Chefs route/sidebar behavior
 - 2026-07-13 14:58 Addressed scrutiny round 2: native Chefs visual/proof coverage and explicit web Chefs activity edge tests
+- 2026-07-13 15:08 Addressed final deception review: first-class native Chefs route, exact web drawer data contracts, owned native saved-recipes filtering, nil-current-chef fallback, and deploy sequencing
