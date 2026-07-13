@@ -1,7 +1,7 @@
 # Planning: Kitchen Navigation Reorg
 
 **Status**: drafting
-**Created**: 2026-07-13 14:05
+**Created**: 2026-07-13 14:07
 
 ## Goal
 Make Spoonjoy's primary organization obvious across the web app and Apple native app: a signed-in cook can quickly find their own recipes, saved recipes, cookbooks, shopping list, fellow chefs, and global search without decoding the current mixed kitchen/index language.
@@ -22,6 +22,7 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 - Native Apple saved-recipes surface derived from cookbook recipe membership, matching the web definition.
 - Native Apple copy updates for "My Recipes", "Saved Recipes", "Shopping List", "Chefs", and the honest editorial feature label.
 - Native Apple tab bar chrome iteration toward liquid-glass/material translucency using native UIKit/SwiftUI primitives.
+- Web/native design-language documentation updates for the finalized kitchen drawer model and mobile navigation posture.
 - Tests for changed web loaders/routes/navigation and native routing/navigation/design contracts.
 - Visual QA evidence for changed web and native UI surfaces.
 
@@ -45,6 +46,7 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 - [ ] Native regular-width navigation exposes the full kitchen drawer set, including Chefs and Search.
 - [ ] Native saved-recipes surface uses the same saved-through-cookbooks definition as web.
 - [ ] Native tab bar/mobile navigation uses material/translucent system chrome instead of the current opaque bone treatment.
+- [ ] Web/native docs reflect the finalized drawer names, saved-recipes definition, search posture, and mobile navigation behavior.
 - [ ] No OAuth files or behavior are edited except incidental imports/tests required by navigation compilation.
 - [ ] 100% test coverage on all new code
 - [ ] All tests pass
@@ -94,3 +96,5 @@ The task intentionally favors obvious kitchen organization over creative naming.
 
 ## Progress Log
 - 2026-07-13 14:05 Created
+- 2026-07-13 14:07 Created initial planning doc
+- 2026-07-13 14:07 Tinfoil hat pass: added explicit documentation alignment coverage
