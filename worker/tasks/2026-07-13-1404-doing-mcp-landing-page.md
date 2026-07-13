@@ -50,7 +50,7 @@ Make `https://spoonjoy.app/mcp` useful for humans by rendering a clear landing p
 
 **CRITICAL: Every unit header MUST start with status emoji (⬜ for new units).**
 
-### ⬜ Unit 0: Setup/Research
+### ✅ Unit 0: Setup/Research
 **What**: Confirm current `/mcp` route behavior, connector docs, route config, route classification, and test targets.
 **Output**: Execution context recorded in this doing doc and artifacts directory created.
 **Acceptance**: Existing route files and docs are read; copy caveats from review are reflected in Unit 1b.
@@ -87,3 +87,4 @@ Make `https://spoonjoy.app/mcp` useful for humans by rendering a clear landing p
 
 ## Progress Log
 - 2026-07-13 14:09 Created from planning doc
+- 2026-07-13 14:11 Unit 0 complete: recorded route, protocol, docs, registration, and test targets in `unit-0-research.md`
