@@ -26,6 +26,7 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 - Tests for changed web loaders/routes/navigation and native routing/navigation/design contracts.
 - Web visual QA evidence for the signed-in home and new/changed drawer routes at mobile and desktop widths.
 - Native visual QA evidence following `/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/docs/native-design-language.md`, including `design-review.json` or fail-closed `design-review-blocked.json`, route screenshots, and app-emitted accessibility proof artifacts when the harness can run.
+- Native screenshot harness updates if needed so changed routes have route-matrix support and route-specific accessibility proof.
 
 ### Out of Scope
 - OAuth/auth flow changes; another agent is working there.
@@ -51,7 +52,13 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 - [ ] Native Saved Recipes uses the same saved-through-cookbooks definition as web by deduping `contentState.cookbooks.flatMap(\\.recipes)` by recipe ID.
 - [ ] Native tab bar/mobile navigation uses system material/translucent chrome (`UITabBarAppearance`/SwiftUI toolbar material) instead of the current opaque bone treatment, with tests proving translucency/material setup.
 - [ ] Web `docs/design-language.md` and native `docs/native-design-language.md` document the finalized drawer names, saved-recipes definition, search posture, and mobile navigation behavior.
-- [ ] Native visual validation produces `design-review.json` with mobile/desktop screenshot booleans and app-emitted accessibility proof artifacts for changed navigation/search routes, or `design-review-blocked.json` if local runtime blockers prevent screenshots.
+- [ ] Native screenshot validation runs against the highest available bootable iPhone simulator resolved by `.github/scripts/resolve-ios-simulator-destination.py` or a pinned `SPOONJOY_IOS_SIMULATOR_NAME`/`SPOONJOY_IOS_SIMULATOR_UDID`, records the resolved simulator name/UDID in artifacts or blocker logs, and runs macOS validation against `generic/platform=macOS`.
+- [ ] Native route-matrix validation covers at least `kitchen`, `recipes`, `saved-recipes`, `cookbooks`, `shopping-list`, and `search` or the nearest supported route variants needed to prove the new compact tabs, regular sidebar, and toolbar search path.
+- [ ] Native `design-review.json` for successful captures is schema-valid under `scripts/validate-design-review.rb` and includes `mobileScreenshot`, `desktopScreenshot`, `dynamicType`, `voiceOverLabels`, `keyboardNavigation`, `reduceMotion`, `contrast`, `kitchenTableHierarchy`, `noOverlap`, `screenshotRoute`, route-specific signed-in proof fields, and iOS/macOS `accessibilityProofArtifacts`.
+- [ ] Native app-emitted accessibility proof uses `SPOONJOY_SCREENSHOT_ACCESSIBILITY_PROOF_PATH` or `SIMCTL_CHILD_SPOONJOY_SCREENSHOT_ACCESSIBILITY_PROOF_PATH`, includes `emittedBy: SpoonjoyApp`, expected bundle identifiers, `minimumTargetSize`, `textFits`, `noTinyClusters`, observed Dynamic Type and Reduce Motion values, route-specific `routeEvidence`, and `offlineIndicatorProof`.
+- [ ] Native `routeEvidence` names actual visible anchors for VoiceOver labels, keyboard navigation targets, Dynamic Type text styles, contrast pairs, hierarchy anchors, and layout guards for each changed route; route-agnostic boolean-only proof is not accepted.
+- [ ] Native `offlineIndicatorProof` names `OfflineStatusView`, visible states `offline`, `stale`, `queuedWork`, `syncFailure`, `conflict`, `blocker`, `destructiveConfirmation`, dismissible states `offline` and `stale`, severe states `queuedWork`, `syncFailure`, `conflict`, `blocker`, `destructiveConfirmation`, hidden states `synced` and `dismissed`, VoiceOver label proof, `Hide offline status` dismiss button proof, and severity-correct mapping.
+- [ ] Native screenshot blockers produce schema-valid `design-review-blocked.json` under `scripts/validate-design-review-blocker.rb` and do not leave a partial `design-review.json`.
 - [ ] Web visual validation captures mobile and desktop evidence for the home, personal drawers, search access, and mobile dock; any absurdity ledger entries for this task are closed or explicitly blocked with evidence.
 - [ ] No OAuth files or behavior are edited except incidental imports/tests required by navigation compilation.
 - [ ] 100% test coverage on all new code
@@ -98,6 +105,8 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 - Native iOS chrome setup: `/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Apps/Spoonjoy/iOS/SpoonjoyiOSApp.swift`.
 - Native recipe/cookbook models: `/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Sources/SpoonjoyCore/RecipeCookbook/RecipeCookbook.swift`.
 - Native design language: `/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/docs/native-design-language.md`.
+- Native screenshot matrix: `/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/scripts/capture-native-screenshot-matrix.sh`, `/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/scripts/capture-native-screenshots.sh`, `/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/scripts/validate-design-review.rb`, and `/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/scripts/validate-design-review-blocker.rb`.
+- Native simulator resolver: `/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/.github/scripts/resolve-ios-simulator-destination.py`.
 
 ## Notes
 The task intentionally favors obvious kitchen organization over creative naming. The implementation should avoid OAuth/auth churn and should preserve existing public recipe/cookbook URLs.
@@ -108,3 +117,4 @@ Native release submission is intentionally not part of this task because it can 
 - 2026-07-13 14:07 Created initial planning doc
 - 2026-07-13 14:07 Tinfoil hat pass: added explicit documentation alignment coverage
 - 2026-07-13 14:13 Addressed planning reviewer findings: concrete routes, native validation artifacts, and native release boundary
+- 2026-07-13 14:18 Addressed second reviewer finding: full native design-review schema, route evidence, blocker, and simulator/macOS validation targets
