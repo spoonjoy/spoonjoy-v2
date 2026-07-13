@@ -336,6 +336,11 @@ describe("route shell coverage", () => {
   });
 
   it("binds waitUntil in the MCP route shell when a Workers context exists", async () => {
+    const captureEvent = vi.fn(async () => undefined);
+    vi.doMock("~/lib/analytics-server", async (importOriginal) => ({
+      ...(await importOriginal<typeof import("~/lib/analytics-server")>()),
+      captureEvent,
+    }));
     const { action } = await import("~/routes/mcp");
     const waitUntil = vi.fn();
     const response = await action(routeArgs(
@@ -349,6 +354,10 @@ describe("route shell coverage", () => {
 
     expect(response.status).toBe(401);
     expect(waitUntil).toHaveBeenCalledTimes(1);
+    expect(captureEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: true, key: "ph_test" }),
+      expect.objectContaining({ event: "spoonjoy.mcp.request" }),
+    );
   });
 
   it("maps legacy REST operation not-found errors to 404", async () => {

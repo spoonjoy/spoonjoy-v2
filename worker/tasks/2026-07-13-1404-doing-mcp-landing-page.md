@@ -60,7 +60,7 @@ Make `https://spoonjoy.app/mcp` useful for humans by rendering a clear landing p
 **Output**: Failing tests that describe the new GET page and preserved POST shell behavior.
 **Acceptance**: Targeted test run fails for the expected missing page/component assertions before implementation.
 
-### ⬜ Unit 1b: MCP Landing Page — Implementation
+### ✅ Unit 1b: MCP Landing Page — Implementation
 **What**: Rename `app/routes/mcp.ts` to `app/routes/mcp.tsx`, export a page component and metadata for GET, keep `action` delegating to `handleMcpHttpRequest`, and update `app/routes.ts` plus `app/lib/web-route-manifest.server.ts` to point at `routes/mcp.tsx`. Page copy must say MCP calls are authenticated `POST` JSON-RPC over stateless Streamable HTTP, no SSE, no batching, and every request including `initialize` requires auth. OAuth wording must be limited to clients that support protected-resource discovery, dynamic registration, and PKCE. Claude Code bearer-token setup stays separate. Token lifecycle tools must be described as requiring token scopes. Do not imply arbitrary URL import or AI cover generation are MCP tools.
 **Output**: Working `/mcp` page and preserved MCP POST endpoint.
 **Acceptance**: Targeted tests pass without warnings.
@@ -89,3 +89,4 @@ Make `https://spoonjoy.app/mcp` useful for humans by rendering a clear landing p
 - 2026-07-13 14:09 Created from planning doc
 - 2026-07-13 14:11 Unit 0 complete: recorded route, protocol, docs, registration, and test targets in `unit-0-research.md`
 - 2026-07-13 14:12 Unit 1a complete: added route data, rendered-page, and POST shell tests; red run saved to `unit-1a-red.log`
+- 2026-07-13 14:16 Unit 1b complete: implemented GET landing page, preserved POST MCP action, updated route registration/classification, and saved green targeted test output to `unit-1b-green.log`
