@@ -34,11 +34,11 @@ Ignored nodes: comments, script, style
  ❯ node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
  ❯ test/routes/mcp-page.test.tsx:20:18
      18|     render(createElement(Stub, { initialEntries: ["/mcp"] }));
-     19| 
+     19|
      20|     await screen.findByRole("heading", { name: "Spoonjoy MCP" });
        |                  ^
      21|     const pageText = document.body.textContent ?? "";
-     22| 
+     22|
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
 
