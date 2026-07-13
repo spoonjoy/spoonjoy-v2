@@ -10,9 +10,9 @@ Objective: Record that the `SJ-044` cleanup-harness dogfood run is complete once
 - Web worktree: `/Users/arimendelow/Projects/spoonjoy-v2-agent-kitchen-nav` on `agent/kitchen-nav-reorg`.
 - Native worktree: `/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav` on `agent/kitchen-nav-reorg`.
 - Planning doc: `agent/tasks/2026-07-13-1405-planning-kitchen-nav-reorg.md` (approved after sub-agent reviewer convergence).
-- Doing doc: pending.
-- Current gate: doing doc conversion/review pending.
-- Next action: create doing doc, run mandatory Work Suite review passes, then execute with work-doer.
+- Doing doc: `agent/tasks/2026-07-13-1405-doing-kitchen-nav-reorg.md` (drafting).
+- Current gate: doing doc review passes pending.
+- Next action: run mandatory Work Suite doing-doc passes, then execute with work-doer after convergence.
 
 ## Current Gate
 
