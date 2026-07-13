@@ -1,8 +1,18 @@
 # Autopilot State
 
-Updated: 2026-06-12 10:08 America/Los_Angeles
+Updated: 2026-07-13 14:07 America/Los_Angeles
 Branch: post-merge `main` terminal state; the self-referential closure branch/PR used to land this line is excluded from stale-branch accounting.
 Objective: Record that the `SJ-044` cleanup-harness dogfood run is complete once this state lands on `main`, and leave the Spoonjoy autonomous queue in a truthful idle state.
+
+## Current Run
+
+- Objective: Ship the kitchen information architecture/navigation reorg across web and Apple native surfaces, including improved mobile liquid-glass navigation.
+- Web worktree: `/Users/arimendelow/Projects/spoonjoy-v2-agent-kitchen-nav` on `agent/kitchen-nav-reorg`.
+- Native worktree: `/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav` on `agent/kitchen-nav-reorg`.
+- Planning doc: `agent/tasks/2026-07-13-1405-planning-kitchen-nav-reorg.md`.
+- Doing doc: pending.
+- Current gate: planning reviewer gate pending after initial plan and tinfoil pass.
+- Next action: run sub-agent planning review, update plan if needed, convert to doing doc, then execute with work-doer.
 
 ## Current Gate
 
