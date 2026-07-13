@@ -189,6 +189,15 @@ export default function McpPage() {
           </p>
         </CookbookHeader>
 
+        <section className="border-y border-[var(--sj-border-strong)] py-5" aria-labelledby="mcp-tldr">
+          <p id="mcp-tldr" className="sj-eyebrow">TL;DR</p>
+          <p className="mt-3 max-w-4xl text-xl/8 text-[var(--sj-ink)]">
+            Authorize Spoonjoy once, then your AI assistant can help with the kitchen you already keep here:
+            finding recipes, organizing cookbooks, and updating your shopping list. OAuth-capable clients can
+            guide you through sign-in and consent; Claude Code can connect with a Spoonjoy bearer token.
+          </p>
+        </section>
+
         <section className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_24rem]">
           <div className="border-y border-[var(--sj-border-strong)] py-6">
             <div className="flex flex-wrap gap-2">

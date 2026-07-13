@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Request as UndiciRequest } from "undici";
 import { faker } from "@faker-js/faker";
-import { action, loader } from "~/routes/mcp";
+import { action, loader, meta } from "~/routes/mcp";
 import { createApiCredential } from "~/lib/api-auth.server";
 import { getLocalDb } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
@@ -32,6 +32,16 @@ describe("/mcp route", () => {
   });
   afterEach(async () => {
     await cleanupDatabase();
+  });
+
+  it("exposes human-facing metadata", () => {
+    expect(meta({} as never)).toEqual(expect.arrayContaining([
+      { title: "Spoonjoy MCP" },
+      expect.objectContaining({
+        name: "description",
+        content: expect.stringContaining("AI assistants"),
+      }),
+    ]));
   });
 
   it("returns landing-page data on GET via the loader", async () => {

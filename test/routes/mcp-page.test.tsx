@@ -20,6 +20,8 @@ describe("/mcp landing page", () => {
     await screen.findByRole("heading", { name: "Spoonjoy MCP" });
     const pageText = document.body.textContent ?? "";
 
+    expect(pageText).toContain("TL;DR");
+    expect(pageText).toContain("Authorize Spoonjoy once");
     expect(pageText).toContain("https://spoonjoy.app/mcp");
     expect(pageText).toContain("POST");
     expect(pageText).toContain("JSON-RPC");
