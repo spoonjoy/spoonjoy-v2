@@ -19,13 +19,13 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 - None
 
 ## Completion Criteria
-- [ ] Signed-in web desktop navigation exposes exact labels/routes: `Kitchen` -> `/`, `My Recipes` -> `/my-recipes`, `Saved` or `Saved Recipes` -> `/saved-recipes`, `Cookbooks` -> `/cookbooks`, `Shopping List` -> `/shopping-list`, `Chefs` -> `/chefs`, and `Kitchen Search` -> `/search`.
-- [ ] Web keeps `/recipes` as `Explore Recipes` / broader all-recipes browsing and does not reuse that label for the current user's authored recipes.
-- [ ] Web My Recipes at `/my-recipes` shows recipes authored by the current user through `Recipe.chefId`, supports a local search/filter query, and provides a create-recipe action.
-- [ ] Web Saved Recipes at `/saved-recipes` shows deduped recipes saved through cookbooks owned by the current user through `RecipeInCookbook` plus `Cookbook.authorId`, including the user's own recipes when saved in a cookbook, and supports a local search/filter query.
-- [ ] Web Cookbooks at `/cookbooks` is a real owned-cookbooks surface based on `Cookbook.authorId`, supports a local search/filter query, and no longer redirects authenticated users to `/?tab=cookbooks`.
-- [ ] Web Chefs at `/chefs` includes existing fellow-chef semantics from `app/lib/fellow-chefs.server.ts`, a "Chefs Using My Recipes" section, and a private chronological activity section that excludes shopping-list events.
-- [ ] Web global search remains at `/search` with existing scopes `all`, `recipes`, `cookbooks`, `chefs`, and `shopping-list`; personal drawer search/filter inputs do not create a second global-search semantics.
+- [x] Signed-in web desktop navigation exposes exact labels/routes: `Kitchen` -> `/`, `My Recipes` -> `/my-recipes`, `Saved` or `Saved Recipes` -> `/saved-recipes`, `Cookbooks` -> `/cookbooks`, `Shopping List` -> `/shopping-list`, `Chefs` -> `/chefs`, and `Kitchen Search` -> `/search`.
+- [x] Web keeps `/recipes` as `Explore Recipes` / broader all-recipes browsing and does not reuse that label for the current user's authored recipes.
+- [x] Web My Recipes at `/my-recipes` shows recipes authored by the current user through `Recipe.chefId`, supports a local search/filter query, and provides a create-recipe action.
+- [x] Web Saved Recipes at `/saved-recipes` shows deduped recipes saved through cookbooks owned by the current user through `RecipeInCookbook` plus `Cookbook.authorId`, including the user's own recipes when saved in a cookbook, and supports a local search/filter query.
+- [x] Web Cookbooks at `/cookbooks` is a real owned-cookbooks surface based on `Cookbook.authorId`, supports a local search/filter query, and no longer redirects authenticated users to `/?tab=cookbooks`.
+- [x] Web Chefs at `/chefs` includes existing fellow-chef semantics from `app/lib/fellow-chefs.server.ts`, a "Chefs Using My Recipes" section, and a private chronological activity section that excludes shopping-list events.
+- [x] Web global search remains at `/search` with existing scopes `all`, `recipes`, `cookbooks`, `chefs`, and `shopping-list`; personal drawer search/filter inputs do not create a second global-search semantics.
 - [ ] Web "Latest from the kitchen" copy is replaced with `On the Counter`, with deterministic selection from the current display recipe ordering and no false freshness claim.
 - [ ] Web mobile navigation labels use kitchen terms (`My Kitchen`, `My Recipes`, `Saved`, `Cookbooks`, `Shopping List`, `Chefs`, `Search`) and the dock is visually glass/material-like while preserving fixed bottom safe-area behavior at 320-390px and desktop-hidden behavior at `lg`.
 - [ ] Native compact iPhone `TabView` exposes exactly five tabs: `Kitchen`, `My Recipes`, `Saved`, `Cookbooks`, and `Shopping List`; `Search` is removed as a bottom tab and remains reachable from the trailing toolbar menu item labeled `Search`, which opens the `.search(query:scope:)` route where `.searchable` uses toolbar-principal placement and search scopes.
@@ -106,7 +106,7 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 **Output**: Web route/navigation source changes in `app/routes.ts`, `app/routes/my-recipes.tsx`, `app/routes/saved-recipes.tsx`, `app/routes/chefs.tsx`, `app/routes/cookbooks._index.tsx`, `app/root.tsx`, and `app/components/navigation/mobile-nav.tsx`; green focused-test logs saved under `./2026-07-13-1405-doing-kitchen-nav-reorg/unit-1b/`.
 **Acceptance**: Unit 1a focused tests pass green; `/recipes` remains broader Explore Recipes; no OAuth route/source files are modified.
 
-### ⬜ Unit 1c: Web Kitchen Drawers — Coverage & Refactor
+### ✅ Unit 1c: Web Kitchen Drawers — Coverage & Refactor
 **What**: Add or extend helpers only where they remove duplication for drawer loaders/cards/search filtering, and cover empty, unauthenticated, duplicate saved recipe, and non-owner cases.
 **Output**: Covered helper/test updates plus coverage or focused-test logs under `./2026-07-13-1405-doing-kitchen-nav-reorg/unit-1c/`.
 **Acceptance**: Focused route/navigation tests pass with coverage for all new loader/helper branches; code remains aligned with existing React Router/Tailwind patterns.
@@ -225,6 +225,7 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 - 2026-07-13 14:58 Addressed scrutiny round 2: native Chefs visual/proof coverage and explicit web Chefs activity edge tests
 - 2026-07-13 15:08 Addressed final deception review: first-class native Chefs route, exact web drawer data contracts, owned native saved-recipes filtering, nil-current-chef fallback, and deploy sequencing
 - 2026-07-13 15:14 Doing doc reviewer chain converged clean; marked ready for execution
-- 2026-07-13 15:18 Unit 0 complete: captured clean web/native worktree state, target files, constraints, and validation commands
-- 2026-07-13 15:25 Unit 1a complete: added red web route/navigation tests for My Recipes, Saved Recipes, Cookbooks, Chefs, desktop nav, and mobile drawer labels
-- 2026-07-13 15:38 Unit 1b complete: implemented web drawer routes, owned-cookbooks page, Chefs activity feed, and desktop/mobile navigation labels; focused tests, typecheck, and build passed
+- 2026-07-13 15:04 Unit 0 complete: captured clean web/native worktree state, target files, constraints, and validation commands
+- 2026-07-13 15:08 Unit 1a complete: added red web route/navigation tests for My Recipes, Saved Recipes, Cookbooks, Chefs, desktop nav, and mobile drawer labels
+- 2026-07-13 15:15 Unit 1b complete: implemented web drawer routes, owned-cookbooks page, Chefs activity feed, and desktop/mobile navigation labels; focused tests, typecheck, and build passed
+- 2026-07-13 15:28 Unit 1c complete: addressed Unit 1b reviewer findings, added drawer edge/render coverage, fixed cookbook full-title search with preview covers, and verified focused tests, focused coverage, typecheck, build, and whitespace checks
