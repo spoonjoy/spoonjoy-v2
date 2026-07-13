@@ -1,6 +1,6 @@
 # Autopilot State
 
-Updated: 2026-07-13 15:45 America/Los_Angeles
+Updated: 2026-07-13 16:13 America/Los_Angeles
 Branch: post-merge `main` terminal state; the self-referential closure branch/PR used to land this line is excluded from stale-branch accounting.
 Objective: Record that the `SJ-044` cleanup-harness dogfood run is complete once this state lands on `main`, and leave the Spoonjoy autonomous queue in a truthful idle state.
 
@@ -11,8 +11,8 @@ Objective: Record that the `SJ-044` cleanup-harness dogfood run is complete once
 - Native worktree: `/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav` on `agent/kitchen-nav-reorg`.
 - Planning doc: `agent/tasks/2026-07-13-1405-planning-kitchen-nav-reorg.md` (approved after sub-agent reviewer convergence).
 - Doing doc: `agent/tasks/2026-07-13-1405-doing-kitchen-nav-reorg.md` (`READY_FOR_EXECUTION` after mandatory reviewer convergence).
-- Current gate: Unit 3b complete; native `savedRecipes` and `chefs` routes, snapshot-only personal catalogs, deep links, manifests, and app-shell destinations are implemented and pushed in `6f6ee6df`.
-- Next action: execute Unit 3c/4 native coverage and mobile material source-contract tests, then fold in Locke's web mobile-nav findings before final validation.
+- Current gate: Units 3c and 4a-4c complete; native route coverage, five-tab compact navigation, Chefs/Kitchen Search sidebar, toolbar-principal Search, translucent/material tab-bar chrome, and web glass Pantry mobile drawer are implemented, tested, committed, and pushed.
+- Next action: execute Units 5a-5c for web/native design docs plus native screenshot/proof route contracts, then run cross-surface validation, visual QA dogfood, PR/deploy steps, cleanup, and Slugger notification.
 
 ## Current Gate
 

@@ -28,13 +28,13 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 - [x] Web global search remains at `/search` with existing scopes `all`, `recipes`, `cookbooks`, `chefs`, and `shopping-list`; personal drawer search/filter inputs do not create a second global-search semantics.
 - [x] Web "Latest from the kitchen" copy is replaced with `On the Counter`, with deterministic selection from the current display recipe ordering and no false freshness claim.
 - [x] Web mobile navigation labels use kitchen terms (`My Kitchen`, `My Recipes`, `Saved`, `Cookbooks`, `Shopping List`, `Chefs`, `Search`) and the dock is visually glass/material-like while preserving fixed bottom safe-area behavior at 320-390px and desktop-hidden behavior at `lg`.
-- [ ] Native compact iPhone `TabView` exposes exactly five tabs: `Kitchen`, `My Recipes`, `Saved`, `Cookbooks`, and `Shopping List`; `Search` is removed as a bottom tab and remains reachable from the trailing toolbar menu item labeled `Search`, which opens the `.search(query:scope:)` route where `.searchable` uses toolbar-principal placement and search scopes.
-- [ ] Native regular-width `NavigationSplitView` sidebar exposes `Kitchen`, `My Recipes`, `Saved Recipes`, `Cookbooks`, `Shopping List`, `Chefs`, `Kitchen Search`, `Imports`, and `Settings`.
+- [x] Native compact iPhone `TabView` exposes exactly five tabs: `Kitchen`, `My Recipes`, `Saved`, `Cookbooks`, and `Shopping List`; `Search` is removed as a bottom tab and remains reachable from the trailing toolbar menu item labeled `Search`, which opens the `.search(query:scope:)` route where `.searchable` uses toolbar-principal placement and search scopes.
+- [x] Native regular-width `NavigationSplitView` sidebar exposes `Kitchen`, `My Recipes`, `Saved Recipes`, `Cookbooks`, `Shopping List`, `Chefs`, `Kitchen Search`, `Imports`, and `Settings`.
 - [x] Native route model includes first-class `AppSection.chefs` and `AppRoute.chefs` with `stateIdentifier == "chefs"`; sidebar, title/back behavior, destination content, route-matrix, and visual proof treat Chefs as its own route, not a search alias.
 - [x] Native My Recipes filters cached/displayed recipes to `contentState.authSessionState`'s current authenticated chef ID, uses a snapshot/current-chef repository rather than the public live catalog for the personal drawer, and when current chef is unavailable it renders an empty/signed-out-safe personal drawer with no public recipes and no `PublicCatalogRequests.listRecipes` call.
 - [x] Native Saved Recipes uses the same saved-through-owned-cookbooks definition as web by filtering `contentState.cookbooks` to `cookbook.chef.id == currentChefID`, flattening `cookbook.recipes`, and deduping by recipe ID with deterministic first-seen cookbook/update ordering; when current chef is unavailable it renders empty/signed-out-safe state.
-- [ ] Native toolbar Search renders `SearchView` as an auxiliary compact route after removing the Search bottom tab, and route/section mapping tests prove `.search` no longer depends on a removed tab item.
-- [ ] Native tab bar/mobile navigation uses system material/translucent chrome (`UITabBarAppearance`/SwiftUI toolbar material) instead of the current opaque bone treatment, with tests proving translucency/material setup.
+- [x] Native toolbar Search renders `SearchView` as an auxiliary compact route after removing the Search bottom tab, and route/section mapping tests prove `.search` no longer depends on a removed tab item.
+- [x] Native tab bar/mobile navigation uses system material/translucent chrome (`UITabBarAppearance`/SwiftUI toolbar material) instead of the current opaque bone treatment, with tests proving translucency/material setup.
 - [ ] Web `docs/design-language.md` and native `docs/native-design-language.md` document the finalized drawer names, saved-recipes definition, search posture, and mobile navigation behavior.
 - [ ] Native screenshot validation runs against the highest available bootable iPhone simulator resolved by `.github/scripts/resolve-ios-simulator-destination.py` or a pinned `SPOONJOY_IOS_SIMULATOR_NAME`/`SPOONJOY_IOS_SIMULATOR_UDID`, records the resolved simulator name/UDID in artifacts or blocker logs, and runs macOS validation against `generic/platform=macOS`.
 - [ ] Native route-matrix validation covers exact routes `kitchen`, `recipes`, `saved-recipes`, `cookbooks`, `shopping-list`, `chefs`, and `search`; if the current screenshot harness lacks `saved-recipes` or `chefs`, this task adds that support before visual QA.
@@ -136,22 +136,22 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 **Output**: Native route/model/view source changes and green focused Swift logs saved under `./2026-07-13-1405-doing-kitchen-nav-reorg/unit-3b/`.
 **Acceptance**: Unit 3a tests pass; saved recipes are deduped from owned cookbook membership only; My Recipes and Saved Recipes are empty/signed-out-safe when `currentChefID` is nil and never fall back to the public recipe catalog.
 
-### ⬜ Unit 3c: Native Route Model And Saved Recipes — Coverage & Refactor
+### ✅ Unit 3c: Native Route Model And Saved Recipes — Coverage & Refactor
 **What**: Cover empty saved-recipes, duplicate recipes across owned cookbooks, foreign-cookbook exclusion, signed-out/current-chef-unavailable fallback, first-class Chefs route parsing, and route parsing rejection of unsafe identifiers.
 **Output**: Additional Swift tests and coverage/focused-test logs under `./2026-07-13-1405-doing-kitchen-nav-reorg/unit-3c/`.
 **Acceptance**: Focused Swift coverage for new route/view-model code is complete and tests stay green with warnings as errors.
 
-### ⬜ Unit 4a: Native Navigation And Liquid Glass — Tests
+### ✅ Unit 4a: Native Navigation And Liquid Glass — Tests
 **What**: Update/add failing tests in `Tests/SpoonjoyCoreTests/NativeMobileDesignContractTests.swift`, `Tests/SpoonjoyCoreTests/KitchenRecipesStructureContractTests.swift`, and related source-contract tests for five compact tabs, regular sidebar labels including Chefs and Kitchen Search, `.search` mapping to a compact auxiliary route instead of a removed tab item, the trailing compact toolbar `Search` menu item opening `.search(query:scope:)`, search-route `.searchable(... placement: .toolbarPrincipal ...)`, `On the Counter`, and translucent/material tab bar appearance.
 **Output**: Failing native source-contract tests and red logs under `./2026-07-13-1405-doing-kitchen-nav-reorg/unit-4a/`.
 **Acceptance**: Focused native design-contract tests fail red on current Search tab, opaque tab bar, old labels, and old editorial copy.
 
-### ⬜ Unit 4b: Native Navigation And Liquid Glass — Implementation
+### ✅ Unit 4b: Native Navigation And Liquid Glass — Implementation
 **What**: Update compact `TabView` and sidebar in `PlatformNavigationView.swift`; remove `.search` from compact tab roots and make `.search` a compact auxiliary route rendered by `compactImmersiveRouteContent`/`destinationContent`; keep search available through the existing trailing toolbar `Menu` item labeled `Search`, whose action calls `performSearch(search)` and navigates to the `.search(query:scope:)` route; keep `.searchable(text:isPresented:placement:.toolbarPrincipal,prompt:"Search Spoonjoy")` and `.searchScopes` active only on the compact search route; wire Chefs sidebar to first-class `.chefs`; update `Apps/Spoonjoy/iOS/SpoonjoyiOSApp.swift` to use translucent/material `UITabBarAppearance`; update native route titles and labels.
 **Output**: Native navigation/chrome source changes and green focused native design-contract logs under `./2026-07-13-1405-doing-kitchen-nav-reorg/unit-4b/`.
 **Acceptance**: Unit 4a tests pass; bottom tabs are exactly Kitchen, My Recipes, Saved, Cookbooks, Shopping List; Search is reachable from toolbar/menu.
 
-### ⬜ Unit 4c: Native Navigation And Liquid Glass — Coverage & Refactor
+### ✅ Unit 4c: Native Navigation And Liquid Glass — Coverage & Refactor
 **What**: Run focused native tests for app state, navigation contracts, and design contracts; refactor duplication in title/label mapping only if tests show repeated fragile strings.
 **Output**: Focused native test logs and any local refactor diff notes under `./2026-07-13-1405-doing-kitchen-nav-reorg/unit-4c/`.
 **Acceptance**: Focused native tests pass with warnings as errors and no route/tab source-contract holes.
@@ -234,3 +234,8 @@ Make Spoonjoy's primary organization obvious across the web app and Apple native
 - 2026-07-13 15:33 Unit 2b complete: replaced the misleading home editorial copy with `On the Counter`, upgraded SpoonDock to a translucent material/glass shell, and verified focused tests, typecheck, and build
 - 2026-07-13 15:39 Unit 2c complete: tightened Chefs activity/render coverage, verified the focused web navigation/search/drawer slice, and captured threshold-neutral coverage with changed web files at 100%
 - 2026-07-13 15:45 Unit 3a complete: added native red tests for saved-recipes and chefs routes plus current-chef My Recipes and owned-cookbook Saved Recipes catalog derivation; focused Swift test failed on the intended missing route/catalog symbols
+- 2026-07-13 16:10 Mobile glass drawer follow-up complete: updated the signed-in web mobile dock to expose My Recipes and Shopping List directly plus a translucent Pantry drawer with My Recipes, Saved Recipes, Cookbooks, Shopping List, Chefs, and Kitchen Search; focused navigation tests and typecheck passed
+- 2026-07-13 16:13 Unit 3c complete: verified AppState and DeepLinkRouter coverage for saved-recipes, Chefs route mapping, owned-cookbook saved recipe dedupe/exclusion, nil-current-chef fallbacks, and unsafe link rejection with warnings as errors
+- 2026-07-13 16:13 Unit 4a complete: updated native design-contract tests for five compact tabs, Chefs/Kitchen Search sidebar labels, Search through the More toolbar menu, compact auxiliary search, and translucent/material tab-bar chrome; red run failed on the intended stale chrome and Shopping label expectations
+- 2026-07-13 16:13 Unit 4b complete: implemented translucent UIKit tab-bar appearance using transparent background, system material blur, and glass bone tint while preserving the SwiftUI `.regularMaterial` tab-bar background; focused native design-contract tests passed
+- 2026-07-13 16:13 Unit 4c complete: reran focused native AppState, DeepLinkRouter, and NativeMobileDesignContract tests with warnings as errors; 45 tests passed
