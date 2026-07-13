@@ -1,0 +1,14 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+ ✓ test/routes/route-shell-coverage.test.ts (13 tests) 945ms
+     ✓ binds waitUntil in the MCP route shell when a Workers context exists  373ms
+ ✓ test/routes/mcp.test.ts (5 tests) 100ms
+ ✓ test/routes/mcp-page.test.tsx (1 test) 74ms
+ ✓ test/components/cookbook/page.test.tsx (3 tests) 70ms
+
+ Test Files  4 passed (4)
+      Tests  22 passed (22)
+   Start at  14:54:56
+   Duration  3.86s (transform 676ms, setup 319ms, import 1.32s, tests 1.19s, environment 545ms)
+

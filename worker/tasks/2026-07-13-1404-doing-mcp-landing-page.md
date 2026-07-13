@@ -1,6 +1,6 @@
 # Doing: MCP Landing Page
 
-**Status**: READY_FOR_EXECUTION
+**Status**: done
 **Execution Mode**: direct
 **Created**: 2026-07-13 14:09
 **Planning**: ./2026-07-13-1404-planning-mcp-landing-page.md
@@ -19,13 +19,13 @@ Make `https://spoonjoy.app/mcp` useful for humans by rendering a clear landing p
 - None
 
 ## Completion Criteria
-- [ ] GET `/mcp` renders a human-facing landing page with title, description, endpoint, auth guidance, and a practical setup path.
-- [ ] POST `/mcp` still delegates to the existing MCP HTTP handler.
-- [ ] Route tests cover the new GET page behavior and existing POST auth/tool behavior still passes.
-- [ ] 100% test coverage on all new code
-- [ ] All tests pass
-- [ ] No warnings
-- [ ] If UI/rendering/layout changed: `visual-qa-dogfood` evidence captured, absurdity ledger closed, and automated visual metrics still pass
+- [x] GET `/mcp` renders a human-facing landing page with title, description, endpoint, auth guidance, and a practical setup path.
+- [x] POST `/mcp` still delegates to the existing MCP HTTP handler.
+- [x] Route tests cover the new GET page behavior and existing POST auth/tool behavior still passes.
+- [x] 100% test coverage on all new code
+- [x] All tests pass
+- [x] No warnings
+- [x] If UI/rendering/layout changed: `visual-qa-dogfood` evidence captured, absurdity ledger closed, and automated visual metrics still pass
 
 ## Code Coverage Requirements
 **MANDATORY: 100% coverage on all new code.**
@@ -70,7 +70,7 @@ Make `https://spoonjoy.app/mcp` useful for humans by rendering a clear landing p
 **Output**: Test, coverage, and build logs in `./2026-07-13-1404-doing-mcp-landing-page/`.
 **Acceptance**: 100% coverage on new/modified route code, all targeted tests pass, `pnpm run build` passes with no warnings.
 
-### ⬜ Unit 1d: MCP Landing Page — Visual QA Dogfood
+### ✅ Unit 1d: MCP Landing Page — Visual QA Dogfood
 **What**: Start the app locally, inspect `/mcp` at desktop and mobile widths, capture screenshots, and keep an absurdity ledger. Check for mobile-safe code blocks, no text overlap, no nested cards, and readable first viewport.
 **Output**: Screenshots and absurdity ledger in `./2026-07-13-1404-doing-mcp-landing-page/`.
 **Acceptance**: Visual evidence captured and all in-scope ready items fixed or explicitly closed.
@@ -91,3 +91,4 @@ Make `https://spoonjoy.app/mcp` useful for humans by rendering a clear landing p
 - 2026-07-13 14:12 Unit 1a complete: added route data, rendered-page, and POST shell tests; red run saved to `unit-1a-red.log`
 - 2026-07-13 14:16 Unit 1b complete: implemented GET landing page, preserved POST MCP action, updated route registration/classification, and saved green targeted test output to `unit-1b-green.log`
 - 2026-07-13 14:48 Unit 1c complete: refreshed Browserslist data to clear stale warnings, verified full coverage at 100%, and ran production build with clean logs
+- 2026-07-13 14:59 Unit 1d complete: captured desktop/mobile screenshots, fixed mobile grid overflow, passed visual reviewer gate, reran targeted tests, full coverage, and build with clean logs

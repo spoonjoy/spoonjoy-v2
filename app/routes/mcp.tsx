@@ -166,7 +166,7 @@ export default function McpPage() {
 
   return (
     <CookbookPage>
-      <div className="grid gap-10">
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-10">
         <CookbookHeader
           eyebrow="Remote connector"
           title="Spoonjoy MCP"
@@ -189,7 +189,7 @@ export default function McpPage() {
           </p>
         </CookbookHeader>
 
-        <section className="border-y border-[var(--sj-border-strong)] py-5" aria-labelledby="mcp-tldr">
+        <section className="min-w-0 border-y border-[var(--sj-border-strong)] py-5" aria-labelledby="mcp-tldr">
           <p id="mcp-tldr" className="sj-eyebrow">TL;DR</p>
           <p className="mt-3 max-w-4xl text-xl/8 text-[var(--sj-ink)]">
             Authorize Spoonjoy once, then your AI assistant can help with the kitchen you already keep here:
@@ -198,8 +198,8 @@ export default function McpPage() {
           </p>
         </section>
 
-        <section className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_24rem]">
-          <div className="border-y border-[var(--sj-border-strong)] py-6">
+        <section className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[minmax(0,1fr)_24rem]">
+          <div className="min-w-0 border-y border-[var(--sj-border-strong)] py-6">
             <div className="flex flex-wrap gap-2">
               <Badge color="green">Owner-scoped</Badge>
               <Badge color="amber">OAuth protected</Badge>
@@ -209,15 +209,17 @@ export default function McpPage() {
               The browser page is the guide. The protocol call is authenticated POST JSON-RPC.
             </h2>
             <p className="mt-3 max-w-3xl text-base/7 text-[var(--sj-ink-soft)]">
-              Visiting this URL shows setup help. MCP clients send JSON-RPC to the same URL with `POST`; every request,
-              including `initialize`, needs a valid bearer token or an OAuth access token bound to this resource.
+              Visiting this URL shows setup help. MCP clients send JSON-RPC to the same URL with{" "}
+              <code className="font-sj-ui font-semibold text-[var(--sj-ink)]">POST</code>; every request, including{" "}
+              <code className="font-sj-ui font-semibold text-[var(--sj-ink)]">initialize</code>, needs a valid bearer token
+              or an OAuth access token bound to this resource.
             </p>
             <div className="mt-6">
               <CodeBlock>{endpoint}</CodeBlock>
             </div>
           </div>
 
-          <dl className="border-y border-[var(--sj-border-strong)] py-3">
+          <dl className="min-w-0 border-y border-[var(--sj-border-strong)] py-3">
             {protocolFacts.map(([label, value]) => (
               <FactRow key={label} label={label} value={value} />
             ))}
@@ -226,7 +228,7 @@ export default function McpPage() {
 
         <section>
           <CookbookSectionTitle>What It Can Use</CookbookSectionTitle>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {capabilities.map((item) => {
               const Icon = item.icon;
               return (
@@ -248,7 +250,7 @@ export default function McpPage() {
 
         <section>
           <CookbookSectionTitle>How To Connect</CookbookSectionTitle>
-          <div className="grid gap-4 lg:grid-cols-3">
+          <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-3">
             {setupSteps.map((step, index) => {
               const Icon = step.icon;
               return (
@@ -267,7 +269,7 @@ export default function McpPage() {
           </div>
         </section>
 
-        <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,28rem)]">
+        <section className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,28rem)]">
           <div>
             <CookbookSectionTitle>Claude Code</CookbookSectionTitle>
             <p className="mb-4 max-w-3xl text-sm/6 text-[var(--sj-ink-soft)]">
