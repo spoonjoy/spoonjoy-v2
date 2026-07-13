@@ -1,6 +1,6 @@
 # Planning: Kitchen Navigation Reorg
 
-**Status**: drafting
+**Status**: approved
 **Created**: 2026-07-13 14:07
 
 ## Goal
@@ -118,3 +118,4 @@ Native release submission is intentionally not part of this task because it can 
 - 2026-07-13 14:07 Tinfoil hat pass: added explicit documentation alignment coverage
 - 2026-07-13 14:13 Addressed planning reviewer findings: concrete routes, native validation artifacts, and native release boundary
 - 2026-07-13 14:18 Addressed second reviewer finding: full native design-review schema, route evidence, blocker, and simulator/macOS validation targets
+- 2026-07-13 14:20 Planning approved after sub-agent reviewer convergence
