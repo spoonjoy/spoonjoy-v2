@@ -112,4 +112,4 @@ The implementation should prefer shared service helpers over fixing identical be
 
 ## Progress Log
 - 2026-07-14 13:15 Created
-- 2026-07-14 13:15 Tinfoil pass added Durable Object env binding, route contract, migration, and search-index scope.
+- 2026-07-14 13:16 Tinfoil pass added Durable Object env binding, route contract, migration, and search-index scope.
