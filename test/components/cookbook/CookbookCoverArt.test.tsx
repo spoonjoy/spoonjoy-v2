@@ -41,12 +41,22 @@ describe("CookbookCoverArt", () => {
 
     expect(screen.getByRole("img", { name: "A" })).toHaveAttribute("src", "/a.jpg");
     const badge = screen.getByTestId("cover-provenance-badge");
-    expect(badge).toHaveTextContent("Chef photo");
+    expect(badge).toHaveTextContent("Original photo");
+    expect(screen.queryByText("Chef photo")).not.toBeInTheDocument();
     expect(badge).toHaveClass("bg-[rgba(37,34,31,0.96)]");
     expect(badge).toHaveClass("text-[var(--sj-paper)]");
     expect(badge.className).not.toContain("text-[var(--sj-ink-soft)]");
     expect(screen.queryByText("Spoonjoy cookbook")).not.toBeInTheDocument();
     expect(screen.getAllByText("1 recipe").length).toBeGreaterThan(0);
+  });
+
+  it("normalizes stale editorial cover labels before rendering cookbook badges", () => {
+    render(<CookbookCoverArt title="Editorial Dish" recipeCount={1} recipeImages={[images[1]]} />);
+
+    const badge = screen.getByTestId("cover-provenance-badge");
+    expect(badge).toHaveTextContent("Editorial photo");
+    expect(screen.queryByText("Editorialized chef photo")).not.toBeInTheDocument();
+    expect(screen.queryByText("Spoonjoy cookbook")).not.toBeInTheDocument();
   });
 
   it("renders a two-photo cover", () => {

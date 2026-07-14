@@ -6,69 +6,65 @@ Generated app/lib/generated/api-v1-playground.ts
 
  RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2-photo-studio
 
- ❯ test/lib/recipe-cover.server.test.ts (57 tests | 5 failed) 498ms
-       ✓ inserts a cover with the supplied fields 21ms
+ ❯ test/lib/recipe-cover.server.test.ts (57 tests | 5 failed) 549ms
+       ✓ inserts a cover with the supplied fields 20ms
        ✓ stores optional stylizedImageUrl and sourceSpoonId 9ms
-       ✓ stores status, generation, provenance, and prompt metadata 9ms
-       ✓ rejects an invalid source type 17ms
+       ✓ stores status, generation, provenance, and prompt metadata 22ms
+       ✓ rejects an invalid source type 9ms
        ✓ rejects an invalid lifecycle status 7ms
        ✓ rejects an invalid generation status 6ms
        ✓ returns covers ordered by createdAt desc, id desc 11ms
        ✓ returns [] when the recipe has no covers 6ms
        ✓ returns the explicitly active cover instead of the latest row 11ms
-       ✓ returns null when the recipe has no active cover 8ms
-       ✓ keeps getCurrentCover as an explicit-active compatibility alias 8ms
+       ✓ returns null when the recipe has no active cover 7ms
+       ✓ keeps getCurrentCover as an explicit-active compatibility alias 9ms
        ✓ returns the requested active stylized variant 6ms
        ✓ returns the requested active image variant 6ms
-       ✓ returns null when coverMode is intentionally none 6ms
+       ✓ returns null when coverMode is intentionally none 5ms
        ✓ does not fall back to newest row when the active cover is missing 6ms
-       ✓ returns null when the active cover is archived 6ms
-       ✓ uses raw image as temporary display for a processing active cover with no variant 6ms
+       ✓ returns null when the active cover is archived 5ms
+       ✓ uses raw image as temporary display for a processing active cover with no variant 10ms
        ✓ falls back to the preferred variant when a ready active cover has no selected variant 6ms
-       ✓ treats a missing coverMode as auto for compatibility 5ms
-       ✓ returns null when no variant is selected and the ready cover has no displayable URL 5ms
-       ✓ returns null when the selected variant URL is empty 5ms
-       ✓ returns null for an invalid override variant 6ms
-       ✓ returns null for an invalid active cover variant 6ms
-       ✓ returns null for an invalid cover mode 5ms
+       ✓ treats a missing coverMode as auto for compatibility 7ms
+       ✓ returns null when no variant is selected and the ready cover has no displayable URL 6ms
+       ✓ returns null when the selected variant URL is empty 8ms
+       ✓ returns null for an invalid override variant 7ms
+       ✓ returns null for an invalid active cover variant 7ms
+       ✓ returns null for an invalid cover mode 7ms
        ✓ returns null for a failed active cover 6ms
        ✓ returns null for an invalid active cover status 6ms
-       ✓ does not throw when recipe.title is an empty string 6ms
-       × formats standalone provenance labels 11ms
-       ✓ returns only same-recipe active covers and serializes cache snapshots 10ms
+       ✓ does not throw when recipe.title is an empty string 7ms
+       × formats standalone provenance labels 12ms
+       ✓ returns only same-recipe active covers and serializes cache snapshots 9ms
        ✓ labels ai-placeholder/image as AI generated 6ms
        × labels chef-upload/image as Original photo 9ms
        × labels chef-upload/stylized as Editorial photo 6ms
-       × labels spoon/image as Original photo 7ms
-       × labels spoon/stylized as Editorial photo 7ms
-       ✓ labels import/image as Imported photo 6ms
+       × labels spoon/image as Original photo 8ms
+       × labels spoon/stylized as Editorial photo 6ms
+       ✓ labels import/image as Imported photo 7ms
        ✓ does not mislabel an unknown source type as AI generated 6ms
-       ✓ sets recipe active cover, variant, and manual cover mode 10ms
-       ✓ rejects an archived cover 7ms
+       ✓ sets recipe active cover, variant, and manual cover mode 9ms
+       ✓ rejects an archived cover 10ms
        ✓ rejects a missing stylized variant URL 8ms
-       ✓ rejects a missing cover 6ms
-       ✓ rejects an invalid requested variant 7ms
-       ✓ rejects a failed cover 7ms
-       ✓ allows the original image when editorial generation failed but the raw photo remains 9ms
-       ✓ rejects a cover with an invalid status 7ms
-       ✓ archives an inactive cover 8ms
-       ✓ rejects a missing cover 7ms
-       ✓ requires a replacement or explicit no-cover state for the active cover 8ms
-       ✓ rejects replacing the active cover with the same cover being archived 8ms
-       ✓ requires a replacement variant when replacing the active cover 8ms
-       ✓ sets coverMode none when archiving the active cover with confirmation 9ms
-       ✓ switches active cover before archiving the previous active cover 10ms
-       ✓ chooses the newest ready non-archived cover with a non-empty display URL 8ms
-       ✓ leaves active fields null when no ready displayable cover exists 8ms
-       ✓ ignores failed, processing, archived, and invalid-status covers 8ms
-       ✓ returns a data URL and matching byte buffer 6ms
-       ✓ escapes special characters in the title 5ms
-       ✓ renders an empty title without throwing 5ms
- ❯ test/components/recipe/RecipeCoverHistory.test.tsx (3 tests | 2 failed) 130ms
-     ✓ renders an explicit empty history state 29ms
-     × labels processing, editorial-failed, archived, invalid-date, and no-variant rows 65ms
-     × submits set-cover and no-cover forms 14ms
- ❯ test/components/recipe/RecipeHeader.test.tsx (27 tests | 3 failed) 144ms
+       ✓ rejects a missing cover 8ms
+       ✓ rejects an invalid requested variant 8ms
+       ✓ rejects a failed cover 9ms
+       ✓ allows the original image when editorial generation failed but the raw photo remains 10ms
+       ✓ rejects a cover with an invalid status 9ms
+       ✓ archives an inactive cover 10ms
+       ✓ rejects a missing cover 8ms
+       ✓ requires a replacement or explicit no-cover state for the active cover 10ms
+       ✓ rejects replacing the active cover with the same cover being archived 10ms
+       ✓ requires a replacement variant when replacing the active cover 11ms
+       ✓ sets coverMode none when archiving the active cover with confirmation 10ms
+       ✓ switches active cover before archiving the previous active cover 11ms
+       ✓ chooses the newest ready non-archived cover with a non-empty display URL 9ms
+       ✓ leaves active fields null when no ready displayable cover exists 9ms
+       ✓ ignores failed, processing, archived, and invalid-status covers 9ms
+       ✓ returns a data URL and matching byte buffer 7ms
+       ✓ escapes special characters in the title 6ms
+       ✓ renders an empty title without throwing 7ms
+ ❯ test/components/recipe/RecipeHeader.test.tsx (27 tests | 3 failed) 141ms
        ✓ renders chef name without link when chefId is not provided 20ms
        ✓ renders chef name as link when chefId is provided 6ms
        ✓ prefers canonical chef profile href over chefId fallback 3ms
@@ -77,12 +73,12 @@ Generated app/lib/generated/api-v1-playground.ts
        ✓ renders recipe title 6ms
        ✓ renders description when provided 3ms
        ✓ does not render description section when not provided 3ms
-       ✓ does not render generic cookbook-view or origin labels without real context 4ms
-       ✓ renders masthead and provenance slots when provided 5ms
+       ✓ does not render generic cookbook-view or origin labels without real context 3ms
+       ✓ renders masthead and provenance slots when provided 4ms
        ✓ uses a full-bleed editorial spread instead of a constrained split hero 2ms
        ✓ renders recipe image when imageUrl is provided 2ms
        × renders cover provenance badge when provided 6ms
-       × uses a high-contrast overlay treatment for cover provenance on bright photos 2ms
+       × uses a high-contrast overlay treatment for cover provenance on bright photos 3ms
        ✓ renders placeholder when imageUrl is not provided 2ms
        × renders explicit awaiting-chef-photo placeholder copy for owners 3ms
        ✓ renders placeholder when coverImageUrl is empty 6ms
@@ -93,15 +89,68 @@ Generated app/lib/generated/api-v1-playground.ts
        ✓ does not display original servings note when scale factor is not 1 2ms
        ✓ does not display original servings note when scale factor is 1 2ms
        ✓ renders clear progress button when onClearProgress is provided 3ms
-       ✓ calls onClearProgress when button is clicked 17ms
+       ✓ calls onClearProgress when button is clicked 16ms
        ✓ does not render clear progress button when onClearProgress is not provided 3ms
-       ✓ does not render edit, delete, share, or save buttons 2ms
+       ✓ does not render edit, delete, share, or save buttons 3ms
+ ❯ test/components/recipe/RecipeCoverHistory.test.tsx (3 tests | 2 failed) 127ms
+     ✓ renders an explicit empty history state 27ms
+     × labels processing, editorial-failed, archived, invalid-date, and no-variant rows 63ms
+     × submits set-cover and no-cover forms 13ms
  ❯ test/lib/spoon-cover-activation.server.test.ts (3 tests | 1 failed) 83ms
-     × auto-activates a first spoon cover as the original image while editorialization is still processing 21ms
-     ✓ does not overwrite a real cover that appears during auto-seed activation 16ms
+     × auto-activates a first spoon cover as the original image while editorialization is still processing 22ms
+     ✓ does not overwrite a real cover that appears during auto-seed activation 14ms
      ✓ activates explicit owner opt-in covers as manual image covers 22ms
+ ❯ test/lib/spoon-cover-stylization.server.test.ts (40 tests | 1 failed) 684ms
+     ✓ writes stylizedImageUrl on success via the supplied runner 23ms
+     ✓ persists prompt addition and parent cover lineage for editorial regeneration 17ms
+     ✓ auto-activates a completed editorial cover only when the recipe has no real active cover 17ms
+     × promotes an auto-seeded original spoon cover to editorial when the same cover is still active 17ms
+     ✓ activates an explicitly requested editorial cover when the guarded active state is unchanged 15ms
+     ✓ does not activate an explicitly requested editorial cover when the guarded state is stale 14ms
+     ✓ does not auto-activate candidate-only editorial jobs 14ms
+     ✓ does not activate explicit editorial jobs without an activation guard 18ms
+     ✓ does not replace a manual raw recipe upload when editorial generation completes 19ms
+     ✓ does not replace a different manual cover selected while a stale job is running 17ms
+     ✓ does not replace a different real active cover on auto-mode recipes 18ms
+     ✓ treats image and fallback active variants as real covers 22ms
+     ✓ replaces a pure AI placeholder active cover after editorialization succeeds 18ms
+     ✓ replaces a different active cover that is not ready yet 19ms
+     ✓ does not revive a cover archived while generation is running 17ms
+     ✓ logs non-Error scheduler failures without throwing 11ms
+     ✓ does not let a corrupt cross-recipe active pointer block auto-activation 18ms
+     ✓ does not overwrite a real active cover that appears during the activation write 21ms
+     ✓ ignores archived stale jobs without consuming quota 16ms
+     ✓ does nothing when stylization quota is exhausted 22ms
+     ✓ returns silently before consuming quota when no image provider config is available 18ms
+     ✓ does not mark a provider skip failed when another worker has cleared processing 18ms
+     ✓ returns silently before consuming quota when env is null 17ms
+     ✓ returns silently when the OpenAI runner factory returns null 16ms
+     ✓ uses a legacy createRunner factory when it returns a runner 16ms
+     ✓ logs errors and leaves stylizedImageUrl null when the runner throws 18ms
+     ✓ does not duplicate matching provider failure messages 17ms
+     ✓ marks a processing cover failed without consuming quota when the source image is missing 16ms
+     ✓ logs nested aggregate errors in serializable form 19ms
+     ✓ falls back to a configured secondary provider within one consumed quota unit 25ms
+     ✓ constructs the default Gemini runner from image provider env 31ms
+     ✓ uses the default Gemini image model when none is configured 19ms
+     ✓ skips when a custom image edit attempt factory returns null 12ms
+     ✓ captures normalized provider metadata when all configured providers fail 14ms
+     ✓ falls back to the default console logger when none is supplied 13ms
+     ✓ uses the OpenAI runner factory when OPENAI_API_KEY is provided 14ms
+     ✓ constructs a real OpenAI runner when no explicit runner is passed and the API key is set 14ms
+     ✓ captures exception telemetry without optional error details 0ms
+     ✓ defaults to openai then gemini 0ms
+     ✓ uses configured primary and fallbacks while ignoring duplicates and unsupported providers 0ms
+ ❯ test/components/cookbook/CookbookCoverArt.test.tsx (7 tests | 2 failed) 55ms
+     ✓ filters missing covers and keeps the first four real images 1ms
+     ✓ renders an editorial fallback cover for empty cookbooks 14ms
+     ✓ defaults to an editorial fallback cover when images are omitted 2ms
+     × renders a single-photo cover 9ms
+     × normalizes stale editorial cover labels before rendering cookbook badges 2ms
+     ✓ renders a two-photo cover 2ms
+     ✓ renders a four-photo cover and ignores extra images 1ms
 
-⎯⎯⎯⎯⎯⎯ Failed Tests 11 ⎯⎯⎯⎯⎯⎯⎯
+⎯⎯⎯⎯⎯⎯ Failed Tests 14 ⎯⎯⎯⎯⎯⎯⎯
 
  FAIL  test/lib/recipe-cover.server.test.ts > recipe-cover.server > active cover payload helpers > formats standalone provenance labels
 AssertionError: expected 'Editorialized chef photo' to be 'Editorial photo' // Object.is equality
@@ -117,7 +166,7 @@ Received: "Editorialized chef photo"
     356|       expect(getRecipeCoverProvenanceLabel("chef-upload", "image")).to…
     357|       expect(getRecipeCoverProvenanceLabel("spoon", "image")).toBe("Or…
 
-⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/11]⎯
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/14]⎯
 
  FAIL  test/lib/recipe-cover.server.test.ts > recipe-cover.server > getRecipeCoverDisplay > labels chef-upload/image as Original photo
  FAIL  test/lib/recipe-cover.server.test.ts > recipe-cover.server > getRecipeCoverDisplay > labels spoon/image as Original photo
@@ -142,7 +191,7 @@ AssertionError: expected { coverId: 'active', …(8) } to match object { coverId
     412|         coverId: "active",
     413|         activeVariant: variant,
 
-⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/11]⎯
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/14]⎯
 
  FAIL  test/lib/recipe-cover.server.test.ts > recipe-cover.server > getRecipeCoverDisplay > labels chef-upload/stylized as Editorial photo
  FAIL  test/lib/recipe-cover.server.test.ts > recipe-cover.server > getRecipeCoverDisplay > labels spoon/stylized as Editorial photo
@@ -167,7 +216,7 @@ AssertionError: expected { coverId: 'active', …(8) } to match object { coverId
     412|         coverId: "active",
     413|         activeVariant: variant,
 
-⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/11]⎯
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/14]⎯
 
  FAIL  test/lib/spoon-cover-activation.server.test.ts > spoon-cover-activation.server > auto-activates a first spoon cover as the original image while editorialization is still processing
 AssertionError: expected { …(3) } to deeply equal { …(3) }
@@ -176,7 +225,7 @@ AssertionError: expected { …(3) } to deeply equal { …(3) }
 + Received
 
   {
-    "activeCoverId": "cmrl650q400046vgston4sxd5",
+    "activeCoverId": "cmrl6c2tx00046v658vvpf2dl",
 -   "activeCoverVariant": "image",
 +   "activeCoverVariant": null,
     "coverMode": "auto",
@@ -190,7 +239,64 @@ AssertionError: expected { …(3) } to deeply equal { …(3) }
      58|       db.recipe.findUniqueOrThrow({
      59|         where: { id: recipeId },
 
-⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/11]⎯
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/14]⎯
+
+ FAIL  test/lib/spoon-cover-stylization.server.test.ts > scheduleSpoonCoverStylization > promotes an auto-seeded original spoon cover to editorial when the same cover is still active
+AssertionError: expected { …(3) } to deeply equal { …(3) }
+
+- Expected
++ Received
+
+  {
+    "activeCoverId": "cmrl6c3cj000r6v67ndeutuzq",
+-   "activeCoverVariant": "image",
++   "activeCoverVariant": null,
+    "coverMode": "auto",
+  }
+
+ ❯ test/lib/spoon-cover-stylization.server.test.ts:214:5
+    212|       previousActiveCoverId: null,
+    213|     })).resolves.toBe(true);
+    214|     await expect(
+       |     ^
+    215|       db.recipe.findUniqueOrThrow({
+    216|         where: { id: recipeId },
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/14]⎯
+
+ FAIL  test/components/cookbook/CookbookCoverArt.test.tsx > CookbookCoverArt > renders a single-photo cover
+Error: expect(element).toHaveTextContent()
+
+Expected element to have text content:
+  Original photo
+Received:
+  Chef photo
+ ❯ test/components/cookbook/CookbookCoverArt.test.tsx:44:19
+     42|     expect(screen.getByRole("img", { name: "A" })).toHaveAttribute("sr…
+     43|     const badge = screen.getByTestId("cover-provenance-badge");
+     44|     expect(badge).toHaveTextContent("Original photo");
+       |                   ^
+     45|     expect(screen.queryByText("Chef photo")).not.toBeInTheDocument();
+     46|     expect(badge).toHaveClass("bg-[rgba(37,34,31,0.96)]");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/14]⎯
+
+ FAIL  test/components/cookbook/CookbookCoverArt.test.tsx > CookbookCoverArt > normalizes stale editorial cover labels before rendering cookbook badges
+Error: expect(element).toHaveTextContent()
+
+Expected element to have text content:
+  Editorial photo
+Received:
+  Editorialized chef photo
+ ❯ test/components/cookbook/CookbookCoverArt.test.tsx:57:19
+     55| 
+     56|     const badge = screen.getByTestId("cover-provenance-badge");
+     57|     expect(badge).toHaveTextContent("Editorial photo");
+       |                   ^
+     58|     expect(screen.queryByText("Editorialized chef photo")).not.toBeInT…
+     59|     expect(screen.queryByText("Spoonjoy cookbook")).not.toBeInTheDocum…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/14]⎯
 
  FAIL  test/components/recipe/RecipeCoverHistory.test.tsx > RecipeCoverHistory > labels processing, editorial-failed, archived, invalid-date, and no-variant rows
 TestingLibraryElementError: Unable to find an accessible element with the role "button" and name "Use Original photo cover"
@@ -546,7 +652,7 @@ Ignored nodes: comments, script, style
     153|     expect(screen.queryByRole("button", { name: "Use Imported photo co…
     154|     expect(screen.queryByText("Chef photo")).toBeNull();
 
-⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/11]⎯
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/14]⎯
 
  FAIL  test/components/recipe/RecipeCoverHistory.test.tsx > RecipeCoverHistory > submits set-cover and no-cover forms
 TestingLibraryElementError: Unable to find an element with the text: Original photo. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
@@ -697,7 +803,7 @@ Ignored nodes: comments, script, style
     231|     expect(screen.getByText("Editorial photo")).toBeInTheDocument();
     232|     expect(screen.queryByText("Chef photo")).toBeNull();
 
-⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/11]⎯
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/14]⎯
 
  FAIL  test/components/recipe/RecipeHeader.test.tsx > RecipeHeader > recipe image > renders cover provenance badge when provided
 TestingLibraryElementError: Unable to find an element with the text: Editorial photo. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
@@ -884,7 +990,7 @@ Ignored nodes: comments, script, style
     130|       expect(screen.queryByText('Editorialized chef photo')).toBeNull()
     131|     })
 
-⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/11]⎯
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/14]⎯
 
  FAIL  test/components/recipe/RecipeHeader.test.tsx > RecipeHeader > recipe image > uses a high-contrast overlay treatment for cover provenance on bright photos
 Error: expect(element).toHaveTextContent()
@@ -901,7 +1007,7 @@ Received:
     144|       expect(screen.queryByText('Chef photo')).toBeNull()
     145|       expect(badge).toHaveClass('bg-[rgba(37,34,31,0.96)]')
 
-⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/11]⎯
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/14]⎯
 
  FAIL  test/components/recipe/RecipeHeader.test.tsx > RecipeHeader > recipe image > renders explicit awaiting-chef-photo placeholder copy for owners
 TestingLibraryElementError: Unable to find an element with the text: Awaiting first photo. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
@@ -1131,11 +1237,11 @@ Ignored nodes: comments, script, style
     164|       expect(screen.queryByText('Awaiting first chef photo')).toBeNull…
     165|     })
 
-⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/11]⎯
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/14]⎯
 
 
- Test Files  4 failed (4)
-      Tests  11 failed | 79 passed (90)
-   Start at  14:33:51
-   Duration  3.16s (transform 161ms, setup 271ms, import 888ms, tests 855ms, environment 672ms)
+ Test Files  6 failed (6)
+      Tests  14 failed | 123 passed (137)
+   Start at  14:39:20
+   Duration  4.91s (transform 232ms, setup 384ms, import 1.18s, tests 1.64s, environment 992ms)
 

@@ -5,8 +5,10 @@ import {
   resolveImageProviderOrder,
   scheduleSpoonCoverStylization,
 } from "~/lib/spoon-cover-stylization.server";
+import { activateSpoonCoverForDecision } from "~/lib/spoon-cover-activation.server";
 import { captureImageGenerationException } from "~/lib/image-gen-telemetry.server";
 import type { ImageGenRunner } from "~/lib/image-gen.server";
+import type { SpoonCoverCreationDecision } from "~/lib/spoon-cover-decision.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 
 type Database = Awaited<ReturnType<typeof getLocalDb>>;
@@ -174,6 +176,60 @@ describe("scheduleSpoonCoverStylization", () => {
       rawPhotoUrl: dataUrl("image/png", VALID_PNG_BYTES),
       recipeTitle: "Stylize Me",
       runner,
+      bucket: mockR2(),
+      now: () => 1234,
+      logger: errorSpy,
+    });
+
+    await expect(
+      db.recipe.findUniqueOrThrow({
+        where: { id: recipeId },
+        select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
+      }),
+    ).resolves.toEqual({
+      activeCoverId: coverId,
+      activeCoverVariant: "stylized",
+      coverMode: "auto",
+    });
+  });
+
+  it("promotes an auto-seeded original spoon cover to editorial when the same cover is still active", async () => {
+    const autoSeedDecision = {
+      shouldCreateCover: true,
+      reason: "auto-seed",
+      coverMode: "auto",
+      activeCoverVariant: null,
+    } satisfies SpoonCoverCreationDecision;
+    await db.recipeCover.update({
+      where: { id: coverId },
+      data: { status: "processing", generationStatus: "processing" },
+    });
+
+    await expect(activateSpoonCoverForDecision(db, {
+      recipeId,
+      coverId,
+      decision: autoSeedDecision,
+      previousActiveCoverId: null,
+    })).resolves.toBe(true);
+    await expect(
+      db.recipe.findUniqueOrThrow({
+        where: { id: recipeId },
+        select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
+      }),
+    ).resolves.toEqual({
+      activeCoverId: coverId,
+      activeCoverVariant: "image",
+      coverMode: "auto",
+    });
+
+    await scheduleSpoonCoverStylization({
+      db,
+      userId,
+      recipeId,
+      coverId,
+      rawPhotoUrl: dataUrl("image/png", VALID_PNG_BYTES),
+      recipeTitle: "Stylize Me",
+      runner: makeRunner(),
       bucket: mockR2(),
       now: () => 1234,
       logger: errorSpy,
