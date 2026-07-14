@@ -97,9 +97,9 @@ New structure:
 - Full-width bone page with a thin cookbook index rail.
 - Header is a quiet masthead: avatar, kitchen name, counts, actions.
 - Main area is an asymmetric spread:
-  - left column: "On the Counter" lead recipe with large photo, title, note/provenance/action.
+  - left column: "Recently Updated" lead recipe with large photo, title, note/provenance/action.
   - right column: compact recipe index with thumbnails, not cards.
-  - lower band: cookbook shelf, where each cookbook looks like a cover/spine object.
+  - lower band: cookbooks, where each cookbook looks like a cover/spine object.
 - Tabs should be replaced with an index switch or segmented text control only if the content genuinely needs hiding. Prefer showing recipes and cookbooks together because they are different objects, not mutually exclusive dashboards.
 
 ### Main Kitchen Navigation

@@ -38,10 +38,6 @@ function normalizeTab(value: string | null): KitchenTab {
   return value === "cookbooks" ? "cookbooks" : "recipes";
 }
 
-function isLocalQaRecipe(title: string) {
-  return /^(e2e|mobile dock save)\b/i.test(title.trim()) || /\(variation \d+\)$/i.test(title.trim());
-}
-
 export function absoluteKitchenUrl(path: string) {
   if (typeof window === "undefined") {
     return path;
@@ -256,8 +252,7 @@ export default function Index() {
     );
   }
 
-  const visibleRecipes = recipes.filter((recipe) => !isLocalQaRecipe(recipe.title));
-  const displayRecipes = visibleRecipes.length > 0 ? visibleRecipes : recipes;
+  const displayRecipes = recipes;
   const heading = isOwner ? "My Kitchen" : `${kitchenUser.username}'s Kitchen`;
   const featuredRecipe = displayRecipes.find((recipe) => recipe.coverImageUrl) ?? displayRecipes[0] ?? null;
   const indexedRecipes = featuredRecipe
@@ -368,8 +363,8 @@ function RecipeLead({
             <ChefHat className="size-10 text-[var(--sj-brass)]" aria-hidden="true" />
           </div>
           <div>
-            <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.22em] text-[var(--sj-brass)]">Recipe box</p>
-            <Subheading level={2} className="mt-3 text-3xl/9 tracking-normal">Start your recipe box</Subheading>
+            <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.22em] text-[var(--sj-brass)]">Recipes</p>
+            <Subheading level={2} className="mt-3 text-3xl/9 tracking-normal">Create your first recipe</Subheading>
             <Text className="mt-3 max-w-md">
               Capture the dish you make most often, the family classic everyone asks about, or the weeknight save you never want to lose.
             </Text>
@@ -393,7 +388,7 @@ function RecipeLead({
   const servingsLabel = formatServingsLabel(recipe.servings);
 
   return (
-    <section aria-label="On the Counter" className="mb-16 border-b border-[var(--sj-border-strong)] pb-8 lg:mb-0">
+    <section aria-label="Recently Updated" className="mb-16 border-b border-[var(--sj-border-strong)] pb-8 lg:mb-0">
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.04fr)_minmax(15.625rem,0.46fr)] lg:items-end">
         <Link
           href={`/recipes/${recipe.id}`}
@@ -412,7 +407,7 @@ function RecipeLead({
         </Link>
 
         <div className="border-l border-[var(--sj-border)] pl-5">
-          <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.22em] text-[var(--sj-brass)]">On the Counter</p>
+          <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.22em] text-[var(--sj-brass)]">Recently Updated</p>
           <Link href={`/recipes/${recipe.id}`} className="block min-h-11 no-underline">
             <Heading level={2} className="mt-3 text-4xl/10 hover:text-[var(--sj-tomato)] sm:mt-5 sm:text-6xl/14">{recipe.title}</Heading>
           </Link>
@@ -537,10 +532,10 @@ function CookbookShelf({
   onShare: (cookbook: KitchenCookbook) => void;
 }) {
   return (
-    <section aria-label="Cookbook shelf" className="mt-12 border-t border-[var(--sj-border-strong)] pt-7">
+    <section aria-label="Cookbooks" className="mt-12 border-t border-[var(--sj-border-strong)] pt-7">
       <div className="mb-5 flex items-end justify-between gap-4">
         <div>
-          <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.22em] text-[var(--sj-brass)]">Shelf</p>
+          <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.22em] text-[var(--sj-brass)]">Cookbooks</p>
           <Subheading level={2} className="mt-1 text-2xl/8">Cookbooks</Subheading>
         </div>
         {isOwner ? <Button href="/cookbooks/new" plain>New Cookbook</Button> : null}
