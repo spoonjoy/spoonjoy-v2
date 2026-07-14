@@ -86,12 +86,12 @@ export function meta({ data }: Route.MetaArgs) {
   if (!data) {
     return [
       { title: "Cookbook - Spoonjoy" },
-      { name: "description", content: "Open this Spoonjoy cookbook." },
+      { name: "description", content: "Open this cookbook on Spoonjoy." },
     ];
   }
 
   const recipeLabel = `${data.cookbook.recipes.length} ${data.cookbook.recipes.length === 1 ? "recipe" : "recipes"}`;
-  const description = `${data.cookbook.title}, a Spoonjoy cookbook by ${data.cookbook.author.username} with ${recipeLabel}.`;
+  const description = `${data.cookbook.title} by ${data.cookbook.author.username} on Spoonjoy with ${recipeLabel}.`;
 
   return [
     { title: `${data.cookbook.title} - Spoonjoy` },
@@ -370,7 +370,7 @@ export default function CookbookDetail() {
   const handleShare = async () => {
     await shareContent({
       title: cookbook.title,
-      text: `Open this Spoonjoy cookbook by ${cookbook.author.username}.`,
+      text: `${cookbook.title} by ${cookbook.author.username} on Spoonjoy.`,
       url: canonicalUrl,
     });
   };

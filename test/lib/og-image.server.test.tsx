@@ -51,6 +51,16 @@ import {
   recipeOgPath,
 } from "~/lib/og-image.server";
 
+function collectReactText(node: unknown): string[] {
+  if (node === null || node === undefined || typeof node === "boolean") return [];
+  if (typeof node === "string" || typeof node === "number") return [String(node)];
+  if (Array.isArray(node)) return node.flatMap(collectReactText);
+  if (typeof node === "object" && "props" in node) {
+    return collectReactText((node as { props?: { children?: unknown } }).props?.children);
+  }
+  return [];
+}
+
 describe("OG image helpers", () => {
   beforeEach(() => {
     mocks.create.mockClear();
@@ -143,23 +153,23 @@ describe("OG image helpers", () => {
   });
 
   it("creates cookbook OG elements with and without cover photos", () => {
-    expect(
-      createCookbookOgElement(
-        {
-          title: "Sunday Sauces",
-          authorUsername: "ari",
-          recipeCount: 4,
-          coverImageUrls: [
-            "https://cdn.example.com/a.jpg",
-            "https://cdn.example.com/b.jpg",
-            "https://cdn.example.com/c.jpg",
-            "https://cdn.example.com/d.jpg",
-            "https://cdn.example.com/e.jpg",
-          ],
-        },
-        "4 recipes",
-      ).type,
-    ).toBe("div");
+    const cookbookElement = createCookbookOgElement(
+      {
+        title: "Sunday Sauces",
+        authorUsername: "ari",
+        recipeCount: 4,
+        coverImageUrls: [
+          "https://cdn.example.com/a.jpg",
+          "https://cdn.example.com/b.jpg",
+          "https://cdn.example.com/c.jpg",
+          "https://cdn.example.com/d.jpg",
+          "https://cdn.example.com/e.jpg",
+        ],
+      },
+      "4 recipes",
+    );
+    expect(cookbookElement.type).toBe("div");
+    expect(collectReactText(cookbookElement).join(" ")).not.toContain("Spoonjoy cookbook");
 
     expect(
       createCookbookOgElement(

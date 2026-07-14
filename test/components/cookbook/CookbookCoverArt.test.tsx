@@ -27,7 +27,7 @@ describe("CookbookCoverArt", () => {
     expect(screen.getAllByText("Empty Book").length).toBeGreaterThan(0);
     expect(screen.getAllByText("0 recipes").length).toBeGreaterThan(0);
     expect(screen.getByText("Spoonjoy")).toBeInTheDocument();
-    expect(screen.getByText("Spoonjoy cookbook")).toBeInTheDocument();
+    expect(screen.queryByText("Spoonjoy cookbook")).not.toBeInTheDocument();
   });
 
   it("defaults to an editorial fallback cover when images are omitted", () => {
@@ -45,6 +45,7 @@ describe("CookbookCoverArt", () => {
     expect(badge).toHaveClass("bg-[rgba(37,34,31,0.96)]");
     expect(badge).toHaveClass("text-[var(--sj-paper)]");
     expect(badge.className).not.toContain("text-[var(--sj-ink-soft)]");
+    expect(screen.queryByText("Spoonjoy cookbook")).not.toBeInTheDocument();
     expect(screen.getAllByText("1 recipe").length).toBeGreaterThan(0);
   });
 

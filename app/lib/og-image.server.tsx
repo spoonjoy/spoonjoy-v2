@@ -261,19 +261,6 @@ export function createCookbookOgElement(input: CookbookOgInput, recipeLabel: str
       >
         <div
           style={{
-            fontFamily: "IBM Plex Sans Condensed",
-            fontSize: 24,
-            fontWeight: 600,
-            letterSpacing: "0.18em",
-            textTransform: "uppercase",
-            color: COLORS.brass,
-          }}
-        >
-          Spoonjoy cookbook
-        </div>
-        <div
-          style={{
-            marginTop: 26,
             fontSize: 82,
             fontWeight: 700,
             lineHeight: 0.96,

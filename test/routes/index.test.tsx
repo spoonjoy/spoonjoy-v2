@@ -620,7 +620,7 @@ describe("Kitchen Index Route", () => {
       fireEvent.click(screen.getByRole("button", { name: "Share No Photo Book" }));
       await waitFor(() => {
         expect(vi.mocked(shareContent)).toHaveBeenCalledWith(expect.objectContaining({
-          text: "Open this Spoonjoy cookbook with 2 recipes.",
+          text: "No Photo Book has 2 recipes on Spoonjoy.",
           title: "No Photo Book",
           url: expect.stringContaining("/cookbooks/cookbook-2"),
         }));

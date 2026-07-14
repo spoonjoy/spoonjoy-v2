@@ -43,10 +43,7 @@ export function CookbookCoverArt({
       )}
 
       <figcaption className="absolute inset-x-0 bottom-0 z-10 border-t border-[color-mix(in_srgb,var(--sj-paper)_18%,transparent)] bg-[color-mix(in_srgb,var(--sj-charcoal)_82%,transparent)] p-4 text-[var(--sj-paper)] backdrop-blur-sm">
-        <p className="font-sj-ui text-[0.68rem]/4 font-semibold uppercase tracking-[0.18em] text-[color-mix(in_srgb,var(--sj-paper)_72%,transparent)]">
-          Spoonjoy cookbook
-        </p>
-        <h3 className="font-sj-display mt-2 line-clamp-2 text-2xl/7 font-semibold tracking-normal">
+        <h3 className="font-sj-display line-clamp-2 text-2xl/7 font-semibold tracking-normal">
           {title}
         </h3>
         <p className="font-sj-ui mt-3 text-xs font-semibold uppercase tracking-[0.14em] text-[color-mix(in_srgb,var(--sj-paper)_72%,transparent)]">
