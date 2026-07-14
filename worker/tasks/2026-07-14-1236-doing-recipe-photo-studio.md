@@ -61,7 +61,7 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 ### ⬜ Unit 0: Setup/Research
 **What**: Confirm both worktrees are on `worker/recipe-photo-studio`, read current source targets, record command inventory, and ensure the native branch is pushed before native commits begin.
 **Output**: Artifact notes in `./2026-07-14-1236-doing-recipe-photo-studio/setup.md` covering web worktree, native worktree, source files, test files, command matrix, and any local capability blockers.
-**Acceptance**: `git status --short --branch` is clean except task docs; source/test paths in the notes exist; web branch is pushed; native branch push status is recorded.
+**Acceptance**: `git status --short --branch` is clean except task docs; source/test paths in the notes exist; web branch is pushed; native branch `worker/recipe-photo-studio` is pushed and tracks `origin/worker/recipe-photo-studio` before any native commit is created.
 
 ### ⬜ Unit 1a: Backend Prompt And Cover Lineage — Tests
 **What**: Write failing tests for bounded prompt additions, prompt sanitization, provider prompt forwarding, and `RecipeCover` prompt/parent lineage persistence.
@@ -70,13 +70,13 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 
 ### ⬜ Unit 1b: Backend Prompt And Cover Lineage — Implementation
 **What**: Add `RecipeCover` lineage/prompt fields in Prisma and migration SQL, update image-generation helpers and scheduling helpers to accept bounded prompt additions, and persist lineage.
-**Output**: Passing tests plus implementation in `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/prisma/schema.prisma`, `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/prisma/migrations/20260714123600_recipe_cover_prompt_lineage/migration.sql`, `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/app/lib/image-gen.server.ts`, `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/app/lib/ai-placeholder-cover.server.ts`, and `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/app/lib/spoon-cover-stylization.server.ts`.
+**Output**: Passing tests plus implementation in `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/prisma/schema.prisma`, `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/prisma/migrations/20260714123600_recipe_cover_prompt_lineage/migration.sql`, `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/migrations/0023_recipe_cover_prompt_lineage.sql`, `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/app/lib/image-gen.server.ts`, `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/app/lib/ai-placeholder-cover.server.ts`, and `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/app/lib/spoon-cover-stylization.server.ts`.
 **Acceptance**: `pnpm run api:playground:generate && pnpm exec vitest run test/lib/image-gen.server.test.ts test/lib/ai-placeholder-cover.server.test.ts test/lib/spoon-cover-stylization.server.test.ts test/scripts/migration-0023-recipe-cover-prompt-lineage.test.ts --fileParallelism=false` passes; `pnpm run prisma:generate` passes; no warnings appear in the green logs.
 
 ### ⬜ Unit 1c: Backend Prompt And Cover Lineage — Coverage & Refactor
 **What**: Run focused coverage for new/modified backend lineage and prompt code, close branch/error-path gaps, and refactor only where it reduces duplication.
 **Output**: Coverage logs in `./2026-07-14-1236-doing-recipe-photo-studio/backend-lineage-coverage.log`.
-**Acceptance**: `pnpm exec vitest run test/lib/image-gen.server.test.ts test/lib/ai-placeholder-cover.server.test.ts test/lib/spoon-cover-stylization.server.test.ts test/scripts/migration-0023-recipe-cover-prompt-lineage.test.ts --coverage --fileParallelism=false 2>&1 | tee worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/backend-lineage-coverage.log` shows 100% coverage for new backend prompt/lineage code; `pnpm run build` passes with no warnings.
+**Acceptance**: `bash -o pipefail -c 'pnpm exec vitest run test/lib/image-gen.server.test.ts test/lib/ai-placeholder-cover.server.test.ts test/lib/spoon-cover-stylization.server.test.ts test/scripts/migration-0023-recipe-cover-prompt-lineage.test.ts --coverage --fileParallelism=false 2>&1 | tee worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/backend-lineage-coverage.log'` shows 100% coverage for new backend prompt/lineage code; `pnpm run build` passes with no warnings.
 
 ### ⬜ Unit 2a: Backend Activation And Labels — Tests
 **What**: Write failing tests for first-photo activation guard behavior and user-facing provenance labels that avoid false "Chef photo" and generic cookbook language.
@@ -91,7 +91,7 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 ### ⬜ Unit 2c: Backend Activation And Labels — Coverage & Refactor
 **What**: Run focused coverage for activation and label helpers and close null/archived/fallback branches.
 **Output**: Coverage logs in `./2026-07-14-1236-doing-recipe-photo-studio/backend-activation-labels-coverage.log`.
-**Acceptance**: `pnpm exec vitest run test/lib/recipe-cover.server.test.ts test/lib/spoon-cover-activation.server.test.ts test/components/recipe/RecipeCoverHistory.test.tsx test/components/recipe/RecipeHeader.test.tsx --coverage --fileParallelism=false 2>&1 | tee worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/backend-activation-labels-coverage.log` shows 100% coverage on new activation/label code; `pnpm run build` passes with no warnings.
+**Acceptance**: `bash -o pipefail -c 'pnpm exec vitest run test/lib/recipe-cover.server.test.ts test/lib/spoon-cover-activation.server.test.ts test/components/recipe/RecipeCoverHistory.test.tsx test/components/recipe/RecipeHeader.test.tsx --coverage --fileParallelism=false 2>&1 | tee worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/backend-activation-labels-coverage.log'` shows 100% coverage on new activation/label code; `pnpm run build` passes with no warnings.
 
 ### ⬜ Unit 3a: REST First-Photo Upload Contract — Tests
 **What**: Write failing tests for `POST /api/v1/recipes/:id/image` multipart upload with `clientMutationId`, `activate`, `generateEditorial`, `postAsSpoon`, `note`, `nextTime`, `cookedAt`, file validation, owner media validation, replay, conflict behavior, and orphaned uploaded-object cleanup when storage succeeds but DB/idempotency commit fails.
@@ -106,22 +106,22 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 ### ⬜ Unit 3c: REST First-Photo Upload Contract — Coverage & Refactor
 **What**: Run focused coverage for the upload route and close invalid MIME, empty photo, unsupported fields, foreign media, replay, conflict, provider-blocker, and orphan-cleanup failure branches.
 **Output**: Coverage logs in `./2026-07-14-1236-doing-recipe-photo-studio/rest-upload-coverage.log`.
-**Acceptance**: `pnpm exec vitest run test/routes/api-v1-recipe-covers.test.ts --coverage --fileParallelism=false 2>&1 | tee worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/rest-upload-coverage.log` shows 100% coverage on new upload route code; `pnpm run build` passes with no warnings.
+**Acceptance**: `bash -o pipefail -c 'pnpm exec vitest run test/routes/api-v1-recipe-covers.test.ts --coverage --fileParallelism=false 2>&1 | tee worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/rest-upload-coverage.log'` shows 100% coverage on new upload route code; `pnpm run build` passes with no warnings.
 
 ### ⬜ Unit 4a: REST Cover Generation And Status Polling — Tests
-**What**: Write failing tests for JSON cover creation from image URL, generated AI placeholder creation, regeneration with prompt additions, `GET /api/v1/recipes/:id/covers` status polling payloads (`covers[].generationStatus`, `covers[].status`, `activeCover`, `spoonImages`, pagination), activation, archive, and no-cover parity.
+**What**: Write failing tests for JSON cover creation from image URL, `POST /api/v1/recipes/:id/covers/generate`, `POST /api/v1/recipes/:id/covers/regenerate` with `promptAddition`, `GET /api/v1/recipes/:id/covers` status polling payloads (`covers[].generationStatus`, `covers[].status`, `activeCover`, `spoonImages`, pagination), activation, archive, and no-cover parity.
 **Output**: Red tests in `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/test/routes/api-v1-recipe-covers.test.ts` and `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/test/lib/api-v1-recipe-writes.server.test.ts` if route helpers are extracted.
 **Acceptance**: `pnpm run api:playground:generate && pnpm exec vitest run test/routes/api-v1-recipe-covers.test.ts test/lib/api-v1-recipe-writes.server.test.ts --fileParallelism=false` fails on missing JSON/generate/prompt/status behavior.
 
 ### ⬜ Unit 4b: REST Cover Generation And Status Polling — Implementation
-**What**: Implement JSON cover creation, generated placeholder creation, prompt-addition regeneration, `GET /api/v1/recipes/:id/covers` status payloads, and parity fixes for activation/archive/no-cover responses.
+**What**: Implement `POST /api/v1/recipes/:id/covers` JSON cover creation, `POST /api/v1/recipes/:id/covers/generate` with `{ clientMutationId, promptAddition?, activateWhenReady? }`, `POST /api/v1/recipes/:id/covers/regenerate` with `{ clientMutationId, coverId, promptAddition?, activateWhenReady? }`, `GET /api/v1/recipes/:id/covers` status payloads, and parity fixes for activation/archive/no-cover responses.
 **Output**: Passing tests plus implementation in `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/app/lib/api-v1.server.ts`, `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/app/lib/api-v1-recipe-writes.server.ts`, `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/app/lib/recipe-cover.server.ts`, and `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/app/lib/recipe-photo-studio.server.ts` when the helper was created in Unit 3b.
 **Acceptance**: `pnpm run api:playground:generate && pnpm exec vitest run test/routes/api-v1-recipe-covers.test.ts test/lib/api-v1-recipe-writes.server.test.ts --fileParallelism=false` passes; mutation responses for create/regenerate/archive/no-cover include `mutation.clientMutationId` and `mutation.replayed`; create/regenerate responses include `createdCover` or `generationStatus`; activation responses include `activeCover`; archive responses include `archivedCover`.
 
 ### ⬜ Unit 4c: REST Cover Generation And Status Polling — Coverage & Refactor
 **What**: Run focused coverage for REST generation/regeneration/status code and close archived-cover, missing-cover, prompt-boundary, and provider-blocker branches.
 **Output**: Coverage logs in `./2026-07-14-1236-doing-recipe-photo-studio/rest-generation-coverage.log`.
-**Acceptance**: `pnpm exec vitest run test/routes/api-v1-recipe-covers.test.ts test/lib/api-v1-recipe-writes.server.test.ts --coverage --fileParallelism=false 2>&1 | tee worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/rest-generation-coverage.log` shows 100% coverage on new REST generation code; `pnpm run build` passes with no warnings.
+**Acceptance**: `bash -o pipefail -c 'pnpm exec vitest run test/routes/api-v1-recipe-covers.test.ts test/lib/api-v1-recipe-writes.server.test.ts --coverage --fileParallelism=false 2>&1 | tee worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/rest-generation-coverage.log'` shows 100% coverage on new REST generation code; `pnpm run build` passes with no warnings.
 
 ### ⬜ Unit 5a: OpenAPI Docs And Playground — Tests
 **What**: Write failing tests for OpenAPI, SDK profile, playground metadata, generated multipart examples, and `docs/api.md` snippets for the new/changed cover endpoints.
@@ -136,10 +136,10 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 ### ⬜ Unit 5c: OpenAPI Docs And Playground — Coverage & Refactor
 **What**: Run focused docs/generated coverage and source-contract scans for changed operations.
 **Output**: Coverage/scan logs in `./2026-07-14-1236-doing-recipe-photo-studio/openapi-playground-coverage.log`.
-**Acceptance**: `pnpm exec vitest run test/lib/api-v1-openapi.server.test.ts test/routes/api-v1-openapi.test.ts test/scripts/generate-api-playground.test.ts --coverage --fileParallelism=false 2>&1 | tee worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/openapi-playground-coverage.log` shows changed-operation coverage; `pnpm run build` passes with no warnings.
+**Acceptance**: `bash -o pipefail -c 'pnpm exec vitest run test/lib/api-v1-openapi.server.test.ts test/routes/api-v1-openapi.test.ts test/scripts/generate-api-playground.test.ts --coverage --fileParallelism=false 2>&1 | tee worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/openapi-playground-coverage.log'` shows changed-operation coverage; `pnpm run build` passes with no warnings.
 
 ### ⬜ Unit 6a: MCP Cover Tool Schemas — Tests
-**What**: Write failing tests for MCP tool schema descriptions and argument validation for upload, generated placeholder, regenerate, status/list, activate, archive, and no-cover tools.
+**What**: Write failing tests for MCP tool schema descriptions and argument validation for `create_recipe_cover_from_upload`, `generate_recipe_cover_placeholder`, `regenerate_recipe_cover`, `get_cover_generation_status`, `list_recipe_covers`, `set_active_recipe_cover`, `archive_recipe_cover`, and no-cover tools.
 **Output**: Red tests in `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/test/routes/mcp.test.ts`, `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/test/lib/mcp/spoonjoy-tools.server.test.ts`, and `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/test/scripts/spoonjoy-mcp-server.test.ts`.
 **Acceptance**: `pnpm run api:playground:generate && pnpm exec vitest run test/routes/mcp.test.ts test/lib/mcp/spoonjoy-tools.server.test.ts test/scripts/spoonjoy-mcp-server.test.ts --fileParallelism=false` fails on missing tool parameters, missing generated-placeholder schema, or mismatched field descriptions.
 
@@ -149,12 +149,12 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 **Acceptance**: `pnpm run api:playground:generate && pnpm exec vitest run test/routes/mcp.test.ts test/lib/mcp/spoonjoy-tools.server.test.ts test/scripts/spoonjoy-mcp-server.test.ts --fileParallelism=false` passes for schema assertions and tool schemas are honest about required/optional fields.
 
 ### ⬜ Unit 6c: MCP Generated And Regenerate Tools — Tests
-**What**: Write failing tests for MCP generated-placeholder creation and regenerate-with-prompt handlers, including prompt boundaries and provider-blocker payloads.
+**What**: Write failing tests for `generate_recipe_cover_placeholder` with `{ recipeId, promptAddition?, activateWhenReady?, idempotencyKey }` and `regenerate_recipe_cover` with `{ recipeId, coverId, promptAddition?, activateWhenReady?, idempotencyKey }`, including prompt boundaries and provider-blocker payloads.
 **Output**: Red tests in `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/test/lib/mcp/spoonjoy-tools.server.test.ts` and `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/test/routes/mcp.test.ts`.
 **Acceptance**: `pnpm run api:playground:generate && pnpm exec vitest run test/lib/mcp/spoonjoy-tools.server.test.ts test/routes/mcp.test.ts --fileParallelism=false` fails on missing generated/regenerate handler behavior.
 
 ### ⬜ Unit 6d: MCP Generated And Regenerate Tools — Implementation
-**What**: Implement generated-placeholder and regenerate-with-prompt MCP handler behavior using the same domain helpers as REST.
+**What**: Implement `generate_recipe_cover_placeholder` and `regenerate_recipe_cover` MCP handler behavior using the same domain helpers as REST.
 **Output**: Passing tests plus implementation in `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/app/lib/spoonjoy-api.server.ts`.
 **Acceptance**: `pnpm run api:playground:generate && pnpm exec vitest run test/lib/mcp/spoonjoy-tools.server.test.ts test/routes/mcp.test.ts --fileParallelism=false` passes and generated/regenerate responses expose cover and generation status fields.
 
@@ -171,22 +171,22 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 ### ⬜ Unit 6g: MCP Cover Tools — Coverage & Refactor
 **What**: Run focused coverage for MCP tool parsing, owner validation, error payloads, and provider-blocker branches.
 **Output**: Coverage logs in `./2026-07-14-1236-doing-recipe-photo-studio/mcp-cover-tools-coverage.log`.
-**Acceptance**: `pnpm exec vitest run test/routes/mcp.test.ts test/lib/mcp/spoonjoy-tools.server.test.ts test/scripts/spoonjoy-mcp-server.test.ts --coverage --fileParallelism=false 2>&1 | tee worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/mcp-cover-tools-coverage.log` shows 100% coverage on new MCP code; `pnpm run build` passes with no warnings.
+**Acceptance**: `bash -o pipefail -c 'pnpm exec vitest run test/routes/mcp.test.ts test/lib/mcp/spoonjoy-tools.server.test.ts test/scripts/spoonjoy-mcp-server.test.ts --coverage --fileParallelism=false 2>&1 | tee worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/mcp-cover-tools-coverage.log'` shows 100% coverage on new MCP code; `pnpm run build` passes with no warnings.
 
 ### ⬜ Unit 7a: MCP/Live Smoke Scripts — Tests
-**What**: Write failing tests for smoke script support for prompt additions, generated placeholder, first-photo upload/Spoon preservation, and cleanup of disposable cover/spoon data.
+**What**: Write failing tests for `scripts/smoke-live.mjs --include-image-cover-smoke` and `runImageCoverSmokeFlow` support for prompt additions, generated placeholder, first-photo upload/Spoon preservation, and cleanup of disposable cover/spoon data.
 **Output**: Red tests in `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/test/scripts/smoke-image-cover-live.test.ts` and `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/test/scripts/spoonjoy-mcp-server.test.ts`.
 **Acceptance**: `pnpm run api:playground:generate && pnpm exec vitest run test/scripts/smoke-image-cover-live.test.ts test/scripts/spoonjoy-mcp-server.test.ts --fileParallelism=false` fails on missing smoke options or cleanup behavior.
 
 ### ⬜ Unit 7b: MCP/Live Smoke Scripts — Implementation
-**What**: Update smoke scripts and cleanup references so disposable Photo Studio data is created with clear names and removed in the same run.
-**Output**: Passing script tests plus implementation in `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/scripts/smoke-image-cover-live.mjs`, `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/scripts/spoonjoy-mcp-server.ts`, and `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/scripts/cleanup-local-qa-data.mjs`.
+**What**: Update the `scripts/smoke-live.mjs` entrypoint, `runImageCoverSmokeFlow`, and cleanup references so disposable Photo Studio data is created with clear names and removed in the same run.
+**Output**: Passing script tests plus implementation in `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/scripts/smoke-live.mjs`, `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/scripts/smoke-image-cover-live.mjs`, `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/scripts/spoonjoy-mcp-server.ts`, and `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/scripts/cleanup-local-qa-data.mjs`.
 **Acceptance**: `pnpm run api:playground:generate && pnpm exec vitest run test/scripts/smoke-image-cover-live.test.ts test/scripts/spoonjoy-mcp-server.test.ts --fileParallelism=false` passes and smoke cleanup covers new cover/spoon artifacts.
 
 ### ⬜ Unit 7c: MCP/Live Smoke Scripts — Coverage & Refactor
 **What**: Run script coverage and build warning scan.
 **Output**: Coverage logs in `./2026-07-14-1236-doing-recipe-photo-studio/smoke-script-coverage.log`.
-**Acceptance**: `pnpm exec vitest run test/scripts/smoke-image-cover-live.test.ts test/scripts/spoonjoy-mcp-server.test.ts --coverage --fileParallelism=false 2>&1 | tee worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/smoke-script-coverage.log` shows script coverage; `pnpm run build` passes with no warnings.
+**Acceptance**: `bash -o pipefail -c 'pnpm exec vitest run test/scripts/smoke-image-cover-live.test.ts test/scripts/spoonjoy-mcp-server.test.ts --coverage --fileParallelism=false 2>&1 | tee worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/smoke-script-coverage.log'` shows script coverage; `pnpm run build` passes with no warnings.
 
 ### ⬜ Unit 8a: Web First-Photo Studio — Tests
 **What**: Write failing route/component tests for the Recipe management Photo Studio no-photo state, `Add first photo`, default toggles, Spoon details disclosure, and action payload creating a Spoon-backed editorial cover.
@@ -201,7 +201,7 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 ### ⬜ Unit 8c: Web First-Photo Studio — Coverage & Refactor
 **What**: Run focused coverage for first-photo UI/action code and close empty-file, post-as-cover-off, post-as-spoon-off, optional field, and validation branches.
 **Output**: Coverage logs in `./2026-07-14-1236-doing-recipe-photo-studio/web-first-photo-coverage.log`.
-**Acceptance**: `pnpm exec vitest run test/routes/recipes-id.test.tsx test/components/recipe/RecipePhotoStudio.test.tsx test/components/recipe/RecipeCoverHistory.test.tsx test/components/recipe/SpoonDialog.test.tsx --coverage --fileParallelism=false 2>&1 | tee worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/web-first-photo-coverage.log` shows 100% coverage on new first-photo code; `pnpm run build` passes with no warnings.
+**Acceptance**: `bash -o pipefail -c 'pnpm exec vitest run test/routes/recipes-id.test.tsx test/components/recipe/RecipePhotoStudio.test.tsx test/components/recipe/RecipeCoverHistory.test.tsx test/components/recipe/SpoonDialog.test.tsx --coverage --fileParallelism=false 2>&1 | tee worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/web-first-photo-coverage.log'` shows 100% coverage on new first-photo code; `pnpm run build` passes with no warnings.
 
 ### ⬜ Unit 9a: Web Processing State And Autoswap — Tests
 **What**: Write failing tests for active original-photo display while editorialization is processing, loading chip copy, revalidation/autorefresh behavior, and final editorial swap.
@@ -216,7 +216,7 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 ### ⬜ Unit 9c: Web Processing State And Autoswap — Coverage & Refactor
 **What**: Run focused coverage for loading/autorefresh branches and ensure stale async states do not show false errors.
 **Output**: Coverage logs in `./2026-07-14-1236-doing-recipe-photo-studio/web-processing-coverage.log`.
-**Acceptance**: `pnpm exec vitest run test/routes/recipes-id.test.tsx test/components/recipe/RecipeHeader.test.tsx test/components/recipe/RecipePhotoStudio.test.tsx --coverage --fileParallelism=false 2>&1 | tee worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/web-processing-coverage.log` shows 100% coverage on new processing UI code; `pnpm run build` passes with no warnings.
+**Acceptance**: `bash -o pipefail -c 'pnpm exec vitest run test/routes/recipes-id.test.tsx test/components/recipe/RecipeHeader.test.tsx test/components/recipe/RecipePhotoStudio.test.tsx --coverage --fileParallelism=false 2>&1 | tee worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/web-processing-coverage.log'` shows 100% coverage on new processing UI code; `pnpm run build` passes with no warnings.
 
 ### ⬜ Unit 10a: Web Generation Controls And Copy — Tests
 **What**: Write failing tests for generated placeholder controls, prompt-addition regeneration, create-cover-from-Spoon controls, archive/no-cover controls, and safer user-facing labels.
@@ -231,7 +231,7 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 ### ⬜ Unit 10c: Web Generation Controls And Copy — Coverage & Refactor
 **What**: Run focused coverage for generation/control copy branches and refactor UI names for product clarity.
 **Output**: Coverage logs in `./2026-07-14-1236-doing-recipe-photo-studio/web-generation-controls-coverage.log`.
-**Acceptance**: `pnpm exec vitest run test/routes/recipes-id.test.tsx test/components/recipe/RecipePhotoStudio.test.tsx test/components/recipe/RecipeCoverHistory.test.tsx test/components/recipe/RecipeHeader.test.tsx --coverage --fileParallelism=false 2>&1 | tee worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/web-generation-controls-coverage.log` shows 100% coverage on new generation-control UI code; `pnpm run build` passes with no warnings.
+**Acceptance**: `bash -o pipefail -c 'pnpm exec vitest run test/routes/recipes-id.test.tsx test/components/recipe/RecipePhotoStudio.test.tsx test/components/recipe/RecipeCoverHistory.test.tsx test/components/recipe/RecipeHeader.test.tsx --coverage --fileParallelism=false 2>&1 | tee worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/web-generation-controls-coverage.log'` shows 100% coverage on new generation-control UI code; `pnpm run build` passes with no warnings.
 
 ### ⬜ Unit 11: Web Visual QA Dogfood
 **What**: Run `visual-qa-dogfood` on recipe detail management Photo Studio states for no photo, first-photo form, processing original, editorial ready, generated placeholder, regenerate direction, and narrow/desktop viewports.
@@ -239,7 +239,7 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 **Acceptance**: Ledger has no `ready` or `needs reviewer gate` items, screenshots show readable controls/copy without overlap, and any visual reviewer gate passes.
 
 ### ⬜ Unit 12a: Native Request Builders — Tests
-**What**: Write failing Swift tests for `RecipeCoverRequests` upload/create/generate/regenerate/list builders carrying `postAsSpoon`, Spoon fields, prompt additions, activation, editorial choices, and polling via `GET /api/v1/recipes/:id/covers`.
+**What**: Write failing Swift tests for `RecipeCoverRequests.uploadImage`, `RecipeCoverRequests.createFromImageURL`, new `RecipeCoverRequests.generatePlaceholder`, `RecipeCoverRequests.regenerate`, and `RecipeCoverRequests.listCovers` carrying `postAsSpoon`, Spoon fields, `promptAddition`, activation, editorial choices, and polling via `GET /api/v1/recipes/:id/covers`.
 **Output**: Red tests in `/Users/arimendelow/Projects/spoonjoy-apple-photo-studio/Tests/SpoonjoyCoreTests/NativeAPIExpansionTests.swift` and `/Users/arimendelow/Projects/spoonjoy-apple-photo-studio/Tests/SpoonjoyCoreTests/APITransportTests.swift`.
 **Acceptance**: `swift test --disable-xctest --parallel -Xswiftc -warnings-as-errors --filter 'NativeAPIExpansionTests|APITransportTests'` fails on missing request fields or missing generated-placeholder request builder, and multipart body tests assert field names and values.
 
@@ -251,7 +251,7 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 ### ⬜ Unit 12c: Native Request Builders — Coverage & Refactor
 **What**: Run native focused coverage for request-builder branches, invalid filenames/content types, optional fields, and typed error paths.
 **Output**: Logs in `./2026-07-14-1236-doing-recipe-photo-studio/native-request-builder-coverage.log`.
-**Acceptance**: `swift test --enable-code-coverage --disable-xctest --parallel -Xswiftc -warnings-as-errors --filter 'NativeAPIExpansionTests|APITransportTests' 2>&1 | tee /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/native-request-builder-coverage.log` covers new request-builder code; `scripts/fail-on-warning.rb --log /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/native-request-builder-coverage.log` passes from the native worktree.
+**Acceptance**: `bash -o pipefail -c "swift test --enable-code-coverage --disable-xctest --parallel -Xswiftc -warnings-as-errors --filter 'NativeAPIExpansionTests|APITransportTests' 2>&1 | tee /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/native-request-builder-coverage.log"` covers new request-builder code; `scripts/fail-on-warning.rb --log /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/native-request-builder-coverage.log` passes from the native worktree.
 
 ### ⬜ Unit 13a: Native Sync Queue Preservation — Tests
 **What**: Write failing tests proving queued `cover.upload` mutations preserve `clientMutationId`, staged media, `postAsSpoon`, Spoon fields, activation, editorialization, and prompt additions without eviction on validation/cancellation errors.
@@ -266,7 +266,7 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 ### ⬜ Unit 13c: Native Sync Queue Preservation — Coverage & Refactor
 **What**: Run focused coverage for sync queue branches and close missing/null/malformed payload paths.
 **Output**: Logs in `./2026-07-14-1236-doing-recipe-photo-studio/native-sync-coverage.log`.
-**Acceptance**: `swift test --enable-code-coverage --disable-xctest --parallel -Xswiftc -warnings-as-errors --filter 'NativeSyncEngineTests|OfflineStoreTests|NativeAPIExpansionTests' 2>&1 | tee /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/native-sync-coverage.log` covers new sync code; `scripts/fail-on-warning.rb --log /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/native-sync-coverage.log` passes from the native worktree.
+**Acceptance**: `bash -o pipefail -c "swift test --enable-code-coverage --disable-xctest --parallel -Xswiftc -warnings-as-errors --filter 'NativeSyncEngineTests|OfflineStoreTests|NativeAPIExpansionTests' 2>&1 | tee /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/native-sync-coverage.log"` covers new sync code; `scripts/fail-on-warning.rb --log /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/native-sync-coverage.log` passes from the native worktree.
 
 ### ⬜ Unit 14a: Native Media Staging And Photo Picker — Tests
 **What**: Write failing Swift/source-contract tests proving the Photo Studio upload UI uses `PhotosPicker`, loads real `Data` bytes, infers/accepts JPEG/PNG/WebP/HEIC content types through existing media-staging policy, preserves staged media on cancellation or validation rejection, and creates `NativeStagedMediaUpload` values suitable for `cover.upload`.
@@ -281,7 +281,7 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 ### ⬜ Unit 14c: Native Media Staging And Photo Picker — Coverage & Refactor
 **What**: Run focused coverage for native media staging branches, cancellation, invalid/oversized media, HEIC/JPEG/PNG/WebP content type handling, and staged-media retention.
 **Output**: Logs in `./2026-07-14-1236-doing-recipe-photo-studio/native-media-staging-coverage.log`.
-**Acceptance**: `swift test --enable-code-coverage --disable-xctest --parallel -Xswiftc -warnings-as-errors --filter 'CoverControlSurfaceTests|NativeCacheFreshnessTests|NativeLiveStoreTests' 2>&1 | tee /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/native-media-staging-coverage.log` covers new media-staging code; `scripts/fail-on-warning.rb --log /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/native-media-staging-coverage.log` passes from the native worktree.
+**Acceptance**: `bash -o pipefail -c "swift test --enable-code-coverage --disable-xctest --parallel -Xswiftc -warnings-as-errors --filter 'CoverControlSurfaceTests|NativeCacheFreshnessTests|NativeLiveStoreTests' 2>&1 | tee /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/native-media-staging-coverage.log"` covers new media-staging code; `scripts/fail-on-warning.rb --log /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/native-media-staging-coverage.log` passes from the native worktree.
 
 ### ⬜ Unit 15a: Native Cover Action Planning — Tests
 **What**: Write failing tests for `RecipeCoverControlsAction`, `RecipeCoverControlsMutationPlan`, `RecipeCoverControlsData`, and `LiveRecipeCoverControlsRepository` behavior for first-photo upload, generated placeholder, regenerate with prompt addition, create from Spoon, activate, archive, and no-cover.
@@ -296,7 +296,7 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 ### ⬜ Unit 15c: Native Cover Action Planning — Coverage & Refactor
 **What**: Run focused coverage for cover-action planning branches and error states.
 **Output**: Logs in `./2026-07-14-1236-doing-recipe-photo-studio/native-viewmodel-coverage.log`.
-**Acceptance**: `swift test --enable-code-coverage --disable-xctest --parallel -Xswiftc -warnings-as-errors --filter 'CoverControlSurfaceTests|RecipeActionParityTests' 2>&1 | tee /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/native-viewmodel-coverage.log` covers new cover-action planning code; `scripts/fail-on-warning.rb --log /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/native-viewmodel-coverage.log` passes from the native worktree.
+**Acceptance**: `bash -o pipefail -c "swift test --enable-code-coverage --disable-xctest --parallel -Xswiftc -warnings-as-errors --filter 'CoverControlSurfaceTests|RecipeActionParityTests' 2>&1 | tee /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/native-viewmodel-coverage.log"` covers new cover-action planning code; `scripts/fail-on-warning.rb --log /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/native-viewmodel-coverage.log` passes from the native worktree.
 
 ### ⬜ Unit 16a: Native SwiftUI Photo Studio Surface — Tests
 **What**: Write failing source-contract/UI tests for native Photo Studio controls, Spoon details, editorial defaults, prompt-addition fields, loading states, and platform-native copy.
@@ -311,7 +311,7 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 ### ⬜ Unit 16c: Native SwiftUI Photo Studio Surface — Coverage & Refactor
 **What**: Run focused native surface tests and refactor visual/product language without changing REST contracts.
 **Output**: Logs in `./2026-07-14-1236-doing-recipe-photo-studio/native-swiftui-surface-coverage.log`.
-**Acceptance**: `swift test --enable-code-coverage --disable-xctest --parallel -Xswiftc -warnings-as-errors --filter 'CoverControlSurfaceTests|RecipeActionParityTests|NativeLiveStoreTests' 2>&1 | tee /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/native-swiftui-surface-coverage.log` passes; `scripts/fail-on-warning.rb --log /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/native-swiftui-surface-coverage.log` passes from the native worktree.
+**Acceptance**: `bash -o pipefail -c "swift test --enable-code-coverage --disable-xctest --parallel -Xswiftc -warnings-as-errors --filter 'CoverControlSurfaceTests|RecipeActionParityTests|NativeLiveStoreTests' 2>&1 | tee /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/native-swiftui-surface-coverage.log"` passes; `scripts/fail-on-warning.rb --log /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/native-swiftui-surface-coverage.log` passes from the native worktree.
 
 ### ⬜ Unit 17: Native Validation
 **What**: Run native validation from `build-native-apple-app` using the repo-owned validation matrix script.
@@ -319,7 +319,7 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 **Acceptance**: From `/Users/arimendelow/Projects/spoonjoy-apple-photo-studio`, `scripts/validate-native-local.sh --artifact-root /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/native-validation` passes, or its canonical blocker artifact documents the exact command, exit code, and fallback evidence.
 
 ### ⬜ Unit 18a: Cross-Surface Drift Checks — Tests
-**What**: Write failing source-contract checks that compare REST/OpenAPI field names, native request-builder field names, MCP tool schema field names, docs examples, and smoke-script arguments for first-photo, generated placeholder, prompt additions, status, and activation.
+**What**: Write failing source-contract checks that compare REST/OpenAPI field names, native request-builder field names, MCP tool schema field names, docs examples, and smoke-script arguments for first-photo, `POST /api/v1/recipes/:id/covers/generate`, `promptAddition`, `GET /api/v1/recipes/:id/covers` status polling, and activation.
 **Output**: Red tests in web OpenAPI/playground/MCP suites and native request-builder/source-contract suites.
 **Acceptance**: These commands fail only on real field-name or behavior drift between surfaces: `pnpm run api:playground:generate && pnpm exec vitest run test/lib/api-v1-openapi.server.test.ts test/scripts/generate-api-playground.test.ts test/lib/mcp/spoonjoy-tools.server.test.ts test/scripts/smoke-image-cover-live.test.ts --fileParallelism=false` from `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio`; `swift test --disable-xctest --parallel -Xswiftc -warnings-as-errors --filter 'NativeAPIExpansionTests|APITransportTests|CoverControlSurfaceTests'` from `/Users/arimendelow/Projects/spoonjoy-apple-photo-studio`.
 
@@ -331,17 +331,17 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 ### ⬜ Unit 18c: Cross-Surface Drift Checks — Coverage & Refactor
 **What**: Run changed-operation generated-contract scans and stale-language scans.
 **Output**: Logs in `./2026-07-14-1236-doing-recipe-photo-studio/cross-surface-drift.log`.
-**Acceptance**: `pnpm run api:playground:generate && pnpm exec vitest run test/lib/api-v1-openapi.server.test.ts test/scripts/generate-api-playground.test.ts test/lib/mcp/spoonjoy-tools.server.test.ts test/scripts/smoke-image-cover-live.test.ts --coverage --fileParallelism=false 2>&1 | tee worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/cross-surface-drift.log` passes; `rg -n "Chef photo|Spoonjoy cookbook|On the counter|placeholder request schema" app docs scripts test` returns no in-scope product-contract matches.
+**Acceptance**: `bash -o pipefail -c 'pnpm run api:playground:generate && pnpm exec vitest run test/lib/api-v1-openapi.server.test.ts test/scripts/generate-api-playground.test.ts test/lib/mcp/spoonjoy-tools.server.test.ts test/scripts/smoke-image-cover-live.test.ts --coverage --fileParallelism=false 2>&1 | tee worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/cross-surface-drift.log'` passes; `! rg -n "Chef photo|Spoonjoy cookbook|On the counter|placeholder request schema" app docs scripts test` succeeds for in-scope product-contract matches.
 
 ### ⬜ Unit 19: Final Web Validation
 **What**: Run final web test, coverage, build, warning scan, and local QA cleanup inspection.
 **Output**: Final web logs under `./2026-07-14-1236-doing-recipe-photo-studio/final-validation/web/`.
-**Acceptance**: From `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio`, these commands pass: `mkdir -p worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/web`; `pnpm test -- --run --fileParallelism=false 2>&1 | tee worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/web/pnpm-test.log`; `pnpm run test:coverage 2>&1 | tee worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/web/pnpm-test-coverage.log`; `pnpm run build 2>&1 | tee worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/web/pnpm-build.log`; `pnpm run cleanup:qa 2>&1 | tee worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/web/pnpm-cleanup-qa.log`; `rg -n " warning |\\bWARN\\b|DeprecationWarning|UnhandledPromiseRejection|console\\.warn" worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/web/pnpm-test.log worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/web/pnpm-test-coverage.log worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/web/pnpm-build.log worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/web/pnpm-cleanup-qa.log` returns no matches.
+**Acceptance**: From `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio`, these commands pass: `mkdir -p worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/web`; `bash -o pipefail -c 'pnpm test -- --run --fileParallelism=false 2>&1 | tee worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/web/pnpm-test.log'`; `bash -o pipefail -c 'pnpm run test:coverage 2>&1 | tee worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/web/pnpm-test-coverage.log'`; `bash -o pipefail -c 'pnpm run build 2>&1 | tee worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/web/pnpm-build.log'`; `bash -o pipefail -c 'pnpm run cleanup:qa 2>&1 | tee worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/web/pnpm-cleanup-qa.log'`; `! rg -n " warning |\\bWARN\\b|DeprecationWarning|UnhandledPromiseRejection|console\\.warn" worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/web/pnpm-test.log worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/web/pnpm-test-coverage.log worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/web/pnpm-build.log worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/web/pnpm-cleanup-qa.log`.
 
 ### ⬜ Unit 20: Final Native Validation
 **What**: Run final native Swift tests, native validation matrix, warning scan, and native artifact audit.
 **Output**: Final native logs under `./2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/`.
-**Acceptance**: From `/Users/arimendelow/Projects/spoonjoy-apple-photo-studio`, `swift test --disable-xctest --parallel -Xswiftc -warnings-as-errors 2>&1 | tee /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/swift-test.log` passes; `scripts/validate-native-local.sh --artifact-root /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix` passes; `scripts/fail-on-warning.rb --log /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/swift-test.log --log /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/apple/matrix-warning-scan.log` passes, or exact capability blockers are recorded with fallback evidence.
+**Acceptance**: From `/Users/arimendelow/Projects/spoonjoy-apple-photo-studio`, `bash -o pipefail -c 'swift test --disable-xctest --parallel -Xswiftc -warnings-as-errors 2>&1 | tee /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/swift-test.log'` passes; `scripts/validate-native-local.sh --artifact-root /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix` passes; `scripts/fail-on-warning.rb --log /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/swift-test.log --log /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/apple/matrix-warning-scan.log` passes, or exact capability blockers are recorded with fallback evidence.
 
 ### ⬜ Unit 21: Open Web PR
 **What**: Create or update the web/backend PR with summary, validation evidence, linked planning/doing docs, and no stale red-phase logs presented as final evidence.
@@ -359,7 +359,7 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 **Acceptance**: `reviewer-reports.md` contains separate web and native reviewer sections, each ending in `CONVERGED` or listing concrete findings for Unit 24.
 
 ### ⬜ Unit 24: Reviewer Finding Fixes
-**What**: Address any BLOCKER/MAJOR reviewer findings from Unit 22 with focused patches, tests, commits, and re-review.
+**What**: Address any BLOCKER/MAJOR reviewer findings from Unit 23 with focused patches, tests, commits, and re-review.
 **Output**: Fix commits, focused validation logs, and reviewer follow-up notes.
 **Acceptance**: `reviewer-reports.md` has no unresolved `BLOCKER` or `MAJOR` findings after re-review, and the focused commands tied to each fix pass.
 
@@ -376,7 +376,7 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 ### ⬜ Unit 27: Production Migration, Deploy, And Web Smoke
 **What**: Verify the merged web commit deploys with `pnpm run deploy:auto` ordering (`deploy:preflight`, `build`, remote D1 migrations, full preflight, deploy), confirm remote D1 has no pending migrations, and run owner-facing Photo Studio smoke checks without leaving disposable data.
 **Output**: Deploy and smoke logs under `./2026-07-14-1236-doing-recipe-photo-studio/deploy/web-smoke.md`.
-**Acceptance**: From the merged web checkout, GitHub production deploy for the merge commit is green or `pnpm run deploy:auto` succeeds locally; `pnpm exec wrangler d1 migrations list DB --remote` reports no pending migrations; `pnpm run deploy:preflight` passes after migrations; `pnpm run smoke:api` and `node scripts/smoke-image-cover-live.mjs --target-env production --base-url https://spoonjoy.app --cleanup` pass, or `web-smoke.md` records a true provider/capability blocker with exact evidence.
+**Acceptance**: From the merged web checkout, GitHub production deploy for the merge commit is green or `pnpm run deploy:auto` succeeds locally; `pnpm exec wrangler d1 migrations list DB --remote` reports no pending migrations; `pnpm run deploy:preflight` passes after migrations; `pnpm run smoke:api` passes, or `web-smoke.md` records a true provider/capability blocker with exact evidence.
 
 ### ⬜ Unit 28: Native Install Or Publish Smoke
 **What**: Verify the native installed/build surface after merge using local build/install smoke, and record TestFlight publish status only when existing credentials permit it without new human action.
@@ -384,14 +384,14 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 **Acceptance**: From the merged native checkout, `scripts/validate-native-local.sh --artifact-root /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/deploy/native-smoke` passes, or `native-smoke.md` records a signing/TestFlight/capability blocker with exact evidence.
 
 ### ⬜ Unit 29: MCP Consuming-Surface Smoke
-**What**: Run an MCP smoke through `scripts/spoonjoy-mcp-server.ts` or the updated image-cover smoke path to prove an agent client can list, generate/regenerate, poll status via `GET /api/v1/recipes/:id/covers` equivalent tool output, activate, archive, and clean up recipe covers.
+**What**: Deploy or verify QA with the merged web code, then run a QA-only MCP/image-cover smoke through the `scripts/smoke-live.mjs --include-image-cover-smoke` entrypoint to prove an agent client can list, generate/regenerate, poll status via `GET /api/v1/recipes/:id/covers` equivalent tool output, activate, archive, and clean up recipe covers.
 **Output**: MCP smoke logs under `./2026-07-14-1236-doing-recipe-photo-studio/deploy/mcp-smoke.md`.
-**Acceptance**: `node scripts/smoke-image-cover-live.mjs --target-env production --base-url https://spoonjoy.app --include-mcp-photo-studio --cleanup` passes from the merged web checkout, or `mcp-smoke.md` records a true provider/capability blocker with exact evidence.
+**Acceptance**: From the merged web checkout, `pnpm run deploy:qa` succeeds or `mcp-smoke.md` records evidence that QA already serves the merge commit; then `node scripts/smoke-live.mjs --target-env qa --base-url https://spoonjoy-v2-qa.mendelow-studio.workers.dev --out worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/deploy/mcp-smoke --include-image-cover-smoke` passes, or `mcp-smoke.md` records a true provider/capability blocker with exact evidence.
 
 ### ⬜ Unit 30: QA Data Cleanup
 **What**: Run local QA cleanup inspection and remove any Codex-created disposable Spoonjoy data created during validation.
 **Output**: Cleanup logs under `./2026-07-14-1236-doing-recipe-photo-studio/cleanup/qa-data.md`.
-**Acceptance**: From `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio`, `pnpm run cleanup:qa 2>&1 | tee worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/cleanup/qa-data.md` reports no Codex-created residue.
+**Acceptance**: From `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio`, `bash -o pipefail -c 'pnpm run cleanup:qa 2>&1 | tee worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/cleanup/qa-data.md'` reports no Codex-created residue.
 
 ### ⬜ Unit 31: Worktree Cleanup
 **What**: Remove task worktrees that are no longer needed after merge/deploy validation and confirm main checkouts are not dirtied.
@@ -405,6 +405,7 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 
 ## Execution
 - **TDD strictly enforced**: tests → red → implement → green → refactor
+- Any command that writes validation output through `tee` must be executed under `bash -o pipefail -c '...'` or with an explicit `${PIPESTATUS[0]}` check so the producer command's failure cannot be hidden by `tee`
 - Commit after every unit or unit phase, including Unit 0, non-lettered validation units, terminal units, and task-doc status updates
 - Push immediately after every commit in every touched repository
 - Run full test suite before marking unit done
@@ -422,3 +423,4 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 - 2026-07-14 13:09 Ambiguity Round 2 pinned final web validation log filenames
 - 2026-07-14 13:11 Ambiguity Round 3 replaced final web warning-scan glob with explicit log filenames
 - 2026-07-14 13:18 Scrutiny A added migration/deploy ordering, native media staging, MCP smoke, pinned status polling, and upload cleanup criteria
+- 2026-07-14 13:26 Scrutiny B addressed no-op smoke command, pipefail validation, root D1 migration, native upstream, pinned request shapes, stale unit reference, and inverted scans
