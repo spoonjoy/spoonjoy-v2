@@ -1,6 +1,6 @@
 # Doing: Recipe Photo Studio
 
-**Status**: READY_FOR_EXECUTION
+**Status**: in-progress
 **Execution Mode**: direct
 **Created**: 2026-07-14 12:39
 **Planning**: ./2026-07-14-1236-planning-recipe-photo-studio.md
@@ -58,7 +58,7 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 
 **CRITICAL: Every unit header MUST start with status emoji (⬜ for new units).**
 
-### ⬜ Unit 0: Setup/Research
+### ✅ Unit 0: Setup/Research
 **What**: Confirm both worktrees are on `worker/recipe-photo-studio`, read current source targets, record command inventory, and ensure the native branch is pushed before native commits begin.
 **Output**: Artifact notes in `./2026-07-14-1236-doing-recipe-photo-studio/setup.md` covering web worktree, native worktree, source files, test files, command matrix, and any local capability blockers.
 **Acceptance**: `git status --short --branch` is clean except task docs; source/test paths in the notes exist; web branch is pushed; native branch `worker/recipe-photo-studio` is pushed and tracks `origin/worker/recipe-photo-studio` before any native commit is created.
@@ -426,3 +426,4 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 - 2026-07-14 13:26 Scrutiny B addressed no-op smoke command, pipefail validation, root D1 migration, native upstream, pinned request shapes, stale unit reference, and inverted scans
 - 2026-07-14 13:33 Final scrutiny A fixed schema-helper ordering and required post-review final validation reruns
 - 2026-07-14 13:34 Doing doc ready for execution after granularity, validation, ambiguity, quality, and scrutiny reviewer convergence
+- 2026-07-14 13:43 Unit 0 complete: confirmed web/native worktrees, pushed native upstream, recorded setup artifact; unit review skipped because this was setup inventory only
