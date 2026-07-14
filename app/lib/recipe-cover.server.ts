@@ -37,6 +37,7 @@ export const RECIPE_COVER_DISPLAY_SELECT = {
 } satisfies Record<keyof RecipeCover, true>;
 
 export interface CreateCoverInput {
+  id?: string;
   recipeId: string;
   imageUrl: string;
   stylizedImageUrl?: string | null;
@@ -100,6 +101,7 @@ export async function createCover(
 
   return db.recipeCover.create({
     data: {
+      id: input.id,
       recipeId: input.recipeId,
       imageUrl: input.imageUrl,
       stylizedImageUrl: input.stylizedImageUrl ?? null,

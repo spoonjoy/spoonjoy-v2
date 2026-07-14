@@ -2256,6 +2256,72 @@ async function handleRecipeSpoonDelete(args: ApiV1RouteArgs, requestId: string, 
   });
 }
 
+async function recipeImageUploadData(
+  args: ApiV1RouteArgs,
+  input: {
+    db: ApiV1Db;
+    principal: ApiPrincipal;
+    recipeId: string;
+    coverId: string;
+    spoonId: string | null;
+    clientMutationId: string;
+    previousActiveCover: ReturnType<typeof fullCoverPayload> | null;
+  },
+) {
+  const origin = publicContentOrigin(args);
+  const recipe = await loadOwnedCoverRecipe(input.db, input.principal, input.recipeId);
+  const cover = await input.db.recipeCover.findFirstOrThrow({ where: { id: input.coverId, recipeId: input.recipeId } });
+  const spoon = input.spoonId
+    ? await input.db.recipeSpoon.findFirstOrThrow({
+        where: { id: input.spoonId, recipeId: input.recipeId },
+        include: { chef: { select: API_V1_SPOON_CHEF_SELECT } },
+      })
+    : null;
+  return {
+    spoon: spoon ? spoonPayload(spoon, origin) : null,
+    activeCover: await activeFullCoverPayload(input.db, recipe, origin),
+    previousActiveCover: input.previousActiveCover,
+    createdCover: fullCoverPayload(cover, recipe, origin),
+    generationStatus: cover.generationStatus,
+    mutation: { clientMutationId: input.clientMutationId, replayed: false },
+  };
+}
+
+async function recoverRecipeImageUpload(
+  args: ApiV1RouteArgs,
+  input: {
+    db: ApiV1Db;
+    principal: ApiPrincipal;
+    recipeId: string;
+    clientMutationId: string;
+    record: ApiIdempotencyKey;
+  },
+): Promise<ApiV1IdempotentMutationResult | null> {
+  await loadOwnedCoverRecipe(input.db, input.principal, input.recipeId);
+  const cover = await input.db.recipeCover.findFirst({
+    where: {
+      id: input.record.id,
+      recipeId: input.recipeId,
+      createdById: input.principal.id,
+    },
+    select: { id: true, sourceSpoonId: true },
+  });
+  if (!cover) return null;
+
+  return {
+    status: 201,
+    data: await recipeImageUploadData(args, {
+      db: input.db,
+      principal: input.principal,
+      recipeId: input.recipeId,
+      coverId: cover.id,
+      spoonId: cover.sourceSpoonId,
+      clientMutationId: input.clientMutationId,
+      previousActiveCover: null,
+    }),
+  };
+}
+
 async function handleRecipeImageUpload(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string) {
   const formData = await accountPhotoFormDataWithinLimit(args.request);
   assertKnownFormDataFields(formData, RECIPE_IMAGE_UPLOAD_FIELDS);
@@ -2278,7 +2344,7 @@ async function handleRecipeImageUpload(args: ApiV1RouteArgs, requestId: string, 
     cookedAt: cookedAt?.toISOString() ?? null,
   };
 
-  return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, clientMutationId, "recipes.image.upload", async (db) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, clientMutationId, "recipes.image.upload", async (db, reservation) => {
     const origin = publicContentOrigin(args);
     const recipe = await loadOwnedCoverRecipe(db, principal, recipeId);
     const previousActiveCover = await activeFullCoverPayload(db, recipe, origin);
@@ -2313,6 +2379,7 @@ async function handleRecipeImageUpload(args: ApiV1RouteArgs, requestId: string, 
 
       const sourceType = postAsSpoon ? "spoon" : "chef-upload";
       let createdCover = await createCover(db, {
+        id: reservation.id,
         recipeId,
         imageUrl: uploadedImageUrl,
         sourceType,
@@ -2372,25 +2439,17 @@ async function handleRecipeImageUpload(args: ApiV1RouteArgs, requestId: string, 
         });
       }
 
-      const nextRecipe = await loadOwnedCoverRecipe(db, principal, recipeId);
-      const persistedCover = await db.recipeCover.findFirstOrThrow({ where: { id: createdCover.id, recipeId } });
-      const spoon = createdSpoonId
-        ? await db.recipeSpoon.findFirstOrThrow({
-            where: { id: createdSpoonId, recipeId },
-            include: { chef: { select: API_V1_SPOON_CHEF_SELECT } },
-          })
-        : null;
-
       return {
         status: 201,
-        data: {
-          spoon: spoon ? spoonPayload(spoon, origin) : null,
-          activeCover: await activeFullCoverPayload(db, nextRecipe, origin),
+        data: await recipeImageUploadData(args, {
+          db,
+          principal,
+          recipeId,
+          coverId: createdCover.id,
+          spoonId: createdSpoonId,
+          clientMutationId,
           previousActiveCover,
-          createdCover: fullCoverPayload(persistedCover, nextRecipe, origin),
-          generationStatus: persistedCover.generationStatus,
-          mutation: { clientMutationId, replayed: false },
-        },
+        }),
       };
     } catch (error) {
       if (uploadedImageUrl) {
@@ -2399,6 +2458,14 @@ async function handleRecipeImageUpload(args: ApiV1RouteArgs, requestId: string, 
       }
       throw error;
     }
+  }, {
+    recoverInFlight: async (db, record) => recoverRecipeImageUpload(args, {
+      db,
+      principal,
+      recipeId,
+      clientMutationId,
+      record,
+    }),
   });
 }
 
@@ -4266,7 +4333,7 @@ function optionalFormDataString(formData: FormData, field: string, maxLength = M
   return optionalNullableString(value, field, maxLength);
 }
 
-function optionalFormDataBoolean(formData: FormData, field: string, fallback = false): boolean {
+function optionalFormDataBoolean(formData: FormData, field: string, fallback: boolean): boolean {
   const value = singleFormDataValue(formData, field);
   if (value === null) return fallback;
   if (value === "true") return true;

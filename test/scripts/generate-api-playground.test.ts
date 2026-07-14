@@ -46,4 +46,69 @@ describe("generate-api-playground", () => {
 
     expect(generated).toBe(serializeApiPlaygroundManifest());
   });
+
+  it("derives multipart field requiredness from inline schemas and tolerates unsupported refs", () => {
+    const document = {
+      openapi: "3.1.0",
+      info: { title: "Custom API", version: "custom" },
+      paths: {
+        "/custom/inline-upload": {
+          post: {
+            operationId: "postCustomInlineUpload",
+            tags: ["Custom"],
+            summary: "Inline upload",
+            requestBody: {
+              required: true,
+              content: {
+                "multipart/form-data": {
+                  schema: {
+                    type: "object",
+                    required: ["photo"],
+                    properties: {
+                      photo: { type: "string", format: "binary" },
+                      caption: { type: "string" },
+                    },
+                  },
+                  examples: {
+                    example: { value: { photo: "(binary image file)", caption: "Optional caption" } },
+                  },
+                },
+              },
+            },
+            responses: { "200": { description: "OK" } },
+          },
+        },
+        "/custom/unsupported-ref-upload": {
+          post: {
+            operationId: "postCustomUnsupportedRefUpload",
+            tags: ["Custom"],
+            summary: "Unsupported ref upload",
+            requestBody: {
+              required: true,
+              content: {
+                "multipart/form-data": {
+                  schema: { $ref: "#/components/requestBodies/Upload" },
+                  examples: {
+                    example: { value: { photo: "(binary image file)" } },
+                  },
+                },
+              },
+            },
+            responses: { "200": { description: "OK" } },
+          },
+        },
+      },
+      components: { schemas: {} },
+    } as ReturnType<typeof buildApiV1OpenApiDocument>;
+
+    const manifest = buildApiPlaygroundManifest(document);
+
+    expect(manifest.operations.find((operation) => operation.id === "POST /custom/inline-upload")?.requestBody?.fields).toEqual([
+      expect.objectContaining({ name: "photo", required: true }),
+      expect.objectContaining({ name: "caption", required: false }),
+    ]);
+    expect(manifest.operations.find((operation) => operation.id === "POST /custom/unsupported-ref-upload")?.requestBody?.fields).toEqual([
+      expect.objectContaining({ name: "photo", required: false }),
+    ]);
+  });
 });

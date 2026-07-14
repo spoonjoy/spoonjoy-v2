@@ -5307,6 +5307,257 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       ]
     },
     {
+      "id": "POST /api/v1/recipes/{id}/image",
+      "operationId": "postApiV1RecipeImage",
+      "label": "Upload a first recipe photo, optionally preserve it as a Spoon, and queue editorialization",
+      "method": "POST",
+      "path": "/api/v1/recipes/{id}/image",
+      "profiles": [
+        "full",
+        "sdk"
+      ],
+      "tag": "Recipe Covers",
+      "auth": "authenticated",
+      "scopes": [
+        "kitchen:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx",
+          "idempotency_in_progress"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": true,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "insufficient_scope",
+          "idempotency_conflict"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": {
+        "key": "clientMutationId",
+        "location": "multipartFormData",
+        "retentionHours": 24,
+        "replayStatus": [
+          201
+        ],
+        "conflictStatus": 409,
+        "inProgressRetryAfterSeconds": 2,
+        "retryBodyRule": "Persist and retry the same multipart recipe image payload for this clientMutationId. The uploaded file digest, size, type, and field values define conflicts."
+      },
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "write",
+      "risk": "mutating",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "label": "Id",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "recipe_1",
+          "description": "Spoonjoy resource id from a previous list response.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "contentType": "multipart/form-data",
+        "fields": [
+          {
+            "name": "clientMutationId",
+            "label": "Client Mutation Id",
+            "required": true,
+            "accept": "",
+            "description": "device-uuid-recipe-image"
+          },
+          {
+            "name": "photo",
+            "label": "Photo",
+            "required": true,
+            "accept": "image/jpeg,image/png,image/gif,image/webp",
+            "description": "(binary image file)"
+          },
+          {
+            "name": "activate",
+            "label": "Activate",
+            "required": false,
+            "accept": "",
+            "description": ""
+          },
+          {
+            "name": "generateEditorial",
+            "label": "Generate Editorial",
+            "required": false,
+            "accept": "",
+            "description": ""
+          },
+          {
+            "name": "postAsSpoon",
+            "label": "Post As Spoon",
+            "required": false,
+            "accept": "",
+            "description": ""
+          },
+          {
+            "name": "note",
+            "label": "Note",
+            "required": false,
+            "accept": "",
+            "description": "Added more lemon."
+          },
+          {
+            "name": "nextTime",
+            "label": "Next Time",
+            "required": false,
+            "accept": "",
+            "description": "Try a wider pan."
+          },
+          {
+            "name": "cookedAt",
+            "label": "Cooked At",
+            "required": false,
+            "accept": "",
+            "description": "2026-06-01T00:00:00.000Z"
+          }
+        ],
+        "example": "{\n  \"clientMutationId\": \"device-uuid-recipe-image\",\n  \"photo\": \"(binary image file)\",\n  \"activate\": true,\n  \"generateEditorial\": true,\n  \"postAsSpoon\": true,\n  \"note\": \"Added more lemon.\",\n  \"nextTime\": \"Try a wider pan.\",\n  \"cookedAt\": \"2026-06-01T00:00:00.000Z\"\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"clientMutationId\": \"device-uuid-recipe-image\",\n  \"photo\": \"(binary image file)\",\n  \"activate\": true,\n  \"generateEditorial\": true,\n  \"postAsSpoon\": true,\n  \"note\": \"Added more lemon.\",\n  \"nextTime\": \"Try a wider pan.\",\n  \"cookedAt\": \"2026-06-01T00:00:00.000Z\"\n}"
+          }
+        ]
+      },
+      "responseStatuses": [
+        "201",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "409",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "201",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "409",
+          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "201",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"spoon\": {\n      \"id\": \"spoon_1\",\n      \"recipeId\": \"recipe_1\",\n      \"chefId\": \"chef_1\",\n      \"photoUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"cookedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"note\": \"Added more lemon.\",\n      \"nextTime\": \"Try a wider pan.\",\n      \"deletedAt\": null\n    },\n    \"activeCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"spoon\",\n      \"imageUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"stylizedImageUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"displayUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorial photo\",\n      \"sourceSpoonId\": \"spoon_1\",\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"previousActiveCover\": null,\n    \"createdCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"spoon\",\n      \"imageUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"stylizedImageUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"displayUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorial photo\",\n      \"sourceSpoonId\": \"spoon_1\",\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"generationStatus\": \"processing\",\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-recipe-image\",\n      \"replayed\": false\n    }\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: kitchen:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        },
+        {
+          "status": "409",
+          "name": "idempotency_in_progress",
+          "label": "Idempotency In Progress",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"idempotency_in_progress\",\n    \"message\": \"Idempotency key is already in progress; retry shortly\",\n    \"status\": 409,\n    \"details\": {\n      \"retryAfterSeconds\": 2\n    }\n  }\n}"
+        }
+      ]
+    },
+    {
       "id": "GET /api/v1/recipes/{id}/covers",
       "operationId": "getApiV1RecipeCovers",
       "label": "List owner recipe cover candidates and spoon photo sources",

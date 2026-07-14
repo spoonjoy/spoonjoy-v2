@@ -40,6 +40,7 @@ const OPERATION_SCOPES = {
   "POST /api/v1/recipes/{id}/spoons": ["kitchen:write"],
   "PATCH /api/v1/recipes/{id}/spoons/{spoonId}": ["kitchen:write"],
   "DELETE /api/v1/recipes/{id}/spoons/{spoonId}": ["kitchen:write"],
+  "POST /api/v1/recipes/{id}/image": ["kitchen:write"],
   "GET /api/v1/recipes/{id}/covers": ["kitchen:write"],
   "PATCH /api/v1/recipes/{id}/covers": ["kitchen:write"],
   "PATCH /api/v1/recipes/{id}/covers/{coverId}": ["kitchen:write"],
@@ -1003,6 +1004,17 @@ describe("API v1 OpenAPI document", () => {
 	        photo: { type: "string", format: "binary" },
 	      },
 	    });
+    expect(components.schemas.RecipeImageUploadRequest).toMatchObject({
+      additionalProperties: false,
+      required: ["clientMutationId", "photo"],
+      properties: {
+        clientMutationId: { type: "string", minLength: 1, maxLength: 160 },
+        photo: { type: "string", format: "binary" },
+        activate: { type: "boolean", default: true },
+        generateEditorial: { type: "boolean", default: true },
+        postAsSpoon: { type: "boolean", default: false },
+      },
+    });
 	    expect(components.schemas.UpdateNotificationPreferencesRequest.required).toEqual([
 	      "clientMutationId",
 	      "notifySpoonOnMyRecipe",
@@ -1161,6 +1173,22 @@ describe("API v1 OpenAPI document", () => {
     expect(sdk.paths["/api/v1/recipes/{id}/covers"].patch["x-idempotency"]).toMatchObject({
       key: "clientMutationId",
       location: "jsonBody",
+    });
+    expect(sdk.paths["/api/v1/recipes/{id}/image"].post).toMatchObject({
+      operationId: "postApiV1RecipeImage",
+      "x-scopes": ["kitchen:write"],
+      requestBody: {
+        content: {
+          "multipart/form-data": {
+            schema: { $ref: "#/components/schemas/RecipeImageUploadRequest" },
+          },
+        },
+      },
+      "x-idempotency": {
+        key: "clientMutationId",
+        location: "multipartFormData",
+        replayStatus: [201],
+      },
     });
     expect(sdk.paths["/api/v1/recipes/{id}/covers/from-spoon/{spoonId}"].post).toMatchObject({
       operationId: "postApiV1RecipeCoverFromSpoon",

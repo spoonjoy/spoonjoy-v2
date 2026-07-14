@@ -8,6 +8,14 @@ import {
 } from "../app/lib/api-v1-openapi.server";
 
 type OpenApiDocument = ReturnType<typeof buildApiV1OpenApiDocument>;
+type OpenApiSchema = {
+  $ref?: string;
+  type?: string | string[];
+  format?: string;
+  description?: string;
+  required?: string[];
+  properties?: Record<string, OpenApiSchema>;
+};
 type ApiPlaygroundProfile = "full" | "connector" | "sdk";
 type ApiPlaygroundAuthFlow = {
   id: string;
@@ -51,12 +59,15 @@ type OpenApiOperation = {
     required?: boolean;
     content?: {
       "application/json"?: {
+        schema?: OpenApiSchema;
         examples?: Record<string, { value?: unknown }>;
       };
       "application/x-www-form-urlencoded"?: {
+        schema?: OpenApiSchema;
         examples?: Record<string, { value?: unknown }>;
       };
       "multipart/form-data"?: {
+        schema?: OpenApiSchema;
         examples?: Record<string, { value?: unknown }>;
       };
     };
@@ -146,10 +157,20 @@ function parameterFromOpenApi(path: string, parameter: OpenApiParameter) {
   };
 }
 
-function requestBodyExample(operation: OpenApiOperation) {
-  const jsonExamples = operation.requestBody?.content?.["application/json"]?.examples;
-  const formExamples = operation.requestBody?.content?.["application/x-www-form-urlencoded"]?.examples;
-  const multipartExamples = operation.requestBody?.content?.["multipart/form-data"]?.examples;
+function resolveSchema(document: OpenApiDocument, schema: OpenApiSchema | undefined): OpenApiSchema | undefined {
+  if (!schema?.$ref) return schema;
+  const match = /^#\/components\/schemas\/([^/]+)$/.exec(schema.$ref);
+  if (!match) return schema;
+  return document.components?.schemas?.[match[1]] as OpenApiSchema | undefined;
+}
+
+function requestBodyExample(document: OpenApiDocument, operation: OpenApiOperation) {
+  const jsonMedia = operation.requestBody?.content?.["application/json"];
+  const formMedia = operation.requestBody?.content?.["application/x-www-form-urlencoded"];
+  const multipartMedia = operation.requestBody?.content?.["multipart/form-data"];
+  const jsonExamples = jsonMedia?.examples;
+  const formExamples = formMedia?.examples;
+  const multipartExamples = multipartMedia?.examples;
   const examples = jsonExamples ?? formExamples ?? multipartExamples;
   const example = examples?.example?.value ?? Object.values(examples ?? {})[0]?.value;
   if (example === undefined) return null;
@@ -158,14 +179,22 @@ function requestBodyExample(operation: OpenApiOperation) {
     : formExamples
       ? "application/x-www-form-urlencoded"
       : "multipart/form-data";
+  const multipartSchema = contentType === "multipart/form-data"
+    ? resolveSchema(document, multipartMedia?.schema)
+    : undefined;
+  const requiredMultipartFields = new Set(multipartSchema?.required ?? []);
+  const multipartProperties = multipartSchema?.properties ?? {};
   const multipartFields = contentType === "multipart/form-data" && example && typeof example === "object" && !Array.isArray(example)
-    ? Object.entries(example as Record<string, unknown>).map(([name, value]) => ({
-        name,
-        label: titleCase(name),
-        required: Boolean(operation.requestBody?.required),
-        accept: name === "photo" ? "image/jpeg,image/png,image/gif,image/webp" : "",
-        description: typeof value === "string" ? value : "",
-      }))
+    ? Object.entries(example as Record<string, unknown>).map(([name, value]) => {
+        const fieldSchema = multipartProperties[name];
+        return {
+          name,
+          label: titleCase(name),
+          required: requiredMultipartFields.has(name),
+          accept: name === "photo" ? "image/jpeg,image/png,image/gif,image/webp" : "",
+          description: typeof value === "string" ? value : fieldSchema?.description ?? "",
+        };
+      })
     : [];
   const renderExample = (value: unknown) => typeof value === "string"
     ? value
@@ -312,6 +341,7 @@ function operationIds(document: Pick<OpenApiDocument, "paths">): Set<string> {
 }
 
 function operationFromOpenApi(
+  document: OpenApiDocument,
   path: string,
   method: string,
   operation: OpenApiOperation,
@@ -344,7 +374,7 @@ function operationFromOpenApi(
     risk: operationRisk(path, method),
     guide: operationGuide(path, method, operation),
     params: (operation.parameters ?? []).map((parameter) => parameterFromOpenApi(path, parameter)),
-    requestBody: requestBodyExample(operation),
+    requestBody: requestBodyExample(document, operation),
     responseStatuses: responseSummaries(operation).map((response) => response.status),
     responseSummaries: responseSummaries(operation),
     responseExamples: responseExamples(operation),
@@ -360,7 +390,7 @@ export function buildApiPlaygroundManifest(document: OpenApiDocument = buildApiV
     const operationsByMethod = pathItem as Record<string, OpenApiOperation>;
     for (const [method, operation] of Object.entries(operationsByMethod)) {
       if (!OPENAPI_OPERATION_METHOD_SET.has(method)) continue;
-      operations.push(operationFromOpenApi(path, method, operation, connectorOperations, sdkOperations));
+      operations.push(operationFromOpenApi(document, path, method, operation, connectorOperations, sdkOperations));
     }
   }
 

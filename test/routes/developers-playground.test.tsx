@@ -103,6 +103,7 @@ describe("/developers/playground", () => {
     expect(data.manifest.operations.map((operation) => operation.id)).toContain("POST /api/v1/tokens");
     expect(data.manifest.operations.map((operation) => operation.id)).toContain("PATCH /api/v1/shopping-list/items/{itemId}");
     expect(data.manifest.operations.map((operation) => operation.id)).toEqual(expect.arrayContaining([
+      "POST /api/v1/recipes/{id}/image",
       "GET /api/v1/recipes/{id}/covers",
       "PATCH /api/v1/recipes/{id}/covers",
       "PATCH /api/v1/recipes/{id}/covers/{coverId}",
@@ -166,6 +167,7 @@ describe("/developers/playground", () => {
     expect(data.manifest.operations.find((operation) => operation.id === "GET /api/v1/me/sync")?.profiles).toEqual(["full", "sdk"]);
     expect(data.manifest.operations.find((operation) => operation.id === "GET /api/v1/recipes/{id}/spoons")?.profiles).toEqual(["full", "sdk"]);
     expect(data.manifest.operations.find((operation) => operation.id === "POST /api/v1/recipes/{id}/spoons")?.profiles).toEqual(["full", "sdk"]);
+    expect(data.manifest.operations.find((operation) => operation.id === "POST /api/v1/recipes/{id}/image")?.profiles).toEqual(["full", "sdk"]);
     expect(data.manifest.operations.find((operation) => operation.id === "GET /api/v1/recipes/{id}/covers")?.profiles).toEqual(["full", "sdk"]);
     expect(data.manifest.operations.find((operation) => operation.id === "PUT /api/v1/recipes/{id}/step-output-uses")?.risk).toBe("mutating");
     expect(data.manifest.operations.find((operation) => operation.id === "POST /oauth/token")?.profiles).toEqual(["full", "sdk"]);
@@ -177,7 +179,20 @@ describe("/developers/playground", () => {
         { name: "photo", required: true, accept: "image/jpeg,image/png,image/gif,image/webp" },
       ],
     });
-    expect(data.manifest.operations.length).toBe(69);
+    expect(data.manifest.operations.find((operation) => operation.id === "POST /api/v1/recipes/{id}/image")?.requestBody).toMatchObject({
+      contentType: "multipart/form-data",
+      fields: [
+        { name: "clientMutationId", required: true, accept: "" },
+        { name: "photo", required: true, accept: "image/jpeg,image/png,image/gif,image/webp" },
+        { name: "activate", required: false, accept: "" },
+        { name: "generateEditorial", required: false, accept: "" },
+        { name: "postAsSpoon", required: false, accept: "" },
+        { name: "note", required: false, accept: "" },
+        { name: "nextTime", required: false, accept: "" },
+        { name: "cookedAt", required: false, accept: "" },
+      ],
+    });
+    expect(data.manifest.operations.length).toBe(70);
   });
 
   it("uses the configured public origin for playground OG URLs", async () => {

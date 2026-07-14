@@ -4,6 +4,7 @@ import { FormData as UndiciFormData, Request as UndiciRequest } from "undici";
 import { action, loader } from "~/routes/api.v1.$";
 import { createApiCredential } from "~/lib/api-auth.server";
 import { getLocalDb } from "~/lib/db.server";
+import { SpoonValidationError } from "~/lib/recipe-spoon.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestRecipe, createTestUser } from "../utils";
 
@@ -384,6 +385,52 @@ describe("API v1 recipe cover management", () => {
     await expect(db.recipeSpoon.count({ where: { recipeId: fixture.recipe.id } })).resolves.toBe(0);
   });
 
+  it("can queue editorial generation for an uploaded photo without activating the cover", async () => {
+    const fixture = await createFirstPhotoFixture(db);
+    const photoBucket = mockPhotoBucket();
+    const formData = recipeImageForm({
+      clientMutationId: "first-photo-editorial-inactive",
+      photo: photoFile("inactive-editorial.png"),
+      activate: false,
+      generateEditorial: true,
+      postAsSpoon: false,
+    });
+
+    const response = await action(routeArgs(
+      recipeImageUploadRequest(fixture.recipe.id, fixture.ownerKitchenWrite.token, "req_recipe_image_editorial_inactive", formData),
+      `recipes/${fixture.recipe.id}/image`,
+      backgroundContext({ PHOTOS: photoBucket.bucket }),
+    ));
+    const payload = await readJson(response);
+
+    expect(response.status).toBe(201);
+    const uploadedKey = vi.mocked(photoBucket.bucket.put).mock.calls[0][0] as string;
+    expect(payload).toMatchObject({
+      ok: true,
+      requestId: "req_recipe_image_editorial_inactive",
+      data: {
+        spoon: null,
+        activeCover: null,
+        createdCover: expect.objectContaining({
+          imageUrl: `https://spoonjoy.app/photos/${uploadedKey}`,
+          activeVariant: null,
+          sourceType: "chef-upload",
+          status: "processing",
+          generationStatus: "processing",
+        }),
+        generationStatus: "processing",
+        mutation: { clientMutationId: "first-photo-editorial-inactive", replayed: false },
+      },
+    });
+    await expect(db.recipe.findUniqueOrThrow({
+      where: { id: fixture.recipe.id },
+      select: { activeCoverId: true, activeCoverVariant: true },
+    })).resolves.toEqual({
+      activeCoverId: null,
+      activeCoverVariant: null,
+    });
+  });
+
   it("validates first-photo upload auth, multipart fields, and image files before writing storage or database rows", async () => {
     const fixture = await createFirstPhotoFixture(db);
     const cases = [
@@ -405,11 +452,41 @@ describe("API v1 recipe cover management", () => {
         code: "validation_error",
       },
       {
+        requestId: "req_recipe_image_duplicate_photo",
+        token: fixture.ownerKitchenWrite.token,
+        formData: recipeImageForm({ clientMutationId: "first-photo-duplicate-photo", photo: photoFile() }),
+        mutate(formData: UndiciFormData) {
+          formData.append("photo", photoFile("second.png"));
+        },
+        status: 400,
+        code: "validation_error",
+      },
+      {
         requestId: "req_recipe_image_bad_boolean",
         token: fixture.ownerKitchenWrite.token,
         formData: recipeImageForm({ clientMutationId: "first-photo-bad-boolean", photo: photoFile(), activate: true }),
         mutate(formData: UndiciFormData) {
           formData.set("activate", "absolutely");
+        },
+        status: 400,
+        code: "validation_error",
+      },
+      {
+        requestId: "req_recipe_image_note_file",
+        token: fixture.ownerKitchenWrite.token,
+        formData: recipeImageForm({ clientMutationId: "first-photo-note-file", photo: photoFile() }),
+        mutate(formData: UndiciFormData) {
+          formData.append("note", photoFile("note.png"));
+        },
+        status: 400,
+        code: "validation_error",
+      },
+      {
+        requestId: "req_recipe_image_cooked_at_file",
+        token: fixture.ownerKitchenWrite.token,
+        formData: recipeImageForm({ clientMutationId: "first-photo-cooked-at-file", photo: photoFile() }),
+        mutate(formData: UndiciFormData) {
+          formData.append("cookedAt", photoFile("date.png"));
         },
         status: 400,
         code: "validation_error",
@@ -513,6 +590,64 @@ describe("API v1 recipe cover management", () => {
     });
   });
 
+  it("recovers a committed first-photo upload when idempotency completion fails", async () => {
+    const fixture = await createFirstPhotoFixture(db);
+    const photoBucket = mockPhotoBucket();
+    const originalUpdate = db.apiIdempotencyKey.update;
+    const updateSpy = vi.fn().mockRejectedValueOnce(new Error("idempotency completion failed after upload"));
+    db.apiIdempotencyKey.update = updateSpy as unknown as typeof db.apiIdempotencyKey.update;
+    const body = {
+      clientMutationId: "first-photo-recover-after-commit",
+      photo: photoFile("recover-after-commit.png"),
+      activate: true,
+      generateEditorial: true,
+      postAsSpoon: true,
+      note: "Recoverable dinner",
+    };
+
+    try {
+      const first = await action(routeArgs(
+        recipeImageUploadRequest(fixture.recipe.id, fixture.ownerKitchenWrite.token, "req_recipe_image_recover_first", recipeImageForm(body)),
+        `recipes/${fixture.recipe.id}/image`,
+        backgroundContext({ PHOTOS: photoBucket.bucket }),
+      ));
+      expect(first.status).toBe(201);
+      const firstPayload = await readJson(first);
+      await expect(db.apiIdempotencyKey.findFirst({
+        where: {
+          userId: fixture.owner.id,
+          key: "first-photo-recover-after-commit",
+        },
+      })).resolves.toMatchObject({
+        responseStatus: null,
+        responseBody: null,
+      });
+
+      db.apiIdempotencyKey.update = originalUpdate;
+      const replay = await action(routeArgs(
+        recipeImageUploadRequest(fixture.recipe.id, fixture.ownerKitchenWrite.token, "req_recipe_image_recover_second", recipeImageForm(body)),
+        `recipes/${fixture.recipe.id}/image`,
+        backgroundContext({ PHOTOS: photoBucket.bucket }),
+      ));
+      expect(replay.status).toBe(201);
+      await expect(replay.json()).resolves.toMatchObject({
+        ok: true,
+        requestId: "req_recipe_image_recover_second",
+        data: {
+          spoon: { id: firstPayload.data.spoon.id },
+          activeCover: { id: firstPayload.data.activeCover.id },
+          createdCover: { id: firstPayload.data.createdCover.id },
+          mutation: { clientMutationId: "first-photo-recover-after-commit", replayed: true },
+        },
+      });
+      expect(photoBucket.bucket.put).toHaveBeenCalledTimes(1);
+      await expect(db.recipeCover.count({ where: { recipeId: fixture.recipe.id } })).resolves.toBe(1);
+      await expect(db.recipeSpoon.count({ where: { recipeId: fixture.recipe.id } })).resolves.toBe(1);
+    } finally {
+      db.apiIdempotencyKey.update = originalUpdate;
+    }
+  });
+
   it("deletes an uploaded first-photo object when a later database write fails", async () => {
     const fixture = await createFirstPhotoFixture(db);
     const photoBucket = mockPhotoBucket();
@@ -548,6 +683,214 @@ describe("API v1 recipe cover management", () => {
         where: {
           userId: fixture.owner.id,
           key: "first-photo-orphan-cleanup",
+        },
+      })).resolves.toBeNull();
+    } finally {
+      db.recipeCover.create = originalCreate;
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("cleans uploaded photo, cover, and Spoon rows when Spoon cover linking fails", async () => {
+    const fixture = await createFirstPhotoFixture(db);
+    const photoBucket = mockPhotoBucket();
+    const originalUpdate = db.recipeCover.update;
+    const updateSpy = vi.fn().mockRejectedValueOnce(new Error("cover link failed after spoon write"));
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    db.recipeCover.update = updateSpy as unknown as typeof db.recipeCover.update;
+
+    try {
+      const response = await action(routeArgs(
+        recipeImageUploadRequest(fixture.recipe.id, fixture.ownerKitchenWrite.token, "req_recipe_image_link_cleanup", recipeImageForm({
+          clientMutationId: "first-photo-link-cleanup",
+          photo: photoFile("link-cleanup.png"),
+          activate: true,
+          postAsSpoon: true,
+          generateEditorial: false,
+        })),
+        `recipes/${fixture.recipe.id}/image`,
+        backgroundContext({ PHOTOS: photoBucket.bucket }),
+      ));
+
+      expect(response.status).toBe(500);
+      await expect(response.json()).resolves.toMatchObject({
+        ok: false,
+        requestId: "req_recipe_image_link_cleanup",
+        error: { code: "internal_error", status: 500 },
+      });
+      const uploadedKey = vi.mocked(photoBucket.bucket.put).mock.calls[0][0] as string;
+      expect(photoBucket.bucket.delete).toHaveBeenCalledWith(uploadedKey);
+      await expect(db.recipeCover.count({ where: { recipeId: fixture.recipe.id } })).resolves.toBe(0);
+      await expect(db.recipeSpoon.count({ where: { recipeId: fixture.recipe.id } })).resolves.toBe(0);
+      await expect(db.apiIdempotencyKey.findFirst({
+        where: {
+          userId: fixture.owner.id,
+          key: "first-photo-link-cleanup",
+        },
+      })).resolves.toBeNull();
+    } finally {
+      db.recipeCover.update = originalUpdate;
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("maps Spoon validation failures during first-photo preservation and cleans the uploaded object", async () => {
+    const fixture = await createFirstPhotoFixture(db);
+    const photoBucket = mockPhotoBucket();
+    const originalCreate = db.recipeSpoon.create;
+    const createSpy = vi.fn().mockRejectedValueOnce(new SpoonValidationError("Spoon preservation failed"));
+    db.recipeSpoon.create = createSpy as unknown as typeof db.recipeSpoon.create;
+
+    try {
+      const response = await action(routeArgs(
+        recipeImageUploadRequest(fixture.recipe.id, fixture.ownerKitchenWrite.token, "req_recipe_image_spoon_validation_cleanup", recipeImageForm({
+          clientMutationId: "first-photo-spoon-validation-cleanup",
+          photo: photoFile("spoon-validation-cleanup.png"),
+          activate: true,
+          postAsSpoon: true,
+          generateEditorial: false,
+        })),
+        `recipes/${fixture.recipe.id}/image`,
+        backgroundContext({ PHOTOS: photoBucket.bucket }),
+      ));
+
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toMatchObject({
+        ok: false,
+        requestId: "req_recipe_image_spoon_validation_cleanup",
+        error: { code: "validation_error", status: 400, message: "Spoon preservation failed" },
+      });
+      const uploadedKey = vi.mocked(photoBucket.bucket.put).mock.calls[0][0] as string;
+      expect(photoBucket.bucket.delete).toHaveBeenCalledWith(uploadedKey);
+      await expect(db.recipeCover.count({ where: { recipeId: fixture.recipe.id } })).resolves.toBe(0);
+      await expect(db.recipeSpoon.count({ where: { recipeId: fixture.recipe.id } })).resolves.toBe(0);
+      await expect(db.apiIdempotencyKey.findFirst({
+        where: {
+          userId: fixture.owner.id,
+          key: "first-photo-spoon-validation-cleanup",
+        },
+      })).resolves.toBeNull();
+    } finally {
+      db.recipeSpoon.create = originalCreate;
+    }
+  });
+
+  it("maps cover activation failures during first-photo upload and cleans the uploaded object", async () => {
+    const fixture = await createFirstPhotoFixture(db);
+    const photoBucket = mockPhotoBucket();
+    const originalTransaction = db.$transaction;
+    const transactionSpy = vi.fn().mockRejectedValueOnce(new Error("activation failed after cover write"));
+    db.$transaction = transactionSpy as unknown as typeof db.$transaction;
+
+    try {
+      const response = await action(routeArgs(
+        recipeImageUploadRequest(fixture.recipe.id, fixture.ownerKitchenWrite.token, "req_recipe_image_activation_cleanup", recipeImageForm({
+          clientMutationId: "first-photo-activation-cleanup",
+          photo: photoFile("activation-cleanup.png"),
+          activate: true,
+          postAsSpoon: false,
+          generateEditorial: false,
+        })),
+        `recipes/${fixture.recipe.id}/image`,
+        backgroundContext({ PHOTOS: photoBucket.bucket }),
+      ));
+
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toMatchObject({
+        ok: false,
+        requestId: "req_recipe_image_activation_cleanup",
+        error: { code: "validation_error", status: 400, message: "activation failed after cover write" },
+      });
+      const uploadedKey = vi.mocked(photoBucket.bucket.put).mock.calls[0][0] as string;
+      expect(photoBucket.bucket.delete).toHaveBeenCalledWith(uploadedKey);
+      await expect(db.recipeCover.count({ where: { recipeId: fixture.recipe.id } })).resolves.toBe(0);
+      await expect(db.recipeSpoon.count({ where: { recipeId: fixture.recipe.id } })).resolves.toBe(0);
+      await expect(db.recipe.findUniqueOrThrow({
+        where: { id: fixture.recipe.id },
+        select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
+      })).resolves.toEqual({
+        activeCoverId: null,
+        activeCoverVariant: null,
+        coverMode: fixture.recipe.coverMode,
+      });
+      await expect(db.apiIdempotencyKey.findFirst({
+        where: {
+          userId: fixture.owner.id,
+          key: "first-photo-activation-cleanup",
+        },
+      })).resolves.toBeNull();
+    } finally {
+      db.$transaction = originalTransaction;
+    }
+  });
+
+  it("does not attempt orphan cleanup when storage fails before an object URL exists", async () => {
+    const fixture = await createFirstPhotoFixture(db);
+    const photoBucket = mockPhotoBucket();
+    vi.mocked(photoBucket.bucket.put).mockRejectedValueOnce(new Error("R2 unavailable before URL"));
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    try {
+      const response = await action(routeArgs(
+        recipeImageUploadRequest(fixture.recipe.id, fixture.ownerKitchenWrite.token, "req_recipe_image_storage_failure", recipeImageForm({
+          clientMutationId: "first-photo-storage-failure",
+          photo: photoFile("storage-failure.png"),
+          activate: true,
+        })),
+        `recipes/${fixture.recipe.id}/image`,
+        backgroundContext({ PHOTOS: photoBucket.bucket }),
+      ));
+
+      expect(response.status).toBe(500);
+      await expect(response.json()).resolves.toMatchObject({
+        ok: false,
+        requestId: "req_recipe_image_storage_failure",
+        error: { code: "internal_error", status: 500 },
+      });
+      expect(photoBucket.bucket.delete).not.toHaveBeenCalled();
+      await expect(db.recipeCover.count({ where: { recipeId: fixture.recipe.id } })).resolves.toBe(0);
+      await expect(db.recipeSpoon.count({ where: { recipeId: fixture.recipe.id } })).resolves.toBe(0);
+      await expect(db.apiIdempotencyKey.findFirst({
+        where: {
+          userId: fixture.owner.id,
+          key: "first-photo-storage-failure",
+        },
+      })).resolves.toBeNull();
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("rolls back rows after a data-URL upload write failure without a Cloudflare environment", async () => {
+    const fixture = await createFirstPhotoFixture(db);
+    const originalCreate = db.recipeCover.create;
+    const createSpy = vi.fn().mockRejectedValueOnce(new Error("cover write failed after data URL upload"));
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    db.recipeCover.create = createSpy as unknown as typeof db.recipeCover.create;
+
+    try {
+      const response = await action(routeArgs(
+        recipeImageUploadRequest(fixture.recipe.id, fixture.ownerKitchenWrite.token, "req_recipe_image_data_url_cleanup", recipeImageForm({
+          clientMutationId: "first-photo-data-url-cleanup",
+          photo: photoFile("data-url.png"),
+          activate: true,
+        })),
+        `recipes/${fixture.recipe.id}/image`,
+        backgroundContext(),
+      ));
+
+      expect(response.status).toBe(500);
+      await expect(response.json()).resolves.toMatchObject({
+        ok: false,
+        requestId: "req_recipe_image_data_url_cleanup",
+        error: { code: "internal_error", status: 500 },
+      });
+      await expect(db.recipeCover.count({ where: { recipeId: fixture.recipe.id } })).resolves.toBe(0);
+      await expect(db.recipeSpoon.count({ where: { recipeId: fixture.recipe.id } })).resolves.toBe(0);
+      await expect(db.apiIdempotencyKey.findFirst({
+        where: {
+          userId: fixture.owner.id,
+          key: "first-photo-data-url-cleanup",
         },
       })).resolves.toBeNull();
     } finally {
