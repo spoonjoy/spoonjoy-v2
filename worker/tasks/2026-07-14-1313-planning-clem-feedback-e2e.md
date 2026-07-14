@@ -16,12 +16,16 @@ Turn Clem's feedback into shipped Spoonjoy product primitives: reliable live coo
 - Fix shopping-list re-add semantics consistently across the web route, REST API v1, and MCP tool surfaces.
 - Add a canonical shopping-list mutation helper so web/API/MCP do not drift after the fix.
 - Add a Cloudflare Durable Object class and Wrangler bindings/migrations for logged-in live cook sessions.
+- Add Durable Object bindings/migrations for both top-level production config and the QA Wrangler environment because Durable Object env bindings are not inherited.
+- Add D1/Prisma migrations for any cook-session index, saved-recipe, tag, or related schema.
+- Add explicit cook-session routes/contracts: snapshot `GET`, revision-checked `PATCH`, completion mutation, and WebSocket subscribe/broadcast after accepted mutations.
 - Replace logged-in recipe cook progress localStorage as source of truth with server-backed cook sessions while retaining localStorage as anonymous/offline fallback.
 - Add D1 cook-session index/history rows only for querying, My Kitchen resume cards, completion history, and idempotent DO-to-D1 completion handoff.
 - Add recipe snapshot/fingerprint protection so in-progress cooking handles recipe edits without silently applying progress to the wrong step or ingredient.
 - Keep scaling as cook-session state and API projection; never mutate stored recipe ingredients while scaling.
 - Add private saved recipes separate from cookbook membership, with recipe detail, My Kitchen, search/API state, and tests.
 - Add typed recipe tags for accepted/manual tags that power recipe filtering/search/API; reserve AI tag suggestions for a later reviewed-suggestion layer only after accepted tags are useful.
+- Update search indexing/query paths so saved recipes and accepted tags are discoverable through the surfaces that claim to support them.
 - Add API-neutral metadata improvements: explicit step count, normalized source display name, yield/servings consistency, tag/course fields, authenticated saved state, and structured scale projections for parseable quantities.
 - Update OpenAPI, generated playground data, MCP/API docs, route contracts, and developer-facing docs where public behavior changes.
 - Improve My Kitchen/navigation only after underlying cook sessions, saved recipes, and tags exist.
@@ -42,11 +46,12 @@ Turn Clem's feedback into shipped Spoonjoy product primitives: reliable live coo
 - [ ] Shopping-list clear/remove then re-add of the same recipe restores only the newly requested quantity across web, REST API v1, and MCP.
 - [ ] Active shopping-list duplicate adds still merge quantities consistently and keep ordering/check-state behavior tested.
 - [ ] Logged-in cook progress syncs across two clients through a Durable Object-backed session; anonymous cook progress remains local-only.
+- [ ] Cook-session snapshot `GET`, revision-checked `PATCH`, completion mutation, and WebSocket subscription contracts are tested.
 - [ ] Cook-session completion is idempotent, creates/updates cook history, clears active resume state, and tolerates DO-to-D1 retry after transient failure.
 - [ ] Recipe edits during an active cook session are detected and do not silently remap progress to different steps or ingredients.
 - [ ] Scaling persists in cook sessions and API projections expose original quantities plus scaled structured quantities without mutating recipe data.
 - [ ] Saved recipes are private, distinct from cookbook membership, and appear on recipe detail, My Kitchen, and authenticated API responses.
-- [ ] Accepted typed recipe tags power at least one user-facing filter/search path and API response path.
+- [ ] Accepted typed recipe tags power at least one user-facing filter/search path, search-index path, and API response path.
 - [ ] API responses and OpenAPI/playground docs expose step count, normalized source display name, tags/course data, authenticated saved state, and scaling semantics.
 - [ ] Import feedback is explicitly rejected in product UI and documented as agentic/API-only.
 - [ ] No Pebble-specific behavior is introduced.
@@ -71,6 +76,7 @@ Turn Clem's feedback into shipped Spoonjoy product primitives: reliable live coo
 ## Decisions Made
 - Use a SQLite-backed Cloudflare Durable Object as the canonical owner for logged-in active cook-session state because the feature is stateful coordination across a user's devices.
 - Do not require Ari to create a Durable Object manually; implement the exported Worker class, `wrangler.json` binding, and Durable Object migration in code.
+- Configure Durable Object bindings and migrations for the production and QA Wrangler environments explicitly.
 - Use a session id for each cook attempt while enforcing one active cook session per logged-in user and recipe in v1.
 - Store live progress in the Durable Object; store only query/index/history metadata in D1.
 - Keep anonymous cooking progress local-only.
@@ -87,8 +93,10 @@ Turn Clem's feedback into shipped Spoonjoy product primitives: reliable live coo
 - `app/routes/recipes.$id.tsx` currently owns cook progress in `localStorage` under `spoonjoy-cook-progress:${recipeId}`.
 - `workers/app.ts` is the Cloudflare Worker entrypoint and currently has no Durable Object export.
 - `wrangler.json` currently defines D1, R2, rate-limit bindings, and QA env config, but no Durable Object binding or migration.
+- Cloudflare Wrangler environments do not inherit Durable Object bindings, so QA must be configured explicitly when the top-level binding is added.
 - `app/cloudflare-env.d.ts` currently defines `Env` without a Durable Object namespace binding.
 - `prisma/schema.prisma` has Recipe, RecipeStep, Ingredient, Cookbook, RecipeInCookbook, ShoppingList, ShoppingListItem, and RecipeSpoon but no cook-session index, saved-recipe, tag, or follow models.
+- `migrations/` and `prisma/migrations/` both exist; schema changes must follow the repo's current D1/Prisma migration pattern.
 - `app/lib/shopping-list.server.ts`, `app/lib/api-v1.server.ts`, and `app/lib/spoonjoy-api.server.ts` all currently restore deleted shopping-list rows by adding old quantity to new quantity.
 - `app/lib/api-v1.server.ts` recipe detail returns steps but does not expose explicit `stepCount`; attribution exposes raw `sourceHost`.
 - `app/lib/spoonjoy-api.server.ts` MCP recipe summaries already expose `stepCount`, so REST/API and MCP behavior must be reconciled intentionally.
@@ -104,3 +112,4 @@ The implementation should prefer shared service helpers over fixing identical be
 
 ## Progress Log
 - 2026-07-14 13:15 Created
+- 2026-07-14 13:15 Tinfoil pass added Durable Object env binding, route contract, migration, and search-index scope.
