@@ -138,17 +138,37 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 **Output**: Coverage/scan logs in `./2026-07-14-1236-doing-recipe-photo-studio/openapi-playground-coverage.log`.
 **Acceptance**: Changed operations are present in all intended profiles and `npm run build` passes with no warnings.
 
-### ⬜ Unit 6a: MCP Cover Tools — Tests
-**What**: Write failing tests for MCP upload/generated/regenerate/status/activate/archive tools, prompt additions, and schema descriptions matching the REST lifecycle.
+### ⬜ Unit 6a: MCP Cover Tool Schemas — Tests
+**What**: Write failing tests for MCP tool schema descriptions and argument validation for upload, generated placeholder, regenerate, status/list, activate, archive, and no-cover tools.
 **Output**: Red tests in `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/test/routes/mcp.test.ts`, `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/test/lib/mcp/spoonjoy-tools.server.test.ts`, and `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/test/scripts/spoonjoy-mcp-server.test.ts`.
-**Acceptance**: Focused MCP tests fail on missing tool parameters, missing generated-placeholder tool behavior, or mismatched payload fields.
+**Acceptance**: Focused MCP tests fail on missing tool parameters, missing generated-placeholder schema, or mismatched field descriptions.
 
-### ⬜ Unit 6b: MCP Cover Tools — Implementation
-**What**: Update MCP tool definitions and handlers for prompt additions, generated placeholder creation, upload-to-cover parity, status, activate, archive, and no-cover flows.
-**Output**: Passing focused tests plus implementation in `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/app/lib/spoonjoy-api.server.ts` and MCP tool registry files.
+### ⬜ Unit 6b: MCP Cover Tool Schemas — Implementation
+**What**: Update MCP tool definitions and schema descriptions so agents can discover the Photo Studio lifecycle and its prompt/Spoon/upload fields.
+**Output**: Passing focused schema tests plus implementation in `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/app/lib/spoonjoy-api.server.ts` and MCP tool registry files.
 **Acceptance**: Focused MCP tests pass and tool schemas are honest about required/optional fields.
 
-### ⬜ Unit 6c: MCP Cover Tools — Coverage & Refactor
+### ⬜ Unit 6c: MCP Generated And Regenerate Tools — Tests
+**What**: Write failing tests for MCP generated-placeholder creation and regenerate-with-prompt handlers, including prompt boundaries and provider-blocker payloads.
+**Output**: Red tests in `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/test/lib/mcp/spoonjoy-tools.server.test.ts` and `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/test/routes/mcp.test.ts`.
+**Acceptance**: Focused MCP tests fail on missing generated/regenerate handler behavior.
+
+### ⬜ Unit 6d: MCP Generated And Regenerate Tools — Implementation
+**What**: Implement generated-placeholder and regenerate-with-prompt MCP handler behavior using the same domain helpers as REST.
+**Output**: Passing focused tests plus implementation in `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/app/lib/spoonjoy-api.server.ts`.
+**Acceptance**: Focused MCP tests pass and generated/regenerate responses expose cover and generation status fields.
+
+### ⬜ Unit 6e: MCP Upload, Status, And Activation Tools — Tests
+**What**: Write failing tests for MCP upload-to-cover parity, list/status payloads, activate, archive, and no-cover behavior.
+**Output**: Red tests in `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/test/lib/mcp/spoonjoy-tools.server.test.ts` and `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/test/routes/mcp.test.ts`.
+**Acceptance**: Focused MCP tests fail on missing upload/status/activation behavior or owner validation.
+
+### ⬜ Unit 6f: MCP Upload, Status, And Activation Tools — Implementation
+**What**: Implement MCP upload-to-cover parity, list/status payloads, activate, archive, and no-cover flows.
+**Output**: Passing focused tests plus implementation in `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/app/lib/spoonjoy-api.server.ts`.
+**Acceptance**: Focused MCP tests pass and owner validation/error payloads match the documented tool contract.
+
+### ⬜ Unit 6g: MCP Cover Tools — Coverage & Refactor
 **What**: Run focused coverage for MCP tool parsing, owner validation, error payloads, and provider-blocker branches.
 **Output**: Coverage logs in `./2026-07-14-1236-doing-recipe-photo-studio/mcp-cover-tools-coverage.log`.
 **Acceptance**: 100% coverage on new MCP code and `npm run build` passes with no warnings.
@@ -308,20 +328,65 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 **Output**: Final native logs under `./2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/`.
 **Acceptance**: Native tests/builds pass with no warnings, or exact capability blockers are recorded with fallback evidence.
 
-### ⬜ Unit 20: PRs And Reviewer Gates
-**What**: Open/update web and native PRs as needed, run cold implementation reviewers against diffs and validation artifacts, address findings, and merge when gates converge and CI/deploy prerequisites pass.
-**Output**: PR URLs, reviewer reports, and merge logs under `./2026-07-14-1236-doing-recipe-photo-studio/pr-review/`.
-**Acceptance**: PRs are merged or a true human-only blocker is recorded with exact required action.
+### ⬜ Unit 20: Open Web PR
+**What**: Create or update the web/backend PR with summary, validation evidence, linked planning/doing docs, and no stale red-phase logs presented as final evidence.
+**Output**: Web PR URL and PR body snapshot under `./2026-07-14-1236-doing-recipe-photo-studio/pr-review/web-pr.md`.
+**Acceptance**: Web PR exists and references the final validation artifacts.
 
-### ⬜ Unit 21: Deploy, Smoke, Cleanup, Notify
-**What**: Verify production or applicable deployment/install surfaces, run smoke checks, remove task worktrees, confirm QA cleanup, update planning/doing completion criteria, and notify Slugger.
-**Output**: Deploy/smoke/cleanup logs and final task status updates.
-**Acceptance**: Production/applicable smoke checks pass, no disposable QA residue remains, worktrees are cleaned when safe, and Slugger is notified.
+### ⬜ Unit 21: Open Native PR
+**What**: Create or update the native PR with summary, validation evidence, linked planning/doing docs, and any exact capability blockers.
+**Output**: Native PR URL and PR body snapshot under `./2026-07-14-1236-doing-recipe-photo-studio/pr-review/native-pr.md`.
+**Acceptance**: Native PR exists and references the final validation artifacts.
+
+### ⬜ Unit 22: Cold Implementation Review Gates
+**What**: Run cold reviewer agents against web and native diffs plus validation artifacts, then record reviewer reports.
+**Output**: Reviewer reports under `./2026-07-14-1236-doing-recipe-photo-studio/pr-review/reviewer-reports.md`.
+**Acceptance**: Reviewer reports are `CONVERGED` or list concrete findings to fix.
+
+### ⬜ Unit 23: Reviewer Finding Fixes
+**What**: Address any BLOCKER/MAJOR reviewer findings from Unit 22 with focused patches, tests, commits, and re-review.
+**Output**: Fix commits, focused validation logs, and reviewer follow-up notes.
+**Acceptance**: Reviewer gates converge with no unresolved BLOCKER/MAJOR findings.
+
+### ⬜ Unit 24: Merge Web PR
+**What**: Merge the web/backend PR after reviewer gates and required checks pass.
+**Output**: Web merge log under `./2026-07-14-1236-doing-recipe-photo-studio/pr-review/web-merge.md`.
+**Acceptance**: Web PR is merged, or a true human-only blocker is recorded with exact required action.
+
+### ⬜ Unit 25: Merge Native PR
+**What**: Merge the native PR after reviewer gates and required checks pass.
+**Output**: Native merge log under `./2026-07-14-1236-doing-recipe-photo-studio/pr-review/native-merge.md`.
+**Acceptance**: Native PR is merged, or a true human-only blocker is recorded with exact required action.
+
+### ⬜ Unit 26: Production Deploy And Web Smoke
+**What**: Verify web production deployment for the merged commit and run owner-facing Photo Studio smoke checks without leaving disposable data.
+**Output**: Deploy and smoke logs under `./2026-07-14-1236-doing-recipe-photo-studio/deploy/web-smoke.md`.
+**Acceptance**: Production Photo Studio smoke passes or a true provider/capability blocker is recorded with exact evidence.
+
+### ⬜ Unit 27: Native Install Or Publish Smoke
+**What**: Verify the applicable native installed/build surface after merge, using local build/install smoke or publish status available without human-only credentials.
+**Output**: Native smoke logs under `./2026-07-14-1236-doing-recipe-photo-studio/deploy/native-smoke.md`.
+**Acceptance**: Native Photo Studio smoke passes, or a signing/TestFlight/capability blocker is recorded with exact evidence.
+
+### ⬜ Unit 28: QA Data Cleanup
+**What**: Run local QA cleanup inspection and remove any Codex-created disposable Spoonjoy data created during validation.
+**Output**: Cleanup logs under `./2026-07-14-1236-doing-recipe-photo-studio/cleanup/qa-data.md`.
+**Acceptance**: `pnpm cleanup:qa` or equivalent reports no Codex-created residue.
+
+### ⬜ Unit 29: Worktree Cleanup
+**What**: Remove task worktrees that are no longer needed after merge/deploy validation and confirm main checkouts are not dirtied.
+**Output**: Worktree cleanup log under `./2026-07-14-1236-doing-recipe-photo-studio/cleanup/worktrees.md`.
+**Acceptance**: Temporary worktrees are removed when safe and remaining checkouts have expected git status.
+
+### ⬜ Unit 30: Final Docs And Slugger Notification
+**What**: Update planning/doing completion criteria, mark task done, commit final docs, and notify Slugger.
+**Output**: Final task-doc commit and Slugger notification command output.
+**Acceptance**: Planning and doing docs reflect verified completion, final docs are committed/pushed, and `ouro msg --to slugger "Done: ..."` succeeds.
 
 ## Execution
 - **TDD strictly enforced**: tests → red → implement → green → refactor
-- Commit after each unit phase (`Xa`, `Xb`, `Xc`, visual QA, validation, and terminal units)
-- Push after each unit complete
+- Commit after every unit or unit phase, including Unit 0, non-lettered validation units, terminal units, and task-doc status updates
+- Push immediately after every commit in every touched repository
 - Run full test suite before marking unit done
 - For UI/rendering/layout units, run `visual-qa-dogfood` before declaring the unit or task complete
 - **All artifacts**: Save outputs, logs, data to `./2026-07-14-1236-doing-recipe-photo-studio/` directory
@@ -331,3 +396,4 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 ## Progress Log
 - 2026-07-14 12:39 Created from planning doc
 - 2026-07-14 12:46 Granularity pass addressed reviewer blockers by splitting REST, MCP, web, native, cross-surface, and terminal work into smaller TDD/validation units
+- 2026-07-14 12:50 Granularity Round 2 addressed remaining MCP and terminal-unit findings
